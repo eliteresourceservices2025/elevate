@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createEmployeeAccount, createHrAccount, signInEnrollingMfa } from "./helpers";
+import { createEmployeeAccount, createHrAccount, signInEnrollingMfa, hydrated, waitForHydration } from "./helpers";
 
 // Needs the local Supabase with migrations applied. HR posts an announcement and publishes a policy;
 // an employee sees the banner, acknowledges both, and HR sees who acknowledged.
@@ -16,6 +16,7 @@ test("HR posts, an employee acknowledges, and HR sees the status", async ({ brow
   // --- HR posts an announcement that needs acknowledgment. Markup is shown as plain text. ---
   const title = `Office closed ${stamp}`;
   await hrPage.goto("/announcements/new");
+  await waitForHydration(hrPage, "#an-title");
   await hrPage.getByLabel("Title").fill(title);
   await hrPage.getByLabel("Message").fill("We are closed on **Friday**.\n\n<script>alert('x')</script>\n\n[Bad link](javascript:alert(1))");
   await hrPage.getByLabel("Require acknowledgment").check();
@@ -38,7 +39,7 @@ test("HR posts, an employee acknowledges, and HR sees the status", async ({ brow
 
   await empPage.getByRole("region", { name: "Waiting for you" }).getByRole("link", { name: title }).click();
   await empPage.waitForURL(announcementUrl);
-  await empPage.getByRole("button", { name: "I have read and understand" }).click();
+  await (await hydrated(empPage.getByRole("button", { name: "I have read and understand" }))).click();
   await expect(empPage.getByText("Your acknowledgment is recorded.")).toBeVisible();
   await expect(empPage.getByText(/You acknowledged this on/)).toBeVisible();
   await empPage.goto("/dashboard");
@@ -59,18 +60,19 @@ test("HR posts, an employee acknowledges, and HR sees the status", async ({ brow
   // --- HR publishes a policy; the employee is asked to acknowledge it ---
   const policyTitle = `Conduct ${stamp}`;
   await hrPage.goto("/announcements?tab=policies");
+  await waitForHydration(hrPage, "#np-title");
   await hrPage.getByLabel("Policy title").fill(policyTitle);
   await hrPage.getByLabel("Text", { exact: true }).fill("# Be kind\n\n- Respect each other");
   await hrPage.getByRole("button", { name: "Create draft" }).click();
   await hrPage.waitForURL(/\/announcements\/policies\/[0-9a-f-]{36}$/);
   const policyUrl = hrPage.url();
   hrPage.once("dialog", (d) => void d.accept());
-  await hrPage.getByRole("button", { name: "Publish version 1" }).click();
+  await (await hydrated(hrPage.getByRole("button", { name: "Publish version 1" }))).click();
   await expect(hrPage.getByText("Version 1 published.")).toBeVisible();
 
   await empPage.goto(policyUrl);
   await expect(empPage.getByRole("heading", { level: 2, name: "Be kind" })).toBeVisible();
-  await empPage.getByRole("button", { name: "I have read and understand" }).click();
+  await (await hydrated(empPage.getByRole("button", { name: "I have read and understand" }))).click();
   await expect(empPage.getByText(/You acknowledged version 1 on/)).toBeVisible();
 
   await hrPage.reload();

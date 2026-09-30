@@ -3,6 +3,7 @@ import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
 import { runAckReminders } from "@/modules/announcements/jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
 import { runLeaveExpiry } from "@/modules/timeoff/jobs";
+import { runLeaveRequestReminders } from "@/modules/timeoff/request-jobs";
 import { runDailyDigest } from "@/modules/notifications/digest";
 import { flushEmailQueue } from "@/modules/notifications/email-queue";
 import { todayInZone } from "@/modules/org/service";
@@ -46,4 +47,10 @@ export const leaveExpiry = inngest.createFunction(
   async ({ step }) => step.run("expire", () => runLeaveExpiry(todayInZone())),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry];
+/** Daily at 1:20 AM: remind approvers of requests waiting 2 working days, and send stale lead steps (4 days) to HR. */
+export const leaveRequestReminders = inngest.createFunction(
+  { id: "leave-request-reminders", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 20 1 * * *` } },
+  async ({ step }) => step.run("remind", () => runLeaveRequestReminders(todayInZone())),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders];

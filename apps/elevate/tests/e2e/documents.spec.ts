@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
-import { createHrAccount, signInEnrollingMfa } from "./helpers";
+import { createHrAccount, signInEnrollingMfa, waitForHydration } from "./helpers";
 
 // Needs the local Supabase with migrations applied and the buckets created (pnpm storage:setup).
 // Uses the REAL storage service: the file goes browser -> private bucket -> checked by the server -> signed download.
@@ -20,6 +20,7 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
 
   await page.getByRole("navigation", { name: "Profile sections" }).getByRole("link", { name: "Documents" }).click();
   await expect(page.getByText("Do not upload client records or patient information.")).toBeVisible();
+  await waitForHydration(page, "#up-file");
 
   const pdf = Buffer.from("%PDF-1.4\n%fake e2e document\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n");
   const fill = async (title: string, file: { name: string; mimeType: string; buffer: Buffer }) => {

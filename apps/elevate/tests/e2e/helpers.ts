@@ -2,7 +2,7 @@ import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import postgres from "postgres";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 // End-to-end helpers. They talk to the LOCAL Supabase started with `supabase start` and only ever
 // create throwaway accounts with fake data.
@@ -63,7 +63,11 @@ export async function createHrAccount(): Promise<TestAccount> {
 }
 
 /** A fresh Employee account with an active profile (so things can be addressed to them). */
-export async function createEmployeeAccount(firstName: string, lastName: string): Promise<TestAccount & { employeeId: string }> {
+export async function createEmployeeAccount(
+  firstName: string,
+  lastName: string,
+  options: { roles?: string[]; managerId?: string } = {},
+): Promise<TestAccount & { employeeId: string }> {
   assertLocal();
   const email = `e2e.emp.${Date.now()}.${randomBytes(2).toString("hex")}@example.com`;
   const password = randomBytes(15).toString("base64url");
@@ -78,11 +82,11 @@ export async function createEmployeeAccount(firstName: string, lastName: string)
     if (error || !data.user) throw new Error(`Could not create test account: ${error?.message}`);
     const id = data.user.id ?? randomUUID();
     await sql`insert into core.users (id, email) values (${id}, ${email})`;
-    await sql`insert into core.user_roles (user_id, role_slug) values (${id}, 'employee')`;
+    for (const role of new Set(["employee", ...(options.roles ?? [])])) await sql`insert into core.user_roles (user_id, role_slug) values (${id}, ${role})`;
     await sql`update core.invitations set accepted_at = now() where lower(email) = ${email}`;
     const [e] = await sql<{ id: string }[]>`
-      insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id)
-      values (${firstName}, ${lastName}, ${email}, 'active', ${id}) returning id`;
+      insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id, manager_id)
+      values (${firstName}, ${lastName}, ${email}, 'active', ${id}, ${options.managerId ?? null}) returning id`;
     return { email, password, employeeId: e.id };
   } finally {
     await sql.end();
@@ -104,4 +108,21 @@ export async function signInEnrollingMfa(page: Page, account: TestAccount) {
   await page.getByLabel("6-digit code").fill(totp(secret));
   await page.getByRole("button", { name: "Verify" }).click();
   await page.waitForURL("**/dashboard");
+}
+
+/**
+ * Waits until React has taken over an element. In the dev server a page can load before its client code runs, and
+ * text typed into a controlled field before then is lost from React's state.
+ */
+export async function waitForHydration(page: Page, selector: string) {
+  await page.waitForFunction((sel) => {
+    const el = document.querySelector(sel);
+    return el !== null && Object.keys(el).some((k) => k.startsWith("__reactProps"));
+  }, selector);
+}
+
+/** Same as waitForHydration, for a button or field you are about to use: waits until React owns it, then returns it. */
+export async function hydrated(locator: Locator): Promise<Locator> {
+  await expect.poll(() => locator.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
+  return locator;
 }

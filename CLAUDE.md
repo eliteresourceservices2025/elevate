@@ -95,6 +95,15 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **Holidays** (`time.holidays`, calendars PH and US, seeded for 2026 and 2027): US federal dates are marked verified; Philippine dates start unverified because each year's list is proclaimed by the government (HR checks them and ticks "verified"). `core.clients.holiday_calendar` picks a client's calendar; a person sees the Philippines plus their current clients' calendars.
 - A CHECK constraint passes when it evaluates to NULL: wrap nullable columns in `coalesce` (this bit `leave_ledger_reason_chk`).
 
+## Time off requests and approvals (Phase 2.2)
+
+- `time.leave_requests`: pending_lead -> pending_hr -> approved, or declined / cancelled. The lead step is decided by anyone above the person in the chain (`timeoff.approve` team scope); HR (`timeoff.approve_final`) decides the last step, may only **decline** (not approve) at the lead step, and a lead step that waits 4 working days is escalated to HR by the daily job. A leave type with `skip_hr` finishes at the lead. Nobody decides their own request or one they filed. Nobody above the person = HR decides alone.
+- **Days** are working days (Monday to Friday minus PH and client holidays) until schedules exist in 2.5; `workdays.ts` is the one place that rule lives. Requests cannot start in the past (HR files those, `timeoff.file_for_others`), prize-day types need 1 working day's notice, and two live requests for the same person may not overlap (a Postgres exclusion constraint, needs `btree_gist`).
+- **Ledger:** approval writes one `usage` row (effective on the first day, tagged with the request id) after `canTake()` passes inside the ledger lock; cancelling approved leave writes a `reversal` dated no earlier than the usage, tagged with the same request id so the replay returns exactly that request's days. Days cannot be used before they were awarded or after they expire.
+- **Invites:** approval and cancellation queue an email of kind `invite` with an .ics attachment (`ics.ts`, all-day, title "Day off", no leave type). Email attachments are stored in `ops.email_queue.attachment` and sent through Resend.
+- **Calendar** (`getTeamCalendar`): HR sees everyone with leave types and pending requests; a Team Lead their downline; an Executive only counts per day; everyone else their teammates by name (approved only, leave type hidden except their own).
+- E2E tip: in the dev server a page can load before React hydrates, and text typed into a controlled field before then is lost. Use `waitForHydration(page, selector)` from `tests/e2e/helpers.ts` before filling forms.
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { balanceOf, expiryAmount, formatDays, isHalfDayStep, unusedByPool, type LedgerEntryType, type LedgerRow } from "./ledger";
+import { balanceOf, canTake, expiryAmount, formatDays, isHalfDayStep, unusedByPool, type LedgerEntryType, type LedgerRow } from "./ledger";
 
 let n = 0;
 const row = (entryType: LedgerEntryType, daysValue: number, effectiveOn: string, expiresOn: string | null = null): LedgerRow => ({
@@ -84,5 +84,40 @@ describe("expiry", () => {
   it("ignores events after the date asked about", () => {
     const award = row("award", 2, "2026-10-01", "2026-10-31");
     expect(expiryAmount([award, row("usage", -2, "2026-11-05")], award.id, "2026-10-31")).toBe(2);
+  });
+});
+
+describe("requests and the ledger", () => {
+  const tagged = (r: LedgerRow, requestId: string): LedgerRow => ({ ...r, requestId });
+
+  it("a reversal returns the draws of its own request, not just the latest ones", () => {
+    const a = row("award", 1, "2026-10-01", "2026-10-31");
+    const b = row("award", 1, "2026-10-02");
+    const first = tagged(row("usage", -1, "2026-10-10"), "req-1"); // draws from a
+    const second = tagged(row("usage", -1, "2026-10-12"), "req-2"); // draws from b
+    const cancel = tagged(row("reversal", 1, "2026-10-13"), "req-1"); // cancelling the FIRST request
+    const left = unusedByPool([a, b, first, second, cancel], "2026-10-31");
+    expect(left.get(a.id)).toBe(1);
+    expect(left.get(b.id)).toBe(0);
+  });
+
+  it("canTake honours the balance, expiry and days already committed", () => {
+    const soon = row("award", 2, "2026-10-01", "2026-10-15");
+    const forever = row("award", 1, "2026-10-01");
+    const rows = [soon, forever];
+    expect(canTake(rows, 3, "2026-10-10", "r")).toBe(true);
+    expect(canTake(rows, 3.5, "2026-10-10", "r")).toBe(false); // over the balance
+    expect(canTake(rows, 3, "2026-10-20", "r")).toBe(false); // the 2 expiring days are gone by then
+    expect(canTake(rows, 1, "2026-10-20", "r")).toBe(true);
+    // A leave later this month already uses the never-expiring day: only the expiring days remain for an earlier one
+    const committed = [...rows, tagged(row("usage", -1, "2026-10-25"), "later")];
+    expect(canTake(committed, 2, "2026-10-10", "r")).toBe(true);
+    expect(canTake(committed, 3, "2026-10-10", "r")).toBe(false);
+  });
+
+  it("refuses usage that would sit after an expiry that was already written off", () => {
+    const old = row("award", 2, "2026-09-01", "2026-09-30");
+    const expiry = row("expiry", -2, "2026-10-01");
+    expect(canTake([old, expiry], 1, "2026-09-20", "r")).toBe(false); // balance is already 0
   });
 });

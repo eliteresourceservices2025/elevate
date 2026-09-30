@@ -8,7 +8,7 @@ import { emailQueue } from "./schema";
 
 type Executor = Pick<typeof db, "insert">;
 
-export const EMAIL_PRIORITY = { ack_due: 1, digest: 2 } as const;
+export const EMAIL_PRIORITY = { ack_due: 1, invite: 1, digest: 2 } as const;
 const MAX_ATTEMPTS = 3;
 const DIGEST_MAX_AGE_HOURS = 24;
 
@@ -27,6 +27,8 @@ export type QueuedEmail = {
   lines: string[];
   /** Relative in-app path. */
   link: string;
+  /** Optional file to attach (a calendar invite). */
+  attachment?: { fileName: string; mimeType: string; content: string };
   /** Queuing the same key for the same person twice does nothing. */
   dedupeKey: string;
 };
@@ -44,6 +46,7 @@ export async function queueEmails(executor: Executor, items: QueuedEmail[]): Pro
         subject: i.subject.slice(0, 200),
         body: JSON.stringify({ heading: i.heading, lines: i.lines }),
         link: i.link,
+        attachment: i.attachment ?? null,
         dedupeKey: i.dedupeKey,
       })),
     )
@@ -85,6 +88,7 @@ export async function flushEmailQueue(now = new Date()): Promise<FlushResult> {
       subject: emailQueue.subject,
       body: emailQueue.body,
       link: emailQueue.link,
+      attachment: emailQueue.attachment,
       attempts: emailQueue.attempts,
       to: users.email,
       archivedAt: users.archivedAt,
@@ -109,7 +113,7 @@ export async function flushEmailQueue(now = new Date()): Promise<FlushResult> {
     const parsed = JSON.parse(item.body) as { heading: string; lines: string[] };
     const rendered = renderEmail({ heading: parsed.heading, lines: parsed.lines, link: item.link, appUrl });
     try {
-      await sender.send({ to: item.to, subject: item.subject, text: rendered.text, html: rendered.html });
+      await sender.send({ to: item.to, subject: item.subject, text: rendered.text, html: rendered.html, ...(item.attachment ? { attachments: [item.attachment] } : {}) });
       await db.update(emailQueue).set({ status: "sent", sentAt: new Date(), attempts: item.attempts + 1, lastError: null }).where(eq(emailQueue.id, item.id));
       sent += 1;
     } catch (error) {

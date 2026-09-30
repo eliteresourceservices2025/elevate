@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, index, integer, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { ops } from "@/modules/audit/schema";
 import { users } from "@/modules/core/schema";
 
@@ -35,13 +35,15 @@ export const emailQueue = ops
       userId: uuid("user_id")
         .notNull()
         .references(() => users.id),
-      /** "ack_due" (sent first) or "digest" (fills the remaining budget). */
+      /** "ack_due" and "invite" are sent first; "digest" fills the remaining budget. */
       kind: text("kind").notNull(),
       priority: integer("priority").notNull(),
       subject: text("subject").notNull(),
       body: text("body").notNull(),
       /** Relative in-app path; the sender prefixes the app address. */
       link: text("link").notNull(),
+      /** One optional attachment, stored as text (a calendar invite). */
+      attachment: jsonb("attachment").$type<{ fileName: string; mimeType: string; content: string }>(),
       /** Queuing the same key twice does nothing, e.g. "digest:2026-10-01". */
       dedupeKey: text("dedupe_key").notNull(),
       /** queued, sent, failed (gave up) or skipped (no longer relevant). */
@@ -55,7 +57,7 @@ export const emailQueue = ops
       uniqueIndex("email_queue_dedupe_idx").on(t.userId, t.dedupeKey),
       index("email_queue_pending_idx").on(t.priority, t.createdAt).where(sql`${t.status} = 'queued'`),
       index("email_queue_sent_idx").on(t.sentAt).where(sql`${t.status} = 'sent'`),
-      check("email_queue_kind_chk", sql`${t.kind} in ('ack_due','digest')`),
+      check("email_queue_kind_chk", sql`${t.kind} in ('ack_due','digest','invite')`),
       check("email_queue_status_chk", sql`${t.status} in ('queued','sent','failed','skipped')`),
     ],
   )

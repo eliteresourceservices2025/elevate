@@ -120,3 +120,74 @@ export const holidays = time
     ],
   )
   .enableRLS();
+
+export const REQUEST_STATUSES = ["pending_lead", "pending_hr", "approved", "declined", "cancelled"] as const;
+export type RequestStatus = (typeof REQUEST_STATUSES)[number];
+
+/**
+ * A request for days off. pending_lead -> pending_hr -> approved, or declined / cancelled along the way.
+ * Two live requests for the same person may not cover the same day (exclusion constraint in the migration).
+ */
+export const leaveRequests = time
+  .table(
+    "leave_requests",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      leaveTypeId: uuid("leave_type_id")
+        .notNull()
+        .references(() => leaveTypes.id),
+      startDate: date("start_date", { mode: "string" }).notNull(),
+      endDate: date("end_date", { mode: "string" }).notNull(),
+      halfDay: boolean("half_day").notNull().default(false),
+      /** Working days the request uses, counted when it was made (weekends and holidays excluded). */
+      days: numeric("days", { precision: 5, scale: 2 }).notNull(),
+      note: text("note"),
+      status: text("status").notNull(),
+      /** Who made the request: the person themselves, or HR filing for them. */
+      filedBy: uuid("filed_by").notNull(),
+      /** The company-calendar date the request entered its current pending step, for reminder timing. */
+      stepStartedOn: date("step_started_on", { mode: "string" }).notNull(),
+      remindedAt: timestamp("reminded_at", { withTimezone: true }),
+      escalatedAt: timestamp("escalated_at", { withTimezone: true }),
+      cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+      cancelledBy: uuid("cancelled_by"),
+      cancelReason: text("cancel_reason"),
+      ...stamps,
+    },
+    (t) => [
+      index("leave_requests_employee_idx").on(t.employeeId, t.startDate),
+      index("leave_requests_status_idx").on(t.status, t.stepStartedOn),
+      check("leave_requests_status_chk", sql`${t.status} in ('pending_lead','pending_hr','approved','declined','cancelled')`),
+      check("leave_requests_dates_chk", sql`${t.endDate} >= ${t.startDate}`),
+      check("leave_requests_days_chk", sql`${t.days} > 0`),
+      check("leave_requests_half_chk", sql`not ${t.halfDay} or (${t.startDate} = ${t.endDate} and ${t.days} = 0.5)`),
+    ],
+  )
+  .enableRLS();
+
+/** Insert-only (trigger): who decided what, at which level, and when. "escalated" is the system moving a stale request to HR. */
+export const leaveApprovals = time
+  .table(
+    "leave_approvals",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      requestId: uuid("request_id")
+        .notNull()
+        .references(() => leaveRequests.id),
+      level: text("level").notNull(),
+      decision: text("decision").notNull(),
+      /** Null when the system escalated. */
+      decidedBy: uuid("decided_by"),
+      note: text("note"),
+      decidedAt: timestamp("decided_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      index("leave_approvals_request_idx").on(t.requestId, t.decidedAt),
+      check("leave_approvals_level_chk", sql`${t.level} in ('lead','hr')`),
+      check("leave_approvals_decision_chk", sql`${t.decision} in ('approved','declined','escalated')`),
+    ],
+  )
+  .enableRLS();

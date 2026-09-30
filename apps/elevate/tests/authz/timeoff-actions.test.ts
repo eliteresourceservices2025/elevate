@@ -84,3 +84,52 @@ describe("time off queries, every role", () => {
     });
   }
 });
+
+// --- Leave requests (Phase 2.2) -------------------------------------------------------------------
+// Most request actions read the record before authorizing (whether it is your own or someone else's decides
+// which permission applies), so their per-role refusals are proven against a real database in
+// tests/integration/timeoff-requests.test.ts. What can be decided before touching the database is checked here.
+
+const requestActions = await import("@/modules/timeoff/request-actions");
+const requestQueries = await import("@/modules/timeoff/request-queries");
+
+describe("leave request actions and queries that authorize first, every role", () => {
+  const range = { leaveTypeId: ID, startDate: "2030-01-07", endDate: "2030-01-08", halfDay: false };
+  const cases: { name: string; call: () => Promise<{ ok: boolean; error?: string }>; allowed: RoleSlug[] }[] = [
+    { name: "previewRequest", call: () => requestActions.previewRequest(range), allowed: EVERYONE },
+  ];
+  for (const c of cases) {
+    describe(c.name, () => {
+      for (const role of ROLE_SLUGS) {
+        it(`${role}: passes authorize()`, async () => {
+          as(role);
+          const result = await c.call();
+          expect(result.ok).toBe(false);
+          expect(result.error).not.toBe(NO_ACCESS);
+        });
+      }
+    });
+  }
+
+  const queryCases: { name: string; call: () => Promise<unknown>; allowed: RoleSlug[] }[] = [
+    { name: "listMyRequests", call: () => requestQueries.listMyRequests(), allowed: EVERYONE },
+    { name: "listRequestTypes", call: () => requestQueries.listRequestTypes(), allowed: EVERYONE },
+    { name: "listApprovalQueue", call: () => requestQueries.listApprovalQueue(), allowed: ["super_admin", "hr_admin", "team_lead"] },
+    { name: "getTeamCalendar", call: () => requestQueries.getTeamCalendar("2030-01"), allowed: EVERYONE },
+  ];
+  for (const q of queryCases) {
+    describe(q.name, () => {
+      for (const role of ROLE_SLUGS) {
+        const allowed = q.allowed.includes(role);
+        it(`${role}: ${allowed ? "passes authorize()" : "is refused"}`, async () => {
+          as(role);
+          const outcome = await q.call().then(
+            () => "resolved",
+            (e: unknown) => (e instanceof ForbiddenError ? "forbidden" : "other"),
+          );
+          expect(outcome).toBe(allowed ? "other" : "forbidden");
+        });
+      }
+    });
+  }
+});

@@ -12,12 +12,19 @@ import { formatDays } from "@/modules/timeoff/ledger";
 import { HolidayControls, HOLIDAY_KIND_LABELS, LeaveTypeRowForm, NewHolidayForm, NewLeaveTypeForm } from "@/modules/timeoff/components/admin-forms";
 import { AdjustForm, AwardForm } from "@/modules/timeoff/components/award-forms";
 import { BalanceView } from "@/modules/timeoff/components/balance-view";
+import { CalendarMonth } from "@/modules/timeoff/components/calendar-view";
+import { RequestForm } from "@/modules/timeoff/components/request-form";
+import { RequestList } from "@/modules/timeoff/components/request-list";
+import { getTeamCalendar, listApprovalQueue, listMyRequests, listRequestTypes } from "@/modules/timeoff/request-queries";
 import { getAwardOptions, getHolidays, getMyTimeOff, listBalances, listLeaveTypes } from "@/modules/timeoff/queries";
 
 export const metadata: Metadata = { title: "Time off" };
 
 const ALL_TABS = [
   { key: "mine", label: "My prize days" },
+  { key: "requests", label: "Requests" },
+  { key: "approvals", label: "Approvals" },
+  { key: "calendar", label: "Calendar" },
   { key: "holidays", label: "Holidays" },
   { key: "balances", label: "Balances" },
   { key: "award", label: "Award" },
@@ -30,7 +37,9 @@ const weekdayOf = (date: string) => WEEKDAY.format(new Date(`${date}T00:00:00Z`)
 export default async function TimeOffPage({ searchParams }: PageProps<"/time-off">) {
   const user = await requireUser();
   const params = await searchParams;
-  const allowed = new Set<string>(["mine", "holidays"]);
+  const allowed = new Set<string>(["mine", "requests", "calendar", "holidays"]);
+  const approve = scopeFor(user, "timeoff.approve");
+  if (approve === "all" || approve === "team") allowed.add("approvals");
   if (scopeFor(user, "timeoff.view_overview")) allowed.add("balances");
   if (can(user, "timeoff.award")) allowed.add("award");
   if (can(user, "timeoff.manage_types")) allowed.add("types");
@@ -40,6 +49,16 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
   const year = Number(params.year) || Number(today.slice(0, 4));
 
   const mine = tab === "mine" ? await orNotFound(getMyTimeOff()) : null;
+  const requests =
+    tab === "requests"
+      ? {
+          types: await orNotFound(listRequestTypes()),
+          items: await orNotFound(listMyRequests()),
+          people: can(user, "timeoff.file_for_others") ? (await orNotFound(getAwardOptions())).people : null,
+        }
+      : null;
+  const approvals = tab === "approvals" ? await orNotFound(listApprovalQueue()) : null;
+  const calendar = tab === "calendar" ? await orNotFound(getTeamCalendar(String(params.month ?? ""))) : null;
   const holidays = tab === "holidays" ? await orNotFound(getHolidays(year)) : null;
   const balances = tab === "balances" ? await orNotFound(listBalances()) : null;
   const options = tab === "award" ? await orNotFound(getAwardOptions()) : null;
@@ -72,6 +91,28 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
           <p className="text-muted-foreground">No people record is linked to your account yet, so there are no prize days to show.</p>
         )
       ) : null}
+
+      {requests ? (
+        <div className="space-y-6">
+          {requests.types.length > 0 ? <RequestForm types={requests.types} today={today} /> : <p className="text-muted-foreground">No leave types are set up yet. Ask HR.</p>}
+          {requests.people && requests.types.length > 0 ? <RequestForm types={requests.types} today={today} people={requests.people} /> : null}
+          <section aria-label="My requests" className="space-y-2">
+            <h2 className="text-lg font-semibold">My requests</h2>
+            <RequestList items={requests.items} empty="You have not made any requests yet." />
+          </section>
+        </div>
+      ) : null}
+
+      {approvals ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            {approvals.scope === "team" ? "Requests from people on your team. You decide the first step; HR decides the last." : "Everything waiting. You decide the HR step; the person's lead decides the first."}
+          </p>
+          <RequestList items={approvals.items} showPerson empty="Nothing is waiting for approval." />
+        </div>
+      ) : null}
+
+      {calendar ? <CalendarMonth view={calendar} today={today} /> : null}
 
       {holidays ? (
         <div className="space-y-6">

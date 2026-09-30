@@ -7,6 +7,8 @@ import { orNotFound } from "@/lib/or-not-found";
 import { AdjustForm, AwardForm } from "@/modules/timeoff/components/award-forms";
 import { BalanceView } from "@/modules/timeoff/components/balance-view";
 import { getAwardOptions, getPersonTimeOff } from "@/modules/timeoff/queries";
+import { RequestList } from "@/modules/timeoff/components/request-list";
+import { listRequestsFor } from "@/modules/timeoff/request-queries";
 import { todayInZone } from "@/modules/org/service";
 
 export const metadata: Metadata = { title: "Prize days" };
@@ -16,6 +18,7 @@ export default async function PersonTimeOffPage({ params }: PageProps<"/time-off
   const user = await requireUser();
   const data = await orNotFound(getPersonTimeOff(employeeId));
   if (!data) notFound();
+  const requests = await orNotFound(listRequestsFor(employeeId));
   const options = can(user, "timeoff.award") ? await orNotFound(getAwardOptions()) : null;
 
   return (
@@ -29,6 +32,10 @@ export default async function PersonTimeOffPage({ params }: PageProps<"/time-off
         </h1>
       </div>
       <BalanceView data={data} />
+      <section aria-label="Requests" className="space-y-2">
+        <h2 className="text-lg font-semibold">Requests</h2>
+        <RequestList items={requests} empty="No requests yet." />
+      </section>
       {options && options.types.length > 0 ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <AwardForm people={options.people} types={options.types} today={todayInZone()} fixedEmployee={data.employeeId} />

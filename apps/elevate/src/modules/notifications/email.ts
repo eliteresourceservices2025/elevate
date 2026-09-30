@@ -3,7 +3,8 @@ import "server-only";
 // Sending email. Production uses Resend over its HTTP API; with no key configured nothing is sent and
 // the queue simply waits. Tests install a fake with setEmailSender().
 
-export type OutgoingEmail = { to: string; subject: string; text: string; html: string };
+export type EmailAttachment = { fileName: string; mimeType: string; /** The file's text (a calendar invite). */ content: string };
+export type OutgoingEmail = { to: string; subject: string; text: string; html: string; attachments?: EmailAttachment[] };
 export interface EmailSender {
   send(mail: OutgoingEmail): Promise<void>;
 }
@@ -18,7 +19,14 @@ class ResendSender implements EmailSender {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: this.from, to: [mail.to], subject: mail.subject, text: mail.text, html: mail.html }),
+      body: JSON.stringify({
+        from: this.from,
+        to: [mail.to],
+        subject: mail.subject,
+        text: mail.text,
+        html: mail.html,
+        ...(mail.attachments?.length ? { attachments: mail.attachments.map((a) => ({ filename: a.fileName, content: Buffer.from(a.content, "utf8").toString("base64") })) } : {}),
+      }),
       signal: AbortSignal.timeout(15_000),
     });
     // Only the status is kept: the response can echo the recipient's address.

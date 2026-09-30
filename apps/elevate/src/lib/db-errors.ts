@@ -11,3 +11,6 @@ export const isUniqueViolation = (error: unknown) => sqlState(error) === "23505"
 
 /** 23514: a CHECK constraint refused a value. */
 export const isCheckViolation = (error: unknown) => sqlState(error) === "23514";
+
+/** 23P01: an exclusion constraint refused an overlap. */
+export const isExclusionViolation = (error: unknown) => sqlState(error) === "23P01";
