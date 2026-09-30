@@ -4,6 +4,7 @@ import { createEmployeeAccount, createHrAccount, signInEnrollingMfa, hydrated, w
 // Needs the local Supabase with migrations applied. HR posts an announcement and publishes a policy;
 // an employee sees the banner, acknowledges both, and HR sees who acknowledged.
 test("HR posts, an employee acknowledges, and HR sees the status", async ({ browser }) => {
+  test.setTimeout(180_000); // three sign-ins and many page loads: close to the 90 second default under parallel load
   const stamp = Date.now();
   const hr = await createHrAccount();
   const employee = await createEmployeeAccount("Eli", `Ack${stamp}`);
