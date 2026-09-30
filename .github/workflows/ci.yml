@@ -11,6 +11,19 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      # Throwaway database for the integration tests. Fake data only, discarded with the runner.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -22,4 +35,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      # Added in Phase 0.3+: schema/migration drift check, Playwright smoke tests.
+      - run: pnpm test:integration
+        env:
+          TEST_DB_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      # Added later: schema/migration drift check, Playwright smoke tests.

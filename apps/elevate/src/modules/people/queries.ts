@@ -21,6 +21,8 @@ import { changeRequestContext } from "./service";
 import { directoryQuerySchema } from "./validators";
 
 const PAGE_SIZE = 25;
+// Drizzle drops the table name for columns inside a select-list subquery, which makes `id` ambiguous.
+const EMPLOYEE_ID = sql.raw('"core"."employees"."id"');
 
 // --- Directory ---------------------------------------------------------------
 
@@ -87,7 +89,7 @@ export async function listDirectory(rawQuery: unknown) {
 
   const clientNames = seesClients
     ? sql<string | null>`(select string_agg(c.name, ', ' order by c.name) from ${clientAssignments} ca
-        join ${clients} c on c.id = ca.client_id where ca.employee_id = ${employees.id} and ca.end_date is null)`
+        join ${clients} c on c.id = ca.client_id where ca.employee_id = ${EMPLOYEE_ID} and ca.end_date is null)`
     : sql<string | null>`null`;
 
   const rows = await db
