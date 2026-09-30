@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "elevate-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "elevate", "dev"],
+      "port": 3000
+    }
+  ]
+}

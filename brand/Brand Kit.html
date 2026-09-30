@@ -1,0 +1,2099 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Elite Resource Services — Brand Kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --p:     #8A2BE2;
+    --pd:    #6C1ABA;
+    --pdd:   #3D1A6E;
+    --off:   #FAF8FF;
+    --pm:    #EDE0FB;
+    --g:     #E2BE2B;
+    --gl:    #FFE680;
+    --gd:    #B09800;
+    --gddd:  #574100;
+    --w:     #FFFFFF;
+    --txt:   #3D1A6E;
+    --txt2:  #5C3D8F;
+    --txt3:  #695B93;
+    --border: rgba(138,43,226,0.15);
+
+    --ff-head: 'Source Sans 3', sans-serif;
+    --ff-body: 'Inter', sans-serif;
+    --ff-mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--ff-body);
+    color: var(--txt);
+    background: var(--off);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  .page {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 96px 80px 160px;
+  }
+
+  /* ── Header ──────────────────────────────────── */
+  .masthead {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 64px;
+    align-items: end;
+    padding-bottom: 56px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-family: var(--ff-mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--txt3);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 24px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 28px;
+    height: 1px;
+    background: var(--p);
+  }
+  h1.title {
+    font-family: var(--ff-head);
+    font-weight: 700;
+    font-size: 88px;
+    line-height: 0.95;
+    letter-spacing: -0.035em;
+    color: var(--pdd);
+    margin: 0;
+  }
+  h1.title em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--p);
+  }
+  .lede {
+    font-family: var(--ff-body);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--txt2);
+    max-width: 38ch;
+    margin: 0;
+  }
+  .meta {
+    display: flex;
+    gap: 32px;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--txt3);
+  }
+  .meta span strong {
+    display: block;
+    color: var(--pdd);
+    font-weight: 500;
+    margin-top: 4px;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Logo ────────────────────────────────────── */
+  .logo-hero {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .logo-stage {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    min-height: 460px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .logo-stage img { width: 60%; max-width: 360px; height: auto; }
+  .logo-light { background: var(--off); }
+  .stage-tag {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--txt3);
+  }
+  .logo-side {
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    gap: 8px;
+  }
+  .logo-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .logo-cell {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-height: 220px;
+    overflow: hidden;
+  }
+  .logo-cell img { width: 70%; max-width: 180px; height: auto; }
+  .logo-cell span {
+    position: absolute;
+    bottom: 14px;
+    left: 16px;
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--txt3);
+  }
+  .logo-white { background: var(--w); }
+  .logo-pm { background: var(--pm); }
+  .logo-pdd { background: var(--pdd); border-color: transparent; }
+  .logo-pdd span { color: rgba(245, 216, 103, 0.7); }
+  .logo-pdd img.invert { filter: invert(1) hue-rotate(180deg); mix-blend-mode: screen; }
+  .logo-gl { background: var(--gl); border-color: transparent; }
+  .logo-gl span { color: var(--gddd); }
+
+  .logo-rules {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .rule-card {
+    background: var(--w);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 32px;
+  }
+  .clearspace {
+    background: var(--off);
+    border-radius: 4px;
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+  }
+  .cs-frame {
+    position: relative;
+    padding: 56px;
+    border: 1px dashed var(--p);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cs-frame img { width: 220px; height: auto; }
+  .cs-mark {
+    position: absolute;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--p);
+    background: var(--off);
+    padding: 0 6px;
+  }
+  .cs-top { top: -8px; left: 50%; transform: translateX(-50%); }
+  .cs-bottom { bottom: -8px; left: 50%; transform: translateX(-50%); }
+  .cs-left { left: -8px; top: 50%; transform: translateY(-50%); }
+  .cs-right { right: -8px; top: 50%; transform: translateY(-50%); }
+  .rule-note {
+    font-family: var(--ff-body);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--txt3);
+    margin: 20px 0 0;
+  }
+  .size-row {
+    background: var(--off);
+    border-radius: 4px;
+    padding: 32px 24px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    gap: 24px;
+    min-height: 220px;
+  }
+  .size-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .size-cell span {
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--txt3);
+  }
+
+  .logo-donts {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .dont-card {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--w);
+  }
+  .dont-stage {
+    aspect-ratio: 1/1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .dont-stage img { width: 70%; max-width: 180px; height: auto; }
+  .dont-label {
+    padding: 16px 18px;
+    font-family: var(--ff-body);
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--txt2);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .dont-label .x {
+    color: #c0392b;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  /* ── Section ─────────────────────────────────── */
+  section {
+    padding: 96px 0 0;
+  }
+  .section-head {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 48px;
+    margin-bottom: 40px;
+    align-items: baseline;
+  }
+  .section-num {
+    font-family: var(--ff-mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--p);
+    text-transform: uppercase;
+  }
+  .section-title {
+    font-family: var(--ff-head);
+    font-weight: 700;
+    font-size: 36px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--pdd);
+    margin: 0;
+  }
+  .section-title small {
+    display: block;
+    font-family: var(--ff-body);
+    font-size: 15px;
+    font-weight: 400;
+    color: var(--txt3);
+    margin-top: 10px;
+    letter-spacing: 0;
+  }
+
+  /* ── Color system ────────────────────────────── */
+  .palette-violet {
+    display: grid;
+    grid-template-columns: 2.2fr 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .swatch {
+    padding: 32px 28px;
+    min-height: 280px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+  }
+  .swatch.lg { min-height: 360px; }
+  .swatch-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .swatch-name {
+    font-family: var(--ff-head);
+    font-weight: 500;
+    font-size: 24px;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    margin-top: 24px;
+  }
+  .swatch.lg .swatch-name { font-size: 36px; font-weight: 400; }
+  .swatch-role {
+    font-family: var(--ff-body);
+    font-size: 13px;
+    margin-top: 6px;
+    opacity: 0.75;
+    line-height: 1.4;
+  }
+  .swatch-codes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 16px;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    margin-top: 28px;
+  }
+  .swatch-codes dt { opacity: 0.6; text-transform: uppercase; }
+  .swatch-codes dd { margin: 0; }
+
+  /* violet swatches */
+  .s-p   { background: var(--p);   color: var(--w); }
+  .s-pd  { background: var(--pd);  color: var(--w); }
+  .s-pdd { background: var(--pdd); color: var(--w); }
+  .s-pm  { background: var(--pm);  color: var(--pdd); }
+  .s-off { background: var(--off); color: var(--pdd); }
+
+  .palette-tints {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  /* gold row */
+  .palette-gold {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr 1fr 1fr;
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .s-g    { background: var(--g);    color: var(--gddd); }
+  .s-gl   { background: var(--gl);   color: var(--gddd); }
+  .s-gd   { background: var(--gd);   color: var(--w); }
+  .s-gddd { background: var(--gddd); color: var(--gl); }
+
+  /* text colors */
+  .text-tokens {
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--w);
+  }
+  .text-row {
+    display: grid;
+    grid-template-columns: 240px 1fr 220px 120px;
+    align-items: center;
+    padding: 28px 32px;
+    border-bottom: 1px solid var(--border);
+    gap: 24px;
+  }
+  .text-row:last-child { border-bottom: 0; }
+  .text-chip {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--txt3);
+  }
+  .chip-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+  }
+  .text-sample {
+    font-family: var(--ff-head);
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+  .text-role {
+    font-family: var(--ff-body);
+    font-size: 13px;
+    color: var(--txt3);
+  }
+  .text-hex {
+    font-family: var(--ff-mono);
+    font-size: 12px;
+    color: var(--txt2);
+    text-align: right;
+  }
+
+  /* ── Typography ──────────────────────────────── */
+  .type-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .type-card {
+    background: var(--w);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 40px 40px 36px;
+  }
+  .type-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--txt3);
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+  .type-label strong { color: var(--p); font-weight: 500; }
+  .type-name {
+    font-size: 56px;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    color: var(--pdd);
+    margin: 0 0 28px;
+  }
+  .type-card.head .type-name { font-family: var(--ff-head); font-weight: 700; }
+  .type-card.body .type-name { font-family: var(--ff-body); font-weight: 400; letter-spacing: -0.03em; }
+
+  .type-aa {
+    font-size: 96px;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    color: var(--pdd);
+    margin: 32px 0 8px;
+  }
+  .type-card.head .type-aa { font-family: var(--ff-head); font-weight: 600; }
+  .type-card.body .type-aa { font-family: var(--ff-body); font-weight: 500; }
+
+  .type-glyphs {
+    font-size: 14px;
+    color: var(--txt2);
+    letter-spacing: 0.04em;
+    line-height: 1.7;
+    border-top: 1px solid var(--border);
+    padding-top: 24px;
+    margin-top: 24px;
+  }
+  .type-card.head .type-glyphs { font-family: var(--ff-head); }
+  .type-card.body .type-glyphs { font-family: var(--ff-body); }
+
+  .weight-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 28px;
+    margin-top: 20px;
+  }
+  .weight-row span {
+    font-size: 22px;
+    color: var(--pdd);
+    letter-spacing: -0.01em;
+  }
+  .type-card.head .weight-row span { font-family: var(--ff-head); }
+  .type-card.body .weight-row span { font-family: var(--ff-body); }
+
+  /* type scale */
+  .scale {
+    margin-top: 8px;
+    background: var(--w);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .scale-row {
+    display: grid;
+    grid-template-columns: 100px 1fr 220px;
+    align-items: baseline;
+    padding: 22px 32px;
+    border-bottom: 1px solid var(--border);
+    gap: 32px;
+  }
+  .scale-row:last-child { border-bottom: 0; }
+  .scale-tag {
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--p);
+    text-transform: uppercase;
+  }
+  .scale-sample {
+    color: var(--pdd);
+    font-family: var(--ff-head);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+  }
+  .scale-spec {
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    color: var(--txt3);
+    letter-spacing: 0.06em;
+    text-align: right;
+  }
+
+  .s-display { font-size: 64px; font-weight: 300; }
+  .s-h1 { font-size: 44px; font-weight: 400; }
+  .s-h2 { font-size: 32px; font-weight: 500; }
+  .s-h3 { font-size: 22px; font-weight: 600; }
+  .s-body { font-family: var(--ff-body) !important; font-size: 16px; font-weight: 400; line-height: 1.55 !important; letter-spacing: -0.005em; color: var(--txt) !important; }
+  .s-cap { font-family: var(--ff-mono) !important; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--txt3) !important; }
+
+  /* ── Components ──────────────────────────────── */
+  .comp-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .comp-card {
+    background: var(--w);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 36px 36px 40px;
+  }
+  .comp-card.tall { grid-column: span 2; }
+  .comp-card.tinted { background: var(--off); }
+  .comp-card.dark { background: var(--pdd); border-color: transparent; }
+  .comp-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--txt3);
+    margin-bottom: 28px;
+  }
+  .comp-card.dark .comp-head { color: rgba(245, 216, 103, 0.6); }
+  .comp-head strong { color: var(--pdd); font-weight: 500; }
+  .comp-card.dark .comp-head strong { color: var(--gl); }
+
+  /* buttons */
+  .btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+  }
+  .btn {
+    font-family: var(--ff-head);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+    padding: 14px 26px;
+    border-radius: 2px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 160ms ease;
+    line-height: 1;
+  }
+  .btn-primary { background: var(--g); color: var(--gddd); }
+  .btn-primary:hover { background: var(--gd); color: var(--gddd); }
+  .btn-primary:focus-visible,
+  .btn-violet:focus-visible,
+  .btn-ghost:focus-visible,
+  .btn-text:focus-visible { outline: 3px solid var(--p); outline-offset: 3px; }
+  .btn-violet { background: var(--p); color: var(--w); }
+  .btn-violet:hover { background: var(--pd); }
+  .btn-ghost { background: transparent; color: var(--p); border-color: var(--p); }
+  .btn-ghost:hover { background: var(--pm); }
+  .btn-text { background: transparent; color: var(--p); padding-left: 0; padding-right: 0; }
+  .btn-text:hover { color: var(--pd); }
+  .btn-sm { font-size: 13px; padding: 10px 18px; }
+  .btn-lg { font-size: 16px; padding: 18px 32px; }
+
+  /* form */
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .field label {
+    font-family: var(--ff-head);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--pdd);
+    text-transform: uppercase;
+  }
+  .field input, .field select {
+    font-family: var(--ff-body);
+    font-size: 15px;
+    color: var(--txt);
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--w);
+    outline: none;
+    transition: border-color 160ms;
+  }
+  .field input:focus { border-color: var(--p); box-shadow: 0 0 0 3px var(--pm); }
+  .field .hint { font-size: 12px; color: var(--txt3); }
+
+  /* badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 4px;
+    line-height: 1;
+  }
+  .badge-violet { background: var(--pm); color: var(--pdd); }
+  .badge-gold { background: var(--gl); color: var(--gddd); }
+  .badge-solid { background: var(--p); color: var(--w); }
+  .badge-outline { background: transparent; color: var(--p); border: 1px solid var(--p); }
+  .badge-dark { background: var(--pdd); color: var(--gl); }
+  .badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* card sample */
+  .sample-card {
+    background: var(--w);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 28px;
+  }
+  .sample-card .badge { margin-bottom: 16px; }
+  .sample-card h4 {
+    font-family: var(--ff-head);
+    font-weight: 500;
+    font-size: 22px;
+    letter-spacing: -0.015em;
+    color: var(--pdd);
+    margin: 0 0 8px;
+  }
+  .sample-card p {
+    font-family: var(--ff-body);
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--txt2);
+    margin: 0 0 20px;
+  }
+  .sample-card .meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--txt3);
+    text-transform: uppercase;
+  }
+
+  /* dark surface */
+  .comp-card.dark h4 {
+    color: var(--w);
+    font-family: var(--ff-head);
+    font-weight: 400;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+    margin: 0 0 12px;
+  }
+  .comp-card.dark p {
+    color: rgba(255,255,255,0.72);
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0 0 24px;
+    max-width: 42ch;
+  }
+
+  /* ── Usage / pairings ────────────────────────── */
+  .pair-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .pair {
+    aspect-ratio: 4/5;
+    border-radius: 4px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border: 1px solid var(--border);
+  }
+  .pair .sample-text {
+    font-family: var(--ff-head);
+    font-weight: 400;
+    font-size: 26px;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+  .pair .pair-tag {
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+  .pair-1 { background: var(--w); color: var(--pdd); }
+  .pair-2 { background: var(--pdd); color: var(--gl); border-color: transparent; }
+  .pair-3 { background: var(--g); color: var(--gddd); border-color: transparent; }
+  .pair-4 { background: var(--p); color: var(--w); border-color: transparent; }
+  .pair-5 { background: var(--pm); color: var(--pdd); }
+  .pair-6 { background: var(--off); color: var(--pdd); }
+  .pair-7 { background: var(--gl); color: var(--gddd); border-color: transparent; }
+  .pair-8 { background: var(--pdd); color: var(--w); border-color: transparent; }
+  .pair-8 .sample-text em { color: var(--gl); font-style: normal; }
+
+  /* ── Spacing / radii ─────────────────────────── */
+  .tokens-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .token-card {
+    background: var(--w);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 32px;
+  }
+  .token-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 80px;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .token-row:last-child { border-bottom: 0; }
+  .token-row .tag {
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--p);
+    text-transform: uppercase;
+  }
+  .token-bar {
+    height: 14px;
+    background: var(--p);
+    border-radius: 2px;
+  }
+  .token-px {
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    color: var(--txt3);
+    text-align: right;
+    letter-spacing: 0.06em;
+  }
+  .radius-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 24px;
+    margin-top: 12px;
+  }
+  .radius-tile {
+    width: 88px;
+    height: 88px;
+    background: var(--pm);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 8px;
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--p);
+  }
+
+  /* ── Email & Social ──────────────────────────── */
+  .channel-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .channel-card {
+    background: var(--w);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 32px;
+  }
+
+  /* Email mockup */
+  .email-frame {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--off);
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  .email-bar {
+    background: var(--pdd);
+    padding: 18px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .email-bar .ws {
+    font-family: var(--ff-head);
+    font-weight: 700;
+    color: var(--w);
+    letter-spacing: 0.04em;
+    font-size: 18px;
+  }
+  .email-bar .ws em { font-style: normal; color: var(--gl); font-weight: 400; font-size: 11px; letter-spacing: 0.18em; display: block; }
+  .email-bar .badge { background: var(--gl); color: var(--gddd); }
+  .email-body { padding: 36px 32px 28px; background: var(--w); }
+  .email-eyebrow {
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--p);
+    margin: 0 0 12px;
+  }
+  .email-h1 {
+    font-family: var(--ff-head);
+    font-weight: 400;
+    font-size: 32px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--pdd);
+    margin: 0 0 16px;
+  }
+  .email-h1 em { font-style: italic; color: var(--p); }
+  .email-p {
+    font-family: var(--ff-body);
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--txt2);
+    margin: 0 0 20px;
+  }
+  .email-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 24px 0;
+  }
+  .email-foot {
+    background: var(--off);
+    padding: 22px 32px;
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--txt3);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .email-specs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 24px;
+    margin-top: 4px;
+  }
+  .email-specs .spec {
+    padding: 14px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .email-specs .spec:last-child,
+  .email-specs .spec:nth-last-child(2) { border-bottom: 0; }
+  .email-specs dt {
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--txt3);
+    margin-bottom: 4px;
+  }
+  .email-specs dd {
+    font-family: var(--ff-head);
+    font-weight: 500;
+    font-size: 16px;
+    color: var(--pdd);
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+  .email-specs dd small {
+    display: block;
+    font-family: var(--ff-body);
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--txt3);
+    margin-top: 2px;
+    letter-spacing: 0;
+  }
+
+  .subject-list {
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .subject-list li {
+    padding: 14px 0;
+    border-bottom: 1px dashed var(--border);
+    display: grid;
+    grid-template-columns: 1fr 90px;
+    gap: 16px;
+    align-items: baseline;
+  }
+  .subject-list li:last-child { border-bottom: 0; }
+  .subject-list .sub {
+    font-family: var(--ff-head);
+    font-weight: 500;
+    font-size: 15px;
+    color: var(--pdd);
+    letter-spacing: -0.005em;
+  }
+  .subject-list .pre {
+    display: block;
+    font-family: var(--ff-body);
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--txt3);
+    margin-top: 3px;
+    letter-spacing: 0;
+  }
+  .subject-list .ct {
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--p);
+    text-align: right;
+  }
+
+  /* Social */
+  .social-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .post {
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--w);
+  }
+  .post-stage {
+    aspect-ratio: 1/1;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+  }
+  .post-meta {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.75;
+  }
+  .post-h {
+    font-family: var(--ff-head);
+    font-weight: 400;
+    font-size: 30px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .post-h em { font-style: italic; }
+  .post-foot {
+    padding: 14px 18px;
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--txt3);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+  }
+  .post-1 { background: var(--pdd); color: var(--w); }
+  .post-1 em { color: var(--gl); }
+  .post-2 { background: var(--off); color: var(--pdd); }
+  .post-2 em { color: var(--p); }
+  .post-3 { background: var(--g); color: var(--gddd); }
+  .post-4 { background: var(--p); color: var(--w); }
+  .post-4 em { color: var(--gl); }
+  .post-5 { background: var(--pm); color: var(--pdd); }
+  .post-6 { background: var(--w); color: var(--pdd); border-bottom: 1px solid var(--border); }
+  .post-stage .stamp {
+    align-self: flex-start;
+    font-family: var(--ff-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    opacity: 0.85;
+  }
+
+  .formats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .format {
+    background: var(--w);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+    text-align: center;
+  }
+  .format .ratio-box {
+    margin: 0 auto 16px;
+    background: var(--pm);
+    border: 1px dashed var(--p);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    color: var(--p);
+    letter-spacing: 0.1em;
+  }
+  .format .name {
+    font-family: var(--ff-head);
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--pdd);
+    margin: 0 0 4px;
+    letter-spacing: 0.02em;
+  }
+  .format .px {
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    color: var(--txt3);
+    letter-spacing: 0.06em;
+  }
+
+  .voice-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .voice-card {
+    background: var(--w);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 28px 32px;
+  }
+  .voice-card.we {
+    border-left: 3px solid var(--p);
+  }
+  .voice-card.notwe {
+    border-left: 3px solid #B0271C;
+  }
+  .voice-card h5 {
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 16px;
+  }
+  .voice-card.we h5 { color: var(--p); }
+  .voice-card.notwe h5 { color: #B0271C; }
+  .voice-card ul { margin: 0; padding: 0; list-style: none; }
+  .voice-card li {
+    font-family: var(--ff-body);
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--txt2);
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .voice-card li:last-child { border-bottom: 0; }
+  .voice-card.we li::before { content: "✓ "; color: var(--p); font-weight: 700; }
+  .voice-card.notwe li::before { content: "✕ "; color: #B0271C; font-weight: 700; }
+
+  /* ── Accessibility ───────────────────────────── */
+  .a11y-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 8px;
+  }
+  .a11y-card {
+    background: var(--w);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 32px;
+  }
+  .matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+  .matrix th, .matrix td {
+    text-align: left;
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .matrix th {
+    color: var(--txt3);
+    text-transform: uppercase;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+  }
+  .matrix td.pair-cell {
+    font-family: var(--ff-body);
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+  .matrix .chip {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 3px;
+    font-family: var(--ff-head);
+    font-weight: 600;
+  }
+  .matrix .ratio { color: var(--pdd); font-weight: 500; }
+  .matrix .pass { color: #1F7A47; }
+  .matrix .ui-only { color: #8A6A00; }
+  .matrix .fail { color: #B0271C; }
+
+  .focus-demo {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 12px;
+  }
+  .focus-demo .btn { outline: 3px solid var(--p); outline-offset: 3px; align-self: flex-start; }
+  .a11y-list {
+    margin: 16px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .a11y-list li {
+    font-family: var(--ff-body);
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--txt2);
+    padding: 12px 0 12px 28px;
+    border-bottom: 1px dashed var(--border);
+    position: relative;
+  }
+  .a11y-list li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    top: 12px;
+    color: var(--p);
+    font-weight: 700;
+  }
+  .a11y-list li:last-child { border-bottom: 0; }
+  .a11y-list strong { color: var(--pdd); font-weight: 600; }
+
+  /* footer */
+  footer {
+    margin-top: 120px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--ff-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--txt3);
+  }
+</style>
+<template id="__bundler_thumbnail" data-bg-color="#FAF8FF">
+  <svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+    <!-- Violet bar top -->
+    <rect width="800" height="600" fill="#FAF8FF"/>
+    <rect width="800" height="10" fill="#3D1A6E"/>
+    <!-- Title block -->
+    <rect x="60" y="60" width="320" height="14" rx="2" fill="#3D1A6E" opacity="0.85"/>
+    <rect x="60" y="84" width="200" height="10" rx="2" fill="#8A2BE2" opacity="0.5"/>
+    <!-- Color swatches row -->
+    <rect x="60" y="130" width="100" height="80" rx="2" fill="#8A2BE2"/>
+    <rect x="170" y="130" width="60" height="80" rx="2" fill="#6C1ABA"/>
+    <rect x="240" y="130" width="60" height="80" rx="2" fill="#3D1A6E"/>
+    <rect x="310" y="130" width="60" height="80" rx="2" fill="#EDE0FB"/>
+    <rect x="380" y="130" width="60" height="80" rx="2" fill="#FAF8FF" stroke="#8A2BE226"/>
+    <rect x="450" y="130" width="80" height="80" rx="2" fill="#E2BE2B"/>
+    <rect x="540" y="130" width="60" height="80" rx="2" fill="#FFE680"/>
+    <rect x="610" y="130" width="60" height="80" rx="2" fill="#574100"/>
+    <!-- Type specimen -->
+    <rect x="60" y="240" width="260" height="18" rx="2" fill="#3D1A6E" opacity="0.7"/>
+    <rect x="60" y="268" width="180" height="10" rx="2" fill="#695B93" opacity="0.5"/>
+    <rect x="60" y="286" width="220" height="10" rx="2" fill="#695B93" opacity="0.35"/>
+    <!-- Buttons row -->
+    <rect x="60" y="330" width="120" height="36" rx="2" fill="#E2BE2B"/>
+    <rect x="192" y="330" width="120" height="36" rx="2" fill="#8A2BE2"/>
+    <rect x="324" y="330" width="100" height="36" rx="2" fill="none" stroke="#8A2BE2" stroke-width="1.5"/>
+    <!-- Logo placeholder circle -->
+    <circle cx="660" cy="340" r="80" fill="#3D1A6E" opacity="0.08"/>
+    <circle cx="660" cy="340" r="52" fill="#8A2BE2" opacity="0.18"/>
+    <circle cx="660" cy="340" r="28" fill="#E2BE2B" opacity="0.6"/>
+    <!-- Bottom rule -->
+    <rect x="60" y="460" width="680" height="1" fill="#8A2BE226"/>
+    <rect x="60" y="480" width="160" height="8" rx="2" fill="#695B93" opacity="0.3"/>
+  </svg>
+</template>
+</head>
+<body>
+<div class="page">
+
+  <!-- ─── Masthead ────────────────────────────── -->
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Brand Kit · v1.0</p>
+      <h1 class="title">Elite<br/>Resource <em>Services</em></h1>
+    </div>
+    <div>
+      <p class="lede">A regal violet and harvest gold system, built for clarity and confidence. This kit defines the color tokens, typography, and component patterns that make every surface feel unmistakably ours.</p>
+      <div class="meta">
+        <span>Issued<strong>May 2026</strong></span>
+        <span>Status<strong>Active</strong></span>
+        <span>Owner<strong>Brand Studio</strong></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── 01 · Logo ───────────────────────────── -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">01 — Logo</span>
+      <h2 class="section-title">The mark.
+        <small>A violet-and-gold yin-yang of intertwining vines, locked above a heavy slab wordmark. The mark always sits above or beside the wordmark — never separated from it without approval.</small>
+      </h2>
+    </div>
+
+    <div class="logo-hero">
+      <div class="logo-stage logo-light">
+        <img src="assets/elite-logo-icon.png" alt="Elite Resource Services" />
+        <span class="stage-tag">Primary · on $off</span>
+      </div>
+      <div class="logo-side">
+        <div class="logo-row">
+          <div class="logo-cell logo-white"><img src="assets/elite-logo-icon.png" alt="" /><span>$w</span></div>
+          <div class="logo-cell logo-pm"><img src="assets/elite-logo-icon.png" alt="" /><span>$pm</span></div>
+        </div>
+        <div class="logo-row">
+          <div class="logo-cell logo-pdd"><img src="assets/elite-logo-icon.png" alt="" /><span>$pdd</span></div>
+          <div class="logo-cell logo-gl"><img src="assets/elite-logo-icon.png" alt="" /><span>$gl</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="logo-rules">
+      <div class="rule-card">
+        <div class="comp-head"><span>Clear space</span><strong>≥ 1× cap height</strong></div>
+        <div class="clearspace">
+          <div class="cs-frame">
+            <span class="cs-mark cs-top">x</span>
+            <span class="cs-mark cs-right">x</span>
+            <span class="cs-mark cs-bottom">x</span>
+            <span class="cs-mark cs-left">x</span>
+            <img src="assets/elite-logo-icon.png" alt="" />
+          </div>
+        </div>
+        <p class="rule-note">Reserve at least one cap-height of empty space on every side. Never let copy, edges, or other marks intrude.</p>
+      </div>
+      <div class="rule-card">
+        <div class="comp-head"><span>Minimum size</span><strong>40 px digital · 0.5″ print</strong></div>
+        <div class="size-row">
+          <div class="size-cell"><img src="assets/elite-logo-icon.png" alt="" style="height:120px"/><span>120 px</span></div>
+          <div class="size-cell"><img src="assets/elite-logo-icon.png" alt="" style="height:72px"/><span>72 px</span></div>
+          <div class="size-cell"><img src="assets/elite-logo-icon.png" alt="" style="height:40px"/><span>40 px · min</span></div>
+        </div>
+        <p class="rule-note">Below 40 px the leaves break up. For favicons and avatars, use the standalone yin-yang mark (in production).</p>
+      </div>
+    </div>
+
+    <div class="logo-donts">
+      <div class="dont-card">
+        <div class="dont-stage" style="background: linear-gradient(135deg, #ff5d8f, #00d2ff);">
+          <img src="assets/elite-logo-icon.png" alt="" />
+        </div>
+        <div class="dont-label"><span class="x">✕</span> Don't place on busy or off-brand gradients</div>
+      </div>
+      <div class="dont-card">
+        <div class="dont-stage" style="background: var(--off);">
+          <img src="assets/elite-logo-icon.png" alt="" style="transform: scaleX(1.4);" />
+        </div>
+        <div class="dont-label"><span class="x">✕</span> Don't stretch, skew, or distort proportions</div>
+      </div>
+      <div class="dont-card">
+        <div class="dont-stage" style="background: var(--off);">
+          <img src="assets/elite-logo-icon.png" alt="" style="filter: hue-rotate(140deg);" />
+        </div>
+        <div class="dont-label"><span class="x">✕</span> Don't recolor outside the approved palette</div>
+      </div>
+      <div class="dont-card">
+        <div class="dont-stage" style="background: var(--off);">
+          <img src="assets/elite-logo-icon.png" alt="" style="filter: drop-shadow(0 6px 0 var(--g)) drop-shadow(0 -6px 0 var(--p));" />
+        </div>
+        <div class="dont-label"><span class="x">✕</span> Don't add shadows, glows, or effects</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 02 · Color ──────────────────────────── -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">02 — Color</span>
+      <h2 class="section-title">Royal violet, harvest gold.
+        <small>The core palette pairs a saturated royal violet with a warm harvest gold for CTAs. Tints, shades and text tokens cascade from these two anchors.</small>
+      </h2>
+    </div>
+
+    <!-- Violet -->
+    <div class="palette-violet">
+      <div class="swatch s-p lg">
+        <div class="swatch-top"><span>$p · Primary</span><span>01</span></div>
+        <div>
+          <div class="swatch-name">Royal Violet</div>
+          <div class="swatch-role">The signature anchor. Buttons, links, brand surfaces.</div>
+          <dl class="swatch-codes">
+            <dt>Hex</dt><dd>#8A2BE2</dd>
+            <dt>RGB</dt><dd>138, 43, 226</dd>
+            <dt>HSL</dt><dd>271° 76% 53%</dd>
+            <dt>Token</dt><dd>$p</dd>
+          </dl>
+        </div>
+      </div>
+      <div class="swatch s-pd">
+        <div class="swatch-top"><span>$pd · Hover</span><span>02</span></div>
+        <div>
+          <div class="swatch-name">Deep Amethyst</div>
+          <div class="swatch-role">Hover &amp; pressed states.</div>
+          <dl class="swatch-codes">
+            <dt>Hex</dt><dd>#6C1ABA</dd>
+            <dt>Token</dt><dd>$pd</dd>
+          </dl>
+        </div>
+      </div>
+      <div class="swatch s-pdd">
+        <div class="swatch-top"><span>$pdd · Text</span><span>03</span></div>
+        <div>
+          <div class="swatch-name">Deep Violet</div>
+          <div class="swatch-role">Body text &amp; dark backgrounds.</div>
+          <dl class="swatch-codes">
+            <dt>Hex</dt><dd>#3D1A6E</dd>
+            <dt>Token</dt><dd>$pdd</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="palette-tints">
+      <div class="swatch s-pm">
+        <div class="swatch-top"><span>$pm · Tint</span><span>04</span></div>
+        <div>
+          <div class="swatch-name">Soft Violet Tint</div>
+          <div class="swatch-role">Quiet surfaces, hover halos, badges.</div>
+          <dl class="swatch-codes"><dt>Hex</dt><dd>#EDE0FB</dd><dt>Token</dt><dd>$pm</dd></dl>
+        </div>
+      </div>
+      <div class="swatch s-off" style="border-left: 1px solid var(--border);">
+        <div class="swatch-top"><span>$off · Page</span><span>05</span></div>
+        <div>
+          <div class="swatch-name">Off‑White Violet</div>
+          <div class="swatch-role">Default page background. Replaces pure white.</div>
+          <dl class="swatch-codes"><dt>Hex</dt><dd>#FAF8FF</dd><dt>Token</dt><dd>$off</dd></dl>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gold -->
+    <div class="palette-gold">
+      <div class="swatch s-g">
+        <div class="swatch-top"><span>$g · CTA</span><span>06</span></div>
+        <div>
+          <div class="swatch-name">Harvest Gold</div>
+          <div class="swatch-role">Primary CTAs &amp; conversion moments.</div>
+          <dl class="swatch-codes"><dt>Hex</dt><dd>#E2BE2B</dd><dt>Token</dt><dd>$g</dd></dl>
+        </div>
+      </div>
+      <div class="swatch s-gl">
+        <div class="swatch-top"><span>$gl · On‑violet</span><span>07</span></div>
+        <div>
+          <div class="swatch-name">Sunlight</div>
+          <div class="swatch-role">Labels on violet surfaces.</div>
+          <dl class="swatch-codes"><dt>Hex</dt><dd>#F5D867</dd></dl>
+        </div>
+      </div>
+      <div class="swatch s-gd">
+        <div class="swatch-top"><span>$gd · Hover</span><span>08</span></div>
+        <div>
+          <div class="swatch-name">Gold Dark</div>
+          <div class="swatch-role">CTA hover depth.</div>
+          <dl class="swatch-codes"><dt>Hex</dt><dd>#B09800</dd></dl>
+        </div>
+      </div>
+      <div class="swatch s-gddd">
+        <div class="swatch-top"><span>$gddd · On‑gold</span><span>09</span></div>
+        <div>
+          <div class="swatch-name">Gold Darkest</div>
+          <div class="swatch-role">Text on gold surfaces.</div>
+          <dl class="swatch-codes"><dt>Hex</dt><dd>#7A5E00</dd></dl>
+        </div>
+      </div>
+    </div>
+
+    <!-- Text tokens -->
+    <div class="text-tokens">
+      <div class="text-row">
+        <div class="text-chip"><span class="chip-dot" style="background:#3D1A6E"></span>$txt</div>
+        <div class="text-sample" style="color:#3D1A6E">The crown sits where it always has.</div>
+        <div class="text-role">Body copy · primary</div>
+        <div class="text-hex">#3D1A6E</div>
+      </div>
+      <div class="text-row">
+        <div class="text-chip"><span class="chip-dot" style="background:#5C3D8F"></span>$txt2</div>
+        <div class="text-sample" style="color:#5C3D8F">Secondary copy &amp; supporting prose.</div>
+        <div class="text-role">Subdued labels · ≥4.5:1</div>
+        <div class="text-hex">#5C3D8F</div>
+      </div>
+      <div class="text-row">
+        <div class="text-chip"><span class="chip-dot" style="background:#695B93"></span>$txt3</div>
+        <div class="text-sample" style="color:#695B93">Captions, helper text, metadata.</div>
+        <div class="text-role">Captions · ≥4.5:1 on white</div>
+        <div class="text-hex">#695B93</div>
+      </div>
+      <div class="text-row">
+        <div class="text-chip"><span class="chip-dot" style="background:rgba(138,43,226,0.15);border:1px solid var(--border)"></span>$border</div>
+        <div class="text-sample" style="color:#695B93; font-size: 16px;">Hairlines, dividers &amp; outlined inputs.</div>
+        <div class="text-role">rgba(138,43,226,0.15)</div>
+        <div class="text-hex">violet @ 15%</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 02 · Typography ─────────────────────── -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">03 — Typography</span>
+      <h2 class="section-title">Source Sans 3 &amp; Inter.
+        <small>Source Sans 3 leads as our voice for headings — humanist, confident, slightly editorial. Inter handles the operational weight: UI, body and dense data.</small>
+      </h2>
+    </div>
+
+    <div class="type-grid">
+      <div class="type-card head">
+        <div class="type-label"><span>Headings · Display</span><strong>Source Sans 3</strong></div>
+        <h3 class="type-name">Source Sans&nbsp;3</h3>
+        <div class="type-aa">Aa</div>
+        <div class="weight-row">
+          <span style="font-weight:300">Light 300</span>
+          <span style="font-weight:400">Regular 400</span>
+          <span style="font-weight:500">Medium 500</span>
+          <span style="font-weight:600">Semi 600</span>
+          <span style="font-weight:700">Bold 700</span>
+          <span style="font-weight:800">Black 800</span>
+        </div>
+        <div class="type-glyphs">
+          ABCDEFGHIJKLMNOPQRSTUVWXYZ<br/>
+          abcdefghijklmnopqrstuvwxyz<br/>
+          0123456789 — &amp; · ‘ ’ “ ” ( ) [ ] / + ?
+        </div>
+      </div>
+
+      <div class="type-card body">
+        <div class="type-label"><span>Body · Interface</span><strong>Inter</strong></div>
+        <h3 class="type-name">Inter</h3>
+        <div class="type-aa">Aa</div>
+        <div class="weight-row">
+          <span style="font-weight:300">Light 300</span>
+          <span style="font-weight:400">Regular 400</span>
+          <span style="font-weight:500">Medium 500</span>
+          <span style="font-weight:600">Semi 600</span>
+          <span style="font-weight:700">Bold 700</span>
+        </div>
+        <div class="type-glyphs">
+          ABCDEFGHIJKLMNOPQRSTUVWXYZ<br/>
+          abcdefghijklmnopqrstuvwxyz<br/>
+          0123456789 — &amp; · ‘ ’ “ ” ( ) [ ] / + ?
+        </div>
+      </div>
+    </div>
+
+    <!-- Scale -->
+    <div class="scale">
+      <div class="scale-row">
+        <span class="scale-tag">Display</span>
+        <div class="scale-sample s-display">A measured craft, in service.</div>
+        <div class="scale-spec">Source Sans · 64 / 1.05 · Light</div>
+      </div>
+      <div class="scale-row">
+        <span class="scale-tag">H1</span>
+        <div class="scale-sample s-h1">Bring the resource to the work.</div>
+        <div class="scale-spec">Source Sans · 44 / 1.1 · Regular</div>
+      </div>
+      <div class="scale-row">
+        <span class="scale-tag">H2</span>
+        <div class="scale-sample s-h2">A team behind every team.</div>
+        <div class="scale-spec">Source Sans · 32 / 1.15 · Medium</div>
+      </div>
+      <div class="scale-row">
+        <span class="scale-tag">H3</span>
+        <div class="scale-sample s-h3">Field operations, simplified.</div>
+        <div class="scale-spec">Source Sans · 22 / 1.25 · Semi</div>
+      </div>
+      <div class="scale-row">
+        <span class="scale-tag">Body</span>
+        <div class="scale-sample s-body">We pair experienced operators with the systems that keep your projects shipping. Whether you need a single specialist or a full standing crew, the goal is the same: predictable delivery, honest reporting, and a team you actually want to work with.</div>
+        <div class="scale-spec">Inter · 16 / 1.55 · Regular</div>
+      </div>
+      <div class="scale-row">
+        <span class="scale-tag">Caption</span>
+        <div class="scale-sample s-cap">PROOF · CASE STUDY · NORTHEAST DIVISION · 2026</div>
+        <div class="scale-spec">JetBrains Mono · 11 · 0.16em</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 03 · Components ─────────────────────── -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">04 — Components</span>
+      <h2 class="section-title">Buttons, badges, surfaces.
+        <small>The component vocabulary leads with gold for primary actions and violet for navigation, links, and secondary moments. Pill buttons, soft fields, and quiet card chrome.</small>
+      </h2>
+    </div>
+
+    <div class="comp-grid">
+      <!-- Buttons -->
+      <div class="comp-card tall">
+        <div class="comp-head"><span>Buttons</span><strong>5 variants · 3 sizes</strong></div>
+        <div class="btn-row">
+          <button class="btn btn-primary">Request a Crew</button>
+          <button class="btn btn-violet">View Services</button>
+          <button class="btn btn-ghost">Learn More</button>
+          <button class="btn btn-text">Read the brief →</button>
+        </div>
+        <div class="btn-row" style="margin-top:18px">
+          <button class="btn btn-primary btn-lg">Schedule a Walk-Through</button>
+          <button class="btn btn-violet btn-sm">Get Quote</button>
+          <button class="btn btn-ghost btn-sm">Cancel</button>
+        </div>
+        <div class="btn-row" style="margin-top:18px">
+          <button class="btn btn-primary" disabled style="opacity:0.45; cursor:not-allowed">Disabled CTA</button>
+          <button class="btn btn-violet" style="background:var(--pd)">Hover State</button>
+          <button class="btn btn-primary" style="background:var(--gd); color:var(--gddd)">Hover State</button>
+        </div>
+      </div>
+
+      <!-- Badges -->
+      <div class="comp-card">
+        <div class="comp-head"><span>Badges &amp; pills</span><strong>Status · Tag</strong></div>
+        <div class="btn-row">
+          <span class="badge badge-violet">Active</span>
+          <span class="badge badge-gold">Featured</span>
+          <span class="badge badge-solid">Priority</span>
+          <span class="badge badge-outline">Pending</span>
+          <span class="badge badge-dark">Members Only</span>
+        </div>
+        <div class="btn-row" style="margin-top:20px">
+          <span class="badge badge-violet">Tier I</span>
+          <span class="badge badge-violet">Tier II</span>
+          <span class="badge badge-gold">Premier</span>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <div class="comp-card">
+        <div class="comp-head"><span>Form fields</span><strong>Inputs · Focus</strong></div>
+        <div class="field">
+          <label for="name">Project Name</label>
+          <input id="name" type="text" placeholder="e.g. Hudson Valley refit" value="Northeast standing crew" />
+        </div>
+        <div class="field">
+          <label for="kind">Service Type</label>
+          <select id="kind">
+            <option>Standing crew</option>
+            <option>Project specialist</option>
+            <option>Audit &amp; advisory</option>
+          </select>
+          <span class="hint">Choose the engagement that best fits your timeline.</span>
+        </div>
+      </div>
+
+      <!-- Sample card -->
+      <div class="comp-card tinted">
+        <div class="comp-head"><span>Card · Surface</span><strong>$off background</strong></div>
+        <div class="sample-card">
+          <span class="badge badge-violet">Case Study</span>
+          <h4>A 14-week refit, delivered in 12.</h4>
+          <p>Our standing crew picked up the project mid-flight, rebuilt the schedule, and closed it under budget — without a single change order on the back half.</p>
+          <div class="meta-row"><span>Northeast · 2026</span><span>Read →</span></div>
+        </div>
+      </div>
+
+      <!-- Dark surface -->
+      <div class="comp-card dark">
+        <div class="comp-head"><span>Dark Surface</span><strong>$pdd</strong></div>
+        <span class="badge badge-dark">For Operators</span>
+        <h4 style="margin-top:16px">Built for the people doing the work.</h4>
+        <p>Gold reads as warmth on a deep violet field — reserve it for headlines, key data, and the one action you want a reader to take.</p>
+        <button class="btn btn-primary">Open the Portal</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 04 · Pairings ───────────────────────── -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">05 — Pairings</span>
+      <h2 class="section-title">Approved color pairings.
+        <small>Eight combinations cover ~95% of brand surfaces. Anything outside this set should be sanity-checked against contrast and warmth.</small>
+      </h2>
+    </div>
+
+    <div class="pair-grid">
+      <div class="pair pair-1">
+        <span class="pair-tag">$off · $pdd</span>
+        <div class="sample-text">Quiet, primary surface.</div>
+      </div>
+      <div class="pair pair-2">
+        <span class="pair-tag">$pdd · $gl</span>
+        <div class="sample-text">Premium, evening tone.</div>
+      </div>
+      <div class="pair pair-3">
+        <span class="pair-tag">$g · $gddd</span>
+        <div class="sample-text">CTA &amp; conversion.</div>
+      </div>
+      <div class="pair pair-4">
+        <span class="pair-tag">$p · $w</span>
+        <div class="sample-text">Brand block, hero.</div>
+      </div>
+      <div class="pair pair-5">
+        <span class="pair-tag">$pm · $pdd</span>
+        <div class="sample-text">Soft callout, badge.</div>
+      </div>
+      <div class="pair pair-6">
+        <span class="pair-tag">$off · $pdd</span>
+        <div class="sample-text">Default page wash.</div>
+      </div>
+      <div class="pair pair-7">
+        <span class="pair-tag">$gl · $gddd</span>
+        <div class="sample-text">Highlight banner.</div>
+      </div>
+      <div class="pair pair-8">
+        <span class="pair-tag">$pdd · $w / $gl</span>
+        <div class="sample-text">Headline with <em>gold accent</em>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 05 · Tokens ─────────────────────────── -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">06 — Spacing &amp; Radii</span>
+      <h2 class="section-title">A 4px grid, four radii.
+        <small>Spacing sits on a 4px base, doubling at common breakpoints. Radii stay restrained — pills for actions, soft squares for surfaces.</small>
+      </h2>
+    </div>
+
+    <div class="tokens-grid">
+      <div class="token-card">
+        <div class="comp-head"><span>Spacing scale</span><strong>4px base</strong></div>
+        <div class="token-row"><span class="tag">xs</span><div class="token-bar" style="width:4px"></div><span class="token-px">4 px</span></div>
+        <div class="token-row"><span class="tag">sm</span><div class="token-bar" style="width:8px"></div><span class="token-px">8 px</span></div>
+        <div class="token-row"><span class="tag">md</span><div class="token-bar" style="width:16px"></div><span class="token-px">16 px</span></div>
+        <div class="token-row"><span class="tag">lg</span><div class="token-bar" style="width:24px"></div><span class="token-px">24 px</span></div>
+        <div class="token-row"><span class="tag">xl</span><div class="token-bar" style="width:40px"></div><span class="token-px">40 px</span></div>
+        <div class="token-row"><span class="tag">2xl</span><div class="token-bar" style="width:64px"></div><span class="token-px">64 px</span></div>
+        <div class="token-row"><span class="tag">3xl</span><div class="token-bar" style="width:96px"></div><span class="token-px">96 px</span></div>
+      </div>
+
+      <div class="token-card">
+        <div class="comp-head"><span>Radii</span><strong>4 stops</strong></div>
+        <div class="radius-row">
+          <div class="radius-tile" style="border-radius:0">0</div>
+          <div class="radius-tile" style="border-radius:4px">4</div>
+          <div class="radius-tile" style="border-radius:8px">8</div>
+          <div class="radius-tile" style="border-radius:999px">PILL</div>
+        </div>
+        <div class="comp-head" style="margin-top:40px"><span>Elevation</span><strong>2 stops</strong></div>
+        <div style="display:flex; gap:24px; margin-top:12px">
+          <div style="width:120px;height:80px;background:var(--w);border:1px solid var(--border);border-radius:6px;box-shadow:0 1px 2px rgba(61,26,110,0.08);display:flex;align-items:flex-end;padding:8px;font-family:var(--ff-mono);font-size:10px;color:var(--txt3);letter-spacing:.1em">SHADOW · 1</div>
+          <div style="width:120px;height:80px;background:var(--w);border:1px solid var(--border);border-radius:6px;box-shadow:0 12px 32px -12px rgba(61,26,110,0.25);display:flex;align-items:flex-end;padding:8px;font-family:var(--ff-mono);font-size:10px;color:var(--txt3);letter-spacing:.1em">SHADOW · 2</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 07 · Email Marketing ────────────────── -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">07 — Email Marketing</span>
+      <h2 class="section-title">Inbox-ready, on brand.
+        <small>Email is our highest-trust channel — it lands in the inboxes of clients we already work with. Keep it spare, keep it useful, and let one CTA do the work.</small>
+      </h2>
+    </div>
+
+    <div class="channel-grid">
+      <div class="channel-card">
+        <div class="comp-head"><span>Template · Standard</span><strong>600 px · single column</strong></div>
+        <div class="email-frame">
+          <div class="email-bar">
+            <div class="ws">ELITE<em>Resource Services</em></div>
+            <span class="badge">May Brief</span>
+          </div>
+          <div class="email-body">
+            <p class="email-eyebrow">Field Notes · No. 12</p>
+            <h3 class="email-h1">A 14-week refit, <em>delivered in 12.</em></h3>
+            <p class="email-p">Our standing crew picked up a Hudson Valley project mid-flight, rebuilt the schedule, and closed it under budget — without a single change order on the back half. Here's how.</p>
+            <button class="btn btn-primary">Read the Case Study</button>
+            <div class="email-divider"></div>
+            <p class="email-p" style="margin:0; font-size:13px; color:var(--txt3);">You're receiving this because you've worked with us before. Manage preferences or unsubscribe anytime.</p>
+          </div>
+          <div class="email-foot">
+            <span>Elite Resource Services</span>
+            <span>brand@eliteresource</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="channel-card">
+        <div class="comp-head"><span>Specs &amp; rules</span><strong>Master template</strong></div>
+        <dl class="email-specs">
+          <div class="spec"><dt>Width</dt><dd>600 px<small>Mobile fluid below 480 px</small></dd></div>
+          <div class="spec"><dt>Header bar</dt><dd>$pdd<small>72 px tall, gold accent</small></dd></div>
+          <div class="spec"><dt>Body BG</dt><dd>$w<small>Never $off — clients clip</small></dd></div>
+          <div class="spec"><dt>Body type</dt><dd>Inter 15 / 24<small>Web-safe fallback: Helvetica</small></dd></div>
+          <div class="spec"><dt>Headline</dt><dd>Source Sans 32 / 36<small>Fallback: Georgia</small></dd></div>
+          <div class="spec"><dt>One CTA</dt><dd>$g pill button<small>Per email, no exceptions</small></dd></div>
+          <div class="spec"><dt>Image cap</dt><dd>≤ 200 KB<small>Always include alt text</small></dd></div>
+          <div class="spec"><dt>Dark mode</dt><dd>Tested<small>Logo on $pdd, no glow</small></dd></div>
+        </dl>
+
+        <div class="comp-head" style="margin-top:32px"><span>Subject lines</span><strong>Library</strong></div>
+        <ul class="subject-list">
+          <li>
+            <div>
+              <span class="sub">Field notes from a 12-week refit</span>
+              <span class="pre">How we rebuilt the schedule mid-project — without a single change order…</span>
+            </div>
+            <span class="ct">Newsletter</span>
+          </li>
+          <li>
+            <div>
+              <span class="sub">Your Q3 crew is ready</span>
+              <span class="pre">Three openings on the standing roster — first call is yours.</span>
+            </div>
+            <span class="ct">Lifecycle</span>
+          </li>
+          <li>
+            <div>
+              <span class="sub">A walk-through, on us</span>
+              <span class="pre">Bring the floor plan; we'll bring the questions.</span>
+            </div>
+            <span class="ct">Promo</span>
+          </li>
+          <li>
+            <div>
+              <span class="sub">It's review time, Casey</span>
+              <span class="pre">Fifteen minutes, your numbers, our notes.</span>
+            </div>
+            <span class="ct">Trans.</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="voice-grid">
+      <div class="voice-card we">
+        <h5>Email · Voice</h5>
+        <ul>
+          <li>One idea per email; one CTA per email.</li>
+          <li>Subject lines under 50 characters; preheader earns the open.</li>
+          <li>First-name only when we'd use it on a call.</li>
+          <li>Plain-text alt sent for every campaign — no exceptions.</li>
+        </ul>
+      </div>
+      <div class="voice-card notwe">
+        <h5>Email · Avoid</h5>
+        <ul>
+          <li>Stacking 3+ buttons in a single email body.</li>
+          <li>All-caps subject lines, exclamation chains, or 🚀-style emoji.</li>
+          <li>Embedded video, animated GIF heroes, or tracking pixels in plain-text.</li>
+          <li>Background-image headers (clients strip them).</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 08 · Social Media ───────────────────── -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">08 — Social Media</span>
+      <h2 class="section-title">Quiet, considered posts.
+        <small>Social isn't where we win clients — it's where we show our work to the people we already serve. Lead with proof and craft, not noise. LinkedIn first, Instagram second, everything else by request.</small>
+      </h2>
+    </div>
+
+    <div class="social-grid">
+      <div class="post">
+        <div class="post-stage post-1">
+          <span class="stamp">Case Study</span>
+          <h3 class="post-h">A 14-week refit,<br/><em>delivered in 12.</em></h3>
+          <div class="post-meta"><span>Northeast · 2026</span><span>01 / 04</span></div>
+        </div>
+        <div class="post-foot"><span>LinkedIn · 1200×1200</span><span>Hero</span></div>
+      </div>
+      <div class="post">
+        <div class="post-stage post-2">
+          <span class="stamp">Hiring</span>
+          <h3 class="post-h">We're looking for <em>operators</em> who finish what they start.</h3>
+          <div class="post-meta"><span>Standing crew · NE</span><span>Apply →</span></div>
+        </div>
+        <div class="post-foot"><span>Instagram · 1080×1080</span><span>Recruit</span></div>
+      </div>
+      <div class="post">
+        <div class="post-stage post-3">
+          <span class="stamp" style="border-color:var(--gddd)">Field Notes</span>
+          <h3 class="post-h">Schedules don't slip on Tuesdays. They slip on Friday at 3.</h3>
+          <div class="post-meta"><span>No. 12</span><span>Read →</span></div>
+        </div>
+        <div class="post-foot"><span>LinkedIn · 1200×627</span><span>Article</span></div>
+      </div>
+      <div class="post">
+        <div class="post-stage post-4">
+          <span class="stamp">Stat</span>
+          <h3 class="post-h" style="font-size:64px; font-weight:300; line-height:0.95">94%</h3>
+          <div>
+            <p style="font-family:var(--ff-body); font-size:14px; line-height:1.5; margin:0 0 8px; opacity:0.85">of our 2025 projects closed on or under their original timeline.</p>
+            <div class="post-meta"><span>Year in review</span><span>03 / 04</span></div>
+          </div>
+        </div>
+        <div class="post-foot"><span>Instagram · 1080×1080</span><span>Carousel</span></div>
+      </div>
+      <div class="post">
+        <div class="post-stage post-5">
+          <span class="stamp">Quote</span>
+          <h3 class="post-h" style="font-style:italic; font-weight:300">“They didn't just fix the schedule. They fixed the room.”</h3>
+          <div class="post-meta"><span>— J. Park, Hudson Valley</span><span>Client</span></div>
+        </div>
+        <div class="post-foot"><span>LinkedIn · 1200×1200</span><span>Testimonial</span></div>
+      </div>
+      <div class="post">
+        <div class="post-stage post-6">
+          <span class="stamp" style="color:var(--p); border-color:var(--p)">Story</span>
+          <h3 class="post-h">Behind the<br/><em>standing crew.</em></h3>
+          <div class="post-meta" style="color:var(--txt3)"><span>Field, May 2026</span><span>Tap →</span></div>
+        </div>
+        <div class="post-foot"><span>Instagram Story · 1080×1920</span><span>Vertical</span></div>
+      </div>
+    </div>
+
+    <div class="formats">
+      <div class="format">
+        <div class="ratio-box" style="width:120px; height:120px;">1 : 1</div>
+        <div class="name">Square Post</div>
+        <div class="px">1080 × 1080 · IG, LI</div>
+      </div>
+      <div class="format">
+        <div class="ratio-box" style="width:160px; height:84px;">1.91 : 1</div>
+        <div class="name">Landscape</div>
+        <div class="px">1200 × 627 · LI Article</div>
+      </div>
+      <div class="format">
+        <div class="ratio-box" style="width:80px; height:142px;">9 : 16</div>
+        <div class="name">Story / Reel</div>
+        <div class="px">1080 × 1920 · IG, LI</div>
+      </div>
+      <div class="format">
+        <div class="ratio-box" style="width:120px; height:150px;">4 : 5</div>
+        <div class="name">Portrait</div>
+        <div class="px">1080 × 1350 · IG Feed</div>
+      </div>
+    </div>
+
+    <div class="voice-grid">
+      <div class="voice-card we">
+        <h5>Social · Voice</h5>
+        <ul>
+          <li>Speak like one operator to another — direct, specific, low ego.</li>
+          <li>Caption opens with a number, observation, or claim — never "Excited to share…".</li>
+          <li>Credit the team and the client by name when the post permits it.</li>
+          <li>Hashtags belong below a line break, max five, all relevant to the trade.</li>
+        </ul>
+      </div>
+      <div class="voice-card notwe">
+        <h5>Social · Avoid</h5>
+        <ul>
+          <li>Trend-chasing, dance reels, or AI-generated stock imagery.</li>
+          <li>Memes that make the client, the trade, or the work the punchline.</li>
+          <li>Logo on full-bleed photography — always reserve a $off or $pdd plate.</li>
+          <li>Engagement bait ("comment YES below…"). Ever.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 09 · Accessibility ──────────────────── -->
+  <section>
+    <div class="section-head">
+      <span class="section-num">09 — Accessibility</span>
+      <h2 class="section-title">WCAG 2.1 AA, by default.
+        <small>Every text/background pair in this kit has been measured. The matrix below documents what's safe for body copy, what's UI-only (≥3:1 large text and non-text controls), and the focus + interaction rules teams should ship with.</small>
+      </h2>
+    </div>
+
+    <div class="a11y-grid">
+      <div class="a11y-card">
+        <div class="comp-head"><span>Contrast Matrix</span><strong>WCAG 2.1</strong></div>
+        <table class="matrix">
+          <thead><tr><th>Pair</th><th>Sample</th><th>Ratio</th><th>Use for</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="pair-cell">$txt on $off</td>
+              <td><span class="chip" style="background:#FAF8FF;color:#3D1A6E">Body copy</span></td>
+              <td class="ratio">12.7:1</td>
+              <td class="pass">Body · AAA</td>
+            </tr>
+            <tr>
+              <td class="pair-cell">$txt2 on $w</td>
+              <td><span class="chip" style="background:#FFFFFF;color:#5C3D8F">Secondary</span></td>
+              <td class="ratio">8.3:1</td>
+              <td class="pass">Body · AAA</td>
+            </tr>
+            <tr>
+              <td class="pair-cell">$txt3 on $w</td>
+              <td><span class="chip" style="background:#FFFFFF;color:#695B93">Caption</span></td>
+              <td class="ratio">5.97:1</td>
+              <td class="pass">Body · AA</td>
+            </tr>
+            <tr>
+              <td class="pair-cell">$w on $p</td>
+              <td><span class="chip" style="background:#8A2BE2;color:#FFFFFF">Violet button</span></td>
+              <td class="ratio">5.96:1</td>
+              <td class="pass">Body · AA</td>
+            </tr>
+            <tr>
+              <td class="pair-cell">$w on $pdd</td>
+              <td><span class="chip" style="background:#3D1A6E;color:#FFFFFF">Dark surface</span></td>
+              <td class="ratio">13.4:1</td>
+              <td class="pass">Body · AAA</td>
+            </tr>
+            <tr>
+              <td class="pair-cell">$gl on $pdd</td>
+              <td><span class="chip" style="background:#3D1A6E;color:#FFE680">Sunlight label</span></td>
+              <td class="ratio">10.9:1</td>
+              <td class="pass">Body · AAA</td>
+            </tr>
+            <tr>
+              <td class="pair-cell">$gl on $p</td>
+              <td><span class="chip" style="background:#8A2BE2;color:#FFE680">Sunlight on violet</span></td>
+              <td class="ratio">4.79:1</td>
+              <td class="pass">Body · AA</td>
+            </tr>
+            <tr>
+              <td class="pair-cell">$gddd on $g</td>
+              <td><span class="chip" style="background:#E2BE2B;color:#574100">CTA button</span></td>
+              <td class="ratio">5.38:1</td>
+              <td class="pass">Body · AA</td>
+            </tr>
+            <tr>
+              <td class="pair-cell">$gddd on $gl</td>
+              <td><span class="chip" style="background:#FFE680;color:#574100">Sunlight banner</span></td>
+              <td class="ratio">7.6:1</td>
+              <td class="pass">Body · AAA</td>
+            </tr>
+            <tr>
+              <td class="pair-cell">$gddd on $gd (hover)</td>
+              <td><span class="chip" style="background:#B09800;color:#574100">CTA hover</span></td>
+              <td class="ratio">3.5:1</td>
+              <td class="ui-only">UI &amp; large only</td>
+            </tr>
+            <tr>
+              <td class="pair-cell">$p on $pm</td>
+              <td><span class="chip" style="background:#EDE0FB;color:#8A2BE2">Violet badge</span></td>
+              <td class="ratio">4.73:1</td>
+              <td class="pass">Body · AA</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="a11y-card">
+        <div class="comp-head"><span>Focus &amp; rules</span><strong>WCAG 2.4.7 · 1.4.11</strong></div>
+        <p style="font-family:var(--ff-body); font-size:14px; line-height:1.55; color:var(--txt2); margin:0 0 8px;">All interactive elements show a visible focus ring at 3 px in $p, offset 3 px. Never remove <code style="font-family:var(--ff-mono); font-size:12px; background:var(--pm); padding:1px 6px; border-radius:3px;">:focus-visible</code> — only restyle it.</p>
+        <div class="focus-demo">
+          <button class="btn btn-primary">Focused CTA</button>
+          <button class="btn btn-violet">Focused Violet</button>
+        </div>
+        <ul class="a11y-list">
+          <li><strong>Don't rely on color alone.</strong> Pair status colors with an icon or label (e.g. badges have a dot prefix).</li>
+          <li><strong>Body copy is 16 px minimum;</strong> captions stay at 11 px in mono only — never for prose.</li>
+          <li><strong>Touch targets ≥ 44 × 44 px</strong> (WCAG 2.5.5). Small buttons keep 40 px hit-area via padding.</li>
+          <li><strong>Motion respects <code style="font-family:var(--ff-mono); font-size:12px;">prefers-reduced-motion</code></strong>; no auto-playing transitions over 200 ms.</li>
+          <li><strong>Form fields show labels above inputs,</strong> never placeholder-only — and pair errors with text, not just a red border.</li>
+          <li><strong>Logo &lt; 40 px</strong> drops to the standalone yin-yang mark; the wordmark falls below legibility threshold.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Elite Resource Services · Brand Kit v1.0</span>
+    <span>brand@eliteresource · May 2026</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "safe-voice",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Anonymous reporting app. Separate subdomain and Vercel project; never reads ELEVATE cookies. Built in Phase 4.2."
+}
