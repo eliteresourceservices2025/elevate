@@ -47,6 +47,17 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 9. **Time and attendance: ELEVATE is the time clock and the only source of hours.** `time.clock_events` is append-only (clock_in, break_start, break_end, clock_out); corrections are new rows with a reason and lead approval, never edits. Timestamps come from the server clock and the IP from the request, never from values the browser sends. Location is optional, needs the employee's permission, and is stored rounded (~1 km). `time.attendance_days` is always rebuilt from clock events, never edited by hand.
 10. **Jibble is used only for screenshots.** On clock-in/clock-out, ELEVATE mirrors the event to Jibble through its API (queued in Inngest, retried, logged in `time.jibble_link_log`). Never read hours from Jibble into payroll exports, and never copy Jibble screenshots, GPS or activity data into ELEVATE: screenshots can contain client patient data.
 
+## Adding a permission or action
+
+1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.
+2. Add the matching row to `tests/authz/matrix.test.ts` (written by hand from the architecture plan, never derived from the registry). The suite fails if an action has no row.
+3. In the action or query: `const user = await requireUser()` first (outside `runAction`), then `await authorize(user, "<module>.<action>", resource)` inside it. Return `runAction(...)` results. Pages wrap queries in `orNotFound()`.
+4. Write `writeAudit()` inside the same transaction as the change. Pass `tx`.
+5. Add the action to a per-role authz test like `tests/authz/settings-actions.test.ts`.
+6. `team` scope needs `managerChainUserIds` on the resource (Phase 1.2); without it team access is denied.
+
+The audit log is insert-only at the database level (trigger). Test data written to it stays until `supabase db reset`.
+
 ## Security and privacy rules
 
 - **MFA:** the `(app)` layout and `proxy.ts` require AAL2. No page or action works at AAL1 except MFA enrollment/challenge.

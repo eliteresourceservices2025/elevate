@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { allowRequest, clientIp } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { writeAudit, type AuditEntry } from "@/modules/audit/write";
 import {
   forgotPasswordSchema,
   mfaCodeSchema,
@@ -17,6 +18,15 @@ export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; e
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
 const TOO_MANY = "Too many attempts. Wait a few minutes and try again.";
 const GENERIC = "Something went wrong. Try again.";
+
+// Sign-in events are best effort: a logging failure must not lock people out or leak details.
+async function auditAuth(entry: AuditEntry) {
+  try {
+    await writeAudit(entry);
+  } catch {
+    console.error("audit write failed for", entry.action);
+  }
+}
 
 async function siteUrl() {
   const fromEnv = process.env.NEXT_PUBLIC_APP_URL;
@@ -34,7 +44,10 @@ export async function signInWithPassword(input: unknown): Promise<ActionResult> 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
   // One message for every failure so the form cannot reveal which emails exist.
-  if (error) return fail("Invalid email or password, or the email is not confirmed yet.");
+  if (error) {
+    await auditAuth({ actor: null, action: "auth.login_failed", metadata: { email: parsed.data.email, method: "password" } });
+    return fail("Invalid email or password, or the email is not confirmed yet.");
+  }
   return { ok: true, data: undefined };
 }
 
@@ -129,13 +142,26 @@ export async function verifyTotp(factorId: string, input: unknown): Promise<Acti
   if (!auth.user) return fail("Sign in again.");
   if (!(await allowRequest("mfa", auth.user.id))) return fail(TOO_MANY);
 
+  const { data: factors } = await supabase.auth.mfa.listFactors();
+  const enrolling = factors?.all.some((f) => f.id === factorId && f.status === "unverified") ?? false;
+
   const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code: parsed.data.code });
-  if (error) return fail("That code did not work. Check your authenticator app and try again.");
+  const actor = { id: auth.user.id, email: auth.user.email ?? "" };
+  if (error) {
+    await auditAuth({ actor, action: "auth.mfa_failed" });
+    return fail("That code did not work. Check your authenticator app and try again.");
+  }
+
+  if (enrolling) await auditAuth({ actor, action: "auth.mfa_enrolled" });
+  // Reaching AAL2 is the moment a person is really signed in, for any sign-in method.
+  await auditAuth({ actor, action: "auth.login", metadata: { provider: auth.user.app_metadata?.provider ?? null } });
   return { ok: true, data: undefined };
 }
 
 export async function signOut(): Promise<never> {
   const supabase = await createSupabaseServerClient();
+  const { data } = await supabase.auth.getUser();
+  if (data.user) await auditAuth({ actor: { id: data.user.id, email: data.user.email ?? "" }, action: "auth.logout" });
   await supabase.auth.signOut();
   redirect("/login");
 }

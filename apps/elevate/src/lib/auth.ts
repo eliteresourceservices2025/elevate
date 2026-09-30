@@ -1,19 +1,15 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import type { AuthzUser } from "@/lib/authz";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { provisionCoreUser } from "@/modules/core/users";
 
-export type AuthUser = {
-  id: string;
-  email: string;
-  /** Role slugs. Filled from core.user_roles in Phase 0.3. */
-  roles: readonly string[];
-};
+export type AuthUser = AuthzUser & { email: string };
 
 /**
- * Returns the signed-in user at AAL2, or redirects. Every server action and
- * query starts with this (CLAUDE.md rule 4). proxy.ts is only the first gate.
+ * Returns the signed-in user at AAL2 with roles, or redirects. Every server action and
+ * query starts with this (CLAUDE.md rule 4), then calls authorize(). proxy.ts is only the first gate.
  */
 export const requireUser = cache(async (): Promise<AuthUser> => {
   const supabase = await createSupabaseServerClient();
@@ -34,5 +30,5 @@ export const requireUser = cache(async (): Promise<AuthUser> => {
     redirect("/login");
   }
 
-  return { id, email, roles: [] };
+  return { id, email, roles: user.roles, isSafevoiceHandler: user.isSafevoiceHandler };
 });
