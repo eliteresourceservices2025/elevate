@@ -5,11 +5,9 @@ test("login page renders", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Sign in to ELEVATE" })).toBeVisible();
 });
 
-test("dashboard shell lists every module", async ({ page }) => {
-  await page.goto("/");
-  await expect(page).toHaveURL(/\/dashboard$/);
-  const nav = page.getByRole("navigation", { name: "Main" });
-  for (const name of ["People", "Time off", "Recruiting", "Safe Voice cases", "Settings"]) {
-    await expect(nav.getByRole("link", { name })).toBeVisible();
+test("app pages send a signed-out visitor to sign in", async ({ page }) => {
+  for (const path of ["/dashboard", "/people", "/settings/roles"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/login/);
   }
 });

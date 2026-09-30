@@ -47,6 +47,12 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 9. **Time and attendance: ELEVATE is the time clock and the only source of hours.** `time.clock_events` is append-only (clock_in, break_start, break_end, clock_out); corrections are new rows with a reason and lead approval, never edits. Timestamps come from the server clock and the IP from the request, never from values the browser sends. Location is optional, needs the employee's permission, and is stored rounded (~1 km). `time.attendance_days` is always rebuilt from clock events, never edited by hand.
 10. **Jibble is used only for screenshots.** On clock-in/clock-out, ELEVATE mirrors the event to Jibble through its API (queued in Inngest, retried, logged in `time.jibble_link_log`). Never read hours from Jibble into payroll exports, and never copy Jibble screenshots, GPS or activity data into ELEVATE: screenshots can contain client patient data.
 
+## Testing
+
+- `pnpm test` unit and authz tests (no database). Every action has a per-role test; `tests/authz/matrix.test.ts` is the hand-written permission matrix.
+- `pnpm test:integration` real-Postgres tests in a throwaway `elevate_test` database. Needs `TEST_DB_ADMIN_URL` (local: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`). CI runs it with a Postgres service. Use it for anything about encryption, audit, history or approvals: mocks cannot catch SQL mistakes.
+- `pnpm test:e2e` Playwright against the local Supabase (`supabase start`, `pnpm db:migrate`). If your dev server already runs, use `E2E_BASE_URL=http://localhost:3000`. It creates throwaway fake accounts and people in the local database. Not run in CI.
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.

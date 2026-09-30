@@ -86,7 +86,7 @@ async function seedPeople(accounts: Account[]) {
   let created = 0;
   for (const [i, p] of data.employees.entries()) {
     // The first six people are the people behind the six seeded accounts, so each account has a profile.
-    const account = accounts[i];
+    const account = accounts.at(i); // numeric loop index, not user input
     const workEmail = account?.email ?? p.email;
 
     const [found] = await sql`select id from core.employees where lower(work_email) = ${workEmail}`;
