@@ -26,7 +26,7 @@ export default async function ClientsPage() {
         {clients.length === 0 ? <li className="py-3 text-sm text-muted-foreground">No clients yet.</li> : null}
         {clients.map((c) => (
           <li key={c.id} className="py-3">
-            <ClientRow client={{ id: c.id, name: c.name, timeZone: c.timeZone, isActive: c.isActive }} />
+            <ClientRow client={{ id: c.id, name: c.name, timeZone: c.timeZone, holidayCalendar: c.holidayCalendar === "PH" ? "PH" : "US", isActive: c.isActive }} />
           </li>
         ))}
       </ul>

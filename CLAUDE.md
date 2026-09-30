@@ -87,6 +87,14 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **Data rights requests** reuse `core.change_requests` with category `data_rights` (correct, delete, other). HR is notified; approving applies nothing automatically, because deletion is a retention and counsel decision.
 - After adding a migration, run `pnpm db:migrate` against the local database before `pnpm test:e2e`: the integration tests build their own database, so they will not reveal a missing local migration.
 
+## Time off: prize days and holidays (Phase 2.1)
+
+- ERS engages 1099 contractors, so there is **no accrual, policy table, carry-over or eligibility rule**. Days off exist only as **prize days** HR awards (`awardDays`, max 5 per award, whole or half days, reason required, optional "use by" date). UI copy says "prize days off", never "PTO" or "paid time off". If ERS ever adds paid leave, add policies and an accrual job on top of the same ledger.
+- `time.leave_ledger` (`src/modules/timeoff/`) is append-only (trigger). Entry types: award, usage, reversal, adjustment, expiry, opening_balance; `days` is signed and checked per type. Balance = sum of rows, never stored. Writes for one person take `lockEmployeeLedger()` (advisory lock) so balance checks cannot race. Nobody awards or adjusts their own days (another admin must). Balances never go below zero.
+- **Expiry** (`runLeaveExpiry`, daily 1:15 AM Phoenix): writes an `expiry` row (unique per award, so it is idempotent) for what was left unused. What is "left" comes from the pure replay in `ledger.ts`: usage draws from the days that expire soonest first, expired days cannot be drawn, a reversal gives back the most recent draws. Phase 2.2's request flow must write `usage`/`reversal` rows with `effective_on` set to the leave date and use the same lock.
+- **Holidays** (`time.holidays`, calendars PH and US, seeded for 2026 and 2027): US federal dates are marked verified; Philippine dates start unverified because each year's list is proclaimed by the government (HR checks them and ticks "verified"). `core.clients.holiday_calendar` picks a client's calendar; a person sees the Philippines plus their current clients' calendars.
+- A CHECK constraint passes when it evaluates to NULL: wrap nullable columns in `coalesce` (this bit `leave_ledger_reason_chk`).
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.

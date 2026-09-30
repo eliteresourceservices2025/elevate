@@ -50,17 +50,22 @@ export function NewClientForm() {
   const { run, pending } = useRun();
   const [name, setName] = useState("");
   const [timeZone, setTimeZone] = useState("America/New_York");
+  const [holidayCalendar, setHolidayCalendar] = useState<"PH" | "US">("US");
   return (
     <form
-      className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3 sm:items-end"
+      className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-4 sm:items-end"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => createClient({ name, timeZone, isActive: true }), "Client added.", () => setName(""));
+        run(() => createClient({ name, timeZone, holidayCalendar, isActive: true }), "Client added.", () => setName(""));
       }}
     >
       <ZoneList />
       <TextField id="nc-name" label="Client name" value={name} onChange={(e) => setName(e.target.value)} required />
       <TextField id="nc-zone" label="Time zone" list="zone-options" value={timeZone} onChange={(e) => setTimeZone(e.target.value)} hint="Names only. Never enter patient information." />
+      <SelectField id="nc-cal" label="Holidays" value={holidayCalendar} onChange={(e) => setHolidayCalendar(e.target.value as "PH" | "US")}>
+        <option value="US">US holidays</option>
+        <option value="PH">Philippine holidays</option>
+      </SelectField>
       <Button type="submit" disabled={pending || !name.trim()}>
         Add client
       </Button>
@@ -68,18 +73,19 @@ export function NewClientForm() {
   );
 }
 
-export function ClientRow({ client }: { client: { id: string; name: string; timeZone: string; isActive: boolean } }) {
+export function ClientRow({ client }: { client: { id: string; name: string; timeZone: string; holidayCalendar: "PH" | "US"; isActive: boolean } }) {
   const { run, pending } = useRun();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(client.name);
   const [timeZone, setTimeZone] = useState(client.timeZone);
+  const [holidayCalendar, setHolidayCalendar] = useState(client.holidayCalendar);
 
   if (!editing)
     return (
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="font-medium">{client.name}</span>
-          <span className="ml-2 text-sm text-muted-foreground">{client.timeZone}</span>
+          <span className="ml-2 text-sm text-muted-foreground">{client.timeZone} · {client.holidayCalendar === "PH" ? "PH" : "US"} holidays</span>
           {client.isActive ? null : <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
         </div>
         <div className="flex gap-1">
@@ -90,7 +96,7 @@ export function ClientRow({ client }: { client: { id: string; name: string; time
             variant="ghost"
             size="sm"
             disabled={pending}
-            onClick={() => run(() => updateClient({ clientId: client.id, name: client.name, timeZone: client.timeZone, isActive: !client.isActive }), client.isActive ? "Marked inactive." : "Marked active.")}
+            onClick={() => run(() => updateClient({ clientId: client.id, name: client.name, timeZone: client.timeZone, holidayCalendar: client.holidayCalendar, isActive: !client.isActive }), client.isActive ? "Marked inactive." : "Marked active.")}
           >
             {client.isActive ? "Mark inactive" : "Mark active"}
           </Button>
@@ -100,15 +106,19 @@ export function ClientRow({ client }: { client: { id: string; name: string; time
 
   return (
     <form
-      className="grid gap-3 sm:grid-cols-3 sm:items-end"
+      className="grid gap-3 sm:grid-cols-4 sm:items-end"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => updateClient({ clientId: client.id, name, timeZone, isActive: client.isActive }), "Client updated.", () => setEditing(false));
+        run(() => updateClient({ clientId: client.id, name, timeZone, holidayCalendar, isActive: client.isActive }), "Client updated.", () => setEditing(false));
       }}
     >
       <ZoneList />
       <TextField id={`ec-name-${client.id}`} label="Client name" value={name} onChange={(e) => setName(e.target.value)} required />
       <TextField id={`ec-zone-${client.id}`} label="Time zone" list="zone-options" value={timeZone} onChange={(e) => setTimeZone(e.target.value)} />
+      <SelectField id={`ec-cal-${client.id}`} label="Holidays" value={holidayCalendar} onChange={(e) => setHolidayCalendar(e.target.value as "PH" | "US")}>
+        <option value="US">US holidays</option>
+        <option value="PH">Philippine holidays</option>
+      </SelectField>
       <div className="flex gap-2">
         <Button type="submit" disabled={pending}>
           Save

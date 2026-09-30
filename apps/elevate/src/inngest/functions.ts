@@ -2,6 +2,7 @@ import "server-only";
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
 import { runAckReminders } from "@/modules/announcements/jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
+import { runLeaveExpiry } from "@/modules/timeoff/jobs";
 import { runDailyDigest } from "@/modules/notifications/digest";
 import { flushEmailQueue } from "@/modules/notifications/email-queue";
 import { todayInZone } from "@/modules/org/service";
@@ -39,4 +40,10 @@ export const emailSender = inngest.createFunction(
   async ({ step }) => step.run("send", () => flushEmailQueue()),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender];
+/** Daily at 1:15 AM: write off prize days past their expiry and remind people of ones expiring within 7 days. */
+export const leaveExpiry = inngest.createFunction(
+  { id: "leave-expiry", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 15 1 * * *` } },
+  async ({ step }) => step.run("expire", () => runLeaveExpiry(todayInZone())),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry];

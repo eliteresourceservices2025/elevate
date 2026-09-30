@@ -1,0 +1,2 @@
+ALTER TABLE "time"."leave_ledger" DROP CONSTRAINT "leave_ledger_reason_chk";--> statement-breakpoint
+ALTER TABLE "time"."leave_ledger" ADD CONSTRAINT "leave_ledger_reason_chk" CHECK ("time"."leave_ledger"."entry_type" not in ('award','adjustment') or coalesce(length(trim("time"."leave_ledger"."reason")), 0) > 0);

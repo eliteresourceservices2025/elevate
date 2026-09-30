@@ -46,7 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Time and attendance",
     items: [
-      { href: "/time-off", label: "Time off", icon: CalendarDays, description: "Leave balances, requests and approvals." },
+      { href: "/time-off", label: "Time off", icon: CalendarDays, description: "Prize days off and holiday calendars." },
       { href: "/attendance", label: "Attendance", icon: Clock, description: "Time clock, lates, absences and hours export." },
       { href: "/schedules", label: "Schedules", icon: CalendarClock, description: "Shifts in the client's time zone and Manila time." },
     ],

@@ -157,12 +157,14 @@ export const clients = core
       id: uuid("id").primaryKey().defaultRandom(),
       name: text("name").notNull(),
       timeZone: text("time_zone").notNull().default("America/New_York"),
+      /** Which public holiday calendar applies to people assigned to this client ('US' or 'PH'). */
+      holidayCalendar: text("holiday_calendar").notNull().default("US"),
       isActive: boolean("is_active").notNull().default(true),
       createdBy: uuid("created_by"),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
       ...stamps,
     },
-    (t) => [uniqueIndex("clients_name_idx").on(sql`lower(${t.name})`)],
+    (t) => [uniqueIndex("clients_name_idx").on(sql`lower(${t.name})`), check("clients_holiday_calendar_chk", sql`${t.holidayCalendar} in ('PH','US')`)],
   )
   .enableRLS();
 

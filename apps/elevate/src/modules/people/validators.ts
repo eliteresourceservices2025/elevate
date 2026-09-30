@@ -175,6 +175,7 @@ export const cancelChangeSchema = z.object({ requestId: uuid });
 export const clientSchema = z.object({
   name: requiredText("the client name", 120),
   timeZone: z.string().refine(isValidTimeZone, "Choose a valid time zone"),
+  holidayCalendar: z.enum(["PH", "US"]).default("US"),
   isActive: z.boolean().default(true),
 });
 export const updateClientSchema = clientSchema.extend({ clientId: uuid });
