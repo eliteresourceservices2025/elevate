@@ -11,6 +11,7 @@ import { isUniqueViolation } from "@/lib/db-errors";
 import { allowRequest } from "@/lib/rate-limit";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
+import { viewBankChangeRequest } from "./queries";
 import { SENSITIVE_LABELS } from "./constants";
 import {
   changeRequests,
@@ -750,3 +751,16 @@ export async function setCustomFieldValues(input: unknown): Promise<ActionResult
   });
 }
 
+
+/** Shows a reviewer the values in a pending bank request. Logged as a sensitive view. */
+export async function viewBankRequest(input: unknown): Promise<ActionResult<{ bankName: string; bankAccountName: string; bankAccountNumber: string }>> {
+  await requireUser();
+
+  return runAction(async () => {
+    const parsed = cancelChangeSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_FORM);
+    // viewBankChangeRequest authorizes "people.approve_change" and writes the audit row.
+    const values = await viewBankChangeRequest(parsed.data.requestId);
+    return values ? { ok: true, data: values } : fail("That request is not waiting for review.");
+  });
+}

@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   Network,
+  UserRound,
   PenLine,
   Settings,
   ShieldQuestion,
@@ -34,6 +35,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Core HR",
     items: [
       { href: "/people", label: "People", icon: Users, description: "Profiles, employment details and client assignments." },
+      { href: "/people/me", label: "My profile", icon: UserRound, description: "Your own details, documents and requests." },
       { href: "/org-chart", label: "Org chart", icon: Network, description: "Departments, teams and reporting lines." },
       { href: "/documents", label: "Documents", icon: FileText, description: "Per-person files and company policies." },
       { href: "/announcements", label: "Announcements", icon: Bell, description: "Company posts and policy acknowledgments." },

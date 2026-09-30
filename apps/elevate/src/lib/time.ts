@@ -50,3 +50,11 @@ export function formatDual(
     secondary: formatInTimeZone(date, secondaryZone, pattern),
   };
 }
+
+/** Format a date-only value (YYYY-MM-DD) without any time-zone shift, e.g. "Sep 1, 2026". */
+export function formatDateOnly(ymd: string | null | undefined): string {
+  if (!ymd) return "—";
+  const d = new Date(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(d);
+}

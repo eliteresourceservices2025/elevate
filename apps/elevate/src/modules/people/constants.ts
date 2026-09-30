@@ -10,6 +10,9 @@ export const STATUS_LABELS: Record<EmployeeStatus, string> = {
   separated: "Separated",
 };
 
+// Typed EmployeeStatus keys only.
+export const statusLabel = (status: EmployeeStatus): string => STATUS_LABELS[status]; // eslint-disable-line security/detect-object-injection
+
 export const CIVIL_STATUSES = ["single", "married", "widowed", "separated", "other"] as const;
 export type CivilStatus = (typeof CIVIL_STATUSES)[number];
 

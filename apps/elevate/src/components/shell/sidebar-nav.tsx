@@ -4,10 +4,18 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { NAV_GROUPS } from "@/lib/nav";
+
+// The longest matching link wins, so "/people/me" does not also light up "/people".
+function activeHref(pathname: string) {
+  const matches = ALL_NAV_ITEMS.filter((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
+  return matches.sort((a, b) => b.href.length - a.href.length)[0]?.href;
+}
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const current = activeHref(pathname);
 
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
@@ -26,7 +34,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             </p>
             <ul className="space-y-0.5">
               {group.items.map(({ href, label, icon: Icon }) => {
-                const active = pathname === href || pathname.startsWith(`${href}/`);
+                const active = href === current;
                 return (
                   <li key={href}>
                     <Link

@@ -1,21 +1,19 @@
 import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { fieldCrypto, maskValue } from "@/lib/crypto";
+import { fieldCrypto } from "@/lib/crypto";
 import { users } from "@/modules/core/schema";
 import { SENSITIVE_FIELDS, type HistoryEvent, type SensitiveField } from "./constants";
 import { employeeSensitive, employees, employmentHistory } from "./schema";
+import { changeRequestContext, maskFor, sensitiveContext } from "./sensitive";
+
+export { changeRequestContext, sensitiveContext };
 
 // Shared building blocks for people actions. Nothing here checks permissions: callers do,
 // before calling, with authorize() (CLAUDE.md rule 4).
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-/** Where an encrypted value lives. Reading and writing must use the same string. */
-export const sensitiveContext = (field: SensitiveField, employeeId: string) =>
-  `employee_sensitive:${field}:${employeeId}`;
-
-export const changeRequestContext = (requestId: string) => `change_request:${requestId}`;
 
 const COLUMNS = {
   tin: "tinEnc",
@@ -33,10 +31,6 @@ export const sensitiveColumn = (field: SensitiveField) => {
   return COLUMNS[field];
 };
 
-// Masked strings are stored at write time so showing them never needs a decrypt.
-const MASKED_WITH_LAST_DIGITS: readonly SensitiveField[] = ["tin", "sss", "philhealth", "pagibig", "bankAccountNumber"];
-const maskFor = (field: SensitiveField, value: string) =>
-  MASKED_WITH_LAST_DIGITS.includes(field) ? maskValue(value) : "••••••";
 
 export type SensitiveValues = Partial<Record<SensitiveField, string | null>>;
 
