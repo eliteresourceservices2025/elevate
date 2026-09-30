@@ -236,3 +236,8 @@ export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type ContactChangeInput = z.input<typeof contactChangeSchema>;
 export type EmergencyContactsInput = z.input<typeof emergencyContactsChangeSchema>;
 export type BankChangeInput = z.input<typeof bankChangeSchema>;
+
+export const dataRightsRequestSchema = z.object({
+  kind: z.enum(["correction", "deletion", "other"]),
+  details: z.string().trim().min(10, "Describe what you need in at least 10 characters").max(1000, "Use 1,000 characters or fewer"),
+});

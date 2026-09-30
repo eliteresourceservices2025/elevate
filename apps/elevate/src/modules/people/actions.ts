@@ -11,6 +11,7 @@ import { isUniqueViolation } from "@/lib/db-errors";
 import { allowRequest } from "@/lib/rate-limit";
 import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
+import { hrUserIds, notify } from "@/modules/notifications/service";
 import { positions } from "@/modules/org/schema";
 import { activeDirectReports, applyReporting, reportName, todayInZone } from "@/modules/org/service";
 import { viewBankChangeRequest } from "./queries";
@@ -46,6 +47,7 @@ import {
   createEmployeeSchema,
   customFieldDefSchema,
   customFieldValuesSchema,
+  dataRightsRequestSchema,
   emergencyContactsChangeSchema,
   endAssignmentSchema,
   revealSensitiveSchema,
@@ -379,7 +381,7 @@ async function selfEmployee(actorId: string) {
 
 async function createRequest(
   actor: Awaited<ReturnType<typeof requireUser>>,
-  category: "contact" | "emergency_contacts" | "bank",
+  category: "contact" | "emergency_contacts" | "bank" | "data_rights",
   build: (requestId: string) => { payload?: unknown; payloadEnc?: string },
   employeeId: string,
 ): Promise<ActionResult> {
@@ -457,6 +459,27 @@ export async function requestBankChange(input: unknown): Promise<ActionResult> {
       (requestId) => ({ payloadEnc: fieldCrypto().encrypt(JSON.stringify(parsed.data), changeRequestContext(requestId)) }),
       me.id,
     );
+  });
+}
+
+/** A correction, deletion or other request about the person's own data. HR decides; nothing is changed automatically. */
+export async function requestDataRights(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    const me = await selfEmployee(actor.id);
+    await authorize(actor, "privacy.request_data_rights", { ownerUserId: actor.id });
+    if (!me) return fail("Your people record is not set up yet. Ask HR.");
+
+    const parsed = dataRightsRequestSchema.safeParse(input);
+    if (!parsed.success) return fail(firstIssue(parsed.error));
+
+    const result = await createRequest(actor, "data_rights", () => ({ payload: parsed.data }), me.id);
+    if (result.ok) {
+      revalidatePath("/my-data");
+      await notify(db, (await hrUserIds()).map((userId) => ({ userId, kind: "privacy.request", title: "New data rights request", body: "Someone asked about their personal data.", link: "/people/requests" })));
+    }
+    return result;
   });
 }
 
@@ -545,6 +568,12 @@ async function applyChange(tx: Tx, req: RequestRow, actorId: string): Promise<Ac
       after: Object.fromEntries(keys.map((k) => [k, proposed[k]])), // eslint-disable-line security/detect-object-injection
       changedBy: actorId,
     });
+    return { ok: true, data: undefined };
+  }
+
+  if (req.category === "data_rights") {
+    // Approving means HR has handled it outside the app (correct the profile, or decide about deletion with counsel).
+    // Nothing is applied automatically.
     return { ok: true, data: undefined };
   }
 

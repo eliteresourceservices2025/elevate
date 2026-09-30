@@ -1,5 +1,7 @@
 import "server-only";
-import type { db } from "@/lib/db";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { db as database, type db } from "@/lib/db";
+import { userRoles, users } from "@/modules/core/schema";
 import { notifications } from "./schema";
 
 type Executor = Pick<typeof db, "insert">;
@@ -23,4 +25,14 @@ export async function notify(executor: Executor, items: NewNotification | NewNot
   await executor.insert(notifications).values(
     list.map((n) => ({ userId: n.userId, kind: n.kind, title: n.title.slice(0, 200), body: n.body?.slice(0, 500) ?? null, link: safeLink(n.link) })),
   );
+}
+
+/** Sign-in accounts of HR Admins and Super Admins, for summaries that go to "HR". */
+export async function hrUserIds(): Promise<string[]> {
+  const rows = await database
+    .selectDistinct({ id: users.id })
+    .from(users)
+    .innerJoin(userRoles, eq(userRoles.userId, users.id))
+    .where(and(inArray(userRoles.roleSlug, ["hr_admin", "super_admin"]), isNull(users.archivedAt)));
+  return rows.map((r) => r.id);
 }

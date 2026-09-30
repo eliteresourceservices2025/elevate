@@ -15,7 +15,11 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: { baseURL, trace: "on-first-retry" },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: /privacy-gate/ },
+    // Publishing a privacy notice stops every signed-in person at the acceptance screen, so this runs alone, last.
+    { name: "privacy-gate", use: { ...devices["Desktop Chrome"] }, testMatch: /privacy-gate/, dependencies: ["chromium"] },
+  ],
   webServer: externalUrl
     ? undefined
     : {

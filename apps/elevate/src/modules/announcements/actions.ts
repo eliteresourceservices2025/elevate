@@ -196,12 +196,12 @@ export async function acknowledge(input: unknown): Promise<ActionResult> {
       .from(employees)
       .where(and(eq(employees.userId, actor.id), isNull(employees.archivedAt), sql`${employees.status} <> 'separated'`))
       .limit(1);
-    if (!me) return fail("Only people with an active ELEVATE profile can acknowledge.");
 
     await db.transaction(async (tx) => {
       if (kind === "announcement") {
         const [a] = await tx.select({ requiresAck: announcements.requiresAck, archivedAt: announcements.archivedAt }).from(announcements).where(eq(announcements.id, id)).limit(1);
         if (!a || a.archivedAt || !a.requiresAck) throw new ActionFailure("Nothing to acknowledge here.");
+        if (!me) throw new ActionFailure("Only people with an active ELEVATE profile can acknowledge.");
         const [r] = await tx
           .select({ employeeId: announcementRecipients.employeeId })
           .from(announcementRecipients)
@@ -210,12 +210,14 @@ export async function acknowledge(input: unknown): Promise<ActionResult> {
         if (!r) throw new ActionFailure("This announcement was not addressed to you.");
       } else {
         const [pv] = await tx
-          .select({ policyId: policyVersions.policyId, version: policyVersions.version, status: policyVersions.status, requiresAck: policyVersions.requiresAck, archivedAt: policies.archivedAt })
+          .select({ policyId: policyVersions.policyId, version: policyVersions.version, status: policyVersions.status, requiresAck: policyVersions.requiresAck, archivedAt: policies.archivedAt, policyKind: policies.kind })
           .from(policyVersions)
           .innerJoin(policies, eq(policies.id, policyVersions.policyId))
           .where(eq(policyVersions.id, id))
           .limit(1);
         if (!pv || pv.status !== "published" || !pv.requiresAck || pv.archivedAt) throw new ActionFailure("Nothing to acknowledge here.");
+        // Everyone with an account accepts the privacy notice, even without a people record (for example a Super Admin).
+        if (!me && pv.policyKind !== "privacy_notice") throw new ActionFailure("Only people with an active ELEVATE profile can acknowledge.");
         const [{ latest }] = await tx
           .select({ latest: sql<number>`max(${policyVersions.version})::int` })
           .from(policyVersions)
@@ -427,21 +429,23 @@ export async function publishDraft(input: unknown): Promise<ActionResult<{ versi
       if (draft.body.includes(PLACEHOLDER_MARK)) throw new ActionFailure("Replace the placeholder text before publishing.");
       if (draft.dueOn && draft.dueOn < today) throw new ActionFailure("The due date has already passed. Change it first.");
 
-      await tx.update(policyVersions).set({ status: "published", publishedAt: new Date(), publishedBy: actor.id, updatedAt: new Date() }).where(eq(policyVersions.id, draft.id));
+      // The privacy notice and monitoring policy always need acknowledgment: the first-login screen and the Jibble gate depend on it.
+      const requiresAck = draft.requiresAck || policy.kind !== "general";
+      await tx.update(policyVersions).set({ status: "published", requiresAck, publishedAt: new Date(), publishedBy: actor.id, updatedAt: new Date() }).where(eq(policyVersions.id, draft.id));
 
       const userIds = (await activeUserIds(tx)).filter((id) => id !== actor.id);
       const notices: NewNotification[] = userIds.map((userId) => ({
         userId,
-        kind: draft.requiresAck ? "policy.ack_required" : "policy.published",
-        title: draft.requiresAck ? `Please acknowledge: ${policy.title} (version ${draft.version})` : `${policy.title} was updated (version ${draft.version})`,
+        kind: requiresAck ? "policy.ack_required" : "policy.published",
+        title: requiresAck ? `Please acknowledge: ${policy.title} (version ${draft.version})` : `${policy.title} was updated (version ${draft.version})`,
         body: draft.changeNote ?? undefined,
         link: `/announcements/policies/${policy.id}`,
       }));
       await notify(tx, notices);
-      if (draft.requiresAck) await queueAckEmails(tx, userIds, today);
+      if (requiresAck) await queueAckEmails(tx, userIds, today);
 
       await writeAudit(
-        { actor, action: "policy.publish", targetType: "policy", targetId: policy.id, metadata: { slug: policy.slug, version: draft.version, requiresAck: draft.requiresAck, dueOn: draft.dueOn, notified: userIds.length } },
+        { actor, action: "policy.publish", targetType: "policy", targetId: policy.id, metadata: { slug: policy.slug, version: draft.version, requiresAck, dueOn: draft.dueOn, notified: userIds.length } },
         tx,
       );
       return draft.version;

@@ -1,0 +1,2 @@
+ALTER TABLE "core"."change_requests" DROP CONSTRAINT "change_requests_category_chk";--> statement-breakpoint
+ALTER TABLE "core"."change_requests" ADD CONSTRAINT "change_requests_category_chk" CHECK ("core"."change_requests"."category" in ('contact','emergency_contacts','bank','data_rights'));

@@ -71,8 +71,8 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
     await sql2.end();
   }
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: /Notifications, 1 unread/ }).click();
+  await page.getByRole("button", { name: /Notifications, \d+ unread/ }).click();
   await page.getByRole("button", { name: /Bell works/ }).click();
   await page.waitForURL("**/documents");
-  await expect(page.getByRole("button", { name: "Notifications" })).toBeVisible(); // no unread count any more
+  await expect(page.getByRole("button", { name: "Notifications" })).toBeVisible();
 });

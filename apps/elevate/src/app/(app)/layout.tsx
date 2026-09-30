@@ -1,3 +1,4 @@
+import { Markdown } from "@/components/markdown";
 import { AppHeader } from "@/components/shell/app-header";
 import { SidebarNav } from "@/components/shell/sidebar-nav";
 import { requireUser } from "@/lib/auth";
@@ -6,10 +7,21 @@ import { AckBanner } from "@/modules/announcements/components/ack-display";
 import { listMyPending } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
 import { countMyUnread } from "@/modules/notifications/queries";
+import { PrivacyGate } from "@/modules/privacy/components/privacy-gate";
+import { getPrivacyGate } from "@/modules/privacy/queries";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   // AAL2 or redirect. Pages and actions still call requireUser() and authorize() themselves.
   const user = await requireUser();
+  // Until the current privacy notice is accepted, nothing else in the app opens.
+  const gate = await getPrivacyGate();
+  if (gate) {
+    return (
+      <PrivacyGate versionId={gate.versionId} title={gate.title} version={gate.version} updated={gate.updated} changeNote={gate.changeNote}>
+        <Markdown source={gate.body} />
+      </PrivacyGate>
+    );
+  }
   const [unread, pending] = await Promise.all([countMyUnread(), listMyPending()]);
 
   return (

@@ -44,12 +44,22 @@ export const SENSITIVE_LABELS: Record<SensitiveField, string> = {
   payRate: "Pay rate",
 };
 
-export const CHANGE_CATEGORIES = ["contact", "emergency_contacts", "bank"] as const;
+export const CHANGE_CATEGORIES = ["contact", "emergency_contacts", "bank", "data_rights"] as const;
 export type ChangeCategory = (typeof CHANGE_CATEGORIES)[number];
 export const CHANGE_CATEGORY_LABELS: Record<ChangeCategory, string> = {
   contact: "Contact details",
   emergency_contacts: "Emergency contacts",
   bank: "Bank details",
+  data_rights: "Data rights request",
+};
+
+/** What a person can ask about their data (Data Privacy Act rights). HR handles these; nothing is deleted automatically. */
+export const DATA_RIGHTS_KINDS = ["correction", "deletion", "other"] as const;
+export type DataRightsKind = (typeof DATA_RIGHTS_KINDS)[number];
+export const DATA_RIGHTS_LABELS: Record<DataRightsKind, string> = {
+  correction: "Correct my data",
+  deletion: "Delete my data",
+  other: "Something else about my data",
 };
 
 export const CHANGE_STATUSES = ["pending", "approved", "rejected", "cancelled"] as const;

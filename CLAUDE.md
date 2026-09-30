@@ -79,6 +79,14 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - Pass `Date` values to drizzle comparison helpers (`lt`, `gte`), not raw `sql` fragments: raw fragments skip the driver's date encoding.
 - Production go-live: Supabase's built-in auth email is heavily rate-limited; configure custom SMTP (Resend can do it) when the Pro project is created.
 
+## Privacy notice and "My data" (Phase 1.5)
+
+- **Gate:** `(app)/layout.tsx` calls `getPrivacyGate()` (`src/modules/privacy/queries.ts`). Until the current published version of the policy with `kind = 'privacy_notice'` is accepted, the layout renders only the acceptance screen. No published notice = no gate; a failure loading it fails open. It is a page-level gate; actions still authorize normally. Acceptance is the same insert-only `docs.acknowledgments` row as any policy (accounts with no people record may accept it too). The privacy notice and monitoring policy always get `requires_ack = true` when published.
+- **Publishing the privacy notice is permanent** in a database (versions are frozen), and it stops everyone at the screen. Never publish one against a shared dev database you still use for e2e: `tests/e2e/privacy-gate.spec.ts` runs in its own Playwright project after the others and archives the policy at the end (`update docs.policies set archived_at = now()` switches the gate off). If that test crashes, run that SQL.
+- **My data** (`/my-data`): `collectMyData()` in `privacy/service.ts` reads only the signed-in account's own rows, returns sensitive fields as stored masks (never decrypts), and names no other person in the activity list. JSON and PDF (`pdf-lib`, Helvetica, non-Latin text becomes "?") come from `exportMyData`, rate-limited and audited as `mydata.export`.
+- **Data rights requests** reuse `core.change_requests` with category `data_rights` (correct, delete, other). HR is notified; approving applies nothing automatically, because deletion is a retention and counsel decision.
+- After adding a migration, run `pnpm db:migrate` against the local database before `pnpm test:e2e`: the integration tests build their own database, so they will not reveal a missing local migration.
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.

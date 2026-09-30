@@ -6,6 +6,7 @@ import { documentsPermissions } from "@/modules/documents/permissions";
 import { notificationsPermissions } from "@/modules/notifications/permissions";
 import { onboardingPermissions } from "@/modules/onboarding/permissions";
 import { orgPermissions } from "@/modules/org/permissions";
+import { privacyPermissions } from "@/modules/privacy/permissions";
 import { peoplePermissions } from "@/modules/people/permissions";
 import { recruitingPermissions } from "@/modules/recruiting/permissions";
 import { reviewsPermissions } from "@/modules/reviews/permissions";
@@ -22,6 +23,7 @@ export const PERMISSIONS = {
   ...documentsPermissions,
   ...announcementsPermissions,
   ...notificationsPermissions,
+  ...privacyPermissions,
   ...timeoffPermissions,
   ...attendancePermissions,
   ...recruitingPermissions,

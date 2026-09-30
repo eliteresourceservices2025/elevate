@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import { CHANGE_CATEGORY_LABELS, CHANGE_STATUSES, type ChangeStatus } from "@/modules/people/constants";
+import { CHANGE_CATEGORY_LABELS, CHANGE_STATUSES, DATA_RIGHTS_LABELS, type ChangeStatus, type DataRightsKind } from "@/modules/people/constants";
 import { RequestReview } from "@/modules/people/components/request-review";
 import { listChangeRequests } from "@/modules/people/queries";
 
@@ -22,6 +22,20 @@ const FIELD_LABELS = new Map<string, string>([
 
 function Proposed({ category, payload }: { category: string; payload: unknown }) {
   if (category === "bank") return <p className="text-sm text-muted-foreground">Bank details are encrypted. Use the button below to view them.</p>;
+
+  if (category === "data_rights") {
+    const { kind, details } = (payload ?? {}) as { kind?: string; details?: string };
+    return (
+      <div className="space-y-1 text-sm">
+        <p>
+          <span className="text-muted-foreground">Request: </span>
+          {DATA_RIGHTS_LABELS[kind as DataRightsKind] ?? "Other"}
+        </p>
+        <p className="whitespace-pre-wrap">{details}</p>
+        <p className="text-xs text-muted-foreground">Approving records that HR handled this outside the app. Nothing is changed or deleted automatically.</p>
+      </div>
+    );
+  }
 
   if (category === "contact") {
     const entries = Object.entries((payload ?? {}) as Record<string, string>);

@@ -260,7 +260,7 @@ export const changeRequests = core
       index("change_requests_status_idx").on(t.status, t.createdAt),
       // One pending request per person and category, so edits cannot stack up.
       uniqueIndex("change_requests_pending_idx").on(t.employeeId, t.category).where(sql`${t.status} = 'pending'`),
-      check("change_requests_category_chk", sql`${t.category} in ('contact','emergency_contacts','bank')`),
+      check("change_requests_category_chk", sql`${t.category} in ('contact','emergency_contacts','bank','data_rights')`),
       check("change_requests_status_chk", sql`${t.status} in ('pending','approved','rejected','cancelled')`),
     ],
   )

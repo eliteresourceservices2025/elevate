@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CalendarDays,
   ClipboardCheck,
+  ShieldCheck,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -36,6 +37,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/people", label: "People", icon: Users, description: "Profiles, employment details and client assignments." },
       { href: "/people/me", label: "My profile", icon: UserRound, description: "Your own details, documents and requests." },
+      { href: "/my-data", label: "My data", icon: ShieldCheck, description: "What ELEVATE holds about you, downloads and privacy requests." },
       { href: "/org-chart", label: "Org chart", icon: Network, description: "Departments, teams and reporting lines." },
       { href: "/documents", label: "Documents", icon: FileText, description: "Per-person files and company policies." },
       { href: "/announcements", label: "Announcements", icon: Bell, description: "Company posts and policy acknowledgments." },

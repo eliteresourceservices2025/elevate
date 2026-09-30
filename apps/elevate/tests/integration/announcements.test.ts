@@ -571,3 +571,63 @@ async function teamWith(employeeId: string) {
   await db.execute(sql`update core.employees set team_id = ${team} where id = ${employeeId}`);
   return team;
 }
+
+// Last on purpose: publishing the privacy notice is permanent in this database, and the earlier test
+// about the seeded placeholder drafts must run first.
+describe("privacy notice gate (first login)", () => {
+  it("blocks nobody until real text is published, then until accepted, and again after a new version", async () => {
+    const privacy = await import("@/modules/privacy/queries");
+    const employee = await person("gate-emp");
+    const admin = await makeUser("gate-admin", ["super_admin"]); // an account with no people record
+    const [policy] = await rows<{ id: string }>(sql`select id from docs.policies where kind = 'privacy_notice'`);
+
+    as(employee.user);
+    expect(await privacy.getPrivacyGate()).toBeNull(); // only the placeholder draft exists
+
+    as(hr);
+    expect((await actions.saveDraft({ policyId: policy.id, body: "We keep your data safe.", requiresAck: false })).ok).toBe(true);
+    expect((await actions.publishDraft({ policyId: policy.id })).ok).toBe(true);
+    // The privacy notice always requires acceptance, even if HR left the box unticked
+    const [published] = await rows<{ requires_ack: boolean; version: number }>(sql`select requires_ack, version from docs.policy_versions where policy_id = ${policy.id} and status = 'published'`);
+    expect(published).toEqual({ requires_ack: true, version: 1 });
+
+    as(employee.user);
+    const gate = await privacy.getPrivacyGate();
+    expect(gate).toMatchObject({ version: 1, updated: false, body: "We keep your data safe." });
+
+    // Accepting records the acknowledgment and lifts the gate
+    expect((await actions.acknowledge({ kind: "policy_version", id: gate!.versionId })).ok).toBe(true);
+    expect(await privacy.getPrivacyGate()).toBeNull();
+
+    // An account without a people record is gated too, and can accept
+    as(admin);
+    expect(await privacy.getPrivacyGate()).not.toBeNull();
+    expect((await actions.acknowledge({ kind: "policy_version", id: gate!.versionId })).ok).toBe(true);
+    expect(await privacy.getPrivacyGate()).toBeNull();
+    // ...but that exception is only for the privacy notice
+    expect(await actions.acknowledge({ kind: "policy_version", id: (await rows<{ id: string }>(sql`select id from docs.policy_versions where policy_id = ${policy.id}`))[0].id })).toMatchObject({ ok: true }); // again: no duplicate
+
+    // A new version asks everyone again and says what changed
+    as(hr);
+    expect((await actions.saveDraft({ policyId: policy.id, body: "We keep your data safe. We also keep it in Singapore.", changeNote: "Added where data is stored.", requiresAck: true })).ok).toBe(true);
+    expect((await actions.publishDraft({ policyId: policy.id })).ok).toBe(true);
+    as(employee.user);
+    const again = await privacy.getPrivacyGate();
+    expect(again).toMatchObject({ version: 2, updated: true, changeNote: "Added where data is stored." });
+    expect((await actions.acknowledge({ kind: "policy_version", id: again!.versionId })).ok).toBe(true);
+    expect(await privacy.getPrivacyGate()).toBeNull();
+
+    // The acceptance shows on the person's own data page
+    const { data } = await privacy.getMyData();
+    expect(data.acknowledgments.filter((a) => a.kind === "Policy").map((a) => a.version).sort()).toEqual([1, 2]);
+
+    // The gate is UI-level only for the notice itself: other people's accounts are unaffected until they visit
+    const other = await person("gate-other");
+    as(other.user);
+    expect(await privacy.getPrivacyGate()).not.toBeNull();
+
+    // Archiving the policy removes the gate
+    await db.execute(sql`update docs.policies set archived_at = now() where id = ${policy.id}`);
+    expect(await privacy.getPrivacyGate()).toBeNull();
+  });
+});

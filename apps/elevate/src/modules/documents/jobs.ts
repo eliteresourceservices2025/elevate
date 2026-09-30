@@ -2,8 +2,7 @@ import "server-only";
 import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/modules/audit/write";
-import { notify, type NewNotification } from "@/modules/notifications/service";
-import { userRoles, users } from "@/modules/core/schema";
+import { hrUserIds, notify, type NewNotification } from "@/modules/notifications/service";
 import { employees } from "@/modules/people/schema";
 import { describeExpiry, dueReminder } from "./expiry";
 import { documentReminders, documentTypes, documents } from "./schema";
@@ -13,15 +12,6 @@ import { getDocumentStorage, type Bucket } from "./storage";
 // directly; src/inngest wraps them in scheduled functions. Audit rows here have no actor ("system").
 
 const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-
-async function hrUserIds(): Promise<string[]> {
-  const rows = await db
-    .selectDistinct({ id: users.id })
-    .from(users)
-    .innerJoin(userRoles, eq(userRoles.userId, users.id))
-    .where(and(inArray(userRoles.roleSlug, ["hr_admin", "super_admin"]), isNull(users.archivedAt)));
-  return rows.map((r) => r.id);
-}
 
 export type ReminderRun = { checked: number; employeeNotices: number; hrSummaries: number };
 
