@@ -57,6 +57,20 @@
       "when": 1790757003816,
       "tag": "0007_organization_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790759723882,
+      "tag": "0008_documents_and_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790759726517,
+      "tag": "0009_document_types_seed",
+      "breakpoints": true
     }
   ]
 }

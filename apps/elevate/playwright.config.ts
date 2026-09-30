@@ -8,6 +8,9 @@ const baseURL = externalUrl ?? `http://localhost:${port}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  // Several tests share one development server that compiles pages on demand, so allow for slow moments.
+  timeout: 90_000,
+  expect: { timeout: 10_000 },
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",

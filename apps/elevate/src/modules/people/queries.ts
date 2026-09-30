@@ -181,6 +181,8 @@ export type ProfileAccess = {
   canArchive: boolean;
   canManageCustomFields: boolean;
   canManageReporting: boolean;
+  canViewDocuments: boolean;
+  canUploadDocuments: boolean;
   /** A manager looking at someone below them: personal details (birth date, address, personal email) are hidden. */
   limitedView: boolean;
 };
@@ -216,6 +218,8 @@ export async function getProfile(employeeId: string) {
     canArchive: can(user, "people.archive"),
     canManageCustomFields: can(user, "people.manage_custom_fields"),
     canManageReporting: can(user, "org.manage_reporting"),
+    canViewDocuments: can(user, "documents.view", resource),
+    canUploadDocuments: can(user, "documents.upload", resource),
     limitedView: !isHr && e.userId !== user.id,
   };
 

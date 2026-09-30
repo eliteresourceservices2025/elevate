@@ -18,6 +18,7 @@ import {
   PayoutSection,
   PersonalSection,
 } from "@/modules/people/components/profile-sections";
+import { EmployeeDocuments } from "@/modules/documents/components/employee-documents";
 import { displayName } from "@/modules/people/format";
 import { listOrgOptions } from "@/modules/org/queries";
 import { getProfile, listClientsForFilter } from "@/modules/people/queries";
@@ -31,6 +32,7 @@ const TABS = [
   { key: "payout", label: "Payout", needs: "canViewSensitive" },
   { key: "emergency", label: "Emergency" },
   { key: "clients", label: "Client assignments", needs: "canViewClients" },
+  { key: "documents", label: "Documents", needs: "canViewDocuments" },
   { key: "history", label: "History", needs: "canViewHistory" },
 ] as const;
 
@@ -102,6 +104,7 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
       {active.key === "payout" ? <PayoutSection profile={profile} /> : null}
       {active.key === "emergency" ? <EmergencySection profile={profile} /> : null}
       {active.key === "clients" ? <ClientsSection profile={profile} clients={clients} today={today} /> : null}
+      {active.key === "documents" ? <EmployeeDocuments employeeId={e.id} canUpload={access.canUploadDocuments} /> : null}
       {active.key === "history" ? <HistorySection profile={profile} /> : null}
     </div>
   );

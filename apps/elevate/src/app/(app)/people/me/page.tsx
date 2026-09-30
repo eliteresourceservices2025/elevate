@@ -4,9 +4,11 @@ import { getMyEmployeeId } from "@/modules/people/queries";
 
 export const metadata: Metadata = { title: "My profile" };
 
-export default async function MyProfilePage() {
+export default async function MyProfilePage({ searchParams }: PageProps<"/people/me">) {
   const id = await getMyEmployeeId();
-  if (id) redirect(`/people/${id}`);
+  const tab = (await searchParams).tab;
+  // Keep the tab, so "my documents" links land on the right tab.
+  if (id) redirect(`/people/${id}${typeof tab === "string" && /^[a-z]+$/.test(tab) ? `?tab=${tab}` : ""}`);
 
   return (
     <div className="mx-auto max-w-xl space-y-3">

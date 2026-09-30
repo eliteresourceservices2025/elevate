@@ -62,6 +62,14 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - Positions are a catalog; `employees.position` is the display title kept in sync.
 - To roll back a half-finished multi-step action, **throw** `ActionFailure` inside the transaction (returning commits).
 
+## Files, notifications and background jobs
+
+- **Files:** private buckets `employee-docs` and `company-docs` (create them with `pnpm storage:setup`, local or hosted). Upload is three steps: `requestUpload` (validates, server picks the path, returns a one-time token) -> browser uploads straight to storage -> `finalizeUpload` (server reads the file, checks the real type by its bytes, size and SHA-256, then activates it; a failing file is deleted). Never trust the browser's file name or declared type. Downloads are 60-second signed links and every one is audited. Archiving keeps the file until retention periods are approved.
+- All storage goes through `DocumentStorage` (`src/modules/documents/storage.ts`); tests use `FakeStorage`. Do not call Supabase Storage from anywhere else.
+- **Every exported function in a "use server" file is a public endpoint.** Each must call `requireUser()` first, and helpers that take the acting user as a parameter belong in a separate server-only file (see `service.ts` files). `tests/authz/server-actions-guard.test.ts` enforces this.
+- **Notifications:** `notify()` (`src/modules/notifications/service.ts`) writes in-app notifications; links must be relative. The bell in the header reads only the signed-in person's own.
+- **Jobs (Inngest):** scheduled functions in `src/inngest/functions.ts` are thin wrappers around plain tested functions (`src/modules/documents/jobs.ts`). Local: `INNGEST_DEV=1` in `.env.local` plus `pnpm dlx inngest-cli@latest dev`. Production: `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`; without a key the endpoint refuses to run. Job dates follow the company time zone (`America/Phoenix`).
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.
