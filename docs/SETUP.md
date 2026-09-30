@@ -261,3 +261,14 @@ vercel env add   # add each variable from .env.example for Production and Previe
 - [ ] Production and staging env vars set in Vercel; no real data anywhere but production
 
 Then start **Phase 0** in `BUILD-PROMPTS.md`.
+
+---
+
+## 12. Auth setup notes (added in Phase 0.2)
+
+- **Invite-only sign-up** is enforced in the database by `private.before_user_created` (migration `0001_auth_invite_only_hook.sql`). On every new Supabase project: run `pnpm db:migrate`, then in Dashboard > Auth > Hooks enable **Before User Created** and point it at `private.before_user_created`. Until then sign-ups are refused.
+- **Bootstrap the first Super Admin:** set `SUPER_ADMIN_EMAILS` in `.env.local` and run `pnpm --filter elevate db:bootstrap`. It creates invitations only; the Super Admin role is assigned in Phase 0.3.
+- **Email templates:** paste `supabase/templates/confirmation.html` and `recovery.html` into Dashboard > Auth > Email Templates (Confirm signup, Reset password). Their links must go to `{{ .SiteURL }}/auth/confirm?...` so the server sets the session.
+- **URL configuration:** Site URL = the production URL. Redirect URLs must include `/auth/callback` and `/auth/confirm` for production, localhost and the Vercel preview pattern.
+- **Local mail:** `supabase start` runs Mailpit at http://127.0.0.1:54324; all auth emails land there.
+- **Lost authenticator:** Supabase has no recovery codes. A Super Admin removes the factor through the Auth admin API (a Settings action is planned in Phase 0.3); the person then enrolls again.

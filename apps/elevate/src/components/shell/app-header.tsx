@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Menu } from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { signOut } from "@/modules/auth/actions";
 import { ClockWidget } from "./clock-widget";
 import { SidebarNav } from "./sidebar-nav";
 import { ZoneClock } from "./zone-clock";
 
-export function AppHeader({ zone }: { zone?: string | null }) {
+export function AppHeader({ zone, email }: { zone?: string | null; email?: string }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -30,6 +31,13 @@ export function AppHeader({ zone }: { zone?: string | null }) {
         <ZoneClock zone={zone} />
       </div>
       <ClockWidget />
+      <form action={signOut} className="flex items-center gap-2">
+        {email ? <span className="hidden text-xs text-muted-foreground xl:inline">{email}</span> : null}
+        <Button type="submit" variant="ghost" size="sm">
+          <LogOut aria-hidden />
+          Sign out
+        </Button>
+      </form>
     </header>
   );
 }

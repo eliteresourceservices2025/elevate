@@ -12,7 +12,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-3 px-5 py-5">
-        <Image src="/elite-logo-icon.png" alt="" width={36} height={36} className="size-9 rounded-full bg-white p-0.5" />
+        <Image src="/elite-logo-icon.png" alt="" width={36} height={36} className="h-auto w-9 rounded-full bg-white p-0.5" />
         <div className="leading-tight">
           <p className="font-heading text-lg font-bold tracking-wide">ELEVATE</p>
           <p className="text-xs text-sidebar-foreground/70">Elite Resource Services</p>
