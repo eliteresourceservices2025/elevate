@@ -29,6 +29,20 @@
       "when": 1790752654379,
       "tag": "0003_roles_seed_and_audit_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790754562617,
+      "tag": "0004_people_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790754564823,
+      "tag": "0005_people_append_only_history",
+      "breakpoints": true
     }
   ]
 }

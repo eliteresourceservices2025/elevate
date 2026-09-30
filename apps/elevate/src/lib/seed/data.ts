@@ -96,7 +96,8 @@ export function buildSeedDataset(count = 40, seed = 20260930): SeedDataset {
     for (let n = 2; usedEmails.has(email); n++) email = `${slug(firstName)}.${slug(lastName)}${n}@${SEED_EMAIL_DOMAIN}`;
     usedEmails.add(email);
 
-    const serial = pad(i + 1, 4);
+    const n = i + 1;
+    const serial = pad(n, 4);
     const year = 2021 + Math.floor(rand() * 5);
 
     employees.push({
@@ -109,10 +110,10 @@ export function buildSeedDataset(count = 40, seed = 20260930): SeedDataset {
       isTeamLead: i < TEAMS.length, // the first person on each team leads it
       startDate: `${year}-${pad(1 + Math.floor(rand() * 12), 2)}-${pad(1 + Math.floor(rand() * 28), 2)}`,
       sensitive: {
-        tin: `000-000-${serial}-000`,
-        sss: `00-${serial}000-0`,
-        philhealth: `00-${serial}00000-0`,
-        pagibig: `0000-${serial}-0000`,
+        tin: `000-000-${pad(n, 3)}-000`,
+        sss: `00-${pad(n, 7)}-0`,
+        philhealth: `00-${pad(n, 9)}-0`,
+        pagibig: `0000-0000-${pad(n, 4)}`,
         bankName: pick(BANKS),
         bankAccount: `FAKE-${serial}-${pad(Math.floor(rand() * 1_000_000), 6)}`,
         payRatePhpMonthly: 18000 + Math.floor(rand() * 20) * 1000,

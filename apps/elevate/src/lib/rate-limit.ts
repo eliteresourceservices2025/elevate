@@ -11,6 +11,7 @@ export const POLICIES = {
   signup: { requests: 5, window: "1 h" },
   passwordReset: { requests: 5, window: "1 h" },
   mfa: { requests: 10, window: "10 m" },
+  reveal: { requests: 30, window: "10 m" },
 } satisfies Record<string, Policy>;
 
 let redis: Redis | null | undefined;

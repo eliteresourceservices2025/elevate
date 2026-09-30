@@ -3,6 +3,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { BASE_ROLE, isRoleSlug, type RoleSlug } from "@/lib/roles";
 import { writeAudit } from "@/modules/audit/write";
+import { linkEmployeeToUser } from "@/modules/people/service";
 import { invitations, userRoles, users } from "./schema";
 
 export type CoreUser = {
@@ -62,6 +63,15 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
           tx,
         );
       }
+    }
+
+    // Attach this account to the matching people record, if HR created one for this email.
+    const linkedEmployeeId = await linkEmployeeToUser(tx, { userId: input.id, email });
+    if (linkedEmployeeId) {
+      await writeAudit(
+        { actor: { id: input.id, email }, action: "people.link_user", targetType: "employee", targetId: linkedEmployeeId },
+        tx,
+      );
     }
 
     const [row] = await tx.select().from(users).where(eq(users.id, input.id)).limit(1);
