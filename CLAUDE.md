@@ -58,6 +58,14 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 The audit log is insert-only at the database level (trigger). Test data written to it stays until `supabase db reset`.
 
+## Encrypting sensitive fields
+
+`src/lib/crypto.ts`: `fieldCrypto().encrypt(value, context)` / `.decrypt(stored, context)`. The context string binds a value to its place, for example `employee_sensitive:tin:<employeeId>`, so a ciphertext copied to another row or column will not decrypt. Always use the same context when reading and writing. Decrypt only after `authorize()`, call `writeAudit()` with action `sensitive.view` (field name, never the value), and show `maskValue()` by default. Rotation: put the new key first in `FIELD_ENCRYPTION_KEYS` (`v2:...,v1:...`), run the re-encrypt job until `needsReencrypt()` is false for every row, then drop the old key. Losing every copy of a key makes its fields unreadable, so keep copies in the password manager.
+
+## Seed data
+
+`pnpm db:seed` creates one fake sign-in account per role (`seed.<role>@example.com`; password in the git-ignored `apps/elevate/.seed-credentials.local`) and refuses to run against production or any remote database unless `ELEVATE_ENV=staging`. The deterministic 40-employee dataset lives in `src/lib/seed/data.ts`; Phase 1.1 and 1.2 add the inserts when their tables exist.
+
 ## Security and privacy rules
 
 - **MFA:** the `(app)` layout and `proxy.ts` require AAL2. No page or action works at AAL1 except MFA enrollment/challenge.
