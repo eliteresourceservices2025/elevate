@@ -15,7 +15,6 @@ test("HR adds a person, saves an encrypted ID, and reveals it", async ({ page })
   await page.getByLabel("Legal first name").fill("Erika");
   await page.getByLabel("Legal last name").fill(lastName);
   await page.getByLabel("Work email").fill(`erika.${stamp}@example.com`);
-  await page.getByLabel("Position").fill("Healthcare Virtual Assistant");
   await page.getByRole("button", { name: "Add person" }).click();
   await page.waitForURL(/\/people\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name: `Erika ${lastName}` })).toBeVisible();

@@ -2,32 +2,45 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useForm, useWatch, type Resolver } from "react-hook-form";
+import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import { toast } from "sonner";
 import { FormSection, SelectField, TextField } from "@/components/form-fields";
+import { PersonPicker, type PickerOption } from "@/components/person-picker";
 import { Button } from "@/components/ui/button";
 import { createEmployee, updateEmployee } from "../actions";
-import { CIVIL_STATUSES, EMPLOYEE_STATUSES, statusLabel, WORKER_TYPES } from "../constants";
-import { employeeFieldsSchema, type EmployeeFieldsInput } from "../validators";
+import { CIVIL_STATUSES, EMPLOYEE_STATUSES, WORKER_TYPES, statusLabel } from "../constants";
+import { createEmployeeSchema, employeeFieldsSchema, type EmployeeFieldsInput } from "../validators";
 
-type Props = { mode: "create" } | { mode: "edit"; employeeId: string };
+type Options = {
+  positions: { id: string; title: string }[];
+  teams: { id: string; name: string }[];
+  managers: PickerOption[];
+};
+
+type Props = ({ mode: "create" } | { mode: "edit"; employeeId: string }) & {
+  options: Options;
+  defaults?: Partial<EmployeeFieldsInput>;
+};
+
+type FormValues = EmployeeFieldsInput & { teamId?: string; managerId?: string };
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace("_", " ");
 
-export function EmployeeForm(props: Props & { defaults?: Partial<EmployeeFieldsInput> }) {
+export function EmployeeForm(props: Props) {
   const router = useRouter();
+  const creating = props.mode === "create";
   const {
     register,
     handleSubmit,
     control,
     formState: { errors, isSubmitting },
-  } = useForm<EmployeeFieldsInput>({
-    resolver: zodResolver(employeeFieldsSchema) as unknown as Resolver<EmployeeFieldsInput>,
+  } = useForm<FormValues>({
+    resolver: zodResolver(creating ? createEmployeeSchema : employeeFieldsSchema) as unknown as Resolver<FormValues>,
     defaultValues: { status: "onboarding", workerType: "contractor", country: "PH", ...props.defaults },
   });
   const status = useWatch({ control, name: "status" });
 
-  async function onSubmit(values: EmployeeFieldsInput) {
+  async function onSubmit(values: FormValues) {
     const result =
       props.mode === "create" ? await createEmployee(values) : await updateEmployee({ ...values, employeeId: props.employeeId });
     if (!result.ok) {
@@ -39,6 +52,8 @@ export function EmployeeForm(props: Props & { defaults?: Partial<EmployeeFieldsI
     router.push(`/people/${id}`);
     router.refresh();
   }
+
+  const { positions, teams, managers } = props.options;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
@@ -73,7 +88,14 @@ export function EmployeeForm(props: Props & { defaults?: Partial<EmployeeFieldsI
       </FormSection>
 
       <FormSection title="Employment">
-        <TextField id="position" label="Position" error={errors.position?.message} {...register("position")} />
+        <SelectField id="positionId" label="Position" error={errors.positionId?.message as string | undefined} {...register("positionId")}>
+          <option value="">Not set</option>
+          {positions.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.title}
+            </option>
+          ))}
+        </SelectField>
         <SelectField id="status" label="Status" error={errors.status?.message} {...register("status")}>
           {EMPLOYEE_STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -94,9 +116,36 @@ export function EmployeeForm(props: Props & { defaults?: Partial<EmployeeFieldsI
         ) : null}
       </FormSection>
 
+      {creating ? (
+        <FormSection title="Team and manager" description="Optional. You can also set these later on the profile.">
+          <SelectField id="teamId" label="Team" error={errors.teamId?.message as string | undefined} {...register("teamId")}>
+            <option value="">No team</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </SelectField>
+          <Controller
+            control={control}
+            name="managerId"
+            render={({ field }) => (
+              <PersonPicker
+                id="managerId"
+                label="Manager"
+                options={managers}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.managerId ? "Choose a person from the list" : undefined}
+              />
+            )}
+          />
+        </FormSection>
+      ) : null}
+
       <div className="flex gap-3">
         <Button type="submit" disabled={isSubmitting}>
-          {props.mode === "create" ? "Add person" : "Save changes"}
+          {creating ? "Add person" : "Save changes"}
         </Button>
         <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancel

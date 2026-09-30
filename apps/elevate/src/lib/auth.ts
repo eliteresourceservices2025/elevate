@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import type { AuthzUser } from "@/lib/authz";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { provisionCoreUser } from "@/modules/core/users";
+import { ensureCoreUser } from "@/modules/core/users";
 
 export type AuthUser = AuthzUser & { email: string };
 
@@ -24,7 +24,7 @@ export const requireUser = cache(async (): Promise<AuthUser> => {
   const { id, email, email_confirmed_at } = data.user;
   if (!email || !email_confirmed_at) redirect("/login");
 
-  const user = await provisionCoreUser({ id, email });
+  const user = await ensureCoreUser({ id, email });
   if (user.archivedAt) {
     await supabase.auth.signOut();
     redirect("/login");

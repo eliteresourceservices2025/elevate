@@ -59,6 +59,8 @@ export function DirectoryTable({ rows, seesClients, sort, dir, params }: Props) 
         header: () => <SortHeader label="Position" column="position" sort={sort} dir={dir} params={params} />,
         cell: ({ row }) => row.original.position ?? "—",
       },
+      { id: "team", header: () => "Team", cell: ({ row }) => row.original.team ?? "—" },
+      { id: "manager", header: () => "Manager", cell: ({ row }) => row.original.managerName ?? "—" },
       { id: "email", header: () => "Work email", cell: ({ row }) => <span className="break-all">{row.original.workEmail}</span> },
     ];
     if (seesClients) cols.push({ id: "clients", header: () => "Client", cell: ({ row }) => row.original.clientNames ?? "—" });

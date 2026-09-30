@@ -5,6 +5,7 @@ import { z } from "zod";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
+import { listOrgOptions } from "@/modules/org/queries";
 import { EmployeeForm } from "@/modules/people/components/employee-form";
 import { displayName } from "@/modules/people/format";
 import { getProfile } from "@/modules/people/queries";
@@ -18,6 +19,7 @@ export default async function EditPersonPage({ params }: PageProps<"/people/[id]
   const user = await requireUser();
   await orNotFound(authorize(user, "people.edit_profile"));
   const { employee: e } = await orNotFound(getProfile(id));
+  const options = await orNotFound(listOrgOptions());
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -31,6 +33,7 @@ export default async function EditPersonPage({ params }: PageProps<"/people/[id]
       <EmployeeForm
         mode="edit"
         employeeId={id}
+        options={options}
         defaults={{
           legalFirstName: e.legalFirstName,
           legalMiddleName: e.legalMiddleName ?? "",
@@ -46,7 +49,7 @@ export default async function EditPersonPage({ params }: PageProps<"/people/[id]
           province: e.province ?? "",
           postalCode: e.postalCode ?? "",
           country: e.country,
-          position: e.position ?? "",
+          positionId: e.positionId ?? "",
           status: e.status,
           workerType: e.workerType as never,
           startDate: e.startDate ?? "",

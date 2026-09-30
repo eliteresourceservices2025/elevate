@@ -4,7 +4,10 @@ import { can, authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fieldCrypto } from "@/lib/crypto";
+import { alias } from "drizzle-orm/pg-core";
 import { writeAudit } from "@/modules/audit/write";
+import { teams } from "@/modules/org/schema";
+import { managerChainUserIds } from "@/modules/org/service";
 import type { ChangeCategory, ChangeStatus, CustomFieldType, CustomFieldVisibility, EmployeeStatus } from "./constants";
 import {
   changeRequests,
@@ -37,6 +40,8 @@ export type DirectoryRow = {
   status: EmployeeStatus;
   startDate: string | null;
   archived: boolean;
+  team: string | null;
+  managerName: string | null;
   /** Only filled for people who may see client names (HR Admin, Super Admin). */
   clientNames: string | null;
 };
@@ -56,6 +61,7 @@ export async function listDirectory(rawQuery: unknown) {
   const conditions: SQL[] = [];
   if (!(seesArchived && q.archived)) conditions.push(isNull(employees.archivedAt));
   if (q.status) conditions.push(eq(employees.status, q.status));
+  if (q.team) conditions.push(eq(employees.teamId, q.team));
   if (q.q) {
     const like = `%${q.q.replace(/[%_\\]/g, "\\$&")}%`;
     conditions.push(
@@ -92,6 +98,7 @@ export async function listDirectory(rawQuery: unknown) {
         join ${clients} c on c.id = ca.client_id where ca.employee_id = ${EMPLOYEE_ID} and ca.end_date is null)`
     : sql<string | null>`null`;
 
+  const mgr = alias(employees, "mgr");
   const rows = await db
     .select({
       id: employees.id,
@@ -104,9 +111,15 @@ export async function listDirectory(rawQuery: unknown) {
       status: employees.status,
       startDate: employees.startDate,
       archivedAt: employees.archivedAt,
+      team: teams.name,
+      managerFirst: mgr.legalFirstName,
+      managerLast: mgr.legalLastName,
+      managerPreferred: mgr.preferredName,
       clientNames,
     })
     .from(employees)
+    .leftJoin(teams, eq(teams.id, employees.teamId))
+    .leftJoin(mgr, eq(mgr.id, employees.managerId))
     .where(where)
     .orderBy(...orderBy)
     .limit(PAGE_SIZE)
@@ -116,9 +129,19 @@ export async function listDirectory(rawQuery: unknown) {
 
   return {
     rows: rows.map<DirectoryRow>((r) => ({
-      ...r,
+      id: r.id,
+      employeeNumber: r.employeeNumber,
+      legalFirstName: r.legalFirstName,
+      legalLastName: r.legalLastName,
+      preferredName: r.preferredName,
+      position: r.position,
+      workEmail: r.workEmail,
       status: r.status as EmployeeStatus,
+      startDate: r.startDate,
       archived: r.archivedAt !== null,
+      team: r.team,
+      managerName: r.managerFirst && r.managerLast ? `${r.managerPreferred?.trim() || r.managerFirst} ${r.managerLast}` : null,
+      clientNames: r.clientNames,
     })),
     total,
     page: q.page,
@@ -157,6 +180,9 @@ export type ProfileAccess = {
   canManageAssignments: boolean;
   canArchive: boolean;
   canManageCustomFields: boolean;
+  canManageReporting: boolean;
+  /** A manager looking at someone below them: personal details (birth date, address, personal email) are hidden. */
+  limitedView: boolean;
 };
 
 async function loadEmployee(employeeId: string) {
@@ -171,11 +197,11 @@ async function loadEmployee(employeeId: string) {
 export async function getProfile(employeeId: string) {
   const user = await requireUser();
   const employee = await loadEmployee(employeeId);
-  const resource = { ownerUserId: employee?.userId ?? undefined };
-
   if (!employee) await authorize({ ...user, roles: [] }, "people.view_profile"); // always forbidden
-  await authorize(user, "people.view_profile", resource);
   const e = employee!;
+  // "Team" scope means: the viewer is somewhere above this person in the reporting chain.
+  const resource = { ownerUserId: e.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, e.id) };
+  await authorize(user, "people.view_profile", resource);
 
   const isHr = can(user, "people.edit_profile");
   const access: ProfileAccess = {
@@ -189,6 +215,8 @@ export async function getProfile(employeeId: string) {
     canManageAssignments: can(user, "people.manage_assignments"),
     canArchive: can(user, "people.archive"),
     canManageCustomFields: can(user, "people.manage_custom_fields"),
+    canManageReporting: can(user, "org.manage_reporting"),
+    limitedView: !isHr && e.userId !== user.id,
   };
 
   const [contacts, sensitive, assignments, history, fieldDefs, fieldValues, pending] = await Promise.all([
@@ -242,6 +270,18 @@ export async function getProfile(employeeId: string) {
       value: valueByDef.get(d.id) ?? "",
     }));
 
+  const [teamRow] = e.teamId ? await db.select({ name: teams.name }).from(teams).where(eq(teams.id, e.teamId)).limit(1) : [];
+  const [managerRow] = e.managerId
+    ? await db.select({ first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName }).from(employees).where(eq(employees.id, e.managerId)).limit(1)
+    : [];
+  const [{ n: reportsCount }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(employees)
+    .where(and(eq(employees.managerId, e.id), isNull(employees.archivedAt), sql`${employees.status} <> 'separated'`));
+
+  // A manager sees a report's work details, not their private ones.
+  const hide = access.limitedView;
+
   return {
     employee: {
       id: e.id,
@@ -250,17 +290,23 @@ export async function getProfile(employeeId: string) {
       legalMiddleName: e.legalMiddleName,
       legalLastName: e.legalLastName,
       preferredName: e.preferredName,
-      birthDate: e.birthDate,
-      civilStatus: e.civilStatus,
+      birthDate: hide ? null : e.birthDate,
+      civilStatus: hide ? null : e.civilStatus,
       workEmail: e.workEmail,
-      personalEmail: e.personalEmail,
+      personalEmail: hide ? null : e.personalEmail,
       mobile: e.mobile,
-      addressLine: e.addressLine,
-      city: e.city,
-      province: e.province,
-      postalCode: e.postalCode,
-      country: e.country,
+      addressLine: hide ? null : e.addressLine,
+      city: hide ? null : e.city,
+      province: hide ? null : e.province,
+      postalCode: hide ? null : e.postalCode,
+      country: hide ? "" : e.country,
+      positionId: e.positionId,
       position: e.position,
+      teamId: e.teamId,
+      teamName: teamRow?.name ?? null,
+      managerId: e.managerId,
+      managerName: managerRow ? `${managerRow.preferred?.trim() || managerRow.first} ${managerRow.last}` : null,
+      reportsCount,
       status: e.status as EmployeeStatus,
       workerType: e.workerType,
       startDate: e.startDate,

@@ -19,6 +19,7 @@ import {
   PersonalSection,
 } from "@/modules/people/components/profile-sections";
 import { displayName } from "@/modules/people/format";
+import { listOrgOptions } from "@/modules/org/queries";
 import { getProfile, listClientsForFilter } from "@/modules/people/queries";
 
 export const metadata: Metadata = { title: "Profile" };
@@ -45,6 +46,7 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
   const active = visible.find((t) => t.key === requested) ?? visible[0];
 
   const today = formatInZone(new Date(), DEFAULT_TIMEZONE, "yyyy-MM-dd");
+  const orgOptions = active.key === "employment" && access.canManageReporting ? await listOrgOptions() : undefined;
   const clients = active.key === "clients" && access.canManageAssignments ? await listClientsForFilter() : [];
 
   return (
@@ -95,7 +97,7 @@ export default async function ProfilePage({ params, searchParams }: PageProps<"/
       </nav>
 
       {active.key === "personal" ? <PersonalSection profile={profile} /> : null}
-      {active.key === "employment" ? <EmploymentSection profile={profile} /> : null}
+      {active.key === "employment" ? <EmploymentSection profile={profile} orgOptions={orgOptions} today={today} /> : null}
       {active.key === "ids" ? <IdsSection profile={profile} /> : null}
       {active.key === "payout" ? <PayoutSection profile={profile} /> : null}
       {active.key === "emergency" ? <EmergencySection profile={profile} /> : null}

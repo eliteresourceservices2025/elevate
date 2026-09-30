@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   date,
@@ -52,6 +53,12 @@ export const employees = core
       postalCode: text("postal_code"),
       country: text("country").notNull().default("PH"),
 
+      // Organization (Phase 1.2). team_id and position_id point at org.teams / org.positions; their
+      // foreign keys live in a custom migration so the two schema files do not import each other.
+      managerId: uuid("manager_id").references((): AnyPgColumn => employees.id),
+      teamId: uuid("team_id"),
+      positionId: uuid("position_id"),
+      // Display title, kept in sync with the positions catalog (and what the history shows).
       position: text("position"),
       status: text("status").notNull().default("onboarding"),
       workerType: text("worker_type").notNull().default("contractor"),
@@ -67,6 +74,8 @@ export const employees = core
       uniqueIndex("employees_work_email_idx").on(sql`lower(${t.workEmail})`),
       uniqueIndex("employees_user_idx").on(t.userId).where(sql`${t.userId} is not null`),
       index("employees_status_idx").on(t.status),
+      index("employees_manager_idx").on(t.managerId),
+      index("employees_team_idx").on(t.teamId),
       check("employees_status_chk", sql`${t.status} in ('onboarding','active','probation','on_leave','separated')`),
       check("employees_worker_type_chk", sql`${t.workerType} in ('contractor','employee')`),
       check(

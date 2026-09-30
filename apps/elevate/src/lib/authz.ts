@@ -3,6 +3,7 @@ import { assetsPermissions } from "@/modules/assets/permissions";
 import { attendancePermissions } from "@/modules/attendance/permissions";
 import { documentsPermissions } from "@/modules/documents/permissions";
 import { onboardingPermissions } from "@/modules/onboarding/permissions";
+import { orgPermissions } from "@/modules/org/permissions";
 import { peoplePermissions } from "@/modules/people/permissions";
 import { recruitingPermissions } from "@/modules/recruiting/permissions";
 import { reviewsPermissions } from "@/modules/reviews/permissions";
@@ -15,6 +16,7 @@ import type { PermissionRule, RoleSlug, Scope } from "./roles";
 
 export const PERMISSIONS = {
   ...peoplePermissions,
+  ...orgPermissions,
   ...documentsPermissions,
   ...timeoffPermissions,
   ...attendancePermissions,

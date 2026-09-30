@@ -9,6 +9,8 @@ import type { getProfile } from "../queries";
 import { RevealField } from "./reveal-field";
 import { AssignClientForm, CustomFieldsForm, EndAssignmentButton } from "./hr-panels";
 import { SensitiveForm } from "./sensitive-form";
+import { ReportingForm } from "@/modules/org/components/reporting-form";
+import type { PickerOption } from "@/components/person-picker";
 import { BankChangeForm, ContactChangeForm, EmergencyContactsForm } from "./self-service-forms";
 
 export type Profile = Awaited<ReturnType<typeof getProfile>>;
@@ -43,6 +45,11 @@ export function PersonalSection({ profile }: { profile: Profile }) {
 
   return (
     <div className="space-y-6">
+      {access.limitedView ? (
+        <p role="note" className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+          Limited view: you see this person&apos;s work details. Birth date, civil status, personal email and home address are visible only to HR and the person.
+        </p>
+      ) : null}
       <DetailList>
         <Detail label="Legal name">{legalName(e)}</Detail>
         <Detail label="Preferred name">{dash(e.preferredName)}</Detail>
@@ -67,7 +74,9 @@ export function PersonalSection({ profile }: { profile: Profile }) {
   );
 }
 
-export function EmploymentSection({ profile }: { profile: Profile }) {
+export type OrgFormOptions = { teams: { id: string; name: string }[]; managers: PickerOption[] };
+
+export function EmploymentSection({ profile, orgOptions, today }: { profile: Profile; orgOptions?: OrgFormOptions; today: string }) {
   const { employee: e, access, customFields } = profile;
   return (
     <div className="space-y-6">
@@ -77,6 +86,9 @@ export function EmploymentSection({ profile }: { profile: Profile }) {
         <Detail label="Status">
           <Badge variant={e.status === "active" ? "default" : "secondary"}>{STATUS_LABELS[e.status]}</Badge>
         </Detail>
+        <Detail label="Team">{dash(e.teamName)}</Detail>
+        <Detail label="Manager">{dash(e.managerName)}</Detail>
+        {e.reportsCount > 0 ? <Detail label="Direct reports">{e.reportsCount}</Detail> : null}
         <Detail label="Worker type">{cap(e.workerType)}</Detail>
         <Detail label="Start date">{formatDateOnly(e.startDate)}</Detail>
         {e.endDate ? <Detail label="Last working day">{formatDateOnly(e.endDate)}</Detail> : null}
@@ -88,6 +100,18 @@ export function EmploymentSection({ profile }: { profile: Profile }) {
             ))
           : null}
       </DetailList>
+      {access.canManageReporting && orgOptions ? (
+        <Section title="Reporting">
+          <ReportingForm
+            employeeId={e.id}
+            current={{ teamId: e.teamId, managerId: e.managerId }}
+            teams={orgOptions.teams}
+            managers={orgOptions.managers}
+            today={today}
+            reportsCount={e.reportsCount}
+          />
+        </Section>
+      ) : null}
       {access.canEdit ? (
         <Section title="Custom fields">
           <CustomFieldsForm employeeId={e.id} fields={customFields} />

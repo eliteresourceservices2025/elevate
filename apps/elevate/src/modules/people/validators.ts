@@ -27,7 +27,7 @@ const email = z.string().trim().toLowerCase().pipe(z.email("Enter a valid email 
 const optionalEmail = z.preprocess(blankToUndefined, email.optional());
 const uuid = z.uuid();
 
-const isoDate = z
+export const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Use the format YYYY-MM-DD")
   .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v), "Enter a real date");
@@ -66,7 +66,7 @@ export const employeeFieldsSchema = z.object({
   mobile,
   ...address,
   country: z.preprocess(blankToUndefined, countryCode.default("PH")),
-  position: text(120),
+  positionId: z.preprocess(blankToUndefined, uuid.optional()),
   status: z.enum(EMPLOYEE_STATUSES).default("onboarding"),
   workerType: z.enum(WORKER_TYPES).default("contractor"),
   startDate: optionalDate,
@@ -76,7 +76,13 @@ export const employeeFieldsSchema = z.object({
 const separatedNeedsEndDate = (v: { status?: string; endDate?: string }) => v.status !== "separated" || Boolean(v.endDate);
 const endDateRule = { message: "Enter the last working day for a separated person", path: ["endDate"] };
 
-export const createEmployeeSchema = employeeFieldsSchema.refine(separatedNeedsEndDate, endDateRule);
+// Team and manager are optional at creation and go through the dated reporting rules.
+export const createEmployeeSchema = employeeFieldsSchema
+  .extend({
+    teamId: z.preprocess(blankToUndefined, uuid.optional()),
+    managerId: z.preprocess(blankToUndefined, uuid.optional()),
+  })
+  .refine(separatedNeedsEndDate, endDateRule);
 
 export const updateEmployeeSchema = employeeFieldsSchema
   .extend({ employeeId: uuid })
@@ -217,6 +223,7 @@ export const directoryQuerySchema = z.object({
   q: z.preprocess(blankToUndefined, z.string().trim().max(80).optional()),
   status: z.preprocess(blankToUndefined, z.enum(EMPLOYEE_STATUSES).optional()),
   client: z.preprocess(blankToUndefined, uuid.optional()),
+  team: z.preprocess(blankToUndefined, uuid.optional()),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
   sort: z.enum(DIRECTORY_SORTS).catch("name"),
   dir: z.enum(["asc", "desc"]).catch("asc"),

@@ -9,7 +9,7 @@ import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import postgres from "postgres";
 import { createFieldCrypto } from "@/lib/crypto-core";
-import { buildSeedDataset } from "@/lib/seed/data";
+import { buildSeedDataset, type SeedDataset } from "@/lib/seed/data";
 import { assertSeedAllowed } from "@/lib/seed/guard";
 import { SENSITIVE_FIELDS, type SensitiveField } from "@/modules/people/constants";
 import { maskFor, sensitiveContext } from "@/modules/people/sensitive";
@@ -84,13 +84,17 @@ async function seedPeople(accounts: Account[]) {
   }
 
   let created = 0;
+  const employeeIds: string[] = [];
   for (const [i, p] of data.employees.entries()) {
     // The first six people are the people behind the six seeded accounts, so each account has a profile.
     const account = accounts.at(i); // numeric loop index, not user input
     const workEmail = account?.email ?? p.email;
 
     const [found] = await sql`select id from core.employees where lower(work_email) = ${workEmail}`;
-    if (found) continue;
+    if (found) {
+      employeeIds.push(found.id);
+      continue;
+    }
 
     const n = String(i + 1).padStart(3, "0");
     const status = i % 9 === 4 ? "probation" : "active";
@@ -134,9 +138,65 @@ async function seedPeople(accounts: Account[]) {
         (${emp.id}, ${enc.get("tin")!}, ${enc.get("sss")!}, ${enc.get("philhealth")!}, ${enc.get("pagibig")!},
          ${enc.get("bankName")!}, ${enc.get("bankAccountName")!}, ${enc.get("bankAccountNumber")!}, ${enc.get("payRate")!},
          ${sql.json(masks)})`;
+    employeeIds.push(emp.id);
     created += 1;
   }
+  await seedOrganization(data, employeeIds);
   console.log(`people: ${created} created, ${data.employees.length - created} already there; ${data.clients.length} clients`);
+}
+
+/**
+ * Two departments, six teams, the position catalog and a reporting tree. Safe to repeat: it only fills
+ * what is missing. Team leads (the first five people) report to the person at index 4 (the Executive
+ * account); everyone else reports to their team lead. The Employee account (index 5) sits in the Team Lead
+ * account's team and reports to them, so team access can be tried with seeded accounts.
+ */
+async function seedOrganization(data: SeedDataset, ids: string[]) {
+  const upsert = async (table: "departments" | "teams" | "positions", column: "name" | "title", value: string, extra: { departmentId?: string } = {}) => {
+    const [row] = table === "teams"
+      ? await sql<{ id: string }[]>`
+          with ins as (insert into core.teams (name, department_id) values (${value}, ${extra.departmentId!})
+            on conflict ((lower(name))) do nothing returning id)
+          select id from ins union all select id from core.teams where lower(name) = lower(${value}) limit 1`
+      : table === "departments"
+        ? await sql<{ id: string }[]>`
+          with ins as (insert into core.departments (name) values (${value}) on conflict ((lower(name))) do nothing returning id)
+          select id from ins union all select id from core.departments where lower(name) = lower(${value}) limit 1`
+        : await sql<{ id: string }[]>`
+          with ins as (insert into core.positions (title) values (${value}) on conflict ((lower(title))) do nothing returning id)
+          select id from ins union all select id from core.positions where lower(title) = lower(${value}) limit 1`;
+    void column;
+    return row.id;
+  };
+
+  const services = await upsert("departments", "name", "Client Services");
+  const operations = await upsert("departments", "name", "Operations");
+  const teamIds: string[] = [];
+  for (const t of data.teams) teamIds.push(await upsert("teams", "name", t.name, { departmentId: services }));
+  await upsert("teams", "name", "HR & Admin", { departmentId: operations });
+  const positionIds = new Map<string, string>();
+  for (const t of data.teams) positionIds.set(t.position, await upsert("positions", "title", t.position));
+
+  for (const [i, p] of data.employees.entries()) {
+    const id = ids.at(i)!;
+    const teamIndex = i === 5 ? 2 : i % 5;
+    const managerIndex = i === 4 ? null : i < 4 ? 4 : i === 5 ? 2 : i % 5;
+    const teamId = teamIds.at(teamIndex)!;
+
+    await sql`update core.employees set team_id = coalesce(team_id, ${teamId}), position_id = coalesce(position_id, ${positionIds.get(p.position)!}) where id = ${id}`;
+    await sql`insert into core.team_memberships (employee_id, team_id, effective_from)
+              select ${id}, ${teamId}, ${p.startDate}::date
+              where not exists (select 1 from core.team_memberships where employee_id = ${id} and effective_to is null)`;
+
+    if (managerIndex !== null) {
+      const managerId = ids.at(managerIndex)!;
+      await sql`update core.employees set manager_id = ${managerId} where id = ${id} and manager_id is null`;
+      await sql`insert into core.reporting_lines (employee_id, manager_id, effective_from)
+                select ${id}, ${managerId}, ${p.startDate}::date
+                where not exists (select 1 from core.reporting_lines where employee_id = ${id} and effective_to is null)`;
+    }
+  }
+  console.log(`organization: 2 departments, ${data.teams.length + 1} teams, ${positionIds.size} positions, reporting tree ready`);
 }
 
 try {

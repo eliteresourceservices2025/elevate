@@ -24,11 +24,11 @@ describe("createEmployeeSchema", () => {
   });
 
   it("turns blank optional fields into undefined", () => {
-    const r = createEmployeeSchema.parse({ ...base, mobile: "", personalEmail: "  ", birthDate: "", position: "" });
+    const r = createEmployeeSchema.parse({ ...base, mobile: "", personalEmail: "  ", birthDate: "", positionId: "" });
     expect(r.mobile).toBeUndefined();
     expect(r.personalEmail).toBeUndefined();
     expect(r.birthDate).toBeUndefined();
-    expect(r.position).toBeUndefined();
+    expect(r.positionId).toBeUndefined();
   });
 
   it("rejects missing names, bad emails, bad phones and unreal dates", () => {

@@ -51,7 +51,16 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 - `pnpm test` unit and authz tests (no database). Every action has a per-role test; `tests/authz/matrix.test.ts` is the hand-written permission matrix.
 - `pnpm test:integration` real-Postgres tests in a throwaway `elevate_test` database. Needs `TEST_DB_ADMIN_URL` (local: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`). CI runs it with a Postgres service. Use it for anything about encryption, audit, history or approvals: mocks cannot catch SQL mistakes.
-- `pnpm test:e2e` Playwright against the local Supabase (`supabase start`, `pnpm db:migrate`). If your dev server already runs, use `E2E_BASE_URL=http://localhost:3000`. It creates throwaway fake accounts and people in the local database. Not run in CI.
+- `pnpm test:e2e` Playwright against the local Supabase (`supabase start`, `pnpm db:migrate`). If your dev server already runs, use `E2E_BASE_URL=http://localhost:3000`. It creates throwaway fake accounts and people in the local database, so the local directory and org chart fill with "E2E" people over time (`supabase db reset`, then migrate and seed, cleans up). Not run in CI.
+
+## Organization and team scope
+
+- Who reports to whom and which team someone is in are **dated** (`core.reporting_lines`, `core.team_memberships`); `employees.manager_id/team_id` hold the current values. Change them only through `applyReporting()` in `src/modules/org/service.ts`: no future dates, nothing before the current assignment began, manager must be active, no loops. It writes history.
+- Loops are refused by a database trigger (advisory-locked, so concurrent changes cannot slip past). Never update `manager_id` outside `applyReporting`.
+- **"Team" scope = everyone below you in the chain** (direct and indirect). Resources for team checks carry `managerChainUserIds` (see `managerChainUserIds()`); without it team access is denied. A manager sees a report's profile in a **limited view**: no birth date, civil status, personal email or home address.
+- A person who still has active reports cannot be archived or marked separated; HR reassigns them first (`reassignReports`).
+- Positions are a catalog; `employees.position` is the display title kept in sync.
+- To roll back a half-finished multi-step action, **throw** `ActionFailure` inside the transaction (returning commits).
 
 ## Adding a permission or action
 
@@ -70,7 +79,7 @@ The audit log is insert-only at the database level (trigger). Test data written 
 
 ## Seed data
 
-`pnpm db:seed` creates one fake sign-in account per role (`seed.<role>@example.com`; password in the git-ignored `apps/elevate/.seed-credentials.local`) and refuses to run against production or any remote database unless `ELEVATE_ENV=staging`. The deterministic 40-employee dataset lives in `src/lib/seed/data.ts`; Phase 1.1 and 1.2 add the inserts when their tables exist.
+`pnpm db:seed` creates one fake sign-in account per role (`seed.<role>@example.com`; password in the git-ignored `apps/elevate/.seed-credentials.local`) and refuses to run against production or any remote database unless `ELEVATE_ENV=staging`. The deterministic 40-employee dataset lives in `src/lib/seed/data.ts` and is inserted with clients, assignments, encrypted fake IDs, 2 departments, 6 teams, the position catalog and a reporting tree (Employee account reports to the Team Lead account, who reports to the Executive account). Re-running fills only what is missing.
 
 ## Security and privacy rules
 

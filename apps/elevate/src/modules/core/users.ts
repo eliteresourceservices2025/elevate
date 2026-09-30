@@ -86,3 +86,34 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
     };
   });
 }
+
+/** One cheap read: the account row and its roles, or null if the account has never been set up. */
+async function loadCoreUser(id: string): Promise<CoreUser | null> {
+  const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  if (!row) return null;
+  const roleRows = await db.select({ slug: userRoles.roleSlug }).from(userRoles).where(eq(userRoles.userId, id));
+  return {
+    id: row.id,
+    email: row.email,
+    archivedAt: row.archivedAt,
+    isSafevoiceHandler: row.isSafevoiceHandler,
+    roles: roleRows.map((r) => r.slug).filter(isRoleSlug),
+  };
+}
+
+/**
+ * Called on every request. Set-up work (invitation, base role, first Super Admin, linking to a
+ * people record) runs once, inside provisionCoreUser; after that this is a read.
+ * It re-provisions only when something that set-up provides is missing.
+ */
+export async function ensureCoreUser(input: { id: string; email: string }): Promise<CoreUser> {
+  const existing = await loadCoreUser(input.id);
+  const email = input.email.toLowerCase();
+
+  const missingBase = !existing || !existing.roles.includes(BASE_ROLE);
+  // The configured first Super Admin is promoted even if they signed in before being listed.
+  const pendingBootstrap = Boolean(existing) && superAdminEmails().includes(email) && !existing!.roles.includes("super_admin");
+
+  if (existing && !missingBase && !pendingBootstrap) return existing;
+  return provisionCoreUser(input);
+}

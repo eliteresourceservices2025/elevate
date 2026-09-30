@@ -3,6 +3,7 @@ import Link from "next/link";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
+import { listOrgOptions } from "@/modules/org/queries";
 import { EmployeeForm } from "@/modules/people/components/employee-form";
 
 export const metadata: Metadata = { title: "Add person" };
@@ -10,6 +11,7 @@ export const metadata: Metadata = { title: "Add person" };
 export default async function NewPersonPage() {
   const user = await requireUser();
   await orNotFound(authorize(user, "people.create"));
+  const options = await orNotFound(listOrgOptions());
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -23,7 +25,7 @@ export default async function NewPersonPage() {
           in with the email below, their account links to this record automatically.
         </p>
       </div>
-      <EmployeeForm mode="create" />
+      <EmployeeForm mode="create" options={options} />
     </div>
   );
 }

@@ -3,14 +3,16 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { authorize } from "@/lib/authz";
+import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { fieldCrypto } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { isUniqueViolation } from "@/lib/db-errors";
 import { allowRequest } from "@/lib/rate-limit";
-import { fail, runAction, type ActionResult } from "@/lib/run-action";
+import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
+import { positions } from "@/modules/org/schema";
+import { activeDirectReports, applyReporting, reportName, todayInZone } from "@/modules/org/service";
 import { viewBankChangeRequest } from "./queries";
 import { SENSITIVE_LABELS } from "./constants";
 import {
@@ -93,20 +95,36 @@ export async function createEmployee(input: unknown): Promise<ActionResult<{ id:
     await authorize(actor, "people.create");
     const parsed = createEmployeeSchema.safeParse(input);
     if (!parsed.success) return fail(firstIssue(parsed.error));
-    const v = parsed.data;
+    const { teamId, managerId, positionId, ...v } = parsed.data;
+    if ((teamId || managerId) && !can(actor, "org.manage_reporting")) return fail("You cannot set a team or manager.");
 
     try {
       const id = await db.transaction(async (tx) => {
+        let positionTitle: string | null = null;
+        if (positionId) {
+          const [pos] = await tx.select({ title: positions.title }).from(positions).where(and(eq(positions.id, positionId), isNull(positions.archivedAt))).limit(1);
+          if (!pos) throw new ActionFailure("That position was not found.");
+          positionTitle = pos.title;
+        }
+
         const userId = await findLinkableUser(tx, [v.workEmail, v.personalEmail]);
         const [created] = await tx
           .insert(employees)
-          .values({ ...v, userId, createdBy: actor.id })
+          .values({ ...v, positionId: positionId ?? null, position: positionTitle, userId, createdBy: actor.id })
           .returning({ id: employees.id, employeeNumber: employees.employeeNumber });
+
+        // Team and manager go through the dated rules. A start date in the future counts from today.
+        if (teamId || managerId) {
+          const today = todayInZone();
+          const effectiveDate = v.startDate && v.startDate < today ? v.startDate : today;
+          const result = await applyReporting(tx, { employeeId: created.id, teamId, managerId, effectiveDate }, actor.id);
+          if (!result.ok) throw new ActionFailure(result.error);
+        }
 
         await recordHistory(tx, {
           employeeId: created.id,
           eventType: "hired",
-          summary: v.position ? `Added to ELEVATE as ${v.position}` : "Added to ELEVATE",
+          summary: positionTitle ? `Added to ELEVATE as ${positionTitle}` : "Added to ELEVATE",
           changedBy: actor.id,
           ...(v.startDate ? { effectiveDate: v.startDate } : {}),
         });
@@ -138,33 +156,50 @@ export async function updateEmployee(input: unknown): Promise<ActionResult> {
     await authorize(actor, "people.edit_profile");
     const parsed = updateEmployeeSchema.safeParse(input);
     if (!parsed.success) return fail(firstIssue(parsed.error));
-    const { employeeId, ...v } = parsed.data;
+    const { employeeId, positionId, ...v } = parsed.data;
 
     try {
-      const result = await db.transaction(async (tx) => {
+      await db.transaction(async (tx) => {
         const [before] = await tx.select().from(employees).where(eq(employees.id, employeeId)).for("update");
-        if (!before) return fail("That person was not found.");
+        if (!before) throw new ActionFailure("That person was not found.");
+
+        let positionTitle: string | null = null;
+        if (positionId) {
+          const [pos] = await tx.select({ title: positions.title }).from(positions).where(eq(positions.id, positionId)).limit(1);
+          if (!pos) throw new ActionFailure("That position was not found.");
+          positionTitle = pos.title;
+        }
 
         const changedProfile = (Object.keys(PROFILE_FIELDS) as ProfileField[]).filter(
           // eslint-disable-next-line security/detect-object-injection -- keys of PROFILE_FIELDS
           (f) => (before[f] ?? undefined) !== (v[f] ?? undefined),
         );
-        const positionChanged = (before.position ?? undefined) !== (v.position ?? undefined);
+        const positionChanged = (before.positionId ?? undefined) !== (positionId ?? undefined);
         const statusChanged = before.status !== v.status;
         const workerTypeChanged = before.workerType !== v.workerType;
 
-        if (!changedProfile.length && !positionChanged && !statusChanged && !workerTypeChanged) return fail("No changes to save.");
+        if (!changedProfile.length && !positionChanged && !statusChanged && !workerTypeChanged) throw new ActionFailure("No changes to save.");
+
+        // Someone who leaves cannot still be the manager of active people.
+        if (statusChanged && v.status === "separated") await assertNoActiveReports(tx, employeeId);
 
         await tx
           .update(employees)
           .set({
             ...Object.fromEntries(Object.keys(PROFILE_FIELDS).map((f) => [f, v[f as ProfileField] ?? null])),
-            position: v.position ?? null,
+            positionId: positionId ?? null,
+            position: positionTitle,
             status: v.status,
             workerType: v.workerType,
             updatedAt: new Date(),
           })
           .where(eq(employees.id, employeeId));
+
+        // If the email now matches a waiting sign-in account, link it.
+        if (!before.userId && (changedProfile.includes("workEmail") || changedProfile.includes("personalEmail"))) {
+          const userId = await findLinkableUser(tx, [v.workEmail, v.personalEmail]);
+          if (userId) await tx.update(employees).set({ userId }).where(eq(employees.id, employeeId));
+        }
 
         const pick = (src: Record<string, unknown>, keys: string[]) => Object.fromEntries(keys.map((k) => [k, src[k] ?? null])); // eslint-disable-line security/detect-object-injection
         if (changedProfile.length) {
@@ -181,9 +216,9 @@ export async function updateEmployee(input: unknown): Promise<ActionResult> {
           await recordHistory(tx, {
             employeeId,
             eventType: "position_changed",
-            summary: `Position: ${before.position ?? "none"} → ${v.position ?? "none"}`,
+            summary: `Position: ${before.position ?? "none"} → ${positionTitle ?? "none"}`,
             before: { position: before.position },
-            after: { position: v.position ?? null },
+            after: { position: positionTitle },
             changedBy: actor.id,
           });
         }
@@ -216,19 +251,27 @@ export async function updateEmployee(input: unknown): Promise<ActionResult> {
             targetType: "employee",
             targetId: employeeId,
             before: pick(before, fields),
-            after: pick({ ...v, position: v.position }, fields),
+            after: pick({ ...v, position: positionTitle }, fields),
           },
           tx,
         );
-        return { ok: true, data: undefined } as const;
       });
-      if (result.ok) revalidateEmployee(employeeId);
-      return result;
+      revalidateEmployee(employeeId);
+      return { ok: true, data: undefined };
     } catch (error) {
       if (isUniqueViolation(error)) return fail("Someone with that work email already exists.");
       throw error;
     }
   });
+}
+
+/** Blocks leaving or archiving while active people still report to this person. */
+async function assertNoActiveReports(tx: Tx, employeeId: string) {
+  const reports = await activeDirectReports(tx, employeeId);
+  if (reports.length === 0) return;
+  const names = reports.slice(0, 5).map(reportName).join(", ");
+  const more = reports.length > 5 ? ` and ${reports.length - 5} more` : "";
+  throw new ActionFailure(`${reports.length} ${reports.length === 1 ? "person reports" : "people report"} to them (${names}${more}). Reassign their reports first.`);
 }
 
 export async function archiveEmployee(input: unknown): Promise<ActionResult> {
@@ -245,6 +288,7 @@ export async function archiveEmployee(input: unknown): Promise<ActionResult> {
       if (!row) return fail("That person was not found.");
       if ((row.archivedAt !== null) === !restore) return fail(restore ? "That person is not archived." : "That person is already archived.");
       if (!restore && row.userId === actor.id) return fail("You cannot archive your own record.");
+      if (!restore) await assertNoActiveReports(tx, employeeId);
 
       await tx.update(employees).set({ archivedAt: restore ? null : new Date(), updatedAt: new Date() }).where(eq(employees.id, employeeId));
       await recordHistory(tx, {

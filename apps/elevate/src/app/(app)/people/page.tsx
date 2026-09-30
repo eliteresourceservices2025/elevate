@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { EMPLOYEE_STATUSES, statusLabel } from "@/modules/people/constants";
 import { DirectoryTable } from "@/modules/people/components/directory-table";
+import { listTeamFilterOptions } from "@/modules/org/queries";
 import { listClientsForFilter, listDirectory } from "@/modules/people/queries";
 
 export const metadata: Metadata = { title: "People" };
@@ -18,6 +19,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
   const user = await requireUser();
   const raw = Object.fromEntries(Object.entries(await searchParams).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v]));
   const { rows, total, page, pageSize, query, seesClients, seesArchived, canCreate } = await listDirectory(raw);
+  const teamOptions = await listTeamFilterOptions();
   const clientOptions = seesClients && can(user, "people.manage_assignments") ? await listClientsForFilter() : [];
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -25,6 +27,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
     ...(query.q ? { q: query.q } : {}),
     ...(query.status ? { status: query.status } : {}),
     ...(query.client ? { client: query.client } : {}),
+    ...(query.team ? { team: query.team } : {}),
     ...(query.archived ? { archived: "1" } : {}),
   };
   const pageLink = (p: number) => `/people?${new URLSearchParams({ ...filters, sort: query.sort, dir: query.dir, page: String(p) })}`;
@@ -40,6 +43,11 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
           {can(user, "people.approve_change") ? (
             <Link href="/people/requests" className={cn(buttonVariants({ variant: "outline" }))}>
               Change requests
+            </Link>
+          ) : null}
+          {can(user, "org.manage_structure") ? (
+            <Link href="/people/structure" className={cn(buttonVariants({ variant: "outline" }))}>
+              Structure
             </Link>
           ) : null}
           {canCreate ? (
@@ -62,6 +70,17 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
             {EMPLOYEE_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {statusLabel(s)}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="team">Team</Label>
+          <NativeSelect id="team" name="team" defaultValue={query.team ?? ""} className="w-48">
+            <option value="">All</option>
+            {teamOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
               </option>
             ))}
           </NativeSelect>

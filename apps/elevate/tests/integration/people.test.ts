@@ -92,7 +92,8 @@ describe("create and update", () => {
     const base = { employeeId: id, ...person("update"), status: "onboarding" as const };
     expect(await actions.updateEmployee(base)).toMatchObject({ ok: false, error: "No changes to save." });
 
-    expect((await actions.updateEmployee({ ...base, position: "Senior VA", status: "active" })).ok).toBe(true);
+    const [pos] = await rows<{ id: string }>(sql`insert into core.positions (title) values (${"Senior VA " + id}) returning id`);
+    expect((await actions.updateEmployee({ ...base, positionId: pos.id, status: "active" })).ok).toBe(true);
     const events = await rows<{ event_type: string }>(sql`select event_type from core.employment_history where employee_id = ${id} order by created_at`);
     expect(events.map((h) => h.event_type)).toEqual(["hired", "position_changed", "status_changed"]);
     expect(await rows(sql`select 1 from ops.audit_log where action = 'people.update' and target_id = ${id}`)).toHaveLength(1);

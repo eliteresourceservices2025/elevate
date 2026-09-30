@@ -60,6 +60,8 @@ export const HISTORY_EVENTS = [
   "profile_changed",
   "position_changed",
   "status_changed",
+  "manager_changed",
+  "team_changed",
   "worker_type_changed",
   "client_assigned",
   "client_ended",
