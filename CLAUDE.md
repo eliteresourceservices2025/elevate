@@ -70,6 +70,15 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **Notifications:** `notify()` (`src/modules/notifications/service.ts`) writes in-app notifications; links must be relative. The bell in the header reads only the signed-in person's own.
 - **Jobs (Inngest):** scheduled functions in `src/inngest/functions.ts` are thin wrappers around plain tested functions (`src/modules/documents/jobs.ts`). Local: `INNGEST_DEV=1` in `.env.local` plus `pnpm dlx inngest-cli@latest dev`. Production: `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`; without a key the endpoint refuses to run. Job dates follow the company time zone (`America/Phoenix`).
 
+## Announcements, policies and email (Phase 1.4)
+
+- `src/modules/announcements/`: announcements (Markdown, audience everyone or teams, recipients frozen at posting), versioned policies (`docs.policy_versions`: a published version is frozen by a database trigger; changes are new versions), and `docs.acknowledgments` (insert-only trigger; one row per person and item/version). For policies the `id` in actions is the policy **version** id.
+- Markdown goes through `src/lib/markdown.ts` into React elements, never an HTML string. Do not add `dangerouslySetInnerHTML` for user text.
+- The seeded privacy notice and monitoring policy are DRAFT placeholders; publishing refuses text containing "DRAFT PLACEHOLDER". Phase 1.5 and the Jibble mirror gate read them by `kind`.
+- **Email:** everything is queued in `ops.email_queue` and sent by the `email-sender` job under a rolling 24-hour budget (`EMAIL_DAILY_BUDGET`, default 90 of Resend's free 100). Acknowledgment emails go first, then the weekday 8:00 AM Manila digest. Bodies carry counts and a link only. With no `RESEND_API_KEY`/`EMAIL_FROM` nothing is sent and the queue waits. Tests use `setEmailSender()`.
+- Pass `Date` values to drizzle comparison helpers (`lt`, `gte`), not raw `sql` fragments: raw fragments skip the driver's date encoding.
+- Production go-live: Supabase's built-in auth email is heavily rate-limited; configure custom SMTP (Resend can do it) when the Pro project is created.
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.

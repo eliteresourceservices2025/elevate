@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { listMyNotifications, type NotificationItem } from "./queries";
-import { notifications } from "./schema";
+import { emailPreferences, notifications } from "./schema";
 
 /** Loads the bell's list when it opens. */
 export async function loadNotifications(): Promise<ActionResult<{ items: NotificationItem[] }>> {
@@ -35,6 +35,21 @@ export async function markAllNotificationsRead(): Promise<ActionResult> {
   return runAction(async () => {
     await authorize(actor, "notifications.read", { ownerUserId: actor.id });
     await db.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.userId, actor.id), isNull(notifications.readAt)));
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Opts the signed-in person in or out of the daily digest email. Emails about something you must acknowledge are required. */
+export async function setDigestOptOut(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "notifications.read", { ownerUserId: actor.id });
+    const parsed = z.object({ optOut: z.boolean() }).safeParse(input);
+    if (!parsed.success) return fail("Check the request and try again.");
+    await db
+      .insert(emailPreferences)
+      .values({ userId: actor.id, digestOptOut: parsed.data.optOut })
+      .onConflictDoUpdate({ target: emailPreferences.userId, set: { digestOptOut: parsed.data.optOut, updatedAt: new Date() } });
     return { ok: true, data: undefined };
   });
 }

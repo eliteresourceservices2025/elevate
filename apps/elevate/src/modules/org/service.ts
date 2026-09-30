@@ -158,3 +158,19 @@ export async function applyReporting(tx: Tx, change: ReportingChange, actorId: s
 
   return { ok: true, changed };
 }
+
+/** Everyone below this sign-in account in the reporting chain (direct and indirect), as employee ids. Used to filter "team" scope lists. */
+export async function downlineEmployeeIds(executor: Db, userId: string): Promise<string[]> {
+  const rows = (await executor.execute(sql`
+    with recursive down(id, depth) as (
+      select e.id, 1 from core.employees e
+      join core.employees m on m.id = e.manager_id
+      where m.user_id = ${userId}
+      union all
+      select e.id, down.depth + 1 from down
+      join core.employees e on e.manager_id = down.id
+      where down.depth < 200
+    )
+    select distinct id from down`)) as unknown as { id: string }[];
+  return rows.map((r) => r.id);
+}

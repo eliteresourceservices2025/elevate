@@ -1,6 +1,9 @@
 import "server-only";
-import { DEFAULT_TIMEZONE } from "@/lib/time";
+import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
+import { runAckReminders } from "@/modules/announcements/jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
+import { runDailyDigest } from "@/modules/notifications/digest";
+import { flushEmailQueue } from "@/modules/notifications/email-queue";
 import { todayInZone } from "@/modules/org/service";
 import { inngest } from "./client";
 
@@ -18,4 +21,22 @@ export const documentPendingCleanup = inngest.createFunction(
   async ({ step }) => step.run("cleanup", () => cleanupPendingUploads()),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup];
+/** Daily at 1:30 AM: acknowledgment reminders (3 days before, the due day, weekly while overdue). */
+export const acknowledgmentReminders = inngest.createFunction(
+  { id: "acknowledgment-reminders", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 30 1 * * *` } },
+  async ({ step }) => step.run("remind", () => runAckReminders(todayInZone())),
+);
+
+/** Weekdays at 8:00 AM Manila time: queue the daily digest for people with unread notifications. */
+export const dailyDigest = inngest.createFunction(
+  { id: "daily-digest", triggers: { cron: `TZ=${SECONDARY_TIMEZONE} 0 8 * * 1-5` } },
+  async ({ step }) => step.run("queue", () => runDailyDigest(formatInZone(new Date(), SECONDARY_TIMEZONE, "yyyy-MM-dd"))),
+);
+
+/** Every 15 minutes: send queued email within the daily budget (acknowledgments first, then digests). */
+export const emailSender = inngest.createFunction(
+  { id: "email-sender", triggers: { cron: "*/15 * * * *" } },
+  async ({ step }) => step.run("send", () => flushEmailQueue()),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender];

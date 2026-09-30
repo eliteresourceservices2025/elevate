@@ -71,6 +71,20 @@
       "when": 1790759726517,
       "tag": "0009_document_types_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790762402514,
+      "tag": "0010_announcements_and_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790762410397,
+      "tag": "0011_announcements_rules",
+      "breakpoints": true
     }
   ]
 }

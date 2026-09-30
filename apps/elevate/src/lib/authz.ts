@@ -1,3 +1,4 @@
+import { announcementsPermissions } from "@/modules/announcements/permissions";
 import { analyticsPermissions } from "@/modules/analytics/permissions";
 import { assetsPermissions } from "@/modules/assets/permissions";
 import { attendancePermissions } from "@/modules/attendance/permissions";
@@ -19,6 +20,7 @@ export const PERMISSIONS = {
   ...peoplePermissions,
   ...orgPermissions,
   ...documentsPermissions,
+  ...announcementsPermissions,
   ...notificationsPermissions,
   ...timeoffPermissions,
   ...attendancePermissions,

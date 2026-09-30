@@ -62,6 +62,33 @@ export async function createHrAccount(): Promise<TestAccount> {
   return { email, password };
 }
 
+/** A fresh Employee account with an active profile (so things can be addressed to them). */
+export async function createEmployeeAccount(firstName: string, lastName: string): Promise<TestAccount & { employeeId: string }> {
+  assertLocal();
+  const email = `e2e.emp.${Date.now()}.${randomBytes(2).toString("hex")}@example.com`;
+  const password = randomBytes(15).toString("base64url");
+
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    await sql`insert into core.invitations (email, expires_at) values (${email}, now() + interval '1 day')`;
+    const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+    if (error || !data.user) throw new Error(`Could not create test account: ${error?.message}`);
+    const id = data.user.id ?? randomUUID();
+    await sql`insert into core.users (id, email) values (${id}, ${email})`;
+    await sql`insert into core.user_roles (user_id, role_slug) values (${id}, 'employee')`;
+    await sql`update core.invitations set accepted_at = now() where lower(email) = ${email}`;
+    const [e] = await sql<{ id: string }[]>`
+      insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id)
+      values (${firstName}, ${lastName}, ${email}, 'active', ${id}) returning id`;
+    return { email, password, employeeId: e.id };
+  } finally {
+    await sql.end();
+  }
+}
+
 /** Password sign-in, then authenticator enrollment (first time) using a generated code. */
 export async function signInEnrollingMfa(page: Page, account: TestAccount) {
   await page.goto("/login");
