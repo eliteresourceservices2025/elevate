@@ -11,12 +11,7 @@ function hostOf(url: string | undefined): string | null {
   }
 }
 
-export type SeedEnv = {
-  DATABASE_URL_DIRECT?: string;
-  DATABASE_URL?: string;
-  NEXT_PUBLIC_SUPABASE_URL?: string;
-  ELEVATE_ENV?: string;
-};
+export type SeedEnv = Readonly<Record<string, string | undefined>>;
 
 /**
  * Allowed only when the database and the auth service are both local, or when ELEVATE_ENV is

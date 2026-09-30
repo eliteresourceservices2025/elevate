@@ -8,8 +8,8 @@ import fs from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import postgres from "postgres";
-import { buildSeedDataset } from "../src/lib/seed/data.ts";
-import { assertSeedAllowed } from "../src/lib/seed/guard.ts";
+import { buildSeedDataset } from "@/lib/seed/data";
+import { assertSeedAllowed } from "@/lib/seed/guard";
 
 config({ path: ".env.local" });
 assertSeedAllowed(process.env);
