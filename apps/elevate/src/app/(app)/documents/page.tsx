@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PagerLinks } from "@/components/pager";
+import { paginate, parsePaging } from "@/lib/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { can } from "@/lib/authz";
@@ -33,11 +35,16 @@ function PersonLink({ id, name, number }: { id: string; name: string; number: st
 export default async function DocumentsPage({ searchParams }: PageProps<"/documents">) {
   const user = await requireUser();
   const isHr = can(user, "documents.view_overview");
-  const requested = (await searchParams).tab;
+  const sp = await searchParams;
+  const requested = sp.tab;
+  const paging = parsePaging({ page: sp.page, size: sp.size });
   const tab = isHr ? (HR_TABS.find((t) => t.key === requested)?.key ?? "attention") : "company";
   const today = formatInZone(new Date(), DEFAULT_TIMEZONE, "yyyy-MM-dd");
 
   const overview = isHr && (tab === "attention" || tab === "missing" || tab === "verify") ? await orNotFound(getDocumentOverview()) : null;
+  const attention = overview ? paginate(overview.attention, paging.page, paging.pageSize) : null;
+  const missing = overview ? paginate(overview.missing, paging.page, paging.pageSize) : null;
+  const unverified = overview ? paginate(overview.unverified, paging.page, paging.pageSize) : null;
   const company = tab === "company" ? await listCompanyDocuments() : null;
   const companyUpload = tab === "company" && can(user, "documents.manage_company") ? await getUploadOptions("company") : null;
   const types = isHr && tab === "types" ? await orNotFound(listDocumentTypes()) : null;
@@ -81,6 +88,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
         overview.attention.length === 0 ? (
           <p className="text-muted-foreground">Nothing is expiring in the next 30 days. Expired documents would appear here too.</p>
         ) : (
+          <>
           <div className="overflow-x-auto rounded-xl border bg-card">
             <Table>
               <TableHeader>
@@ -92,7 +100,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {overview.attention.map((r) => (
+                {attention?.rows.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell><PersonLink id={r.employeeId} name={r.employeeName} number={r.employeeNumber} /></TableCell>
                     <TableCell>{r.typeName}<div className="text-xs text-muted-foreground">{r.title}</div></TableCell>
@@ -103,6 +111,8 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
               </TableBody>
             </Table>
           </div>
+          <PagerLinks info={attention!.info} basePath="/documents" query={{ tab: "attention" }} label="documents" />
+          </>
         )
       ) : null}
 
@@ -110,6 +120,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
         overview.missing.length === 0 ? (
           <p className="text-muted-foreground">Everyone has the documents marked &quot;Everyone needs one&quot;.</p>
         ) : (
+          <>
           <div className="overflow-x-auto rounded-xl border bg-card">
             <Table>
               <TableHeader>
@@ -120,7 +131,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {overview.missing.map((r, i) => (
+                {missing?.rows.map((r, i) => (
                   <TableRow key={`${r.employeeId}-${r.typeName}-${i}`}>
                     <TableCell><PersonLink id={r.employeeId} name={r.employeeName} number={r.employeeNumber} /></TableCell>
                     <TableCell>{r.typeName}</TableCell>
@@ -130,6 +141,8 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
               </TableBody>
             </Table>
           </div>
+          <PagerLinks info={missing!.info} basePath="/documents" query={{ tab: "missing" }} label="gaps" />
+          </>
         )
       ) : null}
 
@@ -137,6 +150,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
         overview.unverified.length === 0 ? (
           <p className="text-muted-foreground">Everything uploaded has been verified.</p>
         ) : (
+          <>
           <div className="overflow-x-auto rounded-xl border bg-card">
             <Table>
               <TableHeader>
@@ -147,7 +161,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {overview.unverified.map((r) => (
+                {unverified?.rows.map((r) => (
                   <TableRow key={r.documentId}>
                     <TableCell><PersonLink id={r.employeeId} name={r.employeeName} number={r.employeeNumber} /></TableCell>
                     <TableCell>{r.typeName}<div className="text-xs text-muted-foreground">{r.title}</div></TableCell>
@@ -157,6 +171,8 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
               </TableBody>
             </Table>
           </div>
+          <PagerLinks info={unverified!.info} basePath="/documents" query={{ tab: "verify" }} label="documents" />
+          </>
         )
       ) : null}
 

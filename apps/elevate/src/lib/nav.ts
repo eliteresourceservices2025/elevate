@@ -17,11 +17,17 @@ import {
   Star,
   UserPlus,
   Users,
+  Camera,
   Clock,
+  Hourglass,
+  ListChecks,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 
-export type NavItem = { href: string; label: string; icon: LucideIcon; description: string };
+/** Shown only to people who hold one of these scopes for the action. Pages and actions still enforce it; this just keeps the menu short. */
+export type NavAccess = { action: string; scopes: ("own" | "team" | "all")[] };
+export type NavItem = { href: string; label: string; icon: LucideIcon; description: string; access?: NavAccess };
 export type NavGroup = { label: string; items: NavItem[] };
 
 // Placeholder links for every module; each becomes real in its build phase.
@@ -48,7 +54,11 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/time-off", label: "Time off", icon: CalendarDays, description: "Prize days off and holiday calendars." },
       { href: "/attendance", label: "Attendance", icon: Clock, description: "Time clock, lates, absences and hours export." },
+      { href: "/extra-hours", label: "Extra hours", icon: Hourglass, description: "Ask for extra hours, confirm the client's requests and decide them." },
+      { href: "/team-attendance", label: "Team attendance", icon: UsersRound, description: "Who is clocked in, flags and end-of-day reports.", access: { action: "attendance.view", scopes: ["all", "team"] } },
+      { href: "/hours-review", label: "Hours review", icon: ListChecks, description: "Approve weekly hours for payroll.", access: { action: "hours.approve", scopes: ["all", "team"] } },
       { href: "/schedules", label: "Schedules", icon: CalendarClock, description: "Shifts in the client's time zone and Manila time." },
+      { href: "/jibble", label: "Jibble", icon: Camera, description: "Screenshot link status and people matching.", access: { action: "jibble.manage", scopes: ["all", "team", "own"] } },
     ],
   },
   {

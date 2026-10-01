@@ -5,7 +5,9 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { PagerLinks } from "@/components/pager";
 import { can } from "@/lib/authz";
+import { DEFAULT_PAGE_SIZE, pageInfo } from "@/lib/pagination";
 import { requireUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { EMPLOYEE_STATUSES, statusLabel } from "@/modules/people/constants";
@@ -22,15 +24,15 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
   const teamOptions = await listTeamFilterOptions();
   const clientOptions = seesClients && can(user, "people.manage_assignments") ? await listClientsForFilter() : [];
 
-  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const info = pageInfo(total, page, pageSize);
   const filters: Record<string, string> = {
     ...(query.q ? { q: query.q } : {}),
     ...(query.status ? { status: query.status } : {}),
     ...(query.client ? { client: query.client } : {}),
     ...(query.team ? { team: query.team } : {}),
     ...(query.archived ? { archived: "1" } : {}),
+    ...(pageSize !== DEFAULT_PAGE_SIZE ? { size: String(pageSize) } : {}),
   };
-  const pageLink = (p: number) => `/people?${new URLSearchParams({ ...filters, sort: query.sort, dir: query.dir, page: String(p) })}`;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -120,25 +122,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
         <DirectoryTable rows={rows} seesClients={seesClients} sort={query.sort} dir={query.dir} params={filters} />
       </div>
 
-      <nav aria-label="Pages" className="flex items-center justify-between text-sm">
-        {page > 1 ? (
-          <Link href={pageLink(page - 1)} className="text-primary underline-offset-4 hover:underline">
-            ← Previous
-          </Link>
-        ) : (
-          <span />
-        )}
-        <span className="text-muted-foreground">
-          Page {page} of {pages}
-        </span>
-        {page < pages ? (
-          <Link href={pageLink(page + 1)} className="text-primary underline-offset-4 hover:underline">
-            Next →
-          </Link>
-        ) : (
-          <span />
-        )}
-      </nav>
+      <PagerLinks info={info} basePath="/people" query={{ ...filters, sort: query.sort, dir: query.dir }} label="people" />
     </div>
   );
 }

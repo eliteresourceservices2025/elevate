@@ -13,7 +13,7 @@ function activeHref(pathname: string) {
   return matches.sort((a, b) => b.href.length - a.href.length)[0]?.href;
 }
 
-export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+export function SidebarNav({ onNavigate, hidden = [] }: { onNavigate?: () => void; hidden?: string[] }) {
   const pathname = usePathname();
   const current = activeHref(pathname);
 
@@ -33,7 +33,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
               {group.label}
             </p>
             <ul className="space-y-0.5">
-              {group.items.map(({ href, label, icon: Icon }) => {
+              {group.items.filter((i) => !hidden.includes(i.href)).map(({ href, label, icon: Icon }) => {
                 const active = href === current;
                 return (
                   <li key={href}>

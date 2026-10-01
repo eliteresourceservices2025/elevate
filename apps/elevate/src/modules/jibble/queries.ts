@@ -28,7 +28,7 @@ export type JibbleOverview = {
   log: LogRow[];
 };
 
-/** The Jibble tab: connection state, who is matched, and the latest calls. HR only. */
+/** The Jibble page: connection state, who is matched, and the latest calls. HR only. */
 export async function getJibbleOverview(): Promise<JibbleOverview> {
   const user = await requireUser();
   await authorize(user, "jibble.manage");

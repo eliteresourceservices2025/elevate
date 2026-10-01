@@ -351,7 +351,7 @@ describe("so payroll is not short: reminders and progress", () => {
     expect(run.leads).toBeGreaterThanOrEqual(1);
     const [n] = await rows<{ title: string; link: string }>(sql`select title, link from ops.notifications where user_id = ${lead.user.id} and kind = 'hours.approval_reminder'`);
     expect(n.title).toBe("1 person has hours waiting for your approval");
-    expect(n.link).toBe(`/attendance?tab=review&rweek=${W}`);
+    expect(n.link).toBe(`/hours-review?rweek=${W}`);
     expect((await rows<{ title: string }>(sql`select title from ops.notifications where user_id = ${hr.id} and kind = 'hours.approval_reminder'`)).some((r) => r.title.includes("no lead"))).toBe(true);
 
     as(lead.user);

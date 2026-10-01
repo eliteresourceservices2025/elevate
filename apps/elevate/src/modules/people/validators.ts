@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from "@/lib/pagination";
 import { isValidTimeZone } from "@/lib/time";
 import {
   CIVIL_STATUSES,
@@ -226,6 +227,7 @@ export const directoryQuerySchema = z.object({
   client: z.preprocess(blankToUndefined, uuid.optional()),
   team: z.preprocess(blankToUndefined, uuid.optional()),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
+  size: z.coerce.number().int().refine((n) => (PAGE_SIZES as readonly number[]).includes(n)).catch(DEFAULT_PAGE_SIZE),
   sort: z.enum(DIRECTORY_SORTS).catch("name"),
   dir: z.enum(["asc", "desc"]).catch("asc"),
   archived: z.preprocess((v) => v === "1" || v === "true" || v === true, z.boolean()),

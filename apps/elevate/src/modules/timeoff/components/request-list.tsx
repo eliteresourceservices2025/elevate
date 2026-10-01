@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { ClientPager, usePaged } from "@/components/client-pager";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -112,12 +113,16 @@ function RequestCard({ item, showPerson }: { item: RequestItem; showPerson: bool
 }
 
 export function RequestList({ items, showPerson = false, empty }: { items: RequestItem[]; showPerson?: boolean; empty: string }) {
+  const paged = usePaged(items, "", 10);
   if (items.length === 0) return <p className="text-muted-foreground">{empty}</p>;
   return (
-    <ul className="space-y-3">
-      {items.map((i) => (
-        <RequestCard key={i.id} item={i} showPerson={showPerson} />
-      ))}
-    </ul>
+    <div className="space-y-3">
+      <ul className="space-y-3">
+        {paged.rows.map((i) => (
+          <RequestCard key={i.id} item={i} showPerson={showPerson} />
+        ))}
+      </ul>
+      <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="requests" />
+    </div>
   );
 }

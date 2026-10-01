@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PagerLinks } from "@/components/pager";
+import { paginate, parsePaging } from "@/lib/pagination";
 import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
@@ -64,9 +66,12 @@ function Proposed({ category, payload }: { category: string; payload: unknown })
 }
 
 export default async function RequestsPage({ searchParams }: PageProps<"/people/requests">) {
-  const raw = (await searchParams).status;
+  const sp = await searchParams;
+  const raw = sp.status;
   const status = (CHANGE_STATUSES as readonly string[]).includes(String(raw)) ? (raw as ChangeStatus) : "pending";
-  const requests = await orNotFound(listChangeRequests(status));
+  const all = await orNotFound(listChangeRequests(status));
+  const paging = parsePaging({ page: sp.page, size: sp.size }, 10);
+  const { rows: requests, info } = paginate(all, paging.page, paging.pageSize);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -113,6 +118,7 @@ export default async function RequestsPage({ searchParams }: PageProps<"/people/
           </li>
         ))}
       </ul>
+      <PagerLinks info={info} basePath="/people/requests" query={{ status }} defaultSize={10} label="requests" />
     </div>
   );
 }

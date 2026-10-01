@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { fromZonedTime } from "date-fns-tz";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
+import { ClientPager, usePaged } from "@/components/client-pager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -234,6 +235,7 @@ function Items({ items, zone, mode, empty }: { items: ExtraItem[]; zone: string;
   const { run, pending } = useRun();
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [edit, setEdit] = useState<Record<string, { start: string; end: string }>>({});
+  const paged = usePaged(items, "", 10);
   const open = async (evidenceId: string) => {
     const result = await openEvidence({ evidenceId });
     if (!result.ok) return void toast.error(result.error);
@@ -241,8 +243,9 @@ function Items({ items, zone, mode, empty }: { items: ExtraItem[]; zone: string;
   };
   if (items.length === 0) return <p className="text-muted-foreground">{empty}</p>;
   return (
+    <div className="space-y-3">
     <ul className="space-y-3">
-      {items.map((r) => {
+      {paged.rows.map((r) => {
         const e = edit[r.id];
         return (
           <li key={r.id} className="space-y-2 rounded-xl border bg-card p-4">
@@ -357,6 +360,8 @@ function Items({ items, zone, mode, empty }: { items: ExtraItem[]; zone: string;
         );
       })}
     </ul>
+    <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="requests" />
+    </div>
   );
 }
 

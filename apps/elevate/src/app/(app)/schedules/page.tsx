@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { PagerLinks } from "@/components/pager";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
+import { paginate, parsePaging } from "@/lib/pagination";
 import { formatDateOnly } from "@/lib/time";
 import { SchedulesPanel } from "@/modules/attendance/components/schedules-panel";
 import { getMySchedule, listSchedules, listTeamSchedules, type ScheduleLine } from "@/modules/attendance/queries";
@@ -24,12 +26,17 @@ function Line({ s, label }: { s: ScheduleLine; label?: string }) {
   );
 }
 
-export default async function SchedulesPage() {
+export default async function SchedulesPage({ searchParams }: PageProps<"/schedules">) {
   const user = await requireUser();
+  const params = await searchParams;
+  const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
   const manage = scopeFor(user, "schedules.manage");
   const mine = await orNotFound(getMySchedule());
   const all = manage ? await orNotFound(listSchedules()) : null;
   const team = !manage && scopeFor(user, "schedules.view") === "team" ? await orNotFound(listTeamSchedules()) : null;
+
+  const paging = parsePaging({ page: one(params.page), size: one(params.size) });
+  const teamPage = team ? paginate(team.rows, paging.page, paging.pageSize) : null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -78,7 +85,7 @@ export default async function SchedulesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {team.rows.map((r) => (
+                  {teamPage?.rows.map((r) => (
                     <TableRow key={r.employeeId}>
                       <TableCell className="font-medium">{r.name}</TableCell>
                       <TableCell>
@@ -102,6 +109,7 @@ export default async function SchedulesPage() {
               </Table>
             </div>
           )}
+          {teamPage ? <PagerLinks info={teamPage.info} basePath="/schedules" label="people" /> : null}
           <p className="text-sm text-muted-foreground">HR changes schedules. Ask HR if one is wrong.</p>
         </section>
       ) : null}

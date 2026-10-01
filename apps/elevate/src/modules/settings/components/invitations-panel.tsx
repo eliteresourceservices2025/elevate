@@ -5,6 +5,7 @@ import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { ClientPager, usePaged } from "@/components/client-pager";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
@@ -39,6 +40,7 @@ function RevokeButton({ row }: { row: InvitationRow }) {
 }
 
 export function InvitationsPanel({ invitations, now }: { invitations: InvitationRow[]; now: number }) {
+  const paged = usePaged(invitations, "", 10);
   const {
     register,
     handleSubmit,
@@ -86,7 +88,7 @@ export function InvitationsPanel({ invitations, now }: { invitations: Invitation
               </TableCell>
             </TableRow>
           ) : null}
-          {invitations.map((row) => {
+          {paged.rows.map((row) => {
             const s = status(row, now);
             return (
               <TableRow key={row.id}>
@@ -102,6 +104,7 @@ export function InvitationsPanel({ invitations, now }: { invitations: Invitation
           })}
         </TableBody>
       </Table>
+      <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="invitations" />
     </div>
   );
 }

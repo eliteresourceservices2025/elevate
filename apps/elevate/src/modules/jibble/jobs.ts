@@ -33,7 +33,7 @@ async function alertHr(kind: string, title: string, body: string, windowHours: n
   const [recent] = (await db.execute(sql`select 1 as ok from ops.notifications where kind = ${kind} and created_at > ${since}::timestamptz limit 1`)) as unknown as { ok: number }[];
   if (recent) return;
   const hr = await hrUserIds();
-  await notify(db, hr.map((userId) => ({ userId, kind, title, body, link: "/attendance?tab=jibble" })));
+  await notify(db, hr.map((userId) => ({ userId, kind, title, body, link: "/jibble" })));
 }
 
 /** HR's pause switch: while paused nothing is sent to Jibble and calls wait in the queue. */
@@ -146,10 +146,10 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
   }
 
   if (authProblem) {
-    await alertHr("jibble.auth", "ELEVATE cannot sign in to Jibble", "Jibble refused the access keys. Screenshots may not be starting. Check the keys (they may have been changed or the plan may have lapsed) in the Jibble tab.", 2);
+    await alertHr("jibble.auth", "ELEVATE cannot sign in to Jibble", "Jibble refused the access keys. Screenshots may not be starting. Check the keys (they may have been changed or the plan may have lapsed) in the Jibble page.", 2);
   } else if (terminal > 0) {
     const [{ n }] = (await db.execute(sql`select count(*)::int as n from time.jibble_link_log where status = 'failed' and created_at > now() - interval '2 hours'`)) as unknown as { n: number }[];
-    if (n >= 3) await alertHr("jibble.failing", "Jibble calls are failing", `${n} clock calls failed in the last 2 hours, so screenshots may not be starting for some people. See the Jibble tab and retry them.`, 6);
+    if (n >= 3) await alertHr("jibble.failing", "Jibble calls are failing", `${n} clock calls failed in the last 2 hours, so screenshots may not be starting for some people. See the Jibble page and retry them.`, 6);
   }
   return run;
 }
@@ -215,7 +215,7 @@ export async function runJibbleRepair(now = new Date(), client: JibbleClient | n
       run.failed += 1;
     }
   }
-  if (authProblem) await alertHr("jibble.auth", "ELEVATE cannot sign in to Jibble", "Jibble refused the access keys. Screenshots may not be starting. Check the keys (they may have been changed or the plan may have lapsed) in the Jibble tab.", 2);
+  if (authProblem) await alertHr("jibble.auth", "ELEVATE cannot sign in to Jibble", "Jibble refused the access keys. Screenshots may not be starting. Check the keys (they may have been changed or the plan may have lapsed) in the Jibble page.", 2);
   return run;
 }
 
@@ -233,7 +233,7 @@ export async function runJibbleUnmatchedReport(now = new Date()): Promise<{ peop
   const names = rows.map((r) => reportName({ first: r.first, last: r.last, preferred: r.preferred })).sort();
   const shown = names.slice(0, 10).join(", ");
   const hr = await hrUserIds();
-  await notify(db, hr.map((userId) => ({ userId, kind: "jibble.unmatched", title: `${rows.length} ${rows.length === 1 ? "person" : "people"} clocked in with no Jibble account`, body: `${shown}${names.length > 10 ? `, and ${names.length - 10} more` : ""}. No screenshots ran for them. Match them in the Jibble tab or add them in Jibble.`, link: "/attendance?tab=jibble" })));
+  await notify(db, hr.map((userId) => ({ userId, kind: "jibble.unmatched", title: `${rows.length} ${rows.length === 1 ? "person" : "people"} clocked in with no Jibble account`, body: `${shown}${names.length > 10 ? `, and ${names.length - 10} more` : ""}. No screenshots ran for them. Match them in the Jibble page or add them in Jibble.`, link: "/jibble" })));
   return { people: rows.length };
 }
 

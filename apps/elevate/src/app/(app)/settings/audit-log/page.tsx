@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PagerLinks } from "@/components/pager";
+import { pageInfo } from "@/lib/pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,11 +16,11 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/setting
   const params = await searchParams;
   const { rows, page, total, pageSize, action } = await orNotFound(listAuditEntries({
     page: typeof params.page === "string" ? params.page : undefined,
+    size: typeof params.size === "string" ? params.size : undefined,
     action: typeof params.action === "string" ? params.action : undefined,
   })); // authorize("settings.view_audit") inside
 
-  const pages = Math.max(1, Math.ceil(total / pageSize));
-  const link = (p: number) => `/settings/audit-log?page=${p}${action ? `&action=${encodeURIComponent(action)}` : ""}`;
+  const info = pageInfo(total, page, pageSize);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -87,25 +89,7 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/setting
         </TableBody>
       </Table>
 
-      <nav aria-label="Pages" className="flex items-center justify-between text-sm">
-        {page > 1 ? (
-          <Link href={link(page - 1)} className="text-primary underline-offset-4 hover:underline">
-            ← Newer
-          </Link>
-        ) : (
-          <span />
-        )}
-        <span className="text-muted-foreground">
-          Page {page} of {pages}
-        </span>
-        {page < pages ? (
-          <Link href={link(page + 1)} className="text-primary underline-offset-4 hover:underline">
-            Older →
-          </Link>
-        ) : (
-          <span />
-        )}
-      </nav>
+      <PagerLinks info={info} basePath="/settings/audit-log" query={{ action: action || undefined }} label="entries" />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClientPager, usePaged } from "@/components/client-pager";
 import { formatDateOnly } from "@/lib/time";
 import { endSchedule, assignSchedule } from "../schedule-actions";
 import { WEEKDAYS } from "../schedule";
@@ -34,6 +35,8 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
     const q = filter.trim().toLowerCase();
     return rows.filter((r) => (!onlyNone || !r.current) && (q === "" || r.name.toLowerCase().includes(q) || (r.team ?? "").toLowerCase().includes(q)));
   }, [rows, filter, onlyNone]);
+
+  const paged = usePaged(shown, `${filter}|${onlyNone}`);
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string, after?: () => void) =>
     startTransition(async () => {
@@ -133,7 +136,7 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
               variant="outline"
               onClick={() => setPicked((p) => (shown.every((r) => p.has(r.employeeId)) ? new Set() : new Set([...p, ...shown.map((r) => r.employeeId)])))}
             >
-              {shown.length > 0 && shown.every((r) => picked.has(r.employeeId)) ? "Unselect shown" : "Select shown"}
+              {shown.length > 0 && shown.every((r) => picked.has(r.employeeId)) ? `Unselect all ${shown.length} matching` : `Select all ${shown.length} matching`}
             </Button>
           </div>
         </div>
@@ -150,7 +153,7 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
               </TableRow>
             </TableHeader>
             <TableBody>
-              {shown.map((r) => (
+              {paged.rows.map((r) => (
                 <TableRow key={r.employeeId}>
                   <TableCell>
                     <input type="checkbox" aria-label={`Select ${r.name}`} className="size-4 accent-primary" checked={picked.has(r.employeeId)} onChange={() => toggle(r.employeeId)} />
@@ -185,6 +188,7 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
             </TableBody>
           </Table>
         </div>
+        <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="people" />
       </section>
     </div>
   );

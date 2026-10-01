@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from "@/lib/pagination";
 import { ROLE_SLUGS } from "@/lib/roles";
 
 const userId = z.uuid();
@@ -20,6 +21,7 @@ export const revokeInvitationSchema = z.object({ invitationId: z.uuid() });
 
 export const auditQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
+  size: z.coerce.number().int().refine((n) => (PAGE_SIZES as readonly number[]).includes(n)).default(DEFAULT_PAGE_SIZE),
   action: z
     .string()
     .trim()

@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { fromZonedTime } from "date-fns-tz";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
+import { ClientPager, usePaged } from "@/components/client-pager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -261,6 +262,7 @@ export function CorrectionList({ items, zone, mode, empty }: { items: Correction
   const [notes, setNotes] = useState<Record<string, string>>({});
   /** Local times the reviewer typed to change a request before approving it. */
   const [adjust, setAdjust] = useState<Record<string, string[]>>({});
+  const paged = usePaged(items, "", 10);
   const open = async (evidenceId: string) => {
     const result = await openEvidence({ evidenceId });
     if (!result.ok) return void toast.error(result.error);
@@ -268,8 +270,9 @@ export function CorrectionList({ items, zone, mode, empty }: { items: Correction
   };
   if (items.length === 0) return <p className="text-muted-foreground">{empty}</p>;
   return (
+    <div className="space-y-3">
     <ul className="space-y-3">
-      {items.map((c) => (
+      {paged.rows.map((c) => (
         <li key={c.id} className="space-y-2 rounded-xl border bg-card p-4">
           <div className="flex flex-wrap items-center gap-2">
             {mode === "queue" ? <span className="font-semibold">{c.employeeName}</span> : null}
@@ -358,6 +361,8 @@ export function CorrectionList({ items, zone, mode, empty }: { items: Correction
         </li>
       ))}
     </ul>
+    <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="requests" />
+    </div>
   );
 }
 
@@ -400,7 +405,7 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
         <input id={`jibble-${row.teamId}`} type="checkbox" className="mt-0.5 size-4 accent-primary" checked={jibble} disabled={!monitoringPublished && !row.jibbleMirror} onChange={(e) => setJibble(e.target.checked)} />
         <span>
           Mirror the clock to Jibble (screenshots)
-          <span className="block text-xs text-muted-foreground">{monitoringPublished ? "Jibble's screenshot app runs while ELEVATE says the person is working. See the Jibble tab." : "Needs the monitoring policy to be published first."}</span>
+          <span className="block text-xs text-muted-foreground">{monitoringPublished ? "Jibble's screenshot app runs while ELEVATE says the person is working. See the Jibble page." : "Needs the monitoring policy to be published first."}</span>
         </span>
       </label>
       <label htmlFor={`eod-${row.teamId}`} className="flex items-center gap-2 text-sm">

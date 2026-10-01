@@ -25,6 +25,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ClientPager, usePaged } from "@/components/client-pager";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BASE_ROLE, ROLE_SLUGS, roleLabel, type RoleSlug } from "@/lib/roles";
@@ -159,7 +161,17 @@ function HandlerToggle({ person }: { person: PersonRow }) {
 }
 
 export function RolesTable({ people, currentUserId }: { people: PersonRow[]; currentUserId: string }) {
+  const [filter, setFilter] = useState("");
+  const shown = people.filter((p) => p.email.toLowerCase().includes(filter.trim().toLowerCase()));
+  const paged = usePaged(shown, filter);
   return (
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <Label htmlFor="roles-filter" className="text-xs">
+          Find a person by email
+        </Label>
+        <Input id="roles-filter" className="h-8 w-64" value={filter} onChange={(e) => setFilter(e.target.value)} />
+      </div>
     <Table>
       <TableHeader>
         <TableRow>
@@ -170,7 +182,7 @@ export function RolesTable({ people, currentUserId }: { people: PersonRow[]; cur
         </TableRow>
       </TableHeader>
       <TableBody>
-        {people.map((person) => {
+        {paged.rows.map((person) => {
           const isSelf = person.id === currentUserId;
           return (
             <TableRow key={person.id}>
@@ -204,5 +216,7 @@ export function RolesTable({ people, currentUserId }: { people: PersonRow[]; cur
         })}
       </TableBody>
     </Table>
+      <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="people" />
+    </div>
   );
 }

@@ -1,7 +1,9 @@
 import { Markdown } from "@/components/markdown";
 import { AppHeader } from "@/components/shell/app-header";
 import { SidebarNav } from "@/components/shell/sidebar-nav";
+import { scopeFor, type ActionName } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
+import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { AckBanner } from "@/modules/announcements/components/ack-display";
 import { listMyPending } from "@/modules/announcements/queries";
@@ -25,13 +27,19 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   }
   const [unread, pending, clock] = await Promise.all([countMyUnread(), listMyPending(), getClockStatus()]);
 
+  const hiddenNav = ALL_NAV_ITEMS.filter((i) => {
+    if (!i.access) return false;
+    const scope = scopeFor(user, i.access.action as ActionName);
+    return !scope || !i.access.scopes.includes(scope);
+  }).map((i) => i.href);
+
   return (
     <div className="flex min-h-screen">
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 lg:block">
-        <SidebarNav />
+        <SidebarNav hidden={hiddenNav} />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <AppHeader zone={DEFAULT_TIMEZONE} email={user.email} unread={unread} clock={clock} />
+        <AppHeader hiddenNav={hiddenNav} zone={DEFAULT_TIMEZONE} email={user.email} unread={unread} clock={clock} />
         <AckBanner items={pending} today={todayInZone()} />
         <main id="main" className="flex-1 p-4 sm:p-6 lg:p-8">
           {children}

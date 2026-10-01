@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { ClientPager, usePaged } from "@/components/client-pager";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
   const { run, pending } = useRun();
   const labels = new Map(Object.entries(flagLabels));
   const label = (f: string) => labels.get(f) ?? f;
+  const paged = usePaged(review.rows, review.weekStart);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -83,7 +85,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
               </TableRow>
             </TableHeader>
             <TableBody>
-              {review.rows.map((r) => (
+              {paged.rows.map((r) => (
                 <Fragment key={r.employeeId}>
                   <TableRow>
                     <TableCell className="font-medium">
@@ -156,6 +158,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
           </Table>
         </div>
       )}
+      {review.rows.length > 0 ? <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="people" /> : null}
     </div>
   );
 }

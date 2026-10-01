@@ -547,7 +547,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
               Your shift ended at {formatInZone(status.shiftEndMs!, status.zone, "h:mm a")}. If you are working extra hours, ask for approval so they count. If not, please clock out.
             </p>
             <div className="flex flex-col gap-2">
-              <Link href="/attendance?tab=extra" onClick={() => setDismissedShiftEnd(status.shiftEndMs)} className={cn(buttonVariants({ size: "lg" }), "h-11 text-base font-semibold")}>
+              <Link href="/extra-hours" onClick={() => setDismissedShiftEnd(status.shiftEndMs)} className={cn(buttonVariants({ size: "lg" }), "h-11 text-base font-semibold")}>
                 Ask for extra hours
               </Link>
               <Button
@@ -585,7 +585,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
               <Button size="lg" className="h-11 text-base font-semibold" onClick={() => setDismissedWindowEnd(covered.endMs)}>
                 OK
               </Button>
-              <Link href="/attendance?tab=extra" onClick={() => setDismissedWindowEnd(covered.endMs)} className={cn(buttonVariants({ variant: "outline" }))}>
+              <Link href="/extra-hours" onClick={() => setDismissedWindowEnd(covered.endMs)} className={cn(buttonVariants({ variant: "outline" }))}>
                 Ask for more time
               </Link>
             </div>

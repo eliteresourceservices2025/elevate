@@ -277,7 +277,7 @@ test("HR sees the Jibble tab and the per-team switch, and nobody else gets the t
   const hr = await createHrAccount();
   const hrPage = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(hrPage, hr);
-  await hrPage.goto("/attendance?tab=jibble");
+  await hrPage.goto("/jibble");
   await expect(hrPage.getByRole("heading", { name: "Jibble", exact: true })).toBeVisible(slow);
   await expect(hrPage.getByText("ELEVATE is the time clock and the only source of hours.")).toBeVisible();
   await expect(hrPage.getByRole("button", { name: "Test connection" })).toBeVisible();
@@ -286,7 +286,7 @@ test("HR sees the Jibble tab and the per-team switch, and nobody else gets the t
   const employee = await createEmployeeAccount("Jo", `NoJibble${Date.now()}`);
   const page = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(page, employee);
-  await page.goto("/attendance?tab=jibble");
+  await page.goto("/jibble");
   await expect(page.getByRole("link", { name: "Jibble" })).toHaveCount(0);
   await expect(page.getByText("Test connection")).toHaveCount(0);
 });
@@ -340,7 +340,7 @@ test("a VA asks for extra hours with the client's approval and the lead approves
 
   const page = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(page, va);
-  await page.goto("/attendance?tab=extra");
+  await page.goto("/extra-hours");
   await waitForHydration(page, "#eh-client");
   await page.getByLabel("From").fill(phoenix(-3 * 3_600_000));
   await page.getByLabel("Until").fill(phoenix(-5 * 3_600_000));
@@ -356,7 +356,7 @@ test("a VA asks for extra hours with the client's approval and the lead approves
 
   const leadPage = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(leadPage, lead);
-  await leadPage.goto("/attendance?tab=extra");
+  await leadPage.goto("/extra-hours");
   await expect(leadPage.getByText("Client needs the month-end report")).toBeVisible(slow);
   await expect(leadPage.getByRole("button", { name: "View screenshot 1" })).toBeVisible();
   await (await hydrated(leadPage.getByRole("button", { name: "Approve" }))).click();
@@ -386,7 +386,7 @@ test("past the end of the shift the header asks whether they are working extra h
   await expect(dialog).toBeVisible(slow);
   await expect(dialog).toContainText("Your shift ended at");
   await dialog.getByRole("link", { name: "Ask for extra hours" }).click();
-  await page.waitForURL("**/attendance?tab=extra");
+  await page.waitForURL("**/extra-hours");
   await expect(dialog).toHaveCount(0);
 });
 
@@ -425,7 +425,7 @@ test("a lead approves a finished week and HR downloads the approved hours", asyn
 
   const leadPage = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(leadPage, lead);
-  await leadPage.goto("/attendance?tab=review");
+  await leadPage.goto("/hours-review");
   await expect(leadPage.getByText(`Will Hrs${stamp}`)).toBeVisible(slow);
   await expect(leadPage.getByText("Not approved").first()).toBeVisible();
   await (await hydrated(leadPage.getByRole("button", { name: "Approve week" }))).click();
@@ -526,4 +526,53 @@ test("My profile stays My profile: its own address and menu highlight, not the P
   await page.getByRole("link", { name: "Emergency" }).click();
   await page.waitForURL("**/people/me?tab=emergency", slow);
   await expect(page.getByRole("link", { name: "My profile", exact: true })).toHaveAttribute("aria-current", "page");
+});
+
+test("Team attendance, Hours review, Extra hours and Jibble are their own menu items; the menu only offers what the role can open", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const slow = { timeout: 30_000 };
+  const hrPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hrPage, await createHrAccount());
+  for (const [name, path, heading] of [
+    ["Team attendance", "/team-attendance", "Team attendance"],
+    ["Hours review", "/hours-review", "Hours review"],
+    ["Extra hours", "/extra-hours", "Extra hours"],
+    ["Jibble", "/jibble", "Jibble"],
+  ] as const) {
+    await hrPage.getByRole("link", { name, exact: true }).click();
+    await hrPage.waitForURL(`**${path}`, slow);
+    await expect(hrPage.getByRole("heading", { name: heading, exact: true })).toBeVisible(slow);
+    await expect(hrPage.getByRole("link", { name, exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(hrPage.getByRole("link", { name: "Attendance", exact: true })).not.toHaveAttribute("aria-current", "page");
+  }
+  // Old addresses still land on the right page
+  await hrPage.goto("/attendance?tab=team");
+  await hrPage.waitForURL("**/team-attendance", slow);
+
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, await createEmployeeAccount("Ria", `Menu${Date.now()}`));
+  await expect(page.getByRole("link", { name: "Extra hours", exact: true })).toBeVisible(slow);
+  for (const name of ["Team attendance", "Hours review", "Jibble"]) await expect(page.getByRole("link", { name, exact: true })).toHaveCount(0);
+});
+
+test("long lists show one page at a time: Schedules pages through everyone and keeps the selection", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const slow = { timeout: 30_000 };
+  const hrPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hrPage, await createHrAccount());
+  await hrPage.goto("/schedules");
+  await waitForHydration(hrPage, "#sc-filter");
+  const rows = hrPage.locator("section[aria-label='Schedules'] tbody tr");
+  await expect(rows.first()).toBeVisible(slow);
+  expect(await rows.count()).toBeLessThanOrEqual(25);
+  const pager = hrPage.getByRole("navigation", { name: "Pages" });
+  await expect(pager).toContainText("Page 1 of");
+  const first = await rows.first().innerText();
+  await hrPage.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(pager).toContainText("Page 2 of");
+  expect(await rows.first().innerText()).not.toBe(first);
+  // Selecting on page 2 survives going back
+  await rows.first().getByRole("checkbox").check();
+  await hrPage.getByRole("button", { name: "Previous", exact: true }).click();
+  await expect(hrPage.getByRole("button", { name: /Set schedule for 1 person/ })).toBeVisible();
 });

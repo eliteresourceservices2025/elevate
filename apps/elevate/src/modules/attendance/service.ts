@@ -239,7 +239,7 @@ export async function notifyOverbreak(tx: Executor, employeeId: string, startEve
       kind: "attendance.overbreak",
       title: `${reportName(me)} went over their ${breakLabel(plannedMinutes)} break`,
       body: `${minutes} ${minutes === 1 ? "minute" : "minutes"} over.`,
-      link: "/attendance?tab=team",
+      link: "/team-attendance",
     })),
   );
   return true;

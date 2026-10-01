@@ -12,7 +12,7 @@ import { ClockWidget } from "./clock-widget";
 import { SidebarNav } from "./sidebar-nav";
 import { ZoneClock } from "./zone-clock";
 
-export function AppHeader({ zone, email, unread = 0, clock = null }: { zone?: string | null; email?: string; unread?: number; clock?: ClockStatus | null }) {
+export function AppHeader({ zone, email, unread = 0, clock = null, hiddenNav = [] }: { hiddenNav?: string[]; zone?: string | null; email?: string; unread?: number; clock?: ClockStatus | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -26,7 +26,7 @@ export function AppHeader({ zone, email, unread = 0, clock = null }: { zone?: st
         </SheetTrigger>
         <SheetContent side="left" className="w-72 gap-0 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SidebarNav onNavigate={() => setOpen(false)} />
+          <SidebarNav hidden={hiddenNav} onNavigate={() => setOpen(false)} />
         </SheetContent>
       </Sheet>
       <div className="ml-auto hidden items-center md:flex">

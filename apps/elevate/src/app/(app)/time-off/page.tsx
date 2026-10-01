@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PagerLinks } from "@/components/pager";
+import { paginate, parsePaging } from "@/lib/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { can, scopeFor } from "@/lib/authz";
@@ -47,6 +49,7 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
   const tab = tabs.find((t) => t.key === params.tab)?.key ?? "mine";
   const today = todayInZone();
   const year = Number(params.year) || Number(today.slice(0, 4));
+  const paging = parsePaging({ page: params.page, size: params.size });
 
   const mine = tab === "mine" ? await orNotFound(getMyTimeOff()) : null;
   const requests =
@@ -62,6 +65,8 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
   const holidays = tab === "holidays" ? await orNotFound(getHolidays(year)) : null;
   const balances = tab === "balances" ? await orNotFound(listBalances()) : null;
   const options = tab === "award" ? await orNotFound(getAwardOptions()) : null;
+  const balancePage = balances ? paginate(balances.rows, paging.page, paging.pageSize) : null;
+  const holidayPage = holidays ? paginate(holidays.rows, paging.page, paging.pageSize) : null;
   const types = tab === "types" ? await orNotFound(listLeaveTypes()) : null;
 
   return (
@@ -143,7 +148,7 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {holidays.rows.map((h) => (
+                  {holidayPage?.rows.map((h) => (
                     <TableRow key={h.id}>
                       <TableCell className="whitespace-nowrap">
                         {weekdayOf(h.date)}, {formatDateOnly(h.date)}
@@ -164,6 +169,7 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
               </Table>
             </div>
           )}
+          {holidayPage ? <PagerLinks info={holidayPage.info} basePath="/time-off" query={{ tab: "holidays", year: String(year) }} label="holidays" /> : null}
           {holidays.canManage ? (
             <>
               <p className="text-sm text-muted-foreground">
@@ -192,7 +198,7 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {balances.rows.map((r) => (
+                  {balancePage?.rows.map((r) => (
                     <TableRow key={r.employeeId}>
                       <TableCell>
                         <Link href={`/time-off/${r.employeeId}`} className="font-medium text-primary underline-offset-4 hover:underline">
@@ -209,6 +215,7 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
               </Table>
             </div>
           )}
+          {balancePage ? <PagerLinks info={balancePage.info} basePath="/time-off" query={{ tab: "balances" }} label="people" /> : null}
         </div>
       ) : null}
 

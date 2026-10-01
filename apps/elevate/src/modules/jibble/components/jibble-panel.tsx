@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { ClientPager, usePaged } from "@/components/client-pager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import type { JibbleOverview } from "../queries";
 const BREAK_TEXT = { clock: "Breaks stop screenshots (clock out and back in)", native: "Breaks use Jibble's own breaks from each person's schedule (an unpaid one, preferring a flexible one)", off: "Breaks are not sent (screenshots keep running)" } as const;
 const STATUS_VARIANT = new Map<string, "default" | "secondary" | "outline" | "destructive">([["sent", "default"], ["queued", "secondary"], ["failed", "destructive"], ["skipped", "outline"]]);
 
-/** The Jibble tab for HR: is it connected, who is matched, what was sent. Screenshots themselves stay in Jibble. */
+/** The Jibble page for HR: is it connected, who is matched, what was sent. Screenshots themselves stay in Jibble. */
 export function JibblePanel({ overview }: { overview: JibbleOverview }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -33,6 +34,10 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
     });
 
   const unmatched = overview.people.filter((p) => !p.jibblePersonId);
+  const [onlyUnmatched, setOnlyUnmatched] = useState(false);
+  const peopleShown = onlyUnmatched ? unmatched : overview.people;
+  const logPaged = usePaged(overview.log);
+  const peoplePaged = usePaged(peopleShown, String(onlyUnmatched));
   return (
     <div className="space-y-6">
       {overview.paused ? (
@@ -47,7 +52,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
       ) : null}
       <section aria-label="Connection" className="space-y-3 rounded-xl border bg-card p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold">Jibble</h2>
+          <h2 className="text-lg font-semibold">Connection</h2>
           <Badge variant={overview.configured ? "default" : "destructive"}>{overview.configured ? "Token set" : "Not set up"}</Badge>
           <Badge variant="outline">{overview.mode === "mirror" ? "ELEVATE starts and stops Jibble" : "Fallback: people clock into both apps"}</Badge>
         </div>
@@ -89,7 +94,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {overview.log.map((l) => (
+                {logPaged.rows.map((l) => (
                   <TableRow key={l.id}>
                     <TableCell>{formatInZone(l.createdAt, undefined, "MMM d, h:mm a")}</TableCell>
                     <TableCell className="font-medium">{l.name}</TableCell>
@@ -115,6 +120,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
             </Table>
           </div>
         )}
+        {overview.log.length > 0 ? <ClientPager info={logPaged.info} onPage={logPaged.setPage} onSize={logPaged.setPageSize} label="calls" /> : null}
       </section>
 
       <section aria-label="People" className="space-y-2">
@@ -122,6 +128,10 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
           People <span className="text-sm font-normal text-muted-foreground">({overview.people.length - unmatched.length} matched, {unmatched.length} not matched)</span>
         </h2>
         <p className="text-sm text-muted-foreground">Matched automatically by work email. If someone uses a different email in Jibble, paste their Jibble person id to match them by hand. People with no match are skipped.</p>
+        <label htmlFor="jp-unmatched" className="flex items-center gap-1.5 text-sm">
+          <input id="jp-unmatched" type="checkbox" className="size-4 accent-primary" checked={onlyUnmatched} onChange={(e) => setOnlyUnmatched(e.target.checked)} />
+          Only people not matched
+        </label>
         <div className="overflow-x-auto rounded-xl border bg-card">
           <Table>
             <TableHeader>
@@ -133,7 +143,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {overview.people.map((p) => (
+              {peoplePaged.rows.map((p) => (
                 <TableRow key={p.employeeId}>
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell>{p.team ?? "No team"}</TableCell>
@@ -159,6 +169,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
             </TableBody>
           </Table>
         </div>
+        <ClientPager info={peoplePaged.info} onPage={peoplePaged.setPage} onSize={peoplePaged.setPageSize} label="people" />
       </section>
     </div>
   );

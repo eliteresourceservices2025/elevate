@@ -49,9 +49,9 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 
 | What you see | What it means | What to do |
 |---|---|---|
-| Jibble tab: red banner "oldest waiting call has waited N minutes" | Jibble is slow or refusing calls. | Check "Recent calls" for the reason. Wait 10 minutes (the repair job fixes drift every 10 minutes). If it persists, **Pause sending** and message the developer. |
+| Jibble page: red banner "oldest waiting call has waited N minutes" | Jibble is slow or refusing calls. | Check "Recent calls" for the reason. Wait 10 minutes (the repair job fixes drift every 10 minutes). If it persists, **Pause sending** and message the developer. |
 | HR notification "ELEVATE cannot sign in to Jibble" | The Jibble keys were changed, revoked, or the plan lapsed. | Check Jibble's API keys and plan. Put the new keys in the host settings. Then "Test connection". |
-| HR notification "N people clocked in with no Jibble account" | These people worked without screenshots. | Match them (Jibble tab) or add them in Jibble. Their days show "No screenshots". |
+| HR notification "N people clocked in with no Jibble account" | These people worked without screenshots. | Match them (Jibble page) or add them in Jibble. Their days show "No screenshots". |
 | "Jibble and ELEVATE totals differ" flag | The nightly comparison found more than 15 minutes of difference. | Look at that day. Usually someone also clocked in Jibble directly, or an outage. ELEVATE's hours stand. |
 | A break did not stop screenshots | The person has no break on their Jibble schedule. ELEVATE then clocks them out of Jibble for the break instead (shown as "clock-out instead" in recent calls). | Add an unpaid break to their Jibble schedule. |
 | Everything looks wrong after a long outage | Old queued calls would put Jibble in a wrong state. | **Pause**, then **Resume**. Calls older than 10 minutes are dropped and the repair job sets everyone's Jibble status right from ELEVATE. |

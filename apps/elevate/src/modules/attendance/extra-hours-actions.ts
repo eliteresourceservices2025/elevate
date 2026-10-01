@@ -111,7 +111,7 @@ export async function requestExtraHours(input: unknown): Promise<ActionResult<{ 
         await tx.update(correctionEvidence).set({ extraRequestId: row.id }).where(inArray(correctionEvidence.id, attached));
         const me = await nameOf(tx, person.id);
         const targets = await reviewerIds(tx, person.id, after && needsHrForAge(startMs, nowMs), actor.id);
-        await notify(tx, targets.map((userId) => ({ userId, kind: "extrahours.requested", title: `${me.name} asked to work extra hours${after ? " (after the fact)" : ""}`, body: `${fmt(startMs, prefs.zone)} to ${formatInZone(endMs, prefs.zone, "h:mm a")}. ${v.reason}`, link: "/attendance?tab=extra" })));
+        await notify(tx, targets.map((userId) => ({ userId, kind: "extrahours.requested", title: `${me.name} asked to work extra hours${after ? " (after the fact)" : ""}`, body: `${fmt(startMs, prefs.zone)} to ${formatInZone(endMs, prefs.zone, "h:mm a")}. ${v.reason}`, link: "/extra-hours" })));
         await writeAudit({ actor, action: "extra_hours.request", targetType: "employee", targetId: person.id, metadata: { requestId: row.id, minutes, afterTheFact: after, evidence: attached.length } }, tx);
       });
     } catch (error) {
@@ -136,7 +136,7 @@ export async function fileExtraHoursFor(input: unknown): Promise<ActionResult> {
     const [exists] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, v.employeeId), isNull(employees.archivedAt)));
     if (!exists) return fail("That person was not found.");
     await authorize(actor, "extra_hours.file_for_others", { ownerUserId: target.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, v.employeeId) });
-    if (target.userId === actor.id) return fail("Ask for your own extra hours from the Extra hours tab.");
+    if (target.userId === actor.id) return fail("Ask for your own extra hours from the Extra hours page.");
 
     const prefs = await prefsFor(db, v.employeeId);
     const rules = await rulesFor(db, v.employeeId);
@@ -158,11 +158,11 @@ export async function fileExtraHoursFor(input: unknown): Promise<ActionResult> {
           .returning({ id: extraHoursRequests.id });
         const attached = await verifyEvidence(tx, v.employeeId, v.evidenceIds, EVIDENCE_MAX_BYTES, actor.id);
         if (attached.length > 0) await tx.update(correctionEvidence).set({ extraRequestId: row.id }).where(inArray(correctionEvidence.id, attached));
-        if (target.userId) await notify(tx, { userId: target.userId, kind: "extrahours.confirm_needed", title: "Your client asked for extra hours", body: `${fmt(startMs, prefs.zone)} to ${formatInZone(endMs, prefs.zone, "h:mm a")}. Please confirm or decline.`, link: "/attendance?tab=extra" });
+        if (target.userId) await notify(tx, { userId: target.userId, kind: "extrahours.confirm_needed", title: "Your client asked for extra hours", body: `${fmt(startMs, prefs.zone)} to ${formatInZone(endMs, prefs.zone, "h:mm a")}. Please confirm or decline.`, link: "/extra-hours" });
         // A lead who is not the filer hears about it (HR filed it); HR hears when a lead filed it.
         const chain = await managerChainUserIds(tx as never, v.employeeId);
         const fyi = [...new Set([...chain.slice(0, 1), ...hr])].filter((id) => id !== actor.id && id !== target.userId);
-        await notify(tx, fyi.map((userId) => ({ userId, kind: "extrahours.filed_for", title: `Extra hours were filed for ${target.name}`, body: `The client asked. ${v.reason}`, link: "/attendance?tab=extra" })));
+        await notify(tx, fyi.map((userId) => ({ userId, kind: "extrahours.filed_for", title: `Extra hours were filed for ${target.name}`, body: `The client asked. ${v.reason}`, link: "/extra-hours" })));
         await writeAudit({ actor, action: "extra_hours.file_for", targetType: "employee", targetId: v.employeeId, metadata: { requestId: row.id, minutes, confirmedByPhone: v.confirmedByPhone, evidence: attached.length } }, tx);
       });
     } catch (error) {
@@ -192,7 +192,7 @@ export async function answerExtraHours(input: unknown): Promise<ActionResult> {
         .set({ status: confirm ? "approved" : "declined", decidedBy: confirm ? r.filedBy : actor.id, decidedAt: new Date(), decisionNote: parsed.data.note ?? null })
         .where(eq(extraHoursRequests.id, r.id));
       const me = await nameOf(tx, person.id);
-      await notify(tx, { userId: r.filedBy, kind: confirm ? "extrahours.confirmed" : "extrahours.declined_by_va", title: confirm ? `${me.name} confirmed the extra hours` : `${me.name} declined the extra hours`, body: parsed.data.note, link: "/attendance?tab=extra" });
+      await notify(tx, { userId: r.filedBy, kind: confirm ? "extrahours.confirmed" : "extrahours.declined_by_va", title: confirm ? `${me.name} confirmed the extra hours` : `${me.name} declined the extra hours`, body: parsed.data.note, link: "/extra-hours" });
       await writeAudit({ actor, action: confirm ? "extra_hours.confirm" : "extra_hours.decline_by_va", targetType: "employee", targetId: person.id, metadata: { requestId: r.id } }, tx);
     });
     refresh();
@@ -253,7 +253,7 @@ export async function decideExtraHours(input: unknown): Promise<ActionResult> {
             kind: v.decision === "approve" ? "extrahours.approved" : "extrahours.declined",
             title: v.decision === "approve" ? (changed ? "Your extra hours were approved with a changed time" : "Your extra hours were approved") : "Your extra hours were declined",
             body: v.decision === "approve" ? `${fmt(startMs, prefs.zone)} to ${formatInZone(endMs, prefs.zone, "h:mm a")}.${v.note ? ` ${v.note}` : ""}` : v.note,
-            link: "/attendance?tab=extra",
+            link: "/extra-hours",
           });
         }
         await writeAudit({ actor, action: `extra_hours.${v.decision}`, targetType: "employee", targetId: r.employeeId, before: changed ? { windowStart: r.windowStart.toISOString(), windowEnd: r.windowEnd.toISOString() } : null, after: { requestId: r.id, minutes, windowStart: new Date(startMs).toISOString(), windowEnd: new Date(endMs).toISOString() }, metadata: { note: v.note ?? null, changed } }, tx);
@@ -286,7 +286,7 @@ export async function cancelExtraHours(input: unknown): Promise<ActionResult> {
       if (!waiting && !(r.status === "approved" && r.windowStart.getTime() > Date.now())) throw new ActionFailure("That request can no longer be cancelled.");
       await tx.update(extraHoursRequests).set({ status: "cancelled", decidedAt: new Date(), decidedBy: actor.id }).where(eq(extraHoursRequests.id, r.id));
       const others = [person.userId, r.filedBy].filter((id): id is string => Boolean(id) && id !== actor.id);
-      await notify(tx, [...new Set(others)].map((userId) => ({ userId, kind: "extrahours.cancelled", title: `Extra hours for ${person.name} were cancelled`, link: "/attendance?tab=extra" })));
+      await notify(tx, [...new Set(others)].map((userId) => ({ userId, kind: "extrahours.cancelled", title: `Extra hours for ${person.name} were cancelled`, link: "/extra-hours" })));
       await writeAudit({ actor, action: "extra_hours.cancel", targetType: "employee", targetId: r.employeeId, metadata: { requestId: r.id, was: r.status } }, tx);
     });
     refresh();

@@ -1,0 +1,18 @@
+export const FLAG_LABELS = new Map<string, string>(Object.entries({
+  open_session: "Still clocked in",
+  outside_range: "Outside allowed IP range",
+  corrected: "Corrected",
+  idle_unanswered: "Idle prompt unanswered",
+  overbreak: "Overbreak",
+  no_eod: "No end-of-day report",
+  late: "Late",
+  left_early: "Left early",
+  extra_hours: "Extra hours",
+  rest_day_work: "Worked on a rest day",
+  holiday_work: "Worked on a holiday",
+  absent: "Absent (review)",
+  no_screenshots: "No screenshots (Jibble not linked or failed)",
+  unapproved_extra: "Unapproved extra hours",
+  jibble_mismatch: "Jibble and ELEVATE totals differ",
+  on_leave: "On approved leave",
+}));

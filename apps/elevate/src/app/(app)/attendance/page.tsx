@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Fragment } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,88 +12,48 @@ import { cn } from "@/lib/utils";
 import { formatDuration, MINUTE } from "@/modules/attendance/clock";
 import { AutoRefresh } from "@/modules/attendance/components/auto-refresh";
 import { CorrectionForm, CorrectionList, FileForOthersForm, PreferencesForm, RulesForm, SetupProfileForm, ShiftNote } from "@/modules/attendance/components/attendance-forms";
-import { JibblePanel } from "@/modules/jibble/components/jibble-panel";
-import { getJibbleOverview } from "@/modules/jibble/queries";
-import { ExtraHoursPanel } from "@/modules/attendance/components/extra-hours-panel";
-import { getMyExtraHours, listActiveClients, listExtraHoursQueue } from "@/modules/attendance/extra-hours-queries";
 import { BulkCorrectionsPanel } from "@/modules/attendance/components/bulk-corrections-panel";
 import { HealthPanel } from "@/modules/health/components/health-panel";
 import { getSystemHealth } from "@/modules/health/queries";
-import { ExportPanel, ReviewPanel } from "@/modules/attendance/components/hours-panels";
-import { getHoursSettings, getTeamReview } from "@/modules/attendance/hours-queries";
-import { getMyTime, listClockRules, listCorrectionBatches, listCorrectionQueue, listFilablePeople, listFlags, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
+import { ExportPanel } from "@/modules/attendance/components/hours-panels";
+import { getHoursSettings } from "@/modules/attendance/hours-queries";
+import { getMyTime, listClockRules, listCorrectionBatches, listCorrectionQueue, listFilablePeople, mondayOf } from "@/modules/attendance/queries";
 
 export const metadata: Metadata = { title: "Attendance" };
 
 const ALL_TABS = [
   { key: "mine", label: "My time" },
-  { key: "extra", label: "Extra hours" },
-  { key: "team", label: "Team" },
-  { key: "review", label: "Review" },
   { key: "corrections", label: "Corrections" },
   { key: "export", label: "Hours export" },
   { key: "rules", label: "Rules" },
-  { key: "jibble", label: "Jibble" },
   { key: "health", label: "Health" },
 ] as const;
 
-const FLAG_LABELS = new Map<string, string>(Object.entries({
-  open_session: "Still clocked in",
-  outside_range: "Outside allowed IP range",
-  corrected: "Corrected",
-  idle_unanswered: "Idle prompt unanswered",
-  overbreak: "Overbreak",
-  no_eod: "No end-of-day report",
-  late: "Late",
-  left_early: "Left early",
-  extra_hours: "Extra hours",
-  rest_day_work: "Worked on a rest day",
-  holiday_work: "Worked on a holiday",
-  absent: "Absent (review)",
-  no_screenshots: "No screenshots (Jibble not linked or failed)",
-  unapproved_extra: "Unapproved extra hours",
-  jibble_mismatch: "Jibble and ELEVATE totals differ",
-  on_leave: "On approved leave",
-}));
+// Old addresses (bookmarks, notifications sent before these became their own pages) go to the page that now holds the content.
+const MOVED: Record<string, string> = { team: "/team-attendance", extra: "/extra-hours", review: "/hours-review", jibble: "/jibble" };
 
 const addDays = (date: string, n: number) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 export default async function AttendancePage({ searchParams }: PageProps<"/attendance">) {
   const user = await requireUser();
   const params = await searchParams;
-  const allowed = new Set<string>(["mine", "extra"]);
-  const view = scopeFor(user, "attendance.view");
-  if (view === "all" || view === "team") allowed.add("team");
+  const moved = typeof params.tab === "string" ? MOVED[params.tab] : undefined;
+  if (moved) redirect(typeof params.rweek === "string" && params.tab === "review" ? `${moved}?rweek=${encodeURIComponent(params.rweek)}` : moved);
+  const allowed = new Set<string>(["mine"]);
   const approve = scopeFor(user, "attendance.approve_correction");
   if (approve === "all" || approve === "team") allowed.add("corrections");
   if (scopeFor(user, "attendance.manage_rules")) allowed.add("rules");
-  const approveScope = scopeFor(user, "hours.approve");
-  if (approveScope === "all" || approveScope === "team") allowed.add("review");
   if (scopeFor(user, "hours.export")) allowed.add("export");
   if (scopeFor(user, "health.view")) allowed.add("health");
-  if (scopeFor(user, "jibble.manage")) allowed.add("jibble");
   const tabs = ALL_TABS.filter((t) => allowed.has(t.key));
   const tab = tabs.find((t) => t.key === params.tab)?.key ?? "mine";
 
   const mine = tab === "mine" ? await orNotFound(getMyTime(typeof params.week === "string" ? params.week : undefined)) : null;
-  const working = tab === "team" ? await orNotFound(listWorkingNow()) : null;
-  const flags = tab === "team" ? await orNotFound(listFlags()) : null;
   const queue = tab === "corrections" ? await orNotFound(listCorrectionQueue()) : null;
-  const notes = tab === "team" ? await orNotFound(listShiftNotes()) : null;
   const filable = tab === "corrections" && ["all", "team"].includes(String(scopeFor(user, "attendance.file_for_others"))) ? await orNotFound(listFilablePeople()) : null;
-  const reviewScope = scopeFor(user, "extra_hours.decide");
-  const canReview = reviewScope === "all" || reviewScope === "team";
-  const fileScope = scopeFor(user, "extra_hours.file_for_others");
-  const canFile = fileScope === "all" || fileScope === "team";
-  const extraMine = tab === "extra" ? await orNotFound(getMyExtraHours()) : null;
-  const extraQueue = tab === "extra" && canReview ? await orNotFound(listExtraHoursQueue()) : null;
-  const extraPeople = tab === "extra" && canFile ? await orNotFound(listFilablePeople()) : null;
-  const extraClients = tab === "extra" && canFile ? await orNotFound(listActiveClients()) : null;
-  const review = tab === "review" ? await orNotFound(getTeamReview(typeof params.rweek === "string" ? params.rweek : undefined)) : null;
   const hoursSettings = tab === "export" ? await orNotFound(getHoursSettings()) : null;
   const health = tab === "health" ? await orNotFound(getSystemHealth()) : null;
   const batches = tab === "corrections" && approve === "all" ? await orNotFound(listCorrectionBatches()) : null;
-  const jibble = tab === "jibble" ? await orNotFound(getJibbleOverview()) : null;
   const rules = tab === "rules" ? await orNotFound(listClockRules()) : null;
 
   return (
@@ -269,110 +230,6 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
         )
       ) : null}
 
-      {working && flags ? (
-        <div className="space-y-8">
-          <section aria-label="Working now" className="space-y-2">
-            <h2 className="text-lg font-semibold">Working now</h2>
-            {working.rows.length === 0 ? (
-              <p className="text-muted-foreground">Nobody is clocked in right now.</p>
-            ) : (
-              <div className="overflow-x-auto rounded-xl border bg-card">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Person</TableHead>
-                      <TableHead>Team</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Since</TableHead>
-                      <TableHead>Last seen</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {working.rows.map((r) => (
-                      <TableRow key={r.employeeId}>
-                        <TableCell className="font-medium">{r.name}</TableCell>
-                        <TableCell>{r.team ?? "No team"}</TableCell>
-                        <TableCell className="space-x-1">
-                          <Badge variant={r.state === "break" ? "secondary" : "default"}>{r.state === "break" ? "On break" : "Working"}</Badge>
-                          {r.outsideRange ? <Badge variant="outline">Outside IP range</Badge> : null}
-                          {r.longOpen ? <Badge variant="destructive">Over 12 hours</Badge> : null}
-                          {r.possiblyOffline ? <Badge variant="outline">Possibly offline</Badge> : null}
-                        </TableCell>
-                        <TableCell>{formatInZone(r.sinceMs, undefined, "MMM d, h:mm a")}</TableCell>
-                        <TableCell>{r.lastSeenMs ? formatInZone(r.lastSeenMs, undefined, "h:mm a") : "-"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </section>
-
-          <section aria-label="Flags" className="space-y-2">
-            <h2 className="text-lg font-semibold">Flags in the last two weeks</h2>
-            <p className="text-sm text-muted-foreground">Rebuilt every night from the clock events. Late, overtime and absence flags arrive with schedules.</p>
-            {flags.rows.length === 0 ? (
-              <p className="text-muted-foreground">Nothing to look at.</p>
-            ) : (
-              <div className="overflow-x-auto rounded-xl border bg-card">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Day</TableHead>
-                      <TableHead>Person</TableHead>
-                      <TableHead>Flags</TableHead>
-                      <TableHead className="text-right">Worked</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {flags.rows.map((r) => (
-                      <TableRow key={`${r.employeeId}-${r.date}`}>
-                        <TableCell>{formatDateOnly(r.date)}</TableCell>
-                        <TableCell className="font-medium">{r.name}</TableCell>
-                        <TableCell className="space-x-1">
-                          {r.flags.map((f) => (
-                            <Badge key={f} variant="outline">
-                              {f === "overbreak" && r.overbreakMinutes
-                                ? `Overbreak +${r.overbreakMinutes} min`
-                                : f === "late" && r.lateMinutes
-                                  ? `Late ${r.lateMinutes} min`
-                                  : f === "left_early" && r.earlyLeaveMinutes
-                                    ? `Left ${r.earlyLeaveMinutes} min early`
-                                    : f === "extra_hours" && r.extraMinutes
-                                      ? `Extra +${formatDuration(r.extraMinutes * MINUTE)}`
-                                      : (FLAG_LABELS.get(f) ?? f)}
-                            </Badge>
-                          ))}
-                        </TableCell>
-                        <TableCell className="text-right">{formatDuration(r.workedMinutes * MINUTE)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </section>
-          <section aria-label="End-of-day reports" className="space-y-2">
-            <h2 className="text-lg font-semibold">End-of-day reports, last 7 days</h2>
-            {!notes || notes.rows.length === 0 ? (
-              <p className="text-muted-foreground">No reports yet.</p>
-            ) : (
-              <ul className="space-y-3">
-                {notes.rows.map((n) => (
-                  <li key={n.id} className="space-y-1 rounded-xl border bg-card p-4">
-                    <p className="text-sm font-semibold">
-                      {n.name} <span className="font-normal text-muted-foreground">{formatInZone(n.sessionStartMs, undefined, "EEE MMM d, h:mm a")}</span>
-                      {n.edited ? <span className="ml-1 text-xs font-normal text-muted-foreground">(edited)</span> : null}
-                    </p>
-                    <p className="whitespace-pre-wrap text-sm">{n.body}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
-      ) : null}
-
       {queue ? (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">{queue.scope === "team" ? "Corrections from people on your team." : "Every pending correction. HR decides when nobody above the person can."}</p>
@@ -382,13 +239,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
         </div>
       ) : null}
 
-      {tab === "extra" ? <ExtraHoursPanel mine={extraMine} queue={extraQueue} filable={extraPeople} clients={extraClients} queueZone="America/Phoenix" /> : null}
-
-      {review ? <ReviewPanel review={review} prevHref={`/attendance?tab=review&rweek=${addDays(review.weekStart, -7)}`} nextHref={`/attendance?tab=review&rweek=${addDays(review.weekStart, 7)}`} flagLabels={Object.fromEntries(FLAG_LABELS)} /> : null}
-
       {hoursSettings ? <ExportPanel settings={hoursSettings} /> : null}
-
-      {jibble ? <JibblePanel overview={jibble} /> : null}
 
       {health ? <HealthPanel health={health} /> : null}
 

@@ -7,6 +7,7 @@ import { isRoleSlug, type RoleSlug } from "@/lib/roles";
 import { auditLog } from "@/modules/audit/schema";
 import { invitations, userRoles, users } from "@/modules/core/schema";
 import { auditQuerySchema } from "./validators";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 
 export type PersonRow = {
   id: string;
@@ -68,14 +69,12 @@ export async function listInvitations(): Promise<InvitationRow[]> {
     .limit(200);
 }
 
-const AUDIT_PAGE_SIZE = 50;
-
 export async function listAuditEntries(rawQuery: unknown) {
   const actor = await requireUser();
   await authorize(actor, "settings.view_audit");
 
   const parsed = auditQuerySchema.safeParse(rawQuery);
-  const { page, action } = parsed.success ? parsed.data : { page: 1, action: undefined };
+  const { page, size, action } = parsed.success ? parsed.data : { page: 1, size: DEFAULT_PAGE_SIZE, action: undefined };
   const where = action ? sql`${auditLog.action} like ${action + "%"}` : undefined;
 
   const rows = await db
@@ -83,13 +82,13 @@ export async function listAuditEntries(rawQuery: unknown) {
     .from(auditLog)
     .where(where)
     .orderBy(desc(auditLog.occurredAt), desc(auditLog.id))
-    .limit(AUDIT_PAGE_SIZE)
-    .offset((page - 1) * AUDIT_PAGE_SIZE);
+    .limit(size)
+    .offset((page - 1) * size);
 
   const [{ total }] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(auditLog)
     .where(where);
 
-  return { rows, page, total, pageSize: AUDIT_PAGE_SIZE, action: action ?? "" };
+  return { rows, page, total, pageSize: size, action: action ?? "" };
 }

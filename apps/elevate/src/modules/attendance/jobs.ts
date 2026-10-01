@@ -217,7 +217,7 @@ async function missedAtShiftEnd(now: Date): Promise<number> {
       if (o.user_id) await notify(tx, { userId: o.user_id, kind: "attendance.missed_clockout", title: "Your shift has ended and you are still clocked in", body: `Your shift ended at ${ended}. Clock out, or ask for extra hours if you are working past it.`, link: "/attendance" });
       const chain = await managerChainUserIds(tx, o.employee_id);
       const targets = (chain.length > 0 ? chain.slice(0, 1) : hr).filter((id) => id !== o.user_id);
-      await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.missed_clockout_lead", title: `${name} is still clocked in after their shift`, body: `Their shift ended at ${ended}. They may have forgotten to clock out.`, link: "/attendance?tab=team" })));
+      await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.missed_clockout_lead", title: `${name} is still clocked in after their shift`, body: `Their shift ended at ${ended}. They may have forgotten to clock out.`, link: "/team-attendance" })));
     });
   }
   return noticed;
@@ -251,7 +251,7 @@ async function missedAfterTwelveHours(now: Date): Promise<{ noticed: number }> {
       if (o.user_id) await notify(tx, { userId: o.user_id, kind: "attendance.missed_clockout", title: "You may have forgotten to clock out", body: "Your session has been open for over 12 hours. Clock out, or ask for a time correction.", link: "/attendance" });
       const chain = await managerChainUserIds(tx, o.employee_id);
       const targets = (chain.length > 0 ? chain.slice(0, 1) : hr).filter((id) => id !== o.user_id);
-      await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.missed_clockout_lead", title: `${name} has been clocked in for over 12 hours`, body: "They may have forgotten to clock out.", link: "/attendance?tab=team" })));
+      await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.missed_clockout_lead", title: `${name} has been clocked in for over 12 hours`, body: "They may have forgotten to clock out.", link: "/team-attendance" })));
     });
   }
   return { noticed };
@@ -290,7 +290,7 @@ export async function runQuietSessionAlerts(now = new Date()): Promise<{ noticed
       const name = reportName({ first: o.first, last: o.last, preferred: o.preferred });
       const chain = await managerChainUserIds(tx, o.employee_id);
       const targets = (chain.length > 0 ? chain.slice(0, 1) : hr).filter((id) => id !== o.user_id);
-      await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.quiet_lead", title: `${name} has not been seen for 2 hours`, body: "They are still clocked in. Their page may be closed, their device off or their connection down.", link: "/attendance?tab=team" })));
+      await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.quiet_lead", title: `${name} has not been seen for 2 hours`, body: "They are still clocked in. Their page may be closed, their device off or their connection down.", link: "/team-attendance" })));
     });
   }
   return { noticed };
@@ -377,10 +377,10 @@ export async function runExtraHoursReminders(now = new Date()): Promise<{ remind
       if (r.status === "pending_lead") {
         const chain = await managerChainUserIds(tx, r.employee_id);
         const targets = [...new Set([...chain.slice(0, 1), ...hr])].filter((id) => id !== r.user_id);
-        await notify(tx, targets.map((userId) => ({ userId, kind: "extrahours.reminder", title: `${name}'s extra hours request is still waiting`, body: `The window starts ${when}.`, link: "/attendance?tab=extra" })));
+        await notify(tx, targets.map((userId) => ({ userId, kind: "extrahours.reminder", title: `${name}'s extra hours request is still waiting`, body: `The window starts ${when}.`, link: "/extra-hours" })));
       } else {
         const targets = [...new Set([...(r.user_id ? [r.user_id] : []), r.filed_by])];
-        await notify(tx, targets.map((userId) => ({ userId, kind: "extrahours.reminder", title: `Extra hours for ${name} still need an answer`, body: `The window starts ${when}. Confirm or decline.`, link: "/attendance?tab=extra" })));
+        await notify(tx, targets.map((userId) => ({ userId, kind: "extrahours.reminder", title: `Extra hours for ${name} still need an answer`, body: `The window starts ${when}. Confirm or decline.`, link: "/extra-hours" })));
       }
     });
   }
@@ -402,7 +402,7 @@ export async function runWeeklyExtraHoursNotice(now = new Date()): Promise<{ cli
   const shown = rows.slice(0, 8).map((r) => `${r.name} ${fmtMinutes(r.minutes)}`).join(", ");
   const body = `${shown}${rows.length > 8 ? `, and ${rows.length - 8} more` : ""}.`;
   const hr = await hrUserIds();
-  await notify(db, hr.map((userId) => ({ userId, kind: "extrahours.weekly", title: `Approved extra hours, week of ${from}`, body, link: "/attendance?tab=extra" })));
+  await notify(db, hr.map((userId) => ({ userId, kind: "extrahours.weekly", title: `Approved extra hours, week of ${from}`, body, link: "/extra-hours" })));
   return { clients: rows.length };
 }
 
@@ -434,8 +434,8 @@ export async function runLeadApprovalReminders(now = new Date()): Promise<{ lead
   for (const p of pending) if (p.leadUserId) byLead.set(p.leadUserId, (byLead.get(p.leadUserId) ?? 0) + 1);
   const hr = await hrUserIds();
   const noLead = pending.filter((p) => !p.leadUserId).length;
-  await notify(db, [...byLead.entries()].map(([userId, n]) => ({ userId, kind: "hours.approval_reminder", title: `${n} ${n === 1 ? "person has" : "people have"} hours waiting for your approval`, body: `Week of ${weekStart}. Approved hours are what HR exports for payroll.`, link: `/attendance?tab=review&rweek=${weekStart}` })));
-  if (noLead > 0) await notify(db, hr.map((userId) => ({ userId, kind: "hours.approval_reminder", title: `${noLead} ${noLead === 1 ? "person has" : "people have"} no lead to approve their hours`, body: `Week of ${weekStart}. You approve these.`, link: `/attendance?tab=review&rweek=${weekStart}` })));
+  await notify(db, [...byLead.entries()].map(([userId, n]) => ({ userId, kind: "hours.approval_reminder", title: `${n} ${n === 1 ? "person has" : "people have"} hours waiting for your approval`, body: `Week of ${weekStart}. Approved hours are what HR exports for payroll.`, link: `/hours-review?rweek=${weekStart}` })));
+  if (noLead > 0) await notify(db, hr.map((userId) => ({ userId, kind: "hours.approval_reminder", title: `${noLead} ${noLead === 1 ? "person has" : "people have"} no lead to approve their hours`, body: `Week of ${weekStart}. You approve these.`, link: `/hours-review?rweek=${weekStart}` })));
   return { leads: byLead.size };
 }
 

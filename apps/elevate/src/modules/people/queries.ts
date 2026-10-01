@@ -23,7 +23,6 @@ import {
 import { changeRequestContext } from "./service";
 import { directoryQuerySchema } from "./validators";
 
-const PAGE_SIZE = 25;
 // Drizzle drops the table name for columns inside a select-list subquery, which makes `id` ambiguous.
 const EMPLOYEE_ID = sql.raw('"core"."employees"."id"');
 
@@ -122,8 +121,8 @@ export async function listDirectory(rawQuery: unknown) {
     .leftJoin(mgr, eq(mgr.id, employees.managerId))
     .where(where)
     .orderBy(...orderBy)
-    .limit(PAGE_SIZE)
-    .offset((q.page - 1) * PAGE_SIZE);
+    .limit(q.size)
+    .offset((q.page - 1) * q.size);
 
   const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(employees).where(where);
 
@@ -145,7 +144,7 @@ export async function listDirectory(rawQuery: unknown) {
     })),
     total,
     page: q.page,
-    pageSize: PAGE_SIZE,
+    pageSize: q.size,
     query: q,
     seesClients,
     seesArchived,

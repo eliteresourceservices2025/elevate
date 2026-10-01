@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Pin } from "lucide-react";
+import { PagerLinks } from "@/components/pager";
+import { paginate, parsePaging } from "@/lib/pagination";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { can } from "@/lib/authz";
@@ -27,12 +29,16 @@ const KIND_LABEL = { general: null, privacy_notice: "Privacy notice", monitoring
 export default async function AnnouncementsPage({ searchParams }: PageProps<"/announcements">) {
   const user = await requireUser();
   const isHr = can(user, "announcements.manage");
-  const requested = (await searchParams).tab;
+  const sp = await searchParams;
+  const requested = sp.tab;
+  const paging = parsePaging({ page: sp.page, size: sp.size }, 10);
   const tab = TABS.find((t) => t.key === requested)?.key ?? "announcements";
   const today = todayInZone();
 
   const items = tab === "announcements" ? await orNotFound(listAnnouncements()) : null;
   const policies = tab === "policies" ? await orNotFound(listPolicies()) : null;
+  const itemPage = items ? paginate(items, paging.page, paging.pageSize) : null;
+  const policyPage = policies ? paginate(policies, paging.page, paging.pageSize) : null;
   const optedOut = await getMyDigestOptOut();
 
   return (
@@ -67,7 +73,7 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
           <p className="text-muted-foreground">No announcements yet.</p>
         ) : (
           <ul className="space-y-3">
-            {items.map((a) => (
+            {itemPage?.rows.map((a) => (
               <li key={a.id}>
                 <Link href={`/announcements/${a.id}`} className="block rounded-xl border bg-card p-4 outline-none transition-colors hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring">
                   <div className="flex flex-wrap items-center gap-2">
@@ -88,12 +94,13 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
           </ul>
         )
       ) : null}
+      {itemPage ? <PagerLinks info={itemPage.info} basePath="/announcements" query={{ tab: "announcements" }} defaultSize={10} label="announcements" /> : null}
 
       {policies ? (
         <div className="space-y-6">
           {policies.length === 0 ? <p className="text-muted-foreground">No policies have been published yet.</p> : null}
           <ul className="space-y-3">
-            {policies.map((p) => (
+            {policyPage?.rows.map((p) => (
               <li key={p.id}>
                 <Link href={`/announcements/policies/${p.id}`} className="block rounded-xl border bg-card p-4 outline-none transition-colors hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring">
                   <div className="flex flex-wrap items-center gap-2">
@@ -111,6 +118,7 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
               </li>
             ))}
           </ul>
+          {policyPage ? <PagerLinks info={policyPage.info} basePath="/announcements" query={{ tab: "policies" }} defaultSize={10} label="policies" /> : null}
           {isHr ? (
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">Add a policy</h2>
