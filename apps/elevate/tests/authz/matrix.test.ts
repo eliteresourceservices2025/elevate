@@ -74,6 +74,8 @@ const EXPECTED: Record<string, string> = {
   "extra_hours.request": "O O O O O O",
   "extra_hours.file_for_others": "A A T - - -",
   "extra_hours.decide": "A A T - - -",
+  "hours.approve": "A A T - - -",
+  "hours.export": "A A - - - -",
   "recruiting.view": "A A - A - -",
   "onboarding.manage": "A A T - - -",
   "onboarding.view_own_tasks": "- - - - - O",

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 import { createEmployeeAccount, createHrAccount, hydrated, signInEnrollingMfa, waitForHydration } from "./helpers";
@@ -387,4 +388,74 @@ test("past the end of the shift the header asks whether they are working extra h
   await dialog.getByRole("link", { name: "Ask for extra hours" }).click();
   await page.waitForURL("**/attendance?tab=extra");
   await expect(dialog).toHaveCount(0);
+});
+
+test("a lead approves a finished week and HR downloads the approved hours", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const slow = { timeout: 30_000 };
+  const stamp = Date.now();
+  const lead = await createEmployeeAccount("Lara", `HrsLead${stamp}`, { roles: ["team_lead"] });
+  const worker = await createEmployeeAccount("Will", `Hrs${stamp}`, { managerId: lead.employeeId });
+  const hr = await createHrAccount();
+
+  // Last week's Monday and Tuesday: two normal 7 hour days (9 to 5 with a lunch hour) on a schedule that covers only those days
+  const phxDate = (offset: number) => new Date(Date.now() + offset * 86_400_000).toLocaleDateString("sv-SE", { timeZone: "America/Phoenix" });
+  const mondayOf = (d: string) => {
+    const dt = new Date(`${d}T00:00:00Z`);
+    dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7));
+    return dt.toISOString().slice(0, 10);
+  };
+  const monday = mondayOf(phxDate(-7));
+  const tuesday = new Date(Date.parse(`${monday}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    await sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone)
+      values (${worker.employeeId}, ${monday}::date - 20, '09:00', '17:00', array[1,2]::smallint[], 60, 'America/Phoenix')`;
+    for (const d of [monday, tuesday]) {
+      for (const [type, time] of [["clock_in", "09:00"], ["break_start", "12:00"], ["break_end", "13:00"], ["clock_out", "17:00"]]) {
+        await sql`insert into time.clock_events (employee_id, type, occurred_at) values (${worker.employeeId}, ${type}, timezone('America/Phoenix', ${d}::date + ${time}::time))`;
+      }
+      // What the nightly rebuild would have written for that day
+      await sql`insert into time.attendance_days (employee_id, date, sessions, worked_minutes, break_minutes, scheduled_minutes, first_in, last_out)
+        values (${worker.employeeId}, ${d}::date, 1, 420, 60, 420, timezone('America/Phoenix', ${d}::date + time '09:00'), timezone('America/Phoenix', ${d}::date + time '17:00'))`;
+    }
+  } finally {
+    await sql.end();
+  }
+
+  const leadPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(leadPage, lead);
+  await leadPage.goto("/attendance?tab=review");
+  await expect(leadPage.getByText(`Will Hrs${stamp}`)).toBeVisible(slow);
+  await expect(leadPage.getByText("Not approved").first()).toBeVisible();
+  await (await hydrated(leadPage.getByRole("button", { name: "Approve week" }))).click();
+  await expect(leadPage.getByText(/Approved 2 days for/)).toBeVisible(slow);
+  await expect(leadPage.getByText("Approved", { exact: true }).first()).toBeVisible(slow);
+
+  const hrPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hrPage, hr);
+  await hrPage.goto("/attendance?tab=export");
+  await waitForHydration(hrPage, "#pp-kind");
+  await hrPage.getByLabel("Pay periods", { exact: true }).selectOption("weekly");
+  await hrPage.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(hrPage.getByText("Pay periods saved.")).toBeVisible(slow);
+  await hrPage.reload();
+  await waitForHydration(hrPage, "#ex-period");
+  await hrPage.getByLabel("Pay period", { exact: true }).selectOption(monday);
+  const [download] = await Promise.all([hrPage.waitForEvent("download"), hrPage.getByRole("button", { name: "Download daily detail (CSV)" }).click()]);
+  expect(download.suggestedFilename()).toContain(`hours-daily-${monday}`);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Playwright's own download path
+  const csv = readFileSync((await download.path())!, "utf8");
+  expect(csv).toContain(`Will Hrs${stamp}`);
+  expect(csv).toContain("Approved");
+  // This person's two approved days (the local database may hold other people approved by earlier runs)
+  expect(csv.split("\r\n").filter((line) => line.includes(`Will Hrs${stamp}`))).toHaveLength(2);
+
+  // Put the pay periods back so the next run starts from the default
+  const reset = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    await reset`update time.hours_settings set pay_period_kind = 'semi_monthly' where id = 1`;
+  } finally {
+    await reset.end();
+  }
 });

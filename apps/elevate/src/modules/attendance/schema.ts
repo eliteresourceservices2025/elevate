@@ -373,3 +373,48 @@ export const shiftNotes = time
     ],
   )
   .enableRLS();
+
+/**
+ * A lead's (or HR's) approval of one person's day. Append-only (trigger): it stores the numbers that were approved, so a later
+ * correction shows as "changed after approval" and needs approving again. The latest row for a person and day is the current one.
+ */
+export const hoursApprovals = time
+  .table(
+    "hours_approvals",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      /** The calendar day in the person's own zone (the day the session started). */
+      date: date("date", { mode: "string" }).notNull(),
+      scheduledMinutes: integer("scheduled_minutes"),
+      workedMinutes: integer("worked_minutes").notNull(),
+      breakMinutes: integer("break_minutes").notNull(),
+      extraMinutes: integer("extra_minutes").notNull(),
+      approvedExtraMinutes: integer("approved_extra_minutes").notNull(),
+      approvedBy: uuid("approved_by").notNull(),
+      note: text("note"),
+      approvedAt: timestamp("approved_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [index("hours_approvals_employee_idx").on(t.employeeId, t.date, t.approvedAt), index("hours_approvals_date_idx").on(t.date)],
+  )
+  .enableRLS();
+
+export const PAY_PERIOD_KINDS = ["semi_monthly", "weekly", "biweekly", "monthly"] as const;
+
+/** One row: how HR's pay periods are cut, for the hours export. */
+export const hoursSettings = time
+  .table(
+    "hours_settings",
+    {
+      id: smallint("id").primaryKey().default(1),
+      payPeriodKind: text("pay_period_kind").notNull().default("semi_monthly"),
+      /** For every-two-weeks periods: the Monday a period starts on. */
+      biweeklyAnchor: date("biweekly_anchor", { mode: "string" }).notNull().default("2026-01-05"),
+      updatedBy: uuid("updated_by"),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [check("hours_settings_single_chk", sql`${t.id} = 1`), check("hours_settings_kind_chk", sql`${t.payPeriodKind} in ('semi_monthly','weekly','biweekly','monthly')`)],
+  )
+  .enableRLS();

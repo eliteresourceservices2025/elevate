@@ -25,12 +25,13 @@ export type RebuildRun = { people: number; days: number };
  * A scheduled day that has ended with no clocking, no approved leave and no holiday is "absent". The day gets a row with no
  * sessions so the lead sees it; when something changes later (a correction, approved leave) the flag is taken off again.
  */
-async function flagAbsences(now: Date, daysBack: number): Promise<number> {
+async function flagAbsences(now: Date, daysBack: number, onlyEmployeeId?: string): Promise<number> {
   const earliestMs = now.getTime() - (daysBack + 2) * DAY_MS;
   const ids = (await db.execute(sql`
     select distinct s.employee_id from time.schedules s join core.employees e on e.id = s.employee_id
     where e.archived_at is null and e.status <> 'separated' and s.effective_from <= ((${now.toISOString()}::timestamptz at time zone 'UTC')::date + 1)
-      and (s.effective_to is null or s.effective_to >= ((${new Date(earliestMs).toISOString()}::timestamptz at time zone 'UTC')::date - 1))`)) as unknown as { employee_id: string }[];
+      and (s.effective_to is null or s.effective_to >= ((${new Date(earliestMs).toISOString()}::timestamptz at time zone 'UTC')::date - 1))
+      ${onlyEmployeeId ? sql`and s.employee_id = ${onlyEmployeeId}` : sql``}`)) as unknown as { employee_id: string }[];
   const byPerson = await loadSchedulesFor(db, ids.map((r) => r.employee_id));
   let written = 0;
 
@@ -65,9 +66,12 @@ async function flagAbsences(now: Date, daysBack: number): Promise<number> {
  * Flags: open_session, outside_range, corrected, idle_unanswered, overbreak, on_leave, and against the person's schedule: late,
  * left_early, extra_hours, rest_day_work, holiday_work and absent. People with no schedule get none of those.
  */
-export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Promise<RebuildRun> {
+export async function rebuildAttendanceDays(now = new Date(), daysBack = 3, onlyEmployeeId?: string): Promise<RebuildRun> {
   const fromMs = now.getTime() - (daysBack + 2) * DAY_MS;
-  const people = (await db.execute(sql`select distinct employee_id from time.clock_events where occurred_at >= to_timestamp(${fromMs / 1000})`)) as unknown as { employee_id: string }[];
+  // One person (before their hours are approved) or everyone with events in the window.
+  const people = onlyEmployeeId
+    ? [{ employee_id: onlyEmployeeId }]
+    : ((await db.execute(sql`select distinct employee_id from time.clock_events where occurred_at >= to_timestamp(${fromMs / 1000})`)) as unknown as { employee_id: string }[]);
   let written = 0;
 
   for (const { employee_id: employeeId } of people) {
@@ -150,7 +154,7 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Pro
       written += 1;
     }
   }
-  written += await flagAbsences(now, daysBack);
+  written += await flagAbsences(now, daysBack, onlyEmployeeId);
   return { people: people.length, days: written };
 }
 

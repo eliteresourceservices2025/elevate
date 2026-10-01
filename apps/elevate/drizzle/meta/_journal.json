@@ -176,6 +176,13 @@
       "when": 1790867723375,
       "tag": "0024_extra_hours",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790870067551,
+      "tag": "0025_hours_approval_export",
+      "breakpoints": true
     }
   ]
 }

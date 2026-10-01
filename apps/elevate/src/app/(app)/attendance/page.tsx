@@ -15,6 +15,8 @@ import { JibblePanel } from "@/modules/jibble/components/jibble-panel";
 import { getJibbleOverview } from "@/modules/jibble/queries";
 import { ExtraHoursPanel } from "@/modules/attendance/components/extra-hours-panel";
 import { getMyExtraHours, listActiveClients, listExtraHoursQueue } from "@/modules/attendance/extra-hours-queries";
+import { ExportPanel, ReviewPanel } from "@/modules/attendance/components/hours-panels";
+import { getHoursSettings, getTeamReview } from "@/modules/attendance/hours-queries";
 import { SchedulesPanel } from "@/modules/attendance/components/schedules-panel";
 import { getMyTime, listClockRules, listCorrectionQueue, listFilablePeople, listFlags, listSchedules, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
 import { todayInZone } from "@/modules/org/service";
@@ -25,8 +27,10 @@ const ALL_TABS = [
   { key: "mine", label: "My time" },
   { key: "extra", label: "Extra hours" },
   { key: "team", label: "Team" },
+  { key: "review", label: "Review" },
   { key: "corrections", label: "Corrections" },
   { key: "schedules", label: "Schedules" },
+  { key: "export", label: "Hours export" },
   { key: "rules", label: "Rules" },
   { key: "jibble", label: "Jibble" },
 ] as const;
@@ -61,6 +65,9 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   if (approve === "all" || approve === "team") allowed.add("corrections");
   if (scopeFor(user, "attendance.manage_rules")) allowed.add("rules");
   if (scopeFor(user, "schedules.manage")) allowed.add("schedules");
+  const approveScope = scopeFor(user, "hours.approve");
+  if (approveScope === "all" || approveScope === "team") allowed.add("review");
+  if (scopeFor(user, "hours.export")) allowed.add("export");
   if (scopeFor(user, "jibble.manage")) allowed.add("jibble");
   const tabs = ALL_TABS.filter((t) => allowed.has(t.key));
   const tab = tabs.find((t) => t.key === params.tab)?.key ?? "mine";
@@ -79,6 +86,8 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const extraQueue = tab === "extra" && canReview ? await orNotFound(listExtraHoursQueue()) : null;
   const extraPeople = tab === "extra" && canFile ? await orNotFound(listFilablePeople()) : null;
   const extraClients = tab === "extra" && canFile ? await orNotFound(listActiveClients()) : null;
+  const review = tab === "review" ? await orNotFound(getTeamReview(typeof params.rweek === "string" ? params.rweek : undefined)) : null;
+  const hoursSettings = tab === "export" ? await orNotFound(getHoursSettings()) : null;
   const schedulesList = tab === "schedules" ? await orNotFound(listSchedules()) : null;
   const jibble = tab === "jibble" ? await orNotFound(getJibbleOverview()) : null;
   const rules = tab === "rules" ? await orNotFound(listClockRules()) : null;
@@ -365,6 +374,10 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
       ) : null}
 
       {tab === "extra" ? <ExtraHoursPanel mine={extraMine} queue={extraQueue} filable={extraPeople} clients={extraClients} queueZone="America/Phoenix" /> : null}
+
+      {review ? <ReviewPanel review={review} prevHref={`/attendance?tab=review&rweek=${addDays(review.weekStart, -7)}`} nextHref={`/attendance?tab=review&rweek=${addDays(review.weekStart, 7)}`} flagLabels={Object.fromEntries(FLAG_LABELS)} /> : null}
+
+      {hoursSettings ? <ExportPanel settings={hoursSettings} /> : null}
 
       {schedulesList ? <SchedulesPanel rows={schedulesList.rows} withoutSchedule={schedulesList.withoutSchedule} today={todayInZone()} /> : null}
 

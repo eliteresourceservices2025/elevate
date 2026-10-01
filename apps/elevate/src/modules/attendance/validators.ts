@@ -129,3 +129,9 @@ export const decideExtraSchema = z.object({
 export const cancelExtraSchema = z.object({ requestId: uuid });
 /** A screenshot upload for an extra hours request; employeeId when a lead or HR uploads for someone else. */
 export const extraUploadSchema = evidenceUploadSchema.extend({ employeeId: z.preprocess(blankToUndefined, uuid.optional()) });
+
+/** Approve one person's week (any Monday) through the last finished day. */
+export const approveWeekSchema = z.object({ employeeId: uuid, weekStart: ymd, note: z.preprocess(blankToUndefined, z.string().trim().max(300).optional()) });
+export const approveCleanSchema = z.object({ weekStart: ymd });
+export const payPeriodSchema = z.object({ kind: z.enum(["semi_monthly", "weekly", "biweekly", "monthly"]), biweeklyAnchor: z.preprocess(blankToUndefined, ymd.optional()) });
+export const exportHoursSchema = z.object({ periodStart: ymd, kind: z.enum(["daily", "summary"]), includeUnapproved: z.boolean().default(false) });

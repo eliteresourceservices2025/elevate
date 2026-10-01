@@ -27,6 +27,9 @@ export const attendancePermissions = definePermissions({
   "extra_hours.request": { roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" } },
   "extra_hours.file_for_others": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   "extra_hours.decide": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  // Hours: a lead (their team) or HR approves each person's week; HR exports approved hours per pay period.
+  "hours.approve": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  "hours.export": { roles: { super_admin: "all", hr_admin: "all" } },
   "attendance.manage_rules": { roles: { super_admin: "all", hr_admin: "all" } },
   "attendance.view_summary": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", executive: "all" } },
 });
