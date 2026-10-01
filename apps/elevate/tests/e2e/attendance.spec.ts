@@ -267,3 +267,22 @@ test("a time claim with a screenshot is reviewed by the lead, who can open the p
   await page.goto("/attendance");
   await expect(page.locator("tr[data-session]")).toHaveCount(1, slow);
 });
+
+test("HR sees the Jibble tab and the per-team switch, and nobody else gets the tab", async ({ browser }) => {
+  const slow = { timeout: 30_000 };
+  const hr = await createHrAccount();
+  const hrPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hrPage, hr);
+  await hrPage.goto("/attendance?tab=jibble");
+  await expect(hrPage.getByRole("heading", { name: "Jibble", exact: true })).toBeVisible(slow);
+  await expect(hrPage.getByText("ELEVATE is the time clock and the only source of hours.")).toBeVisible();
+  await expect(hrPage.getByRole("button", { name: "Test connection" })).toBeVisible();
+  await expect(hrPage.getByRole("heading", { name: /^People/ })).toBeVisible();
+
+  const employee = await createEmployeeAccount("Jo", `NoJibble${Date.now()}`);
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, employee);
+  await page.goto("/attendance?tab=jibble");
+  await expect(page.getByRole("link", { name: "Jibble" })).toHaveCount(0);
+  await expect(page.getByText("Test connection")).toHaveCount(0);
+});

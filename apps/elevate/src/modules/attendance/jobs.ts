@@ -55,6 +55,8 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Pro
         missingEod = have.n < endedIds.length;
       }
 
+      const [jibbleFlag] = (await db.execute(sql`select 1 as ok from time.jibble_daily where employee_id = ${employeeId} and date = ${d.date}::date and flagged`)) as unknown as { ok: number }[];
+
       const flags = [
         d.open ? "open_session" : null,
         flagRows[0]?.outside ? "outside_range" : null,
@@ -62,6 +64,7 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Pro
         idle.n > 0 ? "idle_unanswered" : null,
         d.overbreakMinutes > 0 ? "overbreak" : null,
         missingEod ? "no_eod" : null,
+        jibbleFlag ? "jibble_mismatch" : null,
         (await onFullDayLeave(db, employeeId, d.date)) ? "on_leave" : null,
       ].filter((f): f is string => f !== null);
 

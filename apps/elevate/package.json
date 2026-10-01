@@ -17,6 +17,7 @@
     "db:seed": "tsx scripts/seed.mts",
     "storage:setup": "tsx scripts/setup-storage.mts",
     "email:test": "tsx scripts/send-test-email.mts",
+    "jibble:probe": "tsx scripts/jibble-probe.mts",
     "dev:mfa": "tsx scripts/dev-mfa.mts",
     "db:bootstrap": "tsx scripts/bootstrap-super-admins.mts",
     "format": "prettier --write .",

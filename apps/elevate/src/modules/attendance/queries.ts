@@ -294,7 +294,7 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
   return { items, scope };
 }
 
-export type RulesRow = { teamId: string; teamName: string; allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; hasRow: boolean };
+export type RulesRow = { teamId: string; teamName: string; allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; hasRow: boolean };
 
 /** Every team with its clock rules (defaults for teams without a row). HR only. */
 export async function listClockRules(): Promise<{ rows: RulesRow[]; monitoringPublished: boolean }> {
@@ -307,7 +307,7 @@ export async function listClockRules(): Promise<{ rows: RulesRow[]; monitoringPu
     monitoringPublished: await monitoringPolicyPublished(db),
     rows: all.map((t) => {
       const r = byTeam.get(t.id);
-      return { teamId: t.id, teamName: t.name, allowedCidrs: r?.allowedCidrs ?? [], selfieRequired: r?.selfieRequired ?? false, idleMinutes: r ? r.idleMinutes : 30, graceMinutes: r?.graceMinutes ?? 60, eodExpected: r?.eodExpected ?? false, hasRow: Boolean(r) };
+      return { teamId: t.id, teamName: t.name, allowedCidrs: r?.allowedCidrs ?? [], selfieRequired: r?.selfieRequired ?? false, idleMinutes: r ? r.idleMinutes : 30, graceMinutes: r?.graceMinutes ?? 60, eodExpected: r?.eodExpected ?? false, jibbleMirror: r?.jibbleMirror ?? false, hasRow: Boolean(r) };
     }),
   };
 }

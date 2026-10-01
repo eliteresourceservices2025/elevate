@@ -2,6 +2,7 @@ import "server-only";
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
 import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
+import { processMirrorQueue, purgeJibbleData, runJibbleComparison, syncJibblePeople } from "@/modules/jibble/jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
 import { runLeaveExpiry } from "@/modules/timeoff/jobs";
 import { runLeaveRequestReminders } from "@/modules/timeoff/request-jobs";
@@ -90,4 +91,26 @@ export const evidencePurge = inngest.createFunction(
   async ({ step }) => step.run("purge", () => purgeEvidence()),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge];
+/** Sends waiting clock calls to Jibble: right away when a clock event asks, and every 5 minutes as a safety sweep (retries). */
+export const jibbleMirror = inngest.createFunction(
+  { id: "jibble-mirror", triggers: [{ event: "jibble/mirror.requested" }, { cron: "*/5 * * * *" }] },
+  async ({ step }) => step.run("send", () => processMirrorQueue()),
+);
+
+/** Daily at 3:00 AM: match people to Jibble accounts by work email. */
+export const jibblePeopleSync = inngest.createFunction(
+  { id: "jibble-people-sync", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 0 3 * * *` } },
+  async ({ step }) => step.run("sync", () => syncJibblePeople()),
+);
+
+/** Daily at 3:10 AM (after the 2:30 attendance rebuild): compare yesterday's Jibble totals with ELEVATE's and clean up old totals. */
+export const jibbleComparison = inngest.createFunction(
+  { id: "jibble-comparison", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 10 3 * * *` } },
+  async ({ step }) => {
+    const compared = await step.run("compare", () => runJibbleComparison());
+    await step.run("purge", () => purgeJibbleData());
+    return compared;
+  },
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison];

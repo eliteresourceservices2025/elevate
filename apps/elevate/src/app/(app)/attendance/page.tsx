@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { formatDuration, MINUTE } from "@/modules/attendance/clock";
 import { AutoRefresh } from "@/modules/attendance/components/auto-refresh";
 import { CorrectionForm, CorrectionList, FileForOthersForm, PreferencesForm, RulesForm, SetupProfileForm, ShiftNote } from "@/modules/attendance/components/attendance-forms";
+import { JibblePanel } from "@/modules/jibble/components/jibble-panel";
+import { getJibbleOverview } from "@/modules/jibble/queries";
 import { getMyTime, listClockRules, listCorrectionQueue, listFilablePeople, listFlags, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
 
 export const metadata: Metadata = { title: "Attendance" };
@@ -20,6 +22,7 @@ const ALL_TABS = [
   { key: "team", label: "Team" },
   { key: "corrections", label: "Corrections" },
   { key: "rules", label: "Rules" },
+  { key: "jibble", label: "Jibble" },
 ] as const;
 
 const FLAG_LABELS = new Map<string, string>(Object.entries({
@@ -29,6 +32,7 @@ const FLAG_LABELS = new Map<string, string>(Object.entries({
   idle_unanswered: "Idle prompt unanswered",
   overbreak: "Overbreak",
   no_eod: "No end-of-day report",
+  jibble_mismatch: "Jibble and ELEVATE totals differ",
   on_leave: "On approved leave",
 }));
 
@@ -43,6 +47,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const approve = scopeFor(user, "attendance.approve_correction");
   if (approve === "all" || approve === "team") allowed.add("corrections");
   if (scopeFor(user, "attendance.manage_rules")) allowed.add("rules");
+  if (scopeFor(user, "jibble.manage")) allowed.add("jibble");
   const tabs = ALL_TABS.filter((t) => allowed.has(t.key));
   const tab = tabs.find((t) => t.key === params.tab)?.key ?? "mine";
 
@@ -52,6 +57,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const queue = tab === "corrections" ? await orNotFound(listCorrectionQueue()) : null;
   const notes = tab === "team" ? await orNotFound(listShiftNotes()) : null;
   const filable = tab === "corrections" && ["all", "team"].includes(String(scopeFor(user, "attendance.file_for_others"))) ? await orNotFound(listFilablePeople()) : null;
+  const jibble = tab === "jibble" ? await orNotFound(getJibbleOverview()) : null;
   const rules = tab === "rules" ? await orNotFound(listClockRules()) : null;
 
   return (
@@ -284,6 +290,8 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
           <CorrectionList items={queue.items} zone="America/Phoenix" mode="queue" empty="No corrections are waiting." />
         </div>
       ) : null}
+
+      {jibble ? <JibblePanel overview={jibble} /> : null}
 
       {rules ? (
         <div className="space-y-4">

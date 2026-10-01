@@ -62,6 +62,8 @@ export const clockRules = time
     graceMinutes: integer("grace_minutes").notNull().default(60),
     /** Whether the team is expected to write an end-of-day report. Only flags a missing one; never blocks clocking out. */
     eodExpected: boolean("eod_expected").notNull().default(false),
+    /** Use Jibble screenshots for this team: ELEVATE tells Jibble when each person clocks in and out, and compares totals nightly. Needs the monitoring policy. */
+    jibbleMirror: boolean("jibble_mirror").notNull().default(false),
     updatedBy: uuid("updated_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   })

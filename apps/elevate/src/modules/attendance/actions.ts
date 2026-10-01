@@ -362,14 +362,15 @@ export async function saveClockRules(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return fail(first(parsed.error));
     const v = parsed.data;
     if (v.selfieRequired && !(await monitoringPolicyPublished(db))) return fail("Publish the monitoring policy before requiring selfies.");
+    if (v.jibbleMirror && !(await monitoringPolicyPublished(db))) return fail("Publish the monitoring policy before turning on Jibble screenshots.");
 
     await db.transaction(async (tx) => {
       const [team] = await tx.select({ id: teams.id }).from(teams).where(eq(teams.id, v.teamId)).limit(1);
       if (!team) throw new ActionFailure("That team was not found.");
       const [before] = await tx.select().from(clockRules).where(eq(clockRules.teamId, v.teamId)).limit(1);
-      const values = { allowedCidrs: [...new Set(v.allowedCidrs)], selfieRequired: v.selfieRequired, idleMinutes: v.idleMinutes ?? null, graceMinutes: v.graceMinutes, eodExpected: v.eodExpected, updatedBy: actor.id, updatedAt: new Date() };
+      const values = { allowedCidrs: [...new Set(v.allowedCidrs)], selfieRequired: v.selfieRequired, idleMinutes: v.idleMinutes ?? null, graceMinutes: v.graceMinutes, eodExpected: v.eodExpected, jibbleMirror: v.jibbleMirror, updatedBy: actor.id, updatedAt: new Date() };
       await tx.insert(clockRules).values({ teamId: v.teamId, ...values }).onConflictDoUpdate({ target: clockRules.teamId, set: values });
-      await writeAudit({ actor, action: "clock.rules", targetType: "team", targetId: v.teamId, before: before ? { allowedCidrs: before.allowedCidrs, selfieRequired: before.selfieRequired, idleMinutes: before.idleMinutes } : null, after: { allowedCidrs: values.allowedCidrs, selfieRequired: values.selfieRequired, idleMinutes: values.idleMinutes, eodExpected: values.eodExpected } }, tx);
+      await writeAudit({ actor, action: "clock.rules", targetType: "team", targetId: v.teamId, before: before ? { allowedCidrs: before.allowedCidrs, selfieRequired: before.selfieRequired, idleMinutes: before.idleMinutes } : null, after: { allowedCidrs: values.allowedCidrs, selfieRequired: values.selfieRequired, idleMinutes: values.idleMinutes, eodExpected: values.eodExpected, jibbleMirror: values.jibbleMirror } }, tx);
     });
     refresh();
     return { ok: true, data: undefined };

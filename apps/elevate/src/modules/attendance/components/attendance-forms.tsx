@@ -368,13 +368,14 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
   const [idle, setIdle] = useState(row.idleMinutes === null ? "" : String(row.idleMinutes));
   const [grace, setGrace] = useState(String(row.graceMinutes));
   const [eod, setEod] = useState(row.eodExpected);
+  const [jibble, setJibble] = useState(row.jibbleMirror);
   return (
     <form
       className="space-y-3 rounded-xl border bg-card p-4"
       onSubmit={(e) => {
         e.preventDefault();
         run(
-          () => saveClockRules({ teamId: row.teamId, allowedCidrs: ranges.split("\n").map((r) => r.trim()).filter(Boolean), selfieRequired: selfie, idleMinutes: idle, graceMinutes: grace, eodExpected: eod }),
+          () => saveClockRules({ teamId: row.teamId, allowedCidrs: ranges.split("\n").map((r) => r.trim()).filter(Boolean), selfieRequired: selfie, idleMinutes: idle, graceMinutes: grace, eodExpected: eod, jibbleMirror: jibble }),
           `Rules saved for ${row.teamName}.`,
         );
       }}
@@ -392,6 +393,13 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
       <label htmlFor={`selfie-${row.teamId}`} className="flex items-center gap-2 text-sm">
         <input id={`selfie-${row.teamId}`} type="checkbox" className="size-4 accent-primary" checked={selfie} disabled={!monitoringPublished && !row.selfieRequired} onChange={(e) => setSelfie(e.target.checked)} />
         Require a selfie at clock-in {monitoringPublished ? "" : "(needs the monitoring policy to be published first)"}
+      </label>
+      <label htmlFor={`jibble-${row.teamId}`} className="flex items-start gap-2 text-sm">
+        <input id={`jibble-${row.teamId}`} type="checkbox" className="mt-0.5 size-4 accent-primary" checked={jibble} disabled={!monitoringPublished && !row.jibbleMirror} onChange={(e) => setJibble(e.target.checked)} />
+        <span>
+          Mirror the clock to Jibble (screenshots)
+          <span className="block text-xs text-muted-foreground">{monitoringPublished ? "Jibble's screenshot app runs while ELEVATE says the person is working. See the Jibble tab." : "Needs the monitoring policy to be published first."}</span>
+        </span>
       </label>
       <label htmlFor={`eod-${row.teamId}`} className="flex items-center gap-2 text-sm">
         <input id={`eod-${row.teamId}`} type="checkbox" className="size-4 accent-primary" checked={eod} onChange={(e) => setEod(e.target.checked)} />

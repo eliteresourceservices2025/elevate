@@ -68,6 +68,7 @@ const EXPECTED: Record<string, string> = {
   "attendance.file_for_others": "A A T - - -",
   "attendance.notes": "O O O O O O",
   "attendance.notes_view": "A A T - - -",
+  "jibble.manage": "A A - - - -",
   "recruiting.view": "A A - A - -",
   "onboarding.manage": "A A T - - -",
   "onboarding.view_own_tasks": "- - - - - O",

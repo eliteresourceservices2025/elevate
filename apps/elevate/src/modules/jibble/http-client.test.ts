@@ -1,0 +1,91 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_URLS, JibbleError, JibbleHttpClient } from "./http-client";
+
+// The real client against a stubbed fetch: the requests it makes, how it reads answers, and that errors never carry a body.
+
+type Call = { url: string; method: string; headers: Record<string, string>; body: string | undefined };
+const calls: Call[] = [];
+const answer = (responses: { status?: number; json?: unknown }[]) => {
+  calls.length = 0;
+  let i = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
+      calls.push({ url, method: init.method, headers: init.headers, body: init.body });
+      const r = responses[Math.min(i++, responses.length - 1)];
+      return new Response(JSON.stringify(r.json ?? {}), { status: r.status ?? 200 });
+    }),
+  );
+};
+afterEach(() => vi.unstubAllGlobals());
+
+const token = new JibbleHttpClient({ ...DEFAULT_URLS, accessToken: "pat-123" });
+
+describe("Jibble HTTP client", () => {
+  it("lists people with the bearer token, a page at a time", async () => {
+    const page = (n: number, from: number) => ({ value: Array.from({ length: n }, (_, i) => ({ id: `id-${from + i}`, email: `p${from + i}@example.com`, fullName: `Person ${from + i}`, status: "Active" })) });
+    answer([{ json: page(200, 0) }, { json: page(5, 200) }]);
+    const people = await token.listPeople();
+    expect(people).toHaveLength(205);
+    expect(people[0]).toMatchObject({ id: "id-0", email: "p0@example.com", fullName: "Person 0" });
+    expect(calls[0].url).toContain("https://workspace.prod.jibble.io/v1/People?");
+    expect(calls[1].url).toContain("$skip=200");
+    expect(calls[0].headers.Authorization).toBe("Bearer pat-123");
+  });
+
+  it("sends a clock-in as a time entry for the person and a clock-out the same way", async () => {
+    answer([{ json: { id: "entry-1" } }, { json: {} }]);
+    expect(await token.clock("person-1", "In")).toEqual({ entryId: "entry-1" });
+    expect(await token.clock("person-1", "Out")).toEqual({ entryId: null });
+    expect(calls[0]).toMatchObject({ method: "POST", url: "https://time-tracking.prod.jibble.io/v1/TimeEntries" });
+    expect(JSON.parse(calls[0].body!)).toMatchObject({ personId: "person-1", type: "In" });
+    expect(JSON.parse(calls[1].body!)).toMatchObject({ type: "Out" });
+  });
+
+  it("ends a break through the EndBreak endpoint", async () => {
+    answer([{ json: {} }]);
+    await token.clock("person-1", "EndBreak");
+    expect(calls[0].url).toBe("https://time-tracking.prod.jibble.io/v1/TimeEntries/EndBreak");
+    expect(JSON.parse(calls[0].body!).model).toMatchObject({ personId: "person-1" });
+  });
+
+  it("reads tracked minutes per person and day from the timesheet summary", async () => {
+    answer([{ json: [{ personId: "p1", daily: [{ date: "2026-10-01", tracked: "PT7H30M" }, { date: "2026-10-02", tracked: null }] }, { personId: "p2", daily: [{ date: "2026-10-01", tracked: "08:00:00" }] }] }]);
+    const days = await token.dailyTracked(["p1", "p2"], "2026-10-01", "2026-10-02");
+    expect(days).toEqual([
+      { personId: "p1", date: "2026-10-01", trackedMinutes: 450 },
+      { personId: "p2", date: "2026-10-01", trackedMinutes: 480 },
+    ]);
+    expect(calls[0].url).toContain("time-attendance.prod.jibble.io/v2/TimesheetsSummary?Period=Custom&Date=2026-10-01&EndDate=2026-10-02");
+    expect(calls[0].url).toContain("PersonIds=p1&PersonIds=p2");
+  });
+
+  it("gets a token with a client id and secret when there is no personal token, and reuses it", async () => {
+    const withSecret = new JibbleHttpClient({ ...DEFAULT_URLS, clientId: "cid", clientSecret: "csecret" });
+    answer([{ json: { access_token: "jwt", expires_in: 3600 } }, { json: { value: [] } }, { json: { value: [] } }]);
+    await withSecret.listPeople();
+    await withSecret.listPeople();
+    expect(calls.filter((c) => c.url.includes("/connect/token"))).toHaveLength(1);
+    expect(calls[0].body).toContain("grant_type=client_credentials");
+    expect(calls[1].headers.Authorization).toBe("Bearer jwt");
+  });
+
+  it("turns refusals into short errors with the status and no response body", async () => {
+    answer([{ status: 401, json: { error: "secret details ana@example.com" } }]);
+    const err = await token.clock("p", "In").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(JibbleError);
+    expect((err as JibbleError).status).toBe(401);
+    expect((err as JibbleError).retryable).toBe(false);
+    expect((err as JibbleError).message).not.toContain("ana@example.com");
+
+    answer([{ status: 503 }]);
+    expect(((await token.clock("p", "In").catch((e: unknown) => e)) as JibbleError).retryable).toBe(true);
+  });
+
+  it("reports a dead connection as a retryable error", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("fetch failed"); }));
+    const err = (await token.clock("p", "In").catch((e: unknown) => e)) as JibbleError;
+    expect(err.status).toBeNull();
+    expect(err.retryable).toBe(true);
+  });
+});

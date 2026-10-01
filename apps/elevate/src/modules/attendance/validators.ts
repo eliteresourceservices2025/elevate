@@ -65,6 +65,8 @@ export const rulesSchema = z.object({
   graceMinutes: z.preprocess(toNumber, z.number().int().min(0).max(240)).default(60),
   /** Flag a missing end-of-day report. Never blocks clocking out. */
   eodExpected: z.boolean().default(false),
+  /** Use Jibble screenshots for this team. Needs the monitoring policy. */
+  jibbleMirror: z.boolean().default(false),
 });
 
 export const weekSchema = z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });

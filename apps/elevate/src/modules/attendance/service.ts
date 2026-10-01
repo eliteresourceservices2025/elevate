@@ -9,6 +9,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds, reportName } from "@/modules/org/service";
+import { enqueueMirror, kickMirror } from "@/modules/jibble/enqueue";
 import { employees } from "@/modules/people/schema";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
 import { clockEvents, clockPrefs, clockRules, clockSelfies, correctionEvidence, overbreakNotices } from "./schema";
@@ -46,13 +47,13 @@ export async function loadEventsBetween(executor: Executor, employeeId: string, 
   return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned }));
 }
 
-export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean };
-export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false };
+export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean };
+export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false, jibbleMirror: false };
 
 /** The rules of the person's team (or the defaults when the team has none). */
 export async function rulesFor(executor: Executor, employeeId: string): Promise<EffectiveRules> {
   const [row] = await executor
-    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected })
+    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected, jibbleMirror: clockRules.jibbleMirror })
     .from(employees)
     .innerJoin(clockRules, eq(clockRules.teamId, employees.teamId))
     .where(eq(employees.id, employeeId))
@@ -136,7 +137,8 @@ export async function performClock(actor: { id: string; email: string }, type: C
   const rawIp = await clientIp();
   const ip = rawIp === "unknown" ? null : rawIp.slice(0, 64);
 
-  return db.transaction(async (tx) => {
+  let mirrored = 0;
+  const result = await db.transaction(async (tx) => {
     await lockEmployeeClock(tx, person.id);
     const replay = replayClock(await loadRecentEvents(tx, person.id));
     const prefs = await prefsFor(tx, person.id);
@@ -170,6 +172,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
 
     const types: ClockType[] = endsBreakToo ? ["break_end", "clock_out"] : [type];
     let last: { id: string; occurredAt: Date } | undefined;
+    const inserted: { id: string; type: ClockType }[] = [];
     let breakEndedAt: number | null = null;
     for (const t of types) {
       [last] = await tx
@@ -187,6 +190,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
           createdBy: actor.id,
         })
         .returning({ id: clockEvents.id, occurredAt: clockEvents.occurredAt });
+      inserted.push({ id: last!.id, type: t });
       if (t === "break_end") breakEndedAt = last!.occurredAt.getTime();
     }
 
@@ -202,7 +206,8 @@ export async function performClock(actor: { id: string; email: string }, type: C
     }
     await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired) } }, tx);
     if (type === "clock_in") await touchPresence(tx, person.id);
-    await afterClockEvent(tx, person.id, type);
+    // Jibble screenshots: queued in this same transaction when the team uses Jibble and monitoring is published (never blocks the clock).
+    mirrored = await enqueueMirror(tx, { employeeId: person.id, events: inserted, allowed: monitoring && rules.jibbleMirror });
 
     return {
       state: transition(endsBreakToo ? "working" : replay.state, endsBreakToo ? "clock_out" : type)!,
@@ -211,14 +216,9 @@ export async function performClock(actor: { id: string; email: string }, type: C
       sessionId: type === "clock_out" ? (replay.sessions[replay.sessions.length - 1]?.startEventId ?? null) : null,
     };
   });
+  if (mirrored > 0) await kickMirror();
+  return result;
 }
-
-/**
- * Hook for Phase 2.4: ELEVATE mirrors clock-in and clock-out to Jibble (queued, retried, logged) so its screenshot
- * app runs only while ELEVATE says the person is working. Nothing is read back from Jibble. Intentionally empty now.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function afterClockEvent(_tx: Executor, _employeeId: string, _type: ClockType): Promise<void> {}
 
 /**
  * Tells the person's lead (HR when nobody is above them) that a timed break ran over. Once per break: the first caller
