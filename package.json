@@ -15,6 +15,7 @@
     "db:generate": "pnpm --filter elevate db:generate",
     "db:migrate": "pnpm --filter elevate db:migrate",
     "db:seed": "pnpm --filter elevate db:seed",
+    "email:test": "pnpm --filter elevate --reporter=append-only email:test",
     "test:integration": "pnpm --filter elevate test:integration"
   }
 }
