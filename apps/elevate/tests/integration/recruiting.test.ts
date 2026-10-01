@@ -372,8 +372,9 @@ describe("interviews and scorecards", () => {
 
 describe("applicant emails", () => {
   it("sends queued mail under its own daily cap and skips applicants whose data was removed", async () => {
-    const sent: { to: string; subject: string }[] = [];
-    setEmailSender({ send: async (m) => void sent.push({ to: m.to, subject: m.subject }) });
+    const sent: { to: string; subject: string; bcc?: string }[] = [];
+    setEmailSender({ send: async (m) => void sent.push({ to: m.to, subject: m.subject, bcc: m.bcc }) });
+    process.env.EMAIL_APPLICANT_BCC = "talent@example.com";
     await db.execute(sql`delete from talent.candidate_emails`);
 
     const opening = await openJob();
@@ -386,7 +387,8 @@ describe("applicant emails", () => {
 
     const result = await jobs.sendCandidateEmails();
     expect(result).toMatchObject({ configured: true, sent: 1, skipped: 1 });
-    expect(sent).toEqual([{ to: a, subject: "We received your application" }]);
+    expect(sent).toEqual([{ to: a, subject: "We received your application", bcc: "talent@example.com" }]);
+    delete process.env.EMAIL_APPLICANT_BCC;
 
     // The cap: nothing more goes out once the day's allowance is used
     process.env.CANDIDATE_EMAIL_DAILY_BUDGET = "1";

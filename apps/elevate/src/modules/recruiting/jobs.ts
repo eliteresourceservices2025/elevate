@@ -34,6 +34,8 @@ export async function sendCandidateEmails(now = new Date()) {
     .orderBy(asc(candidateEmails.createdAt))
     .limit(left);
 
+  // EMAIL_APPLICANT_BCC: a shared mailbox (talent acquisition) that keeps a copy of everything applicants are told.
+  const bcc = process.env.EMAIL_APPLICANT_BCC?.trim() || undefined;
   let sent = 0;
   let failed = 0;
   let skipped = 0;
@@ -45,7 +47,7 @@ export async function sendCandidateEmails(now = new Date()) {
     }
     const parsed = JSON.parse(item.body) as { text: string; html: string };
     try {
-      await sender.send({ to: item.to, subject: item.subject, text: parsed.text, html: parsed.html, ...(item.attachment ? { attachments: [item.attachment] } : {}) });
+      await sender.send({ to: item.to, subject: item.subject, text: parsed.text, html: parsed.html, ...(bcc ? { bcc } : {}), ...(item.attachment ? { attachments: [item.attachment] } : {}) });
       await db.update(candidateEmails).set({ status: "sent", sentAt: new Date(), attempts: item.attempts + 1, lastError: null }).where(eq(candidateEmails.id, item.id));
       sent += 1;
     } catch (error) {

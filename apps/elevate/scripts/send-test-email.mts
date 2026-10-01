@@ -25,7 +25,7 @@ console.log(`Sending from ${from} to ${to} ...`);
 const response = await fetch("https://api.resend.com/emails", {
   method: "POST",
   headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-  body: JSON.stringify({ from, to: [to], subject: "ELEVATE test email", text: mail.text, html: mail.html }),
+  body: JSON.stringify({ from, to: [to], subject: "ELEVATE test email", text: mail.text, html: mail.html, ...(process.env.EMAIL_REPLY_TO ? { reply_to: process.env.EMAIL_REPLY_TO } : {}), ...(process.env.EMAIL_APPLICANT_BCC ? { bcc: [process.env.EMAIL_APPLICANT_BCC] } : {}) }),
   signal: AbortSignal.timeout(15_000),
 });
 const body = (await response.json().catch(() => ({}))) as { id?: string; message?: string; name?: string };
