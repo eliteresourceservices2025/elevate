@@ -160,6 +160,31 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
   );
 }
 
+/** How much of a pay period is approved, by team, so HR knows whether the export is complete before payroll. */
+function ProgressBox({ progress }: { progress: HoursSettings["progress"][number] }) {
+  const open = progress.teams.filter((t) => t.pendingDays > 0);
+  return (
+    <div role="status" className={`rounded-lg border p-3 text-sm ${progress.pendingDays === 0 ? "border-green-600/40 bg-green-600/10" : "border-amber-500/50 bg-amber-500/10"}`}>
+      {progress.totalDays === 0 ? (
+        "No finished days in this period yet."
+      ) : progress.pendingDays === 0 ? (
+        <>All {progress.totalDays} finished days in this period are approved.</>
+      ) : (
+        <>
+          <strong>{progress.pendingDays} of {progress.totalDays} finished days are not approved yet</strong> ({progress.pendingPeople} {progress.pendingPeople === 1 ? "person" : "people"}). They are left out of the export until a lead or HR approves them.
+          <ul className="mt-1 list-disc pl-5">
+            {open.map((t) => (
+              <li key={t.team}>
+                {t.team}: {t.pendingDays} {t.pendingDays === 1 ? "day" : "days"} ({t.pendingPeople} {t.pendingPeople === 1 ? "person" : "people"})
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** HR: how pay periods are cut, and the CSV downloads for a period. */
 export function ExportPanel({ settings }: { settings: HoursSettings }) {
   const { run, pending } = useRun();
@@ -169,7 +194,7 @@ export function ExportPanel({ settings }: { settings: HoursSettings }) {
   const [anchor, setAnchor] = useState(settings.biweeklyAnchor);
 
   const download = (what: "daily" | "summary") =>
-    run<{ fileName: string; csv: string; rows: number }>(
+    run<{ fileName: string; csv: string; rows: number; unapprovedDays: number }>(
       async () => {
         const result = await exportHours({ periodStart: period, kind: what, includeUnapproved: includeAll });
         if (result.ok) {
@@ -182,7 +207,7 @@ export function ExportPanel({ settings }: { settings: HoursSettings }) {
         }
         return result;
       },
-      (d) => `Downloaded ${d?.rows ?? 0} ${(d?.rows ?? 0) === 1 ? "row" : "rows"}.`,
+      (d) => `Downloaded ${d?.rows ?? 0} ${(d?.rows ?? 0) === 1 ? "row" : "rows"}.${!includeAll && (d?.unapprovedDays ?? 0) > 0 ? ` ${d?.unapprovedDays} finished ${d?.unapprovedDays === 1 ? "day is" : "days are"} not approved and left out.` : ""}`,
     );
 
   return (
@@ -192,6 +217,7 @@ export function ExportPanel({ settings }: { settings: HoursSettings }) {
         <p className="text-sm text-muted-foreground">
           ELEVATE totals and labels hours; it does not compute pay. By default only days a lead or HR approved, with the numbers they approved, are included. Hours that were corrected after approval are left out until approved again.
         </p>
+        {settings.progress.find((p) => p.start === period) ? <ProgressBox progress={settings.progress.find((p) => p.start === period)!} /> : null}
         <SelectField id="ex-period" label="Pay period" value={period} onChange={(e) => setPeriod(e.target.value)}>
           {settings.periods.map((p) => (
             <option key={p.start} value={p.start}>

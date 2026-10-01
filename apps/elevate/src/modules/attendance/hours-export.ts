@@ -34,7 +34,7 @@ async function approverNames(userIds: string[]): Promise<Map<string, string>> {
 
 const STATE_TEXT = new Map<DayState, string>([["approved", "Approved"], ["changed", "Changed after approval"], ["none", "Not approved"]]);
 
-export type HoursExport = { fileName: string; csv: string; rows: number };
+export type HoursExport = { fileName: string; csv: string; rows: number; /** Finished days in the period that are not approved (or changed since): left out unless asked for. */ unapprovedDays: number };
 
 /** The daily detail (one row per person and day) or the per-person summary for a pay period. */
 export async function buildHoursExport(input: { periodStart: string; periodEnd: string; kind: "daily" | "summary"; includeUnapproved: boolean }): Promise<HoursExport> {
@@ -53,6 +53,8 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
     .filter((x) => input.includeUnapproved || x.state === "approved")
     .sort((a, b) => (people.get(a.d.employeeId)?.name ?? "").localeCompare(people.get(b.d.employeeId)?.name ?? "") || a.d.date.localeCompare(b.d.date));
 
+  const today = formatInZone(Date.now(), undefined, "yyyy-MM-dd");
+  const unapprovedDays = days.filter((d) => (d.sessions > 0 || d.scheduledMinutes !== null) && d.date < today && dayState(d, approvals.get(approvalKey(d.employeeId, d.date))) !== "approved").length;
   const regular = (extra: number, worked: number) => Math.max(0, worked - extra);
   const stamp = `${periodStart}_to_${periodEnd}`;
 
@@ -85,7 +87,7 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
         approval && state !== "none" ? formatInZone(approval.approvedAt, undefined, "yyyy-MM-dd") : "",
       ];
     });
-    return { fileName: `hours-daily-${stamp}.csv`, csv: toCsv(header, rows), rows: rows.length };
+    return { fileName: `hours-daily-${stamp}.csv`, csv: toCsv(header, rows), rows: rows.length, unapprovedDays };
   }
 
   // Summary: one row per person with totals for the period.
@@ -135,5 +137,5 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
       leaveDays,
     ]);
   }
-  return { fileName: `hours-summary-${stamp}.csv`, csv: toCsv(header, rows), rows: rows.length };
+  return { fileName: `hours-summary-${stamp}.csv`, csv: toCsv(header, rows), rows: rows.length, unapprovedDays };
 }

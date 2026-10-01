@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatInZone } from "@/lib/time";
-import { retryJibbleSend, setJibblePerson, syncJibblePeopleNow, testJibbleConnection } from "../actions";
+import { retryJibbleSend, setJibblePaused, setJibblePerson, syncJibblePeopleNow, testJibbleConnection } from "../actions";
 import type { JibbleOverview } from "../queries";
 
 const BREAK_TEXT = { clock: "Breaks stop screenshots (clock out and back in)", native: "Breaks use Jibble's own breaks from each person's schedule (an unpaid one, preferring a flexible one)", off: "Breaks are not sent (screenshots keep running)" } as const;
@@ -35,6 +35,16 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
   const unmatched = overview.people.filter((p) => !p.jibblePersonId);
   return (
     <div className="space-y-6">
+      {overview.paused ? (
+        <div role="status" className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
+          <strong>Sending to Jibble is paused.</strong> Nothing is being sent, so screenshots may not be running. The ELEVATE clock is not affected. {overview.counts.queued} {overview.counts.queued === 1 ? "call is" : "calls are"} waiting. When you resume, calls that waited more than 10 minutes are dropped and everyone&apos;s Jibble status is set right from ELEVATE.
+        </div>
+      ) : null}
+      {!overview.paused && overview.oldestQueuedMinutes !== null && overview.oldestQueuedMinutes >= 15 ? (
+        <div role="status" className="rounded-xl border border-red-500/50 bg-red-500/10 p-4 text-sm">
+          The oldest waiting call to Jibble has waited <strong>{overview.oldestQueuedMinutes} minutes</strong>. Jibble may be slow or refusing calls: check the recent calls below.
+        </div>
+      ) : null}
       <section aria-label="Connection" className="space-y-3 rounded-xl border bg-card p-4">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-semibold">Jibble</h2>
@@ -48,6 +58,9 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
         <div className="flex flex-wrap gap-2">
           <Button size="sm" disabled={pending || !overview.configured} onClick={() => run(() => testJibbleConnection(), (d) => { const r = d as { people: number; breaks: number | null }; return `Connected. Jibble has ${r.people} people${r.breaks === null ? "" : ` and ${r.breaks} break ${r.breaks === 1 ? "type" : "types"}`}.${overview.breakMode === "native" && r.breaks === 0 ? " Breaks will fail until breaks are set up for people in Jibble (Settings > Breaks, and on their schedule)." : ""}`; })}>
             Test connection
+          </Button>
+          <Button size="sm" variant={overview.paused ? "default" : "outline"} disabled={pending} onClick={() => run(() => setJibblePaused({ paused: !overview.paused }), (d) => (overview.paused ? `Resumed. ${(d as { dropped: number }).dropped} old calls were dropped.` : "Paused. Nothing will be sent to Jibble."))}>
+            {overview.paused ? "Resume sending to Jibble" : "Pause sending to Jibble"}
           </Button>
           <Button size="sm" variant="outline" disabled={pending || !overview.configured} onClick={() => run(() => syncJibblePeopleNow(), (d) => `Matched ${(d as { matched: number }).matched} people; ${(d as { unmatched: number }).unmatched} still unmatched.`)}>
             Match people by email now
@@ -80,7 +93,11 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
                   <TableRow key={l.id}>
                     <TableCell>{formatInZone(l.createdAt, undefined, "MMM d, h:mm a")}</TableCell>
                     <TableCell className="font-medium">{l.name}</TableCell>
-                    <TableCell>{l.action}</TableCell>
+                    <TableCell>
+                      {l.action}
+                      {l.source === "repair" ? <Badge variant="outline" className="ml-1">repair</Badge> : null}
+                      {l.fallback ? <Badge variant="outline" className="ml-1">clock-out instead</Badge> : null}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT.get(l.status) ?? "outline"}>{l.status}</Badge>
                     </TableCell>

@@ -333,3 +333,74 @@ describe("the payroll export", () => {
     expect((await queries.getHoursSettings()).periods[0].start.slice(8)).toMatch(/^(01|16)$/);
   });
 });
+
+describe("so payroll is not short: reminders and progress", () => {
+  const mondayMorning = (weekStart: string) => new Date(`${addDays(weekStart, 7)}T08:00:00+08:00`); // Monday 8 AM Manila, the week after
+
+  it("reminds each lead about their people's unapproved hours, HR about people with no lead, and stops once approved", async () => {
+    const W = lastWeek();
+    await db.execute(sql`delete from ops.notifications where kind = 'hours.approval_reminder'`);
+    const lead = await person("RemLead", { roles: ["team_lead", "employee"] });
+    const worker = await person("RemWorker", { managerId: lead.employeeId });
+    const solo = await person("RemSolo");
+    await normalWeek(worker.employeeId, W);
+    await normalWeek(solo.employeeId, W);
+    await jobs.rebuildAttendanceDays(new Date(), 14);
+
+    const run = await jobs.runLeadApprovalReminders(mondayMorning(W));
+    expect(run.leads).toBeGreaterThanOrEqual(1);
+    const [n] = await rows<{ title: string; link: string }>(sql`select title, link from ops.notifications where user_id = ${lead.user.id} and kind = 'hours.approval_reminder'`);
+    expect(n.title).toBe("1 person has hours waiting for your approval");
+    expect(n.link).toBe(`/attendance?tab=review&rweek=${W}`);
+    expect((await rows<{ title: string }>(sql`select title from ops.notifications where user_id = ${hr.id} and kind = 'hours.approval_reminder'`)).some((r) => r.title.includes("no lead"))).toBe(true);
+
+    as(lead.user);
+    await actions.approveHoursWeek({ employeeId: worker.employeeId, weekStart: W });
+    await db.execute(sql`delete from ops.notifications where kind = 'hours.approval_reminder'`);
+    await jobs.runLeadApprovalReminders(mondayMorning(W));
+    expect(await notes(lead.user.id, "hours.approval_reminder")).toHaveLength(0); // nothing left for this lead
+  });
+
+  it("tells HR on Wednesday who is still holding up last week's hours", async () => {
+    const W = lastWeek();
+    await db.execute(sql`delete from ops.notifications where kind = 'hours.approval_summary'`);
+    const lead = await person("SumLead", { roles: ["team_lead", "employee"] });
+    for (const label of ["SumA", "SumB", "SumC"]) {
+      const w = await person(label, { managerId: lead.employeeId });
+      await normalWeek(w.employeeId, W);
+    }
+    await jobs.rebuildAttendanceDays(new Date(), 14);
+    const run = await jobs.runHrApprovalSummary(new Date(`${addDays(W, 9)}T08:00:00+08:00`)); // Wednesday
+    expect(run.people).toBeGreaterThanOrEqual(3);
+    const [n] = await rows<{ title: string; body: string }>(sql`select title, body from ops.notifications where user_id = ${hr.id} and kind = 'hours.approval_summary'`);
+    expect(n.title).toContain("not approved");
+    expect(n.body).toContain("Unapproved days are left out of the payroll export.");
+    expect(n.body).toContain("SumLead");
+  });
+
+  it("shows HR how much of a period is approved, by team, and warns when an export leaves days out", async () => {
+    const W = lastWeek();
+    const period = { start: W, end: addDays(W, 6), label: "last week" };
+    const lead = await person("ProgLead", { roles: ["team_lead", "employee"] });
+    const worker = await person("ProgWorker", { managerId: lead.employeeId });
+    await normalWeek(worker.employeeId, W);
+    await jobs.rebuildAttendanceDays(new Date(), 14);
+    const before = await queries.periodProgress(period);
+    expect(before.pendingDays).toBeGreaterThanOrEqual(2);
+    expect(before.teams.length).toBeGreaterThan(0);
+
+    as(lead.user);
+    await actions.approveHoursWeek({ employeeId: worker.employeeId, weekStart: W });
+    const after = await queries.periodProgress(period);
+    expect(after.totalDays).toBe(before.totalDays);
+    expect(after.pendingDays).toBe(before.pendingDays - 2);
+
+    as(hr);
+    await actions.savePayPeriod({ kind: "weekly" });
+    const out = await actions.exportHours({ periodStart: W, kind: "daily", includeUnapproved: false });
+    expect(out.ok && out.data.unapprovedDays).toBe(after.pendingDays);
+    const settings = await queries.getHoursSettings();
+    expect(settings.progress).toHaveLength(3);
+    expect(settings.progress[0]).toMatchObject({ start: settings.periods[0].start });
+  });
+});

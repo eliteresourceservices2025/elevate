@@ -13,6 +13,8 @@ import { loadSchedules, loadSchedulesFor } from "./schedule-service";
 import { approvedExtra, effectiveEndMs, grantedByDate } from "./extra-hours";
 import { approvedWindows } from "./extra-hours-service";
 import { holidaysInRange } from "@/modules/timeoff/request-service";
+import { approvalKey, attendanceRows, dayState, latestApprovals } from "./hours-service";
+import { mondayOf } from "./pay-periods";
 import { EVIDENCE_KEEP_DAYS, SELFIE_KEEP_DAYS, loadEventsBetween, notifyOverbreak, onFullDayLeave, prefsFor, rulesFor } from "./service";
 
 // Background work (no signed-in person). src/inngest wraps these in scheduled functions.
@@ -106,6 +108,11 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3, only
         missingEod = have.n < endedIds.length;
       }
 
+      // A team that uses Jibble: a clock-in whose Jibble call was skipped (no match) or failed means no screenshots ran that day.
+      const [noShots] = rules.jibbleMirror
+        ? ((await db.execute(sql`select 1 as ok from time.jibble_link_log where employee_id = ${employeeId} and source = 'event' and status in ('skipped', 'failed') and last_error is distinct from 'not sent: not the production environment'
+            and created_at between to_timestamp(${d.firstIn / 1000}) and to_timestamp(${(end + 3_600_000) / 1000}) limit 1`)) as unknown as { ok: number }[])
+        : [];
       const [jibbleFlag] = (await db.execute(sql`select 1 as ok from time.jibble_daily where employee_id = ${employeeId} and date = ${d.date}::date and flagged`)) as unknown as { ok: number }[];
 
       // Against the person's schedule: late, left early, extra hours (a rest day or holiday counts in full).
@@ -132,6 +139,7 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3, only
         d.overbreakMinutes > 0 ? "overbreak" : null,
         missingEod ? "no_eod" : null,
         jibbleFlag ? "jibble_mismatch" : null,
+        noShots ? "no_screenshots" : null,
         (await onFullDayLeave(db, employeeId, d.date)) ? "on_leave" : null,
       ].filter((f): f is string => f !== null);
 
@@ -396,4 +404,56 @@ export async function runWeeklyExtraHoursNotice(now = new Date()): Promise<{ cli
   const hr = await hrUserIds();
   await notify(db, hr.map((userId) => ({ userId, kind: "extrahours.weekly", title: `Approved extra hours, week of ${from}`, body, link: "/attendance?tab=extra" })));
   return { clients: rows.length };
+}
+
+type Pending = { employeeId: string; name: string };
+
+/** People whose finished days in a week are not all approved (or changed since), with each one's direct lead (null when nobody is above). */
+async function pendingApprovals(weekStart: string, today: string): Promise<{ person: Pending; leadUserId: string | null }[]> {
+  const days = (await attendanceRows(db, null, weekStart, addDays(weekStart, 6))).filter((d) => (d.sessions > 0 || d.scheduledMinutes !== null) && d.date < today);
+  const ids = [...new Set(days.map((d) => d.employeeId))];
+  if (ids.length === 0) return [];
+  const approvals = await latestApprovals(db, ids, weekStart, addDays(weekStart, 6));
+  const pendingIds = [...new Set(days.filter((d) => dayState(d, approvals.get(approvalKey(d.employeeId, d.date))) !== "approved").map((d) => d.employeeId))];
+  const out: { person: Pending; leadUserId: string | null }[] = [];
+  for (const id of pendingIds) {
+    const [p] = (await db.execute(sql`select legal_first_name as first, legal_last_name as last, preferred_name as preferred from core.employees where id = ${id} and archived_at is null`)) as unknown as { first: string; last: string; preferred: string | null }[];
+    if (!p) continue;
+    out.push({ person: { employeeId: id, name: reportName({ first: p.first, last: p.last, preferred: p.preferred }) }, leadUserId: (await managerChainUserIds(db, id))[0] ?? null });
+  }
+  return out;
+}
+
+const lastWeekStart = (now: Date) => mondayOf(addDays(formatInZone(now, "Asia/Manila", "yyyy-MM-dd"), -7));
+
+/** Mondays at 8 AM Manila: each lead is told how many of their people have unapproved hours from last week, so payroll is not short. */
+export async function runLeadApprovalReminders(now = new Date()): Promise<{ leads: number }> {
+  const weekStart = lastWeekStart(now);
+  const pending = await pendingApprovals(weekStart, formatInZone(now, "Asia/Manila", "yyyy-MM-dd"));
+  const byLead = new Map<string, number>();
+  for (const p of pending) if (p.leadUserId) byLead.set(p.leadUserId, (byLead.get(p.leadUserId) ?? 0) + 1);
+  const hr = await hrUserIds();
+  const noLead = pending.filter((p) => !p.leadUserId).length;
+  await notify(db, [...byLead.entries()].map(([userId, n]) => ({ userId, kind: "hours.approval_reminder", title: `${n} ${n === 1 ? "person has" : "people have"} hours waiting for your approval`, body: `Week of ${weekStart}. Approved hours are what HR exports for payroll.`, link: `/attendance?tab=review&rweek=${weekStart}` })));
+  if (noLead > 0) await notify(db, hr.map((userId) => ({ userId, kind: "hours.approval_reminder", title: `${noLead} ${noLead === 1 ? "person has" : "people have"} no lead to approve their hours`, body: `Week of ${weekStart}. You approve these.`, link: `/attendance?tab=review&rweek=${weekStart}` })));
+  return { leads: byLead.size };
+}
+
+/** Wednesdays at 8 AM Manila: HR gets who is still holding up last week's hours, by lead, before payroll runs short. */
+export async function runHrApprovalSummary(now = new Date()): Promise<{ people: number }> {
+  const weekStart = lastWeekStart(now);
+  const pending = await pendingApprovals(weekStart, formatInZone(now, "Asia/Manila", "yyyy-MM-dd"));
+  if (pending.length === 0) return { people: 0 };
+  const byLead = new Map<string | null, number>();
+  for (const p of pending) byLead.set(p.leadUserId, (byLead.get(p.leadUserId) ?? 0) + 1);
+  const names = new Map<string, string>();
+  for (const id of byLead.keys()) {
+    if (!id) continue;
+    const [e] = (await db.execute(sql`select legal_first_name as first, legal_last_name as last, preferred_name as preferred from core.employees where user_id = ${id} limit 1`)) as unknown as { first: string; last: string; preferred: string | null }[];
+    names.set(id, e ? reportName({ first: e.first, last: e.last, preferred: e.preferred }) : "a lead");
+  }
+  const list = [...byLead.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([id, n]) => `${id ? names.get(id) : "no lead"} (${n})`).join(", ");
+  const hr = await hrUserIds();
+  await notify(db, hr.map((userId) => ({ userId, kind: "hours.approval_summary", title: `${pending.length} ${pending.length === 1 ? "person's" : "people's"} hours from last week are not approved`, body: `${list}${byLead.size > 8 ? ", and more" : ""}. Unapproved days are left out of the payroll export.`, link: "/attendance?tab=export" })));
+  return { people: pending.length };
 }

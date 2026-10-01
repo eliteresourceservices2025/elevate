@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -10,9 +10,9 @@ import { writeAudit } from "@/modules/audit/write";
 import { employees } from "@/modules/people/schema";
 import { getJibbleClient } from "./client";
 import { JibbleError } from "./http-client";
-import { processMirrorQueue, syncJibblePeople, type PeopleSync } from "./jobs";
-import { jibbleLinkLog, jibblePeople } from "./schema";
-import { retrySchema, setPersonSchema } from "./validators";
+import { processMirrorQueue, runJibbleRepair, syncJibblePeople, type PeopleSync } from "./jobs";
+import { jibbleLinkLog, jibblePeople, jibbleSettings } from "./schema";
+import { pauseSchema, retrySchema, setPersonSchema } from "./validators";
 
 const NOT_SET_UP = "Jibble is not set up yet. Add the access token on the server first.";
 const BAD = "Check the request and try again.";
@@ -99,5 +99,37 @@ export async function retryJibbleSend(input: unknown): Promise<ActionResult> {
     await processMirrorQueue();
     refresh();
     return { ok: true, data: undefined };
+  });
+}
+
+/**
+ * HR's pause switch for everything sent to Jibble. While paused, clock calls wait in the queue and nothing is sent. When resumed, calls
+ * that waited more than 10 minutes are dropped (replaying a long backlog would put Jibble in a wrong state), and the repair job puts
+ * everyone's Jibble state right from ELEVATE's. The ELEVATE clock is never affected.
+ */
+export async function setJibblePaused(input: unknown): Promise<ActionResult<{ dropped: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "jibble.manage");
+    const parsed = pauseSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD);
+    let dropped = 0;
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(jibbleSettings)
+        .values({ id: 1, paused: parsed.data.paused, pausedBy: actor.id, pausedAt: new Date() })
+        .onConflictDoUpdate({ target: jibbleSettings.id, set: { paused: parsed.data.paused, pausedBy: actor.id, pausedAt: new Date() } });
+      if (!parsed.data.paused) {
+        const old = (await tx.execute(sql`update time.jibble_link_log set status = 'skipped', last_error = 'dropped: waited too long while paused' where status = 'queued' and created_at < now() - interval '10 minutes' returning 1`)) as unknown as unknown[];
+        dropped = old.length;
+      }
+      await writeAudit({ actor, action: parsed.data.paused ? "jibble.pause" : "jibble.resume", targetType: "integration", metadata: { dropped } }, tx);
+    });
+    if (!parsed.data.paused) {
+      await processMirrorQueue();
+      await runJibbleRepair();
+    }
+    refresh();
+    return { ok: true, data: { dropped } };
   });
 }

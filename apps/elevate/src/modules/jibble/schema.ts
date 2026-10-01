@@ -34,10 +34,12 @@ export const jibbleLinkLog = time
       employeeId: uuid("employee_id")
         .notNull()
         .references(() => employees.id),
-      /** The ELEVATE clock event this call mirrors. */
-      eventId: uuid("event_id")
-        .notNull()
-        .references(() => clockEvents.id),
+      /** The ELEVATE clock event this call mirrors; empty for a repair call that puts Jibble back in step with ELEVATE. */
+      eventId: uuid("event_id").references(() => clockEvents.id),
+      /** event = mirrors a clock click; repair = sent by the repair job because Jibble was out of step. */
+      source: text("source").notNull().default("event"),
+      /** A break start that could not use a Jibble break and clocked the person out instead (so its end clocks them back in). */
+      fallback: boolean("fallback").notNull().default(false),
       /** In, Out, StartBreak or EndBreak. */
       action: text("action").notNull(),
       status: text("status").notNull().default("queued"),
@@ -55,6 +57,7 @@ export const jibbleLinkLog = time
       index("jibble_link_log_employee_idx").on(t.employeeId, t.createdAt),
       check("jibble_link_log_status_chk", sql`${t.status} in ('queued','sent','failed','skipped')`),
       check("jibble_link_log_action_chk", sql`${t.action} in ('In','Out','StartBreak','EndBreak')`),
+      check("jibble_link_log_source_chk", sql`${t.source} in ('event','repair')`),
     ],
   )
   .enableRLS();
@@ -75,5 +78,19 @@ export const jibbleDaily = time
       comparedAt: timestamp("compared_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [uniqueIndex("jibble_daily_unique_idx").on(t.employeeId, t.date), index("jibble_daily_date_idx").on(t.date)],
+  )
+  .enableRLS();
+
+/** One row: HR's pause switch. While paused nothing is sent to Jibble (calls wait in the queue). */
+export const jibbleSettings = time
+  .table(
+    "jibble_settings",
+    {
+      id: smallint("id").primaryKey().default(1),
+      paused: boolean("paused").notNull().default(false),
+      pausedBy: uuid("paused_by"),
+      pausedAt: timestamp("paused_at", { withTimezone: true }),
+    },
+    (t) => [check("jibble_settings_single_chk", sql`${t.id} = 1`)],
   )
   .enableRLS();

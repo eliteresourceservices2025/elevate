@@ -2,7 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import type { db } from "@/lib/db";
 import type { ClockType } from "@/modules/attendance/clock";
-import { breakMode, getJibbleClient, mirrorSendsEnabled } from "./client";
+import { breakMode, getJibbleClient, mirrorSendsEnabled, sendsAllowed } from "./client";
 import { mirrorSteps } from "./mirror-rules";
 import { jibbleLinkLog, jibblePeople } from "./schema";
 
@@ -19,11 +19,13 @@ export async function enqueueMirror(tx: Executor, input: { employeeId: string; e
   const steps = mirrorSteps(input.events, breakMode());
   if (steps.length === 0) return 0;
   const [match] = await tx.select({ id: jibblePeople.jibblePersonId }).from(jibblePeople).where(eq(jibblePeople.employeeId, input.employeeId)).limit(1);
+  const allowed = Boolean(match) && sendsAllowed(match?.id ?? null);
+  const reason = !match ? "no Jibble person matched" : allowed ? null : "not sent: not the production environment";
   await tx
     .insert(jibbleLinkLog)
-    .values(steps.map((s) => ({ employeeId: input.employeeId, eventId: s.eventId, action: s.action, status: match ? "queued" : "skipped", lastError: match ? null : "no Jibble person matched" })))
+    .values(steps.map((s) => ({ employeeId: input.employeeId, eventId: s.eventId, action: s.action, status: allowed ? "queued" : "skipped", lastError: reason })))
     .onConflictDoNothing();
-  return match ? steps.length : 0;
+  return allowed ? steps.length : 0;
 }
 
 /** After the transaction commits: ask the job runner to send now instead of waiting for the 5-minute sweep. Best effort. */

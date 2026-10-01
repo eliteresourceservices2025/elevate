@@ -104,3 +104,22 @@ export function describeFailure(status: number | null, code: string): string {
 
 /** Whether another try could help: network trouble, rate limits and server errors yes; a refusal no. */
 export const isRetryable = (status: number | null) => status === null || status === 408 || status === 429 || status >= 500;
+
+/** Where a person is in Jibble, from their latest time entry. */
+export type JibbleState = "in" | "break" | "out";
+
+/** The state a Jibble call leaves a person in. */
+export const targetState = (action: JibbleAction): JibbleState => (action === "In" || action === "EndBreak" ? "in" : action === "Out" ? "out" : "break");
+
+/**
+ * The call that puts Jibble back in step with ELEVATE (ELEVATE is the source of truth), or null when they already agree.
+ * elevate: working / on a break / clocked out. Jibble: in / on a break / out.
+ */
+export function repairAction(elevate: "working" | "break" | "out", jibble: JibbleState, mode: BreakMode): JibbleAction | null {
+  if (elevate === "out") return jibble === "out" ? null : "Out";
+  if (elevate === "working") return jibble === "in" ? null : jibble === "break" ? "EndBreak" : "In";
+  // on a break in ELEVATE
+  if (mode === "off") return jibble === "in" ? null : jibble === "break" ? "EndBreak" : "In"; // breaks are not mirrored: Jibble stays "in"
+  if (mode === "clock") return jibble === "out" ? null : jibble === "break" ? null : "Out"; // a break is "out" in Jibble
+  return jibble === "break" ? null : jibble === "out" ? "In" : "StartBreak"; // native: from out, clock in first; the next run starts the break
+}

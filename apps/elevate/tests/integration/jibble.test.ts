@@ -30,6 +30,7 @@ const NO_ACCESS = "You do not have access to do that.";
 let counter = 0;
 const uniq = (p: string) => `${p}${Date.now().toString(36)}${counter++}`;
 const rows = async <T = Record<string, unknown>>(q: ReturnType<typeof sql>) => (await db.execute(q)) as unknown as T[];
+const notes = (userId: string, kind: string) => rows(sql`select 1 from ops.notifications where user_id = ${userId} and kind = ${kind}`);
 const as = (u: TestUser) => {
   current.user = u;
 };
@@ -43,6 +44,10 @@ class FakeJibble implements JibbleClient {
   breaks: { id: string; name: string; durationMinutes: number | null }[] = [];
   people: JibblePerson[] = [];
   tracked: JibbleDay[] = [];
+  /** Where each Jibble person is right now, for the state checks (null = no entry). A person not listed has no entry. */
+  states = new Map<string, "in" | "break" | "out" | null>();
+  /** Make the state lookup fail. */
+  stateFails = false;
   /** Return an error to make a call fail. */
   fail: (personId: string, action: string) => InstanceType<typeof JibbleError> | null = () => null;
   async listPeople() {
@@ -50,6 +55,10 @@ class FakeJibble implements JibbleClient {
   }
   async listBreaks() {
     return this.breaks;
+  }
+  async latestState(personId: string) {
+    if (this.stateFails) throw new JibbleError(503, "request refused");
+    return this.states.get(personId) ?? null;
   }
   async clock(personId: string, action: string, options?: { breakMinutes?: number | null; previousEntryId?: string | null }) {
     const f = this.fail(personId, action);
@@ -111,6 +120,10 @@ beforeAll(async () => {
   await rows(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values ('Hana', ${uniq("Hr")}, ${hr.email}, 'active', ${hr.id})`);
 });
 beforeEach(() => {
+  process.env.ELEVATE_ENV = "production"; // the safety lock lets the fake send
+  delete process.env.JIBBLE_TEST_PERSON_IDS;
+  fake.states = new Map();
+  fake.stateFails = false;
   fake.calls = [];
   fake.breaks = [];
   fake.people = [];
@@ -121,6 +134,7 @@ beforeEach(() => {
   delete process.env.JIBBLE_BREAK_MODE;
 });
 afterAll(() => {
+  delete process.env.ELEVATE_ENV;
   setJibbleClient(undefined);
 });
 
@@ -334,12 +348,12 @@ describe("sending to Jibble", () => {
   });
 
   it("tells HR once a day when the token is rejected, and lets HR retry a failed call", async () => {
-    await db.execute(sql`delete from ops.notifications where kind = 'jibble.failing'`);
+    await db.execute(sql`delete from ops.notifications where kind = 'jibble.auth'`);
     const p = await queued("Token", ["In"]);
     fake.fail = () => new JibbleError(401, "token rejected");
     await jobs.processMirrorQueue();
     await jobs.processMirrorQueue(); // nothing left to send, and no second alert
-    const alerts = await rows<{ title: string }>(sql`select title from ops.notifications where kind = 'jibble.failing' and user_id = ${hr.id}`);
+    const alerts = await rows<{ title: string }>(sql`select title from ops.notifications where kind = 'jibble.auth' and user_id = ${hr.id}`);
     expect(alerts).toHaveLength(1);
     expect(alerts[0].title).toBe("ELEVATE cannot sign in to Jibble");
 
@@ -493,5 +507,277 @@ describe("the nightly comparison", () => {
     expect(purged.daily).toBeGreaterThanOrEqual(1);
     expect(purged.logs).toBeGreaterThanOrEqual(1);
     expect(await rows(sql`select 1 from time.jibble_daily where employee_id = ${p.employeeId}`)).toHaveLength(1);
+  });
+});
+
+// ---- Phase 2.6: hardening ------------------------------------------------------------------------------
+
+async function queuedRows(label: string, steps: string[], opts: { teamId?: string } = {}) {
+  const p = await person(label, { teamId: opts.teamId ?? (await makeTeam()) });
+  const ids: string[] = [];
+  for (let i = 0; i < steps.length; i++) {
+    const [e] = await rows<{ id: string }>(sql`insert into time.clock_events (employee_id, type, occurred_at, planned_break_minutes) values (${p.employeeId}, ${i % 2 ? "clock_out" : "clock_in"}, ${iso(HOUR - i * MIN)}, null) returning id`);
+    ids.push(e.id);
+  }
+  for (let i = 0; i < steps.length; i++) {
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, created_at) values (${p.employeeId}, ${ids.at(i)}, ${steps.at(i)}, now() - (${steps.length - i} * interval '1 second'))`);
+  }
+  return p;
+}
+
+describe("the safety lock", () => {
+  it("sends only in production, or for named test people, so a copy of the app cannot clock real people", async () => {
+    await withMonitoring(async () => {
+      const team = await makeTeam();
+      await turnOn(hr, team);
+      const a = await person("LockA", { teamId: team });
+      const b = await person("LockB", { teamId: team });
+      delete process.env.ELEVATE_ENV; // a laptop or staging
+      as(a.user);
+      await attendance.clockIn({});
+      expect(await logOf(a.employeeId)).toEqual([expect.objectContaining({ action: "In", status: "skipped", last_error: "not sent: not the production environment" })]);
+
+      process.env.JIBBLE_TEST_PERSON_IDS = `other-id, ${fayJibbleId(b.employeeId)}`; // a named test person is allowed
+      as(b.user);
+      await attendance.clockIn({});
+      expect(await logOf(b.employeeId)).toEqual([expect.objectContaining({ action: "In", status: "queued" })]);
+
+      // Queued before the lock was applied: the sender refuses too
+      delete process.env.JIBBLE_TEST_PERSON_IDS;
+      const run = await jobs.processMirrorQueue();
+      expect(run.skipped).toBeGreaterThanOrEqual(1);
+      expect(fake.calls.filter((c) => c.personId === fayJibbleId(b.employeeId))).toHaveLength(0);
+      expect((await logOf(b.employeeId))[0]).toMatchObject({ status: "skipped", last_error: "not sent: not the production environment" });
+    });
+  });
+});
+
+describe("the pause switch", () => {
+  it("holds everything while paused, drops stale calls on resume, and is HR only", async () => {
+    const fresh = await queuedRows("PauseFresh", ["In"]);
+    const old = await queuedRows("PauseOld", ["In"]);
+    await db.execute(sql`update time.jibble_link_log set created_at = now() - interval '30 minutes' where employee_id = ${old.employeeId}`);
+    as(hr);
+    expect(await actions.setJibblePaused({ paused: true })).toEqual({ ok: true, data: { dropped: 0 } });
+    expect((await queries.getJibbleOverview()).paused).toBe(true);
+    expect(await jobs.processMirrorQueue()).toEqual({ sent: 0, retrying: 0, failed: 0, skipped: 0 });
+    expect(fake.calls).toHaveLength(0);
+    expect((await logOf(fresh.employeeId))[0].status).toBe("queued"); // still waiting
+
+    const resumed = await actions.setJibblePaused({ paused: false });
+    expect(resumed.ok && resumed.data.dropped).toBeGreaterThanOrEqual(1);
+    expect((await logOf(old.employeeId))[0]).toMatchObject({ status: "skipped", last_error: "dropped: waited too long while paused" });
+    expect((await logOf(fresh.employeeId))[0].status).toBe("sent"); // the recent one went out on resume
+    expect(await rows(sql`select 1 from ops.audit_log where action in ('jibble.pause', 'jibble.resume') and actor_user_id = ${hr.id}`)).toHaveLength(2);
+
+    for (const role of ["team_lead", "recruiter", "executive", "employee"] as RoleSlug[]) {
+      as(await makeUser("nopause", [role]));
+      expect(await actions.setJibblePaused({ paused: true })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+  });
+});
+
+describe("when Jibble refuses a break", () => {
+  it("clocks the person out instead, so screenshots still stop, and clocks them back in when the break ends", async () => {
+    const p = await queuedRows("Fallback", ["StartBreak", "EndBreak"]);
+    fake.fail = (id, action) => (id === fayJibbleId(p.employeeId) && action === "StartBreak" ? new JibbleError(422, "no break set up for this person in Jibble") : null);
+    await jobs.processMirrorQueue();
+    expect(fake.calls.filter((c) => c.personId === fayJibbleId(p.employeeId)).map((c) => c.action)).toEqual(["Out", "In"]); // out for the break, in at the end
+    expect(await logOf(p.employeeId)).toEqual([
+      expect.objectContaining({ action: "StartBreak", status: "sent", last_error: "no Jibble break available: clocked out instead" }),
+      expect.objectContaining({ action: "EndBreak", status: "sent" }),
+    ]);
+    expect((await rows<{ fallback: boolean }>(sql`select fallback from time.jibble_link_log where employee_id = ${p.employeeId} order by created_at`)).map((r) => r.fallback)).toEqual([true, true]);
+  });
+
+  it("remembers a fallback break across runs, and does not fall back when the failure is Jibble being down", async () => {
+    const p = await queuedRows("FallbackLater", ["StartBreak"]);
+    fake.fail = (id, action) => (id === fayJibbleId(p.employeeId) && action === "StartBreak" ? new JibbleError(400, "request refused") : null);
+    await jobs.processMirrorQueue();
+    // The break end arrives in a later run
+    const [e] = await rows<{ id: string }>(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'break_end', now()) returning id`);
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action) values (${p.employeeId}, ${e.id}, 'EndBreak')`);
+    fake.calls = [];
+    fake.fail = () => null;
+    await jobs.processMirrorQueue();
+    expect(fake.calls.map((c) => c.action)).toEqual(["In"]);
+
+    const down = await queuedRows("FallbackDown", ["StartBreak"]);
+    fake.calls = [];
+    fake.fail = (id) => (id === fayJibbleId(down.employeeId) ? new JibbleError(503, "request refused") : null);
+    await jobs.processMirrorQueue();
+    expect(fake.calls).toHaveLength(0); // retried later, not clocked out
+    expect((await logOf(down.employeeId))[0]).toMatchObject({ status: "queued", attempts: 1 });
+  });
+});
+
+describe("retries are careful", () => {
+  it("looks at Jibble before a retry, so a call that already went through is not sent twice", async () => {
+    const p = await queuedRows("Careful", ["In"]);
+    const jid = fayJibbleId(p.employeeId);
+    await db.execute(sql`update time.jibble_link_log set attempts = 1 where employee_id = ${p.employeeId}`);
+    fake.states.set(jid, "in"); // the first try worked, we just never heard back
+    await jobs.processMirrorQueue();
+    expect(fake.calls.filter((c) => c.personId === jid)).toHaveLength(0);
+    expect((await logOf(p.employeeId))[0]).toMatchObject({ status: "sent", last_error: "already in that state (checked)" });
+
+    const q = await queuedRows("CarefulNot", ["In"]);
+    await db.execute(sql`update time.jibble_link_log set attempts = 1 where employee_id = ${q.employeeId}`);
+    fake.states.set(fayJibbleId(q.employeeId), "out"); // it did not go through: send it
+    await jobs.processMirrorQueue();
+    expect(fake.calls.filter((c) => c.personId === fayJibbleId(q.employeeId)).map((c) => c.action)).toEqual(["In"]);
+
+    const r = await queuedRows("CarefulUnknown", ["In"]);
+    await db.execute(sql`update time.jibble_link_log set attempts = 1 where employee_id = ${r.employeeId}`);
+    fake.stateFails = true; // cannot look: send it (a 409 would still be handled)
+    await jobs.processMirrorQueue();
+    expect(fake.calls.filter((c) => c.personId === fayJibbleId(r.employeeId))).toHaveLength(1);
+  });
+
+  it("waits as long as Jibble asks when it says to slow down", async () => {
+    const p = await queuedRows("SlowDown", ["In"]);
+    fake.fail = (id) => (id === fayJibbleId(p.employeeId) ? new JibbleError(429, "slow down", null, 20 * MIN) : null);
+    const start = new Date();
+    await jobs.processMirrorQueue(start);
+    const [row] = await rows<{ next: Date }>(sql`select next_attempt_at as next from time.jibble_link_log where employee_id = ${p.employeeId}`);
+    expect(new Date(row.next).getTime() - start.getTime()).toBeGreaterThanOrEqual(19 * MIN); // longer than the one minute backoff
+  });
+
+  it("tells HR about failing calls only once three have failed, and then only once in six hours", async () => {
+    await db.execute(sql`delete from ops.notifications where kind = 'jibble.failing'`);
+    await db.execute(sql`delete from time.jibble_link_log where status = 'failed' and created_at > now() - interval '3 hours'`);
+    const make = async (label: string) => {
+      const p = await queuedRows(label, ["In"]);
+      return p;
+    };
+    const a = await make("FailA");
+    const b = await make("FailB");
+    const c = await make("FailC");
+    fake.fail = (id) => ([a, b, c].some((x) => fayJibbleId(x.employeeId) === id) ? new JibbleError(400, "request refused") : null);
+    // The first two failures are not yet a pattern
+    await db.execute(sql`update time.jibble_link_log set status = 'skipped' where employee_id = ${c.employeeId}`);
+    await jobs.processMirrorQueue();
+    expect(await notes(hr.id, "jibble.failing")).toHaveLength(0);
+    await db.execute(sql`update time.jibble_link_log set status = 'queued' where employee_id = ${c.employeeId}`);
+    await jobs.processMirrorQueue();
+    expect(await notes(hr.id, "jibble.failing")).toHaveLength(1);
+    const d = await make("FailD");
+    fake.fail = () => new JibbleError(400, "request refused");
+    await jobs.processMirrorQueue();
+    expect(await notes(hr.id, "jibble.failing")).toHaveLength(1); // not again within six hours
+    expect(d.employeeId).toBeTruthy();
+  });
+});
+
+describe("the repair job", () => {
+  async function onTeam(label: string, state: { events: [string, number, number | null][] }) {
+    const team = await makeTeam();
+    await db.execute(sql`insert into time.clock_rules (team_id, jibble_mirror) values (${team}, true)`);
+    const p = await person(label, { teamId: team });
+    for (const [type, agoMs, planned] of state.events) await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at, planned_break_minutes) values (${p.employeeId}, ${type}, ${iso(agoMs)}, ${planned})`);
+    return { ...p, jid: fayJibbleId(p.employeeId) };
+  }
+  const sent = (jid: string) => fake.calls.filter((c) => c.personId === jid);
+
+  it("clocks Jibble in when ELEVATE says someone is working and Jibble says they are out, and out when it is the other way round", async () => {
+    const working = await onTeam("RepWork", { events: [["clock_in", 40 * MIN, null]] });
+    const finished = await onTeam("RepDone", { events: [["clock_in", 3 * HOUR, null], ["clock_out", 10 * MIN, null]] });
+    const agreed = await onTeam("RepAgree", { events: [["clock_in", 40 * MIN, null]] });
+    fake.states.set(working.jid, "out");
+    fake.states.set(finished.jid, "in");
+    fake.states.set(agreed.jid, "in");
+    const run = await jobs.runJibbleRepair();
+    expect(run.repaired).toBeGreaterThanOrEqual(2);
+    expect(sent(working.jid).map((c) => c.action)).toEqual(["In"]);
+    expect(sent(finished.jid).map((c) => c.action)).toEqual(["Out"]);
+    expect(sent(agreed.jid)).toHaveLength(0);
+    expect(await rows(sql`select 1 from time.jibble_link_log where employee_id = ${working.employeeId} and source = 'repair' and event_id is null and status = 'sent'`)).toHaveLength(1);
+    // Not again straight away, even if Jibble still disagrees
+    fake.calls = [];
+    await jobs.runJibbleRepair();
+    expect(sent(working.jid)).toHaveLength(0);
+  });
+
+  it("starts a native break in Jibble with the chosen length when ELEVATE says the person is on a break", async () => {
+    const onBreak = await onTeam("RepBreak", { events: [["clock_in", 2 * HOUR, null], ["break_start", 30 * MIN, 15]] });
+    fake.states.set(onBreak.jid, "in");
+    await jobs.runJibbleRepair();
+    expect(sent(onBreak.jid)).toEqual([expect.objectContaining({ action: "StartBreak", options: { breakMinutes: 15 } })]);
+  });
+
+  it("leaves alone a click from the last minutes, a person with a call still waiting, people who are out, and a Jibble it cannot read", async () => {
+    const justNow = await onTeam("RepJust", { events: [["clock_in", MIN, null]] });
+    const waiting = await onTeam("RepWait", { events: [["clock_in", 30 * MIN, null]] });
+    const out = await onTeam("RepOut", { events: [["clock_in", 5 * HOUR, null], ["clock_out", 4 * HOUR, null]] });
+    const unreadable = await onTeam("RepUnread", { events: [["clock_in", 30 * MIN, null]] });
+    for (const p of [justNow, waiting, out, unreadable]) fake.states.set(p.jid, "out");
+    const [e] = await rows<{ id: string }>(sql`select id from time.clock_events where employee_id = ${waiting.employeeId} limit 1`);
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action) values (${waiting.employeeId}, ${e.id}, 'In')`);
+    fake.states.delete(unreadable.jid); // unknown: no entry in Jibble
+    await jobs.runJibbleRepair();
+    for (const p of [justNow, waiting, out, unreadable]) expect(sent(p.jid)).toHaveLength(0);
+  });
+
+  it("does nothing when paused, in fallback mode, outside production, or when Jibble cannot be read", async () => {
+    const p = await onTeam("RepOff", { events: [["clock_in", 40 * MIN, null]] });
+    fake.states.set(p.jid, "out");
+    fake.stateFails = true;
+    expect((await jobs.runJibbleRepair()).repaired).toBe(0);
+    fake.stateFails = false;
+    process.env.JIBBLE_MIRROR_ENABLED = "false";
+    await jobs.runJibbleRepair();
+    delete process.env.JIBBLE_MIRROR_ENABLED;
+    delete process.env.ELEVATE_ENV;
+    await jobs.runJibbleRepair();
+    process.env.ELEVATE_ENV = "production";
+    as(hr);
+    await actions.setJibblePaused({ paused: true });
+    await jobs.runJibbleRepair();
+    expect(sent(p.jid)).toHaveLength(0);
+    await actions.setJibblePaused({ paused: false });
+    expect(sent(p.jid).map((c) => c.action)).toEqual(["In"]); // resuming sets Jibble right
+  });
+});
+
+describe("people who clock in without a Jibble account", () => {
+  it("gives HR one list of who worked without screenshots, and nothing when everyone is matched", async () => {
+    await db.execute(sql`delete from ops.notifications where kind = 'jibble.unmatched'`);
+    await db.execute(sql`update time.jibble_link_log set created_at = now() - interval '3 days' where status = 'skipped' and last_error = 'no Jibble person matched'`);
+    expect((await jobs.runJibbleUnmatchedReport()).people).toBe(0);
+    expect(await notes(hr.id, "jibble.unmatched")).toHaveLength(0);
+
+    await withMonitoring(async () => {
+      const team = await makeTeam();
+      await turnOn(hr, team);
+      const lost = await person("NoMatchOne", { teamId: team, mapped: false });
+      const lost2 = await person("NoMatchTwo", { teamId: team, mapped: false });
+      for (const p of [lost, lost2]) {
+        as(p.user);
+        await attendance.clockIn({});
+      }
+    });
+    const run = await jobs.runJibbleUnmatchedReport();
+    expect(run.people).toBe(2);
+    const [n] = await rows<{ title: string; body: string }>(sql`select title, body from ops.notifications where user_id = ${hr.id} and kind = 'jibble.unmatched'`);
+    expect(n.title).toContain("2 people clocked in with no Jibble account");
+    expect(n.body).toContain("NoMatchOne");
+  });
+
+  it("flags the day for the lead when screenshots could not run, but not when the only reason was the safety lock", async () => {
+    const team = await makeTeam();
+    await db.execute(sql`insert into time.clock_rules (team_id, jibble_mirror) values (${team}, true)`);
+    const Y = formatInZone(Date.now() - 24 * HOUR, "America/Phoenix", "yyyy-MM-dd");
+    const at = (time: string) => new Date(`${Y}T${time}:00-07:00`).toISOString();
+    const missed = await person("ShotsMissed", { teamId: team, mapped: false });
+    const locked = await person("ShotsLocked", { teamId: team });
+    for (const [p, reason] of [[missed, "no Jibble person matched"], [locked, "not sent: not the production environment"]] as const) {
+      const [e] = await rows<{ id: string }>(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', ${at("09:00")}) returning id`);
+      await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_out', ${at("17:00")})`);
+      await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, status, last_error, created_at) values (${p.employeeId}, ${e.id}, 'In', 'skipped', ${reason}, ${at("09:00:30".slice(0, 5))})`);
+    }
+    await attendanceJobs.rebuildAttendanceDays();
+    const flagsOf = async (id: string) => (await rows<{ flags: string[] }>(sql`select flags from time.attendance_days where employee_id = ${id} and date = ${Y}::date`)).flatMap((r) => r.flags);
+    expect(await flagsOf(missed.employeeId)).toContain("no_screenshots");
+    expect(await flagsOf(locked.employeeId)).not.toContain("no_screenshots");
   });
 });

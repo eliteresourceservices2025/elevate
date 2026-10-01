@@ -428,7 +428,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
       {!online ? (
         <span role="status" className="flex items-center gap-1 rounded-full bg-red-600/10 px-2 py-1 text-xs font-medium text-red-700 dark:text-red-400">
           <WifiOff className="size-3.5" aria-hidden />
-          Offline: clock paused
+          {browserOnline ? "Cannot reach ELEVATE: refresh, or sign in again" : "Offline: clock paused"}
         </span>
       ) : null}
 

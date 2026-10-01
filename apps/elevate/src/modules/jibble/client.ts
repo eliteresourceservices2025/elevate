@@ -29,3 +29,14 @@ export const mismatchToleranceMinutes = () => {
   const n = Number(process.env.JIBBLE_MISMATCH_MINUTES);
   return Number.isFinite(n) && n >= 1 && n <= 240 ? n : 15;
 };
+
+/**
+ * The safety lock: ELEVATE only sends to Jibble in production (ELEVATE_ENV=production). Anywhere else (a laptop, staging, tests) it
+ * sends only for the Jibble person ids listed in JIBBLE_TEST_PERSON_IDS, so a copy of the app can never clock real people in or out
+ * of the live Jibble organization.
+ */
+export function sendsAllowed(jibblePersonId: string | null): boolean {
+  if (process.env.ELEVATE_ENV === "production") return true;
+  const testIds = (process.env.JIBBLE_TEST_PERSON_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return jibblePersonId !== null && testIds.includes(jibblePersonId);
+}

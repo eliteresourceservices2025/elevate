@@ -6,3 +6,4 @@ export const setPersonSchema = z.object({
   jibblePersonId: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.uuid("Paste the Jibble person id").nullable()),
 });
 export const retrySchema = z.object({ logId: z.uuid() });
+export const pauseSchema = z.object({ paused: z.boolean() });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ATTEMPTS, backoffMs, describeFailure, isMismatch, isRetryable, mirrorSteps, parseBreakMode, parseDuration, pickBreak } from "./mirror-rules";
+import { MAX_ATTEMPTS, backoffMs, describeFailure, isMismatch, isRetryable, mirrorSteps, parseBreakMode, parseDuration, pickBreak, repairAction, targetState } from "./mirror-rules";
 import { configFromEnv } from "./http-client";
 
 const ev = (id: string, type: "clock_in" | "break_start" | "break_end" | "clock_out") => ({ id, type });
@@ -139,5 +139,37 @@ describe("configuration", () => {
     expect(c?.workspaceUrl).toBe("https://example.test");
     expect(c?.timeTrackingUrl).toBe("https://time-tracking.prod.jibble.io");
     expect(c?.timeAttendanceUrl).toBe("https://time-attendance.prod.jibble.io");
+  });
+});
+
+describe("putting Jibble back in step with ELEVATE", () => {
+  it("knows where each call leaves a person", () => {
+    expect(targetState("In")).toBe("in");
+    expect(targetState("EndBreak")).toBe("in");
+    expect(targetState("Out")).toBe("out");
+    expect(targetState("StartBreak")).toBe("break");
+  });
+
+  it("does nothing when they already agree", () => {
+    expect(repairAction("working", "in", "native")).toBeNull();
+    expect(repairAction("out", "out", "native")).toBeNull();
+    expect(repairAction("break", "break", "native")).toBeNull();
+    expect(repairAction("break", "out", "clock")).toBeNull(); // clock mode: a break is "out"
+    expect(repairAction("break", "in", "off")).toBeNull(); // breaks are not mirrored
+  });
+
+  it("clocks Jibble in when ELEVATE says working, and out when ELEVATE says clocked out", () => {
+    expect(repairAction("working", "out", "native")).toBe("In");
+    expect(repairAction("working", "break", "native")).toBe("EndBreak");
+    expect(repairAction("out", "in", "native")).toBe("Out");
+    expect(repairAction("out", "break", "clock")).toBe("Out");
+  });
+
+  it("follows the break mode when ELEVATE says on a break", () => {
+    expect(repairAction("break", "in", "native")).toBe("StartBreak");
+    expect(repairAction("break", "out", "native")).toBe("In"); // clock in first; the next run starts the break
+    expect(repairAction("break", "in", "clock")).toBe("Out");
+    expect(repairAction("break", "out", "off")).toBe("In");
+    expect(repairAction("break", "break", "off")).toBe("EndBreak");
   });
 });

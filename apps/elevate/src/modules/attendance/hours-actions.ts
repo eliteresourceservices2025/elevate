@@ -98,7 +98,7 @@ export async function savePayPeriod(input: unknown): Promise<ActionResult> {
 }
 
 /** A CSV of a pay period's hours: the daily detail or a per-person summary. Approved days only unless asked otherwise. Audited. */
-export async function exportHours(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number }>> {
+export async function exportHours(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number; unapprovedDays: number }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "hours.export");

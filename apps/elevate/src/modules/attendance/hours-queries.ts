@@ -118,7 +118,35 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
   return { weekStart, weekEnd, rows, scope, pending: rows.filter((r) => r.canApprove).length };
 }
 
-export type HoursSettings = { kind: PayPeriodKind; biweeklyAnchor: string; periods: PayPeriod[] };
+export type PeriodProgress = { start: string; totalDays: number; pendingDays: number; pendingPeople: number; teams: { team: string; pendingDays: number; pendingPeople: number }[] };
+export type HoursSettings = { kind: PayPeriodKind; biweeklyAnchor: string; periods: PayPeriod[]; /** How much of the latest periods is approved. */ progress: PeriodProgress[] };
+
+/** Finished days (before today) of a pay period that are approved, and the rest by team. */
+export async function periodProgress(period: PayPeriod): Promise<PeriodProgress> {
+  const today = todayInZone();
+  const days = (await attendanceRows(db, null, period.start, period.end)).filter((d) => (d.sessions > 0 || d.scheduledMinutes !== null) && d.date < today);
+  const ids = [...new Set(days.map((d) => d.employeeId))];
+  if (ids.length === 0) return { start: period.start, totalDays: 0, pendingDays: 0, pendingPeople: 0, teams: [] };
+  const approvals = await latestApprovals(db, ids, period.start, period.end);
+  const teamRows = (await db.execute(sql`select e.id, coalesce(t.name, 'No team') as team from core.employees e left join core.teams t on t.id = e.team_id where e.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { id: string; team: string }[];
+  const teamOf = new Map(teamRows.map((r) => [r.id, r.team]));
+  const pending = days.filter((d) => dayState(d, approvals.get(approvalKey(d.employeeId, d.date))) !== "approved");
+  const byTeam = new Map<string, { days: number; people: Set<string> }>();
+  for (const d of pending) {
+    const t = teamOf.get(d.employeeId) ?? "No team";
+    const cur = byTeam.get(t) ?? { days: 0, people: new Set<string>() };
+    cur.days += 1;
+    cur.people.add(d.employeeId);
+    byTeam.set(t, cur);
+  }
+  return {
+    start: period.start,
+    totalDays: days.length,
+    pendingDays: pending.length,
+    pendingPeople: new Set(pending.map((d) => d.employeeId)).size,
+    teams: [...byTeam.entries()].map(([team, v]) => ({ team, pendingDays: v.days, pendingPeople: v.people.size })).sort((a, b) => b.pendingDays - a.pendingDays),
+  };
+}
 
 /** How pay periods are cut and the recent ones to export. HR only. */
 export async function getHoursSettings(): Promise<HoursSettings> {
@@ -127,5 +155,6 @@ export async function getHoursSettings(): Promise<HoursSettings> {
   const [row] = await db.select().from(hoursSettings).where(eq(hoursSettings.id, 1)).limit(1);
   const kind = (row?.payPeriodKind ?? "semi_monthly") as PayPeriodKind;
   const anchor = row?.biweeklyAnchor ?? "2026-01-05";
-  return { kind, biweeklyAnchor: anchor, periods: recentPeriods(kind, todayInZone(), 8, anchor) };
+  const periods = recentPeriods(kind, todayInZone(), 8, anchor);
+  return { kind, biweeklyAnchor: anchor, periods, progress: await Promise.all(periods.slice(0, 3).map((p) => periodProgress(p))) };
 }

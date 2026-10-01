@@ -134,6 +134,32 @@ describe("Jibble HTTP client", () => {
     expect(explain(JSON.stringify({ message: "x".repeat(500) }))?.length).toBe(300);
   });
 
+  it("reads where a person is in Jibble from their latest time entry", async () => {
+    answer([{ json: { type: "In" } }, { json: { type: "StartBreak" } }, { json: { type: "Out" } }, { json: {} }]);
+    expect(await token.latestState("p1")).toBe("in");
+    expect(await token.latestState("p1")).toBe("break");
+    expect(await token.latestState("p1")).toBe("out");
+    expect(await token.latestState("p1")).toBeNull();
+    expect(calls[0].url).toContain("/v1/People(p1)/LatestTimeEntry");
+  });
+
+  it("keeps how long Jibble asked us to wait when it says to slow down", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 429, headers: { "Retry-After": "90" } })));
+    const err = (await token.clock("p", "In").catch((e: unknown) => e)) as JibbleError;
+    expect(err.status).toBe(429);
+    expect(err.retryAfterMs).toBe(90_000);
+    expect(err.retryable).toBe(true);
+    expect(err.message).toBe("http 429: slow down");
+  });
+
+  it("asks for a token once when many calls start together", async () => {
+    const withSecret = new JibbleHttpClient({ ...DEFAULT_URLS, clientId: "cid", clientSecret: "csecret" });
+    answer([{ json: { access_token: "jwt", expires_in: 3600 } }, { json: { id: "e" } }]);
+    await Promise.all([withSecret.clock("a", "In"), withSecret.clock("b", "In"), withSecret.clock("c", "In")]);
+    expect(calls.filter((c) => c.url.includes("/connect/token"))).toHaveLength(1);
+    expect(calls.filter((c) => c.url.endsWith("/v1/TimeEntries"))).toHaveLength(3);
+  });
+
   it("reports a dead connection as a retryable error", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("fetch failed"); }));
     const err = (await token.clock("p", "In").catch((e: unknown) => e)) as JibbleError;

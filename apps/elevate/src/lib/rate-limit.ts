@@ -18,6 +18,17 @@ export const POLICIES = {
   presence: { requests: 60, window: "10 m" },
 } satisfies Record<string, Policy>;
 
+/**
+ * Attendance must never depend on the rate limiter: if the limiter is not configured or cannot be reached, the clock and the
+ * "still here" ping keep working (the clock has its own state checks and lock). Login, uploads and the rest still fail closed.
+ */
+const FAIL_OPEN: ReadonlySet<keyof typeof POLICIES> = new Set(["clock", "presence"]);
+
+/** Whether a request may go ahead when the limiter is missing or down. */
+export function allowWhenLimiterUnavailable(policy: keyof typeof POLICIES, production: boolean): boolean {
+  return FAIL_OPEN.has(policy) || !production;
+}
+
 let redis: Redis | null | undefined;
 const limiters = new Map<string, Ratelimit>();
 
@@ -41,7 +52,7 @@ export async function clientIp(): Promise<string> {
  */
 export async function allowRequest(policy: keyof typeof POLICIES, key: string): Promise<boolean> {
   const client = getRedis();
-  if (!client) return process.env.NODE_ENV !== "production";
+  if (!client) return allowWhenLimiterUnavailable(policy, process.env.NODE_ENV === "production");
 
   let limiter = limiters.get(policy);
   if (!limiter) {
@@ -54,6 +65,11 @@ export async function allowRequest(policy: keyof typeof POLICIES, key: string): 
     });
     limiters.set(policy, limiter);
   }
-  const { success } = await limiter.limit(key);
-  return success;
+  try {
+    const { success } = await limiter.limit(key);
+    return success;
+  } catch {
+    console.error("rate limiter unavailable:", policy); // no key or request data
+    return allowWhenLimiterUnavailable(policy, true);
+  }
 }

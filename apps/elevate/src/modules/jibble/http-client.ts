@@ -4,7 +4,7 @@
 // /v1/TimeEntries/EndBreak, TimeAttendance /v2/TimesheetsSummary. Auth is a Bearer token: a personal access token
 // (JIBBLE_ACCESS_TOKEN), or a token fetched with a Client ID and Secret (client_credentials) when the plan has them.
 
-import { describeFailure, isRetryable, parseDuration, pickBreak, type JibbleAction, type JibbleBreak } from "./mirror-rules";
+import { describeFailure, isRetryable, parseDuration, pickBreak, type JibbleAction, type JibbleBreak, type JibbleState } from "./mirror-rules";
 
 export type JibblePerson = { id: string; email: string | null; fullName: string; status: string | null };
 export type JibbleDay = { personId: string; date: string; trackedMinutes: number };
@@ -14,6 +14,8 @@ export type ClockOptions = { breakMinutes?: number | null; previousEntryId?: str
 
 export interface JibbleClient {
   listPeople(): Promise<JibblePerson[]>;
+  /** Where a person is in Jibble right now (from their latest time entry); null when they have none. */
+  latestState(personId: string): Promise<JibbleState | null>;
   /** The breaks available to one person in Jibble (they come from the person's schedule). */
   listBreaks(personId: string): Promise<JibbleBreak[]>;
   /** Sends one clock action for a person. Returns the new time entry's id when Jibble gives one. */
@@ -28,6 +30,8 @@ export class JibbleError extends Error {
     public readonly code: string,
     /** What Jibble said was wrong, shortened. For the local probe script only: never stored, logged or shown in the app. */
     public readonly detail: string | null = null,
+    /** How long Jibble asked us to wait before trying again (a "slow down" answer), in milliseconds. */
+    public readonly retryAfterMs: number | null = null,
   ) {
     super(describeFailure(status, code));
     this.name = "JibbleError";
@@ -95,11 +99,20 @@ const PLATFORM = { clientVersion: "elevate", os: "server", deviceModel: "server"
 export class JibbleHttpClient implements JibbleClient {
   private cached: { token: string; expiresAt: number } | null = null;
   private breakCache = new Map<string, { at: number; breaks: JibbleBreak[] }>();
+  /** One token request at a time, so a burst of calls on a cold server asks for a token once, not once per call. */
+  private tokenRequest: Promise<string> | null = null;
   constructor(private readonly config: JibbleConfig) {}
 
   private async token(): Promise<string> {
     if (this.config.accessToken) return this.config.accessToken;
     if (this.cached && this.cached.expiresAt > Date.now() + 60_000) return this.cached.token;
+    this.tokenRequest ??= this.fetchToken().finally(() => {
+      this.tokenRequest = null;
+    });
+    return this.tokenRequest;
+  }
+
+  private async fetchToken(): Promise<string> {
     const body = new URLSearchParams({ grant_type: "client_credentials", client_id: this.config.clientId ?? "", client_secret: this.config.clientSecret ?? "" });
     const json = (await this.send("POST", `${this.config.identityUrl}/connect/token`, { form: body }, false)) as Json;
     const token = typeof json.access_token === "string" ? json.access_token : null;
@@ -121,7 +134,8 @@ export class JibbleHttpClient implements JibbleClient {
     }
     if (!response.ok) {
       const detail = await response.text().then((t) => explain(t), () => null);
-      throw new JibbleError(response.status, response.status === 401 ? "token rejected" : response.status === 403 ? "not allowed" : "request refused", detail);
+      const seconds = Number(response.headers.get("retry-after"));
+      throw new JibbleError(response.status, response.status === 401 ? "token rejected" : response.status === 403 ? "not allowed" : response.status === 429 ? "slow down" : "request refused", detail, Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 3600) * 1000 : null);
     }
     if (response.status === 204) return {};
     return (await response.json().catch(() => ({}))) as unknown;
@@ -136,6 +150,11 @@ export class JibbleHttpClient implements JibbleClient {
       if (rows.length < 200) break;
     }
     return out;
+  }
+
+  async latestState(personId: string): Promise<JibbleState | null> {
+    const entry = (await this.send("GET", `${this.config.timeTrackingUrl}/v1/People(${encodeURIComponent(personId)})/LatestTimeEntry?$select=type,time`)) as Json;
+    return entry.type === "In" ? "in" : entry.type === "StartBreak" ? "break" : entry.type === "Out" ? "out" : null;
   }
 
   async listBreaks(personId: string): Promise<JibbleBreak[]> {

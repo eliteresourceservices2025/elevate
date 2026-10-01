@@ -1,8 +1,8 @@
 import "server-only";
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
-import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runExtraHoursReminders, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts, runWeeklyExtraHoursNotice } from "@/modules/attendance/jobs";
+import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runExtraHoursReminders, runHrApprovalSummary, runLeadApprovalReminders, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts, runWeeklyExtraHoursNotice } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
-import { processMirrorQueue, purgeJibbleData, runJibbleComparison, syncJibblePeople } from "@/modules/jibble/jobs";
+import { processMirrorQueue, purgeJibbleData, runJibbleComparison, runJibbleRepair, runJibbleUnmatchedReport, syncJibblePeople } from "@/modules/jibble/jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
 import { runLeaveExpiry } from "@/modules/timeoff/jobs";
 import { runLeaveRequestReminders } from "@/modules/timeoff/request-jobs";
@@ -97,6 +97,18 @@ export const jibbleMirror = inngest.createFunction(
   async ({ step }) => step.run("send", () => processMirrorQueue()),
 );
 
+/** Every 10 minutes: put Jibble back in step with ELEVATE for people who are working (or just clocked out) on teams that use Jibble. */
+export const jibbleRepair = inngest.createFunction(
+  { id: "jibble-repair", triggers: { cron: "*/10 * * * *" } },
+  async ({ step }) => step.run("repair", () => runJibbleRepair()),
+);
+
+/** Daily at 3:20 AM: tell HR who clocked in with no Jibble account yesterday (they worked without screenshots). */
+export const jibbleUnmatched = inngest.createFunction(
+  { id: "jibble-unmatched", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 20 3 * * *` } },
+  async ({ step }) => step.run("report", () => runJibbleUnmatchedReport()),
+);
+
 /** Daily at 3:00 AM: match people to Jibble accounts by work email. */
 export const jibblePeopleSync = inngest.createFunction(
   { id: "jibble-people-sync", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 0 3 * * *` } },
@@ -125,4 +137,16 @@ export const extraHoursWeekly = inngest.createFunction(
   async ({ step }) => step.run("summarize", () => runWeeklyExtraHoursNotice()),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, extraHoursReminders, extraHoursWeekly];
+/** Mondays at 8:00 AM Manila: remind each lead of unapproved hours from last week. */
+export const approvalReminders = inngest.createFunction(
+  { id: "approval-reminders", triggers: { cron: `TZ=${SECONDARY_TIMEZONE} 0 8 * * 1` } },
+  async ({ step }) => step.run("remind", () => runLeadApprovalReminders()),
+);
+
+/** Wednesdays at 8:00 AM Manila: tell HR who is still holding up last week's hours. */
+export const approvalSummary = inngest.createFunction(
+  { id: "approval-summary", triggers: { cron: `TZ=${SECONDARY_TIMEZONE} 0 8 * * 3` } },
+  async ({ step }) => step.run("summarize", () => runHrApprovalSummary()),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary];
