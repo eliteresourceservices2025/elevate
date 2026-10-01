@@ -13,6 +13,8 @@ export const JOBS: Record<string, JobInfo> = {
   "acknowledgment-reminders": { label: "Acknowledgment reminders", everyMinutes: DAILY },
   "daily-digest": { label: "Daily notification digest", everyMinutes: DAILY * 3 }, // weekdays only: a weekend is a gap
   "email-sender": { label: "Email sender", everyMinutes: 15 },
+  "candidate-email-sender": { label: "Applicant email sender", everyMinutes: 10 },
+  "recruiting-retention": { label: "Applicant data retention", everyMinutes: DAILY },
   "leave-expiry": { label: "Prize day expiry", everyMinutes: DAILY },
   "leave-request-reminders": { label: "Time off request reminders", everyMinutes: DAILY },
   "attendance-rebuild": { label: "Nightly attendance rebuild", everyMinutes: DAILY },

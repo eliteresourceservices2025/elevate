@@ -16,6 +16,8 @@ export const POLICIES = {
   download: { requests: 60, window: "10 m" },
   clock: { requests: 30, window: "10 m" },
   presence: { requests: 60, window: "10 m" },
+  /** Public applications, per address. */
+  careers: { requests: 5, window: "1 h" },
 } satisfies Record<string, Policy>;
 
 /**

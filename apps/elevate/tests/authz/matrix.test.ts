@@ -6,8 +6,7 @@ import { ROLE_SLUGS, type RoleSlug, type Scope } from "@/lib/roles";
 // from the registry. If you add or change an action, update this table in the same commit.
 // Column order: super_admin, hr_admin, team_lead, recruiter, executive, employee.
 // A = all, T = team, O = own, "-" = no access.
-// Deferred (grant nothing yet): team lead "assigned openings", recruiter "hand-off only",
-// executive "summary" for recruiting and reviews.
+// Deferred (grant nothing yet): recruiter "hand-off only" for onboarding, executive "summary" for reviews.
 const EXPECTED: Record<string, string> = {
   "people.view_directory": "A A A A A A",
   "people.view_profile": "A A T - - O",
@@ -77,7 +76,14 @@ const EXPECTED: Record<string, string> = {
   "extra_hours.decide": "A A T - - -",
   "hours.approve": "A A T - - -",
   "hours.export": "A A - - - -",
-  "recruiting.view": "A A - A - -",
+  "recruiting.view": "A A T A - -", // a lead's team scope = on that opening's hiring team
+  "recruiting.summary": "A A T A A -", // counts only for the executive
+  "recruiting.manage_openings": "A A - A - -",
+  "recruiting.move": "A A - A - -",
+  "recruiting.interview": "A A - A - -",
+  "recruiting.scorecard": "O O O O - -", // only your own, only as an interviewer on that interview
+  "recruiting.download_resume": "A A T A - -",
+  "recruiting.manage_retention": "A A - - - -",
   "onboarding.manage": "A A T - - -",
   "onboarding.view_own_tasks": "- - - - - O",
   "reviews.view": "A A T - - O",

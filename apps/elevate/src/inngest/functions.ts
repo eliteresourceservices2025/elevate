@@ -9,6 +9,7 @@ import { runLeaveRequestReminders } from "@/modules/timeoff/request-jobs";
 import { runDailyDigest } from "@/modules/notifications/digest";
 import { flushEmailQueue } from "@/modules/notifications/email-queue";
 import { todayInZone } from "@/modules/org/service";
+import { runRecruitingRetention, sendCandidateEmails } from "@/modules/recruiting/jobs";
 import { runHealthCheck, trackJob as track } from "@/modules/health/service";
 import { inngest } from "./client";
 
@@ -156,4 +157,16 @@ export const healthCheck = inngest.createFunction(
   async ({ step }) => step.run("check", () => track("health-check", () => runHealthCheck())),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck];
+/** Every 10 minutes: send queued applicant emails (received, rejection, interview) under their own daily cap. */
+export const candidateEmailSender = inngest.createFunction(
+  { id: "candidate-email-sender", triggers: { cron: "*/10 * * * *" } },
+  async ({ step }) => step.run("send", () => track("candidate-email-sender", () => sendCandidateEmails())),
+);
+
+/** Daily at 3:30 AM Phoenix: remove personal data of applicants past the retention period (only when HR has switched it on). */
+export const recruitingRetention = inngest.createFunction(
+  { id: "recruiting-retention", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 30 3 * * *` } },
+  async ({ step }) => step.run("purge", () => track("recruiting-retention", () => runRecruitingRetention())),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention];

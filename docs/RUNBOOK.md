@@ -58,9 +58,19 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 
 **Emergency stop:** Attendance > Jibble > **Pause sending to Jibble**. The ELEVATE clock keeps working; only the calls to Jibble stop.
 
+## 5b. Recruiting problems
+
+| What you see | What it means | What to do |
+|---|---|---|
+| An applicant says the apply form failed | The form allows 5 applications an hour per internet connection, a resume must be a PDF or DOCX up to 4 MB, and the privacy box must be ticked. | Ask them to try a smaller file or wait an hour; or add them yourself later. |
+| Applicant emails (received, interview) are not arriving | The email service is not configured, or the applicant email cap for the day (default 20) is used up. They wait in the queue and go out when possible. | Check the email settings on the host; the Health page shows the "Applicant email sender" job. |
+| Nothing is being deleted for old applicants | Retention is off until HR turns it on, on purpose. | Get counsel's approval of the periods, then switch it on in Recruiting > Applicant data retention. |
+| A resume will not open | The link lasts 60 seconds. | Click "Open resume" again. |
+
 ## 6. Deploying changes (developer)
 
 - Deploy at the **Manila shift change**, not in the middle of a night shift (that is the US day, when most VAs are working). Check Attendance > Health before and after.
+- A new environment needs the private bucket `recruiting-docs` (`pnpm storage:setup`) before the careers form can take resumes.
 - Database changes must be safe to run while people clock in (add columns and tables; never rename or drop in one step).
 - A failed deploy is rolled back from the host's dashboard, and the Health tab confirms jobs are running again.
 - The host's own scheduler calls `/api/cron/backstop` every 15 minutes (needs `CRON_SECRET`). If the job service (Inngest) is down, this still sends waiting Jibble calls, repairs Jibble and sends the health alert.
