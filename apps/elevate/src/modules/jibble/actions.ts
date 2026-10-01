@@ -22,7 +22,7 @@ const friendly = (e: unknown) =>
   e instanceof JibbleError ? (e.status === 401 ? "Jibble rejected the access token. It may have expired." : e.status === 403 ? "Jibble says this token is not allowed to do that." : `Jibble did not answer properly (${e.message}).`) : "Could not reach Jibble.";
 
 /** Checks the token works by reading the people list. Reads names only to count them. */
-export async function testJibbleConnection(): Promise<ActionResult<{ people: number }>> {
+export async function testJibbleConnection(): Promise<ActionResult<{ people: number; breaks: number | null }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "jibble.manage");
@@ -30,8 +30,10 @@ export async function testJibbleConnection(): Promise<ActionResult<{ people: num
     if (!client) return fail(NOT_SET_UP);
     try {
       const people = await client.listPeople();
-      await writeAudit({ actor, action: "jibble.test", targetType: "integration", metadata: { people: people.length } });
-      return { ok: true, data: { people: people.length } };
+      // Native breaks need break types created in Jibble; a failure to read them is not a failed connection.
+      const breaks = await client.listBreaks().then((b) => b.length, () => null);
+      await writeAudit({ actor, action: "jibble.test", targetType: "integration", metadata: { people: people.length, breaks } });
+      return { ok: true, data: { people: people.length, breaks } };
     } catch (error) {
       return fail(friendly(error));
     }

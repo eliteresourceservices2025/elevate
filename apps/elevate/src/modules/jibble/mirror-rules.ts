@@ -8,12 +8,31 @@ export type JibbleAction = "In" | "Out" | "StartBreak" | "EndBreak";
 
 /**
  * How a break is shown to Jibble so screenshots stop while the person is on break:
- * clock = clock out at the start and back in at the end (works on every plan); native = Jibble's own break entries
- * (needs breaks set up in Jibble); off = breaks are not mirrored (screenshots keep running during a break).
+ * native = Jibble's own break entries (the default; needs break types created in Jibble, see pickBreak);
+ * clock = clock out at the start and back in at the end (works with no break types set up);
+ * off = breaks are not mirrored (screenshots keep running during a break).
  */
 export type BreakMode = "clock" | "native" | "off";
 
-export const parseBreakMode = (value: string | undefined): BreakMode => (value === "native" || value === "off" ? value : "clock");
+export const parseBreakMode = (value: string | undefined): BreakMode => (value === "clock" || value === "off" ? value : "native");
+
+/** A break type defined in Jibble (Organization Settings > Breaks). A null length means no time limit. */
+export type JibbleBreak = { id: string; name: string; durationMinutes: number | null };
+
+/**
+ * Which Jibble break type matches an ELEVATE break of a chosen length (15, 30 or 60 minutes, or null for no limit): the one with
+ * exactly that length, else the shortest one that is long enough, else a break with no limit, else the longest. Null when Jibble has none.
+ */
+export function pickBreak(breaks: readonly JibbleBreak[], plannedMinutes: number | null): JibbleBreak | null {
+  if (breaks.length === 0) return null;
+  const longestFirst = [...breaks].sort((a, b) => (b.durationMinutes ?? 0) - (a.durationMinutes ?? 0));
+  const unlimited = breaks.find((b) => b.durationMinutes === null);
+  if (plannedMinutes === null) return unlimited ?? longestFirst[0];
+  const exact = breaks.find((b) => b.durationMinutes === plannedMinutes);
+  if (exact) return exact;
+  const longEnough = breaks.filter((b) => b.durationMinutes !== null && b.durationMinutes >= plannedMinutes).sort((a, b) => (a.durationMinutes ?? 0) - (b.durationMinutes ?? 0))[0];
+  return longEnough ?? unlimited ?? longestFirst[0];
+}
 
 export type MirrorInput = { id: string; type: ClockType };
 export type MirrorStep = { eventId: string; action: JibbleAction };

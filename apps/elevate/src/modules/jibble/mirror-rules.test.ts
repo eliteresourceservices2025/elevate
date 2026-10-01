@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ATTEMPTS, backoffMs, describeFailure, isMismatch, isRetryable, mirrorSteps, parseBreakMode, parseDuration } from "./mirror-rules";
+import { MAX_ATTEMPTS, backoffMs, describeFailure, isMismatch, isRetryable, mirrorSteps, parseBreakMode, parseDuration, pickBreak } from "./mirror-rules";
 import { configFromEnv } from "./http-client";
 
 const ev = (id: string, type: "clock_in" | "break_start" | "break_end" | "clock_out") => ({ id, type });
@@ -27,11 +27,36 @@ describe("which calls go to Jibble", () => {
     expect(mirrorSteps([ev("e", "break_end"), ev("o", "clock_out")], "native").map((s) => s.action)).toEqual(["EndBreak", "Out"]);
   });
 
-  it("reads the break mode and defaults to clock", () => {
-    expect(parseBreakMode(undefined)).toBe("clock");
+  it("reads the break mode and defaults to Jibble's own breaks", () => {
+    expect(parseBreakMode(undefined)).toBe("native");
     expect(parseBreakMode("native")).toBe("native");
+    expect(parseBreakMode("clock")).toBe("clock");
     expect(parseBreakMode("off")).toBe("off");
-    expect(parseBreakMode("anything else")).toBe("clock");
+    expect(parseBreakMode("anything else")).toBe("native");
+  });
+});
+
+describe("matching an ELEVATE break to a Jibble break type", () => {
+  const b = (name: string, durationMinutes: number | null) => ({ id: name, name, durationMinutes });
+  const all = [b("15 minutes", 15), b("30 minutes", 30), b("1 hour", 60), b("Open", null)];
+
+  it("takes the break of exactly the chosen length, and the open one for no limit", () => {
+    expect(pickBreak(all, 15)?.name).toBe("15 minutes");
+    expect(pickBreak(all, 30)?.name).toBe("30 minutes");
+    expect(pickBreak(all, 60)?.name).toBe("1 hour");
+    expect(pickBreak(all, null)?.name).toBe("Open");
+  });
+
+  it("falls back to the shortest break that is long enough, then an open one, then the longest", () => {
+    expect(pickBreak([b("20 minutes", 20), b("1 hour", 60)], 15)?.name).toBe("20 minutes");
+    expect(pickBreak([b("15 minutes", 15), b("Open", null)], 60)?.name).toBe("Open");
+    expect(pickBreak([b("15 minutes", 15), b("30 minutes", 30)], 60)?.name).toBe("30 minutes");
+    expect(pickBreak([b("15 minutes", 15), b("30 minutes", 30)], null)?.name).toBe("30 minutes"); // no open one: the longest
+  });
+
+  it("returns nothing when Jibble has no break types", () => {
+    expect(pickBreak([], 15)).toBeNull();
+    expect(pickBreak([], null)).toBeNull();
   });
 });
 

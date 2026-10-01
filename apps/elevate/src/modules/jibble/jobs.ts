@@ -14,7 +14,7 @@ import { jibbleDaily, jibbleLinkLog, jibblePeople } from "./schema";
 const DAY_MS = 86_400_000;
 const ONE_DAY_ALERT = "jibble.failing";
 
-type Due = { id: string; employee_id: string; action: JibbleAction; attempts: number; next_attempt_at: Date; jibble_person_id: string | null };
+type Due = { id: string; employee_id: string; action: JibbleAction; attempts: number; next_attempt_at: Date; jibble_person_id: string | null; planned: number | null; previous_entry: string | null };
 
 /** HR hears about Jibble trouble at most once a day. */
 async function alertHr(title: string, body: string): Promise<void> {
@@ -36,14 +36,19 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
   if (!client) return run;
 
   const rows = (await db.execute(sql`
-    select l.id, l.employee_id, l.action, l.attempts, l.next_attempt_at, p.jibble_person_id
-    from time.jibble_link_log l left join time.jibble_people p on p.employee_id = l.employee_id
+    select l.id, l.employee_id, l.action, l.attempts, l.next_attempt_at, p.jibble_person_id, ev.planned_break_minutes as planned,
+      -- the entry that started the break, so ending it can point at it
+      (select l2.jibble_entry_id from time.jibble_link_log l2 where l2.employee_id = l.employee_id and l2.action = 'StartBreak' and l2.status = 'sent' and l2.created_at < l.created_at
+        order by l2.created_at desc limit 1) as previous_entry
+    from time.jibble_link_log l left join time.jibble_people p on p.employee_id = l.employee_id left join time.clock_events ev on ev.id = l.event_id
     where l.status = 'queued' order by l.employee_id, l.created_at limit 500`)) as unknown as Due[];
 
   const byPerson = new Map<string, Due[]>();
   for (const r of rows) byPerson.set(r.employee_id, [...(byPerson.get(r.employee_id) ?? []), r]);
 
   let authProblem = false;
+  /** The break-start entry sent earlier in this same run, per person (the database list above was read before it was sent). */
+  const startedBreak = new Map<string, string | null>();
   let terminal = 0;
   for (const list of byPerson.values()) {
     for (const row of list) {
@@ -54,7 +59,9 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
         continue;
       }
       try {
-        const { entryId } = await client.clock(row.jibble_person_id, row.action);
+        // A break start sends the length chosen in ELEVATE (to pick the matching Jibble break); a break end points at the entry that started it.
+        const { entryId } = await client.clock(row.jibble_person_id, row.action, row.action === "StartBreak" ? { breakMinutes: row.planned === null ? null : Number(row.planned) } : row.action === "EndBreak" ? { previousEntryId: startedBreak.get(row.employee_id) ?? row.previous_entry } : undefined);
+        if (row.action === "StartBreak") startedBreak.set(row.employee_id, entryId);
         await db.update(jibbleLinkLog).set({ status: "sent", attempts: row.attempts + 1, sentAt: new Date(), jibbleEntryId: entryId, lastError: null }).where(eq(jibbleLinkLog.id, row.id));
         run.sent += 1;
       } catch (error) {

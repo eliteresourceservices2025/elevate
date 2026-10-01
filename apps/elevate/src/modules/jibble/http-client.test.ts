@@ -42,11 +42,37 @@ describe("Jibble HTTP client", () => {
     expect(JSON.parse(calls[1].body!)).toMatchObject({ type: "Out" });
   });
 
-  it("ends a break through the EndBreak endpoint", async () => {
+  it("ends a break through the EndBreak endpoint, pointing at the entry that started it", async () => {
     answer([{ json: {} }]);
-    await token.clock("person-1", "EndBreak");
+    await token.clock("person-1", "EndBreak", { previousEntryId: "entry-9" });
     expect(calls[0].url).toBe("https://time-tracking.prod.jibble.io/v1/TimeEntries/EndBreak");
-    expect(JSON.parse(calls[0].body!).model).toMatchObject({ personId: "person-1" });
+    expect(JSON.parse(calls[0].body!).model).toMatchObject({ personId: "person-1", previousTimeEntryId: "entry-9" });
+  });
+
+  it("reads the break types and starts a break with the one that matches the chosen length, remembering the list", async () => {
+    answer([
+      { json: { value: [{ id: "b-15", name: "15 minutes", duration: "PT15M" }, { id: "b-60", name: "1 hour", duration: "PT1H" }, { id: "b-open", name: "Open", duration: null }] } },
+      { json: { id: "entry-1" } },
+      { json: { id: "entry-2" } },
+      { json: { id: "entry-3" } },
+    ]);
+    expect(await token.clock("person-1", "StartBreak", { breakMinutes: 60 })).toEqual({ entryId: "entry-1" });
+    expect(calls[0].url).toBe("https://time-tracking.prod.jibble.io/v1/Break");
+    expect(calls[1]).toMatchObject({ method: "POST", url: "https://time-tracking.prod.jibble.io/v1/TimeEntries" });
+    expect(JSON.parse(calls[1].body!)).toMatchObject({ personId: "person-1", type: "StartBreak", breakId: "b-60" });
+    await token.clock("person-1", "StartBreak", { breakMinutes: null });
+    expect(JSON.parse(calls[2].body!).breakId).toBe("b-open");
+    expect(calls.filter((c) => c.url.endsWith("/v1/Break"))).toHaveLength(1); // the list was remembered
+  });
+
+  it("refuses to start a break when Jibble has no break types, with a clear error that is not retried", async () => {
+    answer([{ json: { value: [] } }]);
+    const fresh = new JibbleHttpClient({ ...DEFAULT_URLS, accessToken: "pat-123" });
+    const err = (await fresh.clock("person-1", "StartBreak", { breakMinutes: 15 }).catch((e: unknown) => e)) as JibbleError;
+    expect(err).toBeInstanceOf(JibbleError);
+    expect(err.message).toContain("no break type in Jibble");
+    expect(err.retryable).toBe(false);
+    expect(calls).toHaveLength(1); // nothing was sent to the time entries endpoint
   });
 
   it("reads tracked minutes per person and day from the timesheet summary", async () => {

@@ -4,15 +4,20 @@
 // /v1/TimeEntries/EndBreak, TimeAttendance /v2/TimesheetsSummary. Auth is a Bearer token: a personal access token
 // (JIBBLE_ACCESS_TOKEN), or a token fetched with a Client ID and Secret (client_credentials) when the plan has them.
 
-import { describeFailure, isRetryable, parseDuration, type JibbleAction } from "./mirror-rules";
+import { describeFailure, isRetryable, parseDuration, pickBreak, type JibbleAction, type JibbleBreak } from "./mirror-rules";
 
 export type JibblePerson = { id: string; email: string | null; fullName: string; status: string | null };
 export type JibbleDay = { personId: string; date: string; trackedMinutes: number };
 
+/** Extra facts for a break call: the length ELEVATE's break was set to (to pick the matching Jibble break), and the entry that started it. */
+export type ClockOptions = { breakMinutes?: number | null; previousEntryId?: string | null };
+
 export interface JibbleClient {
   listPeople(): Promise<JibblePerson[]>;
+  /** The break types defined in Jibble. */
+  listBreaks(): Promise<JibbleBreak[]>;
   /** Sends one clock action for a person. Returns the new time entry's id when Jibble gives one. */
-  clock(personId: string, action: JibbleAction): Promise<{ entryId: string | null }>;
+  clock(personId: string, action: JibbleAction, options?: ClockOptions): Promise<{ entryId: string | null }>;
   /** Tracked minutes per person and day, for the nightly comparison. Totals only: nothing else is read. */
   dailyTracked(personIds: string[], fromDate: string, toDate: string): Promise<JibbleDay[]>;
 }
@@ -69,6 +74,7 @@ type Json = Record<string, unknown>;
 
 export class JibbleHttpClient implements JibbleClient {
   private cached: { token: string; expiresAt: number } | null = null;
+  private breakCache: { at: number; breaks: JibbleBreak[] } | null = null;
   constructor(private readonly config: JibbleConfig) {}
 
   private async token(): Promise<string> {
@@ -109,9 +115,29 @@ export class JibbleHttpClient implements JibbleClient {
     return out;
   }
 
-  async clock(personId: string, action: JibbleAction): Promise<{ entryId: string | null }> {
+  async listBreaks(): Promise<JibbleBreak[]> {
+    const page = (await this.send("GET", `${this.config.timeTrackingUrl}/v1/Break`)) as { value?: Json[] };
+    return (page.value ?? []).map((b) => ({ id: String(b.id), name: String(b.name ?? ""), durationMinutes: parseDuration(typeof b.duration === "string" ? b.duration : null) }));
+  }
+
+  /** The break types, remembered for ten minutes (they rarely change and every break start needs them). */
+  private async breaks(): Promise<JibbleBreak[]> {
+    if (this.breakCache && Date.now() - this.breakCache.at < 10 * 60_000) return this.breakCache.breaks;
+    const breaks = await this.listBreaks();
+    this.breakCache = { at: Date.now(), breaks };
+    return breaks;
+  }
+
+  async clock(personId: string, action: JibbleAction, options: ClockOptions = {}): Promise<{ entryId: string | null }> {
     // clientType "Web" because the entry is made by a server on the person's behalf; Jibble stamps the time itself.
-    const entry = { personId, type: action === "EndBreak" ? "In" : action, clientType: "Web", platform: null };
+    let entry: Record<string, unknown> = { personId, type: action === "EndBreak" ? "In" : action, clientType: "Web", platform: null };
+    if (action === "StartBreak") {
+      // Jibble starts a break of one of the organization's break types: pick the one that matches the length chosen in ELEVATE.
+      const chosen = pickBreak(await this.breaks(), options.breakMinutes ?? null);
+      if (!chosen) throw new JibbleError(422, "no break type in Jibble");
+      entry = { ...entry, breakId: chosen.id };
+    }
+    if (action === "EndBreak" && options.previousEntryId) entry = { ...entry, previousTimeEntryId: options.previousEntryId };
     const url = action === "EndBreak" ? `${this.config.timeTrackingUrl}/v1/TimeEntries/EndBreak` : `${this.config.timeTrackingUrl}/v1/TimeEntries`;
     const json = (await this.send("POST", url, { json: action === "EndBreak" ? { model: entry } : entry })) as Json;
     return { entryId: typeof json.id === "string" ? json.id : null };

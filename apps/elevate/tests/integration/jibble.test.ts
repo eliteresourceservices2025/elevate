@@ -39,7 +39,8 @@ const DAY = 86_400_000;
 const iso = (agoMs: number) => new Date(Date.now() - agoMs).toISOString();
 
 class FakeJibble implements JibbleClient {
-  calls: { personId: string; action: string }[] = [];
+  calls: { personId: string; action: string; options?: { breakMinutes?: number | null; previousEntryId?: string | null } }[] = [];
+  breaks: { id: string; name: string; durationMinutes: number | null }[] = [];
   people: JibblePerson[] = [];
   tracked: JibbleDay[] = [];
   /** Return an error to make a call fail. */
@@ -47,10 +48,13 @@ class FakeJibble implements JibbleClient {
   async listPeople() {
     return this.people;
   }
-  async clock(personId: string, action: string) {
+  async listBreaks() {
+    return this.breaks;
+  }
+  async clock(personId: string, action: string, options?: { breakMinutes?: number | null; previousEntryId?: string | null }) {
     const f = this.fail(personId, action);
     if (f) throw f;
-    this.calls.push({ personId, action });
+    this.calls.push({ personId, action, options });
     return { entryId: `entry-${this.calls.length}` };
   }
   async dailyTracked() {
@@ -77,6 +81,7 @@ async function person(label: string, opts: { teamId?: string; mapped?: boolean }
     insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id, team_id)
     values (${label}, ${uniq(label)}, ${user.email}, 'active', ${user.id}, ${opts.teamId ?? null}) returning id`);
   const jibbleId = randomUUID();
+  mapped.set(e.id, jibbleId);
   if (opts.mapped !== false) await db.execute(sql`insert into time.jibble_people (employee_id, jibble_person_id, matched_by) values (${e.id}, ${jibbleId}, 'manual')`);
   return { user, employeeId: e.id, jibbleId };
 }
@@ -92,6 +97,8 @@ async function withMonitoring<T>(fn: () => Promise<T>): Promise<T> {
     await db.execute(sql`update docs.policies set archived_at = now() where id = ${p.id}`);
   }
 }
+const fayJibbleId = (employeeId: string) => mapped.get(employeeId)!;
+const mapped = new Map<string, string>();
 const logOf = (employeeId: string) => rows<{ action: string; status: string; attempts: number; last_error: string | null }>(sql`select action, status, attempts, last_error from time.jibble_link_log where employee_id = ${employeeId} order by created_at, action`);
 const turnOn = (hr: TestUser, teamId: string, on = true) => {
   as(hr);
@@ -105,6 +112,7 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   fake.calls = [];
+  fake.breaks = [];
   fake.people = [];
   fake.tracked = [];
   fake.fail = () => null;
@@ -187,9 +195,10 @@ describe("when a clock click is queued for Jibble", () => {
     });
   });
 
-  it("stops screenshots on a break (clock mode), sends only the Out when clocking out on a break, and can use native breaks or none", async () => {
+  it("uses Jibble's own breaks by default, can clock out and in for a break instead, sends only the Out when clocking out on a break, or sends no breaks", async () => {
     await withMonitoring(async () => {
       const team = await makeTeam();
+      process.env.JIBBLE_BREAK_MODE = "clock";
       await turnOn(hr, team);
       const bea = await person("Bea", { teamId: team });
       as(bea.user);
@@ -209,13 +218,36 @@ describe("when a clock click is queued for Jibble", () => {
       await attendance.endBreak();
       expect((await logOf(cy.employeeId)).map((l) => l.action)).toEqual(["In"]);
 
-      process.env.JIBBLE_BREAK_MODE = "native";
+      delete process.env.JIBBLE_BREAK_MODE; // the default is Jibble's own breaks
       const di = await person("Di", { teamId: team });
       as(di.user);
       await attendance.clockIn({});
       await attendance.startBreak({});
       await attendance.endBreak();
       expect((await rows<{ action: string }>(sql`select action from time.jibble_link_log where employee_id = ${di.employeeId} order by created_at`)).map((r) => r.action)).toEqual(["In", "StartBreak", "EndBreak"]);
+    });
+  });
+
+  it("sends the break length when a break starts, and points the break end at the entry that started it", async () => {
+    await withMonitoring(async () => {
+      const team = await makeTeam();
+      await turnOn(hr, team);
+      const fay = await person("Fay", { teamId: team });
+      as(fay.user);
+      await attendance.clockIn({});
+      await attendance.startBreak({ breakMinutes: 30 });
+      await attendance.endBreak();
+      await attendance.startBreak({}); // no time limit
+      await attendance.endBreak();
+      await jobs.processMirrorQueue();
+      const mine = fake.calls.filter((c) => c.personId === fayJibbleId(fay.employeeId));
+      expect(mine.map((c) => c.action)).toEqual(["In", "StartBreak", "EndBreak", "StartBreak", "EndBreak"]);
+      expect(mine[1].options).toEqual({ breakMinutes: 30 });
+      expect(mine[3].options).toEqual({ breakMinutes: null });
+      // Each break end points at the entry its own break start returned (entry ids come from the fake in call order)
+      expect(mine[2].options?.previousEntryId).toMatch(/^entry-/);
+      expect(mine[4].options?.previousEntryId).toMatch(/^entry-/);
+      expect(mine[2].options?.previousEntryId).not.toBe(mine[4].options?.previousEntryId);
     });
   });
 
@@ -368,13 +400,15 @@ describe("matching people to Jibble accounts", () => {
   it("tests the connection and shows HR the overview", async () => {
     fake.people = [{ id: randomUUID(), email: "x@example.com", fullName: "X", status: "Active" }];
     as(hr);
-    expect(await actions.testJibbleConnection()).toEqual({ ok: true, data: { people: 1 } });
+    expect(await actions.testJibbleConnection()).toEqual({ ok: true, data: { people: 1, breaks: 0 } });
+    fake.breaks = [{ id: randomUUID(), name: "15 minute break", durationMinutes: 15 }];
+    expect(await actions.testJibbleConnection()).toEqual({ ok: true, data: { people: 1, breaks: 1 } });
     fake.listPeople = async () => {
       throw new JibbleError(401, "token rejected");
     };
     expect(await actions.testJibbleConnection()).toEqual({ ok: false, error: "Jibble rejected the access token. It may have expired." });
     const overview = await queries.getJibbleOverview();
-    expect(overview).toMatchObject({ configured: true, mode: "mirror", breakMode: "clock", toleranceMinutes: 15 });
+    expect(overview).toMatchObject({ configured: true, mode: "mirror", breakMode: "native", toleranceMinutes: 15 });
     expect(overview.people.length).toBeGreaterThan(0);
     process.env.JIBBLE_MIRROR_ENABLED = "false";
     expect((await queries.getJibbleOverview()).mode).toBe("fallback");

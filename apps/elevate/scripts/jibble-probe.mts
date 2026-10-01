@@ -3,8 +3,8 @@
 //
 //   pnpm jibble:probe                                  checks the token and counts the people (read only)
 //   pnpm jibble:probe test.person@example.com          also finds that person by email (read only)
-//   pnpm jibble:probe test.person@example.com --clock  also clocks them in, waits for you, then out
-//   add --native-break to try Jibble's own break entries instead of clocking out and in for a break
+//   pnpm jibble:probe test.person@example.com --clock  also clocks them in, takes a break with Jibble's own break types, then clocks out
+//   add --clock-break to test the other way: clocking out and in for the break (needs no break types in Jibble)
 //
 // Use a TEST person that is not a real VA: --clock creates real time entries in Jibble for that person.
 // Reads JIBBLE_ACCESS_TOKEN (or JIBBLE_CLIENT_ID and JIBBLE_CLIENT_SECRET) from the git-ignored file
@@ -19,7 +19,7 @@ config({ path: ".env.jibble.local" });
 const args = process.argv.slice(2);
 const email = args.find((a) => a.includes("@"))?.trim().toLowerCase();
 const doClock = args.includes("--clock");
-const nativeBreak = args.includes("--native-break");
+const nativeBreak = !args.includes("--clock-break");
 
 const cfg = configFromEnv(process.env);
 if (!cfg) {
@@ -41,6 +41,16 @@ try {
 }
 const withEmail = people.filter((p) => p.email).length;
 console.log(`OK: the token works. Jibble has ${people.length} people (${withEmail} with an email address).`);
+try {
+  const breaks = await client.listBreaks();
+  console.log(breaks.length === 0 ? "Break types in Jibble: none yet." : `Break types in Jibble: ${breaks.map((b) => `${b.name} (${b.durationMinutes === null ? "no limit" : `${b.durationMinutes} min`})`).join(", ")}.`);
+  if (breaks.length === 0 && nativeBreak) {
+    console.log("ELEVATE's breaks use Jibble's own break types. Create them in Jibble first (Unpaid: 15 minutes, 30 minutes, 1 hour and one with no time limit), or test the other way with --clock-break.");
+    if (doClock) process.exit(1);
+  }
+} catch (error) {
+  console.error(`Could not read the break types: ${error instanceof JibbleError ? error.message : "unexpected error"}.`);
+}
 
 if (!email) {
   console.log("Add a test person's email to look them up: pnpm jibble:probe test.person@example.com");
@@ -73,9 +83,11 @@ const pause = async (question: string) => {
   const answer = await ask.question(`${question} (press Enter to go on, or type q to stop) `);
   return answer.trim().toLowerCase() !== "q";
 };
-const send = async (action: JibbleAction) => {
+let lastEntry: string | null = null;
+const send = async (action: JibbleAction, options?: { breakMinutes?: number | null; previousEntryId?: string | null }) => {
   try {
-    const { entryId } = await client.clock(found.id, action);
+    const { entryId } = await client.clock(found.id, action, options);
+    if (action === "StartBreak") lastEntry = entryId;
     console.log(`  ${action}: sent${entryId ? ` (entry ${entryId})` : ""}.`);
     return true;
   } catch (error) {
@@ -90,9 +102,9 @@ if (!(await pause("Ready?"))) process.exit(0);
 if (await send("In")) {
   const running = await pause("1/3 Check the desktop app: does it show the person as clocked in and start capturing screenshots? Note it down.");
   if (running) {
-    if (await send(nativeBreak ? "StartBreak" : "Out")) {
-      const paused = await pause(`2/3 Check the desktop app: did screenshots stop for the break${nativeBreak ? "" : " (we clocked out)"}?`);
-      if (paused && (await send(nativeBreak ? "EndBreak" : "In"))) await pause("Check the desktop app: did screenshots start again?");
+    if (await send(nativeBreak ? "StartBreak" : "Out", nativeBreak ? { breakMinutes: 15 } : undefined)) {
+      const paused = await pause(`2/3 Check the desktop app: did screenshots stop for the break${nativeBreak ? " (a 15 minute break was started)" : " (we clocked out)"}?`);
+      if (paused && (await send(nativeBreak ? "EndBreak" : "In", nativeBreak ? { previousEntryId: lastEntry } : undefined))) await pause("Check the desktop app: did screenshots start again?");
     }
   }
   console.log("Finishing: clocking the test person out.");

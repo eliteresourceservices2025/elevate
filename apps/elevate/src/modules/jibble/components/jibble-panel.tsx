@@ -12,7 +12,7 @@ import { formatInZone } from "@/lib/time";
 import { retryJibbleSend, setJibblePerson, syncJibblePeopleNow, testJibbleConnection } from "../actions";
 import type { JibbleOverview } from "../queries";
 
-const BREAK_TEXT = { clock: "Breaks stop screenshots (clock out and back in)", native: "Breaks use Jibble's own break entries", off: "Breaks are not sent (screenshots keep running)" } as const;
+const BREAK_TEXT = { clock: "Breaks stop screenshots (clock out and back in)", native: "Breaks use Jibble's own break types, matched by length (create them in Jibble)", off: "Breaks are not sent (screenshots keep running)" } as const;
 const STATUS_VARIANT = new Map<string, "default" | "secondary" | "outline" | "destructive">([["sent", "default"], ["queued", "secondary"], ["failed", "destructive"], ["skipped", "outline"]]);
 
 /** The Jibble tab for HR: is it connected, who is matched, what was sent. Screenshots themselves stay in Jibble. */
@@ -46,7 +46,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
           policy is published{overview.monitoringPublished ? " (it is)" : " (it is not yet)"} and the switch for the team is on in the Rules tab ({overview.teamsOn} {overview.teamsOn === 1 ? "team is" : "teams are"} on). Each night ELEVATE compares totals and flags days that differ by more than {overview.toleranceMinutes} minutes.
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={pending || !overview.configured} onClick={() => run(() => testJibbleConnection(), (d) => `Connected. Jibble has ${(d as { people: number }).people} people.`)}>
+          <Button size="sm" disabled={pending || !overview.configured} onClick={() => run(() => testJibbleConnection(), (d) => { const r = d as { people: number; breaks: number | null }; return `Connected. Jibble has ${r.people} people${r.breaks === null ? "" : ` and ${r.breaks} break ${r.breaks === 1 ? "type" : "types"}`}.${overview.breakMode === "native" && r.breaks === 0 ? " Breaks will fail until you create break types in Jibble (Unpaid: 15 minutes, 30 minutes, 1 hour, and one with no limit)." : ""}`; })}>
             Test connection
           </Button>
           <Button size="sm" variant="outline" disabled={pending || !overview.configured} onClick={() => run(() => syncJibblePeopleNow(), (d) => `Matched ${(d as { matched: number }).matched} people; ${(d as { unmatched: number }).unmatched} still unmatched.`)}>
