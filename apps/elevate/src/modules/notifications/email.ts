@@ -13,6 +13,7 @@ class ResendSender implements EmailSender {
   constructor(
     private readonly apiKey: string,
     private readonly from: string,
+    private readonly replyTo?: string,
   ) {}
 
   async send(mail: OutgoingEmail) {
@@ -22,6 +23,7 @@ class ResendSender implements EmailSender {
       body: JSON.stringify({
         from: this.from,
         to: [mail.to],
+        ...(this.replyTo ? { reply_to: this.replyTo } : {}),
         subject: mail.subject,
         text: mail.text,
         html: mail.html,
@@ -45,5 +47,6 @@ export function getEmailSender(): EmailSender | null {
   if (override !== undefined) return override;
   const key = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
-  return key && from ? new ResendSender(key, from) : null;
+  // EMAIL_REPLY_TO: a monitored address, so people can answer (a one-way "no-reply" sender lowers trust with inbox providers).
+  return key && from ? new ResendSender(key, from, process.env.EMAIL_REPLY_TO || undefined) : null;
 }

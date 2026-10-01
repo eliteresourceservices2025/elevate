@@ -22,6 +22,29 @@ ${paragraphs}
   return { text, html, url };
 }
 
+/** The invitation to create an ELEVATE account. Plain: who invited them is not named, only that the address must match. */
+export function renderInvitation(input: { appUrl: string; expiresOn: string }) {
+  const url = `${input.appUrl.replace(/\/+$/, "")}/signup`;
+  const lines = [
+    "You have been invited to create an ELEVATE account for Elite Resource Services.",
+    "Open the link, choose Accept an invite, and sign up with this exact email address (the one this message was sent to).",
+    `The invitation is valid until ${input.expiresOn}.`,
+  ];
+  const text = ["Your ELEVATE invitation", ...lines, `Create your account: ${url}`, "If you were not expecting this, you can ignore it."].join("\n\n");
+  const paragraphs = lines.map((l) => `<p style="margin:0 0 8px;font-size:14px;line-height:1.5">${escapeHtml(l)}</p>`).join("\n");
+  const html = `<!doctype html><html><body style="margin:0;background:#f6f3fb;font-family:Inter,Arial,sans-serif;color:#1f1b2d">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px">
+<table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden">
+<tr><td style="background:#8A2BE2;padding:16px 24px;color:#ffffff;font-weight:700;font-size:18px">ELEVATE</td></tr>
+<tr><td style="padding:24px">
+<h1 style="margin:0 0 12px;font-size:18px">Your ELEVATE invitation</h1>
+${paragraphs}
+<p style="margin:20px 0"><a href="${escapeHtml(url)}" style="background:#8A2BE2;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;display:inline-block">Create your account</a></p>
+<p style="margin:0;font-size:12px;color:#6b6680">If you were not expecting this, you can ignore it.</p>
+</td></tr></table></td></tr></table></body></html>`;
+  return { subject: "Your ELEVATE invitation", text, html };
+}
+
 /** Which heading a notification kind is counted under in the digest. */
 export function digestGroup(kind: string): string {
   if (kind.startsWith("announcement.") || kind.startsWith("policy.")) return "announcements and policies";

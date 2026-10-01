@@ -10,6 +10,7 @@ import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { writeAudit } from "@/modules/audit/write";
 import { invitations, userRoles, users } from "@/modules/core/schema";
+import { sendInvitationEmail } from "./invitation-email";
 import { planRoleChange } from "./plan";
 import {
   createInvitationSchema,
@@ -166,7 +167,8 @@ export async function resetAuthenticator(input: unknown): Promise<ActionResult<{
   });
 }
 
-export async function createInvitation(input: unknown): Promise<ActionResult> {
+/** emailed = the invitation email was handed to the email service; false = no email service is set up here, or it refused. */
+export async function createInvitation(input: unknown): Promise<ActionResult<{ emailed: boolean }>> {
   const actor = await requireUser();
 
   return runAction(async () => {
@@ -204,11 +206,13 @@ export async function createInvitation(input: unknown): Promise<ActionResult> {
         { actor, action: "invitation.create", targetType: "invitation", targetId: email, after: { email, expiresAt } },
         tx,
       );
-      return { ok: true, data: undefined } as const;
+      return { ok: true, data: { emailed: false, expiresAt } } as const;
     });
 
-    if (result.ok) revalidatePath("/settings/invitations");
-    return result;
+    if (!result.ok) return result;
+    revalidatePath("/settings/invitations");
+    const emailed = await sendInvitationEmail(email, result.data.expiresAt);
+    return { ok: true, data: { emailed } };
   });
 }
 

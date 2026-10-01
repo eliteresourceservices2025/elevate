@@ -51,7 +51,8 @@ export function InvitationsPanel({ invitations, now }: { invitations: Invitation
   async function onSubmit(values: CreateInvitationInput) {
     const result = await createInvitation(values);
     if (!result.ok) return toast.error(result.error);
-    toast.success(`Invited ${values.email}. Ask them to use "Accept an invite" on the sign-in page.`);
+    if (result.data.emailed) toast.success(`Invited ${values.email}. We emailed them the link.`);
+    else toast.success(`Invited ${values.email}, but no email was sent (email is not set up here, or it failed). Ask them to use "Accept an invite" on the sign-in page.`);
     reset();
   }
 
@@ -66,8 +67,8 @@ export function InvitationsPanel({ invitations, now }: { invitations: Invitation
         </Button>
       </form>
       <p className="text-sm text-muted-foreground">
-        Invitations last 7 days. New people start as Employee; only a Super Admin can give other roles. Email delivery
-        comes later, so tell the person to use <strong>Accept an invite</strong> on the sign-in page with this exact
+        Invitations last 7 days. New people start as Employee; only a Super Admin can give other roles. We email the link when
+        email is set up. If they do not receive it, tell them to use <strong>Accept an invite</strong> on the sign-in page with this exact
         address.
       </p>
       <Table>

@@ -88,3 +88,42 @@ test("an employee has no Recruiting menu item and cannot open it; the public pag
   await anon.goto("/careers");
   await expect(anon.getByRole("heading", { name: "Careers at Elite Resource Services" })).toBeVisible(slow);
 });
+
+test("a card can be dragged to another stage with the keyboard", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const slow = { timeout: 30_000 };
+  const stamp = Date.now();
+  const hrPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hrPage, await createHrAccount());
+  await hrPage.goto("/recruiting/new");
+  await waitForHydration(hrPage, "#op-title");
+  await hrPage.getByLabel("Job title").fill(`E2E Drag ${stamp}`);
+  await hrPage.getByLabel(/^Description/).fill("A job used to check dragging a card between stages.");
+  await hrPage.getByRole("button", { name: "Create job (draft)" }).click();
+  await hrPage.waitForURL(/\/recruiting\/[0-9a-f-]{36}$/, slow);
+  const boardUrl = hrPage.url();
+  await hrPage.getByRole("button", { name: "Publish job" }).click();
+  await expect(hrPage.getByText("Open", { exact: true }).first()).toBeVisible(slow);
+
+  const anon = await (await browser.newContext()).newPage();
+  await anon.goto(boardUrl.replace(/.*\/recruiting\//, "/careers/"));
+  await waitForHydration(anon, "#ap-name");
+  await anon.getByLabel("Full name").fill(`Dan Dragger${stamp}`);
+  await anon.getByLabel("Email", { exact: true }).fill(`dan.${stamp}@example.com`);
+  await anon.locator("#ap-resume").setInputFiles({ name: "cv.pdf", mimeType: "application/pdf", buffer: PDF });
+  await anon.getByLabel(/I have read the privacy notice/).check();
+  await anon.getByRole("button", { name: "Send application" }).click();
+  await expect(anon.getByText("Thank you, we received your application.")).toBeVisible(slow);
+
+  await hrPage.goto(boardUrl);
+  await waitForHydration(hrPage, "select");
+  const handle = hrPage.getByRole("button", { name: `Drag Dan Dragger${stamp} to another stage. Press space, then the arrow keys, then space again.` });
+  await handle.focus();
+  // dnd-kit needs a moment between picking up, moving and dropping
+  await hrPage.keyboard.press("Space");
+  await hrPage.waitForTimeout(400);
+  await hrPage.keyboard.press("ArrowRight");
+  await hrPage.waitForTimeout(400);
+  await hrPage.keyboard.press("Space");
+  await expect(hrPage.locator("section[data-stage='screening']").getByRole("link", { name: `Dan Dragger${stamp}` })).toBeVisible(slow);
+});
