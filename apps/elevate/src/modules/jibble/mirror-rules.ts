@@ -16,22 +16,28 @@ export type BreakMode = "clock" | "native" | "off";
 
 export const parseBreakMode = (value: string | undefined): BreakMode => (value === "clock" || value === "off" ? value : "native");
 
-/** A break type defined in Jibble (Organization Settings > Breaks). A null length means no time limit. */
-export type JibbleBreak = { id: string; name: string; durationMinutes: number | null };
+/**
+ * A break available to a person in Jibble (breaks come from the person's schedule, so they are listed per person). A null length is
+ * a flexible ("staggered") break with no fixed length of its own. ELEVATE's breaks are unpaid, so unpaid ones are preferred.
+ */
+export type JibbleBreak = { id: string; name: string; durationMinutes: number | null; paid?: boolean };
 
 /**
- * Which Jibble break type matches an ELEVATE break of a chosen length (15, 30 or 60 minutes, or null for no limit): the one with
- * exactly that length, else the shortest one that is long enough, else a break with no limit, else the longest. Null when Jibble has none.
+ * Which Jibble break to use for an ELEVATE break of a chosen length (15, 30 or 60 minutes, or null for no limit). Unpaid breaks
+ * are preferred. A break of exactly that length wins; then a flexible one (it fits any length, so Jibble does not count a full fixed
+ * break for a short one); then the shortest fixed break that is long enough; then the longest. Null when the person has no break in Jibble.
  */
 export function pickBreak(breaks: readonly JibbleBreak[], plannedMinutes: number | null): JibbleBreak | null {
-  if (breaks.length === 0) return null;
-  const longestFirst = [...breaks].sort((a, b) => (b.durationMinutes ?? 0) - (a.durationMinutes ?? 0));
-  const unlimited = breaks.find((b) => b.durationMinutes === null);
-  if (plannedMinutes === null) return unlimited ?? longestFirst[0];
-  const exact = breaks.find((b) => b.durationMinutes === plannedMinutes);
+  const unpaid = breaks.filter((b) => b.paid !== true);
+  const pool = unpaid.length > 0 ? unpaid : breaks;
+  if (pool.length === 0) return null;
+  const longestFirst = [...pool].sort((a, b) => (b.durationMinutes ?? 0) - (a.durationMinutes ?? 0));
+  const flexible = pool.find((b) => b.durationMinutes === null);
+  if (plannedMinutes === null) return flexible ?? longestFirst[0];
+  const exact = pool.find((b) => b.durationMinutes === plannedMinutes);
   if (exact) return exact;
-  const longEnough = breaks.filter((b) => b.durationMinutes !== null && b.durationMinutes >= plannedMinutes).sort((a, b) => (a.durationMinutes ?? 0) - (b.durationMinutes ?? 0))[0];
-  return longEnough ?? unlimited ?? longestFirst[0];
+  const longEnough = pool.filter((b) => b.durationMinutes !== null && b.durationMinutes >= plannedMinutes).sort((a, b) => (a.durationMinutes ?? 0) - (b.durationMinutes ?? 0))[0];
+  return flexible ?? longEnough ?? longestFirst[0];
 }
 
 export type MirrorInput = { id: string; type: ClockType };

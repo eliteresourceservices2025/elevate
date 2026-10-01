@@ -30,8 +30,8 @@ export async function testJibbleConnection(): Promise<ActionResult<{ people: num
     if (!client) return fail(NOT_SET_UP);
     try {
       const people = await client.listPeople();
-      // Native breaks need break types created in Jibble; a failure to read them is not a failed connection.
-      const breaks = await client.listBreaks().then((b) => b.length, () => null);
+      // Native breaks come from each person's schedule in Jibble; check the first person as a sample. Failing to read them is not a failed connection.
+      const breaks = people.length === 0 ? null : await client.listBreaks(people[0].id).then((b) => b.length, () => null);
       await writeAudit({ actor, action: "jibble.test", targetType: "integration", metadata: { people: people.length, breaks } });
       return { ok: true, data: { people: people.length, breaks } };
     } catch (error) {

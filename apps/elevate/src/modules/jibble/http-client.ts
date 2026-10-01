@@ -14,8 +14,8 @@ export type ClockOptions = { breakMinutes?: number | null; previousEntryId?: str
 
 export interface JibbleClient {
   listPeople(): Promise<JibblePerson[]>;
-  /** The break types defined in Jibble. */
-  listBreaks(): Promise<JibbleBreak[]>;
+  /** The breaks available to one person in Jibble (they come from the person's schedule). */
+  listBreaks(personId: string): Promise<JibbleBreak[]>;
   /** Sends one clock action for a person. Returns the new time entry's id when Jibble gives one. */
   clock(personId: string, action: JibbleAction, options?: ClockOptions): Promise<{ entryId: string | null }>;
   /** Tracked minutes per person and day, for the nightly comparison. Totals only: nothing else is read. */
@@ -74,7 +74,7 @@ type Json = Record<string, unknown>;
 
 export class JibbleHttpClient implements JibbleClient {
   private cached: { token: string; expiresAt: number } | null = null;
-  private breakCache: { at: number; breaks: JibbleBreak[] } | null = null;
+  private breakCache = new Map<string, { at: number; breaks: JibbleBreak[] }>();
   constructor(private readonly config: JibbleConfig) {}
 
   private async token(): Promise<string> {
@@ -115,16 +115,24 @@ export class JibbleHttpClient implements JibbleClient {
     return out;
   }
 
-  async listBreaks(): Promise<JibbleBreak[]> {
-    const page = (await this.send("GET", `${this.config.timeTrackingUrl}/v1/Break`)) as { value?: Json[] };
-    return (page.value ?? []).map((b) => ({ id: String(b.id), name: String(b.name ?? ""), durationMinutes: parseDuration(typeof b.duration === "string" ? b.duration : null) }));
+  async listBreaks(personId: string): Promise<JibbleBreak[]> {
+    const answer = (await this.send("GET", `${this.config.timeTrackingUrl}/v1/GetBreaks(personId=${encodeURIComponent(personId)},time=${encodeURIComponent(new Date().toISOString())})`)) as Json[] | { value?: Json[] };
+    const list = Array.isArray(answer) ? answer : (answer.value ?? []);
+    return list
+      .filter((b) => b.isAvailable !== false)
+      .map((b) => {
+        const minutes = parseDuration(typeof b.duration === "string" ? b.duration : null);
+        // A length of zero is a flexible ("staggered") break: it has no fixed length of its own.
+        return { id: String(b.id), name: String(b.name ?? ""), durationMinutes: minutes === null || minutes === 0 ? null : minutes, paid: b.type === "Paid" };
+      });
   }
 
-  /** The break types, remembered for ten minutes (they rarely change and every break start needs them). */
-  private async breaks(): Promise<JibbleBreak[]> {
-    if (this.breakCache && Date.now() - this.breakCache.at < 10 * 60_000) return this.breakCache.breaks;
-    const breaks = await this.listBreaks();
-    this.breakCache = { at: Date.now(), breaks };
+  /** A person's breaks, remembered for ten minutes (every break start needs them). */
+  private async breaksFor(personId: string): Promise<JibbleBreak[]> {
+    const cached = this.breakCache.get(personId);
+    if (cached && Date.now() - cached.at < 10 * 60_000) return cached.breaks;
+    const breaks = await this.listBreaks(personId);
+    this.breakCache.set(personId, { at: Date.now(), breaks });
     return breaks;
   }
 
@@ -132,9 +140,9 @@ export class JibbleHttpClient implements JibbleClient {
     // clientType "Web" because the entry is made by a server on the person's behalf; Jibble stamps the time itself.
     let entry: Record<string, unknown> = { personId, type: action === "EndBreak" ? "In" : action, clientType: "Web", platform: null };
     if (action === "StartBreak") {
-      // Jibble starts a break of one of the organization's break types: pick the one that matches the length chosen in ELEVATE.
-      const chosen = pickBreak(await this.breaks(), options.breakMinutes ?? null);
-      if (!chosen) throw new JibbleError(422, "no break type in Jibble");
+      // Jibble starts one of the person's breaks: pick the one that fits the length chosen in ELEVATE.
+      const chosen = pickBreak(await this.breaksFor(personId), options.breakMinutes ?? null);
+      if (!chosen) throw new JibbleError(422, "no break set up for this person in Jibble");
       entry = { ...entry, breakId: chosen.id };
     }
     if (action === "EndBreak" && options.previousEntryId) entry = { ...entry, previousTimeEntryId: options.previousEntryId };

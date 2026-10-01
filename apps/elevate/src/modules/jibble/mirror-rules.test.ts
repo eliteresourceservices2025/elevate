@@ -40,18 +40,35 @@ describe("matching an ELEVATE break to a Jibble break type", () => {
   const b = (name: string, durationMinutes: number | null) => ({ id: name, name, durationMinutes });
   const all = [b("15 minutes", 15), b("30 minutes", 30), b("1 hour", 60), b("Open", null)];
 
-  it("takes the break of exactly the chosen length, and the open one for no limit", () => {
+  it("takes the break of exactly the chosen length, and the flexible one for no limit", () => {
     expect(pickBreak(all, 15)?.name).toBe("15 minutes");
     expect(pickBreak(all, 30)?.name).toBe("30 minutes");
     expect(pickBreak(all, 60)?.name).toBe("1 hour");
     expect(pickBreak(all, null)?.name).toBe("Open");
   });
 
-  it("falls back to the shortest break that is long enough, then an open one, then the longest", () => {
+  it("falls back to a flexible break, then the shortest fixed break that is long enough, then the longest", () => {
+    expect(pickBreak([b("20 minutes", 20), b("Flexible", null)], 15)?.name).toBe("Flexible"); // fits any length
     expect(pickBreak([b("20 minutes", 20), b("1 hour", 60)], 15)?.name).toBe("20 minutes");
-    expect(pickBreak([b("15 minutes", 15), b("Open", null)], 60)?.name).toBe("Open");
+    expect(pickBreak([b("15 minutes", 15), b("Flexible", null)], 60)?.name).toBe("Flexible");
     expect(pickBreak([b("15 minutes", 15), b("30 minutes", 30)], 60)?.name).toBe("30 minutes");
-    expect(pickBreak([b("15 minutes", 15), b("30 minutes", 30)], null)?.name).toBe("30 minutes"); // no open one: the longest
+    expect(pickBreak([b("15 minutes", 15), b("30 minutes", 30)], null)?.name).toBe("30 minutes"); // no flexible one: the longest
+  });
+
+  it("prefers an unpaid break, since ELEVATE's breaks are deducted", () => {
+    const paid = { id: "p", name: "Paid 15", durationMinutes: 15, paid: true };
+    const unpaid = { id: "u", name: "Unpaid hour", durationMinutes: 60, paid: false };
+    expect(pickBreak([paid, unpaid], 15)?.name).toBe("Unpaid hour");
+    expect(pickBreak([paid], 15)?.name).toBe("Paid 15"); // only a paid one exists: better than nothing
+  });
+
+  it("works with the breaks of the Elite organization: a 1 hour break and a flexible one", () => {
+    const hour = { id: "h", name: "1 Hour Break", durationMinutes: 60, paid: false };
+    const staggered = { id: "s", name: "1 Hour Break (Staggered)", durationMinutes: null, paid: false };
+    expect(pickBreak([hour, staggered], 15)?.name).toBe("1 Hour Break (Staggered)");
+    expect(pickBreak([hour, staggered], 30)?.name).toBe("1 Hour Break (Staggered)");
+    expect(pickBreak([hour, staggered], 60)?.name).toBe("1 Hour Break");
+    expect(pickBreak([hour, staggered], null)?.name).toBe("1 Hour Break (Staggered)");
   });
 
   it("returns nothing when Jibble has no break types", () => {

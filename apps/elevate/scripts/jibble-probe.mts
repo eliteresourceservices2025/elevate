@@ -41,16 +41,7 @@ try {
 }
 const withEmail = people.filter((p) => p.email).length;
 console.log(`OK: the token works. Jibble has ${people.length} people (${withEmail} with an email address).`);
-try {
-  const breaks = await client.listBreaks();
-  console.log(breaks.length === 0 ? "Break types in Jibble: none yet." : `Break types in Jibble: ${breaks.map((b) => `${b.name} (${b.durationMinutes === null ? "no limit" : `${b.durationMinutes} min`})`).join(", ")}.`);
-  if (breaks.length === 0 && nativeBreak) {
-    console.log("ELEVATE's breaks use Jibble's own break types. Create them in Jibble first (Unpaid: 15 minutes, 30 minutes, 1 hour and one with no time limit), or test the other way with --clock-break.");
-    if (doClock) process.exit(1);
-  }
-} catch (error) {
-  console.error(`Could not read the break types: ${error instanceof JibbleError ? error.message : "unexpected error"}.`);
-}
+
 
 if (!email) {
   console.log("Add a test person's email to look them up: pnpm jibble:probe test.person@example.com");
@@ -63,6 +54,16 @@ if (!found) {
   process.exit(1);
 }
 console.log(`Found ${found.fullName} (status ${found.status ?? "unknown"}), id ${found.id}.`);
+try {
+  const breaks = await client.listBreaks(found.id);
+  console.log(breaks.length === 0 ? "Breaks available to this person in Jibble: none." : `Breaks available to this person in Jibble: ${breaks.map((b) => `${b.name} (${b.durationMinutes === null ? "flexible" : `${b.durationMinutes} min`}, ${b.paid ? "paid" : "unpaid"})`).join(", ")}.`);
+  if (breaks.length === 0 && nativeBreak) {
+    console.log("This person has no break in Jibble (breaks come from their schedule), so a native break cannot start. Add one to their schedule in Jibble, or test the other way with --clock-break.");
+    if (doClock) process.exit(1);
+  }
+} catch (error) {
+  console.error(`Could not read this person's breaks: ${error instanceof JibbleError ? error.message : "unexpected error"}.`);
+}
 
 const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 const today = new Date().toISOString().slice(0, 10);

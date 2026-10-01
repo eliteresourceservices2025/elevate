@@ -49,28 +49,37 @@ describe("Jibble HTTP client", () => {
     expect(JSON.parse(calls[0].body!).model).toMatchObject({ personId: "person-1", previousTimeEntryId: "entry-9" });
   });
 
-  it("reads the break types and starts a break with the one that matches the chosen length, remembering the list", async () => {
+  it("reads the person's breaks and starts a break with the one that fits the chosen length, remembering the list", async () => {
     answer([
-      { json: { value: [{ id: "b-15", name: "15 minutes", duration: "PT15M" }, { id: "b-60", name: "1 hour", duration: "PT1H" }, { id: "b-open", name: "Open", duration: null }] } },
+      { json: [{ id: "b-15", name: "15 minutes", duration: "PT15M", type: "Unpaid", isAvailable: true }, { id: "b-60", name: "1 hour", duration: "PT1H", type: "Unpaid", isAvailable: true }, { id: "b-open", name: "Flexible", duration: "PT0S", type: "Unpaid", isAvailable: true }, { id: "b-gone", name: "Not available", duration: "PT30M", type: "Unpaid", isAvailable: false }] },
       { json: { id: "entry-1" } },
       { json: { id: "entry-2" } },
       { json: { id: "entry-3" } },
     ]);
     expect(await token.clock("person-1", "StartBreak", { breakMinutes: 60 })).toEqual({ entryId: "entry-1" });
-    expect(calls[0].url).toBe("https://time-tracking.prod.jibble.io/v1/Break");
+    expect(calls[0].url).toContain("https://time-tracking.prod.jibble.io/v1/GetBreaks(personId=person-1,time=");
     expect(calls[1]).toMatchObject({ method: "POST", url: "https://time-tracking.prod.jibble.io/v1/TimeEntries" });
     expect(JSON.parse(calls[1].body!)).toMatchObject({ personId: "person-1", type: "StartBreak", breakId: "b-60" });
     await token.clock("person-1", "StartBreak", { breakMinutes: null });
     expect(JSON.parse(calls[2].body!).breakId).toBe("b-open");
-    expect(calls.filter((c) => c.url.endsWith("/v1/Break"))).toHaveLength(1); // the list was remembered
+    expect(calls.filter((c) => c.url.includes("/v1/GetBreaks("))).toHaveLength(1); // the list was remembered
   });
 
-  it("refuses to start a break when Jibble has no break types, with a clear error that is not retried", async () => {
-    answer([{ json: { value: [] } }]);
+  it("reads breaks as a flexible break when the length is zero, and skips ones that are not available", async () => {
+    answer([{ json: [{ id: "h", name: "1 Hour Break", duration: "PT1H", type: "Unpaid", isAvailable: true }, { id: "s", name: "Staggered", duration: "PT0S", type: "Unpaid", isAvailable: true }, { id: "x", name: "Off", duration: "PT15M", type: "Paid", isAvailable: false }] }]);
+    const fresh = new JibbleHttpClient({ ...DEFAULT_URLS, accessToken: "pat-123" });
+    expect(await fresh.listBreaks("p1")).toEqual([
+      { id: "h", name: "1 Hour Break", durationMinutes: 60, paid: false },
+      { id: "s", name: "Staggered", durationMinutes: null, paid: false },
+    ]);
+  });
+
+  it("refuses to start a break when the person has no break in Jibble, with a clear error that is not retried", async () => {
+    answer([{ json: [] }]);
     const fresh = new JibbleHttpClient({ ...DEFAULT_URLS, accessToken: "pat-123" });
     const err = (await fresh.clock("person-1", "StartBreak", { breakMinutes: 15 }).catch((e: unknown) => e)) as JibbleError;
     expect(err).toBeInstanceOf(JibbleError);
-    expect(err.message).toContain("no break type in Jibble");
+    expect(err.message).toContain("no break set up for this person in Jibble");
     expect(err.retryable).toBe(false);
     expect(calls).toHaveLength(1); // nothing was sent to the time entries endpoint
   });
