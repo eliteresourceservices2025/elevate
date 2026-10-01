@@ -489,3 +489,19 @@ test("HR sees the Health tab and the bulk corrections panel, and a lead sees nei
   await leadPage.goto("/attendance?tab=corrections");
   await expect(leadPage.getByText("File many corrections from a spreadsheet")).toHaveCount(0);
 });
+
+test("the Schedules link in the menu opens the schedule: HR where shifts are set, everyone else their own", async ({ browser }) => {
+  const slow = { timeout: 30_000 };
+  const hrPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hrPage, await createHrAccount());
+  await hrPage.goto("/schedules");
+  await hrPage.waitForURL("**/attendance?tab=schedules", slow);
+  await expect(hrPage.getByRole("heading", { name: "Set a schedule" })).toBeVisible(slow);
+
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, await createEmployeeAccount("Sia", `Sched${Date.now()}`));
+  await page.goto("/schedules");
+  await page.waitForURL(/\/attendance$/, slow);
+  await expect(page.getByRole("region", { name: "My schedule" })).toBeVisible(slow);
+  await expect(page.getByText("Not built yet")).toHaveCount(0);
+});
