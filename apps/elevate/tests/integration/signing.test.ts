@@ -349,6 +349,27 @@ describe("who can see and do what", () => {
     expect(await forbidden(queries.listTemplates())).toBe("ForbiddenError");
   });
 
+  it("shows the document in the page: HR and the signer may; an outsider and a draft are refused; the first open is recorded once", async () => {
+    const { openSigningDocument } = await import("@/modules/signing/document");
+    const actorOf = (u: TestUser) => ({ id: u.id, email: u.email, roles: u.roles });
+    const id = await send({ signers: [ana] });
+    const draft = await send({ signers: [ana], send: false });
+
+    const hrView = await openSigningDocument(actorOf(hr), id);
+    expect(hrView.sealed).toBe(false);
+    expect(fake.objects.has(fake.key("signed-docs", hrView.path))).toBe(true);
+    expect((await rows(sql`select 1 from docs.esign_events where envelope_id = ${id} and type = 'viewed'`)).length).toBe(0); // HR looking is not a signer opening
+
+    await openSigningDocument(actorOf(ana), id);
+    await openSigningDocument(actorOf(ana), id);
+    expect((await rows(sql`select 1 from docs.esign_events where envelope_id = ${id} and type = 'viewed'`)).length).toBe(1);
+    expect((await signerRow(id, ana)).viewed_at).not.toBeNull();
+
+    await expect(openSigningDocument(actorOf(outsider), id)).rejects.toThrow("Forbidden");
+    await expect(openSigningDocument(actorOf(ana), draft)).rejects.toThrow(/not found/);
+    await expect(openSigningDocument(actorOf(hr), randomUUID())).rejects.toThrow(/not found/);
+  });
+
   it("records each document open and audits it, with a 60-second link", async () => {
     const id = await send({ signers: [ana] });
     const link = await open(ana, id);

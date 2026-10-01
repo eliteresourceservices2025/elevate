@@ -209,7 +209,7 @@ export async function getApplication(applicationId: string) {
     nowMs: Date.now(),
     application: { id: app.id, openingId: app.openingId, stage: app.stage as Stage, closeKind: app.closeKind, closeReason: app.closeReason, note: app.note, appliedAt: app.appliedAt, stageChangedAt: app.stageChangedAt },
     opening,
-    candidate: candidate.anonymizedAt ? { removed: true as const } : { removed: false as const, name: candidate.fullName, email: candidate.email, phone: candidate.phone, country: candidate.country, hasResume: Boolean(candidate.resumePath), resumeName: candidate.resumeName, consentAt: candidate.consentAt, consentVersion: candidate.consentNoticeVersion },
+    candidate: candidate.anonymizedAt ? { removed: true as const } : { removed: false as const, name: candidate.fullName, email: candidate.email, phone: candidate.phone, country: candidate.country, hasResume: Boolean(candidate.resumePath), resumeKind: candidate.resumeKind, resumeName: candidate.resumeName, consentAt: candidate.consentAt, consentVersion: candidate.consentNoticeVersion },
     history: history.map((h) => ({ ...h, byName: h.by ? (names.get(h.by) ?? "Unknown") : "Applicant" })),
     notes: notes.map((n) => ({ ...n, authorName: names.get(n.author) ?? "Unknown" })),
     interviews: interviewViews,

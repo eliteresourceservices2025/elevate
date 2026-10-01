@@ -269,6 +269,26 @@ describe("who can see which opening", () => {
     expect(await rows(sql`select 1 from ops.audit_log where action = 'recruiting.resume_view' and target_id = ${appId}`)).toHaveLength(1);
   });
 
+  it("shows a PDF resume in the page for the hiring team and HR only, audited, and refuses a Word file and an outsider", async () => {
+    const { openResume } = await import("@/modules/recruiting/resume");
+    const opening = await openJob();
+    const email = `${uniq("inline")}@example.com`;
+    await apply(opening, { email });
+    const appId = (await appFor(opening, email))!;
+    const asActor = (u: TestUser) => ({ id: u.id, email: u.email, roles: u.roles });
+    const pdf = await openResume(asActor(hr), appId);
+    expect(pdf.kind).toBe("pdf");
+    expect(pdf.bytes.length).toBeGreaterThan(8);
+    expect((await openResume(asActor(lead), appId)).kind).toBe("pdf"); // on the hiring team
+    await expect(openResume(asActor(otherLead), appId)).rejects.toThrow("Forbidden");
+    await expect(openResume(asActor(employee), appId)).rejects.toThrow("Forbidden");
+    expect((await rows(sql`select 1 from ops.audit_log where action = 'recruiting.resume_view' and target_id = ${appId} and metadata->>'inline' = 'true'`)).length).toBe(2);
+
+    const docx = `${uniq("word")}@example.com`;
+    await apply(opening, { email: docx }, { bytes: DOCX_BYTES, name: "cv.docx" });
+    expect((await openResume(asActor(hr), (await appFor(opening, docx))!)).kind).toBe("docx"); // the route shows only PDFs; this one is a download
+  });
+
   it("only lets HR and recruiters set up jobs, and only leads and recruiters on a hiring team", async () => {
     as(lead);
     expect(await actions.saveOpening({ title: "Nope nope", description: "A lead cannot create jobs, only help hire for them." })).toEqual({ ok: false, error: NO_ACCESS });

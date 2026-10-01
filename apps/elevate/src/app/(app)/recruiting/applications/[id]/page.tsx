@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { formatInZone, SECONDARY_TIMEZONE } from "@/lib/time";
-import { CancelInterviewButton, InterviewForm, MoveControls, NoteForm, RejectForm, ResumeButton, ScorecardForm } from "@/modules/recruiting/components/application-panels";
+import { CancelInterviewButton, InterviewForm, MoveControls, NoteForm, RejectForm, ResumeViewer, ScorecardForm } from "@/modules/recruiting/components/application-panels";
 import { CRITERIA, INTERVIEW_KIND_LABELS, RECOMMENDATION_LABELS, STAGE_LABELS, averageRating, type Recommendation } from "@/modules/recruiting/constants";
 import { getApplication, listInterviewerChoices } from "@/modules/recruiting/queries";
 
@@ -67,7 +67,7 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
               </div>
             </dl>
             {app.note ? <p className="whitespace-pre-wrap rounded-md bg-muted/40 p-2 text-sm">{app.note}</p> : null}
-            {candidate.hasResume ? <ResumeButton applicationId={app.id} /> : null}
+            {candidate.hasResume ? <ResumeViewer applicationId={app.id} kind={candidate.resumeKind} /> : null}
           </>
         )}
       </section>

@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { DocumentViewer } from "@/components/document-viewer";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -12,6 +13,23 @@ import { addNote, cancelInterview, getResumeLink, moveApplication, rejectApplica
 import { BOARD_STAGES, CRITERIA, INTERVIEW_KINDS, INTERVIEW_KIND_LABELS, RECOMMENDATIONS, RECOMMENDATION_LABELS, STAGE_LABELS, type CriterionKey, type Stage } from "../constants";
 import type { PersonChoice } from "../queries";
 import { useRun } from "./use-run";
+
+/** The resume inside the page when it is a PDF; a Word file cannot be shown by a browser, so it only offers the download. */
+export function ResumeViewer({ applicationId, kind }: { applicationId: string; kind: string | null }) {
+  if (kind === "pdf" || kind === null) {
+    return (
+      <DocumentViewer src={`/api/recruiting/resume/${applicationId}`} title="Resume" openLabel="View resume">
+        <ResumeButton applicationId={applicationId} />
+      </DocumentViewer>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <ResumeButton applicationId={applicationId} />
+      <p className="text-xs text-muted-foreground">This is a Word file, which cannot be shown in the page. Download it to read it.</p>
+    </div>
+  );
+}
 
 export function ResumeButton({ applicationId }: { applicationId: string }) {
   const [pending, setPending] = useState(false);
@@ -28,7 +46,7 @@ export function ResumeButton({ applicationId }: { applicationId: string }) {
         window.open(result.data.url, "_blank", "noopener,noreferrer");
       }}
     >
-      Open resume
+      Download resume
     </Button>
   );
 }

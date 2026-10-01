@@ -64,7 +64,16 @@ test("HR publishes a job, an applicant applies on the public page, HR moves them
   await hrPage.waitForURL(/\/recruiting\/applications\//, slow);
   await expect(hrPage.getByRole("heading", { name: `Pia Applicant${stamp}` })).toBeVisible(slow);
   await expect(hrPage.getByRole("link", { name: "Recruiting", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(hrPage.getByRole("button", { name: "Open resume" })).toBeVisible();
+  // The resume is viewed inside the page (PDF), with a separate download button
+  await expect(hrPage.getByRole("button", { name: "Download resume" })).toBeVisible();
+  await hrPage.getByRole("button", { name: "View resume" }).click();
+  const frame = hrPage.locator("iframe[title='Resume']");
+  await expect(frame).toBeVisible();
+  const src = (await frame.getAttribute("src"))!;
+  const resumeResponse = await hrPage.request.get(src);
+  expect(resumeResponse.status()).toBe(200);
+  expect(resumeResponse.headers()["content-type"]).toContain("application/pdf");
+  expect(resumeResponse.headers()["content-disposition"]).toContain("inline");
   await hrPage.getByLabel("Add a note").fill("Good phone manner.");
   await hrPage.getByRole("button", { name: "Add note" }).click();
   await expect(hrPage.getByText("Good phone manner.")).toBeVisible(slow);

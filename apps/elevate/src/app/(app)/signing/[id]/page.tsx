@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { formatInZone, SECONDARY_TIMEZONE } from "@/lib/time";
 import { ManageButtons } from "@/modules/signing/components/envelope-forms";
-import { OpenDocumentButton, SignPanel } from "@/modules/signing/components/sign-panel";
+import { EnvelopeDocument, SignPanel } from "@/modules/signing/components/sign-panel";
 import { SIGNER_STATUS_LABELS, STATUS_LABELS } from "@/modules/signing/constants";
 import { getEnvelopeDetail } from "@/modules/signing/queries";
 
@@ -47,7 +47,7 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
         <section aria-label="Signed copy" className="space-y-2 rounded-xl border border-green-600/40 bg-green-600/10 p-4">
           <h2 className="text-lg font-semibold">Everyone has signed</h2>
           <p className="text-sm">Sealed {e.sealedAt ? `${formatInZone(e.sealedAt, undefined, "MMM d, yyyy h:mm a")} (${formatInZone(e.sealedAt, SECONDARY_TIMEZONE, "h:mm a")} Manila)` : ""}. The signed copy includes a certificate of completion.</p>
-          <OpenDocumentButton envelopeId={e.id} label="Download the signed copy" />
+          <EnvelopeDocument envelopeId={e.id} title="The signed document" openLabel="View the signed copy" sealed />
           {e.sealedSha256 ? <p className="break-all font-mono text-xs text-muted-foreground">SHA-256: {e.sealedSha256}</p> : null}
         </section>
       ) : null}
@@ -88,7 +88,7 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
           <section aria-label="Manage" className="space-y-3 rounded-xl border bg-card p-4">
             <h2 className="text-lg font-semibold">Manage</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <OpenDocumentButton envelopeId={e.id} label={e.status === "completed" ? "Open the signed copy" : "Open the original"} />
+              {e.status === "completed" ? <p className="text-sm text-muted-foreground">The signed copy is above.</p> : <EnvelopeDocument envelopeId={e.id} title="The original document" openLabel="View the original" />}
             </div>
             <ManageButtons envelopeId={e.id} status={e.status} sealing={e.sealing} />
             {e.originalSha256 ? <p className="break-all font-mono text-xs text-muted-foreground">Original SHA-256: {e.originalSha256}</p> : null}

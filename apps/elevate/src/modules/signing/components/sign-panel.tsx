@@ -1,7 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DocumentViewer } from "@/components/document-viewer";
 import { TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { useRun } from "@/modules/recruiting/components/use-run";
@@ -9,8 +11,8 @@ import { declineEnvelope, getDocumentLink, signEnvelope } from "../actions";
 import { CONSENT_TEXT } from "../constants";
 import { SignaturePad } from "./signature-pad";
 
-/** Opens the document (a short signed link). Opening it is recorded: signing needs it. */
-export function OpenDocumentButton({ envelopeId, label = "Open the document" }: { envelopeId: string; label?: string }) {
+/** Downloads the document (a 60-second signed link that saves the file). Reading it in the page is the viewer below. */
+export function OpenDocumentButton({ envelopeId, label = "Download" }: { envelopeId: string; label?: string }) {
   const { run, pending } = useRun();
   return (
     <Button
@@ -20,13 +22,23 @@ export function OpenDocumentButton({ envelopeId, label = "Open the document" }: 
       onClick={() =>
         run<{ url: string; sealed: boolean }>(
           () => getDocumentLink({ envelopeId }),
-          "Opened in a new tab.",
+          "Download started.",
           (data) => data && window.open(data.url, "_blank", "noopener,noreferrer"),
         )
       }
     >
       {label}
     </Button>
+  );
+}
+
+/** The document, shown inside the page, with a separate download button. Opening it is recorded for a signer: signing needs it. */
+export function EnvelopeDocument({ envelopeId, title, openLabel, sealed = false, defaultOpen = false }: { envelopeId: string; title: string; openLabel: string; sealed?: boolean; defaultOpen?: boolean }) {
+  const router = useRouter();
+  return (
+    <DocumentViewer src={`/api/signing/${envelopeId}/document`} title={title} openLabel={openLabel} defaultOpen={defaultOpen} onFirstLoad={() => router.refresh()}>
+      <OpenDocumentButton envelopeId={envelopeId} label={sealed ? "Download the signed copy" : "Download"} />
+    </DocumentViewer>
   );
 }
 
@@ -46,7 +58,7 @@ export function SignPanel({ envelopeId, viewed, defaultName }: { envelopeId: str
     <div className="space-y-5">
       <div className="space-y-2">
         <h3 className="font-semibold">1. Read the document</h3>
-        <OpenDocumentButton envelopeId={envelopeId} />
+        <EnvelopeDocument envelopeId={envelopeId} title="The document to sign" openLabel="Read the document" />
         {viewed ? <p className="text-sm text-green-700">You opened it. You can sign now.</p> : <p className="text-sm text-muted-foreground">Open and read it first. Signing is available after you have opened it.</p>}
       </div>
 
@@ -83,7 +95,7 @@ export function SignPanel({ envelopeId, viewed, defaultName }: { envelopeId: str
         <Button type="submit" disabled={pending || !ready}>
           Sign document
         </Button>
-        {!viewed ? <p className="text-xs text-muted-foreground">Open the document above to enable signing.</p> : null}
+        {!viewed ? <p className="text-xs text-muted-foreground">Read the document above to enable signing.</p> : null}
       </form>
 
       <div className="border-t pt-4">

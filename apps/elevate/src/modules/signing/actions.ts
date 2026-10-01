@@ -14,6 +14,7 @@ import { CONSENT_VERSION, MAX_SIGNATURE_PNG_BYTES, MAX_SIGNATURE_PNG_SIZE, isTyp
 import { esignEnvelopes, esignSigners, esignTemplates } from "./schema";
 import { currentSignInMethods } from "./session";
 import { afterSignature, appendEvent, endEnvelope, legalNames, sealEnvelope, sendDraft } from "./service";
+import { openSigningDocument } from "./document";
 import { envelopeIdSchema, reasonSchema, signSchema, templateIdSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
@@ -130,7 +131,7 @@ async function myRow(userId: string, envelopeId: string) {
 }
 
 /**
- * A short link to read the document (the sealed copy once it is complete, the original before). The first time a signer opens it
+ * A 60-second link that downloads the document (the sealed copy once it is complete, the original before); the in-page viewer is the route /api/signing/[id]/document. The first time a signer opens it
  * is recorded: signing is only allowed after the document was opened. HR can open any envelope's document.
  */
 export async function getDocumentLink(input: unknown): Promise<ActionResult<{ url: string; sealed: boolean }>> {
@@ -138,32 +139,10 @@ export async function getDocumentLink(input: unknown): Promise<ActionResult<{ ur
   return runAction(async () => {
     const parsed = envelopeIdSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
-    const { envelopeId } = parsed.data;
-    const [env] = await db.select().from(esignEnvelopes).where(eq(esignEnvelopes.id, envelopeId));
-    const mine = await myRow(actor.id, envelopeId);
-    if (!env) return fail("That document was not found.");
-    const isManager = await authorize(actor, "signing.manage").then(() => true, () => false);
-    if (!isManager) {
-      await authorize(actor, "signing.view_own", { ownerUserId: mine?.userId });
-      if (env.status === "draft") return fail("That document was not found.");
-    }
-    if (!(await allowRequest("download", actor.id))) return fail("Too many downloads. Wait a few minutes and try again.");
-
-    const sealed = Boolean(env.sealedPath);
-    const path = env.sealedPath ?? env.originalPath;
-    const reference = `${env.title.replace(/[^\p{L}\p{N} ._-]/gu, "").trim().slice(0, 60) || "document"}${sealed ? " (signed)" : ""}.pdf`;
-    const url = await getDocumentStorage().createSignedDownload(BUCKETS.signed, path, 60, reference);
-
-    if (mine && mine.status === "pending" && !mine.viewedAt) {
-      const ip = await clientIp();
-      await db.transaction(async (tx) => {
-        await tx.update(esignSigners).set({ viewedAt: new Date() }).where(and(eq(esignSigners.id, mine.id), eq(esignSigners.status, "pending")));
-        await appendEvent(tx, envelopeId, { type: "viewed", actorUserId: actor.id, signerId: mine.id, ip: ip === "unknown" ? null : ip });
-      });
-    }
-    await writeAudit({ actor, action: "signing.document_view", targetType: "esign_envelope", targetId: envelopeId, metadata: { sealed } });
-    refresh(envelopeId);
-    return { ok: true, data: { url, sealed } };
+    const doc = await openSigningDocument(actor, parsed.data.envelopeId);
+    const url = await getDocumentStorage().createSignedDownload(BUCKETS.signed, doc.path, 60, doc.fileName);
+    refresh(doc.envelopeId);
+    return { ok: true, data: { url, sealed: doc.sealed } };
   });
 }
 

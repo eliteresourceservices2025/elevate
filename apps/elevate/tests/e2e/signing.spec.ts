@@ -28,6 +28,20 @@ async function openedFile(page: Page, buttonName: string | RegExp): Promise<Buff
   return Buffer.from(await response.body());
 }
 
+/** Opens the viewer inside the page (no download, no new tab) and checks the file it shows is an inline PDF. */
+async function readInPage(page: Page, envelopeUrl: string) {
+  await page.getByRole("button", { name: "Read the document" }).click();
+  const frame = page.locator("iframe[title='The document to sign']");
+  await expect(frame).toBeVisible();
+  const src = (await frame.getAttribute("src"))!;
+  expect(src).toBe(`/api/signing/${envelopeUrl.split("/").pop()}/document`);
+  const response = await page.request.get(src);
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toContain("application/pdf");
+  expect(response.headers()["content-disposition"]).toContain("inline");
+  expect((await response.body()).subarray(0, 5).toString()).toBe("%PDF-");
+}
+
 test("HR sends a document, two people sign it (typed and drawn), it is sealed, and the signed copy verifies on the public page", async ({ browser }) => {
   test.setTimeout(360_000);
   const slow = { timeout: 30_000 };
@@ -69,7 +83,7 @@ test("HR sends a document, two people sign it (typed and drawn), it is sealed, a
   await siaPage.waitForURL(/\/signing\/[0-9a-f-]{36}$/, slow);
   await waitForHydration(siaPage, "#sig-consent");
   await expect(siaPage.getByRole("button", { name: "Sign document" })).toBeDisabled();
-  await openedFile(siaPage, "Open the document");
+  await readInPage(siaPage, envelopeUrl);
   await expect(siaPage.getByText("You opened it. You can sign now.")).toBeVisible(slow);
   await siaPage.getByLabel(/I agree to sign this document electronically/).check();
   await siaPage.getByRole("button", { name: "Sign document" }).click();
@@ -80,7 +94,7 @@ test("HR sends a document, two people sign it (typed and drawn), it is sealed, a
   await signInEnrollingMfa(tomPage, tom);
   await tomPage.goto(envelopeUrl);
   await waitForHydration(tomPage, "#sig-consent");
-  await openedFile(tomPage, "Open the document");
+  await readInPage(tomPage, envelopeUrl);
   await expect(tomPage.getByText("You opened it. You can sign now.")).toBeVisible(slow);
   await tomPage.getByRole("tab", { name: "Draw it" }).click();
   const pad = tomPage.getByTestId("signature-pad");
