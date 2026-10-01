@@ -256,7 +256,8 @@ describe("sending to Jibble", () => {
     expect(run.sent).toBeGreaterThanOrEqual(2);
     expect(fake.calls.filter((c) => c.personId === p.jibbleId).map((c) => c.action)).toEqual(["In", "Out"]);
     expect((await logOf(p.employeeId)).map((l) => l.status)).toEqual(["sent", "sent"]);
-    expect((await jobs.processMirrorQueue()).sent).toBe(0); // nothing is sent twice
+    await jobs.processMirrorQueue();
+    expect(fake.calls.filter((c) => c.personId === p.jibbleId)).toHaveLength(2); // nothing is sent twice
   });
 
   it("retries network trouble with a growing delay, keeps later calls waiting, and gives up after six tries", async () => {
