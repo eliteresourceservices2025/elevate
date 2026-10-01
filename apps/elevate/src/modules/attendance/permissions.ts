@@ -20,6 +20,9 @@ export const attendancePermissions = definePermissions({
   // End-of-day notes: written by the person, read by their chain of leads and HR.
   "attendance.notes": { roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" } },
   "attendance.notes_view": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  // Schedules: HR sets them; leads see their team's, everyone sees their own.
+  "schedules.view": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", employee: "own" } },
+  "schedules.manage": { roles: { super_admin: "all", hr_admin: "all" } },
   "attendance.manage_rules": { roles: { super_admin: "all", hr_admin: "all" } },
   "attendance.view_summary": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", executive: "all" } },
 });

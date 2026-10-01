@@ -286,3 +286,32 @@ test("HR sees the Jibble tab and the per-team switch, and nobody else gets the t
   await expect(page.getByRole("link", { name: "Jibble" })).toHaveCount(0);
   await expect(page.getByText("Test connection")).toHaveCount(0);
 });
+
+test("HR sets a schedule and the employee sees it in both time zones", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const slow = { timeout: 30_000 };
+  const stamp = Date.now();
+  const employee = await createEmployeeAccount("Sam", `Shift${stamp}`);
+  const hr = await createHrAccount();
+
+  const hrPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hrPage, hr);
+  await hrPage.goto("/attendance?tab=schedules");
+  await waitForHydration(hrPage, "#sc-filter");
+  await hrPage.getByLabel("Find a person or team").fill(`Shift${stamp}`);
+  await hrPage.getByLabel(/^Select Sam/).check();
+  await hrPage.getByLabel("Shift starts").fill("21:00");
+  await hrPage.getByLabel("Shift ends").fill("05:00");
+  await hrPage.getByLabel("Time zone").fill("Asia/Manila");
+  await hrPage.getByRole("button", { name: "Set schedule for 1 person" }).click();
+  await expect(hrPage.getByText("Schedule set for 1 person.")).toBeVisible(slow);
+  await expect(hrPage.getByText("Mon to Fri, 9:00 PM - 5:00 AM (Asia/Manila)")).toBeVisible(slow);
+
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, employee);
+  await page.goto("/attendance");
+  await expect(page.getByRole("region", { name: "My schedule" })).toContainText("Mon to Fri, 9:00 PM - 5:00 AM (Asia/Manila)", slow);
+  await expect(page.getByRole("region", { name: "My schedule" })).toContainText("9:00 PM - 5:00 AM in Manila");
+  await expect(page.getByRole("columnheader", { name: "Shift" })).toBeVisible();
+  await expect(page.getByText("Rest day").first()).toBeVisible();
+});

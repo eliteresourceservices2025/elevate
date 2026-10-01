@@ -18,6 +18,7 @@ import { leaveApprovals, leaveLedger, leaveRequests, leaveTypes } from "./schema
 import { finalizeApproval, holidaysInRange, notifyWaiting, peerEmployeeIds, pendingDays, queueInvite } from "./request-service";
 import { cancelRequestSchema, decideRequestSchema, previewRequestSchema, requestIdSchema, requestLeaveSchema } from "./request-validators";
 import { loadLedger, lockEmployeeLedger } from "./service";
+import { workingWeekdaysFor } from "@/modules/attendance/schedule-service";
 import { requestDays, workingDaysBetween } from "./workdays";
 
 const BAD = "Check the request and try again.";
@@ -81,7 +82,7 @@ export async function requestLeave(input: unknown): Promise<ActionResult<{ id: s
     try {
       id = await db.transaction(async (tx) => {
         const holidays = new Set((await holidaysInRange(tx, subject.id, v.startDate, v.endDate)).map((h) => h.date));
-        const days = requestDays(v.startDate, v.endDate, v.halfDay, holidays);
+        const days = requestDays(v.startDate, v.endDate, v.halfDay, holidays, await workingWeekdaysFor(tx, subject.id, v.startDate));
         if (days === 0) throw new ActionFailure(v.halfDay ? "A half day needs a single working day." : "There are no working days in that range.");
 
         const requestId = randomUUID();
@@ -142,7 +143,7 @@ export async function previewRequest(input: unknown): Promise<ActionResult<Reque
     if (!type) return fail("Choose a leave type.");
 
     const holidays = await holidaysInRange(db, me.id, v.startDate, v.endDate);
-    const days = requestDays(v.startDate, v.endDate, v.halfDay, new Set(holidays.map((h) => h.date)));
+    const days = requestDays(v.startDate, v.endDate, v.halfDay, new Set(holidays.map((h) => h.date)), await workingWeekdaysFor(db, me.id, v.startDate));
     let balance: RequestPreview["balance"] = null;
     if (type.tracksBalance) {
       const total = balanceOf(await loadLedger(db, me.id, type.id));

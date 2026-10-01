@@ -64,6 +64,8 @@ export const clockRules = time
     eodExpected: boolean("eod_expected").notNull().default(false),
     /** Use Jibble screenshots for this team: ELEVATE tells Jibble when each person clocks in and out, and compares totals nightly. Needs the monitoring policy. */
     jibbleMirror: boolean("jibble_mirror").notNull().default(false),
+    /** Minutes after the shift start (or before its end) before a late arrival or early leave is flagged. */
+    lateGraceMinutes: integer("late_grace_minutes").notNull().default(10),
     updatedBy: uuid("updated_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   })
@@ -156,6 +158,39 @@ export const clockCorrections = time
   )
   .enableRLS();
 
+/**
+ * A person's shift pattern, in the schedule's (client's) time zone. Changes are new rows: setting a new schedule closes the
+ * previous one the day before. Two schedules for one person can never overlap (exclusion constraint in the migration).
+ */
+export const schedules = time
+  .table(
+    "schedules",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      effectiveFrom: date("effective_from", { mode: "string" }).notNull(),
+      effectiveTo: date("effective_to", { mode: "string" }),
+      startTime: text("start_time").notNull(),
+      endTime: text("end_time").notNull(),
+      /** ISO weekdays worked: 1 = Monday ... 7 = Sunday. The others are rest days. */
+      weekdays: smallint("weekdays").array().notNull(),
+      breakMinutes: smallint("break_minutes").notNull().default(0),
+      zone: text("zone").notNull(),
+      createdBy: uuid("created_by"),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      index("schedules_employee_idx").on(t.employeeId, t.effectiveFrom),
+      check("schedules_dates_chk", sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+      check("schedules_times_chk", sql`${t.startTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and ${t.endTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`),
+      check("schedules_weekdays_chk", sql`cardinality(${t.weekdays}) between 1 and 7 and ${t.weekdays} <@ array[1,2,3,4,5,6,7]::smallint[]`),
+      check("schedules_break_chk", sql`${t.breakMinutes} between 0 and 240`),
+    ],
+  )
+  .enableRLS();
+
 /** Rebuilt from the clock events every night (never edited by hand). One row per person and day. */
 export const attendanceDays = time
   .table(
@@ -172,6 +207,12 @@ export const attendanceDays = time
       breakMinutes: integer("break_minutes").notNull().default(0),
       /** Minutes spent past the chosen length on timed breaks. */
       overbreakMinutes: integer("overbreak_minutes").notNull().default(0),
+      /** From the person's schedule (null when they have none): the shift's hours minus its planned break, and what the day did against it. */
+      scheduledMinutes: integer("scheduled_minutes"),
+      lateMinutes: integer("late_minutes").notNull().default(0),
+      earlyLeaveMinutes: integer("early_leave_minutes").notNull().default(0),
+      /** Worked time beyond the scheduled hours (a rest day or holiday counts in full). */
+      extraMinutes: integer("extra_minutes").notNull().default(0),
       firstIn: timestamp("first_in", { withTimezone: true }),
       lastOut: timestamp("last_out", { withTimezone: true }),
       /** Flags: open_session, outside_range, corrected, idle_unanswered, on_leave. Late, overtime and absence arrive with schedules. */

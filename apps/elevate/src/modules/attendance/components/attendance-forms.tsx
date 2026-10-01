@@ -367,6 +367,7 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
   const [selfie, setSelfie] = useState(row.selfieRequired);
   const [idle, setIdle] = useState(row.idleMinutes === null ? "" : String(row.idleMinutes));
   const [grace, setGrace] = useState(String(row.graceMinutes));
+  const [lateGrace, setLateGrace] = useState(String(row.lateGraceMinutes));
   const [eod, setEod] = useState(row.eodExpected);
   const [jibble, setJibble] = useState(row.jibbleMirror);
   return (
@@ -375,7 +376,7 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
       onSubmit={(e) => {
         e.preventDefault();
         run(
-          () => saveClockRules({ teamId: row.teamId, allowedCidrs: ranges.split("\n").map((r) => r.trim()).filter(Boolean), selfieRequired: selfie, idleMinutes: idle, graceMinutes: grace, eodExpected: eod, jibbleMirror: jibble }),
+          () => saveClockRules({ teamId: row.teamId, allowedCidrs: ranges.split("\n").map((r) => r.trim()).filter(Boolean), selfieRequired: selfie, idleMinutes: idle, graceMinutes: grace, lateGraceMinutes: lateGrace, eodExpected: eod, jibbleMirror: jibble }),
           `Rules saved for ${row.teamName}.`,
         );
       }}
@@ -388,7 +389,8 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <TextField id={`idle-${row.teamId}`} label="Idle prompt after (minutes)" type="number" min="5" max="240" value={idle} onChange={(e) => setIdle(e.target.value)} hint="Empty turns the prompt off." />
-        <TextField id={`grace-${row.teamId}`} label="Grace after shift end (minutes)" type="number" min="0" max="240" value={grace} onChange={(e) => setGrace(e.target.value)} hint="Used once schedules exist." />
+        <TextField id={`grace-${row.teamId}`} label="Grace after shift end (minutes)" type="number" min="0" max="240" value={grace} onChange={(e) => setGrace(e.target.value)} hint="Still clocked in this long after the shift ends: the person and lead get a missed clock-out notice." />
+        <TextField id={`late-${row.teamId}`} label="Late and early-leave grace (minutes)" type="number" min="0" max="120" value={lateGrace} onChange={(e) => setLateGrace(e.target.value)} hint="Arriving or leaving within this many minutes of the shift is not flagged." />
       </div>
       <label htmlFor={`selfie-${row.teamId}`} className="flex items-center gap-2 text-sm">
         <input id={`selfie-${row.teamId}`} type="checkbox" className="size-4 accent-primary" checked={selfie} disabled={!monitoringPublished && !row.selfieRequired} onChange={(e) => setSelfie(e.target.checked)} />

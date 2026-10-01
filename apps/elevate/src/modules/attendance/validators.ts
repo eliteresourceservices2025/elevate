@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidRange } from "./clock";
+import { isValidTime } from "./schedule";
 import { isValidTimeZone } from "@/lib/time";
 
 const uuid = z.uuid();
@@ -67,6 +68,24 @@ export const rulesSchema = z.object({
   eodExpected: z.boolean().default(false),
   /** Use Jibble screenshots for this team. Needs the monitoring policy. */
   jibbleMirror: z.boolean().default(false),
+  /** Minutes after the shift start (or before its end) before a late arrival or early leave is flagged. */
+  lateGraceMinutes: z.preprocess(toNumber, z.number().int().min(0, "Zero or more").max(120, "120 at most")).default(10),
 });
 
 export const weekSchema = z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
+
+const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a date").refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), "Enter a real date");
+const hhmm = z.string().refine(isValidTime, "Use a time like 09:00");
+
+/** HR gives one or many people the same shift pattern from a date. */
+export const assignScheduleSchema = z.object({
+  employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),
+  effectiveFrom: ymd,
+  startTime: hhmm,
+  endTime: hhmm,
+  weekdays: z.array(z.number().int().min(1).max(7)).min(1, "Choose at least one working day").max(7).transform((d) => [...new Set(d)].sort((a, b) => a - b)),
+  breakMinutes: z.preprocess(toNumber, z.number().int().min(0, "Zero or more").max(240, "240 at most")).default(0),
+  /** Empty = each person's client zone (or the company zone). */
+  zone: z.preprocess(blankToUndefined, z.string().refine(isValidTimeZone, "Choose a valid time zone").optional()),
+});
+export const endScheduleSchema = z.object({ employeeId: uuid, endDate: ymd });

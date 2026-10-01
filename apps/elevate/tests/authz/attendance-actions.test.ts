@@ -17,6 +17,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 const actions = await import("@/modules/attendance/actions");
 const peopleActions = await import("@/modules/people/actions");
 const queries = await import("@/modules/attendance/queries");
+const scheduleActions = await import("@/modules/attendance/schedule-actions");
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const NO_ACCESS = "You do not have access to do that.";
@@ -49,6 +50,8 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "requestEvidenceUpload", call: () => actions.requestEvidenceUpload({ mime: "image/png", size: 1000 }), allowed: EVERYONE },
   { name: "saveShiftNote", call: () => actions.saveShiftNote({ sessionId: ID, body: "Finished the inbox." }), allowed: EVERYONE },
   { name: "fileCorrectionForOthers", call: () => actions.fileCorrectionForOthers(claim), allowed: TEAM_OR_HR },
+  { name: "assignSchedule", call: () => scheduleActions.assignSchedule({ employeeIds: [ID], effectiveFrom: "2026-10-01", startTime: "09:00", endTime: "17:00", weekdays: [1, 2, 3, 4, 5], breakMinutes: 60 }), allowed: HR },
+  { name: "endSchedule", call: () => scheduleActions.endSchedule({ employeeId: ID, endDate: "2026-10-01" }), allowed: HR },
   { name: "saveClockRules", call: () => actions.saveClockRules(rules), allowed: HR },
 ];
 
@@ -84,6 +87,7 @@ describe("time clock queries, every role", () => {
     { name: "listClockRules", call: () => queries.listClockRules(), allowed: HR },
     { name: "listFilablePeople", call: () => queries.listFilablePeople(), allowed: TEAM_VIEW },
     { name: "listShiftNotes", call: () => queries.listShiftNotes(), allowed: TEAM_VIEW },
+    { name: "listSchedules", call: () => queries.listSchedules(), allowed: HR },
   ];
   for (const q of queryCases) {
     describe(q.name, () => {

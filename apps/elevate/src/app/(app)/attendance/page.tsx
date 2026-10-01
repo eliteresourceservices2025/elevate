@@ -13,7 +13,9 @@ import { AutoRefresh } from "@/modules/attendance/components/auto-refresh";
 import { CorrectionForm, CorrectionList, FileForOthersForm, PreferencesForm, RulesForm, SetupProfileForm, ShiftNote } from "@/modules/attendance/components/attendance-forms";
 import { JibblePanel } from "@/modules/jibble/components/jibble-panel";
 import { getJibbleOverview } from "@/modules/jibble/queries";
-import { getMyTime, listClockRules, listCorrectionQueue, listFilablePeople, listFlags, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
+import { SchedulesPanel } from "@/modules/attendance/components/schedules-panel";
+import { getMyTime, listClockRules, listCorrectionQueue, listFilablePeople, listFlags, listSchedules, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
+import { todayInZone } from "@/modules/org/service";
 
 export const metadata: Metadata = { title: "Attendance" };
 
@@ -21,6 +23,7 @@ const ALL_TABS = [
   { key: "mine", label: "My time" },
   { key: "team", label: "Team" },
   { key: "corrections", label: "Corrections" },
+  { key: "schedules", label: "Schedules" },
   { key: "rules", label: "Rules" },
   { key: "jibble", label: "Jibble" },
 ] as const;
@@ -32,6 +35,12 @@ const FLAG_LABELS = new Map<string, string>(Object.entries({
   idle_unanswered: "Idle prompt unanswered",
   overbreak: "Overbreak",
   no_eod: "No end-of-day report",
+  late: "Late",
+  left_early: "Left early",
+  extra_hours: "Extra hours",
+  rest_day_work: "Worked on a rest day",
+  holiday_work: "Worked on a holiday",
+  absent: "Absent",
   jibble_mismatch: "Jibble and ELEVATE totals differ",
   on_leave: "On approved leave",
 }));
@@ -47,6 +56,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const approve = scopeFor(user, "attendance.approve_correction");
   if (approve === "all" || approve === "team") allowed.add("corrections");
   if (scopeFor(user, "attendance.manage_rules")) allowed.add("rules");
+  if (scopeFor(user, "schedules.manage")) allowed.add("schedules");
   if (scopeFor(user, "jibble.manage")) allowed.add("jibble");
   const tabs = ALL_TABS.filter((t) => allowed.has(t.key));
   const tab = tabs.find((t) => t.key === params.tab)?.key ?? "mine";
@@ -57,6 +67,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const queue = tab === "corrections" ? await orNotFound(listCorrectionQueue()) : null;
   const notes = tab === "team" ? await orNotFound(listShiftNotes()) : null;
   const filable = tab === "corrections" && ["all", "team"].includes(String(scopeFor(user, "attendance.file_for_others"))) ? await orNotFound(listFilablePeople()) : null;
+  const schedulesList = tab === "schedules" ? await orNotFound(listSchedules()) : null;
   const jibble = tab === "jibble" ? await orNotFound(getJibbleOverview()) : null;
   const rules = tab === "rules" ? await orNotFound(listClockRules()) : null;
 
@@ -84,6 +95,16 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
         mine ? (
           <div className="space-y-6">
             {mine.days.some((d) => d.open) ? <AutoRefresh seconds={30} /> : null}
+            <section aria-label="My schedule" className="rounded-xl border bg-card p-4">
+              {mine.schedule ? (
+                <p className="text-sm">
+                  <span className="font-semibold">Your schedule:</span> {mine.schedule.days}, {mine.schedule.client} ({mine.schedule.zone}), which is <strong>{mine.schedule.manila}</strong> in Manila.{" "}
+                  <span className="text-muted-foreground">Since {formatDateOnly(mine.schedule.effectiveFrom)}. Your times below are in {mine.zone}.</span>
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">You have no schedule yet, so late, early and extra hours are not tracked. HR sets schedules.</p>
+              )}
+            </section>
             <section aria-label="This week" className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-lg font-semibold">
@@ -103,11 +124,13 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                   <TableHeader>
                     <TableRow>
                       <TableHead>Day</TableHead>
+                      <TableHead>Shift</TableHead>
                       <TableHead>First in</TableHead>
                       <TableHead>Last out</TableHead>
                       <TableHead className="text-right">Breaks</TableHead>
                       <TableHead className="text-right">Over break</TableHead>
                       <TableHead className="text-right">Worked</TableHead>
+                      <TableHead className="text-right">Extra</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -117,15 +140,33 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                           <TableCell className="font-medium">
                             {d.weekday}, {formatDateOnly(d.date)}
                           </TableCell>
+                          <TableCell className="text-xs">
+                            {d.shift ? (
+                              <>
+                                {d.shift.range}
+                                <span className="block text-muted-foreground">
+                                  {d.shift.clientRange} {d.shift.zone.split("/").pop()?.replace("_", " ")}
+                                </span>
+                              </>
+                            ) : d.holiday ? (
+                              <Badge variant="outline">Holiday</Badge>
+                            ) : mine.schedule ? (
+                              <span className="text-muted-foreground">Rest day</span>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
                           <TableCell>{d.firstIn ? formatInZone(d.firstIn, mine.zone, "h:mm a") : "-"}</TableCell>
                           <TableCell>{d.open ? <Badge variant="secondary">In progress</Badge> : d.lastOut ? formatInZone(d.lastOut, mine.zone, "h:mm a") : "-"}</TableCell>
                           <TableCell className="text-right">{d.breakMinutes ? formatDuration(d.breakMinutes * MINUTE) : "-"}</TableCell>
                           <TableCell className="text-right">{d.overbreakMinutes ? <Badge variant="destructive">+{d.overbreakMinutes} min</Badge> : "-"}</TableCell>
                           <TableCell className="text-right font-medium">{d.workedMinutes ? formatDuration(d.workedMinutes * MINUTE) : "-"}</TableCell>
+                          <TableCell className="text-right">{d.extraMinutes ? <Badge variant="secondary">+{formatDuration(d.extraMinutes * MINUTE)}</Badge> : "-"}</TableCell>
                         </TableRow>
                         {d.sessionList.map((sess, i) => (
                           <TableRow key={`${d.date}-${sess.startAt}`} className="bg-muted/30 text-xs" data-session>
                             <TableCell className="pl-6 text-muted-foreground">Session {i + 1}</TableCell>
+                            <TableCell />
                             <TableCell>{formatInZone(sess.startAt, mine.zone, "h:mm a")}</TableCell>
                             <TableCell>{sess.endAt ? formatInZone(sess.endAt, mine.zone, "h:mm a") : <Badge variant="secondary">In progress</Badge>}</TableCell>
                             <TableCell className="text-right">
@@ -140,6 +181,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                             </TableCell>
                             <TableCell className="text-right">{sess.overbreakMinutes ? `+${sess.overbreakMinutes}m` : "-"}</TableCell>
                             <TableCell className="text-right">{sess.workedMinutes ? formatDuration(sess.workedMinutes * MINUTE) : "-"}</TableCell>
+                            <TableCell />
                           </TableRow>
                         ))}
                         {d.sessionList.map((sess) => {
@@ -148,7 +190,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                           if (!sess.eventId || (!note && !canEdit)) return null;
                           return (
                             <TableRow key={`note-${sess.eventId}`} className="bg-muted/30">
-                              <TableCell colSpan={6} className="pl-6">
+                              <TableCell colSpan={8} className="pl-6">
                                 <ShiftNote sessionId={sess.eventId} initial={note?.body ?? null} edited={note?.edited ?? false} canEdit={canEdit} />
                               </TableCell>
                             </TableRow>
@@ -161,8 +203,10 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                       <TableCell />
                       <TableCell />
                       <TableCell />
+                      <TableCell />
                       <TableCell className="text-right font-semibold">{mine.days.reduce((n, d) => n + d.overbreakMinutes, 0) ? `+${mine.days.reduce((n, d) => n + d.overbreakMinutes, 0)} min` : "-"}</TableCell>
                       <TableCell className="text-right font-semibold">{formatDuration(mine.weekMinutes * MINUTE)}</TableCell>
+                      <TableCell className="text-right font-semibold">{mine.days.reduce((n, d) => n + d.extraMinutes, 0) ? `+${formatDuration(mine.days.reduce((n, d) => n + d.extraMinutes, 0) * MINUTE)}` : "-"}</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -250,7 +294,15 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                         <TableCell className="space-x-1">
                           {r.flags.map((f) => (
                             <Badge key={f} variant="outline">
-                              {f === "overbreak" && r.overbreakMinutes ? `Overbreak +${r.overbreakMinutes} min` : (FLAG_LABELS.get(f) ?? f)}
+                              {f === "overbreak" && r.overbreakMinutes
+                                ? `Overbreak +${r.overbreakMinutes} min`
+                                : f === "late" && r.lateMinutes
+                                  ? `Late ${r.lateMinutes} min`
+                                  : f === "left_early" && r.earlyLeaveMinutes
+                                    ? `Left ${r.earlyLeaveMinutes} min early`
+                                    : f === "extra_hours" && r.extraMinutes
+                                      ? `Extra +${formatDuration(r.extraMinutes * MINUTE)}`
+                                      : (FLAG_LABELS.get(f) ?? f)}
                             </Badge>
                           ))}
                         </TableCell>
@@ -290,6 +342,8 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
           <CorrectionList items={queue.items} zone="America/Phoenix" mode="queue" empty="No corrections are waiting." />
         </div>
       ) : null}
+
+      {schedulesList ? <SchedulesPanel rows={schedulesList.rows} withoutSchedule={schedulesList.withoutSchedule} today={todayInZone()} /> : null}
 
       {jibble ? <JibblePanel overview={jibble} /> : null}
 

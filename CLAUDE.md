@@ -142,6 +142,15 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **HR tab:** Attendance > Jibble (`jibble.manage`, HR and Super Admin only): connection test, match people, recent calls with Retry.
 - `pnpm jibble:probe [email] [--clock] [--native-break]` checks the token and tries one TEST person; use it before turning a team on to see whether an API clock-in really starts the desktop app's screenshots.
 
+## Schedules and flags (Phase 2.5, part A)
+
+- **Schedules** (`time.schedules`, `src/modules/attendance/schedule.ts` is the pure part): a dated shift pattern per person: start and end (HH:mm in the schedule's zone, usually the client's; an end at or before the start ends next day), ISO working weekdays (1 = Monday), a planned unpaid break, effective dates. A new schedule closes the old one the day before; the past is not edited; two schedules for one person cannot overlap (exclusion constraint). HR and Super Admin set them (`assignSchedule` for one or many, all or nothing; start no more than 7 days back); leads and people read them. Everyone sees them in the schedule's zone, their own and Manila.
+- **A shift belongs to the day it STARTS in the person's own zone** (`shiftOn()`), the same rule as attendance days, so a US-hours shift worked from Manila is one day. Daylight saving moves Manila hours, never the client's.
+- **Nightly flags** (`rebuildAttendanceDays`, columns `scheduled_minutes`, `late_minutes`, `early_leave_minutes`, `extra_minutes`): `late` and `left_early` past the team's `late_grace_minutes` (default 10); `extra_hours` = worked minus scheduled, ignoring under 15 minutes (a shifted day is not extra); `rest_day_work` and `holiday_work` count in full as extra; `absent` = a scheduled day that ended with no clocking, no approved leave and no holiday (the flag is taken off again if events or leave appear). **People with no schedule get none of these.** Holidays are the person's PH plus their clients' calendars.
+- **Missed clock-out** now fires at shift end plus the team's `grace_minutes` (default 60), once per session (`missed_clockout_notices`); the 12-hour rule remains the backstop for people with no schedule.
+- **Leave days** use the person's working weekdays in their own zone when they have a schedule (`workingWeekdaysFor`), Monday to Friday otherwise (`workdays.ts` takes an optional weekday set).
+- E2E: the Schedules tab is HR only; the My time table has Shift and Extra columns.
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.

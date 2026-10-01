@@ -4,11 +4,14 @@ import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatInZone } from "@/lib/time";
-import { downlineEmployeeIds, managerChainUserIds, reportName } from "@/modules/org/service";
+import { holidaysInRange } from "@/modules/timeoff/request-service";
+import { downlineEmployeeIds, managerChainUserIds, reportName, todayInZone } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { EOD_EDIT_WINDOW_MS, MAX_OPEN_SESSION_MS, buildDays, isPossiblyOffline, needsHrDecision, replayClock, type ClockState, type DayTotals, type SessionDetail } from "./clock";
+import { describeSchedule, extraMinutes, hasScheduleAround, scheduleFor, shiftOn, shiftRange } from "./schedule";
 import { clockRules } from "./schema";
+import { loadSchedules, loadSchedulesFor } from "./schedule-service";
 import { loadEventsBetween, loadRecentEvents, monitoringPolicyPublished, pendingClockOut, prefsFor, rulesFor } from "./service";
 
 // Every query starts with requireUser() and authorize(). Pages wrap them in orNotFound().
@@ -106,7 +109,9 @@ export type CorrectionItem = {
 export type MyTime = {
   zone: string;
   weekStart: string;
-  days: { date: string; weekday: string; workedMinutes: number; breakMinutes: number; overbreakMinutes: number; sessions: number; firstIn: number | null; lastOut: number | null; open: boolean; sessionList: SessionDetail[] }[];
+  days: { date: string; weekday: string; workedMinutes: number; breakMinutes: number; overbreakMinutes: number; sessions: number; firstIn: number | null; lastOut: number | null; open: boolean; sessionList: SessionDetail[]; scheduledMinutes: number | null; extraMinutes: number; shift: { range: string; clientRange: string; zone: string } | null; holiday: boolean }[];
+  /** The person's schedule in force this week, described in the client's zone and Manila; null when they have none. */
+  schedule: { days: string; client: string; manila: string; zone: string; effectiveFrom: string } | null;
   weekMinutes: number;
   prefs: { shareLocation: boolean; timeZone: string | null };
   monitoringPublished: boolean;
@@ -140,11 +145,32 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
   const to = Date.parse(`${addDays(weekStart, 8)}T00:00:00Z`);
   const byDate = new Map(buildDays(await loadEventsBetween(db, me.id, from, to), prefs.zone, Date.now()).map((d) => [d.date, d]));
   const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" });
+  const schedules = await loadSchedules(db, me.id);
+  const holidays = new Set((await holidaysInRange(db, me.id, weekStart, addDays(weekStart, 6))).map((h) => h.date));
   const days = Array.from({ length: 7 }, (_, i) => {
     const date = addDays(weekStart, i);
     const d = byDate.get(date);
-    return { date, weekday: WEEKDAY.format(new Date(`${date}T00:00:00Z`)), workedMinutes: d?.workedMinutes ?? 0, breakMinutes: d?.breakMinutes ?? 0, overbreakMinutes: d?.overbreakMinutes ?? 0, sessions: d?.sessions ?? 0, firstIn: d?.firstIn ?? null, lastOut: d?.lastOut ?? null, open: d?.open ?? false, sessionList: d?.sessionList ?? [] };
+    const shift = shiftOn(schedules, prefs.zone, date);
+    const worked = d?.workedMinutes ?? 0;
+    const holiday = holidays.has(date);
+    return {
+      date,
+      weekday: WEEKDAY.format(new Date(`${date}T00:00:00Z`)),
+      workedMinutes: worked,
+      breakMinutes: d?.breakMinutes ?? 0,
+      overbreakMinutes: d?.overbreakMinutes ?? 0,
+      sessions: d?.sessions ?? 0,
+      firstIn: d?.firstIn ?? null,
+      lastOut: d?.lastOut ?? null,
+      open: d?.open ?? false,
+      sessionList: d?.sessionList ?? [],
+      scheduledMinutes: shift?.scheduledMinutes ?? null,
+      extraMinutes: extraMinutes({ workedMinutes: worked, shift, hasSchedule: hasScheduleAround(schedules, date), holiday }),
+      shift: shift ? { range: shiftRange(shift, prefs.zone), clientRange: shiftRange(shift, shift.schedule.zone), zone: shift.schedule.zone } : null,
+      holiday,
+    };
   });
+  const current = scheduleFor(schedules, weekStart) ?? scheduleFor(schedules, addDays(weekStart, 6));
 
   const rows = (await db.execute(sql`
     select c.id, c.employee_id, c.reason, c.proposed, c.status, c.decision_note, c.created_at, c.kind, c.original_proposed, c.requested_by,
@@ -154,6 +180,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
   const sessionIds = days.flatMap((d) => d.sessionList.map((s) => s.eventId).filter((id): id is string => Boolean(id)));
   const noteRows = sessionIds.length === 0 ? [] : ((await db.execute(sql`select session_event_id, body, edited from time.shift_notes where employee_id = ${me.id} and session_event_id in (${list(sessionIds)})`)) as unknown as { session_event_id: string; body: string; edited: boolean }[]);
   return {
+    schedule: current ? { ...describeSchedule(current, weekStart), effectiveFrom: current.effectiveFrom } : null,
     notes: Object.fromEntries(noteRows.map((n) => [n.session_event_id, { body: n.body, edited: n.edited }])),
     serverNowMs: Date.now(),
     noteWindowMs: EOD_EDIT_WINDOW_MS,
@@ -232,7 +259,7 @@ export async function listWorkingNow(): Promise<{ rows: WorkingNowRow[]; scope: 
   };
 }
 
-export type FlagRow = { employeeId: string; name: string; date: string; flags: string[]; workedMinutes: number; overbreakMinutes: number };
+export type FlagRow = { employeeId: string; name: string; date: string; flags: string[]; workedMinutes: number; overbreakMinutes: number; lateMinutes: number; earlyLeaveMinutes: number; extraMinutes: number };
 
 /** Days with something worth a look in the last two weeks, from the nightly rebuild. */
 export async function listFlags(): Promise<{ rows: FlagRow[]; scope: "all" | "team" }> {
@@ -243,11 +270,11 @@ export async function listFlags(): Promise<{ rows: FlagRow[]; scope: "all" | "te
   if (restrict && restrict.length === 0) return { rows: [], scope };
   const filter = restrict ? sql`and d.employee_id in (${list(restrict)})` : sql``;
   const rows = (await db.execute(sql`
-    select d.employee_id, d.date::text as date, d.flags, d.worked_minutes, d.overbreak_minutes, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
+    select d.employee_id, d.date::text as date, d.flags, d.worked_minutes, d.overbreak_minutes, d.late_minutes, d.early_leave_minutes, d.extra_minutes, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
     from time.attendance_days d join core.employees e on e.id = d.employee_id
     where d.date >= current_date - 14 and cardinality(d.flags) > 0 ${filter}
-    order by d.date desc, e.legal_last_name limit 300`)) as unknown as { employee_id: string; date: string; flags: string[]; worked_minutes: number; overbreak_minutes: number; first: string; last: string; preferred: string | null }[];
-  return { scope, rows: rows.map((r) => ({ employeeId: r.employee_id, name: reportName({ first: r.first, last: r.last, preferred: r.preferred }), date: r.date, flags: r.flags, workedMinutes: r.worked_minutes, overbreakMinutes: r.overbreak_minutes })) };
+    order by d.date desc, e.legal_last_name limit 300`)) as unknown as { employee_id: string; date: string; flags: string[]; worked_minutes: number; overbreak_minutes: number; late_minutes: number; early_leave_minutes: number; extra_minutes: number; first: string; last: string; preferred: string | null }[];
+  return { scope, rows: rows.map((r) => ({ employeeId: r.employee_id, name: reportName({ first: r.first, last: r.last, preferred: r.preferred }), date: r.date, flags: r.flags, workedMinutes: r.worked_minutes, overbreakMinutes: r.overbreak_minutes, lateMinutes: r.late_minutes, earlyLeaveMinutes: r.early_leave_minutes, extraMinutes: r.extra_minutes })) };
 }
 
 /** Corrections waiting for the signed-in person to decide: their downline's (lead) or everyone's (HR). */
@@ -294,7 +321,7 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
   return { items, scope };
 }
 
-export type RulesRow = { teamId: string; teamName: string; allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; hasRow: boolean };
+export type RulesRow = { teamId: string; teamName: string; allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; lateGraceMinutes: number; hasRow: boolean };
 
 /** Every team with its clock rules (defaults for teams without a row). HR only. */
 export async function listClockRules(): Promise<{ rows: RulesRow[]; monitoringPublished: boolean }> {
@@ -307,7 +334,7 @@ export async function listClockRules(): Promise<{ rows: RulesRow[]; monitoringPu
     monitoringPublished: await monitoringPolicyPublished(db),
     rows: all.map((t) => {
       const r = byTeam.get(t.id);
-      return { teamId: t.id, teamName: t.name, allowedCidrs: r?.allowedCidrs ?? [], selfieRequired: r?.selfieRequired ?? false, idleMinutes: r ? r.idleMinutes : 30, graceMinutes: r?.graceMinutes ?? 60, eodExpected: r?.eodExpected ?? false, jibbleMirror: r?.jibbleMirror ?? false, hasRow: Boolean(r) };
+      return { teamId: t.id, teamName: t.name, allowedCidrs: r?.allowedCidrs ?? [], selfieRequired: r?.selfieRequired ?? false, idleMinutes: r ? r.idleMinutes : 30, graceMinutes: r?.graceMinutes ?? 60, eodExpected: r?.eodExpected ?? false, jibbleMirror: r?.jibbleMirror ?? false, lateGraceMinutes: r?.lateGraceMinutes ?? 10, hasRow: Boolean(r) };
     }),
   };
 }
@@ -352,3 +379,45 @@ export async function listShiftNotes(): Promise<{ rows: NoteRow[]; scope: "all" 
     rows: rows.map((r) => ({ id: r.id, employeeId: r.employee_id, name: reportName({ first: r.first, last: r.last, preferred: r.preferred }), sessionStartMs: Number(r.start_ms), body: r.body, edited: r.edited, updatedAt: new Date(r.updated_at).toISOString() })),
   };
 }
+
+export type ScheduleListRow = {
+  employeeId: string;
+  name: string;
+  team: string | null;
+  zone: string | null;
+  current: { days: string; client: string; manila: string; effectiveFrom: string; breakMinutes: number } | null;
+  /** A schedule that starts later, when one is already set. */
+  upcoming: { effectiveFrom: string; days: string; client: string } | null;
+};
+
+/** Everyone active with their current schedule (or none). HR only. */
+export async function listSchedules(): Promise<{ rows: ScheduleListRow[]; withoutSchedule: number }> {
+  const user = await requireUser();
+  await authorize(user, "schedules.manage");
+  const people = (await db.execute(sql`
+    select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team
+    from core.employees e left join core.teams t on t.id = e.team_id
+    where e.archived_at is null and e.status <> 'separated' order by e.legal_last_name, e.legal_first_name limit 1000`)) as unknown as { id: string; first: string; last: string; preferred: string | null; team: string | null }[];
+  const byPerson = await loadSchedulesFor(db, people.map((p) => p.id));
+  const today = todayInZone();
+  const rows = people.map((p) => {
+    const list = byPerson.get(p.id) ?? [];
+    const now = scheduleFor(list, today);
+    const later = list.find((s) => s.effectiveFrom > today);
+    return {
+      employeeId: p.id,
+      name: reportName({ first: p.first, last: p.last, preferred: p.preferred }),
+      team: p.team,
+      zone: now?.zone ?? later?.zone ?? null,
+      current: now ? { ...pickDescription(now, today), effectiveFrom: now.effectiveFrom, breakMinutes: now.breakMinutes } : null,
+      upcoming: later ? { effectiveFrom: later.effectiveFrom, days: describeSchedule(later, later.effectiveFrom).days, client: describeSchedule(later, later.effectiveFrom).client } : null,
+    };
+  });
+  return { rows, withoutSchedule: rows.filter((r) => !r.current).length };
+}
+
+const pickDescription = (s: Parameters<typeof describeSchedule>[0], date: string) => {
+  const d = describeSchedule(s, date);
+  return { days: d.days, client: `${d.client} (${d.zone})`, manila: d.manila };
+};
+

@@ -47,13 +47,13 @@ export async function loadEventsBetween(executor: Executor, employeeId: string, 
   return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned }));
 }
 
-export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean };
-export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false, jibbleMirror: false };
+export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; lateGraceMinutes: number };
+export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false, jibbleMirror: false, lateGraceMinutes: 10 };
 
 /** The rules of the person's team (or the defaults when the team has none). */
 export async function rulesFor(executor: Executor, employeeId: string): Promise<EffectiveRules> {
   const [row] = await executor
-    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected, jibbleMirror: clockRules.jibbleMirror })
+    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected, jibbleMirror: clockRules.jibbleMirror, lateGraceMinutes: clockRules.lateGraceMinutes })
     .from(employees)
     .innerJoin(clockRules, eq(clockRules.teamId, employees.teamId))
     .where(eq(employees.id, employeeId))

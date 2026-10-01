@@ -1,5 +1,5 @@
-// Pure working-day rules. Until schedules exist (Phase 2.5) a working day is Monday to Friday that is not a
-// public holiday. Dates are yyyy-MM-dd on the company calendar; nothing here reads a clock.
+// Pure working-day rules. A working day is a day the person works (the weekdays of their schedule, or Monday to Friday when
+// they have none) that is not a public holiday. Dates are yyyy-MM-dd on the company calendar; nothing here reads a clock.
 
 const DAY_MS = 86_400_000;
 const parse = (date: string) => Date.parse(`${date}T00:00:00Z`);
@@ -17,16 +17,18 @@ export function eachDate(start: string, end: string): string[] {
   return out;
 }
 
-export const isWorkingDay = (date: string, holidays: ReadonlySet<string>) => isWeekday(date) && !holidays.has(date);
+/** `weekdays` are JavaScript weekdays (0 = Sunday) the person works; leave it out for Monday to Friday. */
+export const isWorkingDay = (date: string, holidays: ReadonlySet<string>, weekdays?: ReadonlySet<number>) =>
+  (weekdays ? weekdays.has(new Date(parse(date)).getUTCDay()) : isWeekday(date)) && !holidays.has(date);
 
 /** The working days inside a range. */
-export function workingDaysIn(start: string, end: string, holidays: ReadonlySet<string>): string[] {
-  return eachDate(start, end).filter((d) => isWorkingDay(d, holidays));
+export function workingDaysIn(start: string, end: string, holidays: ReadonlySet<string>, weekdays?: ReadonlySet<number>): string[] {
+  return eachDate(start, end).filter((d) => isWorkingDay(d, holidays, weekdays));
 }
 
 /** Days a request uses: its working days, or half a day for a half-day request on a single working day. */
-export function requestDays(start: string, end: string, halfDay: boolean, holidays: ReadonlySet<string>): number {
-  const count = workingDaysIn(start, end, holidays).length;
+export function requestDays(start: string, end: string, halfDay: boolean, holidays: ReadonlySet<string>, weekdays?: ReadonlySet<number>): number {
+  const count = workingDaysIn(start, end, holidays, weekdays).length;
   if (halfDay) return start === end && count === 1 ? 0.5 : 0;
   return count;
 }
