@@ -108,7 +108,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
   // A day boundary in the person's zone can sit a day either side of UTC, so look a day wide.
   const from = Date.parse(`${addDays(weekStart, -1)}T00:00:00Z`);
   const to = Date.parse(`${addDays(weekStart, 8)}T00:00:00Z`);
-  const byDate = new Map(buildDays(await loadEventsBetween(db, me.id, from, to), prefs.zone).map((d) => [d.date, d]));
+  const byDate = new Map(buildDays(await loadEventsBetween(db, me.id, from, to), prefs.zone, Date.now()).map((d) => [d.date, d]));
   const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" });
   const days = Array.from({ length: 7 }, (_, i) => {
     const date = addDays(weekStart, i);

@@ -8,6 +8,7 @@ import { orNotFound } from "@/lib/or-not-found";
 import { formatDateOnly, formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { formatDuration, MINUTE } from "@/modules/attendance/clock";
+import { AutoRefresh } from "@/modules/attendance/components/auto-refresh";
 import { CorrectionForm, CorrectionList, PreferencesForm, RulesForm } from "@/modules/attendance/components/attendance-forms";
 import { getMyTime, listClockRules, listCorrectionQueue, listFlags, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
 
@@ -71,6 +72,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
       {tab === "mine" ? (
         mine ? (
           <div className="space-y-6">
+            {mine.days.some((d) => d.open) ? <AutoRefresh seconds={30} /> : null}
             <section aria-label="This week" className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-lg font-semibold">
@@ -103,7 +105,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                           {d.weekday}, {formatDateOnly(d.date)}
                         </TableCell>
                         <TableCell>{d.firstIn ? formatInZone(d.firstIn, mine.zone, "h:mm a") : "-"}</TableCell>
-                        <TableCell>{d.open ? <Badge variant="secondary">Still clocked in</Badge> : d.lastOut ? formatInZone(d.lastOut, mine.zone, "h:mm a") : "-"}</TableCell>
+                        <TableCell>{d.open ? <Badge variant="secondary">In progress</Badge> : d.lastOut ? formatInZone(d.lastOut, mine.zone, "h:mm a") : "-"}</TableCell>
                         <TableCell className="text-right">{d.breakMinutes ? formatDuration(d.breakMinutes * MINUTE) : "-"}</TableCell>
                         <TableCell className="text-right font-medium">{d.workedMinutes ? formatDuration(d.workedMinutes * MINUTE) : "-"}</TableCell>
                       </TableRow>

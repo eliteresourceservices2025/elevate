@@ -5,30 +5,37 @@ import { createEmployeeAccount, hydrated, signInEnrollingMfa, waitForHydration }
 // Needs the local Supabase with migrations applied.
 
 test("an employee clocks in, takes a break and clocks out from the header", async ({ page }) => {
+  // Each click is a server round trip on a shared dev server that may be compiling, so state changes get extra time.
+  const slow = { timeout: 30_000 };
   const stamp = Date.now();
   const employee = await createEmployeeAccount("Clara", `Clock${stamp}`);
   await signInEnrollingMfa(page, employee);
 
   await (await hydrated(page.getByRole("button", { name: "Clock in" }))).click();
-  await expect(page.getByText("Clocked in.")).toBeVisible();
-  await expect(page.getByText("Working", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Clock in" })).toHaveCount(0);
+  await expect(page.getByText("Clocked in.")).toBeVisible(slow);
+  await expect(page.getByText("Working", { exact: true })).toBeVisible(slow);
+  await expect(page.getByRole("button", { name: "Clock in" })).toHaveCount(0, slow);
 
   await page.getByRole("button", { name: "Break" }).click();
-  await expect(page.getByText("On break", { exact: true })).toBeVisible();
+  await expect(page.getByText("On break", { exact: true })).toBeVisible(slow);
   // A second window cannot clock in again while this one is on a break
   await page.getByRole("button", { name: "End break" }).click();
-  await expect(page.getByText("Working", { exact: true })).toBeVisible();
+  await expect(page.getByText("Working", { exact: true })).toBeVisible(slow);
+  // The header clock shows seconds, and the week already shows today's session while it is still running
+  await expect(page.getByText(/^\d+:\d{2}:\d{2}$/)).toBeVisible(slow);
+  await page.goto("/attendance");
+  await expect(page.getByRole("region", { name: "This week" }).getByText("In progress")).toBeVisible(slow);
+  await expect(page.getByText("Working", { exact: true })).toBeVisible(slow);
 
   await page.getByRole("button", { name: "Clock out" }).click();
-  await expect(page.getByText("Clocked out.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Clock in" })).toBeVisible();
+  await expect(page.getByText("Clocked out.")).toBeVisible(slow);
+  await expect(page.getByRole("button", { name: "Clock in" })).toBeVisible(slow);
 
   // The week shows today with the finished session
   await page.goto("/attendance");
   const week = page.getByRole("region", { name: "This week" });
-  await expect(week.getByText("Still clocked in")).toHaveCount(0);
-  await expect(week.getByRole("row").filter({ hasText: "Total" })).toBeVisible();
+  await expect(week.getByText("In progress")).toHaveCount(0, slow);
+  await expect(week.getByRole("row").filter({ hasText: "Total" })).toBeVisible(slow);
 });
 
 test("an employee asks to fix a forgotten clock-out and their lead approves it", async ({ browser }) => {

@@ -496,6 +496,24 @@ describe("who sees what", () => {
     expect((await actions.savePreferences({ shareLocation: false, timeZone: "Mars/Olympus" })).ok).toBe(false);
   });
 
+  it("counts a session that is still open up to now in the person's own week, minus breaks", async () => {
+    const ned = await person("Ned");
+    await event(ned.employeeId, "clock_in", iso(3 * HOUR));
+    await event(ned.employeeId, "break_start", iso(2 * HOUR));
+    await event(ned.employeeId, "break_end", iso(1.5 * HOUR));
+    as(ned.user);
+    const week = await queries.getMyTime();
+    const today = week!.days.find((d) => d.open)!;
+    expect(today.open).toBe(true);
+    expect(today.workedMinutes).toBeGreaterThanOrEqual(149); // 3h minus the 30 minute break, to the minute
+    expect(today.workedMinutes).toBeLessThanOrEqual(151);
+    expect(today.breakMinutes).toBe(30);
+    expect(week!.weekMinutes).toBe(today.workedMinutes);
+    // The nightly rebuild still leaves an unfinished session out
+    await jobs.rebuildAttendanceDays();
+    expect((await rows<{ worked_minutes: number }>(sql`select worked_minutes from time.attendance_days where employee_id = ${ned.employeeId}`))[0].worked_minutes).toBe(0);
+  });
+
   it("lets HR see every team's rules, with defaults for teams that have none", async () => {
     const team = await makeTeam();
     as(hr);

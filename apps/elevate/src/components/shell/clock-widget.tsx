@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { formatDuration } from "@/modules/attendance/clock";
+import { formatClock } from "@/modules/attendance/clock";
 import { answerIdlePrompt, clockIn, clockOut, endBreak, reportIdlePrompt, requestClockSelfie, startBreak } from "@/modules/attendance/actions";
 import type { ClockStatus } from "@/modules/attendance/queries";
 
@@ -190,6 +190,8 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const nowMs = now ?? status.serverNowMs;
   const onBreak = status.state === "break";
   const worked = status.sessionStartMs === null ? 0 : nowMs - status.sessionStartMs - status.breakDoneMs - (status.breakStartMs ? nowMs - status.breakStartMs : 0);
+  // While working the clock shows time worked; on a break it shows how long the break has lasted (worked time is paused).
+  const shown = onBreak && status.breakStartMs ? nowMs - status.breakStartMs : worked;
 
   return (
     <div className="relative flex items-center gap-2">
@@ -198,7 +200,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
           <span className={`size-2 rounded-full ${onBreak ? "bg-amber-500" : "bg-green-600"}`} aria-hidden />
           <span className="font-medium">{onBreak ? "On break" : "Working"}</span>
           <span className="font-mono text-muted-foreground" suppressHydrationWarning>
-            {formatDuration(worked)}
+            {formatClock(shown)}
           </span>
         </span>
       ) : null}

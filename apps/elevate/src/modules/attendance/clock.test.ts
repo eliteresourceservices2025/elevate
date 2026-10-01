@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDays, formatDuration, ipAllowed, isValidRange, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
+import { buildDays, formatClock, formatDuration, ipAllowed, isValidRange, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
 
 const T = (iso: string) => Date.parse(iso);
 const ev = (type: ClockType, iso: string): ClockEventLite => ({ type, at: T(iso) });
@@ -109,5 +109,33 @@ describe("location and formatting", () => {
     expect(formatDuration(0)).toBe("0m");
     expect(formatDuration(59 * 60_000)).toBe("59m");
     expect(formatDuration(8 * 3_600_000 + 5 * 60_000)).toBe("8h 05m");
+  });
+});
+
+describe("a session that is still open", () => {
+  const events = [ev("clock_in", "2026-10-05T09:00:00Z"), ev("break_start", "2026-10-05T11:00:00Z"), ev("break_end", "2026-10-05T11:30:00Z")];
+
+  it("is left out of the totals by default (the nightly rebuild)", () => {
+    const [day] = buildDays(events, "UTC");
+    expect(day).toMatchObject({ open: true, workedMinutes: 0, breakMinutes: 0 });
+  });
+
+  it("counts up to now when asked (the person's own live view), minus breaks", () => {
+    const [day] = buildDays(events, "UTC", T("2026-10-05T13:00:00Z"));
+    expect(day).toMatchObject({ open: true, workedMinutes: 210, breakMinutes: 30 }); // 4h minus a 30 minute break
+  });
+
+  it("counts an open break up to now as break time, not work", () => {
+    const [day] = buildDays([ev("clock_in", "2026-10-05T09:00:00Z"), ev("break_start", "2026-10-05T10:00:00Z")], "UTC", T("2026-10-05T10:20:00Z"));
+    expect(day).toMatchObject({ workedMinutes: 60, breakMinutes: 20 });
+  });
+});
+
+describe("formatClock", () => {
+  it("shows seconds so a running clock visibly moves", () => {
+    expect(formatClock(0)).toBe("0:00:00");
+    expect(formatClock(42_000)).toBe("0:00:42");
+    expect(formatClock(3_725_000)).toBe("1:02:05");
+    expect(formatClock(-5)).toBe("0:00:00");
   });
 });

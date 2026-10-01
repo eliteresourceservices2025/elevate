@@ -73,17 +73,23 @@ export type DayTotals = {
 
 /**
  * Groups sessions into calendar days: a session belongs to the day it STARTED in the person's own zone, so a night
- * shift stays one day. Open sessions are shown but contribute no worked time (they are not finished).
+ * shift stays one day. An open session is flagged; it counts toward the totals only when `openUntil` is given (the person's
+ * own live view counts it up to now). The nightly rebuild leaves it out, because it is not finished.
  */
-export function buildDays(events: readonly ClockEventLite[], zone: string): DayTotals[] {
+export function buildDays(events: readonly ClockEventLite[], zone: string, openUntil?: number): DayTotals[] {
   const days = new Map<string, DayTotals>();
   for (const s of replayClock(events).sessions) {
     const date = formatInZone(s.startAt, zone, "yyyy-MM-dd");
     const day = days.get(date) ?? { date, sessions: 0, workedMinutes: 0, breakMinutes: 0, firstIn: s.startAt, lastOut: null, open: false };
     day.sessions += 1;
     day.firstIn = Math.min(day.firstIn, s.startAt);
-    if (s.endAt === null) day.open = true;
-    else {
+    if (s.endAt === null) {
+      day.open = true;
+      if (openUntil !== undefined) {
+        day.workedMinutes += Math.round(workedMs(s, openUntil) / MINUTE);
+        day.breakMinutes += Math.round(breakMs(s, openUntil) / MINUTE);
+      }
+    } else {
       day.workedMinutes += Math.round(workedMs(s, s.endAt) / MINUTE);
       day.breakMinutes += Math.round(breakMs(s, s.endAt) / MINUTE);
       day.lastOut = Math.max(day.lastOut ?? 0, s.endAt);
@@ -141,6 +147,15 @@ export function formatDuration(ms: number): string {
   const h = Math.floor(total / 60);
   const m = total % 60;
   return h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
+}
+
+/** A running clock: 0:00:42 or 1:23:45. */
+export function formatClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 export const MAX_OPEN_SESSION_MS = 12 * 60 * MINUTE;
