@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, index, integer, jsonb, numeric, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, jsonb, numeric, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { time } from "@/modules/timeoff/schema";
@@ -27,6 +27,8 @@ export const clockEvents = time
       /** True when the team has allowed ranges and the IP was outside them. */
       outsideAllowedRange: boolean("outside_allowed_range").notNull().default(false),
       /** Rounded to two decimals (about 1 km) before it is stored. Optional, only with the person's permission. */
+      /** Break starts only: the length the person chose (15, 30 or 60 minutes), or null for an open-ended break. */
+      plannedBreakMinutes: smallint("planned_break_minutes"),
       approxLat: numeric("approx_lat", { precision: 5, scale: 2 }),
       approxLng: numeric("approx_lng", { precision: 5, scale: 2 }),
       correctionId: uuid("correction_id"),
@@ -39,6 +41,7 @@ export const clockEvents = time
       check("clock_events_type_chk", sql`${t.type} in ('clock_in','break_start','break_end','clock_out')`),
       check("clock_events_source_chk", sql`${t.source} in ('web','admin_correction')`),
       check("clock_events_correction_chk", sql`(${t.source} = 'web') or (${t.correctionId} is not null and coalesce(length(trim(${t.correctionReason})), 0) > 0)`),
+      check("clock_events_planned_chk", sql`${t.plannedBreakMinutes} is null or (${t.type} = 'break_start' and ${t.plannedBreakMinutes} in (15, 30, 60))`),
       check("clock_events_location_chk", sql`(${t.approxLat} is null) = (${t.approxLng} is null)`),
     ],
   )
@@ -157,6 +160,8 @@ export const attendanceDays = time
       sessions: integer("sessions").notNull().default(0),
       workedMinutes: integer("worked_minutes").notNull().default(0),
       breakMinutes: integer("break_minutes").notNull().default(0),
+      /** Minutes spent past the chosen length on timed breaks. */
+      overbreakMinutes: integer("overbreak_minutes").notNull().default(0),
       firstIn: timestamp("first_in", { withTimezone: true }),
       lastOut: timestamp("last_out", { withTimezone: true }),
       /** Flags: open_session, outside_range, corrected, idle_unanswered, on_leave. Late, overtime and absence arrive with schedules. */
@@ -173,6 +178,18 @@ export const missedClockoutNotices = time
     eventId: uuid("event_id")
       .primaryKey()
       .references(() => clockEvents.id),
+    noticedAt: timestamp("noticed_at", { withTimezone: true }).notNull().defaultNow(),
+  })
+  .enableRLS();
+
+/** One row per break that went over its chosen length and was reported to the lead, so it is reported once. */
+export const overbreakNotices = time
+  .table("overbreak_notices", {
+    /** The break_start event. */
+    eventId: uuid("event_id")
+      .primaryKey()
+      .references(() => clockEvents.id),
+    minutesOver: integer("minutes_over").notNull(),
     noticedAt: timestamp("noticed_at", { withTimezone: true }).notNull().defaultNow(),
   })
   .enableRLS();

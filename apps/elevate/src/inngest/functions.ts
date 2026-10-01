@@ -1,6 +1,6 @@
 import "server-only";
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
-import { purgeSelfies, rebuildAttendanceDays, runMissedClockouts } from "@/modules/attendance/jobs";
+import { purgeSelfies, rebuildAttendanceDays, runMissedClockouts, runOverbreakAlerts } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
 import { runLeaveExpiry } from "@/modules/timeoff/jobs";
@@ -66,10 +66,16 @@ export const missedClockouts = inngest.createFunction(
   async ({ step }) => step.run("check", () => runMissedClockouts()),
 );
 
+/** Every 5 minutes: tell leads about timed breaks that are still running past their length. */
+export const overbreakAlerts = inngest.createFunction(
+  { id: "overbreak-alerts", triggers: { cron: "*/5 * * * *" } },
+  async ({ step }) => step.run("check", () => runOverbreakAlerts()),
+);
+
 /** Daily at 2:40 AM: delete clock-in selfies after 30 days. */
 export const selfiePurge = inngest.createFunction(
   { id: "selfie-purge", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 40 2 * * *` } },
   async ({ step }) => step.run("purge", () => purgeSelfies()),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, selfiePurge];
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge];

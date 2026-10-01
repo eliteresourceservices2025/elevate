@@ -7,7 +7,7 @@ import { formatInZone } from "@/lib/time";
 import { downlineEmployeeIds, managerChainUserIds, reportName } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
-import { MAX_OPEN_SESSION_MS, buildDays, replayClock, type ClockState, type DayTotals } from "./clock";
+import { MAX_OPEN_SESSION_MS, buildDays, replayClock, type ClockState, type DayTotals, type SessionDetail } from "./clock";
 import { clockRules } from "./schema";
 import { loadEventsBetween, loadRecentEvents, monitoringPolicyPublished, prefsFor, rulesFor } from "./service";
 
@@ -29,6 +29,8 @@ export type ClockStatus = {
   /** Break time already finished in this session (ms), and when an open break started. */
   breakDoneMs: number;
   breakStartMs: number | null;
+  /** The length chosen for the break in progress (15, 30 or 60), or null for no limit. */
+  breakPlannedMinutes: number | null;
   /** The server's clock, so the browser counts from the server's time and not its own. */
   serverNowMs: number;
   idleMinutes: number | null;
@@ -56,6 +58,7 @@ export async function getClockStatus(): Promise<ClockStatus | null> {
     sessionStartMs: live?.startAt ?? null,
     breakDoneMs: live ? live.breaks.filter((b) => b.endAt !== null).reduce((sum, b) => sum + (b.endAt! - b.startAt), 0) : 0,
     breakStartMs: openBreak?.startAt ?? null,
+    breakPlannedMinutes: openBreak?.plannedMinutes ?? null,
     serverNowMs: Date.now(),
     idleMinutes: rules.idleMinutes,
     needsSelfie: rules.selfieRequired && monitoring,
@@ -80,7 +83,7 @@ export type CorrectionItem = {
 export type MyTime = {
   zone: string;
   weekStart: string;
-  days: { date: string; weekday: string; workedMinutes: number; breakMinutes: number; sessions: number; firstIn: number | null; lastOut: number | null; open: boolean }[];
+  days: { date: string; weekday: string; workedMinutes: number; breakMinutes: number; overbreakMinutes: number; sessions: number; firstIn: number | null; lastOut: number | null; open: boolean; sessionList: SessionDetail[] }[];
   weekMinutes: number;
   prefs: { shareLocation: boolean; timeZone: string | null };
   monitoringPublished: boolean;
@@ -113,7 +116,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
   const days = Array.from({ length: 7 }, (_, i) => {
     const date = addDays(weekStart, i);
     const d = byDate.get(date);
-    return { date, weekday: WEEKDAY.format(new Date(`${date}T00:00:00Z`)), workedMinutes: d?.workedMinutes ?? 0, breakMinutes: d?.breakMinutes ?? 0, sessions: d?.sessions ?? 0, firstIn: d?.firstIn ?? null, lastOut: d?.lastOut ?? null, open: d?.open ?? false };
+    return { date, weekday: WEEKDAY.format(new Date(`${date}T00:00:00Z`)), workedMinutes: d?.workedMinutes ?? 0, breakMinutes: d?.breakMinutes ?? 0, overbreakMinutes: d?.overbreakMinutes ?? 0, sessions: d?.sessions ?? 0, firstIn: d?.firstIn ?? null, lastOut: d?.lastOut ?? null, open: d?.open ?? false, sessionList: d?.sessionList ?? [] };
   });
 
   const rows = (await db.execute(sql`
@@ -185,7 +188,7 @@ export async function listWorkingNow(): Promise<{ rows: WorkingNowRow[]; scope: 
   };
 }
 
-export type FlagRow = { employeeId: string; name: string; date: string; flags: string[]; workedMinutes: number };
+export type FlagRow = { employeeId: string; name: string; date: string; flags: string[]; workedMinutes: number; overbreakMinutes: number };
 
 /** Days with something worth a look in the last two weeks, from the nightly rebuild. */
 export async function listFlags(): Promise<{ rows: FlagRow[]; scope: "all" | "team" }> {
@@ -196,11 +199,11 @@ export async function listFlags(): Promise<{ rows: FlagRow[]; scope: "all" | "te
   if (restrict && restrict.length === 0) return { rows: [], scope };
   const filter = restrict ? sql`and d.employee_id in (${list(restrict)})` : sql``;
   const rows = (await db.execute(sql`
-    select d.employee_id, d.date::text as date, d.flags, d.worked_minutes, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
+    select d.employee_id, d.date::text as date, d.flags, d.worked_minutes, d.overbreak_minutes, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
     from time.attendance_days d join core.employees e on e.id = d.employee_id
     where d.date >= current_date - 14 and cardinality(d.flags) > 0 ${filter}
-    order by d.date desc, e.legal_last_name limit 300`)) as unknown as { employee_id: string; date: string; flags: string[]; worked_minutes: number; first: string; last: string; preferred: string | null }[];
-  return { scope, rows: rows.map((r) => ({ employeeId: r.employee_id, name: reportName({ first: r.first, last: r.last, preferred: r.preferred }), date: r.date, flags: r.flags, workedMinutes: r.worked_minutes })) };
+    order by d.date desc, e.legal_last_name limit 300`)) as unknown as { employee_id: string; date: string; flags: string[]; worked_minutes: number; overbreak_minutes: number; first: string; last: string; preferred: string | null }[];
+  return { scope, rows: rows.map((r) => ({ employeeId: r.employee_id, name: reportName({ first: r.first, last: r.last, preferred: r.preferred }), date: r.date, flags: r.flags, workedMinutes: r.worked_minutes, overbreakMinutes: r.overbreak_minutes })) };
 }
 
 /** Corrections waiting for the signed-in person to decide: their downline's (lead) or everyone's (HR). */

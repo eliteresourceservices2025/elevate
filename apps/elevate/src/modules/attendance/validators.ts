@@ -12,6 +12,8 @@ export const clockSchema = z.object({
   longitude: z.preprocess(toNumber, z.number().min(-180).max(180).optional()),
   /** The path returned by requestClockSelfie, for teams that require a selfie. */
   selfiePath: z.preprocess(blankToUndefined, z.string().max(200).optional()),
+  /** For a break: how long it is meant to be (15, 30 or 60 minutes). Leave out for a break with no limit. */
+  breakMinutes: z.preprocess(toNumber, z.union([z.literal(15), z.literal(30), z.literal(60)]).optional()),
 });
 
 export const preferencesSchema = z.object({

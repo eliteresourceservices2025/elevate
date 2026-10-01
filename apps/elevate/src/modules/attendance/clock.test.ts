@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDays, formatClock, formatDuration, ipAllowed, isValidRange, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
+import { breakLabel, buildDays, formatClock, formatDuration, ipAllowed, isValidRange, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
 
 const T = (iso: string) => Date.parse(iso);
 const ev = (type: ClockType, iso: string): ClockEventLite => ({ type, at: T(iso) });
@@ -137,5 +137,72 @@ describe("formatClock", () => {
     expect(formatClock(42_000)).toBe("0:00:42");
     expect(formatClock(3_725_000)).toBe("1:02:05");
     expect(formatClock(-5)).toBe("0:00:00");
+  });
+});
+
+describe("sessions stay separate", () => {
+  it("lists every clock-in to clock-out on a day instead of merging them away", () => {
+    const [day] = buildDays(
+      [
+        ev("clock_in", "2026-10-05T09:00:00Z"), ev("break_start", "2026-10-05T10:00:00Z"), ev("break_end", "2026-10-05T10:15:00Z"), ev("clock_out", "2026-10-05T12:00:00Z"),
+        ev("clock_in", "2026-10-05T13:00:00Z"), ev("clock_out", "2026-10-05T15:00:00Z"),
+      ],
+      "UTC",
+    );
+    expect(day.sessions).toBe(2);
+    expect(day.sessionList).toHaveLength(2);
+    expect(day.sessionList.map((s) => [s.workedMinutes, s.breakMinutes])).toEqual([[165, 15], [120, 0]]);
+    expect(day.sessionList[0].breaks).toEqual([{ startAt: T("2026-10-05T10:00:00Z"), endAt: T("2026-10-05T10:15:00Z"), minutes: 15, plannedMinutes: null, overMinutes: 0 }]);
+    expect(day.workedMinutes).toBe(285);
+  });
+});
+
+describe("timed breaks and overbreaks", () => {
+  const timed = (planned: number | null, endIso: string | null): ClockEventLite[] => [
+    ev("clock_in", "2026-10-05T09:00:00Z"),
+    { ...ev("break_start", "2026-10-05T10:00:00Z"), plannedBreakMinutes: planned },
+    ...(endIso ? [ev("break_end", endIso), ev("clock_out", "2026-10-05T12:00:00Z")] : []),
+  ];
+
+  it("is not an overbreak when the break ends on time or within the one-minute grace", () => {
+    expect(buildDays(timed(15, "2026-10-05T10:15:00Z"), "UTC")[0].overbreakMinutes).toBe(0);
+    expect(buildDays(timed(15, "2026-10-05T10:16:00Z"), "UTC")[0].overbreakMinutes).toBe(0); // exactly the grace
+  });
+
+  it("counts the whole excess once it is past the grace", () => {
+    const [day] = buildDays(timed(30, "2026-10-05T10:45:00Z"), "UTC");
+    expect(day.overbreakMinutes).toBe(15);
+    expect(day.sessionList[0].breaks[0]).toMatchObject({ minutes: 45, plannedMinutes: 30, overMinutes: 15 });
+    expect(day.workedMinutes).toBe(135); // the 3 hour session minus a 45 minute break
+  });
+
+  it("never counts an open-ended break as an overbreak", () => {
+    expect(buildDays(timed(null, "2026-10-05T11:30:00Z"), "UTC")[0].overbreakMinutes).toBe(0);
+  });
+
+  it("counts a break that is still running against the time it has so far", () => {
+    const [day] = buildDays(timed(15, null), "UTC", T("2026-10-05T10:25:00Z"));
+    expect(day.overbreakMinutes).toBe(10);
+    expect(day.open).toBe(true);
+  });
+
+  it("names the choices", () => {
+    expect(breakLabel(15)).toBe("15 minutes");
+    expect(breakLabel(60)).toBe("1 hour");
+    expect(breakLabel(null)).toBe("No time limit");
+  });
+});
+
+describe("an overbreak on a session that is still open", () => {
+  it("counts a break that has already ended, but not one still running (unless it is the live view)", () => {
+    const events: ClockEventLite[] = [
+      ev("clock_in", "2026-10-05T09:00:00Z"),
+      { ...ev("break_start", "2026-10-05T10:00:00Z"), plannedBreakMinutes: 15 },
+      ev("break_end", "2026-10-05T10:45:00Z"),
+    ];
+    const [nightly] = buildDays(events, "UTC"); // the nightly rebuild: the session is unfinished
+    expect(nightly).toMatchObject({ open: true, workedMinutes: 0, overbreakMinutes: 30 });
+    const running = buildDays([...events.slice(0, 2)], "UTC")[0];
+    expect(running.overbreakMinutes).toBe(0); // a break still running is not settled
   });
 });

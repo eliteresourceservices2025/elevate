@@ -1,12 +1,14 @@
 "use client";
 
-import { Clock, Coffee, LogOut, Play } from "lucide-react";
+import { ChevronDown, Clock, Coffee, LogOut, Play } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { formatClock } from "@/modules/attendance/clock";
+import { cn } from "@/lib/utils";
+import { BREAK_CHOICES, MINUTE, breakLabel, formatClock } from "@/modules/attendance/clock";
 import { answerIdlePrompt, clockIn, clockOut, endBreak, reportIdlePrompt, requestClockSelfie, startBreak } from "@/modules/attendance/actions";
 import type { ClockStatus } from "@/modules/attendance/queries";
 
@@ -91,7 +93,10 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const [pending, startTransition] = useTransition();
   const [now, setNow] = useState<number | null>(null);
   const [selfie, setSelfie] = useState(false);
+  const [breakMenu, setBreakMenu] = useState(false);
   const [idlePrompt, setIdlePrompt] = useState<string | null>(null);
+  /** The break (by its start time) whose "your break is up" pop-up the person has already dismissed. */
+  const [dismissedBreak, setDismissedBreak] = useState<number | null>(null);
   const offset = useRef(0);
   const lastActive = useRef(0);
   const idleRef = useRef<{ detector: IdleDetectorLike | null; abort: AbortController | null }>({ detector: null, abort: null });
@@ -110,15 +115,12 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
     return () => clearInterval(id);
   }, [status]);
 
-  const showPrompt = useCallback(
-    async (source: "idle_api" | "fallback") => {
-      if (promptShown.current) return;
-      promptShown.current = true;
-      const result = await reportIdlePrompt({ source });
-      setIdlePrompt(result.ok ? result.data.promptId : "none");
-    },
-    [],
-  );
+  const showPrompt = useCallback(async (source: "idle_api" | "fallback") => {
+    if (promptShown.current) return;
+    promptShown.current = true;
+    const result = await reportIdlePrompt({ source });
+    setIdlePrompt(result.ok ? result.data.promptId : "none");
+  }, []);
 
   // "Are you still working?": the browser's Idle Detection where available, otherwise no activity inside ELEVATE.
   useEffect(() => {
@@ -164,7 +166,15 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
     }
   }, [working]);
 
-  if (!status) return null;
+  if (!status) {
+    // No people record: say so, and point to where it is fixed, instead of silently showing nothing.
+    return (
+      <Link href="/attendance" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "font-medium")}>
+        <Clock aria-hidden />
+        Set up your time clock
+      </Link>
+    );
+  }
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success?: string, after?: () => void) =>
     startTransition(async () => {
@@ -190,33 +200,74 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const nowMs = now ?? status.serverNowMs;
   const onBreak = status.state === "break";
   const worked = status.sessionStartMs === null ? 0 : nowMs - status.sessionStartMs - status.breakDoneMs - (status.breakStartMs ? nowMs - status.breakStartMs : 0);
-  // While working the clock shows time worked; on a break it shows how long the break has lasted (worked time is paused).
-  const shown = onBreak && status.breakStartMs ? nowMs - status.breakStartMs : worked;
+
+  // On a timed break the clock counts down; past zero it counts how far over the person is. Open breaks count up.
+  const plannedMs = status.breakPlannedMinutes === null ? null : status.breakPlannedMinutes * MINUTE;
+  const breakElapsed = onBreak && status.breakStartMs ? nowMs - status.breakStartMs : 0;
+  const remaining = plannedMs === null ? null : plannedMs - breakElapsed;
+  const over = remaining !== null && remaining < 0;
+  const showBreakUp = onBreak && remaining !== null && remaining <= 0 && dismissedBreak !== status.breakStartMs;
+
+  const shownTime = onBreak ? (remaining === null ? formatClock(breakElapsed) : over ? `+${formatClock(-remaining)}` : formatClock(remaining)) : formatClock(worked);
+  const shownLabel = onBreak ? (remaining === null ? "On break" : over ? "Over break by" : "Break left") : "Working";
 
   return (
     <div className="relative flex items-center gap-2">
       {working ? (
         <span className="hidden items-center gap-1.5 text-sm sm:flex" aria-live="off">
-          <span className={`size-2 rounded-full ${onBreak ? "bg-amber-500" : "bg-green-600"}`} aria-hidden />
-          <span className="font-medium">{onBreak ? "On break" : "Working"}</span>
-          <span className="font-mono text-muted-foreground" suppressHydrationWarning>
-            {formatClock(shown)}
+          <span className={cn("size-2.5 rounded-full", onBreak ? (over ? "bg-red-600" : "bg-amber-500") : "bg-green-600")} aria-hidden />
+          <span className={cn("font-medium", over && "text-red-600")}>{shownLabel}</span>
+          <span className={cn("font-mono text-base font-semibold", over ? "text-red-600" : "text-foreground")} suppressHydrationWarning>
+            {shownTime}
           </span>
         </span>
       ) : null}
 
       {!working ? (
-        <Button variant="outline" size="sm" disabled={pending} onClick={() => (status.needsSelfie ? setSelfie(true) : void doClockIn())}>
-          <Clock aria-hidden />
+        <Button
+          size="lg"
+          disabled={pending}
+          onClick={() => (status.needsSelfie ? setSelfie(true) : void doClockIn())}
+          className="h-11 min-w-36 gap-2 px-6 text-base font-bold shadow-lg shadow-primary/30 ring-2 ring-primary/40 transition-transform hover:scale-[1.03]"
+        >
+          <Clock className="size-5" aria-hidden />
           Clock in
         </Button>
       ) : (
         <>
-          <Button variant="ghost" size="sm" disabled={pending} onClick={() => run(() => (onBreak ? endBreak() : startBreak()), onBreak ? "Break ended." : "Break started.")}>
-            {onBreak ? <Play aria-hidden /> : <Coffee aria-hidden />}
-            {onBreak ? "End break" : "Break"}
-          </Button>
-          <Button variant="outline" size="sm" disabled={pending} onClick={() => run(() => clockOut(), "Clocked out.")}>
+          {onBreak ? (
+            <Button variant="default" size="lg" className="h-10 gap-2 px-4 font-semibold" disabled={pending} onClick={() => run(() => endBreak(), "Break ended.")}>
+              <Play aria-hidden />
+              End break
+            </Button>
+          ) : (
+            <div className="relative">
+              <Button variant="ghost" size="lg" className="h-10 gap-1 px-3" disabled={pending} aria-haspopup="menu" aria-expanded={breakMenu} onClick={() => setBreakMenu((v) => !v)}>
+                <Coffee aria-hidden />
+                Break
+                <ChevronDown aria-hidden />
+              </Button>
+              {breakMenu ? (
+                <div role="menu" aria-label="Choose a break" className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-xl border bg-popover py-1 shadow-lg">
+                  {[...BREAK_CHOICES, null].map((m) => (
+                    <button
+                      key={m ?? "open"}
+                      type="button"
+                      role="menuitem"
+                      className="block w-full px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                      onClick={() => {
+                        setBreakMenu(false);
+                        run(() => startBreak(m === null ? {} : { breakMinutes: m }), "Break started.");
+                      }}
+                    >
+                      {breakLabel(m)}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+          <Button variant="outline" size="lg" className="h-10 gap-2 px-4 font-semibold" disabled={pending} onClick={() => run(() => clockOut(), "Clocked out.")}>
             <LogOut aria-hidden />
             Clock out
           </Button>
@@ -224,6 +275,35 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
       )}
 
       {selfie ? <SelfieCapture onCancel={() => setSelfie(false)} onDone={(path) => void doClockIn(path)} /> : null}
+
+      {showBreakUp ? (
+        <div role="alertdialog" aria-modal="true" aria-labelledby="break-up-title" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm space-y-4 rounded-2xl bg-card p-6 shadow-2xl">
+            <h2 id="break-up-title" className="text-xl font-bold text-red-600">
+              Your break is up
+            </h2>
+            <p className="text-sm">
+              Your {breakLabel(status.breakPlannedMinutes)} break has ended. Please end your break and get back to work. Time past your break is recorded on your timesheet, and your team lead is told if you stay on break.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button
+                size="lg"
+                className="h-11 text-base font-semibold"
+                disabled={pending}
+                onClick={() => {
+                  setDismissedBreak(status.breakStartMs);
+                  run(() => endBreak(), "Break ended.");
+                }}
+              >
+                End break and get back to work
+              </Button>
+              <Button variant="ghost" onClick={() => setDismissedBreak(status.breakStartMs)}>
+                Stay on break
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {idlePrompt ? (
         <div role="alertdialog" aria-label="Are you still working?" className="absolute right-0 top-full z-50 mt-2 w-64 space-y-2 rounded-xl border bg-popover p-3 shadow-lg">

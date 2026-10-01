@@ -57,9 +57,10 @@ export async function clockIn(input: unknown): Promise<ActionResult<ClockResult>
   await requireUser();
   return clock("clock_in", input);
 }
-export async function startBreak(): Promise<ActionResult<ClockResult>> {
+/** Starts a break: 15, 30 or 60 minutes, or no limit. A timed break that runs over is reported to the lead. */
+export async function startBreak(input?: unknown): Promise<ActionResult<ClockResult>> {
   await requireUser();
-  return clock("break_start", {});
+  return clock("break_start", input ?? {});
 }
 export async function endBreak(): Promise<ActionResult<ClockResult>> {
   await requireUser();

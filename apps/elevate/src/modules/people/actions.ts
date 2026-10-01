@@ -29,6 +29,7 @@ import {
 import {
   changeRequestContext,
   findLinkableUser,
+  linkEmployeeToUser,
   recordHistory,
   sensitiveColumn,
   sensitiveContext,
@@ -50,6 +51,7 @@ import {
   dataRightsRequestSchema,
   emergencyContactsChangeSchema,
   endAssignmentSchema,
+  myProfileSchema,
   revealSensitiveSchema,
   reviewChangeSchema,
   updateClientSchema,
@@ -146,6 +148,46 @@ export async function createEmployee(input: unknown): Promise<ActionResult<{ id:
       return { ok: true, data: { id } };
     } catch (error) {
       if (isUniqueViolation(error)) return fail("Someone with that work email already exists.");
+      throw error;
+    }
+  });
+}
+
+/**
+ * For HR and Super Admin accounts that have no people record yet (for example the owner): link one that already matches
+ * their email, or create their own, so internal staff can use the time clock and My data like everyone else.
+ */
+export async function createMyProfile(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "people.create");
+    const parsed = myProfileSchema.safeParse(input);
+    if (!parsed.success) return fail(firstIssue(parsed.error));
+
+    try {
+      const id = await db.transaction(async (tx) => {
+        const [mine] = await tx.select({ id: employees.id }).from(employees).where(eq(employees.userId, actor.id)).limit(1);
+        if (mine) throw new ActionFailure("You already have a people record.");
+
+        const linked = await linkEmployeeToUser(tx, { userId: actor.id, email: actor.email });
+        if (linked) {
+          await writeAudit({ actor, action: "people.link_self", targetType: "employee", targetId: linked }, tx);
+          return linked;
+        }
+        const [created] = await tx
+          .insert(employees)
+          .values({ legalFirstName: parsed.data.firstName, legalLastName: parsed.data.lastName, workEmail: actor.email, status: "active", userId: actor.id, createdBy: actor.id })
+          .returning({ id: employees.id });
+        await recordHistory(tx, { employeeId: created.id, eventType: "hired", summary: "Added to ELEVATE by their own account", changedBy: actor.id });
+        await writeAudit({ actor, action: "people.create_self", targetType: "employee", targetId: created.id }, tx);
+        return created.id;
+      });
+      revalidateEmployee(id);
+      revalidatePath("/attendance");
+      return { ok: true, data: { id } };
+    } catch (error) {
+      if (isUniqueViolation(error)) return fail("Someone with your email is already in the directory. Ask HR to link it to your account.");
       throw error;
     }
   });

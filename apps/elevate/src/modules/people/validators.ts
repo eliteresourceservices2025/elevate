@@ -242,3 +242,8 @@ export const dataRightsRequestSchema = z.object({
   kind: z.enum(["correction", "deletion", "other"]),
   details: z.string().trim().min(10, "Describe what you need in at least 10 characters").max(1000, "Use 1,000 characters or fewer"),
 });
+
+export const myProfileSchema = z.object({
+  firstName: requiredText("your first name"),
+  lastName: requiredText("your last name"),
+});

@@ -7,9 +7,11 @@ import { ActionFailure } from "@/lib/run-action";
 import { formatInZone, resolveTimeZone } from "@/lib/time";
 import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
+import { hrUserIds, notify } from "@/modules/notifications/service";
+import { managerChainUserIds, reportName } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
-import { replayClock, ipAllowed, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
-import { clockEvents, clockRules, clockSelfies, clockPrefs } from "./schema";
+import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
+import { clockEvents, clockPrefs, clockRules, clockSelfies, overbreakNotices } from "./schema";
 
 // Server-only helpers for the time clock (not server actions, so they may take the acting user or a transaction).
 // Callers authorize first (CLAUDE.md rule 4).
@@ -27,21 +29,21 @@ export async function lockEmployeeClock(tx: Executor, employeeId: string): Promi
 /** The most recent events for one person (enough to know the current state), oldest first. */
 export async function loadRecentEvents(executor: Executor, employeeId: string, limit = 60): Promise<ClockEventLite[]> {
   const rows = (await executor.execute(sql`
-    select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms
+    select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms, planned_break_minutes as planned
     from time.clock_events where employee_id = ${employeeId} order by occurred_at desc, created_at desc limit ${limit}`)) as unknown as {
-    id: string; type: ClockType; at: number; created_ms: number;
+    id: string; type: ClockType; at: number; created_ms: number; planned: number | null;
   }[];
-  return rows.reverse().map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms) }));
+  return rows.reverse().map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned }));
 }
 
 /** Every event between two instants (inclusive), for timesheets and rebuilding days. */
 export async function loadEventsBetween(executor: Executor, employeeId: string, fromMs: number, toMs: number): Promise<ClockEventLite[]> {
   const rows = (await executor.execute(sql`
-    select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms
+    select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms, planned_break_minutes as planned
     from time.clock_events
     where employee_id = ${employeeId} and occurred_at >= to_timestamp(${fromMs / 1000}) and occurred_at <= to_timestamp(${toMs / 1000})
-    order by occurred_at, created_at`)) as unknown as { id: string; type: ClockType; at: number; created_ms: number }[];
-  return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms) }));
+    order by occurred_at, created_at`)) as unknown as { id: string; type: ClockType; at: number; created_ms: number; planned: number | null }[];
+  return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned }));
 }
 
 export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number };
@@ -115,7 +117,7 @@ export async function checkSelfie(employeeId: string, path: string): Promise<voi
   }
 }
 
-export type ClockInput = { latitude?: number; longitude?: number; selfiePath?: string };
+export type ClockInput = { latitude?: number; longitude?: number; selfiePath?: string; /** break_start only: 15, 30 or 60. */ breakMinutes?: 15 | 30 | 60 };
 export type ClockResult = { state: ClockState; at: string; outsideAllowedRange: boolean };
 
 /**
@@ -158,6 +160,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
 
     const types: ClockType[] = endsBreakToo ? ["break_end", "clock_out"] : [type];
     let last: { id: string; occurredAt: Date } | undefined;
+    let breakEndedAt: number | null = null;
     for (const t of types) {
       [last] = await tx
         .insert(clockEvents)
@@ -168,11 +171,20 @@ export async function performClock(actor: { id: string; email: string }, type: C
           source: "web",
           ip,
           outsideAllowedRange,
+          plannedBreakMinutes: t === "break_start" ? (input.breakMinutes ?? null) : null,
           approxLat: t === type && location ? location.lat : null,
           approxLng: t === type && location ? location.lng : null,
           createdBy: actor.id,
         })
         .returning({ id: clockEvents.id, occurredAt: clockEvents.occurredAt });
+      if (t === "break_end") breakEndedAt = last!.occurredAt.getTime();
+    }
+
+    // A timed break that ran past its length is reported to the lead (once) when it ends.
+    const openBreak = replay.sessions[replay.sessions.length - 1]?.breaks.find((b) => b.endAt === null);
+    if (breakEndedAt !== null && openBreak?.startEventId && openBreak.plannedMinutes !== null) {
+      const over = overbreakOf({ ...openBreak, endAt: breakEndedAt }, breakEndedAt);
+      if (over > 0) await notifyOverbreak(tx, person.id, openBreak.startEventId, over, openBreak.plannedMinutes);
     }
 
     if (type === "clock_in" && input.selfiePath && rules.selfieRequired && monitoring && last) {
@@ -191,3 +203,28 @@ export async function performClock(actor: { id: string; email: string }, type: C
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function afterClockEvent(_tx: Executor, _employeeId: string, _type: ClockType): Promise<void> {}
+
+/**
+ * Tells the person's lead (HR when nobody is above them) that a timed break ran over. Once per break: the first caller
+ * (the person ending the break, or the alert job while it is still running) wins.
+ */
+export async function notifyOverbreak(tx: Executor, employeeId: string, startEventId: string, overMs: number, plannedMinutes: number): Promise<boolean> {
+  const minutes = Math.max(1, Math.round(overMs / MINUTE));
+  const claimed = await tx.insert(overbreakNotices).values({ eventId: startEventId, minutesOver: minutes }).onConflictDoNothing().returning({ id: overbreakNotices.eventId });
+  if (claimed.length === 0) return false;
+
+  const [me] = await tx.select({ userId: employees.userId, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName }).from(employees).where(eq(employees.id, employeeId));
+  const chain = await managerChainUserIds(tx, employeeId);
+  const targets = (chain.length > 0 ? chain.slice(0, 1) : await hrUserIds()).filter((id) => id !== me.userId);
+  await notify(
+    tx,
+    targets.map((userId) => ({
+      userId,
+      kind: "attendance.overbreak",
+      title: `${reportName(me)} went over their ${breakLabel(plannedMinutes)} break`,
+      body: `${minutes} ${minutes === 1 ? "minute" : "minutes"} over.`,
+      link: "/attendance?tab=team",
+    })),
+  );
+  return true;
+}

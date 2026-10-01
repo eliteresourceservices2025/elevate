@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Fragment } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { scopeFor } from "@/lib/authz";
+import { can, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { formatDateOnly, formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { formatDuration, MINUTE } from "@/modules/attendance/clock";
 import { AutoRefresh } from "@/modules/attendance/components/auto-refresh";
-import { CorrectionForm, CorrectionList, PreferencesForm, RulesForm } from "@/modules/attendance/components/attendance-forms";
+import { CorrectionForm, CorrectionList, PreferencesForm, RulesForm, SetupProfileForm } from "@/modules/attendance/components/attendance-forms";
 import { getMyTime, listClockRules, listCorrectionQueue, listFlags, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
 
 export const metadata: Metadata = { title: "Attendance" };
@@ -26,6 +27,7 @@ const FLAG_LABELS = new Map<string, string>(Object.entries({
   outside_range: "Outside allowed IP range",
   corrected: "Corrected",
   idle_unanswered: "Idle prompt unanswered",
+  overbreak: "Overbreak",
   on_leave: "On approved leave",
 }));
 
@@ -95,26 +97,50 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                       <TableHead>First in</TableHead>
                       <TableHead>Last out</TableHead>
                       <TableHead className="text-right">Breaks</TableHead>
+                      <TableHead className="text-right">Over break</TableHead>
                       <TableHead className="text-right">Worked</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {mine.days.map((d) => (
-                      <TableRow key={d.date}>
-                        <TableCell>
-                          {d.weekday}, {formatDateOnly(d.date)}
-                        </TableCell>
-                        <TableCell>{d.firstIn ? formatInZone(d.firstIn, mine.zone, "h:mm a") : "-"}</TableCell>
-                        <TableCell>{d.open ? <Badge variant="secondary">In progress</Badge> : d.lastOut ? formatInZone(d.lastOut, mine.zone, "h:mm a") : "-"}</TableCell>
-                        <TableCell className="text-right">{d.breakMinutes ? formatDuration(d.breakMinutes * MINUTE) : "-"}</TableCell>
-                        <TableCell className="text-right font-medium">{d.workedMinutes ? formatDuration(d.workedMinutes * MINUTE) : "-"}</TableCell>
-                      </TableRow>
+                      <Fragment key={d.date}>
+                        <TableRow>
+                          <TableCell className="font-medium">
+                            {d.weekday}, {formatDateOnly(d.date)}
+                          </TableCell>
+                          <TableCell>{d.firstIn ? formatInZone(d.firstIn, mine.zone, "h:mm a") : "-"}</TableCell>
+                          <TableCell>{d.open ? <Badge variant="secondary">In progress</Badge> : d.lastOut ? formatInZone(d.lastOut, mine.zone, "h:mm a") : "-"}</TableCell>
+                          <TableCell className="text-right">{d.breakMinutes ? formatDuration(d.breakMinutes * MINUTE) : "-"}</TableCell>
+                          <TableCell className="text-right">{d.overbreakMinutes ? <Badge variant="destructive">+{d.overbreakMinutes} min</Badge> : "-"}</TableCell>
+                          <TableCell className="text-right font-medium">{d.workedMinutes ? formatDuration(d.workedMinutes * MINUTE) : "-"}</TableCell>
+                        </TableRow>
+                        {d.sessionList.map((sess, i) => (
+                          <TableRow key={`${d.date}-${sess.startAt}`} className="bg-muted/30 text-xs" data-session>
+                            <TableCell className="pl-6 text-muted-foreground">Session {i + 1}</TableCell>
+                            <TableCell>{formatInZone(sess.startAt, mine.zone, "h:mm a")}</TableCell>
+                            <TableCell>{sess.endAt ? formatInZone(sess.endAt, mine.zone, "h:mm a") : <Badge variant="secondary">In progress</Badge>}</TableCell>
+                            <TableCell className="text-right">
+                              {sess.breaks.length === 0
+                                ? "-"
+                                : sess.breaks.map((b) => (
+                                    <div key={b.startAt}>
+                                      {b.minutes}m{b.plannedMinutes ? ` of ${b.plannedMinutes}m` : ""}
+                                      {b.overMinutes ? <span className="font-medium text-red-600"> (+{b.overMinutes}m over)</span> : null}
+                                    </div>
+                                  ))}
+                            </TableCell>
+                            <TableCell className="text-right">{sess.overbreakMinutes ? `+${sess.overbreakMinutes}m` : "-"}</TableCell>
+                            <TableCell className="text-right">{sess.workedMinutes ? formatDuration(sess.workedMinutes * MINUTE) : "-"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </Fragment>
                     ))}
                     <TableRow>
                       <TableCell className="font-semibold">Total</TableCell>
                       <TableCell />
                       <TableCell />
                       <TableCell />
+                      <TableCell className="text-right font-semibold">{mine.days.reduce((n, d) => n + d.overbreakMinutes, 0) ? `+${mine.days.reduce((n, d) => n + d.overbreakMinutes, 0)} min` : "-"}</TableCell>
                       <TableCell className="text-right font-semibold">{formatDuration(mine.weekMinutes * MINUTE)}</TableCell>
                     </TableRow>
                   </TableBody>
@@ -133,7 +159,10 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
             </section>
           </div>
         ) : (
-          <p className="text-muted-foreground">No people record is linked to your account yet, so there is no time clock to show.</p>
+          <div className="space-y-3">
+            <p className="text-muted-foreground">Your account is not linked to a people record yet, and the time clock needs one.</p>
+            {can(user, "people.create") ? <SetupProfileForm /> : <p className="text-sm">Ask HR to add you in People with your sign-in email, and the clock will appear.</p>}
+          </div>
         )
       ) : null}
 
@@ -197,7 +226,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                         <TableCell className="space-x-1">
                           {r.flags.map((f) => (
                             <Badge key={f} variant="outline">
-                              {FLAG_LABELS.get(f) ?? f}
+                              {f === "overbreak" && r.overbreakMinutes ? `Overbreak +${r.overbreakMinutes} min` : (FLAG_LABELS.get(f) ?? f)}
                             </Badge>
                           ))}
                         </TableCell>

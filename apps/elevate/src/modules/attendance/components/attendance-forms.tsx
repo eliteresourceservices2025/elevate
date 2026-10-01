@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
+import { createMyProfile } from "@/modules/people/actions";
 import { cancelCorrection, decideCorrection, requestCorrection, saveClockRules, savePreferences } from "../actions";
 import type { CorrectionItem, RulesRow } from "../queries";
 
@@ -211,6 +212,34 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
       </label>
       <Button type="submit" disabled={pending}>
         Save rules
+      </Button>
+    </form>
+  );
+}
+
+/** For HR and Super Admin accounts without a people record: add themselves so they can use the clock like everyone else. */
+export function SetupProfileForm() {
+  const { run, pending } = useRun();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  return (
+    <form
+      className="max-w-xl space-y-3 rounded-xl border bg-card p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => createMyProfile({ firstName, lastName }), "Your profile is set up. The time clock is ready.");
+      }}
+    >
+      <h3 className="font-semibold">Set up your profile</h3>
+      <p className="text-sm text-muted-foreground">
+        This adds you to the people directory with your sign-in email, so you can use the time clock, request time off and see your own data. HR can complete the rest of your details later.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <TextField id="sp-first" label="Legal first name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+        <TextField id="sp-last" label="Legal last name" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+      </div>
+      <Button type="submit" disabled={pending || !firstName.trim() || !lastName.trim()}>
+        Set up my profile
       </Button>
     </form>
   );

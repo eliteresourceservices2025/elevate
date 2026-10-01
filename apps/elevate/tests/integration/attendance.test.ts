@@ -16,6 +16,7 @@ const { db } = await import("@/lib/db");
 const actions = await import("@/modules/attendance/actions");
 const queries = await import("@/modules/attendance/queries");
 const jobs = await import("@/modules/attendance/jobs");
+const peopleActions = await import("@/modules/people/actions");
 const { setDocumentStorage } = await import("@/modules/documents/storage");
 
 type TestUser = { id: string; email: string; roles: RoleSlug[] };
@@ -54,8 +55,8 @@ async function person(label: string, roles: RoleSlug[] = ["employee"], opts: { m
 }
 
 /** Writes a clock event directly with a chosen time (the clock itself only ever uses the database clock). */
-async function event(employeeId: string, type: string, at: string, extra: { outside?: boolean } = {}) {
-  await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at, outside_allowed_range) values (${employeeId}, ${type}, ${at}, ${extra.outside ?? false})`);
+async function event(employeeId: string, type: string, at: string, extra: { outside?: boolean; planned?: number } = {}) {
+  await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at, outside_allowed_range, planned_break_minutes) values (${employeeId}, ${type}, ${at}, ${extra.outside ?? false}, ${extra.planned ?? null})`);
 }
 
 const stateOf = async (employeeId: string) => {
@@ -520,5 +521,163 @@ describe("who sees what", () => {
     const result = await queries.listClockRules();
     const row = result.rows.find((r) => r.teamId === team);
     expect(row).toMatchObject({ allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, hasRow: false });
+  });
+});
+
+describe("timed breaks and overbreaks", () => {
+  const MIN = 60_000;
+  const overNotes = (userId: string) => notes(userId, "attendance.overbreak");
+  async function setup() {
+    const lead = await person("BrkLead", ["team_lead", "employee"]);
+    const worker = await person("Brk", ["employee"], { managerId: lead.employeeId });
+    return { lead, worker };
+  }
+
+  it("stores the chosen break length, and refuses a length that is not offered", async () => {
+    const { worker } = await setup();
+    as(worker.user);
+    expect((await actions.clockIn({})).ok).toBe(true);
+    expect((await actions.startBreak({ breakMinutes: 45 })).ok).toBe(false);
+    expect((await actions.startBreak({ breakMinutes: "30" })).ok).toBe(true); // a form can send it as text
+    const planned = async () => (await rows<{ planned_break_minutes: number | null }>(sql`select planned_break_minutes from time.clock_events where employee_id = ${worker.employeeId} and type = 'break_start' order by created_at desc limit 1`))[0].planned_break_minutes;
+    expect(await planned()).toBe(30);
+    expect((await queries.getClockStatus())?.breakPlannedMinutes).toBe(30);
+    expect((await actions.endBreak()).ok).toBe(true);
+    expect((await actions.startBreak({})).ok).toBe(true); // no limit
+    expect(await planned()).toBeNull();
+    expect((await queries.getClockStatus())?.breakPlannedMinutes).toBeNull();
+    // Only a break start can carry a length
+    await expect(db.execute(sql`insert into time.clock_events (employee_id, type, planned_break_minutes) values (${worker.employeeId}, 'clock_in', 15)`)).rejects.toThrow();
+  });
+
+  it("reports an overbreak to the lead when the break ends, shows it on the timesheet, and flags the day", async () => {
+    const { lead, worker } = await setup();
+    await event(worker.employeeId, "clock_in", iso(2 * HOUR));
+    await event(worker.employeeId, "break_start", iso(50 * MIN), { planned: 15 });
+    as(worker.user);
+    expect((await actions.endBreak()).ok).toBe(true);
+
+    expect(await overNotes(lead.user.id)).toHaveLength(1);
+    const [n] = await rows<{ title: string; body: string }>(sql`select title, body from ops.notifications where user_id = ${lead.user.id} and kind = 'attendance.overbreak'`);
+    expect(n.title).toContain("went over their 15 minutes break");
+    expect(Number.parseInt(n.body, 10)).toBeGreaterThanOrEqual(34);
+    expect(await rows(sql`select 1 from time.overbreak_notices where minutes_over >= 34`)).not.toHaveLength(0);
+
+    const week = await queries.getMyTime();
+    const today = week!.days.find((d) => d.sessions > 0)!;
+    expect(today.overbreakMinutes).toBeGreaterThanOrEqual(34);
+    expect(today.sessionList[0].breaks[0]).toMatchObject({ plannedMinutes: 15 });
+    expect(today.sessionList[0].breaks[0].overMinutes).toBeGreaterThanOrEqual(34);
+
+    await jobs.rebuildAttendanceDays();
+    const [day] = await rows<{ flags: string[]; overbreak_minutes: number }>(sql`select flags, overbreak_minutes from time.attendance_days where employee_id = ${worker.employeeId}`);
+    expect(day.flags).toContain("overbreak");
+    expect(day.overbreak_minutes).toBeGreaterThanOrEqual(34);
+
+    as(lead.user);
+    const flagged = (await queries.listFlags()).rows.find((r) => r.employeeId === worker.employeeId);
+    expect(flagged?.flags).toContain("overbreak");
+    expect(flagged?.overbreakMinutes).toBeGreaterThanOrEqual(34);
+  });
+
+  it("does not count a break that ends within the one-minute grace, or one with no limit", async () => {
+    const { lead, worker } = await setup();
+    await event(worker.employeeId, "clock_in", iso(3 * HOUR));
+    await event(worker.employeeId, "break_start", iso(15 * MIN + 30_000), { planned: 15 });
+    as(worker.user);
+    expect((await actions.endBreak()).ok).toBe(true);
+    expect((await actions.startBreak({})).ok).toBe(true);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at, planned_break_minutes) values (${worker.employeeId}, 'break_end', now(), null)`);
+    expect(await overNotes(lead.user.id)).toHaveLength(0);
+    expect((await queries.getMyTime())!.days.find((d) => d.sessions > 0)!.overbreakMinutes).toBe(0);
+  });
+
+  it("tells the lead while the break is still running past its length, once, and not again when it ends", async () => {
+    const { lead, worker } = await setup();
+    await event(worker.employeeId, "clock_in", iso(2 * HOUR));
+    await event(worker.employeeId, "break_start", iso(20 * MIN), { planned: 15 });
+    const quiet = await person("BrkQuiet"); // a break still inside its time: nothing
+    await event(quiet.employeeId, "clock_in", iso(HOUR));
+    await event(quiet.employeeId, "break_start", iso(10 * MIN), { planned: 15 });
+
+    const first = await jobs.runOverbreakAlerts();
+    expect(first.noticed).toBeGreaterThanOrEqual(1);
+    expect(await overNotes(lead.user.id)).toHaveLength(1);
+    expect(await jobs.runOverbreakAlerts()).toEqual({ noticed: 0 });
+    expect((await rows(sql`select 1 from ops.notifications where kind = 'attendance.overbreak' and body is not null and user_id in (select user_id from core.employees where id = ${quiet.employeeId})`))).toHaveLength(0);
+
+    as(worker.user);
+    expect((await actions.endBreak()).ok).toBe(true);
+    expect(await overNotes(lead.user.id)).toHaveLength(1); // already reported: not twice
+  });
+
+  it("goes to HR when nobody is above the person, never to the person themselves", async () => {
+    const solo = await person("BrkSolo");
+    await event(solo.employeeId, "clock_in", iso(2 * HOUR));
+    await event(solo.employeeId, "break_start", iso(45 * MIN), { planned: 15 });
+    as(solo.user);
+    await actions.endBreak();
+    expect((await overNotes(hr.id)).length).toBeGreaterThanOrEqual(1);
+    expect(await overNotes(solo.user.id)).toHaveLength(0);
+  });
+});
+
+describe("every clock-in stays its own record", () => {
+  it("lists two sessions on the same day separately, with their own breaks", async () => {
+    const two = await person("Two");
+    as(two.user);
+    expect((await actions.clockIn({})).ok).toBe(true);
+    expect((await actions.startBreak({ breakMinutes: 15 })).ok).toBe(true);
+    expect((await actions.endBreak()).ok).toBe(true);
+    expect((await actions.clockOut()).ok).toBe(true);
+    expect((await actions.clockIn({})).ok).toBe(true);
+    expect((await actions.clockOut()).ok).toBe(true);
+
+    const week = await queries.getMyTime();
+    const day = week!.days.find((d) => d.sessions > 0)!;
+    expect(day.sessions).toBe(2);
+    expect(day.sessionList).toHaveLength(2);
+    expect(day.sessionList[0].breaks).toHaveLength(1);
+    expect(day.sessionList[1].breaks).toHaveLength(0);
+    expect(day.sessionList[0].endAt).toBeLessThanOrEqual(day.sessionList[1].startAt);
+    // The rebuilt day adds them up rather than replacing one with the other
+    await jobs.rebuildAttendanceDays();
+    expect((await rows<{ sessions: number }>(sql`select sessions from time.attendance_days where employee_id = ${two.employeeId}`))[0].sessions).toBe(2);
+  });
+});
+
+describe("internal staff can use the clock too", () => {
+  it("lets an HR or Super Admin account without a people record set one up and clock in", async () => {
+    const owner = await makeUser("owner", ["super_admin", "employee"]);
+    as(owner);
+    expect(await queries.getClockStatus()).toBeNull();
+    expect(await actions.clockIn({})).toEqual({ ok: false, error: "Your people record is not set up yet. Ask HR." });
+
+    expect((await peopleActions.createMyProfile({ firstName: "x", lastName: "" })).ok).toBe(false);
+    const made = await peopleActions.createMyProfile({ firstName: "Olivia", lastName: "Owner" });
+    expect(made.ok).toBe(true);
+    const [e] = await rows<{ user_id: string; work_email: string; status: string }>(sql`select user_id, work_email, status from core.employees where user_id = ${owner.id}`);
+    expect(e).toMatchObject({ user_id: owner.id, work_email: owner.email, status: "active" });
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'people.create_self' and actor_user_id = ${owner.id}`)).toHaveLength(1);
+
+    expect((await queries.getClockStatus())?.state).toBe("out");
+    expect((await actions.clockIn({})).ok).toBe(true);
+    expect(await peopleActions.createMyProfile({ firstName: "Olivia", lastName: "Owner" })).toEqual({ ok: false, error: "You already have a people record." });
+  });
+
+  it("links the record HR already added with the same email instead of creating a duplicate", async () => {
+    const hrUser = await makeUser("linkme", ["hr_admin", "employee"]);
+    const [pre] = await rows<{ id: string }>(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status) values ('Pre', 'Added', ${hrUser.email}, 'active') returning id`);
+    as(hrUser);
+    expect((await peopleActions.createMyProfile({ firstName: "Other", lastName: "Name" })).ok).toBe(true);
+    const mine = await rows<{ id: string; legal_first_name: string }>(sql`select id, legal_first_name from core.employees where user_id = ${hrUser.id}`);
+    expect(mine).toEqual([{ id: pre.id, legal_first_name: "Pre" }]); // the existing record, not a new one
+  });
+
+  it("is only for HR and Super Admin; everyone else asks HR", async () => {
+    for (const role of ["team_lead", "recruiter", "executive", "employee"] as RoleSlug[]) {
+      as(await makeUser("nopeprofile", [role]));
+      expect(await peopleActions.createMyProfile({ firstName: "A", lastName: "B" })).toEqual({ ok: false, error: NO_ACCESS });
+    }
   });
 });

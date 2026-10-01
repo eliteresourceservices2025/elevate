@@ -15,6 +15,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 const actions = await import("@/modules/attendance/actions");
+const peopleActions = await import("@/modules/people/actions");
 const queries = await import("@/modules/attendance/queries");
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -32,6 +33,8 @@ const rules = { teamId: ID, allowedCidrs: ["203.0.113.0/24"], selfieRequired: fa
 const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: string }>; allowed: RoleSlug[] }[] = [
   { name: "clockIn", call: () => actions.clockIn({}), allowed: EVERYONE },
   { name: "startBreak", call: () => actions.startBreak(), allowed: EVERYONE },
+  { name: "startBreak (30 minutes)", call: () => actions.startBreak({ breakMinutes: 30 }), allowed: EVERYONE },
+  { name: "createMyProfile", call: () => peopleActions.createMyProfile({ firstName: "Olivia", lastName: "Owner" }), allowed: HR },
   { name: "endBreak", call: () => actions.endBreak(), allowed: EVERYONE },
   { name: "clockOut", call: () => actions.clockOut(), allowed: EVERYONE },
   { name: "requestClockSelfie", call: () => actions.requestClockSelfie(), allowed: EVERYONE },

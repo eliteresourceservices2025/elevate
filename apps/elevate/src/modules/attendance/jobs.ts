@@ -7,7 +7,8 @@ import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds, reportName } from "@/modules/org/service";
 import { MAX_OPEN_SESSION_MS, buildDays } from "./clock";
 import { attendanceDays, clockSelfies, missedClockoutNotices } from "./schema";
-import { SELFIE_KEEP_DAYS, loadEventsBetween, onFullDayLeave, prefsFor } from "./service";
+import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
+import { SELFIE_KEEP_DAYS, loadEventsBetween, notifyOverbreak, onFullDayLeave, prefsFor } from "./service";
 
 // Background work (no signed-in person). src/inngest wraps these in scheduled functions.
 
@@ -18,7 +19,7 @@ export type RebuildRun = { people: number; days: number };
 /**
  * Rebuilds attendance_days for the last few days from the clock events. Safe to run any time and as often as needed:
  * it replaces the rows from the events and nothing else, so the table is never edited by hand.
- * Flags: open_session, outside_range, corrected, idle_unanswered, on_leave. (Late, overtime and absence need schedules, Phase 2.5.)
+ * Flags: open_session, outside_range, corrected, idle_unanswered, overbreak, on_leave. (Late, overtime and absence need schedules, Phase 2.5.)
  */
 export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Promise<RebuildRun> {
   const fromMs = now.getTime() - (daysBack + 2) * DAY_MS;
@@ -50,6 +51,7 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Pro
         flagRows[0]?.outside ? "outside_range" : null,
         flagRows[0]?.corrected ? "corrected" : null,
         idle.n > 0 ? "idle_unanswered" : null,
+        d.overbreakMinutes > 0 ? "overbreak" : null,
         (await onFullDayLeave(db, employeeId, d.date)) ? "on_leave" : null,
       ].filter((f): f is string => f !== null);
 
@@ -57,6 +59,7 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Pro
         sessions: d.sessions,
         workedMinutes: d.workedMinutes,
         breakMinutes: d.breakMinutes,
+        overbreakMinutes: d.overbreakMinutes,
         firstIn: new Date(d.firstIn),
         lastOut: d.lastOut ? new Date(d.lastOut) : null,
         flags,
@@ -115,4 +118,30 @@ export async function purgeSelfies(now = new Date()): Promise<{ purged: number }
   await getDocumentStorage().remove(BUCKETS.employee, stale.map((s) => s.path));
   for (const s of stale) await db.update(clockSelfies).set({ purgedAt: now }).where(eq(clockSelfies.id, s.id));
   return { purged: stale.length };
+}
+
+/**
+ * Every few minutes: a timed break that is STILL running past its length (plus the one-minute grace) is reported to the
+ * lead now, instead of waiting for the person to come back. Each break is reported once (see notifyOverbreak).
+ */
+export async function runOverbreakAlerts(now = new Date()): Promise<{ noticed: number }> {
+  const running = (await db.execute(sql`
+    select last.employee_id, last.event_id, last.planned, (extract(epoch from last.occurred_at) * 1000)::float8 as started_ms
+    from (
+      select distinct on (employee_id) employee_id, id as event_id, type, planned_break_minutes as planned, occurred_at
+      from time.clock_events where occurred_at > now() - interval '12 hours'
+      order by employee_id, occurred_at desc, created_at desc
+    ) last
+    where last.type = 'break_start' and last.planned is not null
+      and last.occurred_at < to_timestamp(${(now.getTime() - OVERBREAK_GRACE_MS) / 1000}) - (last.planned || ' minutes')::interval
+      and not exists (select 1 from time.overbreak_notices n where n.event_id = last.event_id)`)) as unknown as {
+    employee_id: string; event_id: string; planned: number; started_ms: number;
+  }[];
+
+  let noticed = 0;
+  for (const r of running) {
+    const over = now.getTime() - Number(r.started_ms) - r.planned * MINUTE;
+    if (await db.transaction((tx) => notifyOverbreak(tx, r.employee_id, r.event_id, over, r.planned))) noticed += 1;
+  }
+  return { noticed };
 }

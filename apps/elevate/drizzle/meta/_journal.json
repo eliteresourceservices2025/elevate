@@ -141,6 +141,13 @@
       "when": 1790849370994,
       "tag": "0019_time_clock_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790853776904,
+      "tag": "0020_overbreak",
+      "breakpoints": true
     }
   ]
 }
