@@ -7,11 +7,12 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { cn } from "@/lib/utils";
 import { signOut } from "@/modules/auth/actions";
 import { NotificationBell } from "@/modules/notifications/components/notification-bell";
+import type { ClockStatus } from "@/modules/attendance/queries";
 import { ClockWidget } from "./clock-widget";
 import { SidebarNav } from "./sidebar-nav";
 import { ZoneClock } from "./zone-clock";
 
-export function AppHeader({ zone, email, unread = 0 }: { zone?: string | null; email?: string; unread?: number }) {
+export function AppHeader({ zone, email, unread = 0, clock = null }: { zone?: string | null; email?: string; unread?: number; clock?: ClockStatus | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -33,7 +34,7 @@ export function AppHeader({ zone, email, unread = 0 }: { zone?: string | null; e
       </div>
       {/* keyed by the count so a fresh server count resets the bell */}
       <NotificationBell key={unread} unread={unread} />
-      <ClockWidget />
+      <ClockWidget status={clock} />
       <form action={signOut} className="flex items-center gap-2">
         {email ? <span className="hidden text-xs text-muted-foreground xl:inline">{email}</span> : null}
         <Button type="submit" variant="ghost" size="sm">

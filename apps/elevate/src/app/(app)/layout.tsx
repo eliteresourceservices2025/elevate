@@ -6,6 +6,7 @@ import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { AckBanner } from "@/modules/announcements/components/ack-display";
 import { listMyPending } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
+import { getClockStatus } from "@/modules/attendance/queries";
 import { countMyUnread } from "@/modules/notifications/queries";
 import { PrivacyGate } from "@/modules/privacy/components/privacy-gate";
 import { getPrivacyGate } from "@/modules/privacy/queries";
@@ -22,7 +23,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       </PrivacyGate>
     );
   }
-  const [unread, pending] = await Promise.all([countMyUnread(), listMyPending()]);
+  const [unread, pending, clock] = await Promise.all([countMyUnread(), listMyPending(), getClockStatus()]);
 
   return (
     <div className="flex min-h-screen">
@@ -30,7 +31,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         <SidebarNav />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <AppHeader zone={DEFAULT_TIMEZONE} email={user.email} unread={unread} />
+        <AppHeader zone={DEFAULT_TIMEZONE} email={user.email} unread={unread} clock={clock} />
         <AckBanner items={pending} today={todayInZone()} />
         <main id="main" className="flex-1 p-4 sm:p-6 lg:p-8">
           {children}

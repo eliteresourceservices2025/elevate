@@ -14,6 +14,7 @@ export const POLICIES = {
   reveal: { requests: 30, window: "10 m" },
   upload: { requests: 20, window: "10 m" },
   download: { requests: 60, window: "10 m" },
+  clock: { requests: 30, window: "10 m" },
 } satisfies Record<string, Policy>;
 
 let redis: Redis | null | undefined;

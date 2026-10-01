@@ -58,7 +58,7 @@ const balanceOf = async (employeeId: string) => (await rows<{ b: number }>(sql`s
 // A block of upcoming working days that no holiday touches, one block per call, so tests never overlap each other.
 let cursor = addDays(today, 21);
 async function workdays(count = 1): Promise<string[]> {
-  const holidays = new Set((await rows<{ date: string }>(sql`select date::text as date from time.holidays`)).map((h) => h.date));
+  const holidays = new Set((await rows<{ date: string }>(sql`select date::text as date from time.holidays where calendar = 'PH'`)).map((h) => h.date));
   const out: string[] = [];
   while (out.length < count) {
     if (isWorkingDay(cursor, holidays)) out.push(cursor);
@@ -70,7 +70,7 @@ async function workdays(count = 1): Promise<string[]> {
 
 /** A recent working day in the past (at least `back` days ago), for leave HR files after the fact. */
 async function pastWorkday(back: number): Promise<string> {
-  const holidays = new Set((await rows<{ date: string }>(sql`select date::text as date from time.holidays`)).map((h) => h.date));
+  const holidays = new Set((await rows<{ date: string }>(sql`select date::text as date from time.holidays where calendar = 'PH'`)).map((h) => h.date));
   let d = addDays(today, -back);
   while (!isWorkingDay(d, holidays)) d = addDays(d, -1);
   return d;

@@ -298,7 +298,7 @@ describe("who has acknowledged", () => {
 describe("policies", () => {
   it("ships the privacy notice and monitoring policy as hidden drafts that cannot be published as-is", async () => {
     const seeded = await rows<{ slug: string; kind: string; status: string }>(sql`
-      select p.slug, p.kind, v.status from docs.policies p join docs.policy_versions v on v.policy_id = p.id where p.kind in ('privacy_notice','monitoring') order by p.kind`);
+      select p.slug, p.kind, v.status from docs.policies p join docs.policy_versions v on v.policy_id = p.id where p.kind in ('privacy_notice','monitoring') and v.version = 1 order by p.kind`);
     expect(seeded).toEqual([
       { slug: "monitoring_policy", kind: "monitoring", status: "draft" },
       { slug: "privacy_notice", kind: "privacy_notice", status: "draft" },
@@ -488,20 +488,26 @@ describe("email queue", () => {
 
     const sender = new FakeSender();
     setEmailSender(sender);
-    process.env.EMAIL_DAILY_BUDGET = "1";
+    // Other test files may queue mail in the same table, so this checks what is ours, not the whole queue.
+    process.env.EMAIL_DAILY_BUDGET = "0";
     try {
-      const first = await emailQueue.flushEmailQueue();
-      expect(first.sent).toBe(1);
-      expect(sender.sent[0].to).toBe(c.user.email); // the acknowledgment email went first
-      expect(sender.sent[0].subject).toMatch(/ your acknowledgment in ELEVATE$/);
-      expect((await emailQueue.flushEmailQueue()).sent).toBe(0); // budget used up
+      expect((await emailQueue.flushEmailQueue()).sent).toBe(0); // no budget: nothing goes, whoever else queued
     } finally {
       delete process.env.EMAIL_DAILY_BUDGET;
     }
-
-    const rest = await emailQueue.flushEmailQueue();
-    expect(rest.sent).toBeGreaterThanOrEqual(2);
-    const digestMail = sender.sent.find((m) => m.to === a.user.email)!;
+    process.env.EMAIL_DAILY_BUDGET = "1000";
+    try {
+      await emailQueue.flushEmailQueue();
+    } finally {
+      delete process.env.EMAIL_DAILY_BUDGET;
+    }
+    const mine = sender.sent.filter((m) => [a, b, c].some((p) => p.user.email === m.to));
+    const ackAt = mine.findIndex((m) => m.to === c.user.email && / your acknowledgment in ELEVATE$/.test(m.subject));
+    const digestAt = mine.flatMap((m, i) => (m.subject.includes("unread notification") ? [i] : []));
+    expect(ackAt).toBeGreaterThanOrEqual(0);
+    expect(digestAt.length).toBeGreaterThanOrEqual(2);
+    expect(digestAt.every((i) => i > ackAt)).toBe(true); // acknowledgments go before digests
+    const digestMail = mine.find((m) => m.to === a.user.email)!;
     expect(digestMail.subject).toBe("You have 1 unread notification in ELEVATE");
     expect(digestMail.text).not.toContain("Secret title"); // counts only
     expect(digestMail.text).toContain("/dashboard");

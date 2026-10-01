@@ -1,5 +1,6 @@
 import "server-only";
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
+import { purgeSelfies, rebuildAttendanceDays, runMissedClockouts } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
 import { runLeaveExpiry } from "@/modules/timeoff/jobs";
@@ -53,4 +54,22 @@ export const leaveRequestReminders = inngest.createFunction(
   async ({ step }) => step.run("remind", () => runLeaveRequestReminders(todayInZone())),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders];
+/** Daily at 2:30 AM: rebuild attendance_days from the clock events for the last few days. */
+export const attendanceRebuild = inngest.createFunction(
+  { id: "attendance-rebuild", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 30 2 * * *` } },
+  async ({ step }) => step.run("rebuild", () => rebuildAttendanceDays()),
+);
+
+/** Hourly: tell people and their leads about sessions open for more than 12 hours. */
+export const missedClockouts = inngest.createFunction(
+  { id: "missed-clockouts", triggers: { cron: "5 * * * *" } },
+  async ({ step }) => step.run("check", () => runMissedClockouts()),
+);
+
+/** Daily at 2:40 AM: delete clock-in selfies after 30 days. */
+export const selfiePurge = inngest.createFunction(
+  { id: "selfie-purge", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 40 2 * * *` } },
+  async ({ step }) => step.run("purge", () => purgeSelfies()),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, selfiePurge];

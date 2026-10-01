@@ -4,5 +4,17 @@ import { definePermissions } from "@/lib/roles";
 // Source of truth: docs/architecture-plan.md, "Users, roles and permissions".
 export const attendancePermissions = definePermissions({
   "attendance.view": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", employee: "own" } },
+  // The clock and its settings are the person's own; corrections are approved by the lead (HR when nobody is above).
+  "attendance.clock": {
+    roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },
+  },
+  "attendance.request_correction": {
+    roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },
+  },
+  "attendance.set_preferences": {
+    roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },
+  },
+  "attendance.approve_correction": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  "attendance.manage_rules": { roles: { super_admin: "all", hr_admin: "all" } },
   "attendance.view_summary": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", executive: "all" } },
 });

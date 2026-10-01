@@ -127,6 +127,20 @@
       "when": 1790767348539,
       "tag": "0017_leave_request_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790849368504,
+      "tag": "0018_time_clock",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790849370994,
+      "tag": "0019_time_clock_rules",
+      "breakpoints": true
     }
   ]
 }

@@ -104,6 +104,17 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **Calendar** (`getTeamCalendar`): HR sees everyone with leave types and pending requests; a Team Lead their downline; an Executive only counts per day; everyone else their teammates by name (approved only, leave type hidden except their own).
 - E2E tip: in the dev server a page can load before React hydrates, and text typed into a controlled field before then is lost. Use `waitForHydration(page, selector)` from `tests/e2e/helpers.ts` before filling forms.
 
+## The time clock (Phase 2.3)
+
+- `time.clock_events` (`src/modules/attendance/`) is append-only (trigger). Web events get the **database clock** (`clock_timestamp()`) and the IP from `x-forwarded-for`; nothing the browser sends can change either. `performClock()` (service.ts) does everything inside `lockEmployeeClock()`: state machine from `clock.ts` (out -> working <-> break -> out; a clock-out on a break writes `break_end` first), no clock-in on approved full-day leave, IP range flag, location, selfie.
+- **Breaks are unpaid** (deducted from worked time). The **calendar day** of a session is the day it STARTED in the person's own zone (`time.clock_prefs.time_zone`, default company zone), so a night shift is one day. `attendance_days` is rebuilt nightly from events (`rebuildAttendanceDays`), never hand-edited; the My time page computes live from events.
+- **Allowed IP ranges are per team** (`time.clock_rules`): outside = flagged for the lead, never blocked; no row = no restriction. IPv4 and CIDR only.
+- **Location and selfie are monitoring**: both work only while a policy with `kind = 'monitoring'` is published (`monitoringPolicyPublished()`), location also needs the person's opt-in (stored rounded to 2 decimals, about 1 km), selfie needs the team rule. Selfies live in `employee-docs/selfies/<employeeId>/`, are checked by their bytes (JPEG, 1.5 MB), and are deleted after 30 days (`purgeSelfies`); the row stays.
+- **Idle prompt** only flags (`time.idle_prompts`), it never clocks anyone out. **Missed clock-out**: a session open over 12 hours notifies the person and their lead once (schedule-based grace comes with Phase 2.5).
+- **Corrections** are requests (`time.clock_corrections`) approved by the lead (HR for anyone); approval writes NEW `admin_correction` rows and re-checks that the proposed events fit and break nothing that was valid. Nobody decides their own.
+- `afterClockEvent()` in service.ts is the empty hook where Phase 2.4 mirrors clock-in and clock-out to Jibble.
+- Tests that need a published monitoring policy use `withMonitoring()` in `tests/integration/attendance.test.ts` (adds a published version, then archives the policy), so the seeded placeholder (version 1) stays intact for the announcements tests.
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.
