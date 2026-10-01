@@ -277,7 +277,7 @@ Then start **Phase 0** in `BUILD-PROMPTS.md`.
 
 ## 13. Document storage and background jobs (added in Phase 1.3)
 
-- **Buckets:** after `pnpm db:migrate`, run `pnpm --filter elevate storage:setup` against each environment (local, staging, production). It creates `employee-docs`, `company-docs` and `recruiting-docs` (applicant resumes) as private buckets limited to 10 MB and PDF/JPG/PNG/DOCX, and corrects them if they drift. Never make them public.
+- **Buckets:** after `pnpm db:migrate`, run `pnpm --filter elevate storage:setup` against each environment (local, staging, production). It creates `employee-docs`, `company-docs` and `recruiting-docs` (applicant resumes) and `signed-docs` (ELEVATE Sign originals and sealed copies) as private buckets limited to 10 MB and PDF/JPG/PNG/DOCX, and corrects them if they drift. Never make them public.
 - **Inngest (expiry reminders, cleanup of unfinished uploads):** create the free Inngest app, then add `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` to the Vercel environment and register `https://<your-domain>/api/inngest` in the Inngest dashboard. Leave `INNGEST_DEV` unset in production.
 - **Local:** set `INNGEST_DEV=1` in `.env.local` and run `pnpm dlx inngest-cli@latest dev` to see and trigger the jobs at http://localhost:8288.
 - **Not included:** virus scanning. Files are restricted to four types, checked by their bytes, stored privately and only ever served as downloads. Add a scanner later if ERS wants one.

@@ -3,7 +3,7 @@
 export type Aal = "aal1" | "aal2" | null;
 export type AccessDecision = { action: "allow" } | { action: "redirect"; to: string };
 
-const PUBLIC_PREFIXES = ["/careers", "/auth"];
+const PUBLIC_PREFIXES = ["/careers", "/auth", "/verify"];
 const GUEST_PATHS = ["/login", "/signup", "/forgot-password"];
 
 const matches = (pathname: string, base: string) => pathname === base || pathname.startsWith(`${base}/`);

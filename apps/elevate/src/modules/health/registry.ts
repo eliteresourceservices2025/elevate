@@ -15,6 +15,8 @@ export const JOBS: Record<string, JobInfo> = {
   "email-sender": { label: "Email sender", everyMinutes: 15 },
   "candidate-email-sender": { label: "Applicant email sender", everyMinutes: 10 },
   "recruiting-retention": { label: "Applicant data retention", everyMinutes: DAILY },
+  "esign-reminders": { label: "Signature reminders and expiry", everyMinutes: DAILY },
+  "esign-seal-sweep": { label: "Sealing signed documents", everyMinutes: 5 },
   "leave-expiry": { label: "Prize day expiry", everyMinutes: DAILY },
   "leave-request-reminders": { label: "Time off request reminders", everyMinutes: DAILY },
   "attendance-rebuild": { label: "Nightly attendance rebuild", everyMinutes: DAILY },

@@ -18,6 +18,8 @@ export const POLICIES = {
   presence: { requests: 60, window: "10 m" },
   /** Public applications, per address. */
   careers: { requests: 5, window: "1 h" },
+  /** The public "verify a document" check, per address. */
+  verify: { requests: 30, window: "10 m" },
 } satisfies Record<string, Policy>;
 
 /**

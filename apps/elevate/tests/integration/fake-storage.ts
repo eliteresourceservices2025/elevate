@@ -20,7 +20,8 @@ export class FakeStorage implements DocumentStorage {
     this.objects.set(this.key(bucket, path), bytes);
   }
 
-  async write(bucket: Bucket, path: string, bytes: Uint8Array) {
+  async write(bucket: Bucket, path: string, bytes: Uint8Array, _contentType?: string) {
+    void _contentType;
     this.objects.set(this.key(bucket, path), bytes);
   }
 

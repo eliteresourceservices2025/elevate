@@ -5,7 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 // the service key; tests swap in an in-memory fake. Buckets are private: nothing here creates a public
 // URL, and every link is signed and short-lived.
 
-export const BUCKETS = { employee: "employee-docs", company: "company-docs", recruiting: "recruiting-docs" } as const;
+export const BUCKETS = { employee: "employee-docs", company: "company-docs", recruiting: "recruiting-docs", signed: "signed-docs" } as const;
 export type Bucket = (typeof BUCKETS)[keyof typeof BUCKETS];
 
 export interface DocumentStorage {

@@ -13,6 +13,7 @@ import { peoplePermissions } from "@/modules/people/permissions";
 import { recruitingPermissions } from "@/modules/recruiting/permissions";
 import { reviewsPermissions } from "@/modules/reviews/permissions";
 import { safevoicePermissions } from "@/modules/safevoice/permissions";
+import { signingPermissions } from "@/modules/signing/permissions";
 import { settingsPermissions } from "@/modules/settings/permissions";
 import { timeoffPermissions } from "@/modules/timeoff/permissions";
 import type { PermissionRule, RoleSlug, Scope } from "./roles";
@@ -31,6 +32,7 @@ export const PERMISSIONS = {
   ...jibblePermissions,
   ...healthPermissions,
   ...recruitingPermissions,
+  ...signingPermissions,
   ...onboardingPermissions,
   ...reviewsPermissions,
   ...safevoicePermissions,

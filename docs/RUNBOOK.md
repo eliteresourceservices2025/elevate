@@ -67,10 +67,20 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 | Nothing is being deleted for old applicants | Retention is off until HR turns it on, on purpose. | Get counsel's approval of the periods, then switch it on in Recruiting > Applicant data retention. |
 | A resume will not open | The link lasts 60 seconds. | Click "Open resume" again. |
 
+## 5c. Signing problems
+
+| What you see | What it means | What to do |
+|---|---|---|
+| "Everyone has signed. The document is being sealed" for more than a few minutes | Sealing failed once (storage hiccup). A job retries every 5 minutes. | Wait 5 minutes and refresh. If it persists, check the Health page ("Sealing signed documents") and tell the developer. The signatures are safe. |
+| Event log shows "Chain broken" | Someone changed the record directly in the database. | Do not use the document; tell the developer at once. |
+| A signer cannot sign | They have not opened the document yet, it is not their turn (one-after-another order), it expired, or it was voided. | Ask them to open it first. Remind, or void and send again. |
+| The person has no account | Signers must have an ELEVATE account. | Invite them first (Settings > Invitations). People outside the company are not supported yet. |
+| Checking a signed PDF says "does not match" | The file was changed after sealing, or it is not the sealed copy (the unsigned original does not match). | Download the signed copy again from the document page. |
+
 ## 6. Deploying changes (developer)
 
 - Deploy at the **Manila shift change**, not in the middle of a night shift (that is the US day, when most VAs are working). Check Attendance > Health before and after.
-- A new environment needs the private bucket `recruiting-docs` (`pnpm storage:setup`) before the careers form can take resumes.
+- A new environment needs the private bucket `recruiting-docs` (`pnpm storage:setup`) before the careers form can take resumes, and `signed-docs` before ELEVATE Sign can store documents.
 - Database changes must be safe to run while people clock in (add columns and tables; never rename or drop in one step).
 - A failed deploy is rolled back from the host's dashboard, and the Health tab confirms jobs are running again.
 - The host's own scheduler calls `/api/cron/backstop` every 15 minutes (needs `CRON_SECRET`). If the job service (Inngest) is down, this still sends waiting Jibble calls, repairs Jibble and sends the health alert.

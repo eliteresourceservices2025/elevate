@@ -11,7 +11,7 @@ const key = process.env.SUPABASE_SECRET_KEY;
 if (!url || !key) throw new Error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY in .env.local");
 
 const admin = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-const BUCKETS = ["employee-docs", "company-docs", "recruiting-docs"];
+const BUCKETS = ["employee-docs", "company-docs", "recruiting-docs", "signed-docs"];
 const options = { public: false, fileSizeLimit: MAX_FILE_BYTES, allowedMimeTypes: ALLOWED_MIME_TYPES };
 
 console.log(`Project: ${new URL(url).host}`);

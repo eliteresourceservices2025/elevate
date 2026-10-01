@@ -35,6 +35,7 @@ describe("decideAccess", () => {
   it("keeps public pages public and password reset session-only", () => {
     expect(decideAccess("/careers", null)).toEqual(allow);
     expect(decideAccess("/auth/callback", null)).toEqual(allow);
+    expect(decideAccess("/verify", null)).toEqual(allow);
     expect(decideAccess("/reset-password", null)).toEqual(to("/login"));
     expect(decideAccess("/reset-password", "aal1")).toEqual(allow);
   });
@@ -42,6 +43,7 @@ describe("decideAccess", () => {
   it("does not treat look-alike paths as public", () => {
     expect(decideAccess("/careers-admin", null)).toEqual(to("/login?next=%2Fcareers-admin"));
     expect(decideAccess("/authors", "aal1")).toEqual(to("/mfa"));
+    expect(decideAccess("/verify-me", null)).toEqual(to("/login?next=%2Fverify-me"));
   });
 });
 

@@ -117,14 +117,17 @@ describe("a VA asks to work extra hours", () => {
 
   it("counts what is already asked for toward the 4 hour day, refuses an overlap, and lets a cancelled one go", async () => {
     const { clientId, va } = await setup("Cap");
-    expect((await ask(va, clientId, window(30 * HOUR, 3 * HOUR))).ok).toBe(true);
-    const more = await ask(va, clientId, window(34 * HOUR, 2 * HOUR)); // 3h + 2h on the same day
+    // Anchored to noon tomorrow in Arizona (UTC-7, no daylight saving) so all the windows fall on one calendar day whatever time the test runs
+    const tomorrow = new Date(Date.now() + 86_400_000);
+    const noon = Date.UTC(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth(), tomorrow.getUTCDate(), 19) - Date.now();
+    expect((await ask(va, clientId, window(noon, 3 * HOUR))).ok).toBe(true);
+    const more = await ask(va, clientId, window(noon + 4 * HOUR, 2 * HOUR)); // 3h + 2h on the same day
     expect(more.ok).toBe(false);
     expect(!more.ok && more.error).toContain("more than 4 hours");
-    expect(await ask(va, clientId, window(31 * HOUR, HOUR))).toEqual({ ok: false, error: "There are already extra hours asked for or approved in part of that time." });
+    expect(await ask(va, clientId, window(noon + HOUR, HOUR))).toEqual({ ok: false, error: "There are already extra hours asked for or approved in part of that time." });
     const first = await latest(va.employeeId);
     expect((await actions.cancelExtraHours({ requestId: first.id })).ok).toBe(true);
-    expect((await ask(va, clientId, window(31 * HOUR, HOUR))).ok).toBe(true); // the cancelled one no longer blocks
+    expect((await ask(va, clientId, window(noon + HOUR, HOUR))).ok).toBe(true); // the cancelled one no longer blocks
   });
 
   it("marks a window that has already started as after the fact, and warns when the day gets very long", async () => {

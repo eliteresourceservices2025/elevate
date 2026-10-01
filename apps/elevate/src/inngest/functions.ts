@@ -10,6 +10,7 @@ import { runDailyDigest } from "@/modules/notifications/digest";
 import { flushEmailQueue } from "@/modules/notifications/email-queue";
 import { todayInZone } from "@/modules/org/service";
 import { runRecruitingRetention, sendCandidateEmails } from "@/modules/recruiting/jobs";
+import { runEsignReminders, runEsignSealSweep } from "@/modules/signing/jobs";
 import { runHealthCheck, trackJob as track } from "@/modules/health/service";
 import { inngest } from "./client";
 
@@ -169,4 +170,16 @@ export const recruitingRetention = inngest.createFunction(
   async ({ step }) => step.run("purge", () => track("recruiting-retention", () => runRecruitingRetention())),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention];
+/** Daily at 8:30 AM Manila: expire overdue documents and remind people whose turn it is to sign. */
+export const esignReminders = inngest.createFunction(
+  { id: "esign-reminders", triggers: { cron: `TZ=${SECONDARY_TIMEZONE} 30 8 * * *` } },
+  async ({ step }) => step.run("remind", () => track("esign-reminders", () => runEsignReminders())),
+);
+
+/** Every 5 minutes: seal any document where everyone has signed but sealing did not finish. */
+export const esignSealSweep = inngest.createFunction(
+  { id: "esign-seal-sweep", triggers: { cron: "*/5 * * * *" } },
+  async ({ step }) => step.run("seal", () => track("esign-seal-sweep", () => runEsignSealSweep())),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep];

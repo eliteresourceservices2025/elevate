@@ -84,6 +84,9 @@ const EXPECTED: Record<string, string> = {
   "recruiting.scorecard": "O O O O - -", // only your own, only as an interviewer on that interview
   "recruiting.download_resume": "A A T A - -",
   "recruiting.manage_retention": "A A - - - -",
+  "signing.manage": "A A - - - -",
+  "signing.view_own": "O O O O O O",
+  "signing.sign": "O O O O O O",
   "onboarding.manage": "A A T - - -",
   "onboarding.view_own_tasks": "- - - - - O",
   "reviews.view": "A A T - - O",
