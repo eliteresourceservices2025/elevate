@@ -29,7 +29,7 @@ if (!cfg) {
 console.log(`Using a ${cfg.accessToken ? "personal access token" : "client id and secret"}. Hosts: ${new URL(cfg.workspaceUrl).host}, ${new URL(cfg.timeTrackingUrl).host}, ${new URL(cfg.timeAttendanceUrl).host}`);
 
 const client: JibbleClient = new JibbleHttpClient(cfg);
-const show = (error: unknown) => (error instanceof JibbleError ? error.message : "unexpected error");
+const show = (error: unknown) => (error instanceof JibbleError ? `${error.message}${error.detail ? ` (Jibble says: ${error.detail})` : ""}` : "unexpected error");
 
 let people;
 try {

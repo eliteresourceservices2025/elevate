@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_URLS, JibbleError, JibbleHttpClient } from "./http-client";
+import { DEFAULT_URLS, JibbleError, JibbleHttpClient, explain } from "./http-client";
 
 // The real client against a stubbed fetch: the requests it makes, how it reads answers, and that errors never carry a body.
 
@@ -115,6 +115,23 @@ describe("Jibble HTTP client", () => {
 
     answer([{ status: 503 }]);
     expect(((await token.clock("p", "In").catch((e: unknown) => e)) as JibbleError).retryable).toBe(true);
+  });
+
+  it("sends who is making the entry in the format Jibble expects", async () => {
+    answer([{ json: { id: "e1" } }]);
+    await token.clock("person-1", "In");
+    expect(JSON.parse(calls[0].body!).platform).toMatchObject({ deviceName: "ELEVATE", isQrKiosk: false });
+  });
+
+  it("keeps what Jibble said was wrong for the probe, but not in the message that gets stored", async () => {
+    answer([{ status: 400, json: { errors: { Platform: ["The Platform field is required."] }, title: "One or more validation errors occurred." } }]);
+    const err = (await token.clock("person-1", "In").catch((e: unknown) => e)) as JibbleError;
+    expect(err.status).toBe(400);
+    expect(err.detail).toContain("Platform: The Platform field is required.");
+    expect(err.message).toBe("http 400: request refused"); // what the log stores has no detail
+    expect(explain("")).toBeNull();
+    expect(explain("plain text")).toBe("plain text");
+    expect(explain(JSON.stringify({ message: "x".repeat(500) }))?.length).toBe(300);
   });
 
   it("reports a dead connection as a retryable error", async () => {

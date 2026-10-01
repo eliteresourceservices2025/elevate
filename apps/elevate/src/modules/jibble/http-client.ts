@@ -26,6 +26,8 @@ export class JibbleError extends Error {
   constructor(
     public readonly status: number | null,
     public readonly code: string,
+    /** What Jibble said was wrong, shortened. For the local probe script only: never stored, logged or shown in the app. */
+    public readonly detail: string | null = null,
   ) {
     super(describeFailure(status, code));
     this.name = "JibbleError";
@@ -72,6 +74,24 @@ export function configFromEnv(env: Record<string, string | undefined>): JibbleCo
 
 type Json = Record<string, unknown>;
 
+/** A short reading of an error answer from Jibble (its message, or the fields it names), at most 300 characters. */
+export function explain(body: string): string | null {
+  if (!body.trim()) return null;
+  try {
+    const json = JSON.parse(body) as Json;
+    const pick = (v: unknown) => (typeof v === "string" ? v : null);
+    const errors = json.errors && typeof json.errors === "object" ? Object.entries(json.errors as Record<string, unknown>).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`).join("; ") : null;
+    const nested = json.error && typeof json.error === "object" ? pick((json.error as Json).message) : null;
+    const text = [pick(json.message), pick(json.detail), pick(json.title), pick(json.error), nested, errors].filter(Boolean).join(" | ");
+    return (text || body).slice(0, 300);
+  } catch {
+    return body.slice(0, 300);
+  }
+}
+
+/** Who is making the entry, in the format Jibble's time entries expect: ELEVATE's server, not a person's device. */
+const PLATFORM = { clientVersion: "elevate", os: "server", deviceModel: "server", deviceName: "ELEVATE", deviceId: "elevate-server", isQrKiosk: false };
+
 export class JibbleHttpClient implements JibbleClient {
   private cached: { token: string; expiresAt: number } | null = null;
   private breakCache = new Map<string, { at: number; breaks: JibbleBreak[] }>();
@@ -99,7 +119,10 @@ export class JibbleHttpClient implements JibbleClient {
     } catch (error) {
       throw new JibbleError(null, error instanceof Error && error.name === "TimeoutError" ? "timeout" : "no connection");
     }
-    if (!response.ok) throw new JibbleError(response.status, response.status === 401 ? "token rejected" : response.status === 403 ? "not allowed" : "request refused");
+    if (!response.ok) {
+      const detail = await response.text().then((t) => explain(t), () => null);
+      throw new JibbleError(response.status, response.status === 401 ? "token rejected" : response.status === 403 ? "not allowed" : "request refused", detail);
+    }
     if (response.status === 204) return {};
     return (await response.json().catch(() => ({}))) as unknown;
   }
@@ -138,7 +161,7 @@ export class JibbleHttpClient implements JibbleClient {
 
   async clock(personId: string, action: JibbleAction, options: ClockOptions = {}): Promise<{ entryId: string | null }> {
     // clientType "Web" because the entry is made by a server on the person's behalf; Jibble stamps the time itself.
-    let entry: Record<string, unknown> = { personId, type: action === "EndBreak" ? "In" : action, clientType: "Web", platform: null };
+    let entry: Record<string, unknown> = { personId, type: action === "EndBreak" ? "In" : action, clientType: "Web", platform: PLATFORM };
     if (action === "StartBreak") {
       // Jibble starts one of the person's breaks: pick the one that fits the length chosen in ELEVATE.
       const chosen = pickBreak(await this.breaksFor(personId), options.breakMinutes ?? null);
