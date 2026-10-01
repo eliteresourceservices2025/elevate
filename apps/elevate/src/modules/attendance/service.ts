@@ -47,13 +47,13 @@ export async function loadEventsBetween(executor: Executor, employeeId: string, 
   return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned }));
 }
 
-export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; lateGraceMinutes: number };
-export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false, jibbleMirror: false, lateGraceMinutes: 10 };
+export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; lateGraceMinutes: number; maxExtraMinutesPerDay: number; maxDayMinutes: number };
+export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false, jibbleMirror: false, lateGraceMinutes: 10, maxExtraMinutesPerDay: 240, maxDayMinutes: 720 };
 
 /** The rules of the person's team (or the defaults when the team has none). */
 export async function rulesFor(executor: Executor, employeeId: string): Promise<EffectiveRules> {
   const [row] = await executor
-    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected, jibbleMirror: clockRules.jibbleMirror, lateGraceMinutes: clockRules.lateGraceMinutes })
+    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected, jibbleMirror: clockRules.jibbleMirror, lateGraceMinutes: clockRules.lateGraceMinutes, maxExtraMinutesPerDay: clockRules.maxExtraMinutesPerDay, maxDayMinutes: clockRules.maxDayMinutes })
     .from(employees)
     .innerJoin(clockRules, eq(clockRules.teamId, employees.teamId))
     .where(eq(employees.id, employeeId))
@@ -279,12 +279,12 @@ export function imageType(bytes: Uint8Array): "image/jpeg" | "image/png" | null 
  * Checks the screenshots a person wants to attach: they must be the person's own, not attached yet, really there, a real
  * JPEG or PNG and small enough. A bad file is deleted. Fills in the size and checksum and returns the verified ids.
  */
-export async function verifyEvidence(tx: Executor, employeeId: string, ids: string[], maxBytes: number): Promise<string[]> {
+export async function verifyEvidence(tx: Executor, employeeId: string, ids: string[], maxBytes: number, uploadedBy?: string): Promise<string[]> {
   const unique = [...new Set(ids)];
   const verified: string[] = [];
   for (const id of unique) {
-    const [row] = await tx.select().from(correctionEvidence).where(and(eq(correctionEvidence.id, id), eq(correctionEvidence.employeeId, employeeId), isNull(correctionEvidence.correctionId), isNull(correctionEvidence.purgedAt))).limit(1);
-    if (!row) throw new ActionFailure("One of the screenshots is not valid. Add it again.");
+    const [row] = await tx.select().from(correctionEvidence).where(and(eq(correctionEvidence.id, id), eq(correctionEvidence.employeeId, employeeId), isNull(correctionEvidence.correctionId), isNull(correctionEvidence.extraRequestId), isNull(correctionEvidence.purgedAt))).limit(1);
+    if (!row || (uploadedBy && row.uploadedBy && row.uploadedBy !== uploadedBy)) throw new ActionFailure("One of the screenshots is not valid. Add it again.");
     const bytes = await getDocumentStorage().read(BUCKETS.employee, row.storagePath);
     const type = bytes ? imageType(bytes) : null;
     if (!bytes || !type || type !== row.mime || bytes.length > maxBytes) {

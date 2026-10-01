@@ -13,6 +13,7 @@ import { formatInZone } from "@/lib/time";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import { BREAK_CHOICES, EOD_TEMPLATE, HEARTBEAT_MS, MINUTE, breakLabel, formatClock, needsWelcomeBack } from "@/modules/attendance/clock";
+import { coveringWindow } from "@/modules/attendance/extra-hours";
 import { answerIdlePrompt, cancelCorrection, clockIn, clockOut, endBreak, pingPresence, reportIdlePrompt, requestClockSelfie, requestCorrection, saveShiftNote, startBreak } from "@/modules/attendance/actions";
 import type { ClockStatus } from "@/modules/attendance/queries";
 
@@ -230,6 +231,9 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const [idlePrompt, setIdlePrompt] = useState<string | null>(null);
   /** The break (by its start time) whose "your break is up" pop-up the person has already dismissed. */
   const [dismissedBreak, setDismissedBreak] = useState<number | null>(null);
+  /** The shift end (and approved window end) whose reminder the person has already dismissed. */
+  const [dismissedShiftEnd, setDismissedShiftEnd] = useState<number | null>(null);
+  const [dismissedWindowEnd, setDismissedWindowEnd] = useState<number | null>(null);
   // Offline: the browser says so, or a request just failed. The server stays the only source of time, so buttons pause.
   const [requestFailed, setRequestFailed] = useState(false);
   const browserOnline = useSyncExternalStore(
@@ -399,6 +403,13 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const over = remaining !== null && remaining < 0;
   const showBreakUp = onBreak && remaining !== null && remaining <= 0 && dismissedBreak !== status.breakStartMs;
 
+  // Past the end of the shift with no approved extra hours: ask whether they are working extra. Near the end of approved extra hours: remind them.
+  // Neither ever clocks anyone out.
+  const covered = coveringWindow(status.extraWindows, nowMs);
+  const shiftOver = working && status.shiftEndMs !== null && nowMs > status.shiftEndMs + 5 * MINUTE && !covered && !status.pendingClockOut;
+  const showShiftPrompt = shiftOver && dismissedShiftEnd !== status.shiftEndMs;
+  const showWindowReminder = working && covered !== null && covered.endMs - nowMs <= 5 * MINUTE && dismissedWindowEnd !== covered.endMs;
+
   const shownTime = onBreak ? (remaining === null ? formatClock(breakElapsed) : over ? `+${formatClock(-remaining)}` : formatClock(remaining)) : formatClock(worked);
   const shownLabel = onBreak ? (remaining === null ? "On break" : over ? "Over break by" : "Break left") : "Working";
 
@@ -521,6 +532,62 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
               <Button variant="ghost" onClick={() => setDismissedBreak(status.breakStartMs)}>
                 Stay on break
               </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showShiftPrompt ? (
+        <div role="alertdialog" aria-modal="true" aria-labelledby="shift-over-title" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm space-y-4 rounded-2xl bg-card p-6 shadow-2xl">
+            <h2 id="shift-over-title" className="text-xl font-bold">
+              Your shift has ended
+            </h2>
+            <p className="text-sm">
+              Your shift ended at {formatInZone(status.shiftEndMs!, status.zone, "h:mm a")}. If you are working extra hours, ask for approval so they count. If not, please clock out.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Link href="/attendance?tab=extra" onClick={() => setDismissedShiftEnd(status.shiftEndMs)} className={cn(buttonVariants({ size: "lg" }), "h-11 text-base font-semibold")}>
+                Ask for extra hours
+              </Link>
+              <Button
+                variant="outline"
+                disabled={blocked}
+                onClick={() => {
+                  setDismissedShiftEnd(status.shiftEndMs);
+                  run(
+                    () => clockOut(),
+                    "Clocked out.",
+                    (data) => {
+                      if (data.sessionId) setEodSession(data.sessionId);
+                    },
+                  );
+                }}
+              >
+                Clock out now
+              </Button>
+              <Button variant="ghost" onClick={() => setDismissedShiftEnd(status.shiftEndMs)}>
+                Not now
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showWindowReminder && covered ? (
+        <div role="alertdialog" aria-modal="true" aria-labelledby="window-end-title" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm space-y-4 rounded-2xl bg-card p-6 shadow-2xl">
+            <h2 id="window-end-title" className="text-xl font-bold">
+              Your approved extra hours end soon
+            </h2>
+            <p className="text-sm">They end at {formatInZone(covered.endMs, status.zone, "h:mm a")}. Please wrap up and clock out, or ask for more time.</p>
+            <div className="flex flex-col gap-2">
+              <Button size="lg" className="h-11 text-base font-semibold" onClick={() => setDismissedWindowEnd(covered.endMs)}>
+                OK
+              </Button>
+              <Link href="/attendance?tab=extra" onClick={() => setDismissedWindowEnd(covered.endMs)} className={cn(buttonVariants({ variant: "outline" }))}>
+                Ask for more time
+              </Link>
             </div>
           </div>
         </div>

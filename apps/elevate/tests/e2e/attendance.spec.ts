@@ -214,7 +214,10 @@ test("welcome back after a long gap: the person can ask their lead to clock them
   await expect(dialog).toContainText("Are you still working?");
 
   await dialog.getByRole("button", { name: "No, I stopped earlier" }).click();
-  await expect(dialog.getByLabel("I stopped working at")).toHaveValue(phoenix(2 * 3_600_000));
+  // Prefilled with the last time seen (2 hours ago), allowing for the minute that passes while the test runs
+  const prefilled = await dialog.getByLabel("I stopped working at").inputValue();
+  const asMs = (v: string) => Date.parse(`${v}:00Z`);
+  expect(Math.abs(asMs(prefilled) - asMs(phoenix(2 * 3_600_000)))).toBeLessThanOrEqual(3 * 60_000);
   await dialog.getByLabel("What happened?").selectOption("device_problem");
   await dialog.getByRole("button", { name: "Ask my lead to clock me out" }).click();
   await expect(page.getByText(/Waiting for approval of your clock-out/)).toBeVisible(slow);
@@ -314,4 +317,74 @@ test("HR sets a schedule and the employee sees it in both time zones", async ({ 
   await expect(page.getByRole("region", { name: "My schedule" })).toContainText("9:00 PM - 5:00 AM in Manila");
   await expect(page.getByRole("columnheader", { name: "Shift" })).toBeVisible();
   await expect(page.getByText("Rest day").first()).toBeVisible();
+});
+
+async function withClient(employeeId: string) {
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    const [c] = await sql<{ id: string }[]>`insert into core.clients (name, time_zone) values (${`E2E Client ${Date.now()}`}, 'America/New_York') returning id`;
+    await sql`insert into core.client_assignments (employee_id, client_id, start_date) values (${employeeId}, ${c.id}, current_date - 30)`;
+  } finally {
+    await sql.end();
+  }
+}
+
+test("a VA asks for extra hours with the client's approval and the lead approves", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const slow = { timeout: 30_000 };
+  const stamp = Date.now();
+  const lead = await createEmployeeAccount("Lia", `XhLead${stamp}`, { roles: ["team_lead"] });
+  const va = await createEmployeeAccount("Vic", `Xh${stamp}`, { managerId: lead.employeeId });
+  await withClient(va.employeeId);
+
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, va);
+  await page.goto("/attendance?tab=extra");
+  await waitForHydration(page, "#eh-client");
+  await page.getByLabel("From").fill(phoenix(-3 * 3_600_000));
+  await page.getByLabel("Until").fill(phoenix(-5 * 3_600_000));
+  await page.getByLabel("Who at the client approved it?").fill("Dana Reyes");
+  await page.getByLabel("Reason").fill("Client needs the month-end report");
+  // A request cannot be sent without the client's approval attached
+  await expect(page.getByRole("button", { name: "Send for approval" })).toBeDisabled();
+  await expect(page.getByText("Never include client or patient information.")).toBeVisible();
+  await page.getByLabel(/Screenshot of the client's approval/).setInputFiles({ name: "approval.png", mimeType: "image/png", buffer: PNG_1X1 });
+  await page.getByRole("button", { name: "Send for approval" }).click();
+  await expect(page.getByText(/Sent to your lead/)).toBeVisible(slow);
+  await expect(page.getByText("Waiting for approval")).toBeVisible(slow);
+
+  const leadPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(leadPage, lead);
+  await leadPage.goto("/attendance?tab=extra");
+  await expect(leadPage.getByText("Client needs the month-end report")).toBeVisible(slow);
+  await expect(leadPage.getByRole("button", { name: "View screenshot 1" })).toBeVisible();
+  await (await hydrated(leadPage.getByRole("button", { name: "Approve" }))).click();
+  await expect(leadPage.getByText("Approved.", { exact: true })).toBeVisible(slow);
+
+  await page.reload();
+  await expect(page.getByText("Approved", { exact: true }).first()).toBeVisible(slow);
+});
+
+test("past the end of the shift the header asks whether they are working extra hours", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const slow = { timeout: 30_000 };
+  const worker = await createEmployeeAccount("Shea", `Shift${Date.now()}`);
+  const hhmm = (agoMs: number) => new Date(Date.now() - agoMs).toLocaleTimeString("en-GB", { timeZone: "America/Phoenix", hour: "2-digit", minute: "2-digit", hour12: false });
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    // A shift that began 6 hours ago and ended 2 hours ago (Phoenix time), with the person still clocked in since it began
+    await sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone)
+      values (${worker.employeeId}, current_date - 5, ${hhmm(6 * 3_600_000)}, ${hhmm(2 * 3_600_000)}, array[1,2,3,4,5,6,7]::smallint[], 0, 'America/Phoenix')`;
+    await sql`insert into time.clock_events (employee_id, type, occurred_at) values (${worker.employeeId}, 'clock_in', now() - interval '6 hours')`;
+  } finally {
+    await sql.end();
+  }
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, worker);
+  const dialog = page.getByRole("alertdialog", { name: "Your shift has ended" });
+  await expect(dialog).toBeVisible(slow);
+  await expect(dialog).toContainText("Your shift ended at");
+  await dialog.getByRole("link", { name: "Ask for extra hours" }).click();
+  await page.waitForURL("**/attendance?tab=extra");
+  await expect(dialog).toHaveCount(0);
 });

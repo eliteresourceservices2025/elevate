@@ -89,3 +89,43 @@ export const assignScheduleSchema = z.object({
   zone: z.preprocess(blankToUndefined, z.string().refine(isValidTimeZone, "Choose a valid time zone").optional()),
 });
 export const endScheduleSchema = z.object({ employeeId: uuid, endDate: ymd });
+
+const instant = z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a real date and time");
+const text = (min: number, max: number, minMessage: string) => z.string().trim().min(min, minMessage).max(max, `Use ${max} characters or fewer`);
+
+/** A VA asks to work extra hours for a client; the client's approval is shown as proof. */
+export const extraRequestSchema = z.object({
+  clientId: uuid,
+  windowStart: instant,
+  windowEnd: instant,
+  contactName: text(2, 120, "Who at the client approved it?"),
+  reason: text(5, 300, "Explain why in a few words"),
+  evidenceIds: z.array(uuid).min(1, "Attach a screenshot of the client's approval").max(3, "Attach three screenshots at most"),
+});
+
+/** A lead or HR files extra hours the client asked for; the VA then confirms or declines. */
+export const fileExtraForSchema = z
+  .object({
+    employeeId: uuid,
+    clientId: uuid,
+    windowStart: instant,
+    windowEnd: instant,
+    contactName: text(2, 120, "Who at the client asked?"),
+    reason: text(5, 300, "Explain why in a few words"),
+    confirmedByPhone: z.boolean().default(false),
+    evidenceIds: z.array(uuid).max(3, "Attach three screenshots at most").default([]),
+  })
+  .refine((v) => v.confirmedByPhone || v.evidenceIds.length > 0, { message: "Attach the client's request, or confirm that you spoke to the client.", path: ["evidenceIds"] });
+
+export const answerExtraSchema = z.object({ requestId: uuid, answer: z.enum(["confirm", "decline"]), note: z.preprocess(blankToUndefined, z.string().trim().max(300).optional()) });
+export const decideExtraSchema = z.object({
+  requestId: uuid,
+  decision: z.enum(["approve", "decline"]),
+  note: z.preprocess(blankToUndefined, z.string().trim().max(300).optional()),
+  /** The reviewer changed the window before approving. */
+  windowStart: z.preprocess(blankToUndefined, instant.optional()),
+  windowEnd: z.preprocess(blankToUndefined, instant.optional()),
+});
+export const cancelExtraSchema = z.object({ requestId: uuid });
+/** A screenshot upload for an extra hours request; employeeId when a lead or HR uploads for someone else. */
+export const extraUploadSchema = evidenceUploadSchema.extend({ employeeId: z.preprocess(blankToUndefined, uuid.optional()) });

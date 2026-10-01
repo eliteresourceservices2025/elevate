@@ -18,6 +18,8 @@ const actions = await import("@/modules/attendance/actions");
 const peopleActions = await import("@/modules/people/actions");
 const queries = await import("@/modules/attendance/queries");
 const scheduleActions = await import("@/modules/attendance/schedule-actions");
+const extraActions = await import("@/modules/attendance/extra-hours-actions");
+const extraQueries = await import("@/modules/attendance/extra-hours-queries");
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const NO_ACCESS = "You do not have access to do that.";
@@ -52,6 +54,10 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "fileCorrectionForOthers", call: () => actions.fileCorrectionForOthers(claim), allowed: TEAM_OR_HR },
   { name: "assignSchedule", call: () => scheduleActions.assignSchedule({ employeeIds: [ID], effectiveFrom: "2026-10-01", startTime: "09:00", endTime: "17:00", weekdays: [1, 2, 3, 4, 5], breakMinutes: 60 }), allowed: HR },
   { name: "endSchedule", call: () => scheduleActions.endSchedule({ employeeId: ID, endDate: "2026-10-01" }), allowed: HR },
+  { name: "requestExtraEvidenceUpload", call: () => extraActions.requestExtraEvidenceUpload({ mime: "image/png", size: 1000 }), allowed: EVERYONE },
+  { name: "requestExtraHours", call: () => extraActions.requestExtraHours({ clientId: ID, windowStart: "2026-10-01T10:00:00Z", windowEnd: "2026-10-01T12:00:00Z", contactName: "Dana", reason: "Client needs it", evidenceIds: [ID] }), allowed: EVERYONE },
+  { name: "answerExtraHours", call: () => extraActions.answerExtraHours({ requestId: ID, answer: "confirm" }), allowed: EVERYONE },
+  { name: "fileExtraHoursFor", call: () => extraActions.fileExtraHoursFor({ employeeId: ID, clientId: ID, windowStart: "2026-10-01T10:00:00Z", windowEnd: "2026-10-01T12:00:00Z", contactName: "Pat", reason: "Client asked", confirmedByPhone: true }), allowed: TEAM_OR_HR },
   { name: "saveClockRules", call: () => actions.saveClockRules(rules), allowed: HR },
 ];
 
@@ -88,6 +94,9 @@ describe("time clock queries, every role", () => {
     { name: "listFilablePeople", call: () => queries.listFilablePeople(), allowed: TEAM_VIEW },
     { name: "listShiftNotes", call: () => queries.listShiftNotes(), allowed: TEAM_VIEW },
     { name: "listSchedules", call: () => queries.listSchedules(), allowed: HR },
+    { name: "getMyExtraHours", call: () => extraQueries.getMyExtraHours(), allowed: EVERYONE },
+    { name: "listExtraHoursQueue", call: () => extraQueries.listExtraHoursQueue(), allowed: TEAM_VIEW },
+    { name: "listActiveClients", call: () => extraQueries.listActiveClients(), allowed: TEAM_VIEW },
   ];
   for (const q of queryCases) {
     describe(q.name, () => {

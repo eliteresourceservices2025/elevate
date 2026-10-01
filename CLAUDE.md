@@ -151,6 +151,17 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **Leave days** use the person's working weekdays in their own zone when they have a schedule (`workingWeekdaysFor`), Monday to Friday otherwise (`workdays.ts` takes an optional weekday set).
 - E2E: the Schedules tab is HR only; the My time table has Shift and Extra columns.
 
+## Extra hours (Phase 2.5, part B)
+
+- UI and copy say **"extra hours"**, never "overtime" (1099 contractors; counsel to confirm wording). ELEVATE labels hours and never computes pay.
+- **Requests** (`time.extra_hours_requests`, `extra-hours-actions.ts`): a window of time for a client the person is assigned to. **VA asks** (`requestExtraHours`): needs 1-3 screenshots of the client's approval (the same private upload and checks as time claims, `correction_evidence.extra_request_id`, `requestExtraEvidenceUpload`), a client contact name (free text) and a reason; status `pending_lead`. **Client asks** (`fileExtraHoursFor`, lead for their team or HR for anyone): proof, or "confirmed by phone" with a reason; status `pending_confirm`; the VA confirms (approved, decided by the filer) or declines (`answerExtraHours`). The filer is the approver. Evidence is bound to who uploaded it (`uploaded_by`).
+- **Decision** (`decideExtraHours`): the person's lead, HR when nobody is above. HR only when it was asked for **after the fact** (the window had started) and more than 7 days before it was filed. Nobody decides their own request or one they filed. The reviewer may change the window when approving (kept in `original_window_*`). Cancel (`cancelExtraHours`): the person or filer while it waits; the lead or HR also for approved time that has not started.
+- **Limits** per team (`clock_rules`): `max_extra_minutes_per_day` (240) counts pending and approved requests together; `max_day_minutes` (720) only warns. A request is 15 minutes to 24 hours, up to 30 days ahead and 31 days back. Two live requests for one person cannot overlap (exclusion constraint). Pure rules: `extra-hours.ts`.
+- **Effect on hours** (nothing blocks the clock): a day's extra time (see schedules) is split into **approved** (up to the minutes granted by that day's approved requests, by the day each window STARTS in the person's own zone) and **unapproved** (what is left, if 15 minutes or more): `attendance_days.approved_extra_minutes`, flag `unapproved_extra`. Approved windows that run on from the shift end push the missed clock-out time back.
+- **Header** (`ClockStatus.shiftEndMs`, `extraWindows`): 5 minutes after the shift end with no approved window, a "Your shift has ended" prompt (ask for extra hours, clock out, or dismiss); 5 minutes before an approved window ends, a reminder. Neither clocks anyone out.
+- **Jobs:** `runExtraHoursReminders` (every 30 minutes, once per request: a request still waiting when its window starts within 2 hours goes to the lead again and to HR; a client's request waits on the VA and the filer); `runWeeklyExtraHoursNotice` (Monday 8:00 Manila, in-app to HR: last week's approved extra hours per client, by when each window started).
+- **Extra hours tab** (everyone): your requests and the form; leads and HR also see the review queue and the "file for the client" form.
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.

@@ -13,6 +13,8 @@ import { AutoRefresh } from "@/modules/attendance/components/auto-refresh";
 import { CorrectionForm, CorrectionList, FileForOthersForm, PreferencesForm, RulesForm, SetupProfileForm, ShiftNote } from "@/modules/attendance/components/attendance-forms";
 import { JibblePanel } from "@/modules/jibble/components/jibble-panel";
 import { getJibbleOverview } from "@/modules/jibble/queries";
+import { ExtraHoursPanel } from "@/modules/attendance/components/extra-hours-panel";
+import { getMyExtraHours, listActiveClients, listExtraHoursQueue } from "@/modules/attendance/extra-hours-queries";
 import { SchedulesPanel } from "@/modules/attendance/components/schedules-panel";
 import { getMyTime, listClockRules, listCorrectionQueue, listFilablePeople, listFlags, listSchedules, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
 import { todayInZone } from "@/modules/org/service";
@@ -21,6 +23,7 @@ export const metadata: Metadata = { title: "Attendance" };
 
 const ALL_TABS = [
   { key: "mine", label: "My time" },
+  { key: "extra", label: "Extra hours" },
   { key: "team", label: "Team" },
   { key: "corrections", label: "Corrections" },
   { key: "schedules", label: "Schedules" },
@@ -41,6 +44,7 @@ const FLAG_LABELS = new Map<string, string>(Object.entries({
   rest_day_work: "Worked on a rest day",
   holiday_work: "Worked on a holiday",
   absent: "Absent",
+  unapproved_extra: "Unapproved extra hours",
   jibble_mismatch: "Jibble and ELEVATE totals differ",
   on_leave: "On approved leave",
 }));
@@ -50,7 +54,7 @@ const addDays = (date: string, n: number) => new Date(Date.parse(`${date}T00:00:
 export default async function AttendancePage({ searchParams }: PageProps<"/attendance">) {
   const user = await requireUser();
   const params = await searchParams;
-  const allowed = new Set<string>(["mine"]);
+  const allowed = new Set<string>(["mine", "extra"]);
   const view = scopeFor(user, "attendance.view");
   if (view === "all" || view === "team") allowed.add("team");
   const approve = scopeFor(user, "attendance.approve_correction");
@@ -67,6 +71,14 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const queue = tab === "corrections" ? await orNotFound(listCorrectionQueue()) : null;
   const notes = tab === "team" ? await orNotFound(listShiftNotes()) : null;
   const filable = tab === "corrections" && ["all", "team"].includes(String(scopeFor(user, "attendance.file_for_others"))) ? await orNotFound(listFilablePeople()) : null;
+  const reviewScope = scopeFor(user, "extra_hours.decide");
+  const canReview = reviewScope === "all" || reviewScope === "team";
+  const fileScope = scopeFor(user, "extra_hours.file_for_others");
+  const canFile = fileScope === "all" || fileScope === "team";
+  const extraMine = tab === "extra" ? await orNotFound(getMyExtraHours()) : null;
+  const extraQueue = tab === "extra" && canReview ? await orNotFound(listExtraHoursQueue()) : null;
+  const extraPeople = tab === "extra" && canFile ? await orNotFound(listFilablePeople()) : null;
+  const extraClients = tab === "extra" && canFile ? await orNotFound(listActiveClients()) : null;
   const schedulesList = tab === "schedules" ? await orNotFound(listSchedules()) : null;
   const jibble = tab === "jibble" ? await orNotFound(getJibbleOverview()) : null;
   const rules = tab === "rules" ? await orNotFound(listClockRules()) : null;
@@ -161,7 +173,16 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                           <TableCell className="text-right">{d.breakMinutes ? formatDuration(d.breakMinutes * MINUTE) : "-"}</TableCell>
                           <TableCell className="text-right">{d.overbreakMinutes ? <Badge variant="destructive">+{d.overbreakMinutes} min</Badge> : "-"}</TableCell>
                           <TableCell className="text-right font-medium">{d.workedMinutes ? formatDuration(d.workedMinutes * MINUTE) : "-"}</TableCell>
-                          <TableCell className="text-right">{d.extraMinutes ? <Badge variant="secondary">+{formatDuration(d.extraMinutes * MINUTE)}</Badge> : "-"}</TableCell>
+                          <TableCell className="text-right">
+                            {d.extraMinutes ? (
+                              <>
+                                <Badge variant={d.approvedExtraMinutes >= d.extraMinutes ? "default" : "secondary"}>+{formatDuration(d.extraMinutes * MINUTE)}</Badge>
+                                <span className="block text-xs text-muted-foreground">{d.approvedExtraMinutes > 0 ? `${formatDuration(d.approvedExtraMinutes * MINUTE)} approved` : "not approved"}</span>
+                              </>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
                         </TableRow>
                         {d.sessionList.map((sess, i) => (
                           <TableRow key={`${d.date}-${sess.startAt}`} className="bg-muted/30 text-xs" data-session>
@@ -342,6 +363,8 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
           <CorrectionList items={queue.items} zone="America/Phoenix" mode="queue" empty="No corrections are waiting." />
         </div>
       ) : null}
+
+      {tab === "extra" ? <ExtraHoursPanel mine={extraMine} queue={extraQueue} filable={extraPeople} clients={extraClients} queueZone="America/Phoenix" /> : null}
 
       {schedulesList ? <SchedulesPanel rows={schedulesList.rows} withoutSchedule={schedulesList.withoutSchedule} today={todayInZone()} /> : null}
 

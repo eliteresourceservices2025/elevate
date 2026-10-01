@@ -192,7 +192,7 @@ export async function requestCorrection(input: unknown): Promise<ActionResult> {
         .insert(clockCorrections)
         .values({ employeeId: person.id, requestedBy: actor.id, reason, kind, proposed: events.map((e) => ({ type: e.type, at: new Date(e.at).toISOString() })) })
         .returning({ id: clockCorrections.id });
-      const attached = await verifyEvidence(tx, person.id, evidenceIds, EVIDENCE_MAX_BYTES);
+      const attached = await verifyEvidence(tx, person.id, evidenceIds, EVIDENCE_MAX_BYTES, actor.id);
       if (attached.length > 0) await tx.update(correctionEvidence).set({ correctionId: row.id }).where(inArray(correctionEvidence.id, attached));
       const [me] = await tx.select({ first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName }).from(employees).where(eq(employees.id, person.id));
       const chain = await managerChainUserIds(tx, person.id);
@@ -252,7 +252,7 @@ export async function requestEvidenceUpload(input: unknown): Promise<ActionResul
     if (n >= 6) return fail("You have unused screenshots waiting. Send your request first, or try again tomorrow.");
     const path = evidencePath(person.id, parsed.data.mime);
     const { token } = await getDocumentStorage().createSignedUpload(BUCKETS.employee, path);
-    const [row] = await db.insert(correctionEvidence).values({ employeeId: person.id, storagePath: path, mime: parsed.data.mime }).returning({ id: correctionEvidence.id });
+    const [row] = await db.insert(correctionEvidence).values({ employeeId: person.id, storagePath: path, mime: parsed.data.mime, uploadedBy: actor.id }).returning({ id: correctionEvidence.id });
     return { ok: true, data: { id: row.id, path, token } };
   });
 }
@@ -265,12 +265,12 @@ export async function openEvidence(input: unknown): Promise<ActionResult<{ url: 
     if (!parsed.success) return fail(BAD);
     if (!(await allowRequest("download", actor.id))) return fail("Too many downloads. Wait a few minutes and try again.");
     const [ev] = await db.select().from(correctionEvidence).where(eq(correctionEvidence.id, parsed.data.evidenceId)).limit(1);
-    if (!ev || !ev.correctionId || ev.purgedAt) return fail("That screenshot is no longer available.");
+    if (!ev || (!ev.correctionId && !ev.extraRequestId) || ev.purgedAt) return fail("That screenshot is no longer available.");
     const [person] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, ev.employeeId));
     if (person?.userId === actor.id) await authorize(actor, "attendance.request_correction", { ownerUserId: actor.id });
     else await authorize(actor, "attendance.approve_correction", { ownerUserId: person?.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, ev.employeeId) });
     const url = await getDocumentStorage().createSignedDownload(BUCKETS.employee, ev.storagePath, 60, `evidence.${ev.mime === "image/png" ? "png" : "jpg"}`);
-    await writeAudit({ actor, action: "clock.evidence_view", targetType: "employee", targetId: ev.employeeId, metadata: { evidenceId: ev.id, correctionId: ev.correctionId } });
+    await writeAudit({ actor, action: "clock.evidence_view", targetType: "employee", targetId: ev.employeeId, metadata: { evidenceId: ev.id, correctionId: ev.correctionId, extraRequestId: ev.extraRequestId } });
     return { ok: true, data: { url } };
   });
 }

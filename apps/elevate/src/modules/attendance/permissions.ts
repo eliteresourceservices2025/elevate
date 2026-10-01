@@ -23,6 +23,10 @@ export const attendancePermissions = definePermissions({
   // Schedules: HR sets them; leads see their team's, everyone sees their own.
   "schedules.view": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", employee: "own" } },
   "schedules.manage": { roles: { super_admin: "all", hr_admin: "all" } },
+  // Extra hours: anyone asks for their own; a lead (team) or HR (anyone) files one the client asked for and decides the VA's.
+  "extra_hours.request": { roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" } },
+  "extra_hours.file_for_others": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  "extra_hours.decide": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   "attendance.manage_rules": { roles: { super_admin: "all", hr_admin: "all" } },
   "attendance.view_summary": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", executive: "all" } },
 });

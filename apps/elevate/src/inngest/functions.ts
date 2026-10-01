@@ -1,6 +1,6 @@
 import "server-only";
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
-import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts } from "@/modules/attendance/jobs";
+import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runExtraHoursReminders, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts, runWeeklyExtraHoursNotice } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
 import { processMirrorQueue, purgeJibbleData, runJibbleComparison, syncJibblePeople } from "@/modules/jibble/jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
@@ -113,4 +113,16 @@ export const jibbleComparison = inngest.createFunction(
   },
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison];
+/** Every 30 minutes: nudge requests for extra hours whose window is about to start and nobody has answered. */
+export const extraHoursReminders = inngest.createFunction(
+  { id: "extra-hours-reminders", triggers: { cron: "*/30 * * * *" } },
+  async ({ step }) => step.run("remind", () => runExtraHoursReminders()),
+);
+
+/** Mondays at 8:00 AM Manila: HR gets last week's approved extra hours per client. */
+export const extraHoursWeekly = inngest.createFunction(
+  { id: "extra-hours-weekly", triggers: { cron: `TZ=${SECONDARY_TIMEZONE} 0 8 * * 1` } },
+  async ({ step }) => step.run("summarize", () => runWeeklyExtraHoursNotice()),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, extraHoursReminders, extraHoursWeekly];

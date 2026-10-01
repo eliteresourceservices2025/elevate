@@ -10,6 +10,8 @@ import { attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices
 import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
 import { EXTRA_THRESHOLD_MINUTES, addDays, earlyLeaveMinutes, extraMinutes, hasScheduleAround, lateMinutes, shiftOn } from "./schedule";
 import { loadSchedules, loadSchedulesFor } from "./schedule-service";
+import { approvedExtra, effectiveEndMs, grantedByDate } from "./extra-hours";
+import { approvedWindows } from "./extra-hours-service";
 import { holidaysInRange } from "@/modules/timeoff/request-service";
 import { EVIDENCE_KEEP_DAYS, SELFIE_KEEP_DAYS, loadEventsBetween, notifyOverbreak, onFullDayLeave, prefsFor, rulesFor } from "./service";
 
@@ -77,6 +79,7 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Pro
     const days = buildDays(events, prefs.zone).filter((d) => d.date >= earliest && d.date <= today);
     const schedules = await loadSchedules(db, employeeId);
     const holidays = new Set((await holidaysInRange(db, employeeId, addDays(earliest, -1), addDays(today, 1))).map((h) => h.date));
+    const granted = grantedByDate(await approvedWindows(db, employeeId, fromMs - DAY_MS, now.getTime() + DAY_MS), prefs.zone);
 
     for (const d of days) {
       const end = d.lastOut ?? now.getTime();
@@ -108,12 +111,15 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Pro
       const late = shift && !holiday ? lateMinutes(d.firstIn, shift, rules.lateGraceMinutes) : 0;
       const early = shift && !holiday && d.lastOut !== null && !d.open ? earlyLeaveMinutes(d.lastOut, shift, rules.lateGraceMinutes) : 0;
       const extra = extraMinutes({ workedMinutes: d.workedMinutes, shift, hasSchedule, holiday });
+      // What approved extra hours requests cover, and what is left over (unapproved).
+      const split = approvedExtra(extra, granted.get(d.date) ?? 0);
 
       const flags = [
         d.open ? "open_session" : null,
         late > 0 ? "late" : null,
         early > 0 ? "left_early" : null,
         extra > 0 ? "extra_hours" : null,
+        split.unapproved > 0 ? "unapproved_extra" : null,
         hasSchedule && !shift && !holiday && d.workedMinutes >= EXTRA_THRESHOLD_MINUTES ? "rest_day_work" : null,
         holiday && d.workedMinutes >= EXTRA_THRESHOLD_MINUTES ? "holiday_work" : null,
         flagRows[0]?.outside ? "outside_range" : null,
@@ -134,6 +140,7 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Pro
         lateMinutes: late,
         earlyLeaveMinutes: early,
         extraMinutes: extra,
+        approvedExtraMinutes: split.approved,
         firstIn: new Date(d.firstIn),
         lastOut: d.lastOut ? new Date(d.lastOut) : null,
         flags,
@@ -185,7 +192,9 @@ async function missedAtShiftEnd(now: Date): Promise<number> {
     const shift = shiftOn(list, prefs.zone, formatInZone(Number(o.last_in_ms), prefs.zone, "yyyy-MM-dd"));
     if (!shift) continue;
     const rules = await rulesFor(db, o.employee_id);
-    if (now.getTime() <= shift.endMs + rules.graceMinutes * MINUTE) continue;
+    // Approved extra hours that run on from the shift push the end back: nobody is "past their shift" while allowed to work.
+    const windows = await approvedWindows(db, o.employee_id, shift.endMs - DAY_MS, now.getTime() + DAY_MS);
+    if (now.getTime() <= effectiveEndMs(shift.endMs, windows) + rules.graceMinutes * MINUTE) continue;
 
     await db.transaction(async (tx) => {
       const claimed = await tx.insert(missedClockoutNotices).values({ eventId: o.event_id }).onConflictDoNothing().returning({ id: missedClockoutNotices.eventId });
@@ -328,4 +337,59 @@ export async function runOverbreakAlerts(now = new Date()): Promise<{ noticed: n
     if (await db.transaction((tx) => notifyOverbreak(tx, r.employee_id, r.event_id, over, r.planned))) noticed += 1;
   }
   return { noticed };
+}
+
+/**
+ * Every 30 minutes: a VA's request still waiting for the lead when its window is about to start (within 2 hours) or already has
+ * goes to the lead again and to HR, once. A client's request still waiting for the VA is nudged the same way.
+ */
+export async function runExtraHoursReminders(now = new Date()): Promise<{ reminded: number }> {
+  const soon = new Date(now.getTime() + 2 * 3_600_000);
+  const due = (await db.execute(sql`
+    select r.id, r.employee_id, r.status, r.filed_by, (extract(epoch from r.window_start) * 1000)::float8 as ws,
+           e.user_id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
+    from time.extra_hours_requests r join core.employees e on e.id = r.employee_id
+    where r.status in ('pending_lead', 'pending_confirm') and r.reminded_at is null and r.window_start < ${soon.toISOString()}::timestamptz`)) as unknown as {
+    id: string; employee_id: string; status: string; filed_by: string; ws: number; user_id: string | null; first: string; last: string; preferred: string | null;
+  }[];
+  if (due.length === 0) return { reminded: 0 };
+  const hr = await hrUserIds();
+  let reminded = 0;
+  for (const r of due) {
+    await db.transaction(async (tx) => {
+      const claimed = await tx.execute(sql`update time.extra_hours_requests set reminded_at = now() where id = ${r.id} and reminded_at is null returning 1`);
+      if ((claimed as unknown as unknown[]).length === 0) return;
+      reminded += 1;
+      const name = reportName({ first: r.first, last: r.last, preferred: r.preferred });
+      const when = formatInZone(Number(r.ws), undefined, "EEE MMM d, h:mm a");
+      if (r.status === "pending_lead") {
+        const chain = await managerChainUserIds(tx, r.employee_id);
+        const targets = [...new Set([...chain.slice(0, 1), ...hr])].filter((id) => id !== r.user_id);
+        await notify(tx, targets.map((userId) => ({ userId, kind: "extrahours.reminder", title: `${name}'s extra hours request is still waiting`, body: `The window starts ${when}.`, link: "/attendance?tab=extra" })));
+      } else {
+        const targets = [...new Set([...(r.user_id ? [r.user_id] : []), r.filed_by])];
+        await notify(tx, targets.map((userId) => ({ userId, kind: "extrahours.reminder", title: `Extra hours for ${name} still need an answer`, body: `The window starts ${when}. Confirm or decline.`, link: "/attendance?tab=extra" })));
+      }
+    });
+  }
+  return { reminded };
+}
+
+/** Mondays at 8 AM Manila: HR gets last week's approved extra hours per client (by when each window started). */
+export async function runWeeklyExtraHoursNotice(now = new Date()): Promise<{ clients: number }> {
+  const zone = "Asia/Manila";
+  const today = formatInZone(now, zone, "yyyy-MM-dd");
+  const monday = addDays(today, -(((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7)));
+  const from = addDays(monday, -7);
+  const rows = (await db.execute(sql`
+    select c.name, sum(r.minutes)::int as minutes, count(*)::int as n from time.extra_hours_requests r join core.clients c on c.id = r.client_id
+    where r.status = 'approved' and (r.window_start at time zone 'Asia/Manila')::date >= ${from}::date and (r.window_start at time zone 'Asia/Manila')::date < ${monday}::date
+    group by c.name order by sum(r.minutes) desc`)) as unknown as { name: string; minutes: number; n: number }[];
+  if (rows.length === 0) return { clients: 0 };
+  const fmtMinutes = (m: number) => `${Math.floor(m / 60)}h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}m` : ""}`;
+  const shown = rows.slice(0, 8).map((r) => `${r.name} ${fmtMinutes(r.minutes)}`).join(", ");
+  const body = `${shown}${rows.length > 8 ? `, and ${rows.length - 8} more` : ""}.`;
+  const hr = await hrUserIds();
+  await notify(db, hr.map((userId) => ({ userId, kind: "extrahours.weekly", title: `Approved extra hours, week of ${from}`, body, link: "/attendance?tab=extra" })));
+  return { clients: rows.length };
 }

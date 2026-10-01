@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, jsonb, numeric, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { teams } from "@/modules/org/schema";
-import { employees } from "@/modules/people/schema";
+import { clients, employees } from "@/modules/people/schema";
 import { time } from "@/modules/timeoff/schema";
 
 // The ELEVATE time clock (B2). ELEVATE is the only source of hours. Clock events are append-only; a correction is
@@ -66,6 +66,9 @@ export const clockRules = time
     jibbleMirror: boolean("jibble_mirror").notNull().default(false),
     /** Minutes after the shift start (or before its end) before a late arrival or early leave is flagged. */
     lateGraceMinutes: integer("late_grace_minutes").notNull().default(10),
+    /** Most extra hours one person may be approved for in a day, and the total hours in a day past which a request shows a warning. */
+    maxExtraMinutesPerDay: integer("max_extra_minutes_per_day").notNull().default(240),
+    maxDayMinutes: integer("max_day_minutes").notNull().default(720),
     updatedBy: uuid("updated_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   })
@@ -213,6 +216,8 @@ export const attendanceDays = time
       earlyLeaveMinutes: integer("early_leave_minutes").notNull().default(0),
       /** Worked time beyond the scheduled hours (a rest day or holiday counts in full). */
       extraMinutes: integer("extra_minutes").notNull().default(0),
+      /** The part of the extra time covered by approved extra hours requests; the rest is unapproved. */
+      approvedExtraMinutes: integer("approved_extra_minutes").notNull().default(0),
       firstIn: timestamp("first_in", { withTimezone: true }),
       lastOut: timestamp("last_out", { withTimezone: true }),
       /** Flags: open_session, outside_range, corrected, idle_unanswered, on_leave. Late, overtime and absence arrive with schedules. */
@@ -265,6 +270,58 @@ export const quietNotices = time
   })
   .enableRLS();
 
+export const EXTRA_STATUSES = ["pending_lead", "pending_confirm", "approved", "declined", "cancelled"] as const;
+
+/**
+ * A request to work extra hours for a client. The VA asks (client approval shown as proof, then the lead decides), or the lead
+ * or HR files it because the client asked (the VA then confirms or declines). Two live requests for one person cannot overlap
+ * (exclusion constraint in the migration).
+ */
+export const extraHoursRequests = time
+  .table(
+    "extra_hours_requests",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      clientId: uuid("client_id")
+        .notNull()
+        .references(() => clients.id),
+      /** va = the VA asked; client = the client asked and a lead or HR filed it. */
+      source: text("source").notNull(),
+      status: text("status").notNull().default("pending_lead"),
+      windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+      windowEnd: timestamp("window_end", { withTimezone: true }).notNull(),
+      /** Set when the reviewer changed the window before approving: what was first asked for. */
+      originalWindowStart: timestamp("original_window_start", { withTimezone: true }),
+      originalWindowEnd: timestamp("original_window_end", { withTimezone: true }),
+      minutes: integer("minutes").notNull(),
+      /** Who at the client approved or asked (free text; ELEVATE holds no client contacts). */
+      contactName: text("contact_name").notNull(),
+      reason: text("reason").notNull(),
+      /** The window had already started when it was asked for. */
+      afterTheFact: boolean("after_the_fact").notNull().default(false),
+      /** A lead or HR vouches for the client's request without a screenshot. */
+      confirmedByPhone: boolean("confirmed_by_phone").notNull().default(false),
+      filedBy: uuid("filed_by").notNull(),
+      decidedBy: uuid("decided_by"),
+      decidedAt: timestamp("decided_at", { withTimezone: true }),
+      decisionNote: text("decision_note"),
+      remindedAt: timestamp("reminded_at", { withTimezone: true }),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      index("extra_hours_employee_idx").on(t.employeeId, t.windowStart),
+      index("extra_hours_status_idx").on(t.status, t.createdAt),
+      check("extra_hours_source_chk", sql`${t.source} in ('va','client')`),
+      check("extra_hours_status_chk", sql`${t.status} in ('pending_lead','pending_confirm','approved','declined','cancelled')`),
+      check("extra_hours_window_chk", sql`${t.windowEnd} > ${t.windowStart} and ${t.minutes} between 15 and 1440`),
+      check("extra_hours_text_chk", sql`coalesce(length(trim(${t.reason})), 0) > 0 and coalesce(length(trim(${t.contactName})), 0) > 0`),
+    ],
+  )
+  .enableRLS();
+
 /** Screenshots a person attaches to a time claim. The file is deleted 90 days after the decision; the row stays. */
 export const correctionEvidence = time
   .table(
@@ -276,6 +333,10 @@ export const correctionEvidence = time
         .references(() => employees.id),
       /** Null until the claim is submitted; an upload never attached is cleaned up after a day. */
       correctionId: uuid("correction_id").references(() => clockCorrections.id),
+      /** Or to an extra hours request. At most one of the two. */
+      extraRequestId: uuid("extra_request_id").references(() => extraHoursRequests.id),
+      /** The sign-in account that uploaded it (a lead or HR uploads for someone else); null for older rows. */
+      uploadedBy: uuid("uploaded_by"),
       storagePath: text("storage_path").notNull(),
       mime: text("mime").notNull(),
       sizeBytes: integer("size_bytes"),
@@ -283,7 +344,7 @@ export const correctionEvidence = time
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       purgedAt: timestamp("purged_at", { withTimezone: true }),
     },
-    (t) => [uniqueIndex("correction_evidence_path_idx").on(t.storagePath), index("correction_evidence_claim_idx").on(t.correctionId), check("correction_evidence_mime_chk", sql`${t.mime} in ('image/jpeg','image/png')`)],
+    (t) => [uniqueIndex("correction_evidence_path_idx").on(t.storagePath), index("correction_evidence_claim_idx").on(t.correctionId), check("correction_evidence_mime_chk", sql`${t.mime} in ('image/jpeg','image/png')`), check("correction_evidence_one_parent_chk", sql`not (${t.correctionId} is not null and ${t.extraRequestId} is not null)`), index("correction_evidence_extra_idx").on(t.extraRequestId)],
   )
   .enableRLS();
 

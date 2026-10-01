@@ -9,6 +9,8 @@ import { downlineEmployeeIds, managerChainUserIds, reportName, todayInZone } fro
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { EOD_EDIT_WINDOW_MS, MAX_OPEN_SESSION_MS, buildDays, isPossiblyOffline, needsHrDecision, replayClock, type ClockState, type DayTotals, type SessionDetail } from "./clock";
+import { approvedExtra, grantedByDate } from "./extra-hours";
+import { approvedWindows } from "./extra-hours-service";
 import { describeSchedule, extraMinutes, hasScheduleAround, scheduleFor, shiftOn, shiftRange } from "./schedule";
 import { clockRules } from "./schema";
 import { loadSchedules, loadSchedulesFor } from "./schedule-service";
@@ -42,6 +44,10 @@ export type ClockStatus = {
   zone: string;
   /** A waiting "I stopped at ..." request: the clock-out time asked for. Other clock actions wait until it is decided or cancelled. */
   pendingClockOut: { id: string; atMs: number } | null;
+  /** The end of the shift this session belongs to (or today's shift when not working); null with no schedule or on a rest day. */
+  shiftEndMs: number | null;
+  /** Approved extra hours windows around now, so the header knows when the person is allowed to keep working. */
+  extraWindows: { startMs: number; endMs: number }[];
 };
 
 /** The signed-in person's clock: what the header widget shows. Null when they have no people record. */
@@ -70,7 +76,14 @@ export async function getClockStatus(): Promise<ClockStatus | null> {
     locationOn: prefs.shareLocation && monitoring,
     zone: prefs.zone,
     pendingClockOut: replay.state === "out" ? null : await pendingClockOut(db, me.id),
+    shiftEndMs: await currentShiftEnd(me.id, prefs.zone, live?.startAt ?? Date.now()),
+    extraWindows: (await approvedWindows(db, me.id, Date.now() - 12 * 3_600_000, Date.now() + DAY_MS)).map((w) => ({ startMs: w.startMs, endMs: w.endMs })),
   };
+}
+
+async function currentShiftEnd(employeeId: string, zone: string, aroundMs: number): Promise<number | null> {
+  const shift = shiftOn(await loadSchedules(db, employeeId), zone, formatInZone(aroundMs, zone, "yyyy-MM-dd"));
+  return shift?.endMs ?? null;
 }
 
 export type EvidenceItem = { id: string; mime: string; purged: boolean };
@@ -109,7 +122,7 @@ export type CorrectionItem = {
 export type MyTime = {
   zone: string;
   weekStart: string;
-  days: { date: string; weekday: string; workedMinutes: number; breakMinutes: number; overbreakMinutes: number; sessions: number; firstIn: number | null; lastOut: number | null; open: boolean; sessionList: SessionDetail[]; scheduledMinutes: number | null; extraMinutes: number; shift: { range: string; clientRange: string; zone: string } | null; holiday: boolean }[];
+  days: { date: string; weekday: string; workedMinutes: number; breakMinutes: number; overbreakMinutes: number; sessions: number; firstIn: number | null; lastOut: number | null; open: boolean; sessionList: SessionDetail[]; scheduledMinutes: number | null; extraMinutes: number; approvedExtraMinutes: number; shift: { range: string; clientRange: string; zone: string } | null; holiday: boolean }[];
   /** The person's schedule in force this week, described in the client's zone and Manila; null when they have none. */
   schedule: { days: string; client: string; manila: string; zone: string; effectiveFrom: string } | null;
   weekMinutes: number;
@@ -147,12 +160,14 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
   const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" });
   const schedules = await loadSchedules(db, me.id);
   const holidays = new Set((await holidaysInRange(db, me.id, weekStart, addDays(weekStart, 6))).map((h) => h.date));
+  const granted = grantedByDate(await approvedWindows(db, me.id, from, to), prefs.zone);
   const days = Array.from({ length: 7 }, (_, i) => {
     const date = addDays(weekStart, i);
     const d = byDate.get(date);
     const shift = shiftOn(schedules, prefs.zone, date);
     const worked = d?.workedMinutes ?? 0;
     const holiday = holidays.has(date);
+    const extra = extraMinutes({ workedMinutes: worked, shift, hasSchedule: hasScheduleAround(schedules, date), holiday });
     return {
       date,
       weekday: WEEKDAY.format(new Date(`${date}T00:00:00Z`)),
@@ -165,7 +180,8 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
       open: d?.open ?? false,
       sessionList: d?.sessionList ?? [],
       scheduledMinutes: shift?.scheduledMinutes ?? null,
-      extraMinutes: extraMinutes({ workedMinutes: worked, shift, hasSchedule: hasScheduleAround(schedules, date), holiday }),
+      extraMinutes: extra,
+      approvedExtraMinutes: approvedExtra(extra, granted.get(date) ?? 0).approved,
       shift: shift ? { range: shiftRange(shift, prefs.zone), clientRange: shiftRange(shift, shift.schedule.zone), zone: shift.schedule.zone } : null,
       holiday,
     };
