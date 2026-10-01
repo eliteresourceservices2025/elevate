@@ -64,6 +64,8 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "approveCleanWeeks", call: () => hoursActions.approveCleanWeeks({ weekStart: "2026-09-28" }), allowed: TEAM_OR_HR },
   { name: "savePayPeriod", call: () => hoursActions.savePayPeriod({ kind: "weekly" }), allowed: HR },
   { name: "exportHours", call: () => hoursActions.exportHours({ periodStart: "2026-10-01", kind: "daily", includeUnapproved: false }), allowed: HR },
+  { name: "fileBulkCorrections", call: () => actions.fileBulkCorrections({ csv: "email,type,time\nana@example.com,clock_in,2026-10-05 09:00", timeZone: "Asia/Manila", reason: "Outage", kind: "other" }), allowed: HR },
+  { name: "decideCorrectionBatch", call: () => actions.decideCorrectionBatch({ batchId: ID, decision: "approve" }), allowed: HR },
   { name: "saveClockRules", call: () => actions.saveClockRules(rules), allowed: HR },
 ];
 
@@ -100,6 +102,7 @@ describe("time clock queries, every role", () => {
     { name: "listFilablePeople", call: () => queries.listFilablePeople(), allowed: TEAM_VIEW },
     { name: "listShiftNotes", call: () => queries.listShiftNotes(), allowed: TEAM_VIEW },
     { name: "listSchedules", call: () => queries.listSchedules(), allowed: HR },
+    { name: "listCorrectionBatches", call: () => queries.listCorrectionBatches(), allowed: HR },
     { name: "getMyExtraHours", call: () => extraQueries.getMyExtraHours(), allowed: EVERYONE },
     { name: "listExtraHoursQueue", call: () => extraQueries.listExtraHoursQueue(), allowed: TEAM_VIEW },
     { name: "listActiveClients", call: () => extraQueries.listActiveClients(), allowed: TEAM_VIEW },

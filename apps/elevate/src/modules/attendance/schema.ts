@@ -144,6 +144,8 @@ export const clockCorrections = time
       proposed: jsonb("proposed").$type<{ type: string; at: string }[]>().notNull(),
       /** Why it is needed: forgot, connection_problem, device_problem or other. */
       kind: text("kind").notNull().default("other"),
+      /** Corrections filed together from one spreadsheet (an outage, many people at once) share a batch id, so another HR admin can decide them together. */
+      batchId: uuid("batch_id"),
       /** Set when the reviewer changed the times before approving: what the person first asked for. */
       originalProposed: jsonb("original_proposed").$type<{ type: string; at: string }[]>(),
       status: text("status").notNull().default("pending"),
@@ -155,6 +157,7 @@ export const clockCorrections = time
     (t) => [
       index("clock_corrections_status_idx").on(t.status, t.createdAt),
       index("clock_corrections_employee_idx").on(t.employeeId, t.createdAt),
+      index("clock_corrections_batch_idx").on(t.batchId),
       check("clock_corrections_status_chk", sql`${t.status} in ('pending','approved','rejected','cancelled')`),
       check("clock_corrections_kind_chk", sql`${t.kind} in ('forgot','connection_problem','device_problem','other')`),
     ],

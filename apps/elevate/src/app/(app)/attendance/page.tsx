@@ -15,10 +15,13 @@ import { JibblePanel } from "@/modules/jibble/components/jibble-panel";
 import { getJibbleOverview } from "@/modules/jibble/queries";
 import { ExtraHoursPanel } from "@/modules/attendance/components/extra-hours-panel";
 import { getMyExtraHours, listActiveClients, listExtraHoursQueue } from "@/modules/attendance/extra-hours-queries";
+import { BulkCorrectionsPanel } from "@/modules/attendance/components/bulk-corrections-panel";
+import { HealthPanel } from "@/modules/health/components/health-panel";
+import { getSystemHealth } from "@/modules/health/queries";
 import { ExportPanel, ReviewPanel } from "@/modules/attendance/components/hours-panels";
 import { getHoursSettings, getTeamReview } from "@/modules/attendance/hours-queries";
 import { SchedulesPanel } from "@/modules/attendance/components/schedules-panel";
-import { getMyTime, listClockRules, listCorrectionQueue, listFilablePeople, listFlags, listSchedules, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
+import { getMyTime, listClockRules, listCorrectionBatches, listCorrectionQueue, listFilablePeople, listFlags, listSchedules, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
 import { todayInZone } from "@/modules/org/service";
 
 export const metadata: Metadata = { title: "Attendance" };
@@ -33,6 +36,7 @@ const ALL_TABS = [
   { key: "export", label: "Hours export" },
   { key: "rules", label: "Rules" },
   { key: "jibble", label: "Jibble" },
+  { key: "health", label: "Health" },
 ] as const;
 
 const FLAG_LABELS = new Map<string, string>(Object.entries({
@@ -69,6 +73,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const approveScope = scopeFor(user, "hours.approve");
   if (approveScope === "all" || approveScope === "team") allowed.add("review");
   if (scopeFor(user, "hours.export")) allowed.add("export");
+  if (scopeFor(user, "health.view")) allowed.add("health");
   if (scopeFor(user, "jibble.manage")) allowed.add("jibble");
   const tabs = ALL_TABS.filter((t) => allowed.has(t.key));
   const tab = tabs.find((t) => t.key === params.tab)?.key ?? "mine";
@@ -89,6 +94,8 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const extraClients = tab === "extra" && canFile ? await orNotFound(listActiveClients()) : null;
   const review = tab === "review" ? await orNotFound(getTeamReview(typeof params.rweek === "string" ? params.rweek : undefined)) : null;
   const hoursSettings = tab === "export" ? await orNotFound(getHoursSettings()) : null;
+  const health = tab === "health" ? await orNotFound(getSystemHealth()) : null;
+  const batches = tab === "corrections" && approve === "all" ? await orNotFound(listCorrectionBatches()) : null;
   const schedulesList = tab === "schedules" ? await orNotFound(listSchedules()) : null;
   const jibble = tab === "jibble" ? await orNotFound(getJibbleOverview()) : null;
   const rules = tab === "rules" ? await orNotFound(listClockRules()) : null;
@@ -370,6 +377,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">{queue.scope === "team" ? "Corrections from people on your team." : "Every pending correction. HR decides when nobody above the person can."}</p>
           {filable ? <FileForOthersForm people={filable} zone="America/Phoenix" /> : null}
+          {batches ? <BulkCorrectionsPanel batches={batches} /> : null}
           <CorrectionList items={queue.items} zone="America/Phoenix" mode="queue" empty="No corrections are waiting." />
         </div>
       ) : null}
@@ -383,6 +391,8 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
       {schedulesList ? <SchedulesPanel rows={schedulesList.rows} withoutSchedule={schedulesList.withoutSchedule} today={todayInZone()} /> : null}
 
       {jibble ? <JibblePanel overview={jibble} /> : null}
+
+      {health ? <HealthPanel health={health} /> : null}
 
       {rules ? (
         <div className="space-y-4">

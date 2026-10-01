@@ -190,6 +190,20 @@
       "when": 1790878328932,
       "tag": "0026_jibble_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790880202372,
+      "tag": "0027_system_health",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790880773849,
+      "tag": "0028_bulk_corrections",
+      "breakpoints": true
     }
   ]
 }

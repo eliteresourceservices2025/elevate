@@ -1,5 +1,7 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+import { fromZonedTime } from "date-fns-tz";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
@@ -13,14 +15,17 @@ import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds, reportName } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
+import { groupByPerson, parseCorrectionsCsv } from "./bulk-corrections";
 import { EOD_EDIT_WINDOW_MS, needsHrDecision, replayClock } from "./clock";
 import { clockCorrections, clockEvents, clockPrefs, clockRules, correctionEvidence, idlePrompts, shiftNotes } from "./schema";
 import { evidencePath, loadRecentEvents, lockEmployeeClock, monitoringPolicyPublished, performClock, personForUser, rulesFor, selfiePath, verifyEvidence, type ClockResult } from "./service";
 import {
   EVIDENCE_MAX_BYTES,
+  bulkCorrectionsSchema,
   clockSchema,
   correctionIdSchema,
   correctionRequestSchema,
+  decideBatchSchema,
   decideCorrectionSchema,
   evidenceIdSchema,
   evidenceUploadSchema,
@@ -349,6 +354,85 @@ export async function decideCorrection(input: unknown): Promise<ActionResult> {
     });
     refresh();
     return { ok: true, data: undefined };
+  });
+}
+
+// --- Bulk corrections (an outage, or many people at once) ----------------------------------------------
+
+export type BulkResult = { batchId: string | null; created: number; failed: { email: string; error: string }[]; parseErrors: { line: number; message: string }[] };
+
+/**
+ * HR files missing clock events for many people from a spreadsheet (email, type, time). Each person gets an ordinary correction
+ * request, checked the same way (events must fit, nothing in the future, 31 days back at most), all sharing one batch id. A different
+ * HR admin decides them together with decideCorrectionBatch; the filer never can. Rows that cannot be filed are listed with the reason.
+ */
+export async function fileBulkCorrections(input: unknown): Promise<ActionResult<BulkResult>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    if (scopeFor(actor, "attendance.file_for_others") !== "all") throw new ForbiddenError("attendance.file_for_others");
+    const parsed = bulkCorrectionsSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { csv, timeZone, reason, kind } = parsed.data;
+    const { rows, errors } = parseCorrectionsCsv(csv);
+    if (rows.length === 0) return fail(errors[0] ? `Line ${errors[0].line}: ${errors[0].message}` : "No events were found in that file.");
+
+    const batchId = randomUUID();
+    const failed: BulkResult["failed"] = [];
+    let created = 0;
+    for (const [email, list] of groupByPerson(rows)) {
+      try {
+        if (list.length > 6) throw new ActionFailure("More than six events for one person. Split them into two files.");
+        const [target] = await db.select({ id: employees.id, userId: employees.userId }).from(employees).where(and(sql`lower(${employees.workEmail}) = ${email}`, isNull(employees.archivedAt), sql`${employees.status} <> 'separated'`)).limit(1);
+        if (!target) throw new ActionFailure("No active person has that email.");
+        if (target.userId === actor.id) throw new ActionFailure("You cannot file your own corrections.");
+        const events = list.map((r) => ({ type: r.type, at: fromZonedTime(`${r.time}:00`, timeZone).toISOString() }));
+        const problem = await checkProposal(target.id, events, Date.now());
+        if (problem) throw new ActionFailure(problem);
+        await db.transaction(async (tx) => {
+          const [{ n }] = (await tx.execute(sql`select count(*)::int as n from time.clock_corrections where employee_id = ${target.id} and status = 'pending'`)) as unknown as { n: number }[];
+          if (n >= 3) throw new ActionFailure("They already have 3 corrections waiting.");
+          const [row] = await tx.insert(clockCorrections).values({ employeeId: target.id, requestedBy: actor.id, reason, kind, batchId, proposed: events }).returning({ id: clockCorrections.id });
+          if (target.userId) await notify(tx, { userId: target.userId, kind: "attendance.correction_filed_for_you", title: "A time correction was filed for you", body: reason, link: "/attendance" });
+          await writeAudit({ actor, action: "clock.correction_filed_for", targetType: "employee", targetId: target.id, metadata: { correctionId: row.id, events: events.length, kind, batchId } }, tx);
+        });
+        created += 1;
+      } catch (error) {
+        if (!(error instanceof ActionFailure)) throw error;
+        failed.push({ email, error: error.message });
+      }
+    }
+
+    if (created > 0) {
+      const reviewers = (await hrUserIds()).filter((id) => id !== actor.id);
+      await notify(db, reviewers.map((userId) => ({ userId, kind: "attendance.correction_needed", title: `${created} time ${created === 1 ? "correction was" : "corrections were"} filed together`, body: reason, link: "/attendance?tab=corrections" })));
+    }
+    await writeAudit({ actor, action: "clock.correction_batch", targetType: "batch", targetId: created > 0 ? batchId : undefined, metadata: { created, failed: failed.length, rows: rows.length, kind } });
+    refresh();
+    return { ok: true, data: { batchId: created > 0 ? batchId : null, created, failed, parseErrors: errors } };
+  });
+}
+
+/** Approves or rejects every waiting correction of one batch, each checked on its own. The HR admin who filed the batch cannot. */
+export async function decideCorrectionBatch(input: unknown): Promise<ActionResult<{ done: number; failed: string[] }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    if (scopeFor(actor, "attendance.approve_correction") !== "all") throw new ForbiddenError("attendance.approve_correction");
+    const parsed = decideBatchSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { batchId, decision, note } = parsed.data;
+    if (decision === "reject" && !note) return fail("Give a short reason so the people know why.");
+    const waiting = (await db.execute(sql`select id from time.clock_corrections where batch_id = ${batchId} and status = 'pending' order by created_at`)) as unknown as { id: string }[];
+    if (waiting.length === 0) return fail("Nothing in that batch is waiting.");
+    let done = 0;
+    const failed: string[] = [];
+    for (const { id } of waiting) {
+      const result = await decideCorrection({ correctionId: id, decision, note });
+      if (result.ok) done += 1;
+      else if (!failed.includes(result.error)) failed.push(result.error);
+    }
+    await writeAudit({ actor, action: `clock.correction_batch_${decision}`, targetType: "batch", targetId: batchId, metadata: { done, failed: failed.length } });
+    refresh();
+    return { ok: true, data: { done, failed } };
   });
 }
 

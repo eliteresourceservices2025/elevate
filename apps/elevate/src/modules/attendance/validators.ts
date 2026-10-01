@@ -135,3 +135,16 @@ export const approveWeekSchema = z.object({ employeeId: uuid, weekStart: ymd, no
 export const approveCleanSchema = z.object({ weekStart: ymd });
 export const payPeriodSchema = z.object({ kind: z.enum(["semi_monthly", "weekly", "biweekly", "monthly"]), biweeklyAnchor: z.preprocess(blankToUndefined, ymd.optional()) });
 export const exportHoursSchema = z.object({ periodStart: ymd, kind: z.enum(["daily", "summary"]), includeUnapproved: z.boolean().default(false) });
+
+/** HR files missing clock events for many people from a spreadsheet's text. */
+export const bulkCorrectionsSchema = z.object({
+  csv: z.string().min(10, "Paste or choose a spreadsheet first").max(200_000, "That file is too big"),
+  timeZone: z.string().refine(isValidTimeZone, "Choose a valid time zone"),
+  reason: z.string().trim().min(5, "Explain what happened in a few words").max(300, "Use 300 characters or fewer"),
+  kind: z.enum(["forgot", "connection_problem", "device_problem", "other"]).default("other"),
+});
+export const decideBatchSchema = z.object({
+  batchId: uuid,
+  decision: z.enum(["approve", "reject"]),
+  note: z.preprocess(blankToUndefined, z.string().trim().max(300).optional()),
+});

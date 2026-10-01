@@ -69,6 +69,7 @@ const EXPECTED: Record<string, string> = {
   "attendance.notes": "O O O O O O",
   "attendance.notes_view": "A A T - - -",
   "jibble.manage": "A A - - - -",
+  "health.view": "A A - - - -",
   "schedules.view": "A A T - - O",
   "schedules.manage": "A A - - - -",
   "extra_hours.request": "O O O O O O",

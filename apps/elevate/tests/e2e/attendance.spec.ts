@@ -459,3 +459,33 @@ test("a lead approves a finished week and HR downloads the approved hours", asyn
     await reset.end();
   }
 });
+
+test("HR sees the Health tab and the bulk corrections panel, and a lead sees neither", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const slow = { timeout: 30_000 };
+  const hr = await createHrAccount();
+  const hrPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hrPage, hr);
+  await hrPage.goto("/attendance?tab=health");
+  await expect(hrPage.getByRole("heading", { name: "Scheduled jobs" })).toBeVisible(slow);
+  await expect(hrPage.getByText("Sending clock calls to Jibble")).toBeVisible();
+  await expect(hrPage.getByRole("heading", { name: "Jibble", exact: true })).toBeVisible();
+
+  await hrPage.goto("/attendance?tab=corrections");
+  await waitForHydration(hrPage, "#bc-csv");
+  await expect(hrPage.getByRole("heading", { name: "File many corrections from a spreadsheet" })).toBeVisible(slow);
+  await expect(hrPage.getByRole("button", { name: "File the batch" })).toBeDisabled();
+  await hrPage.getByLabel("Spreadsheet (paste the CSV text, or choose a file)").fill("email,type,time\nnobody.here@example.com,clock_in,2026-10-05 09:00");
+  await hrPage.getByLabel("Reason (everyone is told)").fill("Test of the bulk panel");
+  await hrPage.getByRole("button", { name: "File the batch" }).click();
+  await expect(hrPage.getByText("No active person has that email.")).toBeVisible(slow);
+
+  const lead = await createEmployeeAccount("Lola", `NoHealth${Date.now()}`, { roles: ["team_lead"] });
+  const leadPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(leadPage, lead);
+  await leadPage.goto("/attendance?tab=health");
+  await expect(leadPage.getByRole("link", { name: "Health" })).toHaveCount(0);
+  await expect(leadPage.getByText("Scheduled jobs")).toHaveCount(0);
+  await leadPage.goto("/attendance?tab=corrections");
+  await expect(leadPage.getByText("File many corrections from a spreadsheet")).toHaveCount(0);
+});

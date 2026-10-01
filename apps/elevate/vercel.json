@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/backstop",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}

@@ -437,3 +437,17 @@ const pickDescription = (s: Parameters<typeof describeSchedule>[0], date: string
   return { days: d.days, client: `${d.client} (${d.zone})`, manila: d.manila };
 };
 
+
+export type CorrectionBatch = { batchId: string; filedBy: string; createdAt: string; waiting: number; people: number; reason: string; mine: boolean };
+
+/** Batches of corrections that still have requests waiting, for HR (a different HR admin than the filer decides). */
+export async function listCorrectionBatches(): Promise<CorrectionBatch[]> {
+  const user = await requireUser();
+  if (scopeFor(user, "attendance.approve_correction") !== "all") throw new ForbiddenError("attendance.approve_correction");
+  const rows = (await db.execute(sql`
+    select c.batch_id, c.requested_by, min(c.created_at) as created_at, count(*)::int as waiting, count(distinct c.employee_id)::int as people, min(c.reason) as reason,
+           (select f.legal_first_name || ' ' || f.legal_last_name from core.employees f where f.user_id = c.requested_by limit 1) as filer
+    from time.clock_corrections c where c.batch_id is not null and c.status = 'pending'
+    group by c.batch_id, c.requested_by order by min(c.created_at) desc limit 20`)) as unknown as { batch_id: string; requested_by: string; created_at: string | Date; waiting: number; people: number; reason: string; filer: string | null }[];
+  return rows.map((r) => ({ batchId: r.batch_id, filedBy: r.filer ?? "HR", createdAt: new Date(r.created_at).toISOString(), waiting: r.waiting, people: r.people, reason: r.reason, mine: r.requested_by === user.id }));
+}

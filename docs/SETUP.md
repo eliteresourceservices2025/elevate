@@ -237,7 +237,7 @@ vercel env add   # add each variable from .env.example for Production and Previe
 - Mark every secret as "Sensitive".
 - Settings → Deployment Protection: enable Vercel Authentication for **preview** deployments.
 - Settings → Firewall: enable the attack-challenge mode toggle if login abuse appears; add a rate-limit rule on `/login`.
-- Add Vercel Cron jobs in `vercel.json` (e.g. nightly Jibble sync at 01:00 Asia/Manila = `0 17 * * *` UTC), each route protected by `CRON_SECRET`.
+- `apps/elevate/vercel.json` already has the backstop cron (`/api/cron/backstop`, every 15 minutes). Set `CRON_SECRET` (at least 16 random characters) in the project's environment variables: Vercel then sends it with each call, and without it the route refuses everyone. The route runs the health check, sends waiting Jibble calls, repairs Jibble and sends missed clock-out notices when the job service (Inngest) is down. See `docs/RUNBOOK.md`.
 
 **Check:** a push to a branch produces a preview URL behind Vercel login.
 
