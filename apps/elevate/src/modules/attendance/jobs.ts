@@ -5,10 +5,10 @@ import { formatInZone } from "@/lib/time";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds, reportName } from "@/modules/org/service";
-import { MAX_OPEN_SESSION_MS, buildDays } from "./clock";
-import { attendanceDays, clockSelfies, missedClockoutNotices } from "./schema";
+import { MAX_OPEN_SESSION_MS, QUIET_AFTER_MS, buildDays } from "./clock";
+import { attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices, quietNotices } from "./schema";
 import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
-import { SELFIE_KEEP_DAYS, loadEventsBetween, notifyOverbreak, onFullDayLeave, prefsFor } from "./service";
+import { EVIDENCE_KEEP_DAYS, SELFIE_KEEP_DAYS, loadEventsBetween, notifyOverbreak, onFullDayLeave, prefsFor, rulesFor } from "./service";
 
 // Background work (no signed-in person). src/inngest wraps these in scheduled functions.
 
@@ -28,6 +28,7 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Pro
 
   for (const { employee_id: employeeId } of people) {
     const prefs = await prefsFor(db, employeeId);
+    const rules = await rulesFor(db, employeeId);
     const today = formatInZone(now, prefs.zone, "yyyy-MM-dd");
     const earliest = formatInZone(now.getTime() - daysBack * DAY_MS, prefs.zone, "yyyy-MM-dd");
     const events = await loadEventsBetween(db, employeeId, fromMs - DAY_MS, now.getTime());
@@ -46,12 +47,21 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3): Pro
         where employee_id = ${employeeId} and answered_at is null and prompted_at <= to_timestamp(${(now.getTime() - 10 * 60_000) / 1000})
           and prompted_at between to_timestamp(${d.firstIn / 1000}) and to_timestamp(${end / 1000})`)) as unknown as { n: number }[];
 
+      // A team that expects end-of-day reports: a finished session with no note is flagged (cleared on the next rebuild once written).
+      const endedIds = d.sessionList.filter((s) => s.endAt !== null && s.eventId).map((s) => s.eventId as string);
+      let missingEod = false;
+      if (rules.eodExpected && endedIds.length > 0) {
+        const [have] = (await db.execute(sql`select count(*)::int as n from time.shift_notes where session_event_id in (${sql.join(endedIds.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { n: number }[];
+        missingEod = have.n < endedIds.length;
+      }
+
       const flags = [
         d.open ? "open_session" : null,
         flagRows[0]?.outside ? "outside_range" : null,
         flagRows[0]?.corrected ? "corrected" : null,
         idle.n > 0 ? "idle_unanswered" : null,
         d.overbreakMinutes > 0 ? "overbreak" : null,
+        missingEod ? "no_eod" : null,
         (await onFullDayLeave(db, employeeId, d.date)) ? "on_leave" : null,
       ].filter((f): f is string => f !== null);
 
@@ -108,6 +118,64 @@ export async function runMissedClockouts(now = new Date()): Promise<{ noticed: n
     });
   }
   return { noticed };
+}
+
+/**
+ * Every 15 minutes: someone who is clocked in and working but has not been seen for 2 hours (the page closed, the device
+ * restarted or the connection dropped) is reported to their lead (HR when nobody is above) once per session. Nobody is clocked out.
+ */
+export async function runQuietSessionAlerts(now = new Date()): Promise<{ noticed: number }> {
+  const cutoff = new Date(now.getTime() - QUIET_AFTER_MS);
+  const quiet = (await db.execute(sql`
+    select s.employee_id, s.event_id, e.user_id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
+    from (
+      select employee_id,
+             (array_agg(id order by occurred_at desc, created_at desc) filter (where type = 'clock_in'))[1] as event_id,
+             (array_agg(type order by occurred_at desc, created_at desc))[1] as last_type,
+             max(occurred_at) as last_event
+      from time.clock_events where occurred_at > now() - interval '3 days' group by employee_id
+    ) s
+    join core.employees e on e.id = s.employee_id
+    left join time.clock_presence p on p.employee_id = s.employee_id
+    where s.last_type in ('clock_in', 'break_end') and s.event_id is not null
+      and greatest(s.last_event, coalesce(p.last_seen_at, s.last_event)) < ${cutoff.toISOString()}::timestamptz
+      and not exists (select 1 from time.quiet_notices n where n.event_id = s.event_id)`)) as unknown as {
+    employee_id: string; event_id: string; user_id: string | null; first: string; last: string; preferred: string | null;
+  }[];
+
+  let noticed = 0;
+  const hr = await hrUserIds();
+  for (const o of quiet) {
+    await db.transaction(async (tx) => {
+      const claimed = await tx.insert(quietNotices).values({ eventId: o.event_id }).onConflictDoNothing().returning({ id: quietNotices.eventId });
+      if (claimed.length === 0) return;
+      noticed += 1;
+      const name = reportName({ first: o.first, last: o.last, preferred: o.preferred });
+      const chain = await managerChainUserIds(tx, o.employee_id);
+      const targets = (chain.length > 0 ? chain.slice(0, 1) : hr).filter((id) => id !== o.user_id);
+      await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.quiet_lead", title: `${name} has not been seen for 2 hours`, body: "They are still clocked in. Their page may be closed, their device off or their connection down.", link: "/attendance?tab=team" })));
+    });
+  }
+  return { noticed };
+}
+
+/** Daily: delete screenshots that were never attached (after a day) and attached ones 90 days after the decision. The rows stay. */
+export async function purgeEvidence(now = new Date()): Promise<{ purged: number }> {
+  const orphanCutoff = new Date(now.getTime() - DAY_MS);
+  const keepCutoff = new Date(now.getTime() - EVIDENCE_KEEP_DAYS * DAY_MS);
+  const orphans = await db.select({ id: correctionEvidence.id, path: correctionEvidence.storagePath }).from(correctionEvidence).where(sql`${correctionEvidence.correctionId} is null and ${correctionEvidence.createdAt} < ${orphanCutoff.toISOString()}::timestamptz`).limit(500);
+  if (orphans.length > 0) {
+    await getDocumentStorage().remove(BUCKETS.employee, orphans.map((o) => o.path));
+    for (const o of orphans) await db.delete(correctionEvidence).where(eq(correctionEvidence.id, o.id));
+  }
+  const old = (await db.execute(sql`
+    select ev.id, ev.storage_path as path from time.correction_evidence ev join time.clock_corrections c on c.id = ev.correction_id
+    where ev.purged_at is null and c.status <> 'pending' and c.decided_at < ${keepCutoff.toISOString()}::timestamptz limit 500`)) as unknown as { id: string; path: string }[];
+  if (old.length > 0) {
+    await getDocumentStorage().remove(BUCKETS.employee, old.map((o) => o.path));
+    for (const o of old) await db.update(correctionEvidence).set({ purgedAt: now }).where(eq(correctionEvidence.id, o.id));
+  }
+  return { purged: orphans.length + old.length };
 }
 
 /** Daily: delete clock-in selfies older than 30 days (the file goes; the row stays, marked purged). */

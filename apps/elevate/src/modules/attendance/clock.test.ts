@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { breakLabel, buildDays, formatClock, formatDuration, ipAllowed, isValidRange, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
+import { MINUTE, breakLabel, buildDays, formatClock, formatDuration, ipAllowed, isPossiblyOffline, isValidRange, lastSeenOf, needsHrDecision, needsWelcomeBack, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
 
 const T = (iso: string) => Date.parse(iso);
 const ev = (type: ClockType, iso: string): ClockEventLite => ({ type, at: T(iso) });
@@ -204,5 +204,38 @@ describe("an overbreak on a session that is still open", () => {
     expect(nightly).toMatchObject({ open: true, workedMinutes: 0, overbreakMinutes: 30 });
     const running = buildDays([...events.slice(0, 2)], "UTC")[0];
     expect(running.overbreakMinutes).toBe(0); // a break still running is not settled
+  });
+});
+
+describe("connection and presence rules", () => {
+  it("shows welcome back only after a gap longer than 15 minutes", () => {
+    expect(needsWelcomeBack(null, 1_000_000)).toBe(false);
+    expect(needsWelcomeBack(1_000_000, 1_000_000 + 14 * MINUTE)).toBe(false);
+    expect(needsWelcomeBack(1_000_000, 1_000_000 + 16 * MINUTE)).toBe(true);
+  });
+
+  it("says possibly offline after 10 minutes without a report, counting from the session start when never seen", () => {
+    const start = 5_000_000;
+    expect(isPossiblyOffline(null, start, start + 9 * MINUTE)).toBe(false);
+    expect(isPossiblyOffline(null, start, start + 11 * MINUTE)).toBe(true);
+    expect(isPossiblyOffline(start + 20 * MINUTE, start, start + 25 * MINUTE)).toBe(false);
+    expect(lastSeenOf(start - 1000, start)).toBe(start); // a report from before the session does not count
+  });
+
+  it("sends a correction to HR only when it reaches back more than 7 days from when it was filed", () => {
+    const filed = Date.parse("2026-10-20T00:00:00Z");
+    expect(needsHrDecision(filed - 6 * 24 * 60 * MINUTE, filed)).toBe(false);
+    expect(needsHrDecision(filed - 8 * 24 * 60 * MINUTE, filed)).toBe(true);
+  });
+
+  it("keeps each session's clock-in event id so a note can be attached", () => {
+    const days = buildDays(
+      [
+        { id: "in-1", type: "clock_in", at: 1_000_000 },
+        { id: "out-1", type: "clock_out", at: 1_000_000 + 60 * MINUTE },
+      ],
+      "UTC",
+    );
+    expect(days[0].sessionList[0].eventId).toBe("in-1");
   });
 });

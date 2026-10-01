@@ -36,6 +36,8 @@ test("an employee clocks in, takes a break and clocks out from the header", asyn
 
   await page.getByRole("button", { name: "Clock out" }).click();
   await expect(page.getByText("Clocked out.")).toBeVisible(slow);
+  // The end-of-day box is optional: skipping it is always fine
+  await page.getByRole("button", { name: "Skip" }).click();
   await expect(page.getByRole("button", { name: "Clock in" })).toBeVisible(slow);
 
   // A second clock-in the same day is its own record, not a replacement for the first
@@ -43,6 +45,7 @@ test("an employee clocks in, takes a break and clocks out from the header", asyn
   await expect(page.getByText("Working", { exact: true })).toBeVisible(slow);
   await page.getByRole("button", { name: "Clock out" }).click();
   // Wait for the state itself, not the toast: the first clock-out's toast may still be on screen
+  await page.getByRole("button", { name: "Skip" }).click();
   await expect(page.getByRole("button", { name: "Clock in" })).toBeVisible(slow);
 
   await page.goto("/attendance");
@@ -154,4 +157,113 @@ test("an HR or Super Admin account without a people record can set one up and us
   await expect(page.getByRole("button", { name: "Clock in" })).toBeVisible({ timeout: 30_000 });
   await (await hydrated(page.getByRole("button", { name: "Clock in" }))).click();
   await expect(page.getByText("Working", { exact: true })).toBeVisible({ timeout: 30_000 });
+});
+
+// A real 1x1 PNG, so the screenshot is a genuine image
+const PNG_1X1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+const phoenix = (agoMs: number) => new Date(Date.now() - agoMs).toLocaleString("sv-SE", { timeZone: "America/Phoenix" }).replace(" ", "T").slice(0, 16);
+
+test("the clock pauses when the connection drops, and an end-of-day note can be written after clocking out", async ({ page, context }) => {
+  const slow = { timeout: 30_000 };
+  const employee = await createEmployeeAccount("Nora", `Offline${Date.now()}`);
+  await signInEnrollingMfa(page, employee);
+  await (await hydrated(page.getByRole("button", { name: "Clock in" }))).click();
+  await expect(page.getByText("Working", { exact: true })).toBeVisible(slow);
+
+  // No connection: the person is told, the buttons wait, and nothing is recorded
+  await context.setOffline(true);
+  await expect(page.getByText("Offline: clock paused")).toBeVisible(slow);
+  await expect(page.getByRole("button", { name: "Clock out" })).toBeDisabled();
+  await context.setOffline(false);
+  await expect(page.getByText("Offline: clock paused")).toHaveCount(0, slow);
+  await expect(page.getByRole("button", { name: "Clock out" })).toBeEnabled();
+
+  // Clock out, then wrap up the day
+  await page.getByRole("button", { name: "Clock out" }).click();
+  const dialog = page.getByRole("dialog", { name: "Wrap up your day" });
+  await expect(dialog).toBeVisible(slow);
+  await dialog.getByRole("button", { name: "Use template" }).click();
+  await expect(dialog.getByLabel("End-of-day note")).toHaveValue(/Done today:/);
+  await dialog.getByLabel("End-of-day note").fill("Done today:\n- Cleared the shared inbox");
+  await dialog.getByRole("button", { name: "Save note" }).click();
+  await expect(page.getByText("Note saved.")).toBeVisible(slow);
+  await expect(dialog).toHaveCount(0);
+
+  await page.goto("/attendance");
+  await expect(page.getByText("Cleared the shared inbox")).toBeVisible(slow);
+});
+
+test("welcome back after a long gap: the person can ask their lead to clock them out at the last time they were seen", async ({ browser }) => {
+  const slow = { timeout: 30_000 };
+  const stamp = Date.now();
+  const lead = await createEmployeeAccount("Wanda", `WbLead${stamp}`, { roles: ["team_lead"] });
+  const worker = await createEmployeeAccount("Wes", `Wb${stamp}`, { managerId: lead.employeeId });
+  // Wes clocked in 3 hours ago and was last seen 2 hours ago, then the laptop restarted
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    await sql`insert into time.clock_events (employee_id, type, occurred_at) values (${worker.employeeId}, 'clock_in', now() - interval '3 hours')`;
+    await sql`insert into time.clock_presence (employee_id, last_seen_at) values (${worker.employeeId}, now() - interval '2 hours')`;
+  } finally {
+    await sql.end();
+  }
+
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, worker);
+  const dialog = page.getByRole("alertdialog", { name: "Welcome back" });
+  await expect(dialog).toBeVisible(slow);
+  await expect(dialog).toContainText("Are you still working?");
+
+  await dialog.getByRole("button", { name: "No, I stopped earlier" }).click();
+  await expect(dialog.getByLabel("I stopped working at")).toHaveValue(phoenix(2 * 3_600_000));
+  await dialog.getByLabel("What happened?").selectOption("device_problem");
+  await dialog.getByRole("button", { name: "Ask my lead to clock me out" }).click();
+  await expect(page.getByText(/Waiting for approval of your clock-out/)).toBeVisible(slow);
+  await expect(dialog).toHaveCount(0);
+
+  // The lead sees it in the queue, with the cause
+  const leadPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(leadPage, lead);
+  await leadPage.goto("/attendance?tab=corrections");
+  await expect(leadPage.getByText("My device restarted or failed.", { exact: true })).toBeVisible(slow);
+
+  // Changing their mind: cancel the request and keep working
+  await page.getByRole("button", { name: "Cancel request" }).click();
+  await expect(page.getByText("Working", { exact: true })).toBeVisible(slow);
+  await expect(page.getByRole("button", { name: "Clock out" })).toBeVisible(slow);
+});
+
+test("a time claim with a screenshot is reviewed by the lead, who can open the proof and approve", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const slow = { timeout: 30_000 };
+  const stamp = Date.now();
+  const lead = await createEmployeeAccount("Lena", `ClaimLead${stamp}`, { roles: ["team_lead"] });
+  const worker = await createEmployeeAccount("Cal", `Claim${stamp}`, { managerId: lead.employeeId });
+
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, worker);
+  await page.goto("/attendance");
+  await waitForHydration(page, "#cr-kind");
+  await page.getByLabel("What do you need to add?").selectOption("session");
+  await page.getByLabel("Why?").selectOption("forgot");
+  await page.getByLabel("I started at").fill(phoenix(4 * 3_600_000));
+  await page.getByLabel("I stopped at").fill(phoenix(2 * 3_600_000));
+  await page.getByLabel("Reason").fill("I started work but forgot to clock in");
+  // A claim that adds a clock-in cannot be sent without proof
+  await expect(page.getByRole("button", { name: "Send for approval" })).toBeDisabled();
+  await expect(page.getByText("Never include client or patient information.").first()).toBeVisible();
+  await page.getByLabel(/Screenshots as proof/).setInputFiles({ name: "history.png", mimeType: "image/png", buffer: PNG_1X1 });
+  await page.getByRole("button", { name: "Send for approval" }).click();
+  await expect(page.getByText("Correction sent for approval.")).toBeVisible(slow);
+
+  const leadPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(leadPage, lead);
+  await leadPage.goto("/attendance?tab=corrections");
+  await expect(leadPage.getByText("I started work but forgot to clock in")).toBeVisible(slow);
+  await expect(leadPage.getByRole("button", { name: "View screenshot 1" })).toBeVisible();
+  await (await hydrated(leadPage.getByRole("button", { name: "Approve" }))).click();
+  await expect(leadPage.getByText("Correction approved.")).toBeVisible(slow);
+
+  // The approved time is on the worker's timesheet as a finished session
+  await page.goto("/attendance");
+  await expect(page.locator("tr[data-session]")).toHaveCount(1, slow);
 });

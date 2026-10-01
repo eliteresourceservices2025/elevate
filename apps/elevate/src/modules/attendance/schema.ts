@@ -60,6 +60,8 @@ export const clockRules = time
     idleMinutes: integer("idle_minutes").default(30),
     /** Minutes after a shift ends before a missed clock-out is raised (used with schedules, Phase 2.5). */
     graceMinutes: integer("grace_minutes").notNull().default(60),
+    /** Whether the team is expected to write an end-of-day report. Only flags a missing one; never blocks clocking out. */
+    eodExpected: boolean("eod_expected").notNull().default(false),
     updatedBy: uuid("updated_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   })
@@ -117,6 +119,7 @@ export const idlePrompts = time
   )
   .enableRLS();
 
+export const CLAIM_KINDS = ["forgot", "connection_problem", "device_problem", "other"] as const;
 export const CORRECTION_STATUSES = ["pending", "approved", "rejected", "cancelled"] as const;
 
 /** A request to add missing clock events. Approval writes new admin_correction rows. */
@@ -132,6 +135,10 @@ export const clockCorrections = time
       reason: text("reason").notNull(),
       /** The events to add: [{ type, at (ISO instant) }]. */
       proposed: jsonb("proposed").$type<{ type: string; at: string }[]>().notNull(),
+      /** Why it is needed: forgot, connection_problem, device_problem or other. */
+      kind: text("kind").notNull().default("other"),
+      /** Set when the reviewer changed the times before approving: what the person first asked for. */
+      originalProposed: jsonb("original_proposed").$type<{ type: string; at: string }[]>(),
       status: text("status").notNull().default("pending"),
       decidedBy: uuid("decided_by"),
       decidedAt: timestamp("decided_at", { withTimezone: true }),
@@ -142,6 +149,7 @@ export const clockCorrections = time
       index("clock_corrections_status_idx").on(t.status, t.createdAt),
       index("clock_corrections_employee_idx").on(t.employeeId, t.createdAt),
       check("clock_corrections_status_chk", sql`${t.status} in ('pending','approved','rejected','cancelled')`),
+      check("clock_corrections_kind_chk", sql`${t.kind} in ('forgot','connection_problem','device_problem','other')`),
     ],
   )
   .enableRLS();
@@ -192,4 +200,72 @@ export const overbreakNotices = time
     minutesOver: integer("minutes_over").notNull(),
     noticedAt: timestamp("noticed_at", { withTimezone: true }).notNull().defaultNow(),
   })
+  .enableRLS();
+
+/** The last moment a clocked-in person's page reported "still here". One row per person, no history. */
+export const clockPresence = time
+  .table("clock_presence", {
+    employeeId: uuid("employee_id")
+      .primaryKey()
+      .references(() => employees.id),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  })
+  .enableRLS();
+
+/** One row per open session already reported as "not seen for a while", so the lead hears once. */
+export const quietNotices = time
+  .table("quiet_notices", {
+    eventId: uuid("event_id")
+      .primaryKey()
+      .references(() => clockEvents.id),
+    noticedAt: timestamp("noticed_at", { withTimezone: true }).notNull().defaultNow(),
+  })
+  .enableRLS();
+
+/** Screenshots a person attaches to a time claim. The file is deleted 90 days after the decision; the row stays. */
+export const correctionEvidence = time
+  .table(
+    "correction_evidence",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      /** Null until the claim is submitted; an upload never attached is cleaned up after a day. */
+      correctionId: uuid("correction_id").references(() => clockCorrections.id),
+      storagePath: text("storage_path").notNull(),
+      mime: text("mime").notNull(),
+      sizeBytes: integer("size_bytes"),
+      sha256: text("sha256"),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+      purgedAt: timestamp("purged_at", { withTimezone: true }),
+    },
+    (t) => [uniqueIndex("correction_evidence_path_idx").on(t.storagePath), index("correction_evidence_claim_idx").on(t.correctionId), check("correction_evidence_mime_chk", sql`${t.mime} in ('image/jpeg','image/png')`)],
+  )
+  .enableRLS();
+
+/** An end-of-day note on one session. Editable by its author for 24 hours after clock-out. */
+export const shiftNotes = time
+  .table(
+    "shift_notes",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      /** The clock_in event that started the session. */
+      sessionEventId: uuid("session_event_id")
+        .notNull()
+        .references(() => clockEvents.id),
+      body: text("body").notNull(),
+      edited: boolean("edited").notNull().default(false),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      uniqueIndex("shift_notes_session_idx").on(t.sessionEventId),
+      index("shift_notes_employee_idx").on(t.employeeId, t.createdAt),
+      check("shift_notes_body_chk", sql`char_length(trim(${t.body})) between 1 and 5000`),
+    ],
+  )
   .enableRLS();

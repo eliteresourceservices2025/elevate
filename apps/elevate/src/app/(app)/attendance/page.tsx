@@ -10,8 +10,8 @@ import { formatDateOnly, formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { formatDuration, MINUTE } from "@/modules/attendance/clock";
 import { AutoRefresh } from "@/modules/attendance/components/auto-refresh";
-import { CorrectionForm, CorrectionList, PreferencesForm, RulesForm, SetupProfileForm } from "@/modules/attendance/components/attendance-forms";
-import { getMyTime, listClockRules, listCorrectionQueue, listFlags, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
+import { CorrectionForm, CorrectionList, FileForOthersForm, PreferencesForm, RulesForm, SetupProfileForm, ShiftNote } from "@/modules/attendance/components/attendance-forms";
+import { getMyTime, listClockRules, listCorrectionQueue, listFilablePeople, listFlags, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
 
 export const metadata: Metadata = { title: "Attendance" };
 
@@ -28,6 +28,7 @@ const FLAG_LABELS = new Map<string, string>(Object.entries({
   corrected: "Corrected",
   idle_unanswered: "Idle prompt unanswered",
   overbreak: "Overbreak",
+  no_eod: "No end-of-day report",
   on_leave: "On approved leave",
 }));
 
@@ -49,6 +50,8 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const working = tab === "team" ? await orNotFound(listWorkingNow()) : null;
   const flags = tab === "team" ? await orNotFound(listFlags()) : null;
   const queue = tab === "corrections" ? await orNotFound(listCorrectionQueue()) : null;
+  const notes = tab === "team" ? await orNotFound(listShiftNotes()) : null;
+  const filable = tab === "corrections" && ["all", "team"].includes(String(scopeFor(user, "attendance.file_for_others"))) ? await orNotFound(listFilablePeople()) : null;
   const rules = tab === "rules" ? await orNotFound(listClockRules()) : null;
 
   return (
@@ -133,6 +136,18 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                             <TableCell className="text-right">{sess.workedMinutes ? formatDuration(sess.workedMinutes * MINUTE) : "-"}</TableCell>
                           </TableRow>
                         ))}
+                        {d.sessionList.map((sess) => {
+                          const note = sess.eventId ? mine.notes[sess.eventId] : undefined;
+                          const canEdit = Boolean(sess.eventId && sess.endAt !== null && mine.serverNowMs - sess.endAt <= mine.noteWindowMs);
+                          if (!sess.eventId || (!note && !canEdit)) return null;
+                          return (
+                            <TableRow key={`note-${sess.eventId}`} className="bg-muted/30">
+                              <TableCell colSpan={6} className="pl-6">
+                                <ShiftNote sessionId={sess.eventId} initial={note?.body ?? null} edited={note?.edited ?? false} canEdit={canEdit} />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </Fragment>
                     ))}
                     <TableRow>
@@ -181,6 +196,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                       <TableHead>Team</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Since</TableHead>
+                      <TableHead>Last seen</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -192,8 +208,10 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                           <Badge variant={r.state === "break" ? "secondary" : "default"}>{r.state === "break" ? "On break" : "Working"}</Badge>
                           {r.outsideRange ? <Badge variant="outline">Outside IP range</Badge> : null}
                           {r.longOpen ? <Badge variant="destructive">Over 12 hours</Badge> : null}
+                          {r.possiblyOffline ? <Badge variant="outline">Possibly offline</Badge> : null}
                         </TableCell>
                         <TableCell>{formatInZone(r.sinceMs, undefined, "MMM d, h:mm a")}</TableCell>
+                        <TableCell>{r.lastSeenMs ? formatInZone(r.lastSeenMs, undefined, "h:mm a") : "-"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -238,12 +256,31 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
               </div>
             )}
           </section>
+          <section aria-label="End-of-day reports" className="space-y-2">
+            <h2 className="text-lg font-semibold">End-of-day reports, last 7 days</h2>
+            {!notes || notes.rows.length === 0 ? (
+              <p className="text-muted-foreground">No reports yet.</p>
+            ) : (
+              <ul className="space-y-3">
+                {notes.rows.map((n) => (
+                  <li key={n.id} className="space-y-1 rounded-xl border bg-card p-4">
+                    <p className="text-sm font-semibold">
+                      {n.name} <span className="font-normal text-muted-foreground">{formatInZone(n.sessionStartMs, undefined, "EEE MMM d, h:mm a")}</span>
+                      {n.edited ? <span className="ml-1 text-xs font-normal text-muted-foreground">(edited)</span> : null}
+                    </p>
+                    <p className="whitespace-pre-wrap text-sm">{n.body}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
       ) : null}
 
       {queue ? (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">{queue.scope === "team" ? "Corrections from people on your team." : "Every pending correction. HR decides when nobody above the person can."}</p>
+          {filable ? <FileForOthersForm people={filable} zone="America/Phoenix" /> : null}
           <CorrectionList items={queue.items} zone="America/Phoenix" mode="queue" empty="No corrections are waiting." />
         </div>
       ) : null}

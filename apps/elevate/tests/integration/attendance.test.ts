@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { RoleSlug } from "@/lib/roles";
-import { FakeStorage, PDF_BYTES } from "./fake-storage";
+import { FakeStorage, PDF_BYTES, PNG_BYTES } from "./fake-storage";
 
 // Real-database tests for the time clock (Phase 2.3): state rules, append-only events, IP flags, location, selfies,
 // leave blocking, corrections, the nightly rebuild, missed clock-outs and who can see whom.
@@ -679,5 +679,378 @@ describe("internal staff can use the clock too", () => {
       as(await makeUser("nopeprofile", [role]));
       expect(await peopleActions.createMyProfile({ firstName: "A", lastName: "B" })).toEqual({ ok: false, error: NO_ACCESS });
     }
+  });
+});
+
+describe("presence, welcome back and the quiet-session alert", () => {
+  const MIN = 60_000;
+  async function setup() {
+    const lead = await person("PresLead", ["team_lead", "employee"]);
+    const worker = await person("Pres", ["employee"], { managerId: lead.employeeId });
+    return { lead, worker };
+  }
+  const setSeen = (employeeId: string, agoMs: number) => db.execute(sql`insert into time.clock_presence (employee_id, last_seen_at) values (${employeeId}, ${iso(agoMs)}) on conflict (employee_id) do update set last_seen_at = excluded.last_seen_at`);
+
+  it("records presence at clock-in, and a ping after a long gap returns when the person was last seen", async () => {
+    const { worker } = await setup();
+    as(worker.user);
+    expect((await actions.pingPresence())).toMatchObject({ ok: true, data: { working: false, previousSeenMs: null } }); // not clocked in: nothing recorded
+    expect(await rows(sql`select 1 from time.clock_presence where employee_id = ${worker.employeeId}`)).toHaveLength(0);
+
+    expect((await actions.clockIn({})).ok).toBe(true);
+    const first = await actions.pingPresence();
+    expect(first.ok && first.data.working).toBe(true);
+    expect(first.ok && first.data.previousSeenMs !== null && first.data.serverNowMs - first.data.previousSeenMs < 15 * MIN).toBe(true); // clock-in counted as seen
+
+    await setSeen(worker.employeeId, 3 * HOUR);
+    const gap = await actions.pingPresence();
+    expect(gap.ok && gap.data.previousSeenMs !== null && gap.data.serverNowMs - gap.data.previousSeenMs > 2.9 * HOUR).toBe(true);
+    const again = await actions.pingPresence(); // the ping itself counts as seen
+    expect(again.ok && again.data.serverNowMs - again.data.previousSeenMs! < MIN).toBe(true);
+  });
+
+  it("shows the lead when each person was last seen and who is possibly offline", async () => {
+    const { lead, worker } = await setup();
+    const quiet = await person("PresQuiet", ["employee"], { managerId: lead.employeeId });
+    for (const p of [worker, quiet]) await event(p.employeeId, "clock_in", iso(HOUR));
+    await setSeen(worker.employeeId, MIN);
+    await setSeen(quiet.employeeId, 25 * MIN);
+    as(lead.user);
+    const { rows: working } = await queries.listWorkingNow();
+    const w = working.find((r) => r.employeeId === worker.employeeId)!;
+    const q = working.find((r) => r.employeeId === quiet.employeeId)!;
+    expect(w).toMatchObject({ possiblyOffline: false });
+    expect(w.lastSeenMs).not.toBeNull();
+    expect(q.possiblyOffline).toBe(true);
+  });
+
+  it("tells the lead once when someone working has not been seen for 2 hours, and never someone on a break or recently seen", async () => {
+    const { lead, worker } = await setup();
+    const fresh = await person("PresFresh", ["employee"], { managerId: lead.employeeId });
+    const onBreak = await person("PresBreak", ["employee"], { managerId: lead.employeeId });
+    await event(worker.employeeId, "clock_in", iso(4 * HOUR));
+    await setSeen(worker.employeeId, 3 * HOUR);
+    await event(fresh.employeeId, "clock_in", iso(4 * HOUR));
+    await setSeen(fresh.employeeId, 5 * MIN);
+    await event(onBreak.employeeId, "clock_in", iso(4 * HOUR));
+    await event(onBreak.employeeId, "break_start", iso(3 * HOUR));
+    await setSeen(onBreak.employeeId, 3 * HOUR);
+
+    const run = await jobs.runQuietSessionAlerts();
+    expect(run.noticed).toBeGreaterThanOrEqual(1);
+    const mine = await rows<{ title: string }>(sql`select title from ops.notifications where user_id = ${lead.user.id} and kind = 'attendance.quiet_lead'`);
+    expect(mine).toHaveLength(1);
+    expect(mine[0].title).toContain("has not been seen");
+    expect((await jobs.runQuietSessionAlerts()).noticed).toBe(0); // once
+    expect(await notes(lead.user.id, "attendance.quiet_lead")).toHaveLength(1);
+    expect(await rows(sql`select 1 from time.clock_events where employee_id = ${worker.employeeId} and type = 'clock_out'`)).toHaveLength(0); // nobody was clocked out
+  });
+});
+
+describe("\"I stopped at\" requests", () => {
+  it("holds the other clock actions until the lead decides or the person cancels, and clocks out at the approved time", async () => {
+    const lead = await person("StopLead", ["team_lead", "employee"]);
+    const worker = await person("Stop", ["employee"], { managerId: lead.employeeId });
+    await event(worker.employeeId, "clock_in", iso(3 * HOUR));
+    as(worker.user);
+    const stopAt = iso(2 * HOUR);
+    expect((await actions.requestCorrection({ reason: "My internet connection dropped.", kind: "connection_problem", events: [{ type: "clock_out", at: stopAt }] })).ok).toBe(true);
+
+    const status = await queries.getClockStatus();
+    expect(status?.state).toBe("working");
+    expect(status?.pendingClockOut).not.toBeNull();
+    expect(Math.abs(status!.pendingClockOut!.atMs - Date.parse(stopAt))).toBeLessThan(1000);
+    expect(await actions.clockOut()).toEqual({ ok: false, error: "Your clock-out request is waiting for approval. Cancel it first if you are still working." });
+    expect((await actions.startBreak()).ok).toBe(false);
+
+    // Cancelling gives the clock back
+    await actions.cancelCorrection({ correctionId: status!.pendingClockOut!.id });
+    expect((await queries.getClockStatus())?.pendingClockOut).toBeNull();
+    // A new request, approved by the lead
+    expect((await actions.requestCorrection({ reason: "My device restarted.", kind: "device_problem", events: [{ type: "clock_out", at: stopAt }] })).ok).toBe(true);
+    const [c] = await rows<{ id: string; kind: string }>(sql`select id, kind from time.clock_corrections where employee_id = ${worker.employeeId} and status = 'pending'`);
+    expect(c.kind).toBe("device_problem");
+    as(lead.user);
+    expect((await actions.decideCorrection({ correctionId: c.id, decision: "approve" })).ok).toBe(true);
+    expect(await stateOf(worker.employeeId)).toBe("clock_out");
+  });
+});
+
+describe("time claims with evidence", () => {
+  const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1]);
+  async function setup() {
+    const lead = await person("ClaimLead", ["team_lead", "employee"]);
+    const worker = await person("Claim", ["employee"], { managerId: lead.employeeId });
+    return { lead, worker };
+  }
+  async function upload(bytes: Uint8Array, mime = "image/png") {
+    const ticket = await actions.requestEvidenceUpload({ mime, size: bytes.length });
+    if (!ticket.ok) throw new Error(ticket.error);
+    fake.put("employee-docs", ticket.data.path, bytes);
+    return ticket.data;
+  }
+  const claimEvents = (startAgo = 3 * HOUR, endAgo = HOUR) => [{ type: "clock_in", at: iso(startAgo) }, { type: "clock_out", at: iso(endAgo) }];
+
+  it("needs a screenshot when the claim adds a clock-in, and attaches checked evidence", async () => {
+    const { lead, worker } = await setup();
+    as(worker.user);
+    const noProof = await actions.requestCorrection({ reason: "I forgot to clock in", kind: "forgot", events: claimEvents() });
+    expect(noProof).toEqual({ ok: false, error: "Attach at least one screenshot (for example your browser history) that shows when you started working." });
+
+    const shot = await upload(PNG_BYTES);
+    const sent = await actions.requestCorrection({ reason: "I forgot to clock in", kind: "forgot", events: claimEvents(), evidenceIds: [shot.id] });
+    expect(sent.ok).toBe(true);
+    const [ev] = await rows<{ correction_id: string | null; size_bytes: number; sha256: string }>(sql`select correction_id, size_bytes, sha256 from time.correction_evidence where id = ${shot.id}`);
+    expect(ev.correction_id).not.toBeNull();
+    expect(ev.size_bytes).toBe(PNG_BYTES.length);
+    expect(ev.sha256).toHaveLength(64);
+    expect(await notes(lead.user.id, "attendance.correction_needed")).toHaveLength(1);
+
+    // The same screenshot cannot be attached twice, and a clock-out only claim needs no proof
+    expect((await actions.requestCorrection({ reason: "Again with the same file", kind: "forgot", events: claimEvents(10 * HOUR, 9 * HOUR), evidenceIds: [shot.id] })).ok).toBe(false);
+    expect((await actions.requestCorrection({ reason: "Forgot to clock out", kind: "forgot", events: [{ type: "clock_out", at: iso(30 * 60_000) }] })).ok).toBe(false); // no open session: does not fit, and not for lack of proof
+  });
+
+  it("refuses a file that is not really a JPG or PNG and deletes it, and someone else's screenshot", async () => {
+    const { worker } = await setup();
+    const other = await person("ClaimOther");
+    as(other.user);
+    const theirs = await upload(PNG_BYTES);
+    as(worker.user);
+    const fakeImage = await upload(new TextEncoder().encode("MZ not an image at all"));
+    const bad = await actions.requestCorrection({ reason: "I forgot to clock in", kind: "forgot", events: claimEvents(), evidenceIds: [fakeImage.id] });
+    expect(bad.ok).toBe(false);
+    expect(fake.objects.has(fake.key("employee-docs", fakeImage.path))).toBe(false);
+    expect(await rows(sql`select 1 from time.clock_corrections where employee_id = ${worker.employeeId}`)).toHaveLength(0); // rolled back
+
+    const stolen = await actions.requestCorrection({ reason: "I forgot to clock in", kind: "forgot", events: claimEvents(), evidenceIds: [theirs.id] });
+    expect(stolen.ok).toBe(false);
+    expect((await actions.requestCorrection({ reason: "Too many files", kind: "forgot", events: claimEvents(), evidenceIds: [randomUUID(), randomUUID(), randomUUID(), randomUUID()] })).ok).toBe(false);
+    expect((await actions.requestEvidenceUpload({ mime: "application/pdf", size: 100 })).ok).toBe(false);
+    expect((await actions.requestEvidenceUpload({ mime: "image/png", size: 6_000_000 })).ok).toBe(false);
+  });
+
+  it("lets only the person, their chain of leads and HR open a screenshot, and audits each open", async () => {
+    const { lead, worker } = await setup();
+    as(worker.user);
+    const shot = await upload(JPEG, "image/jpeg");
+    await actions.requestCorrection({ reason: "I forgot to clock in", kind: "forgot", events: claimEvents(), evidenceIds: [shot.id] });
+
+    for (const who of [worker.user, lead.user, hr]) {
+      as(who);
+      const link = await actions.openEvidence({ evidenceId: shot.id });
+      expect(link.ok && link.data.url).toContain("expires=60");
+    }
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'clock.evidence_view' and metadata->>'evidenceId' = ${shot.id}`)).toHaveLength(3);
+
+    const outsiderLead = await person("ClaimOutsider", ["team_lead", "employee"]);
+    const peer = await person("ClaimPeer");
+    for (const who of [outsiderLead.user, peer.user]) {
+      as(who);
+      expect(await actions.openEvidence({ evidenceId: shot.id })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+    // An upload that was never attached to a claim cannot be opened
+    as(worker.user);
+    const loose = await upload(PNG_BYTES);
+    expect((await actions.openEvidence({ evidenceId: loose.id })).ok).toBe(false);
+  });
+
+  it("lets the reviewer adjust the times before approving, and tells the person", async () => {
+    const { lead, worker } = await setup();
+    as(worker.user);
+    const shot = await upload(PNG_BYTES);
+    await actions.requestCorrection({ reason: "I forgot to clock in", kind: "forgot", events: claimEvents(4 * HOUR, 2 * HOUR), evidenceIds: [shot.id] });
+    const [c] = await rows<{ id: string }>(sql`select id from time.clock_corrections where employee_id = ${worker.employeeId}`);
+
+    as(lead.user);
+    expect((await actions.decideCorrection({ correctionId: c.id, decision: "reject", note: "no", events: claimEvents() })).ok).toBe(false); // times change only with an approval
+    const adjusted = [{ type: "clock_in", at: iso(3 * HOUR) }, { type: "clock_out", at: iso(2 * HOUR) }];
+    expect((await actions.decideCorrection({ correctionId: c.id, decision: "approve", events: adjusted })).ok).toBe(true);
+
+    const written = await rows<{ type: string; seconds: number }>(sql`select type, extract(epoch from now() - occurred_at)::float8 as seconds from time.clock_events where employee_id = ${worker.employeeId} and source = 'admin_correction' order by occurred_at`);
+    expect(written.map((w) => w.type)).toEqual(["clock_in", "clock_out"]);
+    expect(Math.abs(written[0].seconds - 3 * 3600)).toBeLessThan(60); // the adjusted time, not the asked one
+    const [row] = await rows<{ original_proposed: { type: string }[] | null; status: string }>(sql`select original_proposed, status from time.clock_corrections where id = ${c.id}`);
+    expect(row.status).toBe("approved");
+    expect(row.original_proposed).toHaveLength(2);
+    expect((await rows<{ title: string }>(sql`select title from ops.notifications where user_id = ${worker.user.id} and kind = 'attendance.correction_approved'`))[0].title).toContain("with changes");
+  });
+
+  it("sends claims older than 7 days to HR, and only HR can decide them", async () => {
+    const { lead, worker } = await setup();
+    as(worker.user);
+    const shot = await upload(PNG_BYTES);
+    const sent = await actions.requestCorrection({ reason: "Last week was missed", kind: "device_problem", events: claimEvents(10 * 24 * HOUR, 10 * 24 * HOUR - 8 * HOUR), evidenceIds: [shot.id] });
+    expect(sent.ok).toBe(true);
+    expect(await notes(lead.user.id, "attendance.correction_needed")).toHaveLength(0); // not the lead
+    expect((await notes(hr.id, "attendance.correction_needed")).length).toBeGreaterThanOrEqual(1);
+    const [c] = await rows<{ id: string }>(sql`select id from time.clock_corrections where employee_id = ${worker.employeeId}`);
+
+    as(lead.user);
+    expect(await actions.decideCorrection({ correctionId: c.id, decision: "approve" })).toEqual({ ok: false, error: "Only HR can decide this request." });
+    const queue = (await queries.listCorrectionQueue()).items.find((i) => i.id === c.id);
+    expect(queue).toMatchObject({ hrOnly: true, canDecide: false });
+    expect(queue?.evidence).toHaveLength(1);
+    as(hr);
+    expect((await queries.listCorrectionQueue()).items.find((i) => i.id === c.id)?.canDecide).toBe(true);
+    expect((await actions.decideCorrection({ correctionId: c.id, decision: "approve" })).ok).toBe(true);
+  });
+
+  it("deletes screenshots 90 days after the decision, and ones never attached after a day", async () => {
+    const { lead, worker } = await setup();
+    as(worker.user);
+    const shot = await upload(PNG_BYTES);
+    await actions.requestCorrection({ reason: "I forgot to clock in", kind: "forgot", events: claimEvents(), evidenceIds: [shot.id] });
+    const loose = await upload(PNG_BYTES);
+    const [c] = await rows<{ id: string }>(sql`select id from time.clock_corrections where employee_id = ${worker.employeeId}`);
+    as(lead.user);
+    await actions.decideCorrection({ correctionId: c.id, decision: "approve" });
+
+    await jobs.purgeEvidence();
+    expect(fake.objects.has(fake.key("employee-docs", shot.path))).toBe(true); // just decided: kept
+    expect(fake.objects.has(fake.key("employee-docs", loose.path))).toBe(true); // less than a day old: kept
+
+    await db.execute(sql`update time.clock_corrections set decided_at = now() - interval '91 days' where id = ${c.id}`);
+    await db.execute(sql`update time.correction_evidence set created_at = now() - interval '2 days' where id = ${loose.id}`);
+    await jobs.purgeEvidence();
+    expect(fake.objects.has(fake.key("employee-docs", shot.path))).toBe(false);
+    expect(fake.objects.has(fake.key("employee-docs", loose.path))).toBe(false);
+    expect((await rows<{ purged_at: Date | null }>(sql`select purged_at from time.correction_evidence where id = ${shot.id}`))[0].purged_at).not.toBeNull(); // the row stays
+    expect(await rows(sql`select 1 from time.correction_evidence where id = ${loose.id}`)).toHaveLength(0);
+  });
+});
+
+describe("filing a correction for someone else", () => {
+  const forThem = (employeeId: string, reason = "Their laptop died") => actions.fileCorrectionForOthers({ employeeId, reason, kind: "device_problem", events: [{ type: "clock_in", at: iso(3 * HOUR) }, { type: "clock_out", at: iso(HOUR) }] });
+
+  it("lets a lead file for their downline, tells the person, and leaves the decision to HR", async () => {
+    const lead = await person("FileLead", ["team_lead", "employee"]);
+    const worker = await person("Filed", ["employee"], { managerId: lead.employeeId });
+    as(lead.user);
+    expect((await queries.listFilablePeople()).map((p) => p.id)).toContain(worker.employeeId);
+    expect((await forThem(worker.employeeId)).ok).toBe(true);
+    expect(await notes(worker.user.id, "attendance.correction_filed_for_you")).toHaveLength(1);
+    expect((await notes(hr.id, "attendance.correction_needed")).length).toBeGreaterThanOrEqual(1);
+    const [c] = await rows<{ id: string; requested_by: string }>(sql`select id, requested_by from time.clock_corrections where employee_id = ${worker.employeeId}`);
+    expect(c.requested_by).toBe(lead.user.id);
+
+    // Not the lead who filed it, and not another lead above the person either
+    expect(await actions.decideCorrection({ correctionId: c.id, decision: "approve" })).toEqual({ ok: false, error: "Someone else must decide on your own request." });
+    const boss = await person("FileBoss", ["team_lead", "employee"]);
+    await db.execute(sql`update core.employees set manager_id = ${boss.employeeId} where id = ${lead.employeeId}`);
+    as(boss.user);
+    expect(await actions.decideCorrection({ correctionId: c.id, decision: "approve" })).toEqual({ ok: false, error: "Only HR can decide this request." });
+    expect((await queries.listCorrectionQueue()).items.find((i) => i.id === c.id)).toMatchObject({ canDecide: false, hrOnly: true });
+    as(hr);
+    expect((await queries.listCorrectionQueue()).items.find((i) => i.id === c.id)?.filedBy).toContain("FileLead");
+    expect((await actions.decideCorrection({ correctionId: c.id, decision: "approve" })).ok).toBe(true);
+  });
+
+  it("refuses a lead filing outside their downline or for themselves, and everyone below lead", async () => {
+    const lead = await person("FileLead2", ["team_lead", "employee"]);
+    const stranger = await person("FileStranger");
+    as(lead.user);
+    expect(await forThem(stranger.employeeId)).toEqual({ ok: false, error: NO_ACCESS });
+    expect(await forThem(lead.employeeId)).toEqual({ ok: false, error: NO_ACCESS }); // not in their own downline
+    for (const role of ["employee", "recruiter", "executive"] as RoleSlug[]) {
+      as(await makeUser("nofile", [role]));
+      expect(await forThem(stranger.employeeId)).toEqual({ ok: false, error: NO_ACCESS });
+    }
+    as(hr);
+    expect((await forThem(stranger.employeeId)).ok).toBe(true); // HR can file for anyone
+    expect(await forThem(stranger.employeeId, "x")).toMatchObject({ ok: false }); // reason too short
+    const hrPerson = await rows<{ id: string }>(sql`select id from core.employees where user_id = ${hr.id}`);
+    expect(await forThem(hrPerson[0].id)).toEqual({ ok: false, error: "File your own corrections from My time." });
+  });
+
+  it("lets another HR admin decide what an HR admin filed, but not the filer", async () => {
+    const worker = await person("FiledByHr");
+    const hr2 = await person("hr2", ["hr_admin", "employee"]);
+    as(hr);
+    expect((await forThem(worker.employeeId)).ok).toBe(true);
+    const [c] = await rows<{ id: string }>(sql`select id from time.clock_corrections where employee_id = ${worker.employeeId}`);
+    expect(await actions.decideCorrection({ correctionId: c.id, decision: "approve" })).toEqual({ ok: false, error: "Someone else must decide on your own request." });
+    as(hr2.user);
+    expect((await actions.decideCorrection({ correctionId: c.id, decision: "approve" })).ok).toBe(true);
+  });
+});
+
+describe("end-of-day notes", () => {
+  async function setup() {
+    const lead = await person("NoteLead", ["team_lead", "employee"]);
+    const worker = await person("Note", ["employee"], { managerId: lead.employeeId });
+    return { lead, worker };
+  }
+
+  it("returns the finished session's id on clock-out, saves a note, marks edits, and shows it to the lead and HR only", async () => {
+    const { lead, worker } = await setup();
+    as(worker.user);
+    expect((await actions.clockIn({})).ok).toBe(true);
+    const [start] = await rows<{ id: string }>(sql`select id from time.clock_events where employee_id = ${worker.employeeId} and type = 'clock_in'`);
+    expect(await actions.saveShiftNote({ sessionId: start.id, body: "Too early" })).toEqual({ ok: false, error: "Clock out first, then write your end-of-day note." });
+    const out = await actions.clockOut();
+    expect(out.ok && out.data.sessionId).toBe(start.id);
+    expect((await actions.clockIn({})).ok).toBe(true);
+    const second = await actions.clockOut();
+    expect(second.ok && second.data.sessionId).not.toBe(start.id);
+
+    expect((await actions.saveShiftNote({ sessionId: start.id, body: "Done today:\n- inbox\n- calls" })).ok).toBe(true);
+    expect((await actions.saveShiftNote({ sessionId: start.id, body: "   " })).ok).toBe(false);
+    expect((await actions.saveShiftNote({ sessionId: start.id, body: "x".repeat(5001) })).ok).toBe(false);
+    expect((await actions.saveShiftNote({ sessionId: start.id, body: "Done today:\n- inbox\n- calls\n- reports" })).ok).toBe(true);
+    const [n] = await rows<{ body: string; edited: boolean }>(sql`select body, edited from time.shift_notes where session_event_id = ${start.id}`);
+    expect(n).toMatchObject({ edited: true });
+    expect(n.body).toContain("reports");
+    expect(await rows(sql`select 1 from ops.audit_log where action in ('clock.note', 'clock.note_edit') and target_id = ${worker.employeeId}`)).toHaveLength(2);
+
+    const week = await queries.getMyTime();
+    expect(week!.notes[start.id]).toMatchObject({ edited: true });
+
+    // The note belongs to its session: nobody else can write on it
+    const other = await person("NoteOther");
+    as(other.user);
+    expect(await actions.saveShiftNote({ sessionId: start.id, body: "Not mine" })).toEqual({ ok: false, error: "That session was not found." });
+    await expect(queries.listShiftNotes()).rejects.toThrow();
+
+    as(lead.user);
+    expect((await queries.listShiftNotes()).rows.some((r) => r.employeeId === worker.employeeId && r.body.includes("reports"))).toBe(true);
+    const outsider = await person("NoteOutsider", ["team_lead", "employee"]);
+    as(outsider.user);
+    expect((await queries.listShiftNotes()).rows.some((r) => r.employeeId === worker.employeeId)).toBe(false);
+    as(hr);
+    expect((await queries.listShiftNotes()).rows.some((r) => r.employeeId === worker.employeeId)).toBe(true);
+  });
+
+  it("closes the note 24 hours after clock-out", async () => {
+    const { worker } = await setup();
+    await event(worker.employeeId, "clock_in", iso(40 * HOUR));
+    await event(worker.employeeId, "clock_out", iso(30 * HOUR));
+    const [start] = await rows<{ id: string }>(sql`select id from time.clock_events where employee_id = ${worker.employeeId} and type = 'clock_in'`);
+    as(worker.user);
+    expect(await actions.saveShiftNote({ sessionId: start.id, body: "Late" })).toEqual({ ok: false, error: "The 24 hours for this note are over. Ask HR if it must change." });
+    expect((await queries.getMyTime())).not.toBeNull();
+  });
+
+  it("flags a missing report only for teams that expect one, and clears the flag once it is written", async () => {
+    const team = await makeTeam();
+    const worker = await person("NoteEod", ["employee"], { teamId: team });
+    const free = await person("NoteFree", ["employee"]); // a team with no rule
+    for (const p of [worker, free]) {
+      await event(p.employeeId, "clock_in", iso(5 * HOUR));
+      await event(p.employeeId, "clock_out", iso(HOUR));
+    }
+    as(hr);
+    expect((await actions.saveClockRules({ teamId: team, allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: true })).ok).toBe(true);
+    const flagsOf = async (employeeId: string) => (await rows<{ flags: string[] }>(sql`select flags from time.attendance_days where employee_id = ${employeeId}`)).flatMap((r) => r.flags);
+
+    await jobs.rebuildAttendanceDays();
+    expect(await flagsOf(worker.employeeId)).toContain("no_eod");
+    expect(await flagsOf(free.employeeId)).not.toContain("no_eod");
+
+    const [start] = await rows<{ id: string }>(sql`select id from time.clock_events where employee_id = ${worker.employeeId} and type = 'clock_in'`);
+    as(worker.user);
+    expect((await actions.saveShiftNote({ sessionId: start.id, body: "Wrapped up the audit." })).ok).toBe(true);
+    await jobs.rebuildAttendanceDays();
+    expect(await flagsOf(worker.employeeId)).not.toContain("no_eod");
   });
 });

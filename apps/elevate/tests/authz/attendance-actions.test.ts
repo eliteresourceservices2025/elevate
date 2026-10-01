@@ -28,6 +28,8 @@ const as = (role: RoleSlug) => {
 };
 
 const correction = { reason: "Forgot to clock out", events: [{ type: "clock_out", at: new Date(Date.now() - 3_600_000).toISOString() }] };
+const claim = { employeeId: ID, reason: "Device died", events: [{ type: "clock_out", at: new Date(Date.now() - 3_600_000).toISOString() }] };
+const TEAM_OR_HR: RoleSlug[] = ["super_admin", "hr_admin", "team_lead"];
 const rules = { teamId: ID, allowedCidrs: ["203.0.113.0/24"], selfieRequired: false, idleMinutes: 30, graceMinutes: 60 };
 
 const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: string }>; allowed: RoleSlug[] }[] = [
@@ -43,6 +45,10 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "answerIdlePrompt", call: () => actions.answerIdlePrompt({ promptId: ID }), allowed: EVERYONE },
   { name: "requestCorrection", call: () => actions.requestCorrection(correction), allowed: EVERYONE },
   { name: "cancelCorrection", call: () => actions.cancelCorrection({ correctionId: ID }), allowed: EVERYONE },
+  { name: "pingPresence", call: () => actions.pingPresence(), allowed: EVERYONE },
+  { name: "requestEvidenceUpload", call: () => actions.requestEvidenceUpload({ mime: "image/png", size: 1000 }), allowed: EVERYONE },
+  { name: "saveShiftNote", call: () => actions.saveShiftNote({ sessionId: ID, body: "Finished the inbox." }), allowed: EVERYONE },
+  { name: "fileCorrectionForOthers", call: () => actions.fileCorrectionForOthers(claim), allowed: TEAM_OR_HR },
   { name: "saveClockRules", call: () => actions.saveClockRules(rules), allowed: HR },
 ];
 
@@ -76,6 +82,8 @@ describe("time clock queries, every role", () => {
     { name: "listFlags", call: () => queries.listFlags(), allowed: TEAM_VIEW },
     { name: "listCorrectionQueue", call: () => queries.listCorrectionQueue(), allowed: TEAM_VIEW },
     { name: "listClockRules", call: () => queries.listClockRules(), allowed: HR },
+    { name: "listFilablePeople", call: () => queries.listFilablePeople(), allowed: TEAM_VIEW },
+    { name: "listShiftNotes", call: () => queries.listShiftNotes(), allowed: TEAM_VIEW },
   ];
   for (const q of queryCases) {
     describe(q.name, () => {

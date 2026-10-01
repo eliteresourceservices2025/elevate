@@ -15,6 +15,11 @@ export const attendancePermissions = definePermissions({
     roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },
   },
   "attendance.approve_correction": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  // A lead files for their downline, HR for anyone; the person is told and someone else decides.
+  "attendance.file_for_others": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  // End-of-day notes: written by the person, read by their chain of leads and HR.
+  "attendance.notes": { roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" } },
+  "attendance.notes_view": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   "attendance.manage_rules": { roles: { super_admin: "all", hr_admin: "all" } },
   "attendance.view_summary": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", executive: "all" } },
 });

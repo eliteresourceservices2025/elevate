@@ -1,6 +1,6 @@
 import "server-only";
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
-import { purgeSelfies, rebuildAttendanceDays, runMissedClockouts, runOverbreakAlerts } from "@/modules/attendance/jobs";
+import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
 import { runLeaveExpiry } from "@/modules/timeoff/jobs";
@@ -78,4 +78,16 @@ export const selfiePurge = inngest.createFunction(
   async ({ step }) => step.run("purge", () => purgeSelfies()),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge];
+/** Every 15 minutes: tell leads about clocked-in people who have not been seen for 2 hours. */
+export const quietSessionAlerts = inngest.createFunction(
+  { id: "quiet-session-alerts", triggers: { cron: "*/15 * * * *" } },
+  async ({ step }) => step.run("check", () => runQuietSessionAlerts()),
+);
+
+/** Daily at 2:50 AM: delete time-claim screenshots 90 days after the decision (and ones never attached). */
+export const evidencePurge = inngest.createFunction(
+  { id: "evidence-purge", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 50 2 * * *` } },
+  async ({ step }) => step.run("purge", () => purgeEvidence()),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge];

@@ -77,7 +77,7 @@ export function workedMs(session: Session, until: number): number {
 }
 
 export type BreakDetail = { startAt: number; endAt: number | null; minutes: number; plannedMinutes: number | null; overMinutes: number };
-export type SessionDetail = { startAt: number; endAt: number | null; workedMinutes: number; breakMinutes: number; overbreakMinutes: number; breaks: BreakDetail[] };
+export type SessionDetail = { eventId?: string; startAt: number; endAt: number | null; workedMinutes: number; breakMinutes: number; overbreakMinutes: number; breaks: BreakDetail[] };
 
 export type DayTotals = {
   date: string;
@@ -110,6 +110,7 @@ export function buildDays(events: readonly ClockEventLite[], zone: string, openU
     const counted = s.endAt !== null || openUntil !== undefined;
     const until = s.endAt ?? openUntil ?? s.startAt;
     const detail: SessionDetail = {
+      eventId: s.startEventId,
       startAt: s.startAt,
       endAt: s.endAt,
       workedMinutes: counted ? Math.round(workedMs(s, until) / MINUTE) : 0,
@@ -196,5 +197,32 @@ export function formatClock(ms: number): string {
   const s = total % 60;
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+
+// --- Connection and presence ------------------------------------------------------------------------
+
+/** How often an open page tells the server "still here". */
+export const HEARTBEAT_MS = 2 * MINUTE;
+/** No report for this long = "possibly offline" on the lead's view (display only; nobody is clocked out). */
+export const OFFLINE_AFTER_MS = 10 * MINUTE;
+/** A gap this long between two reports shows the person "welcome back". */
+export const WELCOME_BACK_GAP_MS = 15 * MINUTE;
+/** A clocked-in person not seen for this long is reported to the lead once. */
+export const QUIET_AFTER_MS = 2 * 60 * MINUTE;
+/** A lead can approve a correction this far back; older ones go to HR. */
+export const LEAD_CLAIM_WINDOW_MS = 7 * 24 * 60 * MINUTE;
+
+/** The last time a clocked-in person was seen (never earlier than their session start). */
+export const lastSeenOf = (lastSeenMs: number | null, sinceMs: number) => Math.max(lastSeenMs ?? 0, sinceMs);
+
+export const isPossiblyOffline = (lastSeenMs: number | null, sinceMs: number, nowMs: number) => nowMs - lastSeenOf(lastSeenMs, sinceMs) > OFFLINE_AFTER_MS;
+
+/** Whether a gap since the previous report is long enough to ask the person whether they are still working. */
+export const needsWelcomeBack = (previousSeenMs: number | null, nowMs: number) => previousSeenMs !== null && nowMs - previousSeenMs > WELCOME_BACK_GAP_MS;
+
+/** A correction older than 7 days when it was filed is decided by HR only. */
+export const needsHrDecision = (earliestEventMs: number, filedAtMs: number) => earliestEventMs < filedAtMs - LEAD_CLAIM_WINDOW_MS;
+
+export const EOD_EDIT_WINDOW_MS = 24 * 60 * MINUTE;
+export const EOD_TEMPLATE = ["Done today:", "- ", "", "In progress:", "- ", "", "Blockers:", "- ", "", "Tomorrow:", "- "].join("\n");
 
 export const MAX_OPEN_SESSION_MS = 12 * 60 * MINUTE;

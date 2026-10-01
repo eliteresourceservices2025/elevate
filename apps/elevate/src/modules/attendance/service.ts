@@ -1,5 +1,5 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { allowRequest, clientIp } from "@/lib/rate-limit";
@@ -11,12 +11,12 @@ import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds, reportName } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
-import { clockEvents, clockPrefs, clockRules, clockSelfies, overbreakNotices } from "./schema";
+import { clockEvents, clockPrefs, clockRules, clockSelfies, correctionEvidence, overbreakNotices } from "./schema";
 
 // Server-only helpers for the time clock (not server actions, so they may take the acting user or a transaction).
 // Callers authorize first (CLAUDE.md rule 4).
 
-type Executor = Pick<typeof db, "execute" | "insert" | "select" | "update">;
+type Executor = Pick<typeof db, "execute" | "insert" | "select" | "update" | "delete">;
 
 export const SELFIE_MAX_BYTES = 1_500_000;
 export const SELFIE_KEEP_DAYS = 30;
@@ -46,13 +46,13 @@ export async function loadEventsBetween(executor: Executor, employeeId: string, 
   return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned }));
 }
 
-export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number };
-export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60 };
+export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean };
+export const DEFAULT_RULES: EffectiveRules = { allowedCidrs: [], selfieRequired: false, idleMinutes: 30, graceMinutes: 60, eodExpected: false };
 
 /** The rules of the person's team (or the defaults when the team has none). */
 export async function rulesFor(executor: Executor, employeeId: string): Promise<EffectiveRules> {
   const [row] = await executor
-    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes })
+    .select({ allowedCidrs: clockRules.allowedCidrs, selfieRequired: clockRules.selfieRequired, idleMinutes: clockRules.idleMinutes, graceMinutes: clockRules.graceMinutes, eodExpected: clockRules.eodExpected })
     .from(employees)
     .innerJoin(clockRules, eq(clockRules.teamId, employees.teamId))
     .where(eq(employees.id, employeeId))
@@ -118,7 +118,13 @@ export async function checkSelfie(employeeId: string, path: string): Promise<voi
 }
 
 export type ClockInput = { latitude?: number; longitude?: number; selfiePath?: string; /** break_start only: 15, 30 or 60. */ breakMinutes?: 15 | 30 | 60 };
-export type ClockResult = { state: ClockState; at: string; outsideAllowedRange: boolean };
+export type ClockResult = {
+  state: ClockState;
+  at: string;
+  outsideAllowedRange: boolean;
+  /** On a clock-out: the clock-in event of the session that just ended, so an end-of-day note can attach to it. */
+  sessionId: string | null;
+};
 
 /**
  * Records one clock event for the signed-in person. The time is the database clock and the IP comes from the request;
@@ -141,6 +147,10 @@ export async function performClock(actor: { id: string; email: string }, type: C
     const endsBreakToo = type === "clock_out" && replay.state === "break";
     if (!endsBreakToo && transition(replay.state, type) === null) {
       throw new ActionFailure(REFUSALS[`${replay.state}:${type}`] ?? "That is not possible right now.");
+    }
+
+    if (replay.state !== "out" && (await pendingClockOut(tx, person.id))) {
+      throw new ActionFailure("Your clock-out request is waiting for approval. Cancel it first if you are still working.");
     }
 
     if (type === "clock_in") {
@@ -191,9 +201,15 @@ export async function performClock(actor: { id: string; email: string }, type: C
       await tx.insert(clockSelfies).values({ eventId: last.id, employeeId: person.id, storagePath: input.selfiePath });
     }
     await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired) } }, tx);
+    if (type === "clock_in") await touchPresence(tx, person.id);
     await afterClockEvent(tx, person.id, type);
 
-    return { state: transition(endsBreakToo ? "working" : replay.state, endsBreakToo ? "clock_out" : type)!, at: last!.occurredAt.toISOString(), outsideAllowedRange };
+    return {
+      state: transition(endsBreakToo ? "working" : replay.state, endsBreakToo ? "clock_out" : type)!,
+      at: last!.occurredAt.toISOString(),
+      outsideAllowedRange,
+      sessionId: type === "clock_out" ? (replay.sessions[replay.sessions.length - 1]?.startEventId ?? null) : null,
+    };
   });
 }
 
@@ -227,4 +243,57 @@ export async function notifyOverbreak(tx: Executor, employeeId: string, startEve
     })),
   );
   return true;
+}
+
+// --- Presence, claims and evidence ---------------------------------------------------------------
+
+/** Records "still here" for a clocked-in person (the database clock). One row per person, no history. */
+export async function touchPresence(executor: Executor, employeeId: string): Promise<void> {
+  await executor.execute(sql`insert into time.clock_presence (employee_id, last_seen_at) values (${employeeId}, clock_timestamp()) on conflict (employee_id) do update set last_seen_at = clock_timestamp()`);
+}
+
+/** A waiting request that adds a clock-out for this person (the "I stopped at ..." flow). */
+export async function pendingClockOut(executor: Executor, employeeId: string): Promise<{ id: string; atMs: number } | null> {
+  const [row] = (await executor.execute(sql`
+    select c.id, (select max((p->>'at')::timestamptz) from jsonb_array_elements(c.proposed) p where p->>'type' = 'clock_out') as at
+    from time.clock_corrections c
+    where c.employee_id = ${employeeId} and c.status = 'pending' and c.proposed @> '[{"type":"clock_out"}]'::jsonb
+    order by c.created_at desc limit 1`)) as unknown as { id: string; at: string | Date }[];
+  return row ? { id: row.id, atMs: new Date(row.at).getTime() } : null;
+}
+
+export const EVIDENCE_KEEP_DAYS = 90;
+const EXT = new Map([["image/jpeg", "jpg"], ["image/png", "png"]]);
+
+/** time-evidence/<employeeId>/<uuid>.<ext>, owned by the person. */
+export const evidencePath = (employeeId: string, mime: string) => `time-evidence/${employeeId}/${randomUUID()}.${EXT.get(mime) ?? "jpg"}`;
+
+/** The real type of an image from its first bytes, or null when it is neither JPEG nor PNG. */
+export function imageType(bytes: Uint8Array): "image/jpeg" | "image/png" | null {
+  if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+  return null;
+}
+
+/**
+ * Checks the screenshots a person wants to attach: they must be the person's own, not attached yet, really there, a real
+ * JPEG or PNG and small enough. A bad file is deleted. Fills in the size and checksum and returns the verified ids.
+ */
+export async function verifyEvidence(tx: Executor, employeeId: string, ids: string[], maxBytes: number): Promise<string[]> {
+  const unique = [...new Set(ids)];
+  const verified: string[] = [];
+  for (const id of unique) {
+    const [row] = await tx.select().from(correctionEvidence).where(and(eq(correctionEvidence.id, id), eq(correctionEvidence.employeeId, employeeId), isNull(correctionEvidence.correctionId), isNull(correctionEvidence.purgedAt))).limit(1);
+    if (!row) throw new ActionFailure("One of the screenshots is not valid. Add it again.");
+    const bytes = await getDocumentStorage().read(BUCKETS.employee, row.storagePath);
+    const type = bytes ? imageType(bytes) : null;
+    if (!bytes || !type || type !== row.mime || bytes.length > maxBytes) {
+      await getDocumentStorage().remove(BUCKETS.employee, [row.storagePath]).catch(() => undefined);
+      await tx.delete(correctionEvidence).where(eq(correctionEvidence.id, row.id));
+      throw new ActionFailure("A screenshot could not be used. Use a JPG or PNG under 5 MB and add it again.");
+    }
+    await tx.update(correctionEvidence).set({ sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }).where(eq(correctionEvidence.id, row.id));
+    verified.push(row.id);
+  }
+  return verified;
 }
