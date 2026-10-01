@@ -451,3 +451,56 @@ export async function listCorrectionBatches(): Promise<CorrectionBatch[]> {
     group by c.batch_id, c.requested_by order by min(c.created_at) desc limit 20`)) as unknown as { batch_id: string; requested_by: string; created_at: string | Date; waiting: number; people: number; reason: string; filer: string | null }[];
   return rows.map((r) => ({ batchId: r.batch_id, filedBy: r.filer ?? "HR", createdAt: new Date(r.created_at).toISOString(), waiting: r.waiting, people: r.people, reason: r.reason, mine: r.requested_by === user.id }));
 }
+
+export type ScheduleLine = { from: string; to: string | null; days: string; client: string; manila: string; zone: string; breakMinutes: number };
+export type MyScheduleView = { current: ScheduleLine | null; upcoming: ScheduleLine[]; past: ScheduleLine[] };
+
+const toLine = (s: Parameters<typeof describeSchedule>[0]): ScheduleLine => {
+  const d = describeSchedule(s, s.effectiveFrom);
+  return { from: s.effectiveFrom, to: s.effectiveTo, days: d.days, client: d.client, manila: d.manila, zone: d.zone, breakMinutes: s.breakMinutes };
+};
+
+/** The signed-in person's own schedule: the one in force, ones that start later, and earlier ones. Null without a people record. */
+export async function getMySchedule(): Promise<MyScheduleView | null> {
+  const user = await requireUser();
+  await authorize(user, "schedules.view", { ownerUserId: user.id });
+  const me = await myEmployee(user.id);
+  if (!me) return null;
+  const schedules = await loadSchedules(db, me.id);
+  const today = todayInZone();
+  const now = scheduleFor(schedules, today);
+  return {
+    current: now ? toLine(now) : null,
+    upcoming: schedules.filter((s) => s.effectiveFrom > today).map(toLine),
+    past: schedules.filter((s) => s !== now && s.effectiveFrom <= today).map(toLine).reverse().slice(0, 10),
+  };
+}
+
+/** A Team Lead's view of their downline's schedules (read only). HR uses listSchedules, which can change them. */
+export async function listTeamSchedules(): Promise<{ rows: ScheduleListRow[] }> {
+  const user = await requireUser();
+  const scope = scopeFor(user, "schedules.view");
+  if (scope !== "team") throw new ForbiddenError("schedules.view");
+  const ids = await downlineEmployeeIds(db, user.id);
+  if (ids.length === 0) return { rows: [] };
+  const people = (await db.execute(sql`
+    select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team
+    from core.employees e left join core.teams t on t.id = e.team_id where e.id in (${list(ids)}) and e.archived_at is null and e.status <> 'separated' order by e.legal_last_name, e.legal_first_name`)) as unknown as { id: string; first: string; last: string; preferred: string | null; team: string | null }[];
+  const byPerson = await loadSchedulesFor(db, people.map((p) => p.id));
+  const today = todayInZone();
+  return {
+    rows: people.map((p) => {
+      const sched = byPerson.get(p.id) ?? [];
+      const now = scheduleFor(sched, today);
+      const later = sched.find((s) => s.effectiveFrom > today);
+      return {
+        employeeId: p.id,
+        name: reportName({ first: p.first, last: p.last, preferred: p.preferred }),
+        team: p.team,
+        zone: now?.zone ?? later?.zone ?? null,
+        current: now ? { ...pickDescription(now, today), effectiveFrom: now.effectiveFrom, breakMinutes: now.breakMinutes } : null,
+        upcoming: later ? { effectiveFrom: later.effectiveFrom, days: describeSchedule(later, later.effectiveFrom).days, client: describeSchedule(later, later.effectiveFrom).client } : null,
+      };
+    }),
+  };
+}

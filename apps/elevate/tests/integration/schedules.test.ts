@@ -147,6 +147,39 @@ describe("assigning schedules", () => {
     as(none.user);
     expect((await queries.getMyTime())?.schedule).toBeNull();
   });
+
+  it("gives each person their own schedule page, and a lead a read-only view of their team's", async () => {
+    const lead = await person("PageLead");
+    await db.execute(sql`insert into core.user_roles (user_id, role_slug) values (${lead.user.id}, 'team_lead')`);
+    const mine = await person("PageMine", { managerId: lead.employeeId });
+    const other = await person("PageOther");
+    await schedule(mine.employeeId, { from: day(-30), zone: "America/New_York" });
+    await db.execute(sql`update time.schedules set effective_to = ${day(-1)}::date where employee_id = ${mine.employeeId}`);
+    await schedule(mine.employeeId, { from: day(0), start: "10:00", end: "18:00", zone: "America/New_York" });
+    await db.execute(sql`update time.schedules set effective_to = ${day(19)}::date where employee_id = ${mine.employeeId} and effective_from = ${day(0)}::date`); // the next one starts on day 20
+    await db.execute(sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone) values (${mine.employeeId}, ${day(20)}::date, '08:00', '16:00', array[1,2,3]::smallint[], 30, 'America/New_York')`);
+    await schedule(other.employeeId);
+
+    as(mine.user);
+    const view = await queries.getMySchedule();
+    expect(view?.current).toMatchObject({ days: "Every day", client: "10:00 AM - 6:00 PM", zone: "America/New_York", breakMinutes: 60 });
+    expect(view?.upcoming).toEqual([expect.objectContaining({ from: day(20), days: "Mon to Wed", breakMinutes: 30 })]);
+    expect(view?.past).toEqual([expect.objectContaining({ from: day(-30), to: day(-1) })]);
+    await expect(queries.listTeamSchedules()).rejects.toThrow(); // an employee has no team view
+
+    as({ ...lead.user, roles: ["team_lead", "employee"] });
+    const team = await queries.listTeamSchedules();
+    expect(team.rows.map((r) => r.employeeId)).toEqual([mine.employeeId]); // only their downline, not the other person
+    expect(team.rows[0].current?.manila).toContain("PM");
+    expect(team.rows[0].upcoming).toMatchObject({ effectiveFrom: day(20) });
+
+    as(hr);
+    await expect(queries.listTeamSchedules()).rejects.toThrow(); // HR uses the full list instead
+
+    const noRecord = await makeUser("PageNoRecord", ["employee"]);
+    as(noRecord);
+    expect(await queries.getMySchedule()).toBeNull();
+  });
 });
 
 describe("nightly flags against a schedule", () => {

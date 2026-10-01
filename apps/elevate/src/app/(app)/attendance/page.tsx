@@ -20,9 +20,7 @@ import { HealthPanel } from "@/modules/health/components/health-panel";
 import { getSystemHealth } from "@/modules/health/queries";
 import { ExportPanel, ReviewPanel } from "@/modules/attendance/components/hours-panels";
 import { getHoursSettings, getTeamReview } from "@/modules/attendance/hours-queries";
-import { SchedulesPanel } from "@/modules/attendance/components/schedules-panel";
-import { getMyTime, listClockRules, listCorrectionBatches, listCorrectionQueue, listFilablePeople, listFlags, listSchedules, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
-import { todayInZone } from "@/modules/org/service";
+import { getMyTime, listClockRules, listCorrectionBatches, listCorrectionQueue, listFilablePeople, listFlags, listShiftNotes, listWorkingNow, mondayOf } from "@/modules/attendance/queries";
 
 export const metadata: Metadata = { title: "Attendance" };
 
@@ -32,7 +30,6 @@ const ALL_TABS = [
   { key: "team", label: "Team" },
   { key: "review", label: "Review" },
   { key: "corrections", label: "Corrections" },
-  { key: "schedules", label: "Schedules" },
   { key: "export", label: "Hours export" },
   { key: "rules", label: "Rules" },
   { key: "jibble", label: "Jibble" },
@@ -69,7 +66,6 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const approve = scopeFor(user, "attendance.approve_correction");
   if (approve === "all" || approve === "team") allowed.add("corrections");
   if (scopeFor(user, "attendance.manage_rules")) allowed.add("rules");
-  if (scopeFor(user, "schedules.manage")) allowed.add("schedules");
   const approveScope = scopeFor(user, "hours.approve");
   if (approveScope === "all" || approveScope === "team") allowed.add("review");
   if (scopeFor(user, "hours.export")) allowed.add("export");
@@ -96,7 +92,6 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const hoursSettings = tab === "export" ? await orNotFound(getHoursSettings()) : null;
   const health = tab === "health" ? await orNotFound(getSystemHealth()) : null;
   const batches = tab === "corrections" && approve === "all" ? await orNotFound(listCorrectionBatches()) : null;
-  const schedulesList = tab === "schedules" ? await orNotFound(listSchedules()) : null;
   const jibble = tab === "jibble" ? await orNotFound(getJibbleOverview()) : null;
   const rules = tab === "rules" ? await orNotFound(listClockRules()) : null;
 
@@ -128,7 +123,12 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
               {mine.schedule ? (
                 <p className="text-sm">
                   <span className="font-semibold">Your schedule:</span> {mine.schedule.days}, {mine.schedule.client} ({mine.schedule.zone}), which is <strong>{mine.schedule.manila}</strong> in Manila.{" "}
-                  <span className="text-muted-foreground">Since {formatDateOnly(mine.schedule.effectiveFrom)}. Your times below are in {mine.zone}.</span>
+                  <span className="text-muted-foreground">
+                    Since {formatDateOnly(mine.schedule.effectiveFrom)}. Your times below are in {mine.zone}.{" "}
+                    <Link href="/schedules" className="text-primary underline-offset-4 hover:underline">
+                      Schedule details
+                    </Link>
+                  </span>
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">You have no schedule yet, so late, early and extra hours are not tracked. HR sets schedules.</p>
@@ -387,8 +387,6 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
       {review ? <ReviewPanel review={review} prevHref={`/attendance?tab=review&rweek=${addDays(review.weekStart, -7)}`} nextHref={`/attendance?tab=review&rweek=${addDays(review.weekStart, 7)}`} flagLabels={Object.fromEntries(FLAG_LABELS)} /> : null}
 
       {hoursSettings ? <ExportPanel settings={hoursSettings} /> : null}
-
-      {schedulesList ? <SchedulesPanel rows={schedulesList.rows} withoutSchedule={schedulesList.withoutSchedule} today={todayInZone()} /> : null}
 
       {jibble ? <JibblePanel overview={jibble} /> : null}
 

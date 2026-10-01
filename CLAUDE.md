@@ -149,7 +149,7 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **Nightly flags** (`rebuildAttendanceDays`, columns `scheduled_minutes`, `late_minutes`, `early_leave_minutes`, `extra_minutes`): `late` and `left_early` past the team's `late_grace_minutes` (default 10); `extra_hours` = worked minus scheduled, ignoring under 15 minutes (a shifted day is not extra); `rest_day_work` and `holiday_work` count in full as extra; `absent` = a scheduled day that ended with no clocking, no approved leave and no holiday (the flag is taken off again if events or leave appear). **People with no schedule get none of these.** Holidays are the person's PH plus their clients' calendars.
 - **Missed clock-out** now fires at shift end plus the team's `grace_minutes` (default 60), once per session (`missed_clockout_notices`); the 12-hour rule remains the backstop for people with no schedule.
 - **Leave days** use the person's working weekdays in their own zone when they have a schedule (`workingWeekdaysFor`), Monday to Friday otherwise (`workdays.ts` takes an optional weekday set).
-- E2E: the Schedules tab is HR only; the My time table has Shift and Extra columns.
+- **Schedules page** (`/schedules`, its own menu item): everyone sees their own schedule (`getMySchedule`: current, next, earlier); HR also gets the assign form and everyone's list (`SchedulesPanel`); a Team Lead gets a read-only list of their team (`listTeamSchedules`). The Attendance My time page shows a one-line schedule with a link here. E2E: the My time table has Shift and Extra columns.
 
 ## Extra hours (Phase 2.5, part B)
 
@@ -186,6 +186,10 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **Backstop:** `/api/cron/backstop` (called by the host's scheduler every 15 minutes, `vercel.json`) runs the health check, `processMirrorQueue`, `runJibbleRepair` and `runMissedClockouts`, so attendance-critical work and the health alert survive the job service being down. It is outside the sign-in gate (all `/api` routes are) and checks `CRON_SECRET` itself (`cronAuthorized`, constant time, at least 16 characters; no secret = nobody gets in). It does not check in as the jobs (that would hide a job-service outage).
 - **Bulk corrections** (`fileBulkCorrections`, `decideCorrectionBatch`, `bulk-corrections.ts`; HR only, Attendance > Corrections): a CSV of `email,type,time` (times in a zone HR picks, up to 500 rows, up to 6 events per person) becomes one ordinary correction request per person with the same `checkProposal` checks, sharing a `batch_id`. Rows that cannot be filed are returned with the reason. **Another HR admin** decides the whole batch (each request is decided by the normal `decideCorrection`, so the filer can never decide, and each is re-checked); one notification goes to the other HR admins, one to each person.
 - **Runbook:** `docs/RUNBOOK.md` is the plain-language guide for outages, sign-in recovery (MFA reset is done in the Supabase dashboard; there is no in-app reset), Jibble problems, deploying at the Manila shift change, and the pilot checklist. Keep it current when behavior changes.
+
+## Navigation rule
+
+**A menu item opens its own page, at its own address, with its own item highlighted. Never redirect a menu item to a tab of another page** (it reads as "the menu took me somewhere else"). If two things belong together, link between them inside the pages instead. "My profile" (`/people/me`) renders the profile itself (`ProfileView`, shared with `/people/[id]`) rather than redirecting to the People list, and Schedules (`/schedules`) is its own page. A new module gets a page at the menu's address; the sidebar highlights the longest matching link.
 
 ## Adding a permission or action
 

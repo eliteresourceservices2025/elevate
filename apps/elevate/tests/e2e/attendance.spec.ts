@@ -300,7 +300,7 @@ test("HR sets a schedule and the employee sees it in both time zones", async ({ 
 
   const hrPage = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(hrPage, hr);
-  await hrPage.goto("/attendance?tab=schedules");
+  await hrPage.goto("/schedules");
   await waitForHydration(hrPage, "#sc-filter");
   await hrPage.getByLabel("Find a person or team").fill(`Shift${stamp}`);
   await hrPage.getByLabel(/^Select Sam/).check();
@@ -309,7 +309,7 @@ test("HR sets a schedule and the employee sees it in both time zones", async ({ 
   await hrPage.getByLabel("Time zone").fill("Asia/Manila");
   await hrPage.getByRole("button", { name: "Set schedule for 1 person" }).click();
   await expect(hrPage.getByText("Schedule set for 1 person.")).toBeVisible(slow);
-  await expect(hrPage.getByText("Mon to Fri, 9:00 PM - 5:00 AM (Asia/Manila)")).toBeVisible(slow);
+  await expect(hrPage.getByText("Mon to Fri, 9:00 PM - 5:00 AM (Asia/Manila)").first()).toBeVisible(slow);
 
   const page = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(page, employee);
@@ -490,18 +490,40 @@ test("HR sees the Health tab and the bulk corrections panel, and a lead sees nei
   await expect(leadPage.getByText("File many corrections from a spreadsheet")).toHaveCount(0);
 });
 
-test("the Schedules link in the menu opens the schedule: HR where shifts are set, everyone else their own", async ({ browser }) => {
+test("the Schedules menu item opens its own page and stays highlighted; the employee sees their own schedule there", async ({ browser }) => {
+  test.setTimeout(180_000);
   const slow = { timeout: 30_000 };
   const hrPage = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(hrPage, await createHrAccount());
-  await hrPage.goto("/schedules");
-  await hrPage.waitForURL("**/attendance?tab=schedules", slow);
+  await hrPage.getByRole("link", { name: "Schedules", exact: true }).click();
+  await hrPage.waitForURL("**/schedules", slow);
   await expect(hrPage.getByRole("heading", { name: "Set a schedule" })).toBeVisible(slow);
+  await expect(hrPage.getByRole("link", { name: "Schedules", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(hrPage.getByRole("link", { name: "Attendance", exact: true })).not.toHaveAttribute("aria-current", "page");
 
+  const worker = await createEmployeeAccount("Sia", `Sched${Date.now()}`);
   const page = await (await browser.newContext()).newPage();
-  await signInEnrollingMfa(page, await createEmployeeAccount("Sia", `Sched${Date.now()}`));
-  await page.goto("/schedules");
-  await page.waitForURL(/\/attendance$/, slow);
-  await expect(page.getByRole("region", { name: "My schedule" })).toBeVisible(slow);
+  await signInEnrollingMfa(page, worker);
+  await page.getByRole("link", { name: "Schedules", exact: true }).click();
+  await page.waitForURL("**/schedules", slow);
+  await expect(page.getByRole("region", { name: "My schedule" })).toContainText("no schedule yet", slow);
+  await expect(page.getByRole("heading", { name: "Set a schedule" })).toHaveCount(0); // only HR sets them
   await expect(page.getByText("Not built yet")).toHaveCount(0);
+});
+
+test("My profile stays My profile: its own address and menu highlight, not the People list", async ({ page }) => {
+  const slow = { timeout: 30_000 };
+  const worker = await createEmployeeAccount("Pia", `Prof${Date.now()}`);
+  await signInEnrollingMfa(page, worker);
+  await page.getByRole("link", { name: "My profile", exact: true }).click();
+  await page.waitForURL("**/people/me", slow);
+  await expect(page.getByRole("link", { name: "My profile", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", { name: "People", exact: true })).not.toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: /Pia Prof/ })).toBeVisible(slow);
+  await expect(page.getByRole("link", { name: "← People" })).toHaveCount(0);
+
+  // Its tabs keep the address too
+  await page.getByRole("link", { name: "Emergency" }).click();
+  await page.waitForURL("**/people/me?tab=emergency", slow);
+  await expect(page.getByRole("link", { name: "My profile", exact: true })).toHaveAttribute("aria-current", "page");
 });

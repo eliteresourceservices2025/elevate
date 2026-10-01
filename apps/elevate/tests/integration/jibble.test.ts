@@ -309,7 +309,7 @@ describe("sending to Jibble", () => {
   it("retries network trouble with a growing delay, keeps later calls waiting, and gives up after six tries", async () => {
     const p = await queued("Retry", ["In", "Out"]);
     fake.fail = (id) => (id === p.jibbleId ? new JibbleError(null, "timeout") : null);
-    const start = new Date();
+    const start = new Date(Date.now() + 10_000); // a few seconds ahead, so a database clock that runs slightly fast cannot make the call look not yet due
     expect(await jobs.processMirrorQueue(start)).toMatchObject({ retrying: expect.any(Number) });
     const log = await logOf(p.employeeId);
     expect(log.map((l) => `${l.action}:${l.status}:${l.attempts}`)).toEqual(["In:queued:1", "Out:queued:0"]); // Out waits behind In
@@ -637,7 +637,7 @@ describe("retries are careful", () => {
   it("waits as long as Jibble asks when it says to slow down", async () => {
     const p = await queuedRows("SlowDown", ["In"]);
     fake.fail = (id) => (id === fayJibbleId(p.employeeId) ? new JibbleError(429, "slow down", null, 20 * MIN) : null);
-    const start = new Date();
+    const start = new Date(Date.now() + 10_000); // same: allow for a database clock that runs slightly fast
     await jobs.processMirrorQueue(start);
     const [row] = await rows<{ next: Date }>(sql`select next_attempt_at as next from time.jibble_link_log where employee_id = ${p.employeeId}`);
     expect(new Date(row.next).getTime() - start.getTime()).toBeGreaterThanOrEqual(19 * MIN); // longer than the one minute backoff

@@ -22,6 +22,7 @@ import { assignScheduleSchema, endScheduleSchema } from "./validators";
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the request and try again.";
 const MAX_BACKDATE_DAYS = 7;
 const refresh = () => {
+  revalidatePath("/schedules");
   revalidatePath("/attendance");
   revalidatePath("/time-off");
 };
@@ -64,7 +65,7 @@ export async function assignSchedule(input: unknown): Promise<ActionResult<{ ass
         );
         if (person.userId) {
           const d = describeSchedule({ ...row, effectiveTo: null }, v.effectiveFrom);
-          await notify(tx, { userId: person.userId, kind: "schedule.assigned", title: "Your schedule was set", body: `${d.days}, ${d.client} (${zone}), which is ${d.manila} in Manila. From ${formatDateOnly(v.effectiveFrom)}.`, link: "/attendance" });
+          await notify(tx, { userId: person.userId, kind: "schedule.assigned", title: "Your schedule was set", body: `${d.days}, ${d.client} (${zone}), which is ${d.manila} in Manila. From ${formatDateOnly(v.effectiveFrom)}.`, link: "/schedules" });
         }
       }
     });
