@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatDateOnly, formatInZone } from "@/lib/time";
 import type { SensitiveField } from "../constants";
 import { SENSITIVE_LABELS, STATUS_LABELS } from "../constants";
+import Link from "next/link";
 import { legalName } from "../format";
 import type { getProfile } from "../queries";
 import { RevealField } from "./reveal-field";
@@ -262,6 +263,13 @@ export function ClientsSection({
       {access.canManageAssignments ? (
         <Section title="Assign a client">
           <AssignClientForm employeeId={employee.id} clients={clients} today={today} />
+          <p className="mt-2 text-sm text-muted-foreground">
+            The client is not in the list?{" "}
+            <Link href="/people/clients" className="text-primary underline-offset-4 hover:underline">
+              Add a client
+            </Link>
+            , then come back and assign it.
+          </p>
         </Section>
       ) : null}
     </div>

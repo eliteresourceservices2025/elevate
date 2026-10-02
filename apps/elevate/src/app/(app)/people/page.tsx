@@ -47,6 +47,16 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
               Change requests
             </Link>
           ) : null}
+          {can(user, "people.manage_clients") ? (
+            <Link href="/people/clients" className={cn(buttonVariants({ variant: "outline" }))}>
+              Clients
+            </Link>
+          ) : null}
+          {can(user, "people.manage_custom_fields") ? (
+            <Link href="/people/fields" className={cn(buttonVariants({ variant: "outline" }))}>
+              Custom fields
+            </Link>
+          ) : null}
           {can(user, "org.manage_structure") ? (
             <Link href="/people/structure" className={cn(buttonVariants({ variant: "outline" }))}>
               Structure
