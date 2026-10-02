@@ -253,6 +253,13 @@
       "when": 1790906361955,
       "tag": "0035_onboarding_offboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790912509566,
+      "tag": "0039_analytics",
+      "breakpoints": true
     }
   ]
 }
