@@ -7,6 +7,12 @@
       "runtimeArgs": ["--filter", "elevate", "dev"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "safe-voice-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "safe-voice", "dev"],
+      "port": 3100
     }
   ]
 }

@@ -17,11 +17,14 @@ test("a review goes from self review to acknowledgment", async ({ browser }) => 
 
   // A template
   await hr.goto("/reviews/templates");
+  // Earlier templates may exist, so the "Add a template" box can be closed and its labels are not unique: use the new form's ids
+  if (!(await hr.locator("#rt-name-new").isVisible())) await hr.getByText("Add a template", { exact: true }).click(); // open on a clean database, closed once templates exist
   await waitForHydration(hr, "#rt-name-new");
-  await hr.getByLabel("Template name").fill(`E2E review ${stamp}`);
-  await hr.getByLabel("Section").fill("Work");
-  await hr.getByLabel("Question 1").fill("Quality of work");
-  await hr.getByRole("button", { name: "Save template" }).last().click();
+  const form = hr.locator("form", { has: hr.locator("#rt-name-new") });
+  await form.locator("#rt-name-new").fill(`E2E review ${stamp}`);
+  await form.locator("#rq-sec-new-0").fill("Work");
+  await form.locator("#rq-prompt-new-0").fill("Quality of work");
+  await form.getByRole("button", { name: "Save template" }).click();
   await expect(hr.getByText("Template saved.")).toBeVisible(slow);
 
   // A cycle for that one person

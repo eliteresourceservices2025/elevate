@@ -3,7 +3,9 @@ import Link from "next/link";
 import { Pin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { requireUser } from "@/lib/auth";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
+import { hiddenNavFor } from "@/lib/nav-access";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { DueBadge } from "@/modules/announcements/components/ack-display";
 import { listAnnouncements, listMyPending } from "@/modules/announcements/queries";
@@ -12,7 +14,9 @@ import { todayInZone } from "@/modules/org/service";
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
-  const modules = ALL_NAV_ITEMS.filter((i) => i.href !== "/dashboard");
+  const user = await requireUser();
+  const hidden = hiddenNavFor(user);
+  const modules = ALL_NAV_ITEMS.filter((i) => i.href !== "/dashboard" && !hidden.includes(i.href));
   const [pending, latest] = await Promise.all([listMyPending(), listAnnouncements({ limit: 3 })]);
   const today = todayInZone();
 

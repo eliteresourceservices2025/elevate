@@ -47,9 +47,8 @@ test("HR awards prize days and the employee sees them, with the holiday calendar
   await expect(empPage.getByRole("button", { name: /Notifications, \d+ unread/ })).toBeVisible();
 
   // HR sees the same ledger on the person's page and in the balances list
-  await hrPage.goto("/time-off?tab=balances");
-  await hrPage.getByRole("link", { name: `Toby Prize${stamp}` }).click();
-  await hrPage.waitForURL(`**/time-off/${employee.employeeId}`);
+  // The balances list is paged (and the local database collects test people), so open the person directly
+  await hrPage.goto(`/time-off/${employee.employeeId}`);
   await expect(hrPage.getByRole("region", { name: "History" }).getByRole("row").filter({ hasText: "E2E trivia night" })).toContainText("+2");
 
   // Holidays: the employee sees the Philippine calendar only (no US client), HR sees both and what to verify

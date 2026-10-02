@@ -1,9 +1,9 @@
 import { Markdown } from "@/components/markdown";
 import { AppHeader } from "@/components/shell/app-header";
 import { SidebarNav } from "@/components/shell/sidebar-nav";
-import { scopeFor, type ActionName } from "@/lib/authz";
+
 import { requireUser } from "@/lib/auth";
-import { ALL_NAV_ITEMS } from "@/lib/nav";
+import { hiddenNavFor } from "@/lib/nav-access";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { AckBanner } from "@/modules/announcements/components/ack-display";
 import { listMyPending } from "@/modules/announcements/queries";
@@ -27,14 +27,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   }
   const [unread, pending, clock] = await Promise.all([countMyUnread(), listMyPending(), getClockStatus()]);
 
-  const hiddenNav = ALL_NAV_ITEMS.filter((i) => {
-    if (!i.access) return false;
-    const rules = Array.isArray(i.access) ? i.access : [i.access];
-    return !rules.some((rule) => {
-      const scope = scopeFor(user, rule.action as ActionName);
-      return scope !== null && rule.scopes.includes(scope);
-    });
-  }).map((i) => i.href);
+  const hiddenNav = hiddenNavFor(user);
 
   return (
     <div className="flex min-h-screen">
