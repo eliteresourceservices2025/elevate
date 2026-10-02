@@ -100,7 +100,7 @@ export async function signInEnrollingMfa(page: Page, account: TestAccount) {
   await page.getByLabel("Password").fill(account.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
-  await page.waitForURL("**/mfa");
+  await page.waitForURL(/\/mfa(\?|$)/);
   const secretEl = page.locator("span.font-mono");
   await expect(secretEl).toBeVisible();
   const secret = (await secretEl.textContent())!.trim();

@@ -32,7 +32,7 @@ export function decideAccess(pathname: string, aal: Aal): AccessDecision {
     const next = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname)}`;
     return { action: "redirect", to: `/login${next}` };
   }
-  if (aal === "aal1") return { action: "redirect", to: "/mfa" };
+  if (aal === "aal1") return { action: "redirect", to: pathname === "/" ? "/mfa" : `/mfa?next=${encodeURIComponent(pathname)}` };
   return { action: "allow" };
 }
 

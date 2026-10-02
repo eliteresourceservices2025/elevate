@@ -1,85 +1,54 @@
 "use client";
 
 import { useId, useState } from "react";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // One metric as a chart with a data table behind a toggle, so the numbers are readable without seeing the chart. Hidden cells arrive
-// from the server as null and are shown as "fewer than 5"; they are never drawn. No dependency: the chart is plain SVG.
+// from the server as null and are shown as "fewer than 5"; they are never drawn. The chart is Recharts.
 
 export type Cell = number | string | null;
 export type Column = { key: string; label: string; suffix?: string };
 export type Series = { key: string; label: string; color: string };
 type Row = Record<string, Cell>;
 
-const W = 640;
-const H = 200;
-const M = { top: 12, right: 12, bottom: 28, left: 44 };
-
-function niceMax(v: number): number {
-  if (v <= 0) return 1;
-  const p = 10 ** Math.floor(Math.log10(v));
-  return Math.ceil(v / p) * p;
-}
-
+/** The chart itself (Recharts). A hidden cell is null, so a line breaks there and a bar is missing: hidden numbers are never drawn. */
 function Chart({ rows, xKey, series, kind, summary, format }: { rows: Row[]; xKey: string; series: Series[]; kind: "line" | "bar"; summary: string; format: (n: number) => string }) {
-  const values = series.flatMap((s) => rows.map((r) => r[s.key])).filter((v): v is number => typeof v === "number");
-  const max = niceMax(Math.max(0, ...values));
-  const innerW = W - M.left - M.right;
-  const innerH = H - M.top - M.bottom;
-  const n = rows.length;
-  const x = (i: number) => M.left + (kind === "bar" ? ((i + 0.5) / Math.max(n, 1)) * innerW : n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW);
-  const y = (v: number) => M.top + innerH - (v / max) * innerH;
-  const step = Math.max(1, Math.ceil(n / 8));
-  const ticks = [0, 0.5, 1].map((t) => t * max);
-  const barW = Math.max(3, Math.min(28, innerW / Math.max(n, 1) / (series.length + 0.6)));
-
+  const data = rows.map((r) => ({ ...r }));
+  const interval = Math.max(0, Math.ceil(rows.length / 8) - 1);
+  const shortX = (v: unknown) => {
+    const t = String(v);
+    return kind === "bar" || t.length <= 7 ? t : t.slice(5);
+  };
+  const axis = { stroke: "currentColor", strokeOpacity: 0.5, fontSize: 11 } as const;
+  const common = { data, margin: { top: 8, right: 12, bottom: 4, left: 0 } };
+  const parts = [
+    <CartesianGrid key="g" stroke="currentColor" strokeOpacity={0.12} vertical={false} />,
+    <XAxis key="x" dataKey={xKey} interval={interval} tickFormatter={shortX} tick={{ fill: "currentColor", fillOpacity: 0.7, fontSize: 11 }} {...axis} />,
+    <YAxis key="y" width={44} tickFormatter={(v: number) => format(v)} tick={{ fill: "currentColor", fillOpacity: 0.7, fontSize: 11 }} {...axis} />,
+    <Tooltip key="t" formatter={(v) => (typeof v === "number" ? format(v) : String(v))} contentStyle={{ fontSize: 12 }} />,
+  ];
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={summary} className="h-auto w-full max-w-3xl">
-      <title>{summary}</title>
-      {ticks.map((t) => (
-        <g key={t}>
-          <line x1={M.left} x2={W - M.right} y1={y(t)} y2={y(t)} stroke="currentColor" strokeOpacity={0.12} />
-          <text x={M.left - 6} y={y(t) + 4} textAnchor="end" fontSize={11} fill="currentColor" fillOpacity={0.7}>
-            {format(t)}
-          </text>
-        </g>
-      ))}
-      {rows.map((r, i) =>
-        i % step === 0 ? (
-          <text key={String(r[xKey])} x={x(i)} y={H - 8} textAnchor="middle" fontSize={11} fill="currentColor" fillOpacity={0.7}>
-            {String(r[xKey]).slice(kind === "bar" || String(r[xKey]).length <= 7 ? 0 : 5)}
-          </text>
-        ) : null,
-      )}
-      {series.map((s, si) => {
-        if (kind === "bar")
-          return rows.map((r, i) => {
-            const v = r[s.key];
-            if (typeof v !== "number") return null;
-            const bx = x(i) - (series.length * barW) / 2 + si * barW;
-            return <rect key={`${s.key}-${i}`} x={bx} y={y(v)} width={barW - 1} height={Math.max(0, M.top + innerH - y(v))} fill={s.color} rx={1} />;
-          });
-        // Lines break at a hidden value instead of bridging it
-        let d = "";
-        let pen = false;
-        rows.forEach((r, i) => {
-          const v = r[s.key];
-          if (typeof v !== "number") {
-            pen = false;
-            return;
-          }
-          d += `${pen ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
-          pen = true;
-        });
-        return (
-          <g key={s.key}>
-            <path d={d} fill="none" stroke={s.color} strokeWidth={2} />
-            {rows.map((r, i) => (typeof r[s.key] === "number" ? <circle key={i} cx={x(i)} cy={y(r[s.key] as number)} r={2.5} fill={s.color} /> : null))}
-          </g>
-        );
-      })}
-    </svg>
+    <div role="img" aria-label={summary} className="h-52 w-full max-w-3xl">
+      <ResponsiveContainer width="100%" height="100%">
+        {kind === "bar" ? (
+          <BarChart {...common}>
+            {parts}
+            {series.map((s) => (
+              <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[2, 2, 0, 0]} isAnimationActive={false} />
+            ))}
+          </BarChart>
+        ) : (
+          <LineChart {...common}>
+            {parts}
+            {series.map((s) => (
+              <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={{ r: 2.5 }} connectNulls={false} isAnimationActive={false} />
+            ))}
+          </LineChart>
+        )}
+      </ResponsiveContainer>
+    </div>
   );
 }
 

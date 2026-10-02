@@ -12,7 +12,7 @@ import { Field } from "./field";
 
 // `factorId` is set when the user already has a verified authenticator (challenge).
 // Otherwise the form enrolls a new one and shows the QR code.
-export function MfaForm({ factorId }: { factorId: string | null }) {
+export function MfaForm({ factorId, next = "/dashboard" }: { factorId: string | null; next?: string }) {
   const router = useRouter();
   const [enroll, setEnroll] = useState<EnrollData | null>(null);
   const [loading, setLoading] = useState(factorId === null);
@@ -42,7 +42,7 @@ export function MfaForm({ factorId }: { factorId: string | null }) {
     if (!activeFactor) return;
     const result = await verifyTotp(activeFactor, values);
     if (!result.ok) return toast.error(result.error);
-    router.replace("/dashboard");
+    router.replace(next);
     router.refresh();
   }
 

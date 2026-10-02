@@ -12,7 +12,7 @@ describe("decideAccess", () => {
 
   it("never lets an AAL1 session reach an app page", () => {
     for (const p of ["/dashboard", "/people", "/settings", "/time-off/requests"]) {
-      expect(decideAccess(p, "aal1")).toEqual(to("/mfa"));
+      expect(decideAccess(p, "aal1")).toEqual(to(`/mfa?next=${encodeURIComponent(p)}`));
     }
   });
 
@@ -43,7 +43,7 @@ describe("decideAccess", () => {
 
   it("does not treat look-alike paths as public", () => {
     expect(decideAccess("/careers-admin", null)).toEqual(to("/login?next=%2Fcareers-admin"));
-    expect(decideAccess("/authors", "aal1")).toEqual(to("/mfa"));
+    expect(decideAccess("/authors", "aal1")).toEqual(to("/mfa?next=%2Fauthors"));
     expect(decideAccess("/verify-me", null)).toEqual(to("/login?next=%2Fverify-me"));
     expect(decideAccess("/signing", null)).toEqual(to("/login?next=%2Fsigning"));
   });
