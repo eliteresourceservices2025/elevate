@@ -96,7 +96,7 @@ export function UploadForm({ target, employeeId, types, clients, today }: Props)
   return (
     <form onSubmit={submit} className="space-y-4 rounded-xl border bg-card p-4" noValidate>
       <div role="note" className="flex gap-2 rounded-lg border border-brand-gold bg-brand-gold/10 p-3 text-sm">
-        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-brand-gold-deep" aria-hidden />
+        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-brand-gold-deep dark:text-brand-gold-light" aria-hidden />
         <p>
           <strong>Do not upload client records or patient information.</strong> This vault is for employment documents only.
         </p>

@@ -9,8 +9,8 @@ import { latin } from "@/modules/privacy/pdf";
 
 const styles = StyleSheet.create({
   page: { paddingTop: 56, paddingBottom: 64, paddingHorizontal: 60, fontFamily: "Helvetica", fontSize: 11, lineHeight: 1.45, color: "#1f1b2d" },
-  brand: { flexDirection: "row", alignItems: "center", marginBottom: 22, borderBottomWidth: 2, borderBottomColor: "#8A2BE2", paddingBottom: 8 },
-  brandText: { fontFamily: "Helvetica-Bold", fontSize: 14, color: "#8A2BE2" },
+  brand: { flexDirection: "row", alignItems: "center", marginBottom: 22, borderBottomWidth: 2, borderBottomColor: "#6C1ABA", paddingBottom: 8 },
+  brandText: { fontFamily: "Helvetica-Bold", fontSize: 14, color: "#6C1ABA" },
   h2: { fontFamily: "Helvetica-Bold", fontSize: 18, marginTop: 4, marginBottom: 10 },
   h3: { fontFamily: "Helvetica-Bold", fontSize: 13, marginTop: 12, marginBottom: 6 },
   h4: { fontFamily: "Helvetica-Bold", fontSize: 11.5, marginTop: 8, marginBottom: 4 },

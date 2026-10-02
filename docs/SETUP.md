@@ -342,6 +342,7 @@ Save both in the password manager. Connection strings use the pooler (port 6543)
 
 ### 14c. ELEVATE side
 
+- Add `NEXT_PUBLIC_SAFEVOICE_URL` (the public address of the Safe Voice site, for example `https://voice.<ERS domain>`) to the **ELEVATE** project so everyone gets the "Report a concern" link in the menu. It is a public value, not a secret; with none set the link is hidden in production.
 - Add `SAFEVOICE_HANDLER_DATABASE_URL` (the `safevoice_handler` connection string) to the **ELEVATE** project's environment variables. Without it the Safe Voice cases page says "not connected" and, in production, the `safevoice-notify` job shows as failing in Attendance > Health.
 - **Designate handlers** (Super Admin only): Settings > Roles and access, tick "Safe Voice handler" on a person (audited). No role grants case access, a Super Admin included; name at least two people so one absence does not leave reports unread. If nobody is designated while reports wait, the Super Admins get one in-app warning a day.
 - Run `pnpm db:migrate` against each environment (it creates the roles and tables).

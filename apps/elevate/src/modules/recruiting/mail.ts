@@ -12,7 +12,7 @@ function wrap(heading: string, lines: string[]): { text: string; html: string } 
   const html = `<!doctype html><html><body style="margin:0;background:#f6f3fb;font-family:Inter,Arial,sans-serif;color:#1f1b2d">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px">
 <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden">
-<tr><td style="background:#8A2BE2;padding:16px 24px;color:#ffffff;font-weight:700;font-size:18px">Elite Resource Services</td></tr>
+<tr><td style="background:#6C1ABA;padding:16px 24px;color:#ffffff;font-weight:700;font-size:18px">Elite Resource Services</td></tr>
 <tr><td style="padding:24px"><h1 style="margin:0 0 12px;font-size:18px">${escapeHtml(heading)}</h1>${paragraphs}</td></tr>
 </table></td></tr></table></body></html>`;
   return { text, html };

@@ -13,7 +13,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarNav } from "./sidebar-nav";
 import { ZoneClock } from "./zone-clock";
 
-export function AppHeader({ zone, email, unread = 0, clock = null, hiddenNav = [] }: { hiddenNav?: string[]; zone?: string | null; email?: string; unread?: number; clock?: ClockStatus | null }) {
+export function AppHeader({ zone, email, unread = 0, clock = null, hiddenNav = [], safeVoiceUrl = null }: { safeVoiceUrl?: string | null; hiddenNav?: string[]; zone?: string | null; email?: string; unread?: number; clock?: ClockStatus | null }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -27,7 +27,7 @@ export function AppHeader({ zone, email, unread = 0, clock = null, hiddenNav = [
         </SheetTrigger>
         <SheetContent side="left" className="w-72 gap-0 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SidebarNav hidden={hiddenNav} onNavigate={() => setOpen(false)} />
+          <SidebarNav hidden={hiddenNav} safeVoiceUrl={safeVoiceUrl} onNavigate={() => setOpen(false)} />
         </SheetContent>
       </Sheet>
       <div className="ml-auto hidden items-center md:flex">

@@ -23,11 +23,11 @@ const firstName = (full: string) => full.trim().split(/\s+/)[0] || "there";
 function frame(heading: string, lines: string[], button?: { label: string; url: string }) {
   const text = `${lines.join("\n\n")}${button ? `\n\n${button.label}: ${button.url}` : ""}\n\nElite Resource Services`;
   const paragraphs = lines.map((l) => `<p style="margin:0 0 12px;font-size:14px;line-height:1.5">${escapeHtml(l)}</p>`).join("\n");
-  const cta = button ? `<p style="margin:20px 0"><a href="${escapeHtml(button.url)}" style="background:#8A2BE2;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;display:inline-block">${escapeHtml(button.label)}</a></p>` : "";
+  const cta = button ? `<p style="margin:20px 0"><a href="${escapeHtml(button.url)}" style="background:#6C1ABA;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;display:inline-block">${escapeHtml(button.label)}</a></p>` : "";
   const html = `<!doctype html><html><body style="margin:0;background:#f6f3fb;font-family:Inter,Arial,sans-serif;color:#1f1b2d">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px">
 <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden">
-<tr><td style="background:#8A2BE2;padding:16px 24px;color:#ffffff;font-weight:700;font-size:18px">Elite Resource Services</td></tr>
+<tr><td style="background:#6C1ABA;padding:16px 24px;color:#ffffff;font-weight:700;font-size:18px">Elite Resource Services</td></tr>
 <tr><td style="padding:24px"><h1 style="margin:0 0 12px;font-size:18px">${escapeHtml(heading)}</h1>${paragraphs}${cta}</td></tr>
 </table></td></tr></table></body></html>`;
   return { text, html };

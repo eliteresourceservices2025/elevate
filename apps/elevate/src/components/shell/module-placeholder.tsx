@@ -15,7 +15,7 @@ export function ModulePlaceholder({ href }: { href: string }) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Construction className="size-4 text-brand-gold-dark" aria-hidden />
+            <Construction className="size-4 text-brand-gold-dark dark:text-brand-gold-light" aria-hidden />
             Coming soon
           </CardTitle>
           <CardDescription>This module is not built yet.</CardDescription>

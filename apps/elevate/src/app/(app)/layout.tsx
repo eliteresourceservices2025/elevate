@@ -28,14 +28,16 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const [unread, pending, clock] = await Promise.all([countMyUnread(), listMyPending(), getClockStatus()]);
 
   const hiddenNav = hiddenNavFor(user);
+  // The anonymous reporting site is a separate app on its own address. Not set in production = no link (nothing to point at).
+  const safeVoiceUrl = process.env.NEXT_PUBLIC_SAFEVOICE_URL || (process.env.NODE_ENV === "production" ? null : "http://localhost:3100");
 
   return (
     <div className="flex min-h-screen">
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 lg:block print:hidden">
-        <SidebarNav hidden={hiddenNav} />
+        <SidebarNav hidden={hiddenNav} safeVoiceUrl={safeVoiceUrl} />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <AppHeader hiddenNav={hiddenNav} zone={DEFAULT_TIMEZONE} email={user.email} unread={unread} clock={clock} />
+        <AppHeader hiddenNav={hiddenNav} safeVoiceUrl={safeVoiceUrl} zone={DEFAULT_TIMEZONE} email={user.email} unread={unread} clock={clock} />
         <AckBanner items={pending} today={todayInZone()} />
         <main id="main" className="flex-1 p-4 sm:p-6 lg:p-8 print:p-0">
           {children}
