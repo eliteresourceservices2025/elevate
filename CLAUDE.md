@@ -20,7 +20,7 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **Time zones:** default `America/Phoenix` (MST/AZT, no daylight saving), secondary `Asia/Manila`, every user can choose their own zone. Use `src/lib/time.ts`; never hardcode a zone.
 - **Worker classification: 1099 contractors** (not W-2 employees). Confirm with counsel before building leave accrual, PTO wording, and "employee" copy in the careers page and contracts.
 - **Language:** English only.
-- **Brand:** purple `#8A2BE2` + gold `#E2BE2B`; Source Sans 3 (headings), Inter (body), JetBrains Mono. Gold is for fills and accents, not body text on white (contrast).
+- **Brand:** main purple `#6C1ABA` (the ERS website color; the bosses disliked the earlier dark violet sidebar) + gold `#E2BE2B` as the accent; Source Sans 3 (headings), Inter (body), JetBrains Mono. Text is a neutral deep ink, not violet. Gold is for fills and accents, not body text on white (contrast). **Light and dark themes** (tokens in `globals.css`, `:root` and `.dark`): ELEVATE uses `next-themes` (`ThemeProvider`, `ThemeToggle` in the header: light, device setting (default), dark; the choice is saved in this browser). **Safe Voice follows the device setting and has Auto/Light/Dark buttons that live in page memory only**: it must never write to browser storage (a test scans for it), so a reload returns to the device setting.
 - **Jibble:** build both the API mirror and the nightly fallback comparison; the mirror stays off for a team until a signed monitoring policy exists.
 - **Repo:** https://github.com/eliteresourceservices2025/elevate (private). Do not push without the owner's OK.
 

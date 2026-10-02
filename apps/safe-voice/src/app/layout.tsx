@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ThemeButtons } from "@/components/theme-buttons";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav aria-label="Main">
               <Link href="/">Send a report</Link>
               <Link href="/follow-up">Check a case</Link>
+              <ThemeButtons />
             </nav>
           </div>
         </header>

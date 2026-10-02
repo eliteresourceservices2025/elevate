@@ -1,28 +1,46 @@
 /* Plain, self-contained styles: system fonts and no third-party requests, so nothing is fetched on the reporter's behalf. */
 :root {
-  --purple: #8a2be2;
-  --purple-dark: #5b1a96;
+  --purple: #6c1aba;
+  --purple-dark: #4f1389;
+  --on-purple: #ffffff;
   --gold: #e2be2b;
-  --ink: #1d1530;
-  --muted: #5a5170;
+  --ink: #231a33;
+  --muted: #5d5275;
   --line: #d9d2e6;
   --bg: #faf8fd;
   --card: #ffffff;
   --danger: #b00020;
   --ok-bg: #f1ecfa;
+  color-scheme: light;
 }
+/* Dark follows the device by default; the buttons in the header override it for this page view only (nothing is saved: this site stores nothing in the browser). */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --purple: #b57cf0;
-    --purple-dark: #d2b0f7;
-    --ink: #f1ecfa;
-    --muted: #b7acd0;
+  :root:not([data-theme="light"]) {
+    --purple: #b98cee;
+    --purple-dark: #d7bdf6;
+    --on-purple: #1a1028;
+    --ink: #f1ecf8;
+    --muted: #b9aed0;
     --line: #3a2f55;
-    --bg: #150f24;
-    --card: #1e1632;
+    --bg: #14101c;
+    --card: #1d1728;
     --danger: #ff8a9b;
-    --ok-bg: #2a1f45;
+    --ok-bg: #2a2040;
+    color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --purple: #b98cee;
+  --purple-dark: #d7bdf6;
+  --on-purple: #1a1028;
+  --ink: #f1ecf8;
+  --muted: #b9aed0;
+  --line: #3a2f55;
+  --bg: #14101c;
+  --card: #1d1728;
+  --danger: #ff8a9b;
+  --ok-bg: #2a2040;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); line-height: 1.55; }
@@ -42,7 +60,7 @@ label { display: block; font-weight: 600; margin: 1rem 0 0.25rem; }
 input[type="text"], input[type="password"], select, textarea { width: 100%; padding: 0.6rem 0.7rem; border: 1px solid var(--line); border-radius: 0.5rem; background: var(--card); color: var(--ink); font: inherit; }
 textarea { min-height: 11rem; resize: vertical; }
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid var(--purple); outline-offset: 2px; }
-button { font: inherit; font-weight: 600; background: var(--purple); color: #fff; border: 0; border-radius: 0.5rem; padding: 0.65rem 1.2rem; cursor: pointer; margin-top: 1rem; }
+button { font: inherit; font-weight: 600; background: var(--purple); color: var(--on-purple); border: 0; border-radius: 0.5rem; padding: 0.65rem 1.2rem; cursor: pointer; margin-top: 1rem; }
 button.secondary { background: transparent; color: var(--purple-dark); border: 1px solid var(--purple); }
 button:disabled { opacity: 0.6; cursor: wait; }
 .error { color: var(--danger); font-weight: 600; margin-top: 0.75rem; }
@@ -53,3 +71,6 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .msg small { display: block; color: var(--muted); margin-bottom: 0.25rem; }
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 @media print { header.site, button { display: none; } }
+.theme { display: inline-flex; border: 1px solid var(--line); border-radius: 0.5rem; overflow: hidden; margin-left: 1rem; vertical-align: middle; }
+.theme button { margin: 0; border-radius: 0; background: transparent; color: var(--muted); border: 0; padding: 0.3rem 0.6rem; font-size: 0.85rem; font-weight: 600; }
+.theme button[aria-pressed="true"] { background: var(--purple); color: var(--on-purple); }

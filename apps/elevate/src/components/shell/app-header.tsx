@@ -9,6 +9,7 @@ import { signOut } from "@/modules/auth/actions";
 import { NotificationBell } from "@/modules/notifications/components/notification-bell";
 import type { ClockStatus } from "@/modules/attendance/queries";
 import { ClockWidget } from "./clock-widget";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarNav } from "./sidebar-nav";
 import { ZoneClock } from "./zone-clock";
 
@@ -32,6 +33,7 @@ export function AppHeader({ zone, email, unread = 0, clock = null, hiddenNav = [
       <div className="ml-auto hidden items-center md:flex">
         <ZoneClock zone={zone} />
       </div>
+      <ThemeToggle />
       {/* keyed by the count so a fresh server count resets the bell */}
       <NotificationBell key={unread} unread={unread} />
       <ClockWidget status={clock} />
