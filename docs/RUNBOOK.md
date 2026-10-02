@@ -103,6 +103,15 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 - **A rating needs fixing after it was shared.** Shared reviews are frozen on purpose. Launch a new review, or ask a developer.
 - **Nobody can calibrate my own review.** Another HR admin has to calibrate and share it.
 
+## 5b6. People analytics problems
+
+- **The Analytics page says "No snapshot yet".** The numbers are built each night at 2:50 AM Phoenix by the "Nightly People analytics summaries" job (Attendance, Health shows whether it ran). The first run builds about a year of history by itself. To build it now, run that function from the Inngest dashboard.
+- **Numbers look a day behind.** Normal: the page shows data through yesterday (company time) and says so at the top. A missed night fixes itself: the next run rebuilds from the first missing day.
+- **Something was corrected in the past and the charts still show the old number.** The last 7 days are rebuilt every night. For an older date, a developer runs `rebuildRange(from, to)` (src/modules/analytics/build.ts) for that range; running it twice gives the same result.
+- **"fewer than 5" appears.** On purpose: a group or cell built from fewer than 5 people is never shown, to protect privacy (including in a team lead's view of a small team). Small teams and clients are combined under "Other". Do not work around it by exporting or by asking for a smaller group: the CSV carries the same hidden cells.
+- **Who sees what.** HR and the Executive see everything company-wide (read-only), a team lead only everyone below them, a recruiter only hiring. Only HR downloads the CSV, and every download is logged (analytics.export).
+- **Headcount looks wrong.** Headcount follows people's start and end dates and the dated team, client and manager history. Fix the person's dates in People; the next nightly run (or `rebuildRange`) picks it up.
+
 ## 5c. Signing problems
 
 | What you see | What it means | What to do |

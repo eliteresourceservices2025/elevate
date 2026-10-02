@@ -41,6 +41,7 @@ export const JOBS: Record<string, JobInfo> = {
   "approval-reminders": { label: "Hours approval reminders", everyMinutes: WEEKLY },
   "approval-summary": { label: "Hours approval summary for HR", everyMinutes: WEEKLY },
   "health-check": { label: "Health check", everyMinutes: 30 },
+  "analytics-nightly": { label: "Nightly People analytics summaries", everyMinutes: DAILY },
 };
 
 export type JobState = "ok" | "late" | "failing" | "waiting";

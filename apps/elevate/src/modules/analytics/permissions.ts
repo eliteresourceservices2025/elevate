@@ -5,4 +5,6 @@ import { definePermissions } from "@/lib/roles";
 export const analyticsPermissions = definePermissions({
   "analytics.view": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", executive: "all" } },
   "analytics.view_hiring": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all", executive: "all" } },
+  // The CSV of what the dashboard shows. HR only: the Executive reads on screen.
+  "analytics.export": { roles: { super_admin: "all", hr_admin: "all" } },
 });

@@ -14,6 +14,7 @@ import { runEsignReminders, runEsignSealSweep } from "@/modules/signing/jobs";
 import { runChecklistReminders, runChecklistSync, runSeparations } from "@/modules/onboarding/jobs";
 import { runSafevoiceNotify } from "@/modules/safevoice/jobs";
 import { runEarlyReviewScheduler, runReviewReminders } from "@/modules/reviews/jobs";
+import { runAnalyticsNightly } from "@/modules/analytics/build";
 import { runHealthCheck, trackJob as track } from "@/modules/health/service";
 import { inngest } from "./client";
 
@@ -221,4 +222,10 @@ export const safevoiceNotify = inngest.createFunction(
   async ({ step }) => step.run("notify", () => track("safevoice-notify", () => runSafevoiceNotify())),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify];
+/** Daily at 2:50 AM Phoenix (after the 2:30 attendance rebuild): People analytics summaries; the first run backfills a year, later runs heal gaps. */
+export const analyticsNightly = inngest.createFunction(
+  { id: "analytics-nightly", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 50 2 * * *` } },
+  async ({ step }) => step.run("build", () => track("analytics-nightly", () => runAnalyticsNightly())),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly];
