@@ -11,5 +11,6 @@ export const recruitingPermissions = definePermissions({
   "recruiting.interview": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   "recruiting.scorecard": { roles: { super_admin: "own", hr_admin: "own", recruiter: "own", team_lead: "own" } },
   "recruiting.download_resume": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all", team_lead: "team" } },
+  "recruiting.connect_calendar": { roles: { super_admin: "own", hr_admin: "own", recruiter: "own" } },
   "recruiting.manage_retention": { roles: { super_admin: "all", hr_admin: "all" } },
 });

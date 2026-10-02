@@ -143,12 +143,12 @@ export function NoteForm({ applicationId }: { applicationId: string }) {
   );
 }
 
-export function InterviewForm({ applicationId, people }: { applicationId: string; people: PersonChoice[] }) {
+export function InterviewForm({ applicationId, people, calendar }: { applicationId: string; people: PersonChoice[]; calendar: { connected: boolean; needsReconnect: boolean } }) {
   const { run, pending } = useRun();
   const [kind, setKind] = useState<(typeof INTERVIEW_KINDS)[number]>("interview");
   const [startsAt, setStartsAt] = useState("");
   const [minutes, setMinutes] = useState("45");
-  const [location, setLocation] = useState("");
+  const [location, setLocation] = useState(calendar.connected && !calendar.needsReconnect ? "Google Meet" : "");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [emailCandidate, setEmailCandidate] = useState(true);
   const [note, setNote] = useState("");
@@ -163,10 +163,13 @@ export function InterviewForm({ applicationId, people }: { applicationId: string
         if (!when || Number.isNaN(when.getTime())) return void toast.error("Pick a date and time.");
         run(
           () => scheduleInterview({ applicationId, kind, startsAt: when.toISOString(), minutes: Number(minutes), location, interviewerUserIds: [...picked], emailCandidate, note }),
-          "Interview scheduled. Invites are queued.",
+          (d) => {
+            if (d?.warning) toast.warning(d.warning);
+            return d?.calendar === "google" ? "Interview scheduled on your Google Calendar. Google sends the invites." : "Interview scheduled. Invites are queued.";
+          },
           () => {
             setStartsAt("");
-            setLocation("");
+            setLocation(calendar.connected && !calendar.needsReconnect ? "Google Meet" : "");
             setNote("");
             setPicked(new Set());
           },
@@ -220,6 +223,9 @@ export function InterviewForm({ applicationId, people }: { applicationId: string
         <input id="iv-email" type="checkbox" className="size-4 accent-primary" checked={emailCandidate} onChange={(e) => setEmailCandidate(e.target.checked)} />
         Email the applicant the invite
       </label>
+      <p className="text-xs text-muted-foreground">
+        {calendar.connected && !calendar.needsReconnect ? "This will be created on your Google Calendar with a Meet link, and Google emails the invites." : "Invites go out as calendar files by email. Connect Google Calendar on the Recruiting page to create the event with a Meet link instead."}
+      </p>
       <Button type="submit" disabled={pending || picked.size === 0}>
         Schedule interview
       </Button>
@@ -230,7 +236,7 @@ export function InterviewForm({ applicationId, people }: { applicationId: string
 export function CancelInterviewButton({ interviewId }: { interviewId: string }) {
   const { run, pending } = useRun();
   return (
-    <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => window.confirm("Cancel this interview? Everyone is sent a cancellation.") && run(() => cancelInterview({ interviewId }), "Interview cancelled.")}>
+    <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => window.confirm("Cancel this interview? Everyone is sent a cancellation.") && run<{ warning: string | null }>(() => cancelInterview({ interviewId }), "Interview cancelled.", (d) => d?.warning && toast.warning(d.warning))}>
       Cancel interview
     </Button>
   );

@@ -10,6 +10,7 @@ import { reportName } from "@/modules/org/service";
 import { getPrivacyNotice } from "@/modules/privacy/queries";
 import { BOARD_STAGES, STAGES, type CriterionKey, type Stage } from "./constants";
 import { applicationStageHistory, applications, candidateNotes, candidates, interviewers, interviews, jobOpenings, openingHiringTeam, scorecards } from "./schema";
+import { calendarStatus } from "./calendar";
 import { authorizeForOpening, getRetentionSettings, hiringTeamIds } from "./service";
 
 // ---- Public (no sign-in): only open jobs, only what the page shows -------------------------------------------------------
@@ -155,7 +156,7 @@ async function listAllNames(userIds: string[]): Promise<PersonChoice[]> {
 }
 
 export type ScorecardView = { id: string; interviewerId: string; interviewerName: string; ratings: Partial<Record<CriterionKey, number>>; recommendation: string; comments: string; submittedAt: Date; mine: boolean };
-export type InterviewView = { id: string; kind: string; startsAt: Date; minutes: number; location: string; note: string | null; status: string; interviewers: PersonChoice[]; iAmInterviewer: boolean; mySubmitted: boolean; scorecards: ScorecardView[]; scorecardsHidden: boolean; waitingOn: number };
+export type InterviewView = { id: string; kind: string; startsAt: Date; minutes: number; location: string; note: string | null; status: string; calendarMode: string; meetLink: string | null; interviewers: PersonChoice[]; iAmInterviewer: boolean; mySubmitted: boolean; scorecards: ScorecardView[]; scorecardsHidden: boolean; waitingOn: number };
 
 /**
  * One application with everything needed to decide. Others' scorecards stay hidden from an interviewer until they have
@@ -196,6 +197,8 @@ export async function getApplication(applicationId: string) {
       location: i.location,
       note: i.note,
       status: i.status,
+      calendarMode: i.calendarMode,
+      meetLink: i.meetLink,
       interviewers: panel,
       iAmInterviewer,
       mySubmitted: Boolean(mine),
@@ -217,6 +220,13 @@ export async function getApplication(applicationId: string) {
     canInterview: scopeFor(user, "recruiting.interview") !== null,
     canDownload: true,
   };
+}
+
+/** The signed-in person's Google Calendar connection, for the Recruiting page and the interview form. Only those who may connect see it. */
+export async function getCalendarCard() {
+  const user = await requireUser();
+  await authorize(user, "recruiting.connect_calendar", { ownerUserId: user.id });
+  return calendarStatus(user.id);
 }
 
 export async function getRetentionView() {

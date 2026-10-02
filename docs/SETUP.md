@@ -195,12 +195,38 @@ Every migration also runs `ALTER TABLE … ENABLE ROW LEVEL SECURITY` for each n
 
 ## 6. Google Cloud (sign-in + Calendar)
 
+There are two separate Google "OAuth clients": one for **sign-in** (used by Supabase, steps 1 to 4 below) and one for **interview calendars** (used by ELEVATE itself, section 6b).
+
 1. Create a project "ELEVATE" in Google Cloud Console.
 2. OAuth consent screen: External (ERS uses personal Gmail today), app name ELEVATE, scopes `openid email profile`; add test users while in testing mode, then publish.
 3. Credentials → OAuth client (Web): authorized redirect URI = `https://<supabase-project>.supabase.co/auth/v1/callback`.
 4. Enable the Google Calendar API. Calendar access is requested separately, only from HR and recruiters, with scope `https://www.googleapis.com/auth/calendar.events`.
 
 **Check:** "Sign in with Google" works on localhost.
+
+### 6b. Google Calendar for interviews (Phase 3.1b)
+
+Without this, ELEVATE sends interview invites as calendar files by email (it works). With it, HR and recruiters can connect their own Google Calendar so each interview is created there with a Google Meet link and Google sends the invites.
+
+1. In the same Google Cloud project, open **APIs & Services > Library**, search for **Google Calendar API** and click **Enable**.
+2. Open **Google Auth Platform** (older screens: APIs & Services > OAuth consent screen) and set the app up:
+   - **Audience / user type:** **Internal** if ERS uses Google Workspace (no review needed, tokens do not expire). Otherwise **External**.
+   - App name ELEVATE, a support email, and a developer contact email.
+   - **Data access (scopes):** click Add or remove scopes and add **calendar.events** (Google describes it as "View and edit events on all your calendars"; do not pick the broader plain "calendar" scope), plus `openid` and `.../auth/userinfo.email`.
+   - For External: while the app is in **Testing**, add each recruiter and HR person's Google address as a **Test user**. **Testing mode connections stop working after 7 days**, so people must reconnect weekly. To avoid that, click **Publish app** and complete Google's short verification for the sensitive Calendar scope (a privacy policy page, a demo video and a short explanation), or move ERS to Google Workspace and use Internal.
+3. **Credentials > Create credentials > OAuth client ID > Web application**, name it "ELEVATE Calendar":
+   - **Authorized redirect URIs:** `http://localhost:3000/api/google/callback` for local development, and `https://<your ELEVATE address>/api/google/callback` for production. They must match exactly (no trailing slash).
+4. Copy the **Client ID** and **Client secret** into `apps/elevate/.env.local` (local) or the host's environment (production), never into chat or the repo:
+   ```
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
+   NEXT_PUBLIC_APP_URL=http://localhost:3000   # the address people use; the redirect address is built from it
+   ```
+   Restart the app.
+5. **Check:** sign in as an HR or recruiter account, open **Recruiting**, find the **Google Calendar** card, click **Connect Google Calendar**, approve on Google's screen and you come back to Recruiting saying it is connected. Schedule an interview on a test applicant: it appears on that Google Calendar with a Meet link.
+6. If Google shows "access blocked" or "app not verified": the person is not a Test user yet (External, Testing), or the redirect address does not match step 3.
+
+Disconnecting in ELEVATE revokes the permission at Google. Anyone can also remove it at https://myaccount.google.com/permissions.
 
 ---
 

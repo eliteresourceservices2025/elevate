@@ -10,7 +10,10 @@ import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-act
 import { formatInZone } from "@/lib/time";
 import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
-import { userRoles } from "@/modules/core/schema";
+import { userRoles, users } from "@/modules/core/schema";
+import { randomUUID } from "node:crypto";
+import { createInterviewEvent, deleteInterviewEvent, discardInterviewEvent, removeConnection } from "./calendar";
+import { googleEventIdFor } from "./google";
 import { queueEmails } from "@/modules/notifications/email-queue";
 import { notify } from "@/modules/notifications/service";
 import { canMove } from "./constants";
@@ -169,7 +172,7 @@ export async function addNote(input: unknown): Promise<ActionResult> {
 
 // ---- Interviews and scorecards --------------------------------------------------------------------------------------------
 
-export async function scheduleInterview(input: unknown): Promise<ActionResult<{ id: string }>> {
+export async function scheduleInterview(input: unknown): Promise<ActionResult<{ id: string; calendar: "google" | "ics"; meetLink: string | null; warning: string | null }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "recruiting.interview");
@@ -177,79 +180,116 @@ export async function scheduleInterview(input: unknown): Promise<ActionResult<{ 
     if (!parsed.success) return fail(first(parsed.error));
     const v = parsed.data;
     const panel = [...new Set(v.interviewerUserIds)];
-    const id = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .select({ app: applications, title: jobOpenings.title, name: candidates.fullName, email: candidates.email, anonymized: candidates.anonymizedAt })
-        .from(applications)
-        .innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId))
-        .innerJoin(candidates, eq(candidates.id, applications.candidateId))
-        .where(eq(applications.id, v.applicationId));
-      if (!row) throw new ActionFailure("That application was not found.");
-      if (row.app.stage === "rejected" || row.app.stage === "hired") throw new ActionFailure("This application is closed.");
-      const eligible = await tx.select({ userId: userRoles.userId }).from(userRoles).where(and(inArray(userRoles.userId, panel), inArray(userRoles.roleSlug, ELIGIBLE_INTERVIEWER_ROLES)));
-      if (new Set(eligible.map((e) => e.userId)).size !== panel.length) throw new ActionFailure("One of the interviewers cannot take part in hiring.");
 
-      const [iv] = await tx.insert(interviews).values({ applicationId: v.applicationId, kind: v.kind, startsAt: v.startsAt, minutes: v.minutes, location: v.location, note: v.note ?? null, createdBy: actor.id }).returning({ id: interviews.id });
-      await tx.insert(interviewers).values(panel.map((userId) => ({ interviewId: iv.id, userId })));
-      await writeAudit({ actor, action: "recruiting.interview_schedule", targetType: "application", targetId: v.applicationId, after: { interviewId: iv.id, startsAt: v.startsAt.toISOString(), interviewers: panel.length } }, tx);
+    const [row] = await db
+      .select({ app: applications, title: jobOpenings.title, name: candidates.fullName, email: candidates.email, anonymized: candidates.anonymizedAt })
+      .from(applications)
+      .innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId))
+      .innerJoin(candidates, eq(candidates.id, applications.candidateId))
+      .where(eq(applications.id, v.applicationId));
+    if (!row) return fail("That application was not found.");
+    if (row.app.stage === "rejected" || row.app.stage === "hired") return fail("This application is closed.");
+    const eligible = await db.select({ userId: userRoles.userId }).from(userRoles).where(and(inArray(userRoles.userId, panel), inArray(userRoles.roleSlug, ELIGIBLE_INTERVIEWER_ROLES)));
+    if (new Set(eligible.map((e) => e.userId)).size !== panel.length) return fail("One of the interviewers cannot take part in hiring.");
+    const panelUsers = await db.select({ email: users.email }).from(users).where(inArray(users.id, panel));
 
-      const when = `${formatInZone(v.startsAt, MANILA, "EEE MMM d, h:mm a")} Manila time`;
-      const ics = buildInterviewIcs({ uid: iv.id, summary: `Interview: ${row.title}`, startsAt: v.startsAt, minutes: v.minutes, location: v.location, description: v.note });
-      await queueEmails(
-        tx,
-        panel.map((userId) => ({
-          userId,
-          kind: "invite" as const,
-          subject: "An interview was scheduled with you",
-          heading: "Interview scheduled",
-          lines: [`You are an interviewer. ${when}.`, "The attached file adds it to your calendar. Open ELEVATE for the details and to fill in your scorecard afterwards."],
-          link: `/recruiting/applications/${v.applicationId}`,
-          attachment: { fileName: "interview.ics", mimeType: "text/calendar", content: ics },
-          dedupeKey: `interview:${iv.id}`,
-        })),
-      );
-      await notify(tx, panel.map((userId) => ({ userId, kind: "recruiting.interview", title: "Interview scheduled", body: `${when}.`, link: `/recruiting/applications/${v.applicationId}` })));
-      if (v.emailCandidate && !row.anonymized) {
-        const mail = interviewMail({ fullName: row.name, jobTitle: row.title, when, location: v.location, note: v.note });
-        await queueCandidateEmail(tx, { applicationId: v.applicationId, toEmail: row.email, kind: "interview", subject: mail.subject, text: mail.text, html: mail.html, attachment: { fileName: "interview.ics", mimeType: "text/calendar", content: ics }, dedupeKey: `interview:${iv.id}` });
-      }
-      return iv.id;
+    // If the person scheduling connected their Google Calendar the event is created there first (with a Meet link, and Google sends
+    // the invites); otherwise, or if Google fails, the invites go out as .ics emails as before. Scheduling never fails because of Google.
+    const interviewId = randomUUID();
+    const calendar = await createInterviewEvent(actor.id, {
+      eventId: googleEventIdFor(interviewId),
+      summary: `Interview: ${row.title}`,
+      description: v.note ?? null,
+      location: v.location,
+      startsAt: v.startsAt,
+      minutes: v.minutes,
+      attendeeEmails: [...panelUsers.map((u) => u.email), ...(v.emailCandidate && !row.anonymized ? [row.email] : [])],
     });
-    const openingId = await openingIdOfApplication(db, v.applicationId);
-    refresh(openingId ?? undefined, v.applicationId);
-    return { ok: true, data: { id } };
+
+    try {
+      await db.transaction(async (tx) => {
+        const [fresh] = await tx.select({ stage: applications.stage }).from(applications).where(eq(applications.id, v.applicationId));
+        if (!fresh || fresh.stage === "rejected" || fresh.stage === "hired") throw new ActionFailure("This application is closed.");
+        await tx.insert(interviews).values({
+          id: interviewId,
+          applicationId: v.applicationId,
+          kind: v.kind,
+          startsAt: v.startsAt,
+          minutes: v.minutes,
+          location: v.location,
+          note: v.note ?? null,
+          createdBy: actor.id,
+          ...(calendar.mode === "google" ? { calendarMode: "google", googleEventId: calendar.eventId, meetLink: calendar.meetLink, calendarUserId: actor.id } : {}),
+        });
+        await tx.insert(interviewers).values(panel.map((userId) => ({ interviewId, userId })));
+        await writeAudit({ actor, action: "recruiting.interview_schedule", targetType: "application", targetId: v.applicationId, after: { interviewId, startsAt: v.startsAt.toISOString(), interviewers: panel.length, calendar: calendar.mode } }, tx);
+
+        const when = `${formatInZone(v.startsAt, MANILA, "EEE MMM d, h:mm a")} Manila time`;
+        await notify(tx, panel.map((userId) => ({ userId, kind: "recruiting.interview", title: "Interview scheduled", body: `${when}.`, link: `/recruiting/applications/${v.applicationId}` })));
+        if (calendar.mode === "ics") {
+          const ics = buildInterviewIcs({ uid: interviewId, summary: `Interview: ${row.title}`, startsAt: v.startsAt, minutes: v.minutes, location: v.location, description: v.note });
+          await queueEmails(
+            tx,
+            panel.map((userId) => ({
+              userId,
+              kind: "invite" as const,
+              subject: "An interview was scheduled with you",
+              heading: "Interview scheduled",
+              lines: [`You are an interviewer. ${when}.`, "The attached file adds it to your calendar. Open ELEVATE for the details and to fill in your scorecard afterwards."],
+              link: `/recruiting/applications/${v.applicationId}`,
+              attachment: { fileName: "interview.ics", mimeType: "text/calendar", content: ics },
+              dedupeKey: `interview:${interviewId}`,
+            })),
+          );
+          if (v.emailCandidate && !row.anonymized) {
+            const mail = interviewMail({ fullName: row.name, jobTitle: row.title, when, location: v.location, note: v.note });
+            await queueCandidateEmail(tx, { applicationId: v.applicationId, toEmail: row.email, kind: "interview", subject: mail.subject, text: mail.text, html: mail.html, attachment: { fileName: "interview.ics", mimeType: "text/calendar", content: ics }, dedupeKey: `interview:${interviewId}` });
+          }
+        }
+      });
+    } catch (error) {
+      if (calendar.mode === "google") await discardInterviewEvent(actor.id, calendar.eventId); // do not leave an orphan event on their calendar
+      throw error;
+    }
+    refresh(row.app.openingId, v.applicationId);
+    return { ok: true, data: { id: interviewId, calendar: calendar.mode, meetLink: calendar.mode === "google" ? calendar.meetLink : null, warning: calendar.mode === "ics" ? calendar.warning : null } };
   });
 }
 
-export async function cancelInterview(input: unknown): Promise<ActionResult> {
+export async function cancelInterview(input: unknown): Promise<ActionResult<{ warning: string | null }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "recruiting.interview");
     const parsed = cancelInterviewSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
     const { interviewId } = parsed.data;
-    const applicationId = await db.transaction(async (tx) => {
+    const done = await db.transaction(async (tx) => {
       const [iv] = await tx.select().from(interviews).where(eq(interviews.id, interviewId)).for("update");
       if (!iv) throw new ActionFailure("That interview was not found.");
       if (iv.status === "cancelled") throw new ActionFailure("It is already cancelled.");
       await tx.update(interviews).set({ status: "cancelled" }).where(eq(interviews.id, interviewId));
-      await writeAudit({ actor, action: "recruiting.interview_cancel", targetType: "application", targetId: iv.applicationId, after: { interviewId } }, tx);
+      await writeAudit({ actor, action: "recruiting.interview_cancel", targetType: "application", targetId: iv.applicationId, after: { interviewId, calendar: iv.calendarMode } }, tx);
       const panel = await tx.select({ userId: interviewers.userId }).from(interviewers).where(eq(interviewers.interviewId, interviewId));
-      const ics = buildInterviewIcs({ uid: iv.id, summary: "Interview cancelled", startsAt: iv.startsAt, minutes: iv.minutes, location: iv.location, method: "CANCEL" });
-      await queueEmails(
-        tx,
-        panel.map((p) => ({ userId: p.userId, kind: "invite" as const, subject: "An interview was cancelled", heading: "Interview cancelled", lines: ["An interview you were part of was cancelled. The attached file removes it from your calendar."], link: `/recruiting/applications/${iv.applicationId}`, attachment: { fileName: "interview-cancelled.ics", mimeType: "text/calendar", content: ics }, dedupeKey: `interview-cancel:${iv.id}` })),
-      );
-      const [cand] = await tx.select({ name: candidates.fullName, email: candidates.email, anonymized: candidates.anonymizedAt }).from(applications).innerJoin(candidates, eq(candidates.id, applications.candidateId)).where(eq(applications.id, iv.applicationId));
-      if (cand && !cand.anonymized) {
-        // Only if they were told about it in the first place.
-        await queueCandidateEmail(tx, { applicationId: iv.applicationId, toEmail: cand.email, kind: "interview", subject: "Your interview was cancelled", text: `Hi,\n\nYour interview with Elite Resource Services was cancelled. We will be in touch about a new time.\n\nElite Resource Services`, html: `<p>Hi,</p><p>Your interview with Elite Resource Services was cancelled. We will be in touch about a new time.</p>`, attachment: { fileName: "interview-cancelled.ics", mimeType: "text/calendar", content: ics }, dedupeKey: `interview-cancel:${iv.id}` });
+      await notify(tx, panel.map((p) => ({ userId: p.userId, kind: "recruiting.interview_cancelled", title: "An interview was cancelled", body: "Open the applicant for details.", link: `/recruiting/applications/${iv.applicationId}` })));
+      // A Google event is removed from the calendar (Google tells the guests, after the commit). Otherwise cancellation files go out as email.
+      if (iv.calendarMode === "ics") {
+        const ics = buildInterviewIcs({ uid: iv.id, summary: "Interview cancelled", startsAt: iv.startsAt, minutes: iv.minutes, location: iv.location, method: "CANCEL" });
+        await queueEmails(
+          tx,
+          panel.map((p) => ({ userId: p.userId, kind: "invite" as const, subject: "An interview was cancelled", heading: "Interview cancelled", lines: ["An interview you were part of was cancelled. The attached file removes it from your calendar."], link: `/recruiting/applications/${iv.applicationId}`, attachment: { fileName: "interview-cancelled.ics", mimeType: "text/calendar", content: ics }, dedupeKey: `interview-cancel:${iv.id}` })),
+        );
+        const [cand] = await tx.select({ name: candidates.fullName, email: candidates.email, anonymized: candidates.anonymizedAt }).from(applications).innerJoin(candidates, eq(candidates.id, applications.candidateId)).where(eq(applications.id, iv.applicationId));
+        if (cand && !cand.anonymized) {
+          // Only if they were told about it in the first place.
+          await queueCandidateEmail(tx, { applicationId: iv.applicationId, toEmail: cand.email, kind: "interview", subject: "Your interview was cancelled", text: "Hi,\n\nYour interview with Elite Resource Services was cancelled. We will be in touch about a new time.\n\nElite Resource Services", html: "<p>Hi,</p><p>Your interview with Elite Resource Services was cancelled. We will be in touch about a new time.</p>", attachment: { fileName: "interview-cancelled.ics", mimeType: "text/calendar", content: ics }, dedupeKey: `interview-cancel:${iv.id}` });
+        }
       }
-      return iv.applicationId;
+      return { applicationId: iv.applicationId, eventId: iv.googleEventId, calendarUserId: iv.calendarUserId };
     });
-    const openingId = await openingIdOfApplication(db, applicationId);
-    refresh(openingId ?? undefined, applicationId);
-    return { ok: true, data: undefined };
+    const warning = done.eventId && done.calendarUserId ? await deleteInterviewEvent(done.calendarUserId, done.eventId) : null;
+    const openingId = await openingIdOfApplication(db, done.applicationId);
+    refresh(openingId ?? undefined, done.applicationId);
+    return { ok: true, data: { warning } };
   });
 }
 
@@ -315,6 +355,16 @@ export async function saveRetention(input: unknown): Promise<ActionResult> {
         .onConflictDoUpdate({ target: recruitingSettings.id, set: { retentionEnabled: v.enabled, rejectedMonths: v.rejectedMonths, withdrawnMonths: v.withdrawnMonths, updatedBy: actor.id, updatedAt: new Date() } });
       await writeAudit({ actor, action: "recruiting.retention_settings", targetType: "recruiting_settings", targetId: "1", before: before ? { enabled: before.retentionEnabled, rejected: before.rejectedMonths, withdrawn: before.withdrawnMonths } : null, after: { enabled: v.enabled, rejected: v.rejectedMonths, withdrawn: v.withdrawnMonths } }, tx);
     });
+    revalidatePath("/recruiting");
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Disconnects the signed-in person's own Google Calendar: the permission is revoked at Google and the stored token deleted. */
+export async function disconnectCalendar(): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await removeConnection(actor);
     revalidatePath("/recruiting");
     return { ok: true, data: undefined };
   });

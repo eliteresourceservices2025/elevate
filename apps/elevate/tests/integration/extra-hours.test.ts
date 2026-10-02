@@ -360,7 +360,13 @@ describe("what approved extra hours do to the day", () => {
 });
 
 describe("a session left open past the shift with approved extra hours", () => {
-  const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+  // The shifts in these tests are built from "now". In a zone where it is about noon right now they never cross midnight, so the
+  // tests give the same answer at any time of day (a plain UTC shift built at 1 AM would start on the previous day).
+  const noonZone = () => {
+    const offset = 12 - new Date().getUTCHours(); // UTC+offset has local time around 12:00
+    return offset === 0 ? "Etc/GMT" : `Etc/GMT${offset > 0 ? "-" : "+"}${Math.abs(offset)}`;
+  };
+  const hhmmIn = (zone: string, ms: number) => formatInZone(ms, zone, "HH:mm");
 
   it("is not a missed clock-out while the approved window runs on from the shift, only after it", async () => {
     const clientId = await newClient();
@@ -368,10 +374,11 @@ describe("a session left open past the shift with approved extra hours", () => {
     const inside = await person("MissInside", { managerId: lead.employeeId, clientId });
     const after = await person("MissAfter", { managerId: lead.employeeId, clientId });
     const now = Date.now();
+    const zone = noonZone();
     for (const p of [inside, after]) {
-      await db.execute(sql`insert into time.clock_prefs (employee_id, time_zone) values (${p.employeeId}, 'UTC')`);
+      await db.execute(sql`insert into time.clock_prefs (employee_id, time_zone) values (${p.employeeId}, ${zone})`);
       await db.execute(sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone)
-        values (${p.employeeId}, current_date - 5, ${hhmm(now - 6 * HOUR)}, ${hhmm(now - 3 * HOUR)}, array[1,2,3,4,5,6,7]::smallint[], 0, 'UTC')`); // ended 3 hours ago
+        values (${p.employeeId}, current_date - 5, ${hhmmIn(zone, now - 6 * HOUR)}, ${hhmmIn(zone, now - 3 * HOUR)}, array[1,2,3,4,5,6,7]::smallint[], 0, ${zone})`); // ended 3 hours ago
       await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', ${new Date(now - 6 * HOUR).toISOString()})`);
     }
     const approve = (p: typeof inside, from: number, to: number) =>
@@ -389,9 +396,10 @@ describe("a session left open past the shift with approved extra hours", () => {
     const clientId = await newClient();
     const p = await person("StatusP", { clientId });
     const now = Date.now();
-    await db.execute(sql`insert into time.clock_prefs (employee_id, time_zone) values (${p.employeeId}, 'UTC')`);
+    const zone = noonZone();
+    await db.execute(sql`insert into time.clock_prefs (employee_id, time_zone) values (${p.employeeId}, ${zone})`);
     await db.execute(sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone)
-      values (${p.employeeId}, current_date - 5, ${hhmm(now - 2 * HOUR)}, ${hhmm(now + 2 * HOUR)}, array[1,2,3,4,5,6,7]::smallint[], 0, 'UTC')`);
+      values (${p.employeeId}, current_date - 5, ${hhmmIn(zone, now - 2 * HOUR)}, ${hhmmIn(zone, now + 2 * HOUR)}, array[1,2,3,4,5,6,7]::smallint[], 0, ${zone})`);
     await db.execute(sql`insert into time.extra_hours_requests (employee_id, client_id, source, status, window_start, window_end, minutes, contact_name, reason, filed_by, decided_at)
       values (${p.employeeId}, ${clientId}, 'va', 'approved', ${new Date(now + 2 * HOUR).toISOString()}, ${new Date(now + 4 * HOUR).toISOString()}, 120, 'Dana', 'Client work', ${p.user.id}, now())`);
     as(p.user);

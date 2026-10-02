@@ -136,3 +136,26 @@ test("a card can be dragged to another stage with the keyboard", async ({ browse
   await hrPage.keyboard.press("Space");
   await expect(hrPage.locator("section[data-stage='screening']").getByRole("link", { name: `Dan Dragger${stamp}` })).toBeVisible(slow);
 });
+
+test("the Google Calendar card is for HR and recruiters only; connecting is refused for everyone else", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const slow = { timeout: 30_000 };
+  const hrPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hrPage, await createHrAccount());
+  await hrPage.goto("/recruiting");
+  const card = hrPage.getByRole("region", { name: "Google Calendar" });
+  await expect(card).toBeVisible(slow);
+  // Either the server has Google credentials (a Connect button) or it says it is not set up: never a broken state
+  await expect(card.getByText(/Connect Google Calendar|Not set up on this server yet/).first()).toBeVisible();
+  // Starting a connection redirects (to Google, or back with a status when there are no credentials)
+  const start = await hrPage.request.get("/api/google/connect", { maxRedirects: 0 });
+  expect(start.status()).toBe(307);
+  // The callback refuses a missing or wrong state
+  const bad = await hrPage.request.get("/api/google/callback?code=x&state=wrong", { maxRedirects: 0 });
+  expect(bad.status()).toBe(307);
+  expect(bad.headers()["location"]).toContain("calendar=failed");
+
+  const empPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(empPage, await createEmployeeAccount("Eli", `Cal${Date.now()}`));
+  expect((await empPage.request.get("/api/google/connect", { maxRedirects: 0 })).status()).toBe(404);
+});

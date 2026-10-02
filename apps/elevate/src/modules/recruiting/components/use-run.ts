@@ -8,12 +8,13 @@ import { toast } from "sonner";
 export function useRun() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const run = <T,>(fn: () => Promise<{ ok: boolean; error?: string; data?: T }>, success: string, after?: (data: T | undefined) => void) =>
+  const run = <T,>(fn: () => Promise<{ ok: boolean; error?: string; data?: T }>, success: string | ((data: T | undefined) => string), after?: (data: T | undefined) => void) =>
     startTransition(async () => {
       try {
         const result = await fn();
         if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
-        toast.success(success);
+        const message = typeof success === "function" ? success(result.data) : success;
+        if (message) toast.success(message);
         after?.(result.data);
         router.refresh();
       } catch {

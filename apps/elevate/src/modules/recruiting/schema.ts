@@ -159,13 +159,37 @@ export const interviews = talent
       location: text("location").notNull(),
       note: text("note"),
       status: text("status").notNull().default("scheduled"),
+      /** ics = invites go out as .ics emails; google = an event on the organizer's Google Calendar (Google sends the invites). */
+      calendarMode: text("calendar_mode").notNull().default("ics"),
+      googleEventId: text("google_event_id"),
+      meetLink: text("meet_link"),
+      /** Whose Google Calendar holds the event (needed to cancel it). */
+      calendarUserId: uuid("calendar_user_id").references(() => users.id),
       createdBy: uuid("created_by")
         .notNull()
         .references(() => users.id),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
-    (t) => [index("interviews_app_idx").on(t.applicationId, t.startsAt), check("interviews_status_chk", sql`${t.status} in ('scheduled','cancelled')`)],
+    (t) => [
+      index("interviews_app_idx").on(t.applicationId, t.startsAt),
+      check("interviews_status_chk", sql`${t.status} in ('scheduled','cancelled')`),
+      check("interviews_calendar_chk", sql`${t.calendarMode} in ('ics','google') and (${t.calendarMode} = 'ics' or (${t.googleEventId} is not null and ${t.calendarUserId} is not null))`),
+    ],
   )
+  .enableRLS();
+
+/** A recruiter's or HR person's connection to their own Google Calendar. The refresh token is encrypted (field encryption, bound to the user). */
+export const calendarConnections = talent
+  .table("calendar_connections", {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id),
+    googleEmail: text("google_email").notNull(),
+    refreshTokenEnc: text("refresh_token_enc").notNull(),
+    connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set when Google refused the token (revoked or expired): the person must reconnect. A short code only, never a response body. */
+    needsReconnect: boolean("needs_reconnect").notNull().default(false),
+  })
   .enableRLS();
 
 export const interviewers = talent

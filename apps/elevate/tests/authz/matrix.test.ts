@@ -83,6 +83,7 @@ const EXPECTED: Record<string, string> = {
   "recruiting.interview": "A A - A - -",
   "recruiting.scorecard": "O O O O - -", // only your own, only as an interviewer on that interview
   "recruiting.download_resume": "A A T A - -",
+  "recruiting.connect_calendar": "O O - O - -", // your own Google Calendar only
   "recruiting.manage_retention": "A A - - - -",
   "signing.manage": "A A - - - -",
   "signing.view_own": "O O O O O O",

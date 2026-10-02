@@ -67,6 +67,15 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 | Nothing is being deleted for old applicants | Retention is off until HR turns it on, on purpose. | Get counsel's approval of the periods, then switch it on in Recruiting > Applicant data retention. |
 | A resume will not open | The link lasts 60 seconds. | Click "Open resume" again. |
 
+## 5b2. Google Calendar problems
+
+| What you see | What it means | What to do |
+|---|---|---|
+| Recruiting page: "Not set up on this server yet" | The Google credentials are not on the server. Interviews still work with emailed calendar files. | The developer adds GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (docs/SETUP.md 6b). |
+| "Google stopped accepting the connection" or a warning after scheduling | The person removed access, or (External app in Testing mode) 7 days passed. The interview was still scheduled and invites went out by email. | Click Reconnect on the Recruiting page. To stop weekly reconnects, publish the Google app or use Google Workspace (Internal). |
+| Google says "access blocked" or "app not verified" when connecting | The person is not an allowed Test user, or the redirect address does not match. | Add them as a Test user in Google Cloud, or check the redirect address. |
+| A cancelled interview is still on someone's Google Calendar | Google could not remove it at that moment. | Delete the event in Google Calendar by hand. |
+
 ## 5c. Signing problems
 
 | What you see | What it means | What to do |

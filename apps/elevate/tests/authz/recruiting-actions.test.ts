@@ -34,6 +34,7 @@ const cases: { name: string; allowed: RoleSlug[]; call: () => Promise<{ ok: bool
   { name: "scheduleInterview", allowed: MANAGERS, call: () => actions.scheduleInterview({}) },
   { name: "cancelInterview", allowed: MANAGERS, call: () => actions.cancelInterview({ interviewId: ID }) },
   { name: "submitScorecard", allowed: INTERVIEWERS, call: () => actions.submitScorecard({}) },
+  { name: "disconnectCalendar", allowed: MANAGERS, call: () => actions.disconnectCalendar() },
   { name: "saveRetention", allowed: HR, call: () => actions.saveRetention({ enabled: false, rejectedMonths: 12, withdrawnMonths: 6 }) },
 ];
 
@@ -59,6 +60,7 @@ describe("Recruiting actions, every role", () => {
 const queryCases: { name: string; allowed: RoleSlug[]; call: () => Promise<unknown> }[] = [
   { name: "listOpenings", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead"], call: () => queries.listOpenings() },
   { name: "getRecruitingSummary", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead", "executive"], call: () => queries.getRecruitingSummary() },
+  { name: "getCalendarCard", allowed: MANAGERS, call: () => queries.getCalendarCard() },
   { name: "getRetentionView", allowed: HR, call: () => queries.getRetentionView() },
   { name: "getOpeningFormOptions", allowed: MANAGERS, call: () => queries.getOpeningFormOptions() },
   { name: "listInterviewerChoices", allowed: MANAGERS, call: () => queries.listInterviewerChoices() },

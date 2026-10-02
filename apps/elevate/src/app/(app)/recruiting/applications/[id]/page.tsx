@@ -7,20 +7,23 @@ import { orNotFound } from "@/lib/or-not-found";
 import { formatInZone, SECONDARY_TIMEZONE } from "@/lib/time";
 import { CancelInterviewButton, InterviewForm, MoveControls, NoteForm, RejectForm, ResumeViewer, ScorecardForm } from "@/modules/recruiting/components/application-panels";
 import { CRITERIA, INTERVIEW_KIND_LABELS, RECOMMENDATION_LABELS, STAGE_LABELS, averageRating, type Recommendation } from "@/modules/recruiting/constants";
-import { getApplication, listInterviewerChoices } from "@/modules/recruiting/queries";
+import { scopeFor } from "@/lib/authz";
+import { getApplication, getCalendarCard, listInterviewerChoices } from "@/modules/recruiting/queries";
 
 export const metadata: Metadata = { title: "Applicant" };
 
 const REC_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = { strong_yes: "default", yes: "default", no: "secondary", strong_no: "destructive" };
 
 export default async function ApplicationPage({ params }: PageProps<"/recruiting/applications/[id]">) {
-  await requireUser();
+  const user = await requireUser();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const data = await orNotFound(getApplication(id));
   const { application: app, candidate, opening } = data;
   const open = app.stage !== "rejected" && app.stage !== "hired";
   const people = data.canInterview ? await orNotFound(listInterviewerChoices()) : [];
+  // The scheduler's own Google Calendar connection (only HR, Super Admin and recruiters can have one)
+  const calendar = data.canInterview && scopeFor(user, "recruiting.connect_calendar") ? await orNotFound(getCalendarCard()) : { connected: false, needsReconnect: false };
   const name = candidate.removed ? "Removed applicant" : candidate.name;
 
   return (
@@ -98,12 +101,21 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{INTERVIEW_KIND_LABELS[i.kind as keyof typeof INTERVIEW_KIND_LABELS] ?? i.kind}</span>
                   {i.status === "cancelled" ? <Badge variant="destructive">Cancelled</Badge> : null}
+                  {i.calendarMode === "google" ? <Badge variant="outline">On Google Calendar</Badge> : null}
                   <span className="text-sm">
                     {formatInZone(i.startsAt, undefined, "EEE MMM d, h:mm a")} ({i.minutes} min) · {formatInZone(i.startsAt, SECONDARY_TIMEZONE, "h:mm a")} Manila
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {i.location}. Interviewers: {i.interviewers.map((p) => p.name).join(", ")}.
+                  {i.meetLink ? (
+                    <>
+                      {" "}
+                      <a href={i.meetLink} target="_blank" rel="noopener noreferrer" className="text-primary underline-offset-4 hover:underline">
+                        Join with Google Meet
+                      </a>
+                    </>
+                  ) : null}
                 </p>
                 {i.note ? <p className="text-sm">{i.note}</p> : null}
                 {data.canInterview && i.status === "scheduled" && !started ? <CancelInterviewButton interviewId={i.id} /> : null}
@@ -135,7 +147,7 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
           <details>
             <summary className="cursor-pointer text-sm font-medium text-primary">Schedule an interview</summary>
             <div className="mt-3">
-              <InterviewForm applicationId={app.id} people={people} />
+              <InterviewForm applicationId={app.id} people={people} calendar={calendar} />
             </div>
           </details>
         ) : null}

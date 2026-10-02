@@ -11,9 +11,10 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { paginate, parsePaging } from "@/lib/pagination";
 import { formatInZone } from "@/lib/time";
+import { CalendarCard } from "@/modules/recruiting/components/calendar-card";
 import { RetentionForm } from "@/modules/recruiting/components/opening-forms";
 import { STAGE_LABELS, STAGES } from "@/modules/recruiting/constants";
-import { getRecruitingSummary, getRetentionView, listOpenings } from "@/modules/recruiting/queries";
+import { getCalendarCard, getRecruitingSummary, getRetentionView, listOpenings } from "@/modules/recruiting/queries";
 
 export const metadata: Metadata = { title: "Recruiting" };
 
@@ -27,6 +28,7 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
   if (!canView && !scopeFor(user, "recruiting.summary")) notFound(); // nothing here for this role: same answer as a missing page
   const summary = scopeFor(user, "recruiting.summary") ? await orNotFound(getRecruitingSummary()) : null;
   const openings = canView ? await orNotFound(listOpenings()) : null;
+  const calendar = scopeFor(user, "recruiting.connect_calendar") ? await orNotFound(getCalendarCard()) : null;
   const retention = scopeFor(user, "recruiting.manage_retention") ? await orNotFound(getRetentionView()) : null;
   const paging = parsePaging({ page: sp.page, size: sp.size }, 10);
   const page = openings ? paginate(openings.rows, paging.page, paging.pageSize) : null;
@@ -118,6 +120,8 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
           )}
         </section>
       ) : null}
+
+      {calendar ? <CalendarCard status={calendar} flash={typeof sp.calendar === "string" ? sp.calendar : undefined} /> : null}
 
       {retention ? (
         <section aria-label="Applicant data retention" className="space-y-2 rounded-xl border bg-card p-4">
