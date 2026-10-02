@@ -121,6 +121,15 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
         </section>
       ) : null}
 
+      {scopeFor(user, "offers.manage_templates") ? (
+        <p className="text-sm">
+          <Link href="/recruiting/offer-templates" className="font-medium text-primary underline-offset-4 hover:underline">
+            Offer templates
+          </Link>{" "}
+          <span className="text-muted-foreground">: the letters recruiters send for signature.</span>
+        </p>
+      ) : null}
+
       {calendar ? <CalendarCard status={calendar} flash={typeof sp.calendar === "string" ? sp.calendar : undefined} /> : null}
 
       {retention ? (

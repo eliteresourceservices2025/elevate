@@ -1,0 +1,2 @@
+ALTER TABLE "docs"."esign_signers" ADD COLUMN "previous_token_hash" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "esign_signers_prev_token_idx" ON "docs"."esign_signers" USING btree ("previous_token_hash") WHERE "docs"."esign_signers"."previous_token_hash" is not null;

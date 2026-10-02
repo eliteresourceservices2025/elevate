@@ -20,6 +20,10 @@ export const POLICIES = {
   careers: { requests: 5, window: "1 h" },
   /** The public "verify a document" check, per address. */
   verify: { requests: 30, window: "10 m" },
+  /** An outside signer asking for an emailed code (per link), checking a code (per link), and everything else on their pages (per address). */
+  signCode: { requests: 5, window: "1 h" },
+  signVerify: { requests: 20, window: "10 m" },
+  signPublic: { requests: 120, window: "10 m" },
 } satisfies Record<string, Policy>;
 
 /**

@@ -23,7 +23,7 @@ export async function openSigningDocument(actor: AuthUser, envelopeId: string): 
   if (!env) throw new ActionFailure("That document was not found.");
   const isManager = await authorize(actor, "signing.manage").then(() => true, () => false);
   if (!isManager) {
-    await authorize(actor, "signing.view_own", { ownerUserId: mine?.userId });
+    await authorize(actor, "signing.view_own", { ownerUserId: mine?.userId ?? undefined });
     if (env.status === "draft") throw new ActionFailure("That document was not found.");
   }
   if (!(await allowRequest("download", actor.id))) throw new ActionFailure("Too many downloads. Wait a few minutes and try again.");

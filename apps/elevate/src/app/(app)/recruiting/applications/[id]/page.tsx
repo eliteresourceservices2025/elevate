@@ -8,6 +8,8 @@ import { formatInZone, SECONDARY_TIMEZONE } from "@/lib/time";
 import { CancelInterviewButton, InterviewForm, MoveControls, NoteForm, RejectForm, ResumeViewer, ScorecardForm } from "@/modules/recruiting/components/application-panels";
 import { CRITERIA, INTERVIEW_KIND_LABELS, RECOMMENDATION_LABELS, STAGE_LABELS, averageRating, type Recommendation } from "@/modules/recruiting/constants";
 import { scopeFor } from "@/lib/authz";
+import { OfferPanel } from "@/modules/offers/components/offer-panel";
+import { getOfferPanel } from "@/modules/offers/queries";
 import { getApplication, getCalendarCard, listInterviewerChoices } from "@/modules/recruiting/queries";
 
 export const metadata: Metadata = { title: "Applicant" };
@@ -25,6 +27,7 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
   // The scheduler's own Google Calendar connection (only HR, Super Admin and recruiters can have one)
   const calendar = data.canInterview && scopeFor(user, "recruiting.connect_calendar") ? await orNotFound(getCalendarCard()) : { connected: false, needsReconnect: false };
   const name = candidate.removed ? "Removed applicant" : candidate.name;
+  const offerPanel = !candidate.removed && scopeFor(user, "offers.view") ? await orNotFound(getOfferPanel(app.id)) : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -89,6 +92,8 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
           ) : null}
         </section>
       ) : null}
+
+      {offerPanel ? <OfferPanel applicationId={app.id} panel={offerPanel} /> : null}
 
       <section aria-label="Interviews" className="space-y-3 rounded-xl border bg-card p-4">
         <h2 className="text-lg font-semibold">Interviews and scorecards</h2>

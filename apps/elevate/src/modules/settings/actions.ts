@@ -11,6 +11,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { writeAudit } from "@/modules/audit/write";
 import { invitations, userRoles, users } from "@/modules/core/schema";
 import { sendInvitationEmail } from "./invitation-email";
+import { ensureInvitation } from "./invite";
 import { planRoleChange } from "./plan";
 import {
   createInvitationSchema,
@@ -20,7 +21,6 @@ import {
   setUserRolesSchema,
 } from "./validators";
 
-const INVITE_DAYS = 7;
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -179,34 +179,9 @@ export async function createInvitation(input: unknown): Promise<ActionResult<{ e
     const { email } = parsed.data;
 
     const result = await db.transaction(async (tx) => {
-      const [account] = await tx
-        .select({ id: users.id })
-        .from(users)
-        .where(sql`lower(${users.email}) = ${email}`)
-        .limit(1);
-      if (account) return fail("That person already has an account.");
-
-      const expiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000);
-      // Re-inviting refreshes the expiry. The unique index on lower(email) guards against a race.
-      const [existing] = await tx
-        .select({ id: invitations.id })
-        .from(invitations)
-        .where(sql`lower(${invitations.email}) = ${email}`)
-        .limit(1);
-      if (existing) {
-        await tx
-          .update(invitations)
-          .set({ invitedBy: actor.id, expiresAt, acceptedAt: null, createdAt: new Date() })
-          .where(eq(invitations.id, existing.id));
-      } else {
-        await tx.insert(invitations).values({ email, invitedBy: actor.id, expiresAt });
-      }
-
-      await writeAudit(
-        { actor, action: "invitation.create", targetType: "invitation", targetId: email, after: { email, expiresAt } },
-        tx,
-      );
-      return { ok: true, data: { emailed: false, expiresAt } } as const;
+      const saved = await ensureInvitation(tx, actor, email);
+      if (saved.exists) return fail("That person already has an account.");
+      return { ok: true, data: { emailed: false, expiresAt: saved.expiresAt } } as const;
     });
 
     if (!result.ok) return result;

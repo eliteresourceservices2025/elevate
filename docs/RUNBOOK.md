@@ -76,6 +76,17 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 | Google says "access blocked" or "app not verified" when connecting | The person is not an allowed Test user, or the redirect address does not match. | Add them as a Test user in Google Cloud, or check the redirect address. |
 | A cancelled interview is still on someone's Google Calendar | Google could not remove it at that moment. | Delete the event in Google Calendar by hand. |
 
+## 5b3. Offers and hiring problems
+
+| What you see | What it means | What to do |
+|---|---|---|
+| "Offer made, but the email could not be sent" | The email service is not set up or refused the message. The offer exists and the applicant was not told. | Fix the email settings, then open the offer and click **Send link again**. |
+| The applicant says the link is "not valid anymore" | It was replaced by a newer email, the offer was withdrawn, it expired, or it is more than 30 days old. | Click **Send link again** (a new link replaces any old one), or make a new offer. |
+| The applicant did not get the 6-digit code | The code email may be in spam, or five codes were already sent this hour. | Ask them to check spam and wait a little; they can ask for a new code on the page. |
+| The applicant cannot sign | They must read the document first, and (with a countersigner) it must be their turn. | Ask them to open the document with "Read the document". |
+| "Hire" says there is no signed offer | The applicant has not signed. | Wait, resend, or hire with a written reason (for example signed on paper). The reason is recorded. |
+| Hire says that work email already exists | That email already belongs to a person record. | Use a different work email, or open the existing record. |
+
 ## 5c. Signing problems
 
 | What you see | What it means | What to do |

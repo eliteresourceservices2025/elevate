@@ -13,7 +13,8 @@ import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-act
 import { writeAudit } from "@/modules/audit/write";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { positions } from "@/modules/org/schema";
-import { activeDirectReports, applyReporting, reportName, todayInZone } from "@/modules/org/service";
+import { activeDirectReports, reportName } from "@/modules/org/service";
+import { createEmployeeRecord } from "./create";
 import { viewBankChangeRequest } from "./queries";
 import { SENSITIVE_LABELS } from "./constants";
 import {
@@ -99,51 +100,10 @@ export async function createEmployee(input: unknown): Promise<ActionResult<{ id:
     await authorize(actor, "people.create");
     const parsed = createEmployeeSchema.safeParse(input);
     if (!parsed.success) return fail(firstIssue(parsed.error));
-    const { teamId, managerId, positionId, ...v } = parsed.data;
-    if ((teamId || managerId) && !can(actor, "org.manage_reporting")) return fail("You cannot set a team or manager.");
+    if ((parsed.data.teamId || parsed.data.managerId) && !can(actor, "org.manage_reporting")) return fail("You cannot set a team or manager.");
 
     try {
-      const id = await db.transaction(async (tx) => {
-        let positionTitle: string | null = null;
-        if (positionId) {
-          const [pos] = await tx.select({ title: positions.title }).from(positions).where(and(eq(positions.id, positionId), isNull(positions.archivedAt))).limit(1);
-          if (!pos) throw new ActionFailure("That position was not found.");
-          positionTitle = pos.title;
-        }
-
-        const userId = await findLinkableUser(tx, [v.workEmail, v.personalEmail]);
-        const [created] = await tx
-          .insert(employees)
-          .values({ ...v, positionId: positionId ?? null, position: positionTitle, userId, createdBy: actor.id })
-          .returning({ id: employees.id, employeeNumber: employees.employeeNumber });
-
-        // Team and manager go through the dated rules. A start date in the future counts from today.
-        if (teamId || managerId) {
-          const today = todayInZone();
-          const effectiveDate = v.startDate && v.startDate < today ? v.startDate : today;
-          const result = await applyReporting(tx, { employeeId: created.id, teamId, managerId, effectiveDate }, actor.id);
-          if (!result.ok) throw new ActionFailure(result.error);
-        }
-
-        await recordHistory(tx, {
-          employeeId: created.id,
-          eventType: "hired",
-          summary: positionTitle ? `Added to ELEVATE as ${positionTitle}` : "Added to ELEVATE",
-          changedBy: actor.id,
-          ...(v.startDate ? { effectiveDate: v.startDate } : {}),
-        });
-        await writeAudit(
-          {
-            actor,
-            action: "people.create",
-            targetType: "employee",
-            targetId: created.id,
-            after: { employeeNumber: created.employeeNumber, status: v.status, workerType: v.workerType, linkedAccount: userId !== null },
-          },
-          tx,
-        );
-        return created.id;
-      });
+      const { id } = await db.transaction((tx) => createEmployeeRecord(tx, actor, parsed.data));
       revalidateEmployee(id);
       return { ok: true, data: { id } };
     } catch (error) {

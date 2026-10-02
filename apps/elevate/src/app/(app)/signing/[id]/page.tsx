@@ -74,6 +74,7 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
                 {s.isMe ? " (you)" : ""}
               </span>
               {s.role ? <span className="text-muted-foreground">{s.role}</span> : null}
+              {s.outside ? <Badge variant="outline">Outside signer</Badge> : null}
               {manager && s.email ? <span className="text-xs text-muted-foreground">{s.email}</span> : null}
               <Badge variant={s.status === "signed" ? "default" : s.status === "declined" ? "destructive" : "secondary"}>{SIGNER_STATUS_LABELS[s.status]}</Badge>
               {s.signedAt ? <span className="text-xs text-muted-foreground">{formatInZone(s.signedAt, undefined, "MMM d, yyyy h:mm a")}</span> : null}

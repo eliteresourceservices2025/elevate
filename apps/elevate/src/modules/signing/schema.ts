@@ -75,9 +75,23 @@ export const esignSigners = docs
       envelopeId: uuid("envelope_id")
         .notNull()
         .references(() => esignEnvelopes.id),
-      userId: uuid("user_id")
-        .notNull()
-        .references(() => users.id),
+      /** An ELEVATE user, or empty for an outside signer (a candidate) who signs through an emailed link and code. */
+      userId: uuid("user_id").references(() => users.id),
+      externalEmail: text("external_email"),
+      externalName: text("external_name"),
+      /** SHA-256 of the emailed link's token (the token itself is never stored). A new link replaces the old one. */
+      accessTokenHash: text("access_token_hash"),
+      /** When the "your signed copy is ready" email replaces the link, the link they were using keeps working to open the signed copy only. */
+      previousTokenHash: text("previous_token_hash"),
+      /** SHA-256 of the 6-digit code last emailed, when it expires, and wrong tries since. */
+      codeHash: text("code_hash"),
+      codeExpiresAt: timestamp("code_expires_at", { withTimezone: true }),
+      codeAttempts: smallint("code_attempts").notNull().default(0),
+      /** Sends are counted per hour to stop code flooding. */
+      codeSentAt: timestamp("code_sent_at", { withTimezone: true }).array(),
+      /** After the right code: SHA-256 of a random session value kept in a cookie, and when it ends. */
+      sessionHash: text("session_hash"),
+      sessionExpiresAt: timestamp("session_expires_at", { withTimezone: true }),
       /** 1, 2, 3 ... Equal numbers sign at the same time in a sequential envelope. */
       position: smallint("position").notNull(),
       role: text("role"),
@@ -100,6 +114,10 @@ export const esignSigners = docs
     },
     (t) => [
       uniqueIndex("esign_signers_envelope_user_idx").on(t.envelopeId, t.userId),
+      uniqueIndex("esign_signers_envelope_external_idx").on(t.envelopeId, sql`lower(${t.externalEmail})`).where(sql`${t.externalEmail} is not null`),
+      uniqueIndex("esign_signers_token_idx").on(t.accessTokenHash).where(sql`${t.accessTokenHash} is not null`),
+      uniqueIndex("esign_signers_prev_token_idx").on(t.previousTokenHash).where(sql`${t.previousTokenHash} is not null`),
+      check("esign_signers_kind_one_chk", sql`(${t.userId} is not null) <> (${t.externalEmail} is not null) and (${t.externalEmail} is null or ${t.externalName} is not null)`),
       index("esign_signers_user_idx").on(t.userId, t.status),
       check("esign_signers_status_chk", sql`${t.status} in ('waiting','pending','signed','declined','cancelled')`),
       check("esign_signers_kind_chk", sql`${t.signatureKind} is null or ${t.signatureKind} in ('typed','drawn')`),

@@ -85,6 +85,10 @@ const EXPECTED: Record<string, string> = {
   "recruiting.download_resume": "A A T A - -",
   "recruiting.connect_calendar": "O O - O - -", // your own Google Calendar only
   "recruiting.manage_retention": "A A - - - -",
+  "offers.manage_templates": "A A - - - -",
+  "offers.make": "A A - A - -",
+  "offers.hire": "A A - - - -",
+  "offers.view": "A A T A - -", // a lead's team scope = on that job's hiring team
   "signing.manage": "A A - - - -",
   "signing.view_own": "O O O O O O",
   "signing.sign": "O O O O O O",

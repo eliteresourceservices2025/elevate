@@ -44,7 +44,7 @@ export async function listEnvelopes(): Promise<EnvelopeRow[]> {
   return envelopes.map((e) => ({ id: e.id, title: e.title, reference: envelopeReference(e.id), status: e.status as EnvelopeStatus, createdAt: e.createdAt, expiresAt: e.expiresAt, signed: by.get(e.id)?.signed ?? 0, total: by.get(e.id)?.total ?? 0 }));
 }
 
-export type SignerView = { id: string; userId: string; name: string; email: string | null; role: string | null; position: number; status: SignerStatus; signedAt: Date | null; viewedAt: Date | null; isMe: boolean };
+export type SignerView = { id: string; userId: string | null; outside: boolean; name: string; email: string | null; role: string | null; position: number; status: SignerStatus; signedAt: Date | null; viewedAt: Date | null; isMe: boolean };
 export type EventView = { seq: number; type: string; at: Date; actor: string | null; ip: string | null };
 
 /**
@@ -61,18 +61,20 @@ export async function getEnvelopeDetail(envelopeId: string) {
   const mine = signers.find((s) => s.userId === user.id) ?? null;
   if (manager) await authorize(user, "signing.manage");
   else {
-    await authorize(user, "signing.view_own", { ownerUserId: mine?.userId });
+    await authorize(user, "signing.view_own", { ownerUserId: mine?.userId ?? undefined });
     if (env.status === "draft") throw new ForbiddenError("signing.view_own");
   }
 
-  const names = await legalNames(db, [env.createdBy, ...signers.map((s) => s.userId)]);
-  const emails = manager ? new Map((await db.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, [env.createdBy, ...signers.map((s) => s.userId)]))).map((u) => [u.id, u.email])) : new Map<string, string>();
+  const userIds = [env.createdBy, ...signers.flatMap((s) => (s.userId ? [s.userId] : []))];
+  const names = await legalNames(db, userIds);
+  const emails = manager ? new Map((await db.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, userIds))).map((u) => [u.id, u.email])) : new Map<string, string>();
+  const signerName = new Map(signers.map((s) => [s.id, s.signedName ?? s.externalName ?? (s.userId ? names.get(s.userId) : null) ?? "Unknown"]));
 
   let events: EventView[] | null = null;
   let chainOk: boolean | null = null;
   if (manager) {
     const rows = await db.select().from(esignEvents).where(eq(esignEvents.envelopeId, envelopeId)).orderBy(asc(esignEvents.seq));
-    events = rows.map((e) => ({ seq: e.seq, type: e.type, at: e.at, actor: e.actorUserId ? (emails.get(e.actorUserId) ?? names.get(e.actorUserId) ?? null) : null, ip: e.ip }));
+    events = rows.map((e) => ({ seq: e.seq, type: e.type, at: e.at, actor: e.actorUserId ? (emails.get(e.actorUserId) ?? names.get(e.actorUserId) ?? null) : e.signerId ? `${signerName.get(e.signerId) ?? "Signer"} (outside signer)` : null, ip: e.ip }));
     const stored: StoredEvent[] = rows.map((e) => ({ envelopeId: e.envelopeId, seq: e.seq, type: e.type, actorUserId: e.actorUserId, signerId: e.signerId, at: e.at.toISOString(), ip: e.ip, detail: e.detail, prevHash: e.prevHash, hash: e.hash }));
     chainOk = verifyChain(stored).ok;
   }
@@ -97,7 +99,7 @@ export async function getEnvelopeDetail(envelopeId: string) {
       endReason: env.endReason,
       sealing: env.status === "out" && env.allSignedAt !== null,
     },
-    signers: signers.map<SignerView>((s) => ({ id: s.id, userId: s.userId, name: s.signedName ?? names.get(s.userId) ?? "Unknown", email: emails.get(s.userId) ?? null, role: s.role, position: s.position, status: s.status as SignerStatus, signedAt: s.signedAt, viewedAt: s.viewedAt, isMe: s.userId === user.id })),
+    signers: signers.map<SignerView>((s) => ({ id: s.id, userId: s.userId, outside: s.userId === null, name: signerName.get(s.id) ?? "Unknown", email: s.userId ? (emails.get(s.userId) ?? null) : manager ? s.externalEmail : null, role: s.role, position: s.position, status: s.status as SignerStatus, signedAt: s.signedAt, viewedAt: s.viewedAt, isMe: s.userId !== null && s.userId === user.id })),
     mine: mine ? { status: mine.status as SignerStatus, viewed: mine.viewedAt !== null } : null,
     canSign: Boolean(mine && mine.status === "pending" && env.status === "out" && !expired),
     events,

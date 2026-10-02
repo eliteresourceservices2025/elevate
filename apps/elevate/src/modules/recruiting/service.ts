@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { authorize, type ActionName, type AuthzUser } from "@/lib/authz";
 import { db } from "@/lib/db";
+import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
@@ -41,6 +42,20 @@ export async function queueCandidateEmail(executor: Executor, mail: { applicatio
     .insert(candidateEmails)
     .values({ applicationId: mail.applicationId, toEmail: mail.toEmail, kind: mail.kind, subject: mail.subject, body: JSON.stringify({ text: mail.text, html: mail.html }), attachment: mail.attachment ?? null, dedupeKey: mail.dedupeKey })
     .onConflictDoNothing();
+}
+
+/**
+ * Marks an application Hired inside the caller's transaction (stage, stage history, audit). Only offers/hiring calls this, after it
+ * has authorized. A hire is final; an already hired or rejected application is refused.
+ */
+export async function markHired(tx: Executor, actor: { id: string; email: string }, applicationId: string): Promise<void> {
+  const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
+  if (!app) throw new ActionFailure("That application was not found.");
+  if (app.stage === "hired") throw new ActionFailure("They were already hired.");
+  if (app.stage === "rejected") throw new ActionFailure("Reopen the application before hiring.");
+  await tx.update(applications).set({ stage: "hired", stageChangedAt: new Date(), closedAt: new Date() }).where(eq(applications.id, applicationId));
+  await tx.insert(applicationStageHistory).values({ applicationId, fromStage: app.stage, toStage: "hired", byUserId: actor.id, note: "Hired" });
+  await writeAudit({ actor, action: "recruiting.move", targetType: "application", targetId: applicationId, before: { stage: app.stage }, after: { stage: "hired" } }, tx);
 }
 
 export type ApplyResult = { ok: true } | { ok: false; error: string; field?: string };
