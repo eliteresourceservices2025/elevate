@@ -114,6 +114,8 @@ const EXPECTED: Record<string, string> = {
   "safevoice.handle": "- - - - - -", // handler flag only
   "safevoice.view_counts": "- - - - A -",
   "assets.view": "A A T - - O",
+  "assets.manage": "A A - - - -",
+  "assets.assign": "A A - - - -",
   "analytics.view": "A A T - A -",
   "analytics.view_hiring": "A A - A A -",
   "settings.manage_roles": "A - - - - -",

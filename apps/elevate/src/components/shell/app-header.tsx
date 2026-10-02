@@ -16,7 +16,7 @@ export function AppHeader({ zone, email, unread = 0, clock = null, hiddenNav = [
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-4">
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-4 print:hidden">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger
           aria-label="Open menu"

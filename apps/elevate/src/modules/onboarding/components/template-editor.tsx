@@ -81,7 +81,7 @@ export function TemplateEditor({ template, kind, options }: { template?: Templat
               <div className="space-y-1">
                 <Label htmlFor={`i-check-${template?.id ?? kind}-${i}`}>Done when</Label>
                 <NativeSelect id={`i-check-${template?.id ?? kind}-${i}`} value={it.check} onChange={(e) => set(i, { check: e.target.value })}>
-                  {CHECKS.filter((c) => (kind === "onboarding" ? c !== "exit_interview" && c !== "access" : c !== "account" && c !== "signature")).map((c) => (
+                  {CHECKS.filter((c) => (kind === "onboarding" ? c !== "exit_interview" && c !== "access" && c !== "assets_returned" : c !== "account" && c !== "signature")).map((c) => (
                     <option key={c} value={c}>
                       {CHECK_LABELS[c]}
                     </option>

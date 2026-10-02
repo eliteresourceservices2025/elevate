@@ -12,6 +12,7 @@ import { documents, documentTypes } from "@/modules/documents/schema";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { employees } from "@/modules/people/schema";
 import { changeEmployeeStatus, endClientAssignments } from "@/modules/people/status";
+import { activeAssignmentCount } from "@/modules/assets/service";
 import { esignEnvelopes } from "@/modules/signing/schema";
 import { cancelWaitingLeave } from "@/modules/timeoff/separation";
 import { disableLogin } from "./accounts";
@@ -109,6 +110,8 @@ async function isSatisfied(tx: Pick<typeof db, "select" | "execute">, t: TaskRow
       return ctx.userId !== null;
     case "access":
       return Boolean(ctx.accessRemoved);
+    case "assets_returned":
+      return (await activeAssignmentCount(tx, ctx.employeeId)) === 0;
     case "exit_interview": {
       if (!ctx.offboardingCaseId) return false;
       const [row] = await tx.select({ id: exitInterviews.id }).from(exitInterviews).where(eq(exitInterviews.offboardingCaseId, ctx.offboardingCaseId));

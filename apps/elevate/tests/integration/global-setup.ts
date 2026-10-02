@@ -3,7 +3,8 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
-export const TEST_DB_NAME = "elevate_test";
+// TEST_DB_NAME lets two people (or worktrees) run the integration tests at the same time without dropping each other's database.
+export const TEST_DB_NAME = /^[a-z_][a-z0-9_]{0,40}$/.test(process.env.TEST_DB_NAME ?? "") ? (process.env.TEST_DB_NAME as string) : "elevate_test";
 
 export function testDatabaseUrl(adminUrl: string) {
   const url = new URL(adminUrl);

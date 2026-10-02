@@ -128,6 +128,21 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 
 Counts shown to the Executive hide any category with fewer than 5 reports. Handlers' actions (opening a case, replying, status changes, closing, opening an attachment) are audited with the case reference only, never with any text.
 
+## 5e. Assets problems
+
+| What you see | What it means | What to do |
+|---|---|---|
+| "That tag is already used by another item" | Tags are unique, whatever the letter case. | Pick the next free tag. A tag cannot be changed later because it is printed on the label; to fix a wrong one, archive the item and register it again. |
+| A scanned QR shows "not found" | The person is not signed in as someone allowed to see that item (HR sees everything, a lead only items with their team, a person only their own), or the tag does not exist. | Sign in with the right account. Items are never shown to others, on purpose. Recruiters and Executives have no access. |
+| A scanned QR opens a sign-in page | Scanning needs a signed-in session with the sign-in code. | Sign in, then scan again. |
+| The QR code does not scan | The label was printed too small, or on the wrong site address (a code printed on a test site points at the test site). | Print again from the live site at 63 x 38 mm or larger. |
+| "This item is already assigned" | One person holds it. | Open the item, record its return (condition and where it goes next), then assign it again. |
+| "This item is in repair / lost / retired" | Those items cannot be handed out. | Mark an item back as in stock once repaired or found. A retired item is final: register a new one. |
+| Someone has left but still shows items | The offboarding check "Equipment and assets returned" stays open until every item is returned. Access removal does not wait for it. | Record each return on the item's page (HR can do this after the person has left). If an item is gone, record the return with "Not recovered (lost)". |
+| A wrong hand-over or return was recorded | History cannot be edited or deleted (it is a record). | Record a return and a new hand-over, and explain it in the note. Developers must never edit `talent.asset_assignments` by hand. |
+
+Assets hold no prices or values. Item notes are for HR only: never put passwords, client names or patient information in them. Labels print from Assets > Print labels (or "Print this label" on an item); set margins to default and turn off headers and footers in the print window.
+
 ## 6. Deploying changes (developer)
 
 - Deploy at the **Manila shift change**, not in the middle of a night shift (that is the US day, when most VAs are working). Check Attendance > Health before and after.

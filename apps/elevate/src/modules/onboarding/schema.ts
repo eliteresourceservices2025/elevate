@@ -54,7 +54,7 @@ export const checklistTemplateItems = talent
     (t) => [
       index("checklist_template_items_template_idx").on(t.templateId, t.position),
       check("checklist_template_items_owner_chk", sql`${t.owner} in ('hr','lead','person')`),
-      check("checklist_template_items_check_chk", sql`${t.check} in ('manual','document','required_documents','policy','account','signature','exit_interview','access')`),
+      check("checklist_template_items_check_chk", sql`${t.check} in ('manual','document','required_documents','policy','account','signature','exit_interview','access','assets_returned')`),
     ],
   )
   .enableRLS();

@@ -49,6 +49,7 @@
     "nuqs": "^2.10.1",
     "pdf-lib": "^1.17.1",
     "postgres": "^3.4.9",
+    "qrcode.react": "^4.2.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "^7.89.0",

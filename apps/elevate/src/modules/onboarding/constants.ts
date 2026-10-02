@@ -7,7 +7,7 @@ export type Owner = (typeof OWNERS)[number];
 export const OWNER_LABELS: Record<Owner, string> = { hr: "HR", lead: "Their lead", person: "The person" };
 
 /** What lets ELEVATE decide a task is done by itself. "manual" tasks are ticked by whoever owns them. */
-export const CHECKS = ["manual", "document", "required_documents", "policy", "account", "signature", "exit_interview", "access"] as const;
+export const CHECKS = ["manual", "document", "required_documents", "policy", "account", "signature", "exit_interview", "access", "assets_returned"] as const;
 export type Check = (typeof CHECKS)[number];
 export const CHECK_LABELS: Record<Check, string> = {
   manual: "Ticked by hand",
@@ -18,6 +18,7 @@ export const CHECK_LABELS: Record<Check, string> = {
   signature: "An agreement is signed",
   exit_interview: "The exit interview is submitted",
   access: "Their access is removed",
+  assets_returned: "All their equipment is returned",
 };
 
 export const KINDS = ["onboarding", "offboarding"] as const;
@@ -62,7 +63,7 @@ export const DEFAULT_OFFBOARDING_ITEMS: ItemDef[] = [
   { title: "Write and hand over turnover notes", details: "What is in progress, where files are, who to ask. Please do not include client or patient information.", owner: "person", dueOffsetDays: -3, required: true, check: "manual" },
   { title: "Exit interview", details: "A short, private form. Optional for the person; HR can skip it.", owner: "person", dueOffsetDays: -2, required: false, check: "exit_interview" },
   { title: "Lead confirms the handover and the clearance", owner: "lead", dueOffsetDays: 0, required: true, check: "manual" },
-  { title: "Equipment and assets returned", owner: "hr", dueOffsetDays: 0, required: true, check: "manual" },
+  { title: "Equipment and assets returned", details: "Ticked by ELEVATE when nothing is still assigned to them. Record each return in Assets.", owner: "hr", dueOffsetDays: 0, required: true, check: "assets_returned", href: "/assets" },
   { title: "Access removed at the end of the last working day", details: "Done automatically (or with Remove access now).", owner: "hr", dueOffsetDays: 0, required: true, check: "access" },
   { title: "Final hours are approved and exported", details: "Approve the last week, then export the pay period.", owner: "hr", dueOffsetDays: 2, required: true, check: "manual", href: "/hours-review" },
   { title: "Certificate of engagement, if they ask for one", owner: "hr", dueOffsetDays: 5, required: false, check: "manual" },

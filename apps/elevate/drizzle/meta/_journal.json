@@ -267,6 +267,13 @@
       "when": 1790995422407,
       "tag": "0037_safe_voice",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0038_assets",
+      "breakpoints": true
     }
   ]
 }
