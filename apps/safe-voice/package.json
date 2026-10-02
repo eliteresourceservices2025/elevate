@@ -1,6 +1,36 @@
 {
   "name": "safe-voice",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Anonymous reporting app. Separate subdomain and Vercel project; never reads ELEVATE cookies. Built in Phase 4.2."
+  "description": "Anonymous reporting app. Separate subdomain and Vercel project; never reads ELEVATE cookies or sessions.",
+  "scripts": {
+    "dev": "next dev -p 3100",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@upstash/ratelimit": "^2.2.0",
+    "@upstash/redis": "^1.39.0",
+    "next": "16.3.6",
+    "pdf-lib": "^1.17.1",
+    "postgres": "^3.4.9",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "sharp": "^0.35.5",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "eslint-plugin-security": "^4.1.0",
+    "typescript": "^5",
+    "vitest": "^5.0.2"
+  },
+  "packageManager": "pnpm@12.5.1"
 }

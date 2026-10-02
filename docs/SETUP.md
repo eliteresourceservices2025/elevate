@@ -127,7 +127,7 @@ elevate/
    └─ components/ui/             # shadcn components
 ```
 
-Safe Voice is a **separate small app on its own subdomain** (e.g. `voice.<domain>`) or a separate Vercel project, so the browser never sends ELEVATE's login cookies with a report. It writes only to the `ops.safevoice_*` tables through a dedicated database role.
+Safe Voice is a **separate small app on its own subdomain** (e.g. `voice.<domain>`) or a separate Vercel project, so the browser never sends ELEVATE's login cookies with a report. It writes only to the `ops.safevoice_*` tables through a dedicated database role. Setup is in section 14.
 
 ---
 
@@ -307,3 +307,55 @@ Then start **Phase 0** in `BUILD-PROMPTS.md`.
 - **Inngest (expiry reminders, cleanup of unfinished uploads):** create the free Inngest app, then add `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` to the Vercel environment and register `https://<your-domain>/api/inngest` in the Inngest dashboard. Leave `INNGEST_DEV` unset in production.
 - **Local:** set `INNGEST_DEV=1` in `.env.local` and run `pnpm dlx inngest-cli@latest dev` to see and trigger the jobs at http://localhost:8288.
 - **Not included:** virus scanning. Files are restricted to four types, checked by their bytes, stored privately and only ever served as downloads. Add a scanner later if ERS wants one.
+
+---
+
+## 14. Safe Voice (added in Phase 4.2)
+
+Safe Voice is its own small app (`apps/safe-voice`) deployed as **its own Vercel project on its own subdomain** (for example `voice.<ERS domain>`), so the browser never sends ELEVATE's login cookies with a report. It has no Supabase keys, no sign-in and none of ELEVATE's secrets: it can only reach three tables through a dedicated database role.
+
+### 14a. Database roles (once per Supabase project)
+
+Migration 0037 creates the tables and two **login-less** roles with exactly the access they need and row-level security policies for those roles only:
+
+- `safevoice_app`: used by the Safe Voice app. May add reports, messages and attachments and read back only what a reporter is shown. It cannot update or delete anything and cannot read report text or attachment bytes.
+- `safevoice_handler`: used by ELEVATE for designated handlers. May read cases (never the code or passphrase hashes), add handler messages, change a case's status and outcome. Nothing else.
+
+Give each a password **in the Supabase SQL editor** (never in git, chat or a migration):
+
+```sql
+ALTER ROLE safevoice_app LOGIN PASSWORD '<long random password>';
+ALTER ROLE safevoice_handler LOGIN PASSWORD '<another long random password>';
+```
+
+Save both in the password manager. Connection strings use the pooler (port 6543); on the pooler the user name carries the project reference, for example `safevoice_app.<project-ref>`.
+
+### 14b. The Safe Voice project
+
+1. In Vercel create a **second project** from the same repository with **Root Directory = `apps/safe-voice`**. Give it the subdomain. It does not need the ELEVATE environment variables.
+2. Environment variables (Production; mark as Sensitive):
+   - `SAFEVOICE_DATABASE_URL`: the `safevoice_app` connection string.
+   - `SAFEVOICE_PEPPER`: at least 32 random characters (`openssl rand -base64 48`). **Never change it**: it keys the hashes of every case code and passphrase, so changing it locks every reporter out. Keep two copies in the password manager.
+   - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`: its own Upstash database is best (separate from ELEVATE's). Without Upstash, production refuses every request (fail closed).
+3. **Logging (cannot be set from code).** In the Safe Voice project's settings: do not add any log drain or analytics (no Web Analytics, no Speed Insights, no Sentry), set runtime log retention to the shortest available, and keep the Firewall's own logging for this project to what the plan allows. The app never logs an address, header, cookie or body, and the platform's request logs are the one thing outside its control: tell the owner what the plan records.
+4. Do **not** put the Safe Voice subdomain under a wildcard cookie domain of the ELEVATE site, and do not link to it from ELEVATE pages with a tracking parameter.
+
+### 14c. ELEVATE side
+
+- Add `SAFEVOICE_HANDLER_DATABASE_URL` (the `safevoice_handler` connection string) to the **ELEVATE** project's environment variables. Without it the Safe Voice cases page says "not connected" and, in production, the `safevoice-notify` job shows as failing in Attendance > Health.
+- **Designate handlers** (Super Admin only): Settings > Roles and access, tick "Safe Voice handler" on a person (audited). No role grants case access, a Super Admin included; name at least two people so one absence does not leave reports unread. If nobody is designated while reports wait, the Super Admins get one in-app warning a day.
+- Run `pnpm db:migrate` against each environment (it creates the roles and tables).
+
+### 14d. Local development
+
+```bash
+supabase start
+pnpm db:migrate
+# give the roles a local password (SQL editor at http://127.0.0.1:54323 or psql):
+#   ALTER ROLE safevoice_app LOGIN PASSWORD 'local-only-password';
+#   ALTER ROLE safevoice_handler LOGIN PASSWORD 'local-only-password';
+```
+
+Then create `apps/safe-voice/.env.local` (git-ignored; see `apps/safe-voice/.env.example`) with `SAFEVOICE_DATABASE_URL=postgresql://safevoice_app:local-only-password@127.0.0.1:54322/postgres`, a throwaway `SAFEVOICE_PEPPER`, and add `SAFEVOICE_HANDLER_DATABASE_URL=postgresql://safevoice_handler:local-only-password@127.0.0.1:54322/postgres` to `apps/elevate/.env.local`. Run `pnpm --filter safe-voice dev` (port 3100). The integration tests make their own roles' passwords in the throwaway `elevate_test` database.
+
+**Check:** send a test report at `http://localhost:3100`, write down the code and passphrase, open it under "Check a case", then open ELEVATE as a designated handler and find it under Safe Voice cases.

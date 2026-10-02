@@ -113,6 +113,21 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 | The person has no account | Signers must have an ELEVATE account. | Invite them first (Settings > Invitations). People outside the company are not supported yet. |
 | Checking a signed PDF says "does not match" | The file was changed after sealing, or it is not the sealed copy (the unsigned original does not match). | Download the signed copy again from the document page. |
 
+## 5d. Safe Voice problems
+
+| What you see | What it means | What to do |
+|---|---|---|
+| A reporter says their code and passphrase "do not work" | Wrong or mistyped (the page gives the same message for a wrong code, a wrong passphrase and an unknown code, on purpose). Or they hit the rate limit (10 tries per code in 15 minutes). | Ask them to retype carefully (capitals, spaces and dashes do not matter) and to wait 15 minutes if they tried many times. **Nobody can look a code up or reset a passphrase**: they are stored only as keyed hashes and no one, the developer included, can recover them. If they are truly lost, the reporter can send a new report and mention the old one. |
+| Every reporter is locked out at once | `SAFEVOICE_PEPPER` was changed or lost. | Restore the original value from the password manager and redeploy the Safe Voice project. Never change it. |
+| The Safe Voice page says "not available right now" | `SAFEVOICE_DATABASE_URL` or `SAFEVOICE_PEPPER` is missing, or the role's password changed. | Check the Safe Voice project's environment variables and the `safevoice_app` password (SETUP section 14). |
+| "Too many tries" for everyone in production | Upstash is not configured or unreachable (the app refuses requests rather than skip the limit). | Fix the Upstash variables on the Safe Voice project. |
+| Safe Voice cases says "not connected" | `SAFEVOICE_HANDLER_DATABASE_URL` is not set on ELEVATE. | Add it (SETUP section 14c). |
+| Reports wait and nobody is told | Nobody is designated as a handler (Super Admins get one warning a day), or the `safevoice-notify` job is late (Attendance > Health). | Designate handlers in Settings > Roles and access (tick Safe Voice handler). Check the job on the Health page. Notices are sent once an hour at most, on purpose. |
+| A handler wants to know who a reporter is | They must not try. Nothing in the app can tell: no name, address, device or exact time is stored. | Do not ask the developer to look in logs or the database either; the design depends on there being nothing to find. Attachments have their hidden details removed, but words in the text or in a picture can still identify someone: ask the reporter, through the case, before acting on a detail. |
+| A report mentions a client's patient | The warning on the form was missed. | Do not copy it elsewhere. Reply asking the reporter to describe the situation without patient details. Counsel decides about removing the text. |
+
+Counts shown to the Executive hide any category with fewer than 5 reports. Handlers' actions (opening a case, replying, status changes, closing, opening an attachment) are audited with the case reference only, never with any text.
+
 ## 6. Deploying changes (developer)
 
 - Deploy at the **Manila shift change**, not in the middle of a night shift (that is the US day, when most VAs are working). Check Attendance > Health before and after.
