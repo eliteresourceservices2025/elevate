@@ -12,6 +12,7 @@ import { todayInZone } from "@/modules/org/service";
 import { runRecruitingRetention, sendCandidateEmails } from "@/modules/recruiting/jobs";
 import { runEsignReminders, runEsignSealSweep } from "@/modules/signing/jobs";
 import { runChecklistReminders, runChecklistSync, runSeparations } from "@/modules/onboarding/jobs";
+import { runEarlyReviewScheduler, runReviewReminders } from "@/modules/reviews/jobs";
 import { runHealthCheck, trackJob as track } from "@/modules/health/service";
 import { inngest } from "./client";
 
@@ -201,4 +202,16 @@ export const checklistReminders = inngest.createFunction(
   async ({ step }) => step.run("remind", () => track("checklist-reminders", () => runChecklistReminders(formatInZone(new Date(), SECONDARY_TIMEZONE, "yyyy-MM-dd")))),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders];
+/** Daily at 1:45 AM in the company time zone: open the month 3 and month 5 early-engagement reviews that came due. */
+export const earlyReviews = inngest.createFunction(
+  { id: "early-reviews", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 45 1 * * *` } },
+  async ({ step }) => step.run("open", () => track("early-reviews", () => runEarlyReviewScheduler(todayInZone()))),
+);
+
+/** Daily at 8:45 AM Manila: remind whoever has the next step on a review that is due or late. */
+export const reviewReminders = inngest.createFunction(
+  { id: "review-reminders", triggers: { cron: `TZ=${SECONDARY_TIMEZONE} 45 8 * * *` } },
+  async ({ step }) => step.run("remind", () => track("review-reminders", () => runReviewReminders(formatInZone(new Date(), SECONDARY_TIMEZONE, "yyyy-MM-dd")))),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders];

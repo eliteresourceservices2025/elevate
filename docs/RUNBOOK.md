@@ -95,6 +95,14 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 - **Someone was offboarded by mistake.** Before access is removed use "Cancel offboarding". After that, restore the person in People and ask a developer to re-enable the sign-in in the Supabase dashboard (Authentication, Users, the person, remove the ban).
 - **Certificate of engagement.** Issue it from the offboarding page. It lists dates and role only. Every view is logged.
 
+## 5b5. Review problems
+
+- **A person has no review in a cycle.** The cycle covers people who were current when it was launched (not separated or archived). Someone added later is not added automatically: launch a small cycle for them with "Chosen people".
+- **The wrong lead was given a review.** Open the review and use "Change reviewer" before the lead's review is written.
+- **A month 3 or month 5 review did not open.** Check Reviews > Templates that early reviews are switched on, and that the person has a start date. People who started more than a month past their milestone are not back-filled: launch a cycle for them by hand.
+- **A rating needs fixing after it was shared.** Shared reviews are frozen on purpose. Launch a new review, or ask a developer.
+- **Nobody can calibrate my own review.** Another HR admin has to calibrate and share it.
+
 ## 5c. Signing problems
 
 | What you see | What it means | What to do |

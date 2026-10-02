@@ -6,7 +6,7 @@ import { ROLE_SLUGS, type RoleSlug, type Scope } from "@/lib/roles";
 // from the registry. If you add or change an action, update this table in the same commit.
 // Column order: super_admin, hr_admin, team_lead, recruiter, executive, employee.
 // A = all, T = team, O = own, "-" = no access.
-// Deferred (grant nothing yet): recruiter "hand-off only" for onboarding, executive "summary" for reviews.
+// Deferred (grant nothing yet): recruiter "hand-off only" for onboarding.
 const EXPECTED: Record<string, string> = {
   "people.view_directory": "A A A A A A",
   "people.view_profile": "A A T - - O",
@@ -101,6 +101,16 @@ const EXPECTED: Record<string, string> = {
   "certificates.issue": "A A - - - -",
   "onboarding.view_own_tasks": "- - - - - O",
   "reviews.view": "A A T - - O",
+  "reviews.summary": "A A - - A -",
+  "reviews.manage_templates": "A A - - - -",
+  "reviews.manage_cycles": "A A - - - -",
+  "reviews.write_self": "O O O O O O",
+  "reviews.write_lead": "A A T - - -",
+  "reviews.calibrate": "A A - - - -",
+  "reviews.share": "A A - - - -",
+  "reviews.acknowledge": "O O O O O O",
+  "goals.view": "A A T - - O",
+  "goals.manage": "A A T - - O",
   "safevoice.handle": "- - - - - -", // handler flag only
   "safevoice.view_counts": "- - - - A -",
   "assets.view": "A A T - - O",
