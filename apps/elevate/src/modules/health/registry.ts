@@ -20,6 +20,7 @@ export const JOBS: Record<string, JobInfo> = {
   "offboarding-separations": { label: "Removing access after the last working day", everyMinutes: 60 },
   "checklist-sync": { label: "Checklist auto-completion", everyMinutes: 30 },
   "checklist-reminders": { label: "Checklist reminders", everyMinutes: DAILY },
+  "safevoice-notify": { label: "Safe Voice handler notifications", everyMinutes: 60 },
   "leave-expiry": { label: "Prize day expiry", everyMinutes: DAILY },
   "leave-request-reminders": { label: "Time off request reminders", everyMinutes: DAILY },
   "attendance-rebuild": { label: "Nightly attendance rebuild", everyMinutes: DAILY },

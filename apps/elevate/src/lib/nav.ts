@@ -27,7 +27,8 @@ import {
 
 /** Shown only to people who hold one of these scopes for the action. Pages and actions still enforce it; this just keeps the menu short. */
 export type NavAccess = { action: string; scopes: ("own" | "team" | "all")[] };
-export type NavItem = { href: string; label: string; icon: LucideIcon; description: string; access?: NavAccess };
+/** `access` may list several rules: the item shows when ANY of them holds. */
+export type NavItem = { href: string; label: string; icon: LucideIcon; description: string; access?: NavAccess | NavAccess[] };
 export type NavGroup = { label: string; items: NavItem[] };
 
 // Placeholder links for every module; each becomes real in its build phase.
@@ -76,7 +77,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/reviews", label: "Reviews", icon: Star, description: "Review cycles, probation reviews and goals." },
       { href: "/assets", label: "Assets", icon: Boxes, description: "Equipment inventory and assignments." },
       { href: "/analytics", label: "Analytics", icon: BarChart3, description: "Headcount, turnover, attendance and hiring." },
-      { href: "/safe-voice-cases", label: "Safe Voice cases", icon: ShieldQuestion, description: "Anonymous report handling (designated handlers only)." },
+      { href: "/safe-voice-cases", label: "Safe Voice cases", icon: ShieldQuestion, description: "Anonymous report handling (designated handlers only; Executives see counts).", access: [{ action: "safevoice.handle", scopes: ["all"] }, { action: "safevoice.view_counts", scopes: ["all"] }] },
     ],
   },
   {

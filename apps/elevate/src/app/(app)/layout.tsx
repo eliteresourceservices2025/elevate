@@ -29,8 +29,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   const hiddenNav = ALL_NAV_ITEMS.filter((i) => {
     if (!i.access) return false;
-    const scope = scopeFor(user, i.access.action as ActionName);
-    return !scope || !i.access.scopes.includes(scope);
+    const rules = Array.isArray(i.access) ? i.access : [i.access];
+    return !rules.some((rule) => {
+      const scope = scopeFor(user, rule.action as ActionName);
+      return scope !== null && rule.scopes.includes(scope);
+    });
   }).map((i) => i.href);
 
   return (

@@ -11,6 +11,7 @@ import { flushEmailQueue } from "@/modules/notifications/email-queue";
 import { todayInZone } from "@/modules/org/service";
 import { runRecruitingRetention, sendCandidateEmails } from "@/modules/recruiting/jobs";
 import { runEsignReminders, runEsignSealSweep } from "@/modules/signing/jobs";
+import { runSafevoiceNotify } from "@/modules/safevoice/jobs";
 import { runChecklistReminders, runChecklistSync, runSeparations } from "@/modules/onboarding/jobs";
 import { runHealthCheck, trackJob as track } from "@/modules/health/service";
 import { inngest } from "./client";
@@ -201,4 +202,10 @@ export const checklistReminders = inngest.createFunction(
   async ({ step }) => step.run("remind", () => track("checklist-reminders", () => runChecklistReminders(formatInZone(new Date(), SECONDARY_TIMEZONE, "yyyy-MM-dd")))),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders];
+/** Hourly: tell the designated Safe Voice handlers (in the app, counts and a link only) when there is something new. */
+export const safevoiceNotify = inngest.createFunction(
+  { id: "safevoice-notify", triggers: { cron: "20 * * * *" } },
+  async ({ step }) => step.run("notify", () => track("safevoice-notify", () => runSafevoiceNotify())),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, safevoiceNotify];
