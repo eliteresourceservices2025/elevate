@@ -78,7 +78,7 @@ test("a review goes from self review to acknowledgment", async ({ browser }) => 
   await expect(personPage.getByText("A steady start.")).toBeVisible();
   await waitForHydration(personPage, "#ack-comment");
   await personPage.getByRole("button", { name: "I have read this review" }).click();
-  await expect(personPage.getByText("Acknowledged.")).toBeVisible(slow);
+  await expect(personPage.getByText("Acknowledged.", { exact: true })).toBeVisible(slow);
   await personPage.reload();
   await expect(personPage.getByText(/Acknowledged on \d{4}-\d{2}-\d{2}/)).toBeVisible(slow);
 });
