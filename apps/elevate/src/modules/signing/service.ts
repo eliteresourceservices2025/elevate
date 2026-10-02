@@ -14,7 +14,7 @@ import { computeEventHash, GENESIS_HASH, sha256Hex } from "./chain";
 import { CONSENT_VERSION, DEFAULT_EXPIRY_DAYS, MAX_PDF_BYTES, MAX_SIGNERS, allSigned, envelopeReference, isPdf, signersToActivate, type EventType, type SigningOrder } from "./constants";
 import { issueExternalLinks } from "./external-mail";
 import { readPdfInfo, sealPdf, type SealSigner } from "./seal";
-import { esignEnvelopes, esignEvents, esignSigners } from "./schema";
+import { esignEnvelopes, esignEvents, esignSigners, esignTemplates } from "./schema";
 
 // Internals that take the acting user as an argument (not a "use server" file, so none of this is a public endpoint). Callers
 // authorize first. Other modules (offers, onboarding) create envelopes through createEnvelope().
@@ -163,6 +163,15 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
     await storage.remove(BUCKETS.signed, [path]).catch(() => undefined);
     throw error;
   }
+}
+
+/** Reads an agreement template's PDF for another module (onboarding) that sends it through createEnvelope(). */
+export async function loadTemplatePdf(templateId: string): Promise<{ name: string; fileName: string; bytes: Uint8Array; role: string | null }> {
+  const [t] = await db.select().from(esignTemplates).where(and(eq(esignTemplates.id, templateId), isNull(esignTemplates.archivedAt)));
+  if (!t) throw new ActionFailure("That agreement template was not found.");
+  const bytes = await getDocumentStorage().read(BUCKETS.signed, t.filePath);
+  if (!bytes) throw new ActionFailure("The agreement template file is missing.");
+  return { name: t.name, fileName: t.fileName, bytes, role: t.roles[0] ?? null };
 }
 
 /** After a signature: wakes the next signer(s) in a sequential envelope, or marks the envelope ready to seal. */

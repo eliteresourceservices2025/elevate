@@ -117,3 +117,8 @@ export async function ensureCoreUser(input: { id: string; email: string }): Prom
   if (existing && !missingBase && !pendingBootstrap) return existing;
   return provisionCoreUser(input);
 }
+
+/** Archives a sign-in account (used when someone leaves): the next request from it is refused and it signs out. Nothing is deleted. */
+export async function archiveUserAccount(tx: Pick<typeof db, "update">, userId: string): Promise<void> {
+  await tx.update(users).set({ archivedAt: new Date() }).where(and(eq(users.id, userId), isNull(users.archivedAt)));
+}

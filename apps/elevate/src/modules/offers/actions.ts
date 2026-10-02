@@ -9,6 +9,7 @@ import { isUniqueViolation } from "@/lib/db-errors";
 import { clientIp } from "@/lib/rate-limit";
 import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
+import { openOnboardingCase } from "@/modules/onboarding/service";
 import { createEmployeeRecord } from "@/modules/people/create";
 import { createEmployeeSchema } from "@/modules/people/validators";
 import { authorizeForOpening, markHired } from "@/modules/recruiting/service";
@@ -19,7 +20,7 @@ import { createEnvelope, sendDraft, voidEnvelopeTx } from "@/modules/signing/ser
 import { esignSigners } from "@/modules/signing/schema";
 import { templateProblem } from "./merge";
 import { buildLetter, latestSigned, loadApplicant, loadTemplate, offerById, offerValues, offersFor } from "./service";
-import { offerTemplates, offers, onboardingCases } from "./schema";
+import { offerTemplates, offers } from "./schema";
 import { renderOfferPdf } from "./offer-pdf";
 import { hireSchema, makeOfferSchema, offerIdSchema, offerTemplateSchema, previewSchema, templateIdSchema } from "./validators";
 
@@ -245,7 +246,7 @@ export async function hireCandidate(input: unknown): Promise<ActionResult<{ empl
       const result = await db.transaction(async (tx) => {
         const created = await createEmployeeRecord(tx, actor, person.data, `Hired from the ${applicant.title} application`);
         await markHired(tx, actor, v.applicationId);
-        await tx.insert(onboardingCases).values({ employeeId: created.id, applicationId: v.applicationId, offerId: signed?.id ?? null, startDate: v.startDate, hiredWithoutOfferReason: signed ? null : (v.withoutOfferReason ?? null), createdBy: actor.id });
+        await openOnboardingCase(tx, actor, { employeeId: created.id, applicationId: v.applicationId, offerId: signed?.id ?? null, startDate: v.startDate, withoutOfferReason: signed ? null : (v.withoutOfferReason ?? null) });
         // Someone with no ELEVATE account yet is invited (an existing account is linked by email when the record is created)
         const invite = created.linkedAccount ? ({ exists: true } as const) : await ensureInvitation(tx, actor, v.workEmail);
         await writeAudit({ actor, action: "offers.hire", targetType: "application", targetId: v.applicationId, after: { employeeId: created.id, signedOffer: Boolean(signed), withoutOfferReason: signed ? null : v.withoutOfferReason } }, tx);

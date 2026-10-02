@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, date, jsonb, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { jsonb, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
-import { employees } from "@/modules/people/schema";
 import { applications, talent } from "@/modules/recruiting/schema";
 import { esignEnvelopes } from "@/modules/signing/schema";
 
@@ -49,36 +48,5 @@ export const offers = talent
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [uniqueIndex("offers_envelope_idx").on(t.envelopeId).where(sql`${t.envelopeId} is not null`)],
-  )
-  .enableRLS();
-
-/** Opened by a hire. Phase 3.4 adds the checklist on top; for now it records who was hired from which application and offer. */
-export const onboardingCases = talent
-  .table(
-    "onboarding_cases",
-    {
-      id: uuid("id").primaryKey().defaultRandom(),
-      employeeId: uuid("employee_id")
-        .notNull()
-        .references(() => employees.id),
-      applicationId: uuid("application_id")
-        .notNull()
-        .references(() => applications.id),
-      offerId: uuid("offer_id").references(() => offers.id),
-      startDate: date("start_date", { mode: "string" }),
-      status: text("status").notNull().default("open"),
-      /** Set when HR hired without a signed offer: the reason is required. */
-      hiredWithoutOfferReason: text("hired_without_offer_reason"),
-      createdBy: uuid("created_by")
-        .notNull()
-        .references(() => users.id),
-      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    },
-    (t) => [
-      uniqueIndex("onboarding_cases_application_idx").on(t.applicationId),
-      uniqueIndex("onboarding_cases_employee_idx").on(t.employeeId),
-      check("onboarding_cases_status_chk", sql`${t.status} in ('open','completed','cancelled')`),
-      check("onboarding_cases_reason_chk", sql`(${t.offerId} is not null) or coalesce(length(trim(${t.hiredWithoutOfferReason})), 0) > 0`),
-    ],
   )
   .enableRLS();

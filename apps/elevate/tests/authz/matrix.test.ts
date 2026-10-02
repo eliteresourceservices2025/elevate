@@ -93,6 +93,12 @@ const EXPECTED: Record<string, string> = {
   "signing.view_own": "O O O O O O",
   "signing.sign": "O O O O O O",
   "onboarding.manage": "A A T - - -",
+  "onboarding.view": "A A T O O O",
+  "onboarding.manage_templates": "A A - - - -",
+  "offboarding.view": "A A T O O O",
+  "offboarding.manage": "A A - - - -",
+  "offboarding.exit_interview": "O O O O O O",
+  "certificates.issue": "A A - - - -",
   "onboarding.view_own_tasks": "- - - - - O",
   "reviews.view": "A A T - - O",
   "safevoice.handle": "- - - - - -", // handler flag only

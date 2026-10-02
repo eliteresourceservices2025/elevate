@@ -87,6 +87,14 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 | "Hire" says there is no signed offer | The applicant has not signed. | Wait, resend, or hire with a written reason (for example signed on paper). The reason is recorded. |
 | Hire says that work email already exists | That email already belongs to a person record. | Use a different work email, or open the existing record. |
 
+## 5b4. Onboarding and offboarding problems
+
+- **A new hire has no checklist.** The checklist is created when HR hires from the applicant page. Someone added by hand has none: no action is needed unless you want one, ask a developer.
+- **A task will not tick by itself.** Only "ticked by hand" tasks can be ticked by people. The others close when ELEVATE sees the document, policy acknowledgment, account or signature (within 30 minutes, or when the page is opened). If the thing really is done outside ELEVATE, HR can skip it with a reason.
+- **Access was not removed after the last working day.** Open the case: "Remove access now" does it immediately and repeats whatever step failed. If it says the person still has reports, reassign them first (People, their profile, Employment), then try again. The hourly job tries again by itself.
+- **Someone was offboarded by mistake.** Before access is removed use "Cancel offboarding". After that, restore the person in People and ask a developer to re-enable the sign-in in the Supabase dashboard (Authentication, Users, the person, remove the ban).
+- **Certificate of engagement.** Issue it from the offboarding page. It lists dates and role only. Every view is logged.
+
 ## 5c. Signing problems
 
 | What you see | What it means | What to do |

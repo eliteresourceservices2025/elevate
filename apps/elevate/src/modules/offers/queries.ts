@@ -10,7 +10,8 @@ import { authorizeForOpening } from "@/modules/recruiting/service";
 import { legalNames } from "@/modules/signing/service";
 import { esignSigners } from "@/modules/signing/schema";
 import { loadApplicant, offersFor, type OfferStatus } from "./service";
-import { offerTemplates, onboardingCases } from "./schema";
+import { onboardingCases } from "@/modules/onboarding/schema";
+import { offerTemplates } from "./schema";
 
 export type TemplateRow = { id: string; name: string; description: string | null; body: string; updatedAt: Date };
 

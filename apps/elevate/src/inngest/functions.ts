@@ -11,6 +11,7 @@ import { flushEmailQueue } from "@/modules/notifications/email-queue";
 import { todayInZone } from "@/modules/org/service";
 import { runRecruitingRetention, sendCandidateEmails } from "@/modules/recruiting/jobs";
 import { runEsignReminders, runEsignSealSweep } from "@/modules/signing/jobs";
+import { runChecklistReminders, runChecklistSync, runSeparations } from "@/modules/onboarding/jobs";
 import { runHealthCheck, trackJob as track } from "@/modules/health/service";
 import { inngest } from "./client";
 
@@ -182,4 +183,22 @@ export const esignSealSweep = inngest.createFunction(
   async ({ step }) => step.run("seal", () => track("esign-seal-sweep", () => runEsignSealSweep())),
 );
 
-export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep];
+/** Hourly: remove access for people whose last working day has ended in their own time zone. */
+export const offboardingSeparations = inngest.createFunction(
+  { id: "offboarding-separations", triggers: { cron: "5 * * * *" } },
+  async ({ step }) => step.run("separate", () => track("offboarding-separations", () => runSeparations())),
+);
+
+/** Every 30 minutes: close checklist tasks that ELEVATE can see are done. */
+export const checklistSync = inngest.createFunction(
+  { id: "checklist-sync", triggers: { cron: "*/30 * * * *" } },
+  async ({ step }) => step.run("sync", () => track("checklist-sync", () => runChecklistSync())),
+);
+
+/** Daily at 8:30 AM Manila: remind owners of checklist tasks that are due or late. */
+export const checklistReminders = inngest.createFunction(
+  { id: "checklist-reminders", triggers: { cron: `TZ=${SECONDARY_TIMEZONE} 30 8 * * *` } },
+  async ({ step }) => step.run("remind", () => track("checklist-reminders", () => runChecklistReminders(formatInZone(new Date(), SECONDARY_TIMEZONE, "yyyy-MM-dd")))),
+);
+
+export const functions = [documentExpiryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders];
