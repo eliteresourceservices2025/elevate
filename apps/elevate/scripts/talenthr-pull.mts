@@ -1,12 +1,12 @@
 // Pulls what the TalentHR CSV export lacks, through TalentHR's API (read only on TalentHR's side):
 //   - each person's documents, saved as real documents of the person (matched by work email)
 //   - each person's time-off budgets and history, kept as an ENCRYPTED archive (not loaded into the leave ledger)
-//   - all jobs and applicants, kept as one encrypted archive
+//   - all jobs and applicants, kept as one encrypted archive; ACTIVE applicants are also loaded into recruiting (jobs come in closed, no emails)
 //
 //   pnpm talenthr:pull -- --probe                          checks the API key (one read-only call) and says which way it works
 //   pnpm talenthr:pull -- --as hr@example.com --dry-run    counts what would be pulled, writes nothing
 //   pnpm talenthr:pull -- --as hr@example.com              does it (safe to run again: what was imported is skipped)
-//   add --only a@x.com,b@x.com to try a few people first
+//   add --only a@x.com,b@x.com to try a few people first (applicants are skipped then); add --no-applicants to leave recruiting alone
 //
 // REAL DATA: this refuses to run unless ELEVATE_ENV=production, so a laptop or test database never receives real people's files.
 // The key is read from the git-ignored file apps/elevate/.env.talenthr.local (TALENTHR_API_KEY) and is never printed.
@@ -61,12 +61,14 @@ const scheme = (await probeTalentHr(apiKey)) ?? "key-as-user";
 const api = createTalentHrClient({ apiKey, scheme });
 const only = value("--only")?.split(",").map((s) => s.trim()).filter(Boolean);
 const dryRun = flag("--dry-run");
+const applicants = !flag("--no-applicants");
 
 console.log(dryRun ? "Dry run: nothing will be written." : "Pulling from TalentHR...");
-const { pullId, summary } = await runPull({ id: actor.id, email: actor.email }, api, { dryRun, onlyEmails: only });
+const { pullId, summary } = await runPull({ id: actor.id, email: actor.email }, api, { dryRun, onlyEmails: only, applicants });
 console.log(`Pull ${pullId.slice(0, 8)} finished.`);
 console.log(`People in TalentHR: ${summary.people}. Matched in ELEVATE: ${summary.matched}. Not in ELEVATE yet: ${summary.unmatched}.`);
 console.log(`Documents found: ${summary.documentsFound}. ${dryRun ? "Would import" : "Imported"}: ${summary.documentsImported}. Already there: ${summary.documentsDuplicate}. Skipped (too big or not allowed): ${summary.documentsSkipped}. Failed: ${summary.documentsFailed}.`);
 console.log(`Leave histories archived: ${summary.leaveArchived}. Applicants archived: ${summary.applicantsArchived}.`);
+if (applicants && !only) console.log(`Active applicants ${dryRun ? "that would be loaded" : "loaded into recruiting"}: ${summary.applicantsImported} in ${summary.openingsCreated} jobs (closed, no emails sent). Resumes saved: ${summary.resumesImported}. Already there or skipped: ${summary.applicantsSkipped}.`);
 if (summary.unmatched > 0) console.log("People not in ELEVATE are not pulled. Import the people CSV first, then run this again.");
 process.exit(0);

@@ -8,6 +8,7 @@ import { documents, documentTypes } from "@/modules/documents/schema";
 import { extensionOf, MAX_FILE_BYTES, mimeOf, sanitizeFileName, sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { employees } from "@/modules/people/schema";
+import { importActiveApplicants } from "./applicants-pull";
 import { importPullItems, importPulls } from "./schema";
 import type { TalentHrApi } from "./talenthr-client";
 import { createHash } from "node:crypto";
@@ -16,7 +17,7 @@ import { createHash } from "node:crypto";
 // lives in the host's environment). Safe to run again: a source item already imported is skipped.
 
 export type PullActor = { id: string; email: string };
-export type PullSummary = { people: number; matched: number; unmatched: number; documentsFound: number; documentsImported: number; documentsDuplicate: number; documentsSkipped: number; documentsFailed: number; leaveArchived: number; applicantsArchived: number };
+export type PullSummary = { people: number; matched: number; unmatched: number; documentsFound: number; documentsImported: number; documentsDuplicate: number; documentsSkipped: number; documentsFailed: number; leaveArchived: number; applicantsArchived: number; openingsCreated: number; applicantsImported: number; applicantsSkipped: number; resumesImported: number };
 
 const DOC_TYPE_SLUG = "talenthr_import";
 const archiveContext = (kind: string, source: string) => `import_pull:${kind}:${source}`;
@@ -29,9 +30,9 @@ async function importedDocumentType(): Promise<string> {
   return made.id;
 }
 
-export async function runPull(actor: PullActor, api: TalentHrApi, opts: { dryRun: boolean; onlyEmails?: string[] }): Promise<{ pullId: string; summary: PullSummary }> {
+export async function runPull(actor: PullActor, api: TalentHrApi, opts: { dryRun: boolean; onlyEmails?: string[]; applicants?: boolean }): Promise<{ pullId: string; summary: PullSummary }> {
   const [pull] = await db.insert(importPulls).values({ startedBy: actor.id, dryRun: opts.dryRun ? "yes" : "no" }).returning({ id: importPulls.id });
-  const summary: PullSummary = { people: 0, matched: 0, unmatched: 0, documentsFound: 0, documentsImported: 0, documentsDuplicate: 0, documentsSkipped: 0, documentsFailed: 0, leaveArchived: 0, applicantsArchived: 0 };
+  const summary: PullSummary = { people: 0, matched: 0, unmatched: 0, documentsFound: 0, documentsImported: 0, documentsDuplicate: 0, documentsSkipped: 0, documentsFailed: 0, leaveArchived: 0, applicantsArchived: 0, openingsCreated: 0, applicantsImported: 0, applicantsSkipped: 0, resumesImported: 0 };
   try {
     const directory = await api.directory();
     summary.people = directory.length;
@@ -128,6 +129,9 @@ export async function runPull(actor: PullActor, api: TalentHrApi, opts: { dryRun
       await db.insert(importPullItems).values({ pullId: pull.id, kind: "applicants", sourceId: "all", outcome: "archived", payloadEnc });
       summary.applicantsArchived = applicants.length;
     }
+
+    // Active applicants go into recruiting (closed jobs, no emails); everyone else stays in the archive above
+    if (opts.applicants !== false && !wanted) Object.assign(summary, await importActiveApplicants(actor, api, { dryRun: opts.dryRun, pullId: pull.id }));
 
     await db.transaction(async (tx) => {
       await tx.update(importPulls).set({ status: "done", finishedAt: new Date(), summary: summary as unknown as Record<string, number> }).where(eq(importPulls.id, pull.id));

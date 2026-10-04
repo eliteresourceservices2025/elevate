@@ -4,7 +4,8 @@ import { ForbiddenError, authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { allowRequest } from "@/lib/rate-limit";
 import { ActionFailure } from "@/lib/run-action";
-import { parseCsv, MAX_CSV_BYTES } from "@/modules/imports/csv";
+import { parseCsv, MAX_CSV_BYTES, type ParsedCsv } from "@/modules/imports/csv";
+import { parseXlsx } from "@/modules/imports/xlsx";
 import { checkMapping, defaultMapping } from "@/modules/imports/mapping";
 import { stageBatch } from "@/modules/imports/service";
 import { stageFormSchema } from "@/modules/imports/validators";
@@ -32,10 +33,12 @@ export async function POST(request: Request) {
     return json({ ok: false, error: "We could not read the form. Please try again." }, 400);
   }
   const upload = form.get("file");
-  if (!(upload instanceof File) || upload.size === 0) return json({ ok: false, error: "Attach the CSV file." }, 400);
+  if (!(upload instanceof File) || upload.size === 0) return json({ ok: false, error: "Attach the CSV or Excel file." }, 400);
   if (upload.size > MAX_CSV_BYTES) return json({ ok: false, error: "The file is larger than 2 MB." }, 413);
-  if (!/\.csv$/i.test(upload.name)) return json({ ok: false, error: "Upload the CSV export (a .csv file)." }, 400);
-  const parsed = parseCsv(await upload.text());
+  const isXlsx = /\.xlsx$/i.test(upload.name);
+  if (!isXlsx && !/\.csv$/i.test(upload.name)) return json({ ok: false, error: "Upload the export as a .csv or .xlsx file." }, 400);
+  // An Excel file is read by its content (a zip), a CSV as text; the extension only chooses which reader to try
+  const parsed: ParsedCsv = isXlsx ? await parseXlsx(new Uint8Array(await upload.arrayBuffer())) : parseCsv(await upload.text());
   if ("error" in parsed) return json({ ok: false, error: parsed.error }, 400);
 
   const rawMapping = form.get("mapping");

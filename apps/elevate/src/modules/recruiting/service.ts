@@ -143,3 +143,58 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
     throw error;
   }
 }
+
+// ---- Import from TalentHR (Phase 5) ---------------------------------------------------------------------------------------------
+// Used by the TalentHR pull to load ACTIVE applicants. Jobs come in closed (HR reopens one to use it) and no email is ever queued for an
+// imported applicant. These take the acting user as a parameter, so they are internals, not public endpoints.
+
+export const IMPORT_NOTICE = "talenthr-import";
+
+export async function createImportedOpening(tx: Executor, actor: { id: string; email: string }, input: { title: string; description: string; location?: string | null }): Promise<string> {
+  const [o] = await tx
+    .insert(jobOpenings)
+    .values({ title: input.title.trim().slice(0, 120) || "Imported job", description: (input.description.trim() || "Imported from TalentHR.").slice(0, 8000), location: (input.location ?? "").trim().slice(0, 80) || "Remote", status: "closed", sendAck: false, sendRejection: false, createdBy: actor.id, closedAt: new Date() })
+    .returning({ id: jobOpenings.id });
+  await writeAudit({ actor, action: "recruiting.import_opening", targetType: "job_opening", targetId: o.id }, tx);
+  return o.id;
+}
+
+export type ImportedApplication = {
+  openingId: string;
+  email: string;
+  fullName: string;
+  phone?: string | null;
+  stage: "applied" | "screening" | "interview" | "assessment" | "offer";
+  appliedAt?: Date | null;
+  note?: string | null;
+  /** Already stored in the recruiting bucket by the caller. */
+  resume?: { path: string; name: string; kind: "pdf" | "docx"; sha256: string } | null;
+};
+
+/** Adds an applicant and their application. Returns null when this person already applied to that opening. An existing candidate keeps their own details and resume. */
+export async function importApplication(tx: Executor, actor: { id: string; email: string }, input: ImportedApplication): Promise<{ applicationId: string; candidateCreated: boolean } | null> {
+  const email = input.email.trim().toLowerCase();
+  const [existing] = await tx.select().from(candidates).where(and(sql`lower(${candidates.email}) = ${email}`, sql`${candidates.anonymizedAt} is null`));
+  let candidateId: string;
+  let candidateCreated = false;
+  if (existing) {
+    const [again] = await tx.select({ id: applications.id }).from(applications).where(and(eq(applications.openingId, input.openingId), eq(applications.candidateId, existing.id)));
+    if (again) return null;
+    candidateId = existing.id;
+    if (!existing.resumePath && input.resume) await tx.update(candidates).set({ resumePath: input.resume.path, resumeName: input.resume.name, resumeKind: input.resume.kind, resumeSha256: input.resume.sha256 }).where(eq(candidates.id, existing.id));
+  } else {
+    const [made] = await tx
+      .insert(candidates)
+      .values({ email, fullName: input.fullName.trim().slice(0, 120) || email, phone: input.phone?.trim().slice(0, 40) || null, consentNoticeVersion: IMPORT_NOTICE, resumePath: input.resume?.path ?? null, resumeName: input.resume?.name ?? null, resumeKind: input.resume?.kind ?? null, resumeSha256: input.resume?.sha256 ?? null })
+      .returning({ id: candidates.id });
+    candidateId = made.id;
+    candidateCreated = true;
+  }
+  const at = input.appliedAt ?? new Date();
+  const [app] = await tx.insert(applications).values({ openingId: input.openingId, candidateId, stage: input.stage, note: input.note?.trim().slice(0, 2000) || null, appliedAt: at, stageChangedAt: new Date() }).onConflictDoNothing().returning({ id: applications.id });
+  if (!app) return null;
+  await tx.insert(applicationStageHistory).values({ applicationId: app.id, fromStage: null, toStage: "applied", note: "Imported from TalentHR", at });
+  if (input.stage !== "applied") await tx.insert(applicationStageHistory).values({ applicationId: app.id, fromStage: "applied", toStage: input.stage, byUserId: actor.id, note: "Stage in TalentHR" });
+  await writeAudit({ actor, action: "recruiting.import_application", targetType: "application", targetId: app.id, after: { openingId: input.openingId, stage: input.stage, candidateCreated } }, tx);
+  return { applicationId: app.id, candidateCreated };
+}

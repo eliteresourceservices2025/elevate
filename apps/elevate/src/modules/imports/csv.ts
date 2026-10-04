@@ -51,6 +51,11 @@ export function parseCsv(input: string): ParsedCsv {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "The file could not be read." };
   }
+  return tableFromRecords(records);
+}
+
+/** The same checks for any source of rows (a CSV, or the first sheet of a spreadsheet): the first row is the headers. */
+export function tableFromRecords(records: string[][]): ParsedCsv {
   const first = records[0];
   if (!first || first.every((h) => h.trim() === "")) return { error: "The file is empty." };
   const headers = first.map((h) => h.trim());

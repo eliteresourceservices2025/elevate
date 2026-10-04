@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { RoleSlug } from "@/lib/roles";
-import type { TalentHrApi, TalentHrDocument } from "@/modules/imports/talenthr-client";
+import type { TalentHrApi, TalentHrDocument, TalentHrJobApplicant, TalentHrJobPosition } from "@/modules/imports/talenthr-client";
 import { fakeCompany, toCsv } from "../fixtures/talenthr-export";
 import { FakeStorage, PDF_BYTES } from "./fake-storage";
 
@@ -40,7 +40,7 @@ async function makeHr(): Promise<TestUser> {
 }
 
 /** A fake TalentHR holding these people (by tag) with these documents. Tracks calls so tests can check nothing was written to it. */
-function fakeApi(tag: string, docsFor: Record<number, { doc: Partial<TalentHrDocument>; bytes?: Uint8Array; error?: "too_large" | "download_failed" }[]>) {
+function fakeApi(tag: string, docsFor: Record<number, { doc: Partial<TalentHrDocument>; bytes?: Uint8Array; error?: "too_large" | "download_failed" }[]>, hiring: { positions: TalentHrJobPosition[]; applicants: Record<number, TalentHrJobApplicant[]>; cv: Record<string, Uint8Array> } = { positions: [], applicants: {}, cv: {} }) {
   const calls: string[] = [];
   const seed = Math.floor(Math.random() * 1_000_000) * 1_000_000; // source ids differ per test
   const directory = [1, 2, 3, 4, 5, 99].map((n) => ({ id: 5000 + n, first_name: `Test${n}`, last_name: `Person${n}`, email: n === 99 ? `${tag}.nobody@example.com` : `${tag}.person${n}@example.com`, termination_date: null }));
@@ -59,7 +59,8 @@ function fakeApi(tag: string, docsFor: Record<number, { doc: Partial<TalentHrDoc
       });
     },
     async downloadDocument(doc) {
-      const b = bytesOf.get(doc.id);
+      if (doc.url && hiring.cv[doc.url]) return { bytes: hiring.cv[doc.url] };
+      const b = bytesOf.get(doc.id as number);
       if (b?.error) return { error: b.error };
       return b?.bytes ? { bytes: b.bytes } : { error: "download_failed" };
     },
@@ -72,7 +73,15 @@ function fakeApi(tag: string, docsFor: Record<number, { doc: Partial<TalentHrDoc
       return id === 5002 ? [{ id: 9, approved: true, budget: "1", is_canceled: false, start_date: "2026-01-02", end_date: "2026-01-02", timeoff_type_name: "Vacation", timeoff_type_slug: "vacation" }] : [];
     },
     async jobPositions() {
-      return [{ id: 1, job_position_title: "Scribe" }];
+      return hiring.positions;
+    },
+    async positionApplicants(id) {
+      calls.push(`applicants:${id}`);
+      return hiring.applicants[id] ?? [];
+    },
+    async application(_job, appId) {
+      calls.push(`application:${appId}`);
+      return { applicant_cv: hiring.cv[`https://files.example/cv/${appId}`] ? { cv_url: `https://files.example/cv/${appId}`, client_filename: "cv.pdf" } : null };
     },
     async applicants() {
       return [{ id: 1, first_name: "Closed", last_name: "Candidate", email: "closed@example.com" }];
@@ -114,7 +123,7 @@ describe("the TalentHR pull", () => {
     expect(saved.every((d) => d.status === "active" && d.storage_bucket === "employee-docs")).toBe(true);
     expect(fake.objects.size).toBeGreaterThanOrEqual(3);
     // The person with an unmatched email got nothing, and nothing but GET-style reads reached TalentHR
-    expect(calls.every((c) => /^(directory|documents|budgets|requests):?/.test(c))).toBe(true);
+    expect(calls.every((c) => /^(directory|documents|budgets|requests|applicants|application):?/.test(c))).toBe(true);
 
     // The archives are encrypted, and readable only through the decrypting helper
     const archived = await rows<{ source_id: string; payload_enc: string }>(sql`select source_id, payload_enc from ops.import_pull_items where kind = 'leave_history'`);
@@ -147,4 +156,72 @@ describe("the TalentHR pull", () => {
     const one = await runPull(hr, api, { dryRun: false, onlyEmails: [`${tag}.person3@example.com`] });
     expect(one.summary).toMatchObject({ matched: 1, documentsImported: 1 });
   });
+});
+
+describe("loading active applicants into recruiting", () => {
+  const steps = [
+    { id: 1, name: "Applied", slug: "applied" },
+    { id: 2, name: "Phone screen", slug: "phone-screen" },
+    { id: 3, name: "Interview", slug: "interview" },
+    { id: 4, name: "Hired", slug: "hired" },
+    { id: 5, name: "Rejected", slug: "rejected" },
+  ];
+  const seed = Math.floor(Math.random() * 1_000_000) * 100; // source ids differ per run
+  const person = (n: number, tag: string, step: number | null, extra: Partial<TalentHrJobApplicant["application"] & object> & { email?: string | null } = {}) => ({
+    id: 900 + n,
+    first_name: `Cand${n}`,
+    last_name: "Applicant",
+    email: extra.email === undefined ? `${tag}.cand${n}@example.com` : extra.email,
+    phone: "+63 917 222 3333",
+    application: { id: seed + 7000 + n, application_step_id: step, is_disqualified: extra.is_disqualified ?? false, deleted_at: null, description: "I would like to join.", created_at: "2026-09-01T10:00:00Z" },
+  });
+
+  it("creates a closed job, candidates, applications at the right stage and resumes, skips the finished ones, sends no email, and is safe to repeat", async () => {
+    const tag = `cand${Date.now().toString(36)}`;
+    const posId = 4000 + Math.floor(Math.random() * 1000);
+    const hiring = {
+      positions: [{ id: posId, job_position_title: `Scribe ${tag}`, job_description: "Chart notes for a clinic.", job_position_status_slug: "published", available_steps: steps }],
+      applicants: { [posId]: [person(1, tag, 1), person(2, tag, 2), person(3, tag, 3), person(4, tag, 4), person(5, tag, 5), person(6, tag, 1, { is_disqualified: true }), person(7, tag, 1, { email: null })] },
+      cv: { [`https://files.example/cv/${seed + 7002}`]: PDF_BYTES },
+    };
+    const { api } = fakeApi(tag, {}, hiring);
+    const first = await runPull(hr, api, { dryRun: false });
+    expect(first.summary).toMatchObject({ openingsCreated: 1, applicantsImported: 3, resumesImported: 1 });
+
+    const [opening] = await rows<{ id: string; status: string; send_ack: boolean }>(sql`select id, status, send_ack from talent.job_openings where title = ${`Scribe ${tag}`}`);
+    expect(opening).toMatchObject({ status: "closed", send_ack: false });
+    const apps = await rows<{ stage: string; email: string; resume_path: string | null; consent: string }>(sql`
+      select a.stage, c.email, c.resume_path, c.consent_notice_version as consent from talent.applications a join talent.candidates c on c.id = a.candidate_id where a.opening_id = ${opening.id} order by c.email`);
+    expect(apps.map((a) => [a.email.replace(`${tag}.`, ""), a.stage])).toEqual([["cand1@example.com", "applied"], ["cand2@example.com", "screening"], ["cand3@example.com", "interview"]]);
+    expect(apps.find((a) => a.email.includes("cand2"))?.resume_path).toMatch(/^resumes\/.+\.pdf$/);
+    expect(apps.every((a) => a.consent === "talenthr-import")).toBe(true);
+    // History records the import and the stage, and nothing was queued for the applicants
+    expect(await rows(sql`select 1 from talent.application_stage_history h join talent.applications a on a.id = h.application_id where a.opening_id = ${opening.id}`)).toHaveLength(5);
+    expect(await rows(sql`select 1 from talent.candidate_emails e join talent.applications a on a.id = e.application_id where a.opening_id = ${opening.id}`)).toHaveLength(0);
+
+    const again = await runPull(hr, api, { dryRun: false });
+    expect(again.summary).toMatchObject({ openingsCreated: 0, applicantsImported: 0 });
+    expect(await rows(sql`select 1 from talent.applications where opening_id = ${opening.id}`)).toHaveLength(3);
+  });
+
+  it("keeps an existing candidate's own details, and does nothing in a dry run", async () => {
+    const tag = `cdry${Date.now().toString(36)}`;
+    const posId = 5000 + Math.floor(Math.random() * 1000);
+    await db.execute(sql`insert into talent.candidates (email, full_name, phone, consent_notice_version) values (${`${tag}.cand11@example.com`}, 'Existing Name', '111', 'v1')`);
+    const hiring = { positions: [{ id: posId, job_position_title: `Dry ${tag}`, available_steps: steps }], applicants: { [posId]: [person(11, tag, 2)] }, cv: {} };
+    const { api } = fakeApi(tag, {}, hiring);
+    const dry = await runPull(hr, api, { dryRun: true });
+    expect(dry.summary).toMatchObject({ openingsCreated: 1, applicantsImported: 1 });
+    expect(await rows(sql`select 1 from talent.job_openings where title = ${`Dry ${tag}`}`)).toHaveLength(0);
+    await runPull(hr, api, { dryRun: false });
+    const [c] = await rows<{ full_name: string; phone: string }>(sql`select full_name, phone from talent.candidates where lower(email) = ${`${tag}.cand11@example.com`}`);
+    expect(c).toMatchObject({ full_name: "Existing Name", phone: "111" });
+    expect(await rows(sql`select 1 from talent.applications a join talent.job_openings o on o.id = a.opening_id where o.title = ${`Dry ${tag}`}`)).toHaveLength(1);
+  });
+});
+
+// The custom fields an import creates are removed again so other test files see only their own (the database is shared by the whole run)
+afterAll(async () => {
+  await db.execute(sql`delete from core.custom_field_values where field_def_id in (select id from core.custom_field_defs where key like 'imp\_%')`);
+  await db.execute(sql`delete from core.custom_field_defs where key like 'imp\_%'`);
 });

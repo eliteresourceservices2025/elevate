@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { RoleSlug } from "@/lib/roles";
 import { fakeCompany, fakePerson, toCsv } from "../fixtures/talenthr-export";
 
@@ -250,4 +250,10 @@ describe("who may import", () => {
     as(hr2);
     expect((await act.discardImport({ batchId })).ok).toBe(true);
   });
+});
+
+// The custom fields an import creates are removed again so other test files see only their own (the database is shared by the whole run)
+afterAll(async () => {
+  await db.execute(sql`delete from core.custom_field_values where field_def_id in (select id from core.custom_field_defs where key like 'imp\_%')`);
+  await db.execute(sql`delete from core.custom_field_defs where key like 'imp\_%'`);
 });

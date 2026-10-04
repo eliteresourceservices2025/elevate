@@ -9,15 +9,30 @@ export type TalentHrDocument = { id: number; client_filename: string; filename: 
 export type TalentHrBudget = { id: number; employee_id: number; budget: string; year: string; timeoff_type_name: string; timeoff_type_slug: string; used_budget: string; original_budget: string; paid: boolean };
 export type TalentHrTimeOff = { id: number; approved: boolean; budget: string; is_canceled: boolean; start_date: string; end_date: string; timeoff_type_name: string; timeoff_type_slug: string };
 
+export type TalentHrStep = { id: number; name: string; slug: string };
+export type TalentHrJobPosition = { id: number; job_position_title: string; job_description?: string | null; job_position_status_slug?: string | null; location_name?: string | null; city?: string | null; available_steps?: TalentHrStep[] };
+export type TalentHrJobApplicant = {
+  id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  created_at?: string | null;
+  application?: { id: number; is_disqualified?: boolean | null; deleted_at?: string | null; application_step_id?: number | null; description?: string | null; created_at?: string | null } | null;
+};
+export type TalentHrApplication = { application_date?: string | null; applicant_cv?: { cv_url?: string | null; client_filename?: string | null } | null };
+
 /** What the pull needs. Tests provide a fake with the same shape. */
 export interface TalentHrApi {
   directory(): Promise<TalentHrDirectoryRow[]>;
   documents(employeeId: number): Promise<TalentHrDocument[]>;
-  downloadDocument(doc: TalentHrDocument, maxBytes: number): Promise<{ bytes: Uint8Array } | { error: "too_large" | "download_failed" }>;
+  downloadDocument(doc: { id?: number; url: string | null }, maxBytes: number): Promise<{ bytes: Uint8Array } | { error: "too_large" | "download_failed" }>;
   timeOffBudgets(employeeId: number): Promise<TalentHrBudget[]>;
   timeOffRequests(employeeId: number): Promise<TalentHrTimeOff[]>;
-  jobPositions(): Promise<unknown[]>;
+  jobPositions(): Promise<TalentHrJobPosition[]>;
   applicants(): Promise<unknown[]>;
+  positionApplicants(jobPositionId: number): Promise<TalentHrJobApplicant[]>;
+  application(jobPositionId: number, applicationId: number): Promise<TalentHrApplication | null>;
 }
 
 type Envelope<T> = { success?: boolean; data?: T };
@@ -91,8 +106,12 @@ export function createTalentHrClient(opts: { apiKey: string; scheme?: "key-as-us
     },
     timeOffBudgets: (id) => list<TalentHrBudget>(`/employees/${id}/time-off-budgets`),
     timeOffRequests: (id) => paged<TalentHrTimeOff>(`/employees/${id}/time-off-requests`),
-    jobPositions: () => list<unknown>("/job-positions"),
+    jobPositions: () => list<TalentHrJobPosition>("/job-positions"),
     applicants: () => paged<unknown>("/ats-applicants"),
+    positionApplicants: (id) => paged<TalentHrJobApplicant>(`/job-positions/${id}/ats-applicants`),
+    async application(jobId, appId) {
+      return (await get<Envelope<TalentHrApplication>>(`/job-positions/${jobId}/ats-applications/${appId}`)).data ?? null;
+    },
   };
 }
 

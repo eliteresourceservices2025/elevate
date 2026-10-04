@@ -58,14 +58,14 @@ export function ImportUploader() {
     <div className="space-y-4 rounded-xl border bg-card p-4">
       <h2 className="text-lg font-semibold">Upload a TalentHR export</h2>
       <p className="text-sm text-muted-foreground">
-        The CSV from TalentHR (Settings, Import and Export). Nothing is created yet: the file is checked and shown as a preview first. It is kept encrypted and removed once you commit or discard it.
+        The CSV or Excel export from TalentHR (Settings, Import and Export). Only the first sheet of an Excel file is read. Nothing is created yet: the file is checked and shown as a preview first. It is kept encrypted and removed once you commit or discard it.
       </p>
       <div className="space-y-1">
-        <Label htmlFor="import-file">CSV file (up to 2 MB)</Label>
+        <Label htmlFor="import-file">CSV or Excel (.xlsx) file, up to 2 MB</Label>
         <Input
           id="import-file"
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           onChange={(e) => {
             setFile(e.target.files?.[0] ?? null);
             setStep(null);

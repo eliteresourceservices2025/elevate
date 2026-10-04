@@ -17,6 +17,8 @@
     "db:seed": "pnpm --filter elevate db:seed",
     "email:test": "pnpm --filter elevate --reporter=append-only email:test",
     "jibble:probe": "pnpm --filter elevate --reporter=append-only jibble:probe",
+    "talenthr:pull": "pnpm --filter elevate --reporter=append-only talenthr:pull",
+    "storage:setup": "pnpm --filter elevate --reporter=append-only storage:setup",
     "test:integration": "pnpm --filter elevate test:integration"
   }
 }

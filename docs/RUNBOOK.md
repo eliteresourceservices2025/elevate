@@ -129,7 +129,8 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 3. Check the key: `pnpm talenthr:pull -- --probe`.
 4. Try a few people: `pnpm talenthr:pull -- --as hr@yourcompany.com --dry-run --only a@x.com,b@x.com`, then the same without `--dry-run`.
 5. Run it for everyone, then open the import's reconciliation: documents expected versus imported. Files that were too big, not an allowed type or failed to download show as mismatches: add them by hand in People > Documents, or fix and run the pull again (it skips what is done).
-6. TalentHR leave history and applicants are archived as encrypted files and are not loaded into ELEVATE.
+6. TalentHR leave history is archived as an encrypted file and is not loaded into ELEVATE. Active applicants ARE loaded into Recruiting: each TalentHR job with active applicants becomes a **closed** job in ELEVATE (reopen one to use it), with the applicants at the nearest stage and their resumes. No emails are sent to them. Closed, rejected and hired applicants stay only in the encrypted archive. Add `--no-applicants` to leave Recruiting alone.
+7. Run these from the repository root with `pnpm talenthr:pull -- --probe` (the root forwards to the app), or from `apps/elevate`.
 
 ## 5c. Signing problems
 

@@ -97,7 +97,7 @@ export const importPullItems = ops
       pullId: uuid("pull_id")
         .notNull()
         .references(() => importPulls.id),
-      /** document, leave_history or applicants */
+      /** document, leave_history, applicants (the archive), opening or application (loaded into recruiting) */
       kind: text("kind").notNull(),
       /** The id in TalentHR (a document id, an employee id, or "all"). */
       sourceId: text("source_id").notNull(),
@@ -107,6 +107,8 @@ export const importPullItems = ops
       /** A short code such as too_large, type_not_allowed, download_failed. Never a file name or a value. */
       reason: text("reason"),
       sha256: text("sha256"),
+      /** The row this item created in ELEVATE (a job opening or an application), so a repeat run can find it. */
+      localId: uuid("local_id"),
       /** The archived JSON, encrypted (context "import_pull:<kind>:<source>"). Only for leave_history and applicants. */
       payloadEnc: text("payload_enc"),
     },
@@ -114,7 +116,7 @@ export const importPullItems = ops
       index("import_pull_items_pull_idx").on(t.pullId),
       index("import_pull_items_employee_idx").on(t.employeeId),
       uniqueIndex("import_pull_items_done_idx").on(t.kind, t.sourceId).where(sql`${t.outcome} in ('imported','archived')`),
-      check("import_pull_items_kind_chk", sql`${t.kind} in ('document','leave_history','applicants')`),
+      check("import_pull_items_kind_chk", sql`${t.kind} in ('document','leave_history','applicants','opening','application')`),
       check("import_pull_items_outcome_chk", sql`${t.outcome} in ('imported','archived','duplicate','skipped','failed')`),
     ],
   )
