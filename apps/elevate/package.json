@@ -18,6 +18,7 @@
     "storage:setup": "tsx scripts/setup-storage.mts",
     "email:test": "tsx scripts/send-test-email.mts",
     "jibble:probe": "tsx scripts/jibble-probe.mts",
+    "talenthr:pull": "tsx --conditions react-server scripts/talenthr-pull.mts",
     "dev:mfa": "tsx scripts/dev-mfa.mts",
     "db:bootstrap": "tsx scripts/bootstrap-super-admins.mts",
     "format": "prettier --write .",

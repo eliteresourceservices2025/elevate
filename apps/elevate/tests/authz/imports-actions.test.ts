@@ -13,6 +13,8 @@ vi.mock("@/modules/audit/write", () => ({ writeAudit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const actions = await import("@/modules/imports/actions");
+const goLiveActions = await import("@/modules/imports/golive-actions");
+const goLiveQueries = await import("@/modules/imports/golive-queries");
 const queries = await import("@/modules/imports/queries");
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -28,6 +30,7 @@ const cases: { name: string; call: () => Promise<{ ok: boolean; error?: string }
   { name: "rollbackImport", call: () => actions.rollbackImport({ batchId: ID }) },
   { name: "discardImport", call: () => actions.discardImport({ batchId: ID }) },
   { name: "signOffImport", call: () => actions.signOffImport({ batchId: ID }) },
+  { name: "setGoLiveStep", call: () => goLiveActions.setGoLiveStep({ key: "domain_dns", done: true }) },
 ];
 
 beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
@@ -54,6 +57,7 @@ const queryCases: { name: string; call: () => Promise<unknown> }[] = [
   { name: "getBatch", call: () => queries.getBatch(ID) },
   { name: "listBatchRows", call: () => queries.listBatchRows(ID, { filter: "all", page: 1, pageSize: 25 }) },
   { name: "getReconciliation", call: () => queries.getReconciliation(ID) },
+  { name: "getGoLive", call: () => goLiveQueries.getGoLive() },
 ];
 
 describe("Import queries, every role", () => {

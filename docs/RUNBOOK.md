@@ -122,6 +122,15 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 - **I want to undo an import.** Use Roll back on the import page: people it created are archived unless they have signed in or have activity. Re-uploading the same file restores them.
 - **Real data:** only do real imports on the production system. Never upload a real export to a laptop or test copy.
 
+## 5b8. Pulling documents from TalentHR (API)
+
+1. Import the people CSV first (Settings, Import from TalentHR) so people exist in ELEVATE. The pull only handles people whose work email matches.
+2. On the production system, put the API key in `apps/elevate/.env.talenthr.local` (`TALENTHR_API_KEY=...`). Never paste it in chat or commit it.
+3. Check the key: `pnpm talenthr:pull -- --probe`.
+4. Try a few people: `pnpm talenthr:pull -- --as hr@yourcompany.com --dry-run --only a@x.com,b@x.com`, then the same without `--dry-run`.
+5. Run it for everyone, then open the import's reconciliation: documents expected versus imported. Files that were too big, not an allowed type or failed to download show as mismatches: add them by hand in People > Documents, or fix and run the pull again (it skips what is done).
+6. TalentHR leave history and applicants are archived as encrypted files and are not loaded into ELEVATE.
+
 ## 5c. Signing problems
 
 | What you see | What it means | What to do |

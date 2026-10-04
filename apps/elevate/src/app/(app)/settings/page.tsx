@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileUp, History, Mail, ShieldCheck } from "lucide-react";
+import { FileUp, History, ListChecks, Mail, ShieldCheck } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -28,6 +28,13 @@ const SECTIONS = [
     icon: FileUp,
     title: "Import from TalentHR",
     description: "Move people from a TalentHR export: preview, commit and reconcile.",
+  },
+  {
+    href: "/settings/go-live",
+    action: "imports.manage",
+    icon: ListChecks,
+    title: "Go-live checklist",
+    description: "What to check before everyone moves over from TalentHR.",
   },
   {
     href: "/settings/audit-log",

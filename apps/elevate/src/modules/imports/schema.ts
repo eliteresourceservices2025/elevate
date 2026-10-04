@@ -69,3 +69,63 @@ export const importRows = ops
     ],
   )
   .enableRLS();
+
+// A pull from TalentHR's API (Phase 5, part 2): what the CSV export lacks. Documents become real documents of the person; leave history
+// and applicants are archived as encrypted files (they are not loaded into leave or recruiting). One row per source item, so a second run
+// skips what was already imported.
+export const importPulls = ops
+  .table(
+    "import_pulls",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      status: text("status").notNull().default("running"),
+      dryRun: text("dry_run").notNull().default("no"),
+      startedBy: uuid("started_by").references(() => users.id),
+      startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+      finishedAt: timestamp("finished_at", { withTimezone: true }),
+      summary: jsonb("summary").$type<Record<string, number>>().notNull().default({}),
+    },
+    (t) => [check("import_pulls_status_chk", sql`${t.status} in ('running','done','failed')`), check("import_pulls_dry_chk", sql`${t.dryRun} in ('yes','no')`)],
+  )
+  .enableRLS();
+
+export const importPullItems = ops
+  .table(
+    "import_pull_items",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      pullId: uuid("pull_id")
+        .notNull()
+        .references(() => importPulls.id),
+      /** document, leave_history or applicants */
+      kind: text("kind").notNull(),
+      /** The id in TalentHR (a document id, an employee id, or "all"). */
+      sourceId: text("source_id").notNull(),
+      employeeId: uuid("employee_id").references(() => employees.id),
+      /** imported, archived, duplicate, skipped or failed */
+      outcome: text("outcome").notNull(),
+      /** A short code such as too_large, type_not_allowed, download_failed. Never a file name or a value. */
+      reason: text("reason"),
+      sha256: text("sha256"),
+      /** The archived JSON, encrypted (context "import_pull:<kind>:<source>"). Only for leave_history and applicants. */
+      payloadEnc: text("payload_enc"),
+    },
+    (t) => [
+      index("import_pull_items_pull_idx").on(t.pullId),
+      index("import_pull_items_employee_idx").on(t.employeeId),
+      uniqueIndex("import_pull_items_done_idx").on(t.kind, t.sourceId).where(sql`${t.outcome} in ('imported','archived')`),
+      check("import_pull_items_kind_chk", sql`${t.kind} in ('document','leave_history','applicants')`),
+      check("import_pull_items_outcome_chk", sql`${t.outcome} in ('imported','archived','duplicate','skipped','failed')`),
+    ],
+  )
+  .enableRLS();
+
+// Go-live checklist: the manual steps HR ticks off (the automatic ones are computed). One row per item key.
+export const goLiveItems = ops
+  .table("golive_items", {
+    key: text("key").primaryKey(),
+    doneBy: uuid("done_by").references(() => users.id),
+    doneAt: timestamp("done_at", { withTimezone: true }).notNull().defaultNow(),
+    note: text("note"),
+  })
+  .enableRLS();

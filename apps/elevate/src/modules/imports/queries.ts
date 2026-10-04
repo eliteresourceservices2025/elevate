@@ -4,7 +4,7 @@ import { authorize, ForbiddenError } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { employees } from "@/modules/people/schema";
-import { importBatches, importRows } from "./schema";
+import { importBatches, importPullItems, importRows } from "./schema";
 import { decryptRow } from "./service";
 
 // Reads for the import pages. HR and Super Admin only. Personal data is shown only for staged rows (decrypted here) and committed people.
@@ -103,12 +103,33 @@ export async function getReconciliation(batchId: string): Promise<Reconciliation
     { label: "Rows skipped because of errors", expected: 0, actual: rows.filter((r) => r.state === "skipped").length },
     { label: "Managers that could not be set", expected: 0, actual: s.managerWarnings ?? 0 },
   ];
+  // Documents and leave histories pulled from the API for the people in this batch
+  const docNotes: string[] = [];
+  if (ids.length > 0) {
+    const items = await db.select({ kind: importPullItems.kind, outcome: importPullItems.outcome, employeeId: importPullItems.employeeId }).from(importPullItems).where(inArray(importPullItems.employeeId, ids));
+    const docs = items.filter((i) => i.kind === "document");
+    if (docs.length > 0) {
+      const ok = (o: string) => o === "imported" || o === "duplicate";
+      checks.push({ label: "Documents in TalentHR for these people", expected: docs.length, actual: docs.filter((d) => ok(d.outcome)).length });
+      const perPerson = new Map<string, { want: number; have: number }>();
+      for (const d of docs) {
+        const key = d.employeeId as string;
+        const cur = perPerson.get(key) ?? { want: 0, have: 0 };
+        cur.want += 1;
+        if (ok(d.outcome)) cur.have += 1;
+        perPerson.set(key, cur);
+      }
+      checks.push({ label: "People with a document that was not imported", expected: 0, actual: [...perPerson.values()].filter((p) => p.have < p.want).length });
+    } else docNotes.push("No documents have been pulled from TalentHR yet (run the pull script).");
+    const leave = items.filter((i) => i.kind === "leave_history" && i.outcome === "archived").length;
+    docNotes.push(`Leave histories archived (kept as an encrypted file, not loaded into the leave ledger): ${leave}.`);
+  }
   const [{ n: warn }] = await db.select({ n: count() }).from(importRows).where(and(eq(importRows.batchId, batchId), sql`exists (select 1 from jsonb_array_elements(${importRows.issues}) i where i->>'level' = 'warning')`));
   return {
     checks,
     clean: b.status === "committed" && checks.every((c) => c.expected === c.actual),
     warnings: warn,
     signedOffAt: b.signedOffAt,
-    notes: ["Leave balances and documents are compared once they have been pulled from TalentHR's API.", "People who were already in ELEVATE and not in this file are not counted."],
+    notes: [...docNotes, "People who were already in ELEVATE and not in this file are not counted."],
   };
 }

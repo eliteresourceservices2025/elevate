@@ -310,6 +310,13 @@ Then start **Phase 0** in `BUILD-PROMPTS.md`.
 
 ---
 
+## 15. Moving from TalentHR (added in Phase 5)
+
+1. **Import people** (Settings > Import from TalentHR) on the **production** system only, never on a laptop or test copy: upload the CSV, check the column choices and date format, read the preview, commit, then read the reconciliation. Repeat until it is clean (a second dry run matches people by work email).
+2. **Pull documents** with `pnpm talenthr:pull` (RUNBOOK 5b8). The TalentHR API key goes in the git-ignored `apps/elevate/.env.talenthr.local`.
+3. **Sign off** the reconciliation, then work through Settings > Go-live checklist. TalentHR stays active for a two-week parallel run.
+4. Send invitations in waves, pilot team first.
+
 ## 14. Safe Voice (added in Phase 4.2)
 
 Safe Voice is its own small app (`apps/safe-voice`) deployed as **its own Vercel project on its own subdomain** (for example `voice.<ERS domain>`), so the browser never sends ELEVATE's login cookies with a report. It has no Supabase keys, no sign-in and none of ELEVATE's secrets: it can only reach three tables through a dedicated database role.
