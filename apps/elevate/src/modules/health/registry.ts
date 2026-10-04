@@ -21,6 +21,7 @@ export const JOBS: Record<string, JobInfo> = {
   "checklist-sync": { label: "Checklist auto-completion", everyMinutes: 30 },
   "checklist-reminders": { label: "Checklist reminders", everyMinutes: DAILY },
   "safevoice-notify": { label: "Safe Voice handler notifications", everyMinutes: 60 },
+  "import-purge": { label: "Import preview clean-up", everyMinutes: DAILY },
   "early-reviews": { label: "Early-engagement reviews", everyMinutes: DAILY },
   "review-reminders": { label: "Review reminders", everyMinutes: DAILY },
   "leave-expiry": { label: "Prize day expiry", everyMinutes: DAILY },

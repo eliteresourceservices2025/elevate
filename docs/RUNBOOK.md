@@ -112,6 +112,16 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 - **Who sees what.** HR and the Executive see everything company-wide (read-only), a team lead only everyone below them, a recruiter only hiring. Only HR downloads the CSV, and every download is logged (analytics.export).
 - **Headcount looks wrong.** Headcount follows people's start and end dates and the dated team, client and manager history. Fix the person's dates in People; the next nightly run (or `rebuildRange`) picks it up.
 
+## 5b7. Import from TalentHR problems
+
+- **"Check the file" says a column is needed.** An import needs a work email, a first name and a last name column. Choose them in the column list.
+- **Dates look wrong.** Pick the right date format on the upload screen (TalentHR uses month/day/year). Impossible dates are errors.
+- **A row has an error.** Fix it in the export (or in TalentHR) and upload again, or tick "skip the rows with errors" to commit the rest. The preview names the field, never the value.
+- **A supervisor was not linked.** The supervisor must be in the same file, and not terminated while the person is current. Fix the file or set the manager in People.
+- **A second dry run shows "changed" for everyone.** That is expected if the first one used another date format or mapping. Compare the changed field names.
+- **I want to undo an import.** Use Roll back on the import page: people it created are archived unless they have signed in or have activity. Re-uploading the same file restores them.
+- **Real data:** only do real imports on the production system. Never upload a real export to a laptop or test copy.
+
 ## 5c. Signing problems
 
 | What you see | What it means | What to do |

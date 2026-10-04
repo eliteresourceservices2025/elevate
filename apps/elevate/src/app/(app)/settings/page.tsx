@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { History, Mail, ShieldCheck } from "lucide-react";
+import { FileUp, History, Mail, ShieldCheck } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -21,6 +21,13 @@ const SECTIONS = [
     icon: Mail,
     title: "Invitations",
     description: "Invite people to create an ELEVATE account.",
+  },
+  {
+    href: "/settings/import",
+    action: "imports.manage",
+    icon: FileUp,
+    title: "Import from TalentHR",
+    description: "Move people from a TalentHR export: preview, commit and reconcile.",
   },
   {
     href: "/settings/audit-log",

@@ -118,6 +118,7 @@ const EXPECTED: Record<string, string> = {
   "assets.assign": "A A - - - -",
   "analytics.view": "A A T - A -",
   "analytics.view_hiring": "A A - A A -",
+  "imports.manage": "A A - - - -",
   "analytics.export": "A A - - - -",
   "settings.manage_roles": "A - - - - -",
   "settings.set_safevoice_handler": "A - - - - -",
