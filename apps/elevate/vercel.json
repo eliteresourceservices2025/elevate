@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/backstop",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 13 * * *"
     }
   ]
 }

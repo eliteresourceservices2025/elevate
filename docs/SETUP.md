@@ -254,6 +254,8 @@ Store it as `FIELD_ENCRYPTION_KEYS` in the format `v1:<base64>`. To rotate, add 
 
 ## 9. Vercel
 
+> The step-by-step first deployment (two Vercel projects, Supabase, Upstash, Inngest, Resend) is in `docs/DEPLOY.md`. On the free Hobby plan the cron in `apps/elevate/vercel.json` is daily; switch it back to every 15 minutes on Pro.
+
 ```bash
 vercel link
 vercel env add   # add each variable from .env.example for Production and Preview
