@@ -48,7 +48,7 @@ One GitHub repository, **two Vercel projects**: ELEVATE (`apps/elevate`) and Saf
    ```
 
    Build their connection strings from the transaction pooler string, replacing the user name with `safevoice_app.<project-ref>` and `safevoice_handler.<project-ref>` and the password with the matching one.
-10. **First Super Admin.** In PowerShell set `$env:SUPER_ADMIN_EMAILS = "you@yourcompany.com"` (plus the database string from step 5) and run `pnpm db:bootstrap`. This creates invitations only. You sign up with that email after deploying (Part 6).
+10. **First Super Admin.** In PowerShell set `$env:SUPER_ADMIN_EMAILS = "you@yourcompany.com"` (plus the database string from step 5) and run `pnpm db:bootstrap`. This creates invitations only. You sign up with that email after deploying (Part 6). The value may hold several emails separated by commas, but **only the first of them to sign up becomes Super Admin** (the app promotes one while no Super Admin exists); the others sign up as ordinary Employees and the Super Admin gives them roles in Settings.
 
 **Do not run `pnpm db:seed` against this project.** It refuses remote databases on purpose.
 
@@ -90,10 +90,11 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"        
    | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | from Upstash |
    | `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | from Inngest (leave `INNGEST_DEV` empty) |
    | `CRON_SECRET` | the random value |
+   | `SUPER_ADMIN_EMAILS` | the email(s) you invited in Part 1, step 10 (the app checks this at first sign-in; without it nobody becomes Super Admin) |
    | `SAFEVOICE_HANDLER_DATABASE_URL` | the `safevoice_handler` string |
    | `NEXT_PUBLIC_SAFEVOICE_URL` | the Safe Voice address (set after Part 5, then redeploy) |
 
-   Not needed on Vercel: `DATABASE_URL_DIRECT`, `SUPER_ADMIN_EMAILS`, any `JIBBLE_*` (add `JIBBLE_ACCESS_TOKEN` only when a team is ready for it), `GOOGLE_*` (only for interview calendars), `TALENTHR_API_KEY` (used from your own computer, Part 8).
+   Not needed on Vercel: `DATABASE_URL_DIRECT`, any `JIBBLE_*` (add `JIBBLE_ACCESS_TOKEN` only when a team is ready for it), `GOOGLE_*` (only for interview calendars), `TALENTHR_API_KEY` (used from your own computer, Part 8).
 4. Settings > Deployment Protection: keep Vercel Authentication on for **Preview** deployments.
 5. Deploy.
 

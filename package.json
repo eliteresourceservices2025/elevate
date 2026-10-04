@@ -19,6 +19,7 @@
     "jibble:probe": "pnpm --filter elevate --reporter=append-only jibble:probe",
     "talenthr:pull": "pnpm --filter elevate --reporter=append-only talenthr:pull",
     "storage:setup": "pnpm --filter elevate --reporter=append-only storage:setup",
+    "db:bootstrap": "pnpm --filter elevate --reporter=append-only db:bootstrap",
     "test:integration": "pnpm --filter elevate test:integration"
   }
 }
