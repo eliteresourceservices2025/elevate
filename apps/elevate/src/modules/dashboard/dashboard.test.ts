@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { CalendarView } from "@/modules/timeoff/request-queries";
+import { daysSince, plural, rankAttention, waitingSeverity } from "./attention";
 import { availableLenses, defaultLens, pickLens } from "./lens";
 import { QUICK_ACTIONS, quickActionsFor } from "./quick-actions";
+import { dayLabel, monthsTouched, weekAhead } from "./week-ahead";
 
 const user = (...roles: Parameters<typeof availableLenses>[0][number][]) => ({ id: "u1", roles });
 
@@ -44,5 +47,55 @@ describe("quick actions", () => {
   });
   it("every button links inside the app", () => {
     for (const q of QUICK_ACTIONS) expect(q.href.startsWith("/")).toBe(true);
+  });
+});
+
+describe("needs attention", () => {
+  const item = (id: string, severity: "urgent" | "warn" | "info", lenses: Parameters<typeof rankAttention>[1][] = ["hr"]) => ({ id, severity, title: id, href: "/x", lenses });
+  it("puts urgent first, keeps the found order within a level, and only shows what belongs in the view", () => {
+    const ranked = rankAttention([item("a", "info"), item("b", "urgent"), item("c", "warn"), item("d", "urgent"), item("e", "warn", ["my_work"])], "hr");
+    expect(ranked.map((i) => i.id)).toEqual(["b", "d", "c", "a"]);
+  });
+  it("stops at the limit", () => {
+    expect(rankAttention(Array.from({ length: 12 }, (_, i) => item(`i${i}`, "info")), "hr", 5)).toHaveLength(5);
+  });
+  it("counts whole days waited and grades a pile by its oldest request", () => {
+    expect(daysSince("2026-10-01T00:00:00.000Z", new Date("2026-10-04T12:00:00.000Z"))).toBe(3);
+    expect(waitingSeverity(0, 2)).toBe("info");
+    expect(waitingSeverity(2, 2)).toBe("warn");
+    expect(waitingSeverity(5, 1)).toBe("urgent");
+    expect(waitingSeverity(0, 10)).toBe("urgent");
+  });
+  it("speaks in plain plurals", () => {
+    expect(plural(1, "request", "requests")).toBe("1 request");
+    expect(plural(1234, "person", "people")).toBe("1,234 people");
+  });
+});
+
+describe("week ahead", () => {
+  const view = (over: Partial<CalendarView> = {}): CalendarView => ({ month: "2026-10", mode: "all", dates: [], entries: [], counts: {}, holidays: [], ...over });
+  const entry = (name: string, startDate: string, endDate: string, pending = false) => ({ employeeId: name, name, leaveType: null, startDate, endDate, days: 1, pending });
+
+  it("labels today and tomorrow, then the weekday", () => {
+    expect(dayLabel("2026-10-05", "2026-10-05")).toBe("Today");
+    expect(dayLabel("2026-10-06", "2026-10-05")).toBe("Tomorrow");
+    expect(dayLabel("2026-10-09", "2026-10-05")).toBe("Fri, Oct 9");
+  });
+  it("skips quiet weekends and leaves pending requests out", () => {
+    const days = weekAhead([view({ entries: [entry("Ana Cruz", "2026-10-06", "2026-10-07"), entry("Ben Lim", "2026-10-06", "2026-10-06", true)] })], "2026-10-05", 7);
+    expect(days.map((d) => d.date)).toEqual(["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09"]);
+    expect(days.find((d) => d.date === "2026-10-06")?.names).toEqual(["Ana Cruz"]);
+  });
+  it("shows a holiday on a weekend and crosses the end of a month", () => {
+    expect(monthsTouched("2026-10-29", 7)).toEqual(["2026-10", "2026-11"]);
+    const days = weekAhead([view({ holidays: [{ date: "2026-10-10", name: "Founders Day", calendar: "PH" }] })], "2026-10-08", 7);
+    expect(days.find((d) => d.date === "2026-10-10")?.holidays).toEqual(["Founders Day (PH)"]);
+  });
+  it("keeps only counts for a view that hides names, and folds long lists", () => {
+    const counts = weekAhead([view({ mode: "counts", counts: { "2026-10-05": 3 } })], "2026-10-05", 1);
+    expect(counts[0]).toMatchObject({ count: 3, names: [] });
+    const many = weekAhead([view({ entries: ["A", "B", "C", "D", "E", "F"].map((n) => entry(`${n} Person`, "2026-10-05", "2026-10-05")) })], "2026-10-05", 1);
+    expect(many[0].names).toHaveLength(4);
+    expect(many[0].extra).toBe(2);
   });
 });

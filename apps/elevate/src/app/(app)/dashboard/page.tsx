@@ -4,14 +4,18 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Pin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/auth";
 import { authorize } from "@/lib/authz";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { DueBadge } from "@/modules/announcements/components/ack-display";
 import { listAnnouncements, listMyPending } from "@/modules/announcements/queries";
+import { ApprovalQueue } from "@/modules/dashboard/components/approval-queue";
+import { AttentionFeed } from "@/modules/dashboard/components/attention-feed";
 import { GreetingHeader } from "@/modules/dashboard/components/greeting-header";
 import { KpiCards, KpiCardsSkeleton } from "@/modules/dashboard/components/kpi-cards";
 import { QuickActions } from "@/modules/dashboard/components/quick-actions";
+import { WhosOut } from "@/modules/dashboard/components/whos-out";
 import { LENS_COOKIE, availableLenses, pickLens } from "@/modules/dashboard/lens";
 import { todayInZone } from "@/modules/org/service";
 
@@ -28,6 +32,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
   const [pending, latest] = await Promise.all([listMyPending(), listAnnouncements({ limit: 3 })]);
   const today = todayInZone();
+  const showApprovals = lens === "admin" || lens === "hr" || lens === "team_lead";
+  const showAttention = lens !== "executive";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -41,46 +47,75 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
       <QuickActions user={user} lens={lens} />
 
-      {pending.length > 0 ? (
-        <section aria-label="Waiting for you" className="space-y-2">
-          <h2 className="text-lg font-semibold">Waiting for you</h2>
-          <ul className="space-y-2">
-            {pending.map((p) => (
-              <li key={`${p.kind}-${p.versionId ?? p.id}`}>
-                <Link href={p.link} className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3 outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring">
-                  <span className="font-medium">{p.title}</span>
-                  <Badge variant="outline">{p.kind === "policy" ? `Policy, version ${p.version}` : "Announcement"}</Badge>
-                  <DueBadge due={p.due} dueOn={p.dueOn} today={today} />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="min-w-0 space-y-6">
+          {showApprovals ? (
+            <Suspense fallback={<Skeleton className="h-40 rounded-xl" />}>
+              <ApprovalQueue />
+            </Suspense>
+          ) : null}
+          {showAttention ? (
+            <Suspense fallback={<Skeleton className="h-40 rounded-xl" />}>
+              <AttentionFeed lens={lens} />
+            </Suspense>
+          ) : null}
+        </div>
 
-      {latest.length > 0 ? (
-        <section aria-label="Latest announcements" className="space-y-2">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-semibold">Latest announcements</h2>
-            <Link href="/announcements" className="text-sm text-primary underline-offset-4 hover:underline">
-              See all
-            </Link>
-          </div>
-          <ul className="space-y-2">
-            {latest.map((a) => (
-              <li key={a.id}>
-                <Link href={`/announcements/${a.id}`} className="block rounded-xl border bg-card p-3 outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring">
-                  <span className="flex items-center gap-2 font-medium">
-                    {a.pinned ? <Pin className="size-4 text-primary" aria-label="Pinned" /> : null}
-                    {a.title}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{formatInZone(a.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}</span>
+        <div className="min-w-0 space-y-6">
+          <Suspense fallback={<Skeleton className="h-56 rounded-xl" />}>
+            <WhosOut />
+          </Suspense>
+
+          {pending.length > 0 ? (
+            <section aria-label="Waiting for you" className="space-y-2">
+              <h2 className="text-lg font-semibold">Waiting for you</h2>
+              <ul className="space-y-2">
+                {pending.slice(0, 5).map((p) => (
+                  <li key={`${p.kind}-${p.versionId ?? p.id}`}>
+                    <Link href={p.link} className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3 outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring">
+                      <span className="font-medium">{p.title}</span>
+                      <Badge variant="outline">{p.kind === "policy" ? `Policy, version ${p.version}` : "Announcement"}</Badge>
+                      <DueBadge due={p.due} dueOn={p.dueOn} today={today} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {pending.length > 5 ? (
+                <p className="text-sm text-muted-foreground">
+                  {pending.length - 5} more.{" "}
+                  <Link href="/announcements" className="text-primary underline-offset-4 hover:underline">
+                    See everything waiting
+                  </Link>
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          {latest.length > 0 ? (
+            <section aria-label="Latest announcements" className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-lg font-semibold">Latest announcements</h2>
+                <Link href="/announcements" className="text-sm text-primary underline-offset-4 hover:underline">
+                  See all
                 </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+              </div>
+              <ul className="space-y-2">
+                {latest.map((a) => (
+                  <li key={a.id}>
+                    <Link href={`/announcements/${a.id}`} className="block rounded-xl border bg-card p-3 outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring">
+                      <span className="flex items-center gap-2 font-medium">
+                        {a.pinned ? <Pin className="size-4 text-primary" aria-label="Pinned" /> : null}
+                        {a.title}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{formatInZone(a.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

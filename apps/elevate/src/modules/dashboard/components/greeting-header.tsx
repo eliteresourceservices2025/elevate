@@ -1,12 +1,14 @@
 import { Badge } from "@/components/ui/badge";
 import { ROLE_LABELS, type RoleSlug } from "@/lib/roles";
+import { getApprovalQueue } from "../feed-queries";
 import { getGreeting } from "../queries";
 import { LensTabs } from "./lens-tabs";
 import type { Lens } from "../lens";
 
 /** "Good morning, Maria" with today's date, the person's roles and (for people holding several) the view switcher. */
-export async function GreetingHeader({ roles, lenses, lens, summary }: { roles: readonly RoleSlug[]; lenses: Lens[]; lens: Lens; summary?: string | null }) {
-  const g = await getGreeting();
+export async function GreetingHeader({ roles, lenses, lens }: { roles: readonly RoleSlug[]; lenses: Lens[]; lens: Lens }) {
+  const [g, queue] = await Promise.all([getGreeting(), getApprovalQueue()]);
+  const summary = queue.length > 0 ? `${queue.length} ${queue.length === 1 ? "request is" : "requests are"} waiting for your decision` : null;
   // The base Employee role is on everyone, so it is only shown when it is the person's only role.
   const shown = roles.length > 1 ? roles.filter((r) => r !== "employee") : roles;
   return (

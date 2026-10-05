@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createHrAccount, signInEnrollingMfa } from "./helpers";
+import { createHrAccount, signInEnrollingMfa, waitForHydration } from "./helpers";
 
 // Needs the local Supabase with migrations applied. The menu and header stay put while the content scrolls, and the menu narrows to icons.
 
@@ -35,16 +35,18 @@ test("the menu and header stay fixed, and the menu can be narrowed to icons", as
   // Narrow to icons: labels leave the screen, every icon link keeps its name, the choice survives a reload.
   const aside = page.locator("aside");
   await expect(aside).toBeVisible();
-  expect((await aside.boundingBox())!.width).toBeGreaterThan(200);
+  await expect.poll(async () => (await aside.boundingBox())?.width ?? 0).toBeGreaterThan(200);
+  await waitForHydration(page, 'button[aria-label="Hide menu labels"]');
   await page.getByRole("button", { name: "Hide menu labels" }).click();
-  await expect.poll(async () => (await aside.boundingBox())!.width).toBeLessThan(80);
+  await expect.poll(async () => (await aside.boundingBox())?.width ?? 999).toBeLessThan(80);
   const people = page.locator("#main-nav").getByRole("link", { name: "People" });
   await expect(people).toBeVisible();
   await expect(people).toHaveAttribute("title", "People");
   await expect(people.locator("svg")).toBeVisible();
   await page.reload();
   await expect(aside).toBeVisible();
-  await expect.poll(async () => (await aside.boundingBox())!.width).toBeLessThan(80);
+  await expect.poll(async () => (await aside.boundingBox())?.width ?? 999).toBeLessThan(80);
+  await waitForHydration(page, 'button[aria-label="Show menu labels"]');
   await page.getByRole("button", { name: "Show menu labels" }).click();
-  await expect.poll(async () => (await aside.boundingBox())!.width).toBeGreaterThan(200);
+  await expect.poll(async () => (await aside.boundingBox())?.width ?? 999).toBeGreaterThan(200);
 });

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import postgres from "postgres";
 import { createEmployeeAccount, createHrAccount, signInEnrollingMfa, waitForHydration } from "./helpers";
 
 // Needs the local Supabase with migrations applied. The dashboard adapts to a person's roles; the search follows their access.
@@ -63,4 +64,64 @@ test("search finds pages and people with Ctrl+K, and an employee never gets appl
   await expect(emp.getByRole("group", { name: "People" }).getByRole("option").first()).toBeVisible({ timeout: 15_000 });
   await expect(emp.getByRole("group", { name: "Applicants" })).toHaveCount(0);
   await expect(emp.getByRole("group", { name: "Equipment" })).toHaveCount(0);
+});
+
+test("a lead decides a request from the dashboard queue; declining needs a reason", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const lead = await createEmployeeAccount("Lena", `Lead${stamp}`, { roles: ["team_lead"] });
+  const employee = await createEmployeeAccount("Eddie", `Asks${stamp}`, { managerId: lead.employeeId });
+
+  // Two working days a few weeks out that no holiday touches, and two prize days awarded last week
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  const days: string[] = [];
+  try {
+    const holidays = new Set((await sql<{ date: string }[]>`select date::text as date from time.holidays`).map((h) => h.date));
+    let d = new Date(Date.now() + 21 * 86_400_000);
+    while (days.length < 2) {
+      const iso = d.toISOString().slice(0, 10);
+      if ([2, 3, 4].includes(d.getUTCDay()) && !holidays.has(iso)) days.push(iso);
+      d = new Date(d.getTime() + 86_400_000);
+    }
+    await sql`
+      insert into time.leave_ledger (employee_id, leave_type_id, entry_type, days, effective_on, reason)
+      select ${employee.employeeId}, id, 'award', 2, current_date - 7, 'E2E prize' from time.leave_types where slug = 'prize_day'`;
+  } finally {
+    await sql.end();
+  }
+
+  const empPage = await (await browser.newContext()).newPage();
+  const leadPage = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(empPage, employee);
+  await signInEnrollingMfa(leadPage, lead);
+
+  for (const day of days) {
+    await empPage.goto("/time-off?tab=requests");
+    await waitForHydration(empPage, "#rq-start");
+    await empPage.getByLabel("First day").fill(day);
+    await expect(empPage.getByText("This uses 1 day")).toBeVisible();
+    await empPage.getByLabel("Note (optional)").fill("Dashboard test");
+    await empPage.getByRole("button", { name: "Send request" }).click();
+    await expect(empPage.getByText("Request sent.")).toBeVisible();
+  }
+
+  await leadPage.goto("/dashboard");
+  const queue = leadPage.getByRole("region", { name: "Approval queue" });
+  const rows = queue.getByRole("listitem").filter({ hasText: `Asks${stamp}` });
+  await expect(rows).toHaveCount(2);
+
+  // Approve one right here
+  await waitForHydration(leadPage, 'button[aria-label="Search"]');
+  await rows.first().getByRole("button", { name: "Approve" }).click();
+  await expect(leadPage.getByText("Approved.").first()).toBeVisible();
+  await expect(rows).toHaveCount(1);
+
+  // Decline needs a reason before the button works
+  await rows.first().getByRole("button", { name: "Decline" }).click();
+  const dialog = leadPage.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "Decline" })).toBeDisabled();
+  await dialog.getByLabel("Reason").fill("Coverage is short that day.");
+  await dialog.getByRole("button", { name: "Decline" }).click();
+  await expect(leadPage.getByText("Declined.").first()).toBeVisible();
+  await expect(rows).toHaveCount(0);
 });
