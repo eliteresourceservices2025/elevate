@@ -1,31 +1,45 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
+import { Suspense } from "react";
 import { Pin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
-import { ALL_NAV_ITEMS } from "@/lib/nav";
-import { hiddenNavFor } from "@/lib/nav-access";
+import { authorize } from "@/lib/authz";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { DueBadge } from "@/modules/announcements/components/ack-display";
 import { listAnnouncements, listMyPending } from "@/modules/announcements/queries";
+import { GreetingHeader } from "@/modules/dashboard/components/greeting-header";
+import { KpiCards, KpiCardsSkeleton } from "@/modules/dashboard/components/kpi-cards";
+import { QuickActions } from "@/modules/dashboard/components/quick-actions";
+import { LENS_COOKIE, availableLenses, pickLens } from "@/modules/dashboard/lens";
 import { todayInZone } from "@/modules/org/service";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const user = await requireUser();
-  const hidden = hiddenNavFor(user);
-  const modules = ALL_NAV_ITEMS.filter((i) => i.href !== "/dashboard" && !hidden.includes(i.href));
+  await authorize(user, "dashboard.view", { ownerUserId: user.id });
+
+  const asked = (await searchParams).view;
+  const saved = (await cookies()).get(LENS_COOKIE)?.value;
+  const lenses = availableLenses(user.roles);
+  const lens = pickLens(user.roles, Array.isArray(asked) ? asked[0] : asked, saved);
+
   const [pending, latest] = await Promise.all([listMyPending(), listAnnouncements({ limit: 3 })]);
   const today = todayInZone();
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Welcome to ELEVATE</h1>
-        <p className="mt-1 text-muted-foreground">Exceptional Support. Elevated Efficiency.</p>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <Suspense fallback={<div className="h-20" aria-hidden />}>
+        <GreetingHeader roles={user.roles} lenses={lenses} lens={lens} />
+      </Suspense>
+
+      <Suspense fallback={<KpiCardsSkeleton />}>
+        <KpiCards lens={lens} />
+      </Suspense>
+
+      <QuickActions user={user} lens={lens} />
 
       {pending.length > 0 ? (
         <section aria-label="Waiting for you" className="space-y-2">
@@ -67,24 +81,6 @@ export default async function DashboardPage() {
           </ul>
         </section>
       ) : null}
-
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {modules.map(({ href, label, icon: Icon, description }) => (
-          <li key={href}>
-            <Link href={href} className="block h-full rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <Card className="h-full transition-colors hover:bg-secondary/50">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Icon className="size-4 text-primary" aria-hidden />
-                    {label}
-                  </CardTitle>
-                  <CardDescription>{description}</CardDescription>
-                </CardHeader>
-              </Card>
-            </Link>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

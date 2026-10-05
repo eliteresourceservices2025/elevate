@@ -2,6 +2,7 @@ import { announcementsPermissions } from "@/modules/announcements/permissions";
 import { analyticsPermissions } from "@/modules/analytics/permissions";
 import { assetsPermissions } from "@/modules/assets/permissions";
 import { attendancePermissions } from "@/modules/attendance/permissions";
+import { dashboardPermissions } from "@/modules/dashboard/permissions";
 import { documentsPermissions } from "@/modules/documents/permissions";
 import { importsPermissions } from "@/modules/imports/permissions";
 import { healthPermissions } from "@/modules/health/permissions";
@@ -42,6 +43,7 @@ export const PERMISSIONS = {
   ...safevoicePermissions,
   ...assetsPermissions,
   ...analyticsPermissions,
+  ...dashboardPermissions,
   ...settingsPermissions,
 } as const;
 

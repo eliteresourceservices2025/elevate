@@ -4,6 +4,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { SIDEBAR_COOKIE } from "@/components/shell/sidebar-cookie";
 
 import { requireUser } from "@/lib/auth";
+import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { hiddenNavFor } from "@/lib/nav-access";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { AckBanner } from "@/modules/announcements/components/ack-display";
@@ -38,6 +39,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <AppShell
       initialCollapsed={initialCollapsed}
       hiddenNav={hiddenNav}
+      searchPages={ALL_NAV_ITEMS.filter((i) => !hiddenNav.includes(i.href)).map((i) => ({ href: i.href, label: i.label, description: i.description }))}
       safeVoiceUrl={safeVoiceUrl}
       zone={DEFAULT_TIMEZONE}
       email={user.email}

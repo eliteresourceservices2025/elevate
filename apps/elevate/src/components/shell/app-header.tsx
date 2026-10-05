@@ -10,6 +10,8 @@ import { NotificationBell } from "@/modules/notifications/components/notificatio
 import type { ClockStatus } from "@/modules/attendance/queries";
 import { ClockWidget } from "./clock-widget";
 import { ThemeToggle } from "@/components/theme-toggle";
+import type { PageEntry } from "@/modules/dashboard/search";
+import { GlobalSearch } from "./global-search";
 import { SidebarNav } from "./sidebar-nav";
 import { ZoneClock } from "./zone-clock";
 
@@ -22,7 +24,9 @@ export function AppHeader({
   safeVoiceUrl = null,
   collapsed = false,
   onToggleSidebar,
+  searchPages = [],
 }: {
+  searchPages?: PageEntry[];
   safeVoiceUrl?: string | null;
   hiddenNav?: string[];
   zone?: string | null;
@@ -70,7 +74,9 @@ export function AppHeader({
           </div>
         </SheetContent>
       </Sheet>
-      <div className="ml-auto hidden items-center md:flex">
+      <GlobalSearch pages={searchPages} />
+      <div className="ml-auto lg:hidden" aria-hidden />
+      <div className="ml-auto hidden items-center lg:flex">
         <ZoneClock zone={zone} />
       </div>
       <ThemeToggle className="hidden sm:flex" />
@@ -78,7 +84,7 @@ export function AppHeader({
       <NotificationBell key={unread} unread={unread} />
       <ClockWidget status={clock} />
       <form action={signOut} className="flex items-center gap-2">
-        {email ? <span className="hidden text-xs text-muted-foreground xl:inline">{email}</span> : null}
+        {email ? <span className="hidden text-xs text-muted-foreground 2xl:inline">{email}</span> : null}
         {/* On a phone only the icon shows, so the row fits; the name stays for screen readers */}
         <Button type="submit" variant="ghost" size="sm" aria-label="Sign out" title="Sign out">
           <LogOut aria-hidden />

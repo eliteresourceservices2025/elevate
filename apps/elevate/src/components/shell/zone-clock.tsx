@@ -23,7 +23,7 @@ export function ZoneClock({ zone }: { zone?: string | null }) {
   const t = formatDual(minute, { zone, pattern: "h:mm a" });
 
   return (
-    <dl className="flex items-center gap-4 text-xs text-muted-foreground" aria-label="Current time">
+    <dl className="flex items-center gap-4 whitespace-nowrap text-xs text-muted-foreground" aria-label="Current time">
       <div>
         <dt className="sr-only">{t.primaryZone}</dt>
         <dd>

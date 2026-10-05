@@ -24,6 +24,8 @@ export const POLICIES = {
   signCode: { requests: 5, window: "1 h" },
   signVerify: { requests: 20, window: "10 m" },
   signPublic: { requests: 120, window: "10 m" },
+  /** The header search box (it asks as people type, so the allowance is generous). */
+  search: { requests: 200, window: "10 m" },
 } satisfies Record<string, Policy>;
 
 /**
