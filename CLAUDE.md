@@ -191,6 +191,11 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 **A menu item opens its own page, at its own address, with its own item highlighted. Never redirect a menu item to a tab of another page** (it reads as "the menu took me somewhere else"). If two things belong together, link between them inside the pages instead. "My profile" (`/people/me`) renders the profile itself (`ProfileView`, shared with `/people/[id]`) rather than redirecting to the People list, and Schedules (`/schedules`) is its own page. A new module gets a page at the menu's address; the sidebar highlights the longest matching link.
 
+## App shell
+
+- `components/shell/app-shell.tsx` frames every signed-in page: the window never scrolls, the menu and header stay put and **only the content area scrolls** (`h-dvh overflow-hidden`; the root is `relative` so screen-reader-only text, which is absolutely positioned, cannot stretch the page). Printing turns the clipping off. Anything that must scroll the page (a sticky element, `scrollTo`) now works against the content box, not the window.
+- The desktop menu can be **narrowed to icons** (toggle button at the left of the header). It is a plain cookie (`elevate_sidebar`, name in `sidebar-cookie.ts`) read by the server layout so the right width renders at once. Do not import that constant from a `"use client"` file into a server file: the server gets a reference, not the string. Icon links keep their name for screen readers and a `title`. Test: `tests/e2e/shell.spec.ts`.
+
 ## Pages split from Attendance, and paging rule
 
 - **Own menu items** (each its own address, highlighted on its own): `/extra-hours` (everyone), `/team-attendance` (`attendance.view` all or team), `/hours-review` (`hours.approve` all or team, week by `?rweek=`), `/jibble` (`jibble.manage`), `/schedules`. Attendance keeps My time, Corrections, Hours export, Rules and Health. Old `/attendance?tab=team|extra|review|jibble` addresses (stored notifications, bookmarks) redirect to the new pages; new links and notifications use the new addresses.

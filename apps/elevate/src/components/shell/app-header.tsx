@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LogOut, Menu } from "lucide-react";
+import { LogOut, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -13,11 +13,44 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarNav } from "./sidebar-nav";
 import { ZoneClock } from "./zone-clock";
 
-export function AppHeader({ zone, email, unread = 0, clock = null, hiddenNav = [], safeVoiceUrl = null }: { safeVoiceUrl?: string | null; hiddenNav?: string[]; zone?: string | null; email?: string; unread?: number; clock?: ClockStatus | null }) {
+export function AppHeader({
+  zone,
+  email,
+  unread = 0,
+  clock = null,
+  hiddenNav = [],
+  safeVoiceUrl = null,
+  collapsed = false,
+  onToggleSidebar,
+}: {
+  safeVoiceUrl?: string | null;
+  hiddenNav?: string[];
+  zone?: string | null;
+  email?: string;
+  unread?: number;
+  clock?: ClockStatus | null;
+  collapsed?: boolean;
+  onToggleSidebar?: () => void;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-4 print:hidden">
+      {onToggleSidebar ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="hidden lg:inline-flex"
+          onClick={onToggleSidebar}
+          aria-label={collapsed ? "Show menu labels" : "Hide menu labels"}
+          aria-expanded={!collapsed}
+          aria-controls="main-nav"
+          title={collapsed ? "Show menu labels" : "Hide menu labels"}
+        >
+          {collapsed ? <PanelLeftOpen aria-hidden /> : <PanelLeftClose aria-hidden />}
+        </Button>
+      ) : null}
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger
           aria-label="Open menu"

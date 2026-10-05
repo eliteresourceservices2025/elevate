@@ -1,6 +1,7 @@
+import { cookies } from "next/headers";
 import { Markdown } from "@/components/markdown";
-import { AppHeader } from "@/components/shell/app-header";
-import { SidebarNav } from "@/components/shell/sidebar-nav";
+import { AppShell } from "@/components/shell/app-shell";
+import { SIDEBAR_COOKIE } from "@/components/shell/sidebar-cookie";
 
 import { requireUser } from "@/lib/auth";
 import { hiddenNavFor } from "@/lib/nav-access";
@@ -31,18 +32,20 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   // The anonymous reporting site is a separate app on its own address. Not set in production = no link (nothing to point at).
   const safeVoiceUrl = process.env.NEXT_PUBLIC_SAFEVOICE_URL || (process.env.NODE_ENV === "production" ? null : "http://localhost:3100");
 
+  const initialCollapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "collapsed";
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 lg:block print:hidden">
-        <SidebarNav hidden={hiddenNav} safeVoiceUrl={safeVoiceUrl} />
-      </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <AppHeader hiddenNav={hiddenNav} safeVoiceUrl={safeVoiceUrl} zone={DEFAULT_TIMEZONE} email={user.email} unread={unread} clock={clock} />
-        <AckBanner items={pending} today={todayInZone()} />
-        <main id="main" className="flex-1 p-4 sm:p-6 lg:p-8 print:p-0">
-          {children}
-        </main>
-      </div>
-    </div>
+    <AppShell
+      initialCollapsed={initialCollapsed}
+      hiddenNav={hiddenNav}
+      safeVoiceUrl={safeVoiceUrl}
+      zone={DEFAULT_TIMEZONE}
+      email={user.email}
+      unread={unread}
+      clock={clock}
+      banner={<AckBanner items={pending} today={todayInZone()} />}
+    >
+      {children}
+    </AppShell>
   );
 }
