@@ -35,7 +35,7 @@ export function AppHeader({
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-4 print:hidden">
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card px-3 sm:gap-3 sm:px-4 print:hidden">
       {onToggleSidebar ? (
         <Button
           type="button"
@@ -60,21 +60,29 @@ export function AppHeader({
         </SheetTrigger>
         <SheetContent side="left" className="w-72 gap-0 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SidebarNav hidden={hiddenNav} safeVoiceUrl={safeVoiceUrl} onNavigate={() => setOpen(false)} />
+          <div className="min-h-0 flex-1">
+            <SidebarNav hidden={hiddenNav} safeVoiceUrl={safeVoiceUrl} onNavigate={() => setOpen(false)} />
+          </div>
+          {/* The theme buttons leave the header on a phone (no room) and live at the bottom of the menu instead */}
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-sidebar-foreground/15 bg-sidebar px-4 py-3 text-sm text-sidebar-foreground">
+            <span>Theme</span>
+            <ThemeToggle className="bg-card text-card-foreground" />
+          </div>
         </SheetContent>
       </Sheet>
       <div className="ml-auto hidden items-center md:flex">
         <ZoneClock zone={zone} />
       </div>
-      <ThemeToggle />
+      <ThemeToggle className="hidden sm:flex" />
       {/* keyed by the count so a fresh server count resets the bell */}
       <NotificationBell key={unread} unread={unread} />
       <ClockWidget status={clock} />
       <form action={signOut} className="flex items-center gap-2">
         {email ? <span className="hidden text-xs text-muted-foreground xl:inline">{email}</span> : null}
-        <Button type="submit" variant="ghost" size="sm">
+        {/* On a phone only the icon shows, so the row fits; the name stays for screen readers */}
+        <Button type="submit" variant="ghost" size="sm" aria-label="Sign out" title="Sign out">
           <LogOut aria-hidden />
-          Sign out
+          <span className="hidden sm:inline">Sign out</span>
         </Button>
       </form>
     </header>

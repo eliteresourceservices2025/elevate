@@ -358,7 +358,8 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
     return (
       <Link href="/attendance" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "font-medium")}>
         <Clock aria-hidden />
-        Set up your time clock
+        <span className="sm:hidden">Time clock</span>
+        <span className="hidden sm:inline">Set up your time clock</span>
       </Link>
     );
   }
@@ -437,7 +438,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
           size="lg"
           disabled={blocked}
           onClick={() => (status.needsSelfie ? setSelfie(true) : void doClockIn())}
-          className="h-11 min-w-36 gap-2 px-6 text-base font-bold shadow-lg shadow-primary/30 ring-2 ring-primary/40 transition-transform hover:scale-[1.03]"
+          className="h-11 gap-2 px-3 text-base font-bold shadow-lg shadow-primary/30 sm:min-w-36 sm:px-6 ring-2 ring-primary/40 transition-transform hover:scale-[1.03]"
         >
           <Clock className="size-5" aria-hidden />
           Clock in
