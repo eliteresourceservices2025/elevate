@@ -125,3 +125,18 @@ test("a lead decides a request from the dashboard queue; declining needs a reaso
   await expect(leadPage.getByText("Declined.").first()).toBeVisible();
   await expect(rows).toHaveCount(0);
 });
+
+test("the management panels show for HR and never for a plain employee", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const hr = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hr, await createHrAccount());
+  await expect(hr.getByRole("region", { name: "Early warnings" })).toBeVisible({ timeout: 20_000 });
+  await expect(hr.getByRole("region", { name: "Onboarding and offboarding" })).toBeVisible();
+  await expect(hr.getByRole("region", { name: "Who is out" })).toBeVisible();
+  await expect(hr.getByRole("region", { name: "Needs attention" })).toBeVisible();
+
+  const emp = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(emp, await createEmployeeAccount("Plain", `Panels${Date.now().toString(36)}`));
+  await expect(emp.getByRole("region", { name: "Who is out" })).toBeVisible({ timeout: 20_000 });
+  for (const name of ["Early warnings", "Onboarding and offboarding", "Workforce overview", "Approval queue"]) await expect(emp.getByRole("region", { name })).toHaveCount(0);
+});

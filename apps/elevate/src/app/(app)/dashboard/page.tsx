@@ -14,8 +14,11 @@ import { ApprovalQueue } from "@/modules/dashboard/components/approval-queue";
 import { AttentionFeed } from "@/modules/dashboard/components/attention-feed";
 import { GreetingHeader } from "@/modules/dashboard/components/greeting-header";
 import { KpiCards, KpiCardsSkeleton } from "@/modules/dashboard/components/kpi-cards";
+import { RiskCards } from "@/modules/dashboard/components/risk-cards";
 import { QuickActions } from "@/modules/dashboard/components/quick-actions";
+import { Tracker } from "@/modules/dashboard/components/tracker";
 import { WhosOut } from "@/modules/dashboard/components/whos-out";
+import { WorkforceOverview } from "@/modules/dashboard/components/workforce-overview";
 import { LENS_COOKIE, availableLenses, pickLens } from "@/modules/dashboard/lens";
 import { todayInZone } from "@/modules/org/service";
 
@@ -34,6 +37,15 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   const today = todayInZone();
   const showApprovals = lens === "admin" || lens === "hr" || lens === "team_lead";
   const showAttention = lens !== "executive";
+  const showRisks = lens !== "my_work";
+  const showTracker = lens === "admin" || lens === "hr" || lens === "team_lead";
+  const showWorkforce = showTracker || lens === "executive";
+  // The Executive has no approvals or attention list, so the warnings take the left column.
+  const risks = showRisks ? (
+    <Suspense fallback={<Skeleton className="h-40 rounded-xl" />}>
+      <RiskCards lens={lens} />
+    </Suspense>
+  ) : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -59,13 +71,34 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
               <AttentionFeed lens={lens} />
             </Suspense>
           ) : null}
+          {lens === "executive" ? risks : null}
         </div>
 
         <div className="min-w-0 space-y-6">
           <Suspense fallback={<Skeleton className="h-56 rounded-xl" />}>
             <WhosOut />
           </Suspense>
+          {lens !== "executive" ? risks : null}
+        </div>
+      </div>
 
+      {showTracker || showWorkforce ? (
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          {showTracker ? (
+            <Suspense fallback={<Skeleton className="h-56 rounded-xl" />}>
+              <Tracker />
+            </Suspense>
+          ) : null}
+          {showWorkforce ? (
+            <Suspense fallback={<Skeleton className="h-56 rounded-xl" />}>
+              <WorkforceOverview />
+            </Suspense>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="min-w-0 space-y-6">
           {pending.length > 0 ? (
             <section aria-label="Waiting for you" className="space-y-2">
               <h2 className="text-lg font-semibold">Waiting for you</h2>
@@ -90,7 +123,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
               ) : null}
             </section>
           ) : null}
+        </div>
 
+        <div className="min-w-0 space-y-6">
           {latest.length > 0 ? (
             <section aria-label="Latest announcements" className="space-y-2">
               <div className="flex items-baseline justify-between">

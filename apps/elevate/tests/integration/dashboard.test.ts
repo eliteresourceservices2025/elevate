@@ -12,7 +12,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers(), cookies: async () => ({ get: () => undefined }) }));
 
 const { db } = await import("@/lib/db");
-const feed = await import("@/modules/dashboard/feed-queries");
+const feed = { ...(await import("@/modules/dashboard/feed-queries")), ...(await import("@/modules/dashboard/panel-queries")) };
 const queries = await import("@/modules/dashboard/queries");
 const search = await import("@/modules/dashboard/search-service");
 const { todayInZone } = await import("@/modules/org/service");
@@ -135,5 +135,60 @@ describe("search follows each source's own rules", () => {
     as(hr);
     const hits = await search.runSearch(hr, "%%");
     expect(hits.filter((h) => h.kind === "person")).toEqual([]);
+  });
+});
+
+describe("onboarding tracker follows the same scope as the onboarding pages", () => {
+  it("shows progress and overdue counts to HR and the lead above, not to another lead, an employee or the executive", async () => {
+    const first = `Zqnewhire${Date.now().toString(36)}`;
+    const [leadEmp] = await rows<{ id: string }>(sql`select id from core.employees where user_id = ${lead.id}`);
+    const hireId = await person(first, { manager: leadEmp.id });
+    const [opening] = await rows<{ id: string }>(sql`insert into talent.job_openings (title, description, status) values ('Dash tracker job', 'x', 'closed') returning id`);
+    const [cand] = await rows<{ id: string }>(sql`insert into talent.candidates (email, full_name) values (${`${uniq("hire")}@example.com`}, ${first}) returning id`);
+    const [app] = await rows<{ id: string }>(sql`insert into talent.applications (opening_id, candidate_id, stage) values (${opening.id}, ${cand.id}, 'hired') returning id`);
+    const [kase] = await rows<{ id: string }>(sql`insert into talent.onboarding_cases (employee_id, application_id, start_date, created_by, hired_without_offer_reason) values (${hireId}, ${app.id}, ${todayInZone()}, ${hr.id}, 'test fixture') returning id`);
+    for (const [i, [title, status, due]] of ([["Done task", "done", "2026-01-01"], ["Overdue task", "todo", "2026-01-02"], ["Later task", "todo", "2099-01-01"]] as const).entries()) {
+      await db.execute(sql`insert into talent.checklist_tasks (onboarding_case_id, employee_id, position, title, owner, due_on, status) values (${kase.id}, ${hireId}, ${i}, ${title}, 'hr', ${due}::date, ${status})`);
+    }
+
+    for (const [who, expected] of [[hr, true], [lead, true], [otherLead, false]] as const) {
+      as(who);
+      const t = await feed.getTracker();
+      const mine = t?.onboarding.find((c) => c.name.includes(first));
+      expect(Boolean(mine), who.email).toBe(expected);
+      if (expected) expect(mine).toMatchObject({ done: 1, total: 3, overdue: 1 });
+    }
+    for (const who of [employee, exec, recruiter]) {
+      as(who);
+      expect(await feed.getTracker(), who.email).toBeNull();
+    }
+
+    // HR also sees the overdue task in the attention feed, as a count only: no name appears in it.
+    as(hr);
+    const attention = await feed.getAttention("hr");
+    const item = attention.find((i) => i.id === "onboarding-overdue");
+    expect(item).toBeDefined();
+    expect(JSON.stringify(attention)).not.toContain(first);
+  });
+});
+
+describe("early warnings and workforce overview run for every role", () => {
+  for (const role of ROLE_SLUGS) {
+    it(`${role}: risks and workforce do not fail`, async () => {
+      const u = await makeUser(`dash-w-${role}`, [role]);
+      as(u);
+      for (const lens of ["admin", "hr", "executive", "team_lead", "recruiter", "my_work"] as const) {
+        const r = await feed.getRisks(lens);
+        expect(r.cards).toBeInstanceOf(Array);
+      }
+      const w = await feed.getWorkforce();
+      expect(w === null || typeof w.asOf === "string").toBe(true);
+    });
+  }
+
+  it("an employee gets no early warnings and no workforce numbers", async () => {
+    as(employee);
+    for (const lens of ["admin", "hr", "executive", "team_lead", "recruiter"] as const) expect((await feed.getRisks(lens)).cards).toEqual([]);
+    expect(await feed.getWorkforce()).toBeNull();
   });
 });

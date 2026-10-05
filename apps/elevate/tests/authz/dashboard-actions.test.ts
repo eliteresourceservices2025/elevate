@@ -49,3 +49,16 @@ describe("dashboard queries, every role", () => {
     });
   }
 });
+
+describe("the other dashboard panels, every role", () => {
+  // None of these may ever answer a role with a refusal: a panel the person has no access to simply comes back empty.
+  for (const role of ROLE_SLUGS) {
+    it(`${role}: approvals, attention, who is out, risks, tracker and workforce pass authorize()`, async () => {
+      as(role);
+      const feed = await import("@/modules/dashboard/feed-queries");
+      const panels = await import("@/modules/dashboard/panel-queries");
+      const calls: Promise<unknown>[] = [feed.getApprovalQueue(), feed.getAttention("my_work"), feed.getWhosOut(), panels.getRisks("hr"), panels.getTracker(), panels.getWorkforce()];
+      for (const call of calls) await expect(call.catch((e: unknown) => e)).resolves.not.toBeInstanceOf(ForbiddenError);
+    });
+  }
+});
