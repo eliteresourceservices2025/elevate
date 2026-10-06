@@ -2,7 +2,7 @@
 
 ELEVATE (ELITE Employee & VA Engagement / Talent Experience) is the internal HRIS for Elite Resource Services (ERS), a Philippine VA staffing company with 125+ employees and VAs, many serving US healthcare clients. It holds sensitive personal data. **Security and privacy rules below are non-negotiable; if a request conflicts with them, stop and ask.**
 
-The full design is in `docs/architecture-plan.md`. Read the relevant section before starting a module. Build order: `docs/BUILD-PROMPTS.md`; environment: `docs/SETUP.md`.
+The full design is in `docs/architecture-plan.md`. Read the relevant section before starting a module. Build order: `docs/BUILD-PROMPTS.md`; environment: `docs/SETUP.md`; first deployment: `docs/DEPLOY.md`; going live on the Pro plans: `docs/PRODUCTION-CHECKLIST.md`.
 
 ## Repo layout
 

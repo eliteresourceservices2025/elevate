@@ -100,7 +100,7 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"        
 
 **Region.** `apps/elevate/vercel.json` and `apps/safe-voice/vercel.json` run both apps in Singapore (`sin1`), next to the Supabase project. Do not remove this: Vercel's default is Washington, and every database call from there to Singapore costs about 0.2 seconds, which made the dashboard take ten seconds. If you chose a different Supabase region, change `sin1` to the nearest Vercel region (Settings > Functions shows the list).
 
-**Cron on the free plan.** Vercel Hobby allows a scheduled call only once a day, so `apps/elevate/vercel.json` runs the backstop once daily. The jobs themselves run on Inngest. On Pro, change the schedule back to `*/15 * * * *` (every 15 minutes).
+**Cron.** `apps/elevate/vercel.json` calls the backstop every 15 minutes (Vercel Pro). On the free Hobby plan only a daily schedule is accepted, so the deploy would be refused: if you ever drop back to Hobby, change it to `0 13 * * *`. The jobs themselves run on Inngest.
 
 ## Part 5. Vercel project 2: Safe Voice
 
