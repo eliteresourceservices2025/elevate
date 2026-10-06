@@ -89,9 +89,12 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
 
 /** One cheap read: the account row and its roles, or null if the account has never been set up. */
 async function loadCoreUser(id: string): Promise<CoreUser | null> {
-  const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  // Both reads at once: this runs on every request, and each round trip to the database costs real time when it is far away.
+  const [[row], roleRows] = await Promise.all([
+    db.select().from(users).where(eq(users.id, id)).limit(1),
+    db.select({ slug: userRoles.roleSlug }).from(userRoles).where(eq(userRoles.userId, id)),
+  ]);
   if (!row) return null;
-  const roleRows = await db.select({ slug: userRoles.roleSlug }).from(userRoles).where(eq(userRoles.userId, id));
   return {
     id: row.id,
     email: row.email,

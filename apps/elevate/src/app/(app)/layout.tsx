@@ -19,7 +19,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   // AAL2 or redirect. Pages and actions still call requireUser() and authorize() themselves.
   const user = await requireUser();
   // Until the current privacy notice is accepted, nothing else in the app opens.
-  const gate = await getPrivacyGate();
+  // One round of reads, not two: the gate is checked alongside what the page needs, and only decides whether to show it.
+  const [gate, unread, pending, clock] = await Promise.all([getPrivacyGate(), countMyUnread(), listMyPending(), getClockStatus()]);
   if (gate) {
     return (
       <PrivacyGate versionId={gate.versionId} title={gate.title} version={gate.version} updated={gate.updated} changeNote={gate.changeNote}>
@@ -27,7 +28,6 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       </PrivacyGate>
     );
   }
-  const [unread, pending, clock] = await Promise.all([countMyUnread(), listMyPending(), getClockStatus()]);
 
   const hiddenNav = hiddenNavFor(user);
   // The anonymous reporting site is a separate app on its own address. Not set in production = no link (nothing to point at).

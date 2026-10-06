@@ -21,7 +21,7 @@ test("HR adds a person, saves an encrypted ID, and reveals it", async ({ page })
 
   // Save a TIN: it is encrypted, so it shows masked
   await page.getByRole("link", { name: "Government IDs" }).click();
-  await page.getByLabel("TIN").fill("123456789012");
+  await page.getByLabel("TIN", { exact: true }).fill("123456789012");
   await page.getByRole("button", { name: "Save encrypted values" }).click();
   await expect(page.getByText("••••••••9012")).toBeVisible();
 

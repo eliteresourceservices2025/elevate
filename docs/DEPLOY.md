@@ -98,6 +98,8 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"        
 4. Settings > Deployment Protection: keep Vercel Authentication on for **Preview** deployments.
 5. Deploy.
 
+**Region.** `apps/elevate/vercel.json` and `apps/safe-voice/vercel.json` run both apps in Singapore (`sin1`), next to the Supabase project. Do not remove this: Vercel's default is Washington, and every database call from there to Singapore costs about 0.2 seconds, which made the dashboard take ten seconds. If you chose a different Supabase region, change `sin1` to the nearest Vercel region (Settings > Functions shows the list).
+
 **Cron on the free plan.** Vercel Hobby allows a scheduled call only once a day, so `apps/elevate/vercel.json` runs the backstop once daily. The jobs themselves run on Inngest. On Pro, change the schedule back to `*/15 * * * *` (every 15 minutes).
 
 ## Part 5. Vercel project 2: Safe Voice
@@ -142,6 +144,7 @@ Follow `docs/SETUP.md` section 15 and the go-live checklist: import people (Sett
 
 ## If something goes wrong
 
+- A page takes many seconds or never finishes loading: check Vercel > Settings > Functions > Function Region is Singapore (sin1), the same place as the Supabase project (Part 4, "Region"). Then look at the request in Vercel > Logs for a timeout.
 - Build fails on Vercel: check the Root Directory and the Node version first.
 - "Sign-ups are refused": the Before User Created hook is not on (Part 1, step 6).
 - "Safe Voice cases: not connected": `SAFEVOICE_HANDLER_DATABASE_URL` is missing or wrong.

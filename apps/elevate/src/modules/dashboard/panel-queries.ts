@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
+import { cache } from "react";
 import { authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -15,6 +16,9 @@ import { orFallback } from "./or-fallback";
 import { attendanceRisk, crowdedDayRisk, netLossRisk, overdueReviewsRisk, payrollRisks, rankRisks, rateTrend, thinPipelineRisk, type RiskCard } from "./risks";
 import { orderCases, type TrackerCase } from "./tracker";
 import { monthsTouched, weekAhead } from "./week-ahead";
+
+/** One read of the nightly summaries for the whole page (the warnings and the workforce panel both use it). People half only: no hiring funnel. */
+const analyticsForHome = cache(() => orFallback(() => getAnalytics({ range: 12 }, { hiring: false }), null));
 
 async function me() {
   const user = await requireUser();
@@ -35,7 +39,7 @@ export async function getRisks(lens: Lens): Promise<Risks> {
   const today = todayInZone();
   const wantsPeople = lens !== "recruiter";
 
-  const analytics = wantsPeople ? await orFallback(() => getAnalytics({ range: 6 }), null) : null;
+  const analytics = wantsPeople ? await analyticsForHome() : null;
   const [recruiting, hours, calendar, reviews] = await Promise.all([
     orFallback(() => getRecruitingSummary(), null),
     lens === "admin" || lens === "hr" ? orFallback(() => getHoursSettings(), null) : Promise.resolve(null),
@@ -131,7 +135,7 @@ export type Workforce = {
 /** Headcount over time and how people are spread across teams and clients, from the nightly summaries (small groups already merged or hidden). */
 export async function getWorkforce(): Promise<Workforce | null> {
   await me();
-  const dash = await orFallback(() => getAnalytics({ range: 12 }), null);
+  const dash = await analyticsForHome();
   if (!dash || !dash.asOf || !dash.people || dash.people.hidden) return null;
   return {
     asOf: dash.asOf,

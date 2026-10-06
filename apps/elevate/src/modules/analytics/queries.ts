@@ -34,12 +34,13 @@ async function ownEmployeeId(user: AuthzUser): Promise<string | null> {
  * The dashboard data for the signed-in person. HR, Super Admin and the Executive see the company and may pick a team or client with
  * at least 5 people; a team lead sees only their own downline; a recruiter sees hiring only. Throws ForbiddenError for everyone else.
  */
-export async function getDashboard(rawParams: unknown): Promise<Dashboard> {
+export async function getDashboard(rawParams: unknown, opts: { hiring?: boolean } = {}): Promise<Dashboard> {
   const user = await requireUser();
   // A team lead passes through their own chain: the downline they see is, by definition, below them.
   const mayPeople = can(user, "analytics.view", { managerChainUserIds: [user.id] });
   if (!mayPeople) await authorize(user, "analytics.view_hiring");
-  const mayHiring = can(user, "analytics.view_hiring");
+  // The home dashboard only needs the people half and passes hiring: false, which saves a chain of queries.
+  const mayHiring = can(user, "analytics.view_hiring") && opts.hiring !== false;
   const wholeCompany = mayPeople && scopeFor(user, "analytics.view") === "all";
 
   const params = parseDashboardParams(rawParams);
@@ -57,8 +58,7 @@ export async function getDashboard(rawParams: unknown): Promise<Dashboard> {
     let label = "Whole company";
     let hiddenScope = false;
     if (wholeCompany) {
-      const teams = await groupNames("teams", asOf);
-      const clients = await groupNames("clients", asOf);
+      const [teams, clients] = await Promise.all([groupNames("teams", asOf), groupNames("clients", asOf)]);
       out.teams = teams;
       out.clients = clients;
       out.scopeOptions = [
@@ -95,10 +95,13 @@ export async function getDashboard(rawParams: unknown): Promise<Dashboard> {
         out.people = { hidden: true, headcountNow: null, headcount: [], movement: [], leave: [], attendance: [] };
       } else {
         const dim = (t: typeof headcountDaily | typeof movementMonthly | typeof leaveMonthly | typeof attendanceWeekly) => and(eq(t.dimKind, kind), eq(t.dimId, dimId));
-        const hc = await db.select().from(headcountDaily).where(and(dim(headcountDaily), gte(headcountDaily.date, addDays(from, -1))));
-        const mv = await db.select().from(movementMonthly).where(and(dim(movementMonthly), gte(movementMonthly.month, from)));
-        const lv = await db.select().from(leaveMonthly).where(and(dim(leaveMonthly), gte(leaveMonthly.month, from)));
-        const at = await db.select().from(attendanceWeekly).where(and(dim(attendanceWeekly), gte(attendanceWeekly.weekStart, from)));
+        // Four independent reads: one round trip, not four.
+        const [hc, mv, lv, at] = await Promise.all([
+          db.select().from(headcountDaily).where(and(dim(headcountDaily), gte(headcountDaily.date, addDays(from, -1)))),
+          db.select().from(movementMonthly).where(and(dim(movementMonthly), gte(movementMonthly.month, from))),
+          db.select().from(leaveMonthly).where(and(dim(leaveMonthly), gte(leaveMonthly.month, from))),
+          db.select().from(attendanceWeekly).where(and(dim(attendanceWeekly), gte(attendanceWeekly.weekStart, from))),
+        ]);
         const now_ = hc.find((r) => r.date === asOf)?.headcount ?? 0;
         const points = headcountPoints(hc, from, asOf);
         const view: PeopleView = {
@@ -116,9 +119,12 @@ export async function getDashboard(rawParams: unknown): Promise<Dashboard> {
 
   if (mayHiring) {
     const fromMonth = monthStart(from);
-    const funnel = await db.select().from(funnelMonthly).where(gte(funnelMonthly.month, fromMonth));
-    const hires = await db.select().from(timeToHireMonthly).where(gte(timeToHireMonthly.month, fromMonth));
-    const titles = new Map((await rowsOf<{ id: string; title: string }>(sql`select id, title from talent.job_openings`)).map((r) => [r.id, r.title]));
+    const [funnel, hires, titleRows] = await Promise.all([
+      db.select().from(funnelMonthly).where(gte(funnelMonthly.month, fromMonth)),
+      db.select().from(timeToHireMonthly).where(gte(timeToHireMonthly.month, fromMonth)),
+      rowsOf<{ id: string; title: string }>(sql`select id, title from talent.job_openings`),
+    ]);
+    const titles = new Map(titleRows.map((r) => [r.id, r.title]));
     out.hiring = hiringView(funnel, hires.map((r) => ({ month: r.month, openingId: r.openingId, hires: r.hires, totalDays: Number(r.totalDays), medianDays: Number(r.medianDays) })), titles, from, asOf);
   }
   return out;
