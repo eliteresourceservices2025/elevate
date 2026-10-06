@@ -45,9 +45,9 @@ export const dailyDigest = inngest.createFunction(
   async ({ step }) => step.run("queue", () => track("daily-digest", () => runDailyDigest(formatInZone(new Date(), SECONDARY_TIMEZONE, "yyyy-MM-dd")))),
 );
 
-/** Every 15 minutes: send queued email within the daily budget (acknowledgments first, then digests). */
+/** Every 30 minutes: send queued email within the daily budget (acknowledgments first, then digests). */
 export const emailSender = inngest.createFunction(
-  { id: "email-sender", triggers: { cron: "*/15 * * * *" } },
+  { id: "email-sender", triggers: { cron: "*/30 * * * *" } },
   async ({ step }) => step.run("send", () => track("email-sender", () => flushEmailQueue())),
 );
 
@@ -75,9 +75,9 @@ export const missedClockouts = inngest.createFunction(
   async ({ step }) => step.run("check", () => track("missed-clockouts", () => runMissedClockouts())),
 );
 
-/** Every 5 minutes: tell leads about timed breaks that are still running past their length. */
+/** Every 10 minutes: tell leads about timed breaks that are still running past their length. */
 export const overbreakAlerts = inngest.createFunction(
-  { id: "overbreak-alerts", triggers: { cron: "*/5 * * * *" } },
+  { id: "overbreak-alerts", triggers: { cron: "*/10 * * * *" } },
   async ({ step }) => step.run("check", () => track("overbreak-alerts", () => runOverbreakAlerts())),
 );
 
@@ -87,9 +87,9 @@ export const selfiePurge = inngest.createFunction(
   async ({ step }) => step.run("purge", () => track("selfie-purge", () => purgeSelfies())),
 );
 
-/** Every 15 minutes: tell leads about clocked-in people who have not been seen for 2 hours. */
+/** Every 30 minutes: tell leads about clocked-in people who have not been seen for 2 hours. */
 export const quietSessionAlerts = inngest.createFunction(
-  { id: "quiet-session-alerts", triggers: { cron: "*/15 * * * *" } },
+  { id: "quiet-session-alerts", triggers: { cron: "*/30 * * * *" } },
   async ({ step }) => step.run("check", () => track("quiet-session-alerts", () => runQuietSessionAlerts())),
 );
 
@@ -99,15 +99,15 @@ export const evidencePurge = inngest.createFunction(
   async ({ step }) => step.run("purge", () => track("evidence-purge", () => purgeEvidence())),
 );
 
-/** Sends waiting clock calls to Jibble: right away when a clock event asks, and every 5 minutes as a safety sweep (retries). */
+/** Sends waiting clock calls to Jibble: right away when a clock event asks, and every 15 minutes as a safety sweep (retries). */
 export const jibbleMirror = inngest.createFunction(
-  { id: "jibble-mirror", triggers: [{ event: "jibble/mirror.requested" }, { cron: "*/5 * * * *" }] },
+  { id: "jibble-mirror", triggers: [{ event: "jibble/mirror.requested" }, { cron: "*/15 * * * *" }] },
   async ({ step }) => step.run("send", () => track("jibble-mirror", () => processMirrorQueue())),
 );
 
-/** Every 10 minutes: put Jibble back in step with ELEVATE for people who are working (or just clocked out) on teams that use Jibble. */
+/** Every 30 minutes: put Jibble back in step with ELEVATE for people who are working (or just clocked out) on teams that use Jibble. */
 export const jibbleRepair = inngest.createFunction(
-  { id: "jibble-repair", triggers: { cron: "*/10 * * * *" } },
+  { id: "jibble-repair", triggers: { cron: "*/30 * * * *" } },
   async ({ step }) => step.run("repair", () => track("jibble-repair", () => runJibbleRepair())),
 );
 
@@ -133,9 +133,9 @@ export const jibbleComparison = inngest.createFunction(
   },
 );
 
-/** Every 30 minutes: nudge requests for extra hours whose window is about to start and nobody has answered. */
+/** Hourly: nudge requests for extra hours whose window is about to start and nobody has answered. */
 export const extraHoursReminders = inngest.createFunction(
-  { id: "extra-hours-reminders", triggers: { cron: "*/30 * * * *" } },
+  { id: "extra-hours-reminders", triggers: { cron: "0 * * * *" } },
   async ({ step }) => step.run("remind", () => track("extra-hours-reminders", () => runExtraHoursReminders())),
 );
 
@@ -157,15 +157,15 @@ export const approvalSummary = inngest.createFunction(
   async ({ step }) => step.run("summarize", () => track("approval-summary", () => runHrApprovalSummary())),
 );
 
-/** Every 30 minutes: tell HR when a scheduled job has stopped running or a Jibble call has waited too long. */
+/** Hourly: tell HR when a scheduled job has stopped running or a Jibble call has waited too long. */
 export const healthCheck = inngest.createFunction(
-  { id: "health-check", triggers: { cron: "*/30 * * * *" } },
+  { id: "health-check", triggers: { cron: "10 * * * *" } },
   async ({ step }) => step.run("check", () => track("health-check", () => runHealthCheck())),
 );
 
-/** Every 10 minutes: send queued applicant emails (received, rejection, interview) under their own daily cap. */
+/** Every 30 minutes: send queued applicant emails (received, rejection, interview) under their own daily cap. */
 export const candidateEmailSender = inngest.createFunction(
-  { id: "candidate-email-sender", triggers: { cron: "*/10 * * * *" } },
+  { id: "candidate-email-sender", triggers: { cron: "*/30 * * * *" } },
   async ({ step }) => step.run("send", () => track("candidate-email-sender", () => sendCandidateEmails())),
 );
 
@@ -181,9 +181,9 @@ export const esignReminders = inngest.createFunction(
   async ({ step }) => step.run("remind", () => track("esign-reminders", () => runEsignReminders())),
 );
 
-/** Every 5 minutes: seal any document where everyone has signed but sealing did not finish. */
+/** Every 30 minutes: seal any document where everyone has signed but sealing did not finish. */
 export const esignSealSweep = inngest.createFunction(
-  { id: "esign-seal-sweep", triggers: { cron: "*/5 * * * *" } },
+  { id: "esign-seal-sweep", triggers: { cron: "*/30 * * * *" } },
   async ({ step }) => step.run("seal", () => track("esign-seal-sweep", () => runEsignSealSweep())),
 );
 
@@ -195,7 +195,7 @@ export const offboardingSeparations = inngest.createFunction(
 
 /** Every 30 minutes: close checklist tasks that ELEVATE can see are done. */
 export const checklistSync = inngest.createFunction(
-  { id: "checklist-sync", triggers: { cron: "*/30 * * * *" } },
+  { id: "checklist-sync", triggers: { cron: "20 * * * *" } },
   async ({ step }) => step.run("sync", () => track("checklist-sync", () => runChecklistSync())),
 );
 

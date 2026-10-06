@@ -201,11 +201,11 @@ export function formatClock(ms: number): string {
 // --- Connection and presence ------------------------------------------------------------------------
 
 /** How often an open page tells the server "still here". */
-export const HEARTBEAT_MS = 2 * MINUTE;
+export const HEARTBEAT_MS = 10 * MINUTE;
 /** No report for this long = "possibly offline" on the lead's view (display only; nobody is clocked out). */
-export const OFFLINE_AFTER_MS = 10 * MINUTE;
+export const OFFLINE_AFTER_MS = 25 * MINUTE;
 /** A gap this long between two reports shows the person "welcome back". */
-export const WELCOME_BACK_GAP_MS = 15 * MINUTE;
+export const WELCOME_BACK_GAP_MS = 30 * MINUTE;
 /** A clocked-in person not seen for this long is reported to the lead once. */
 export const QUIET_AFTER_MS = 2 * 60 * MINUTE;
 /** A lead can approve a correction this far back; older ones go to HR. */

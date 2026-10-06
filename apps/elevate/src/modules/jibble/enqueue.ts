@@ -28,13 +28,13 @@ export async function enqueueMirror(tx: Executor, input: { employeeId: string; e
   return allowed ? steps.length : 0;
 }
 
-/** After the transaction commits: ask the job runner to send now instead of waiting for the 5-minute sweep. Best effort. */
+/** After the transaction commits: ask the job runner to send now instead of waiting for the 15-minute sweep. Best effort. */
 export async function kickMirror(): Promise<void> {
   if (!process.env.INNGEST_EVENT_KEY && !process.env.INNGEST_DEV) return;
   try {
     const { inngest } = await import("@/inngest/client");
     await Promise.race([inngest.send({ name: "jibble/mirror.requested", data: {} }), new Promise((resolve) => setTimeout(resolve, 3000))]);
   } catch {
-    // The 5-minute sweep picks it up.
+    // The 15-minute sweep picks it up.
   }
 }

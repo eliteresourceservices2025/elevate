@@ -208,17 +208,17 @@ describe("an overbreak on a session that is still open", () => {
 });
 
 describe("connection and presence rules", () => {
-  it("shows welcome back only after a gap longer than 15 minutes", () => {
+  it("shows welcome back only after a gap longer than 30 minutes", () => {
     expect(needsWelcomeBack(null, 1_000_000)).toBe(false);
-    expect(needsWelcomeBack(1_000_000, 1_000_000 + 14 * MINUTE)).toBe(false);
-    expect(needsWelcomeBack(1_000_000, 1_000_000 + 16 * MINUTE)).toBe(true);
+    expect(needsWelcomeBack(1_000_000, 1_000_000 + 29 * MINUTE)).toBe(false);
+    expect(needsWelcomeBack(1_000_000, 1_000_000 + 31 * MINUTE)).toBe(true);
   });
 
-  it("says possibly offline after 10 minutes without a report, counting from the session start when never seen", () => {
+  it("says possibly offline after 25 minutes without a report, counting from the session start when never seen", () => {
     const start = 5_000_000;
-    expect(isPossiblyOffline(null, start, start + 9 * MINUTE)).toBe(false);
-    expect(isPossiblyOffline(null, start, start + 11 * MINUTE)).toBe(true);
-    expect(isPossiblyOffline(start + 20 * MINUTE, start, start + 25 * MINUTE)).toBe(false);
+    expect(isPossiblyOffline(null, start, start + 24 * MINUTE)).toBe(false);
+    expect(isPossiblyOffline(null, start, start + 26 * MINUTE)).toBe(true);
+    expect(isPossiblyOffline(start + 20 * MINUTE, start, start + 30 * MINUTE)).toBe(false);
     expect(lastSeenOf(start - 1000, start)).toBe(start); // a report from before the session does not count
   });
 

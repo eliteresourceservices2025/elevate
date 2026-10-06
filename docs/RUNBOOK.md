@@ -49,7 +49,7 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 
 | What you see | What it means | What to do |
 |---|---|---|
-| Jibble page: red banner "oldest waiting call has waited N minutes" | Jibble is slow or refusing calls. | Check "Recent calls" for the reason. Wait 10 minutes (the repair job fixes drift every 10 minutes). If it persists, **Pause sending** and message the developer. |
+| Jibble page: red banner "oldest waiting call has waited N minutes" | Jibble is slow or refusing calls. | Check "Recent calls" for the reason. Wait 30 minutes (the repair job fixes drift every 15 to 30 minutes). If it persists, **Pause sending** and message the developer. |
 | HR notification "ELEVATE cannot sign in to Jibble" | The Jibble keys were changed, revoked, or the plan lapsed. | Check Jibble's API keys and plan. Put the new keys in the host settings. Then "Test connection". |
 | HR notification "N people clocked in with no Jibble account" | These people worked without screenshots. | Match them (Jibble page) or add them in Jibble. Their days show "No screenshots". |
 | "Jibble and ELEVATE totals differ" flag | The nightly comparison found more than 15 minutes of difference. | Look at that day. Usually someone also clocked in Jibble directly, or an outage. ELEVATE's hours stand. |
@@ -136,7 +136,7 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 
 | What you see | What it means | What to do |
 |---|---|---|
-| "Everyone has signed. The document is being sealed" for more than a few minutes | Sealing failed once (storage hiccup). A job retries every 5 minutes. | Wait 5 minutes and refresh. If it persists, check the Health page ("Sealing signed documents") and tell the developer. The signatures are safe. |
+| "Everyone has signed. The document is being sealed" for more than a few minutes | Sealing failed once (storage hiccup). A job retries every 30 minutes. | Wait up to 30 minutes and refresh. If it persists, check the Health page ("Sealing signed documents") and tell the developer. The signatures are safe. |
 | Event log shows "Chain broken" | Someone changed the record directly in the database. | Do not use the document; tell the developer at once. |
 | A signer cannot sign | They have not opened the document yet, it is not their turn (one-after-another order), it expired, or it was voided. | Ask them to open it first. Remind, or void and send again. |
 | The person has no account | Signers must have an ELEVATE account. | Invite them first (Settings > Invitations). People outside the company are not supported yet. |

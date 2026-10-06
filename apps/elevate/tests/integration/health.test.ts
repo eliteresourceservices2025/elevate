@@ -64,7 +64,7 @@ describe("job check-ins", () => {
 
   it("shows a job as stopped when it has not succeeded for too long", async () => {
     await service.trackJob("quiet-session-alerts", async () => 1);
-    await db.execute(sql`update ops.job_runs set last_success_at = now() - interval '2 hours' where job = 'quiet-session-alerts'`); // every 15 minutes: allowed 42
+    await db.execute(sql`update ops.job_runs set last_success_at = now() - interval '2 hours' where job = 'quiet-session-alerts'`); // every 30 minutes: allowed 80
     expect((await jobOf("quiet-session-alerts")).state).toBe("late");
   });
 });
