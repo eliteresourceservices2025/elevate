@@ -3,6 +3,7 @@ import { ClipboardCheck } from "lucide-react";
 import { todayInZone } from "@/modules/org/service";
 import { getTracker } from "../panel-queries";
 import { percentDone, whenLabel, type TrackerCase } from "../tracker";
+import { guarded } from "./guard";
 
 function CaseList({ kind, cases, total, empty }: { kind: "onboarding" | "offboarding"; cases: TrackerCase[]; total: number; empty: string }) {
   const today = todayInZone();
@@ -56,18 +57,20 @@ function CaseList({ kind, cases, total, empty }: { kind: "onboarding" | "offboar
 
 /** New hires and leavers in progress: how far along each checklist is, what is overdue, and when the person starts or leaves. */
 export async function Tracker() {
-  const t = await getTracker();
-  if (!t) return null;
-  return (
-    <section aria-label="Onboarding and offboarding" className="space-y-3">
-      <h2 className="flex items-center gap-2 text-lg font-semibold">
-        <ClipboardCheck className="size-5 text-primary" aria-hidden />
-        Onboarding and offboarding
-      </h2>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <CaseList kind="onboarding" cases={t.onboarding} total={t.onboardingTotal} empty="Nobody is being onboarded." />
-        <CaseList kind="offboarding" cases={t.offboarding} total={t.offboardingTotal} empty="Nobody is leaving." />
-      </div>
-    </section>
-  );
+  return guarded("Onboarding and offboarding", async () => {
+    const t = await getTracker();
+    if (!t) return null;
+    return (
+      <section aria-label="Onboarding and offboarding" className="space-y-3">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <ClipboardCheck className="size-5 text-primary" aria-hidden />
+          Onboarding and offboarding
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <CaseList kind="onboarding" cases={t.onboarding} total={t.onboardingTotal} empty="Nobody is being onboarded." />
+          <CaseList kind="offboarding" cases={t.offboarding} total={t.offboardingTotal} empty="Nobody is leaving." />
+        </div>
+      </section>
+    );
+  });
 }

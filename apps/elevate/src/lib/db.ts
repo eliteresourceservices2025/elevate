@@ -10,7 +10,8 @@ function getDb() {
   if (!instance) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL is not set");
-    instance = drizzle(postgres(url, { prepare: false }));
+    // Timeouts so a stalled connection fails fast instead of hanging a whole page; idle connections are released after 20 seconds.
+    instance = drizzle(postgres(url, { prepare: false, connect_timeout: 10, idle_timeout: 20 }));
   }
   return instance;
 }

@@ -145,6 +145,22 @@ Follow `docs/SETUP.md` section 15 and the go-live checklist: import people (Sett
 ## If something goes wrong
 
 - A page takes many seconds or never finishes loading: check Vercel > Settings > Functions > Function Region is Singapore (sin1), the same place as the Supabase project (Part 4, "Region"). Then look at the request in Vercel > Logs for a timeout.
+- "canceling statement due to statement timeout" in the Vercel logs: the database was busy or something held a lock. In the Supabase SQL editor run these and read the result before changing anything:
+
+  ```sql
+  -- what is running or waiting right now, longest first
+  select pid, usename, state, wait_event_type, wait_event, now() - query_start as running_for, left(query, 120) as query
+  from pg_stat_activity where datname = current_database() and state <> 'idle' order by query_start;
+
+  -- who is blocking whom
+  select blocked.pid as waiting_pid, left(blocked.query, 80) as waiting_query, blocking.pid as blocking_pid, left(blocking.query, 80) as blocking_query
+  from pg_stat_activity blocked join pg_stat_activity blocking on blocking.pid = any(pg_blocking_pids(blocked.pid));
+
+  -- how many connections, by state
+  select state, count(*) from pg_stat_activity group by state;
+  ```
+
+  Also look at Supabase > Reports > Database (CPU, memory, connections). A free project has a small, shared CPU. If a connection shows `idle in transaction` for minutes it can be ended with `select pg_terminate_backend(<pid>);`.
 - Build fails on Vercel: check the Root Directory and the Node version first.
 - "Sign-ups are refused": the Before User Created hook is not on (Part 1, step 6).
 - "Safe Voice cases: not connected": `SAFEVOICE_HANDLER_DATABASE_URL` is missing or wrong.

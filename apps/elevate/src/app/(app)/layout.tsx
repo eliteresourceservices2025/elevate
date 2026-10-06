@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { unstable_rethrow } from "next/navigation";
 import { Markdown } from "@/components/markdown";
 import { AppShell } from "@/components/shell/app-shell";
 import { SIDEBAR_COOKIE } from "@/components/shell/sidebar-cookie";
@@ -6,6 +7,7 @@ import { SIDEBAR_COOKIE } from "@/components/shell/sidebar-cookie";
 import { requireUser } from "@/lib/auth";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { hiddenNavFor } from "@/lib/nav-access";
+import { withTimeout } from "@/modules/dashboard/timeout";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { AckBanner } from "@/modules/announcements/components/ack-display";
 import { listMyPending } from "@/modules/announcements/queries";
@@ -20,7 +22,13 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await requireUser();
   // Until the current privacy notice is accepted, nothing else in the app opens.
   // One round of reads, not two: the gate is checked alongside what the page needs, and only decides whether to show it.
-  const [gate, unread, pending, clock] = await Promise.all([getPrivacyGate(), countMyUnread(), listMyPending(), getClockStatus()]);
+  // The bell count and the acknowledgment banner are nice to have: if they are slow or fail, the page still opens without them.
+  const optional = <T,>(read: Promise<T>, fallback: T) => withTimeout(read, 8_000).catch((error: unknown) => {
+    unstable_rethrow(error);
+    console.error("layout read skipped:", error instanceof Error ? error.name : "unknown error");
+    return fallback;
+  });
+  const [gate, unread, pending, clock] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus()]);
   if (gate) {
     return (
       <PrivacyGate versionId={gate.versionId} title={gate.title} version={gate.version} updated={gate.updated} changeNote={gate.changeNote}>
