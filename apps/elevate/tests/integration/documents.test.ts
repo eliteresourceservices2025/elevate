@@ -40,8 +40,8 @@ async function makeUser(label: string, roles: RoleSlug[]): Promise<TestUser> {
   return { id, email, roles };
 }
 
-async function makeEmployee(label: string, opts: { userId?: string; status?: string } = {}) {
-  const n = uniq(label);
+async function makeEmployee(label: string, opts: { userId?: string; status?: string; sortFirst?: boolean } = {}) {
+  const n = (opts.sortFirst ? "0" : "") + uniq(label);
   const [e] = await rows<{ id: string }>(sql`
     insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id)
     values (${label}, ${n}, ${n + "@example.com"}, ${opts.status ?? "active"}, ${opts.userId ?? null}) returning id`);
@@ -98,9 +98,10 @@ beforeAll(async () => {
   lead = await makeUser("lead", ["employee", "team_lead"]);
 });
 
-async function person(label = "Person", roles: RoleSlug[] = ["employee"]) {
+/** sortFirst: the overview lists are ordered by last name and capped, so a test that looks for its own person among them must sort ahead of everyone other test files create. */
+async function person(label = "Person", roles: RoleSlug[] = ["employee"], opts: { sortFirst?: boolean } = {}) {
   const user = await makeUser(label, roles);
-  const id = await makeEmployee(label, { userId: user.id });
+  const id = await makeEmployee(label, { userId: user.id, sortFirst: opts.sortFirst });
   return { user, id };
 }
 
@@ -284,7 +285,7 @@ describe("who can do what", () => {
 
 describe("HR overview", () => {
   it("lists expiring and expired documents, and who is missing required ones", async () => {
-    const p = await person("Over");
+    const p = await person("Over", ["employee"], { sortFirst: true });
     const soon = await upload({ actor: hr, employeeId: p.id, slug: "hipaa_training", expiresOn: addDays(today, 10) });
     const soonId = soon.ticket.ok ? soon.ticket.data.documentId : "";
     // the app refuses past dates, so an already-expired document is set up directly

@@ -31,6 +31,8 @@ const as = (u: TestUser) => {
 const today = () => formatInZone(Date.now(), PHX, "yyyy-MM-dd");
 /** A Monday in the past, a whole week behind this one, so every day of it is finished. */
 const lastWeek = () => mondayOf(addDays(today(), -8));
+/** How far back a test rebuild reaches: lastWeek() is 8 to 14 days back (14 on a Monday), so it needs more than the 12 or 14 this once used. */
+const REBUILD_DAYS = 21;
 const at = (date: string, time: string) => fromZonedTime(`${date}T${time}:00`, PHX).toISOString();
 
 async function makeUser(label: string, roles: RoleSlug[]): Promise<TestUser> {
@@ -133,7 +135,7 @@ describe("approving a week", () => {
     // An approved correction adds a late session on Monday
     await event(worker.employeeId, "clock_in", at(W, "18:00"));
     await event(worker.employeeId, "clock_out", at(W, "19:00"));
-    await jobs.rebuildAttendanceDays(new Date(), 12);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
 
     let review = await queries.getTeamReview(W);
     let row = review.rows.find((r) => r.employeeId === worker.employeeId)!;
@@ -167,7 +169,7 @@ describe("approving everyone without flags", () => {
     await event(open.employeeId, "clock_in", at(addDays(today(), -1), "09:00")); // clocked in since yesterday, never out
 
     as(lead.user);
-    await jobs.rebuildAttendanceDays(new Date(), 12);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
     const result = await actions.approveCleanWeeks({ weekStart: W });
     expect(result.ok).toBe(true);
     const data = result.ok ? result.data : null;
@@ -195,7 +197,7 @@ describe("the review view", () => {
     const other = await person("ViewOther");
     await normalWeek(mine.employeeId, W);
     await normalWeek(other.employeeId, W);
-    await jobs.rebuildAttendanceDays(new Date(), 12);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
 
     as(lead.user);
     const review = await queries.getTeamReview(W);
@@ -234,7 +236,7 @@ describe("the payroll export", () => {
     const { W, worker } = await approvedWeek("ExpA");
     const other = await person("ExpUnapproved");
     await normalWeek(other.employeeId, W);
-    await jobs.rebuildAttendanceDays(new Date(), 12);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
     as(hr);
     expect(await actions.savePayPeriod({ kind: "weekly" })).toEqual({ ok: true, data: undefined });
     const out = await actions.exportHours({ periodStart: W, kind: "daily", includeUnapproved: false });
@@ -263,7 +265,7 @@ describe("the payroll export", () => {
     const { W, lead, worker } = await approvedWeek("ExpChanged");
     await event(worker.employeeId, "clock_in", at(W, "18:00"));
     await event(worker.employeeId, "clock_out", at(W, "19:00"));
-    await jobs.rebuildAttendanceDays(new Date(), 12);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
     as(hr);
     await actions.savePayPeriod({ kind: "weekly" });
     const before = await actions.exportHours({ periodStart: W, kind: "daily", includeUnapproved: false });
@@ -345,7 +347,7 @@ describe("so payroll is not short: reminders and progress", () => {
     const solo = await person("RemSolo");
     await normalWeek(worker.employeeId, W);
     await normalWeek(solo.employeeId, W);
-    await jobs.rebuildAttendanceDays(new Date(), 14);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
 
     const run = await jobs.runLeadApprovalReminders(mondayMorning(W));
     expect(run.leads).toBeGreaterThanOrEqual(1);
@@ -369,7 +371,7 @@ describe("so payroll is not short: reminders and progress", () => {
       const w = await person(label, { managerId: lead.employeeId });
       await normalWeek(w.employeeId, W);
     }
-    await jobs.rebuildAttendanceDays(new Date(), 14);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
     const run = await jobs.runHrApprovalSummary(new Date(`${addDays(W, 9)}T08:00:00+08:00`)); // Wednesday
     expect(run.people).toBeGreaterThanOrEqual(3);
     const [n] = await rows<{ title: string; body: string }>(sql`select title, body from ops.notifications where user_id = ${hr.id} and kind = 'hours.approval_summary'`);
@@ -384,7 +386,7 @@ describe("so payroll is not short: reminders and progress", () => {
     const lead = await person("ProgLead", { roles: ["team_lead", "employee"] });
     const worker = await person("ProgWorker", { managerId: lead.employeeId });
     await normalWeek(worker.employeeId, W);
-    await jobs.rebuildAttendanceDays(new Date(), 14);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
     const before = await queries.periodProgress(period);
     expect(before.pendingDays).toBeGreaterThanOrEqual(2);
     expect(before.teams.length).toBeGreaterThan(0);
