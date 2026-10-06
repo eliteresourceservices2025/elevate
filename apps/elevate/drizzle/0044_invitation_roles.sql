@@ -1,0 +1,3 @@
+ALTER TABLE "core"."invitations" ADD COLUMN "roles" text[] DEFAULT '{}'::text[] NOT NULL;--> statement-breakpoint
+ALTER TABLE "core"."invitations" ADD COLUMN "is_safevoice_handler" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "core"."invitations" ADD CONSTRAINT "invitations_roles_chk" CHECK ("core"."invitations"."roles" <@ array['super_admin', 'hr_admin', 'team_lead', 'recruiter', 'executive']::text[]);

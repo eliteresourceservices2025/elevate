@@ -351,6 +351,13 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **Go-live checklist** (`/settings/go-live`, `imports.manage`, table `ops.golive_items`, migration 0042): automatic rows (required production settings present by NAME only, privacy notice and monitoring policy published with real text, at least two Safe Voice handlers, a signed-off reconciliation, how many people have accounts) and manual steps HR ticks (domain and DNS, a backup restore test, error alerts, sign-in emails, sending domain, counsel's read, pilot team, invitations in waves, help for HR, the two-week parallel run, archive and cancel TalentHR). The settings check describes the deployment you are looking at, so open it on the live site.
 - Tests: `src/modules/imports/golive.test.ts`, `tests/integration/imports-pull.test.ts`, `tests/e2e/go-live.spec.ts`, and the import authz test covers the checklist action and query.
 
+## Invitations with roles (Settings > Invitations)
+
+- A **Super Admin** can choose roles (all but Employee) and the **Safe Voice handler** flag when inviting (`core.invitations.roles` and `is_safevoice_handler`, migration 0044; a check constraint allows only the five grantable roles). HR can still invite but only as Employee: asking for roles or the flag needs `settings.manage_roles` / `settings.set_safevoice_handler` (the same Super-Admin-only rights as the Roles page), checked in `createInvitation`. A re-invite by HR keeps what a Super Admin chose; a Super Admin's new choice (even an empty one) replaces it.
+- **Nothing is granted when inviting.** `provisionCoreUser` (first sign-in) reads the invitation in the same statement that marks it accepted, so the choices are applied **exactly once**, and **only if the invitation had not expired**. It writes the roles (`granted_by` = the inviter), sets the handler flag and audits `invitation.grants_applied` (roles and flag, `invitedBy` in the metadata).
+- Only someone who may give roles sees what was chosen (`listInvitations` blanks roles and the flag for HR), so who is a Safe Voice handler is not read off the invitation list. The invitation email says nothing about roles.
+- Tests: `src/modules/settings/invitation-grants.test.ts`, `tests/authz/settings-actions.test.ts`, `tests/integration/invitations.test.ts` (apply once, expired grants nothing, HR refused, re-invite rules, database constraint), `tests/e2e/invitations.spec.ts`.
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.

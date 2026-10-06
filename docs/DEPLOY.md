@@ -142,6 +142,17 @@ Follow `docs/SETUP.md` section 15 and the go-live checklist: import people (Sett
 - **Resend Free:** about 100 emails a day and one domain.
 - **Inngest and Upstash free tiers** are enough for a demo and a pilot.
 
+## Part 10. Deploying an update
+
+A code change that comes with a new file in `apps/elevate/drizzle/` needs that migration applied to Supabase **before** the new code runs, or pages that read the new columns fail. In a PowerShell window (same as Part 1, step 5):
+
+```powershell
+$env:DATABASE_URL_DIRECT = "<the session pooler string>"
+pnpm db:migrate
+```
+
+Then push and let Vercel deploy. Adding a column with a default is safe for the old code to run against for a few minutes, so this order (migrate, then deploy) is always the safe one.
+
 ## If something goes wrong
 
 - A page takes many seconds or never finishes loading: check Vercel > Settings > Functions > Function Region is Singapore (sin1), the same place as the Supabase project (Part 4, "Region"). Then look at the request in Vercel > Logs for a timeout.

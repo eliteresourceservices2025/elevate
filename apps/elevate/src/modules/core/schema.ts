@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 export const core = pgSchema("core");
 
@@ -32,8 +32,15 @@ export const invitations = core
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
       acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+      // Chosen by a Super Admin when inviting and applied once, when the person first signs in (never before, and never after it expires).
+      // Employee is not listed: everyone gets it.
+      roles: text("roles").array().notNull().default(sql`'{}'::text[]`),
+      isSafevoiceHandler: boolean("is_safevoice_handler").notNull().default(false),
     },
-    (t) => [uniqueIndex("invitations_email_lower_idx").on(sql`lower(${t.email})`)],
+    (t) => [
+      uniqueIndex("invitations_email_lower_idx").on(sql`lower(${t.email})`),
+      check("invitations_roles_chk", sql`${t.roles} <@ array['super_admin', 'hr_admin', 'team_lead', 'recruiter', 'executive']::text[]`),
+    ],
   )
   .enableRLS();
 

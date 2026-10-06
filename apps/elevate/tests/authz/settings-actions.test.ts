@@ -44,6 +44,9 @@ const cases: Case[] = [
   { name: "setSafevoiceHandler", call: () => setSafevoiceHandler({ userId: OTHER, enabled: true }), allowed: ["super_admin"] },
   { name: "resetAuthenticator", call: () => resetAuthenticator({ userId: OTHER }), allowed: ["super_admin"] },
   { name: "createInvitation", call: () => createInvitation({ email: "new@example.com" }), allowed: ["super_admin", "hr_admin"] },
+  // Choosing roles or the Safe Voice handler flag in an invitation is the same right as on the Roles page: Super Admin only.
+  { name: "createInvitation with roles", call: () => createInvitation({ email: "new@example.com", roles: ["hr_admin"] }), allowed: ["super_admin"] },
+  { name: "createInvitation as Safe Voice handler", call: () => createInvitation({ email: "new@example.com", safevoiceHandler: true }), allowed: ["super_admin"] },
   { name: "revokeInvitation", call: () => revokeInvitation({ invitationId: OTHER }), allowed: ["super_admin", "hr_admin"] },
 ];
 

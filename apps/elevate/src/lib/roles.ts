@@ -22,6 +22,9 @@ export const ROLE_LABELS: Record<RoleSlug, string> = {
 /** Everyone who signs in holds this role; it cannot be removed. */
 export const BASE_ROLE: RoleSlug = "employee";
 
+/** Roles a Super Admin can give with an invitation. Employee is left out: everyone gets it. */
+export const GRANTABLE_ROLES = ROLE_SLUGS.filter((r) => r !== BASE_ROLE);
+
 export function isRoleSlug(value: string): value is RoleSlug {
   return (ROLE_SLUGS as readonly string[]).includes(value);
 }

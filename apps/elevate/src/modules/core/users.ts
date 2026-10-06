@@ -35,15 +35,37 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
     await tx.execute(sql`set local lock_timeout = '5s'`);
     await tx.insert(users).values({ id: input.id, email }).onConflictDoNothing({ target: users.id });
 
-    await tx
+    // Marks the invitation accepted and reads what the Super Admin chose for this person. Only the first set-up gets a row back, so the
+    // choices are applied exactly once, and an invitation that had already run out gives nothing.
+    const [accepted] = await tx
       .update(invitations)
       .set({ acceptedAt: new Date() })
-      .where(and(sql`lower(${invitations.email}) = ${email}`, isNull(invitations.acceptedAt)));
+      .where(and(sql`lower(${invitations.email}) = ${email}`, isNull(invitations.acceptedAt)))
+      .returning({ roles: invitations.roles, isSafevoiceHandler: invitations.isSafevoiceHandler, invitedBy: invitations.invitedBy, expiresAt: invitations.expiresAt });
 
     await tx
       .insert(userRoles)
       .values({ userId: input.id, roleSlug: BASE_ROLE })
       .onConflictDoNothing();
+
+    if (accepted && accepted.expiresAt.getTime() > Date.now() && (accepted.roles.length > 0 || accepted.isSafevoiceHandler)) {
+      const granted = accepted.roles.filter(isRoleSlug).filter((r) => r !== BASE_ROLE);
+      if (granted.length > 0) {
+        await tx.insert(userRoles).values(granted.map((roleSlug) => ({ userId: input.id, roleSlug, grantedBy: accepted.invitedBy }))).onConflictDoNothing();
+      }
+      if (accepted.isSafevoiceHandler) await tx.update(users).set({ isSafevoiceHandler: true }).where(eq(users.id, input.id));
+      await writeAudit(
+        {
+          actor: null,
+          action: "invitation.grants_applied",
+          targetType: "user",
+          targetId: input.id,
+          after: { email, roles: [BASE_ROLE, ...granted], isSafevoiceHandler: accepted.isSafevoiceHandler },
+          metadata: { invitedBy: accepted.invitedBy, reason: "Chosen by a Super Admin in the invitation, applied at first sign-in" },
+        },
+        tx,
+      );
+    }
 
     if (superAdminEmails().includes(email)) {
       const [existing] = await tx

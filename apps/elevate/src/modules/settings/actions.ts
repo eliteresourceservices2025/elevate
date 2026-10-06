@@ -2,7 +2,7 @@
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { authorize } from "@/lib/authz";
+import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isRoleSlug } from "@/lib/roles";
@@ -176,10 +176,15 @@ export async function createInvitation(input: unknown): Promise<ActionResult<{ e
 
     const parsed = createInvitationSchema.safeParse(input);
     if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Enter a valid email address.");
-    const { email } = parsed.data;
+    const { email, roles, safevoiceHandler } = parsed.data;
+    // Roles and the Safe Voice handler flag are a Super Admin's call, exactly as on the Roles page: HR can still invite, but only as Employee.
+    // Asking for either without that right is refused; a Super Admin always sets both (an empty choice clears an earlier one).
+    if (roles.length > 0) await authorize(actor, "settings.manage_roles");
+    if (safevoiceHandler) await authorize(actor, "settings.set_safevoice_handler");
+    const grant = can(actor, "settings.manage_roles") ? { roles: [...new Set(roles)], safevoiceHandler } : undefined;
 
     const result = await db.transaction(async (tx) => {
-      const saved = await ensureInvitation(tx, actor, email);
+      const saved = await ensureInvitation(tx, actor, email, grant);
       if (saved.exists) return fail("That person already has an account.");
       return { ok: true, data: { emailed: false, expiresAt: saved.expiresAt } } as const;
     });

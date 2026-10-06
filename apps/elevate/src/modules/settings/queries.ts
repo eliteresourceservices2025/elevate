@@ -1,6 +1,6 @@
 import "server-only";
 import { desc, eq, sql } from "drizzle-orm";
-import { authorize } from "@/lib/authz";
+import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isRoleSlug, type RoleSlug } from "@/lib/roles";
@@ -48,13 +48,18 @@ export type InvitationRow = {
   expiresAt: Date;
   acceptedAt: Date | null;
   invitedByEmail: string | null;
+  /** What they get on top of Employee when they first sign in, as chosen in the invitation. */
+  roles: string[];
+  isSafevoiceHandler: boolean;
 };
 
 export async function listInvitations(): Promise<InvitationRow[]> {
   const actor = await requireUser();
   await authorize(actor, "invitations.create");
 
-  return db
+  // Only someone who may give roles sees what was chosen: who is a Safe Voice handler in particular is not for HR to read off this list.
+  const seesGrants = can(actor, "settings.manage_roles");
+  const rows = await db
     .select({
       id: invitations.id,
       email: invitations.email,
@@ -62,11 +67,14 @@ export async function listInvitations(): Promise<InvitationRow[]> {
       expiresAt: invitations.expiresAt,
       acceptedAt: invitations.acceptedAt,
       invitedByEmail: users.email,
+      roles: invitations.roles,
+      isSafevoiceHandler: invitations.isSafevoiceHandler,
     })
     .from(invitations)
     .leftJoin(users, eq(users.id, invitations.invitedBy))
     .orderBy(desc(invitations.createdAt))
     .limit(200);
+  return rows.map((r) => (seesGrants ? r : { ...r, roles: [], isSafevoiceHandler: false }));
 }
 
 export async function listAuditEntries(rawQuery: unknown) {
