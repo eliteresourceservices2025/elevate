@@ -1,6 +1,6 @@
 # ELEVATE
 
-ELITE Employee & VA Engagement / Talent Experience — the internal HRIS for Elite Resource Services.
+ELITE Life & VA Engagement / Talent Experience — the internal HRIS for Elite Resource Services.
 
 - Design: [docs/architecture-plan.md](docs/architecture-plan.md)
 - Setup: [docs/SETUP.md](docs/SETUP.md)
