@@ -515,17 +515,19 @@ test("My profile stays My profile: its own address and menu highlight, not the P
   const slow = { timeout: 30_000 };
   const worker = await createEmployeeAccount("Pia", `Prof${Date.now()}`);
   await signInEnrollingMfa(page, worker);
-  await page.getByRole("link", { name: "My profile", exact: true }).click();
+  // The dashboard also has a "My profile" quick action, so the menu is looked at on its own.
+  const menu = page.getByRole("navigation", { name: "Main" });
+  await menu.getByRole("link", { name: "My profile", exact: true }).click();
   await page.waitForURL("**/people/me", slow);
-  await expect(page.getByRole("link", { name: "My profile", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("link", { name: "People", exact: true })).not.toHaveAttribute("aria-current", "page");
+  await expect(menu.getByRole("link", { name: "My profile", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(menu.getByRole("link", { name: "People", exact: true })).not.toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: /Pia Prof/ })).toBeVisible(slow);
   await expect(page.getByRole("link", { name: "← People" })).toHaveCount(0);
 
   // Its tabs keep the address too
   await page.getByRole("link", { name: "Emergency" }).click();
   await page.waitForURL("**/people/me?tab=emergency", slow);
-  await expect(page.getByRole("link", { name: "My profile", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(menu.getByRole("link", { name: "My profile", exact: true })).toHaveAttribute("aria-current", "page");
 });
 
 test("Team attendance, Hours review, Extra hours and Jibble are their own menu items; the menu only offers what the role can open", async ({ browser }) => {
