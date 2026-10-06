@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { BASE_ROLE, isRoleSlug, type RoleSlug } from "@/lib/roles";
 import { writeAudit } from "@/modules/audit/write";
 import { linkEmployeeToUser } from "@/modules/people/service";
+import { needsProvisioning } from "./provision-rules";
 import { invitations, userRoles, users } from "./schema";
 
 export type CoreUser = {
@@ -30,6 +31,8 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
   const email = input.email.toLowerCase();
 
   return db.transaction(async (tx) => {
+    // If another request is setting up the same account, fail in seconds instead of queueing behind it for minutes.
+    await tx.execute(sql`set local lock_timeout = '5s'`);
     await tx.insert(users).values({ id: input.id, email }).onConflictDoNothing({ target: users.id });
 
     await tx
@@ -113,12 +116,18 @@ export async function ensureCoreUser(input: { id: string; email: string }): Prom
   const existing = await loadCoreUser(input.id);
   const email = input.email.toLowerCase();
 
-  const missingBase = !existing || !existing.roles.includes(BASE_ROLE);
-  // The configured first Super Admin is promoted even if they signed in before being listed.
-  const pendingBootstrap = Boolean(existing) && superAdminEmails().includes(email) && !existing!.roles.includes("super_admin");
+  const listed = superAdminEmails().includes(email);
+  const isSuperAdmin = Boolean(existing?.roles.includes("super_admin"));
+  // Only a listed person who is not yet Super Admin can need the bootstrap, and only while nobody holds the role: ask just then.
+  const anySuperAdmin = existing && listed && !isSuperAdmin ? await superAdminExists() : true;
 
-  if (existing && !missingBase && !pendingBootstrap) return existing;
+  if (existing && !needsProvisioning({ exists: true, hasBaseRole: existing.roles.includes(BASE_ROLE), listed, isSuperAdmin, anySuperAdmin })) return existing;
   return provisionCoreUser(input);
+}
+
+async function superAdminExists(): Promise<boolean> {
+  const [row] = await db.select({ userId: userRoles.userId }).from(userRoles).where(eq(userRoles.roleSlug, "super_admin")).limit(1);
+  return Boolean(row);
 }
 
 /** Archives a sign-in account (used when someone leaves): the next request from it is refused and it signs out. Nothing is deleted. */
