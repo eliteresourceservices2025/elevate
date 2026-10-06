@@ -47,6 +47,12 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 9. **Time and attendance: ELEVATE is the time clock and the only source of hours.** `time.clock_events` is append-only (clock_in, break_start, break_end, clock_out); corrections are new rows with a reason and lead approval, never edits. Timestamps come from the server clock and the IP from the request, never from values the browser sends. Location is optional, needs the employee's permission, and is stored rounded (~1 km). `time.attendance_days` is always rebuilt from clock events, never edited by hand.
 10. **Jibble is used only for screenshots.** On clock-in/clock-out, ELEVATE mirrors the event to Jibble through its API (queued in Inngest, retried, logged in `time.jibble_link_log`). Never read hours from Jibble into payroll exports, and never copy Jibble screenshots, GPS or activity data into ELEVATE: screenshots can contain client patient data.
 
+## Database connection (do not remove the query limiter)
+
+- `src/lib/db.ts` wraps the driver with `limitQueries` (`src/lib/limit-queries.ts`): **at most 6 queries run at once, the rest wait in the app**, never inside the driver. Reason: behind Supabase's transaction pooler (Supavisor, port 6543, which production uses) a driver that queues more queries than it has connections stalls the pooler: a server connection sits `active` in `ClientRead` until the 2-minute statement timeout, and every other query waits behind it, so a page that asks for 20+ things at once (the dashboard) froze for minutes. Proven with a plain script: 30 parallel queries hung, 150 through the limiter took 0.5 s. Settings that did NOT help: `max`, `max_pipeline`, `prepare`, `fetch_types`.
+- The limit is below `max: 10` connections on purpose, so transactions (`db.transaction` reserves a connection) still find one free. Keep it that way when changing either number.
+- **To reproduce pooler problems locally:** set `[db.pooler] enabled = true` in `supabase/config.toml` (`default_pool_size = 15` matches the free plan), `supabase stop` then `supabase start`, and run the app with `DATABASE_URL=postgresql://postgres.pooler-dev:postgres@127.0.0.1:54329/postgres`. Dashboard panels also time out after 20 s (`guarded`), so a database stall shows a notice instead of a frozen page.
+
 ## Testing
 
 - `pnpm test` unit and authz tests (no database). Every action has a per-role test; `tests/authz/matrix.test.ts` is the hand-written permission matrix.

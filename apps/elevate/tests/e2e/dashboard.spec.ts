@@ -124,6 +124,14 @@ test("a lead decides a request from the dashboard queue; declining needs a reaso
   await dialog.getByRole("button", { name: "Decline" }).click();
   await expect(leadPage.getByText("Declined.").first()).toBeVisible();
   await expect(rows).toHaveCount(0);
+
+  // Leave the shared local database as found: the approved first step would otherwise wait for HR forever and crowd the approvals list that other tests read.
+  const cleanup = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    await cleanup`update time.leave_requests set status = 'cancelled', cancelled_at = now(), cancel_reason = 'e2e cleanup' where employee_id = ${employee.employeeId} and status in ('pending_lead', 'pending_hr')`;
+  } finally {
+    await cleanup.end();
+  }
 });
 
 test("the management panels show for HR and never for a plain employee", async ({ browser }) => {
