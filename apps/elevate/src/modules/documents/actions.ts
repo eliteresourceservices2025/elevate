@@ -13,12 +13,16 @@ import { writeAudit } from "@/modules/audit/write";
 import { todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { ALLOWED_TYPES_TEXT, MAX_FILE_BYTES, extensionOf, kindFromMime, mimeOf, sanitizeFileName, sniffFileKind } from "./files";
-import { documentTypes, documents } from "./schema";
+import { documentFolders, documentTypes, documents } from "./schema";
 import { clientChoices } from "./service";
 import { BUCKETS, getDocumentStorage, type Bucket } from "./storage";
 import {
   archiveDocumentTypeSchema,
+  createFolderSchema,
   documentIdSchema,
+  folderIdSchema,
+  moveDocumentSchema,
+  renameFolderSchema,
   documentTypeSchema,
   requestUploadSchema,
   updateDocumentTypeSchema,
@@ -27,6 +31,7 @@ import {
 
 const BAD = "Check the request and try again.";
 const PENDING_LIMIT = 5;
+const FOLDER_LIMIT_PER_PERSON = 30;
 const ACTIVE_LIMIT_PER_PERSON = 100;
 const PENDING_WINDOW_MS = 2 * 60 * 60 * 1000;
 
@@ -100,6 +105,14 @@ export async function requestUpload(input: unknown): Promise<ActionResult<Upload
       if (active >= ACTIVE_LIMIT_PER_PERSON) return fail("This person has reached the limit of 100 documents. Archive old ones first.");
     }
 
+    let folderId: string | null = null;
+    if (v.folderId) {
+      if (!employee) return fail("Folders are for a person's own documents.");
+      const [folder] = await db.select({ id: documentFolders.id }).from(documentFolders).where(and(eq(documentFolders.id, v.folderId), eq(documentFolders.employeeId, employee.id), isNull(documentFolders.archivedAt))).limit(1);
+      if (!folder) return fail("Choose one of this person's folders.");
+      folderId = folder.id;
+    }
+
     const id = randomUUID();
     const bucket = v.target === "employee" ? BUCKETS.employee : BUCKETS.company;
     const path = `${employee ? employee.id : "company"}/${id}.${extensionOf(kind)}`;
@@ -109,6 +122,7 @@ export async function requestUpload(input: unknown): Promise<ActionResult<Upload
       typeId: type.id,
       employeeId: employee?.id ?? null,
       clientId,
+      folderId,
       title: v.title,
       audience: v.target === "company" ? v.audience : "all_staff",
       status: "pending",
@@ -302,6 +316,123 @@ export async function archiveDocument(input: unknown): Promise<ActionResult> {
     await db.transaction(async (tx) => {
       await tx.update(documents).set({ archivedAt: new Date(), archivedBy: actor.id, updatedAt: new Date() }).where(eq(documents.id, found.doc.id));
       await writeAudit({ actor, action: "document.archive", targetType: found.doc.employeeId ? "employee" : "company", targetId: found.doc.employeeId ?? "company", metadata: { documentId: found.doc.id } }, tx);
+    });
+    refresh(found.doc.employeeId);
+    return { ok: true, data: undefined };
+  });
+}
+
+// --- Folders ------------------------------------------------------------------------
+
+async function ownerOfEmployee(employeeId: string) {
+  const [row] = await db.select({ id: employees.id, userId: employees.userId }).from(employees).where(and(eq(employees.id, employeeId), isNull(employees.archivedAt))).limit(1);
+  return row;
+}
+
+async function loadFolder(folderId: string) {
+  const [folder] = await db.select().from(documentFolders).where(and(eq(documentFolders.id, folderId), isNull(documentFolders.archivedAt))).limit(1);
+  if (!folder) return null;
+  const owner = await ownerOfEmployee(folder.employeeId);
+  return owner ? { folder, ownerUserId: owner.userId } : null;
+}
+
+/** A new folder for a person's documents. HR for anyone; a person for their own. Names are never written to the audit log. */
+export async function createFolder(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    const parsed = createFolderSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const owner = await ownerOfEmployee(parsed.data.employeeId);
+    await authorize(actor, "documents.organize", { ownerUserId: owner?.userId ?? undefined });
+    if (!owner) return fail("That person was not found.");
+
+    try {
+      const id = await db.transaction(async (tx) => {
+        const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(documentFolders).where(and(eq(documentFolders.employeeId, owner.id), isNull(documentFolders.archivedAt)));
+        if (n >= FOLDER_LIMIT_PER_PERSON) throw new ActionFailure(`A person can have ${FOLDER_LIMIT_PER_PERSON} folders at most.`);
+        const [row] = await tx.insert(documentFolders).values({ employeeId: owner.id, name: parsed.data.name, createdBy: actor.id }).returning({ id: documentFolders.id });
+        await writeAudit({ actor, action: "document.folder_create", targetType: "employee", targetId: owner.id, metadata: { folderId: row.id } }, tx);
+        return row.id;
+      });
+      refresh(owner.id);
+      return { ok: true, data: { id } };
+    } catch (error) {
+      if (isUniqueViolation(error)) return fail("There is already a folder with that name.");
+      throw error;
+    }
+  });
+}
+
+export async function renameFolder(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    const parsed = renameFolderSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const found = await loadFolder(parsed.data.folderId);
+    await authorize(actor, "documents.organize", { ownerUserId: found?.ownerUserId ?? undefined });
+    if (!found) return fail("That folder was not found.");
+
+    try {
+      await db.transaction(async (tx) => {
+        await tx.update(documentFolders).set({ name: parsed.data.name, updatedAt: new Date() }).where(eq(documentFolders.id, found.folder.id));
+        await writeAudit({ actor, action: "document.folder_rename", targetType: "employee", targetId: found.folder.employeeId, metadata: { folderId: found.folder.id } }, tx);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) return fail("There is already a folder with that name.");
+      throw error;
+    }
+    refresh(found.folder.employeeId);
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Removes a folder. Its documents are not touched: they go back to "No folder". */
+export async function archiveFolder(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    const parsed = folderIdSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD);
+    const found = await loadFolder(parsed.data.folderId);
+    await authorize(actor, "documents.organize", { ownerUserId: found?.ownerUserId ?? undefined });
+    if (!found) return fail("That folder was not found.");
+
+    await db.transaction(async (tx) => {
+      await tx.update(documents).set({ folderId: null, updatedAt: new Date() }).where(eq(documents.folderId, found.folder.id));
+      await tx.update(documentFolders).set({ archivedAt: new Date(), updatedAt: new Date() }).where(eq(documentFolders.id, found.folder.id));
+      await writeAudit({ actor, action: "document.folder_remove", targetType: "employee", targetId: found.folder.employeeId, metadata: { folderId: found.folder.id } }, tx);
+    });
+    refresh(found.folder.employeeId);
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Puts a document in one of its owner's folders, or back to "No folder" (folderId null). The document and the folder must belong to the same person. */
+export async function moveDocument(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    const parsed = moveDocumentSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD);
+
+    const found = await loadDocument(parsed.data.documentId);
+    await authorize(actor, "documents.organize", { ownerUserId: found?.ownerUserId ?? undefined });
+    if (!found || found.doc.archivedAt || !found.doc.employeeId) return fail("That document was not found.");
+
+    if (parsed.data.folderId) {
+      const [folder] = await db
+        .select({ id: documentFolders.id })
+        .from(documentFolders)
+        .where(and(eq(documentFolders.id, parsed.data.folderId), eq(documentFolders.employeeId, found.doc.employeeId), isNull(documentFolders.archivedAt)))
+        .limit(1);
+      if (!folder) return fail("Choose one of this person's folders.");
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.update(documents).set({ folderId: parsed.data.folderId, updatedAt: new Date() }).where(eq(documents.id, found.doc.id));
+      await writeAudit({ actor, action: "document.move", targetType: "employee", targetId: found.doc.employeeId!, metadata: { documentId: found.doc.id, folderId: parsed.data.folderId } }, tx);
     });
     refresh(found.doc.employeeId);
     return { ok: true, data: undefined };

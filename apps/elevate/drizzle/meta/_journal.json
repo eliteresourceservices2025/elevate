@@ -330,6 +330,13 @@
       "when": 1791573617298,
       "tag": "0046_quick_tour",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791575222800,
+      "tag": "0047_document_folders",
+      "breakpoints": true
     }
   ]
 }

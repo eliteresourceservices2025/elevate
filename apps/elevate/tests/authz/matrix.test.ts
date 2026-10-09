@@ -28,6 +28,7 @@ const EXPECTED: Record<string, string> = {
   "documents.view": "A A - - - O",
   "documents.upload": "A A - - - O",
   "documents.verify": "A A - - - -",
+  "documents.organize": "A A - - - O",
   "documents.archive": "A A - - - O",
   "documents.manage_types": "A A - - - -",
   "documents.view_overview": "A A - - - -",

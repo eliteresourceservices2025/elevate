@@ -127,7 +127,9 @@ export function useUnsavedChanges(dirty: boolean): void {
 export function useWarnWhenEdited(values: unknown, resetKey?: string): { edited: boolean; markSaved: () => void } {
   const now = JSON.stringify(values);
   const latest = useRef(now);
-  latest.current = now;
+  useEffect(() => {
+    latest.current = now;
+  });
   const [saved, setSaved] = useState(now);
   // A different item loaded into the same form (resetKey changed) starts clean, whatever it holds.
   useEffect(() => setSaved(latest.current), [resetKey]);

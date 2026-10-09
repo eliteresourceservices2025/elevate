@@ -44,6 +44,25 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
   const saved = fs.readFileSync((await download.path())!);
   expect(saved.equals(pdf)).toBe(true);
 
+  // Folders: make one, move the contract into it, see it only there, then remove the folder (the document stays)
+  await page.getByRole("button", { name: "New folder" }).click();
+  await page.getByLabel("Folder name").fill("Contracts");
+  await page.getByRole("button", { name: "Create folder" }).click();
+  await expect(page.getByText("Folder created.")).toBeVisible();
+  const chips = page.getByRole("group", { name: "Folders" });
+  await expect(chips.getByRole("button", { name: /^Contracts/ })).toBeVisible();
+  await page.getByLabel("Move Signed contract to a folder").selectOption({ label: "Contracts" });
+  await expect(page.getByText("Document moved.")).toBeVisible();
+  await chips.getByRole("button", { name: /^Contracts/ }).click();
+  await expect(page.getByRole("row", { name: /Signed contract/ })).toBeVisible();
+  await chips.getByRole("button", { name: /^No folder/ }).click();
+  await expect(page.getByRole("row", { name: /Signed contract/ })).toHaveCount(0);
+  await chips.getByRole("button", { name: /^Contracts/ }).click();
+  page.once("dialog", (d) => void d.accept());
+  await page.getByRole("button", { name: "Remove folder" }).click();
+  await expect(page.getByText("Folder removed.")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Signed contract/ })).toBeVisible();
+
   // A program disguised as a PDF is refused by the server and leaves nothing behind
   await fill("Sneaky", { name: "invoice.pdf", mimeType: "application/pdf", buffer: Buffer.from([0x4d, 0x5a, 0x90, 0, 3, 0, 0, 0, 4, 0, 0, 0, 0xff, 0xff, 0, 0]) });
   await expect(page.getByText("not a PDF, JPG, PNG, WEBP, DOC or DOCX")).toBeVisible();

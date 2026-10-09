@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateOnly } from "@/lib/time";
-import { archiveDocument, getDownloadUrl, verifyDocument } from "../actions";
+import { archiveDocument, getDownloadUrl, moveDocument, verifyDocument } from "../actions";
 import type { ExpiryStatus } from "../expiry";
 import { formatBytes } from "../files";
-import type { DocumentRow } from "../queries";
+import type { DocumentRow, FolderRow } from "../queries";
 
 export function ExpiryBadge({ status, expiresOn }: { status: ExpiryStatus; expiresOn: string | null }) {
   if (status === "none" || !expiresOn) return <span className="text-muted-foreground">No expiry</span>;
@@ -54,11 +54,14 @@ export function DocumentList({
   viewerIsHr,
   showAudience = false,
   emptyText = "No documents yet.",
+  folders,
 }: {
   rows: DocumentRow[];
   viewerIsHr: boolean;
   showAudience?: boolean;
   emptyText?: string;
+  /** When given, each open document gets a "Move to" choice with these folders. */
+  folders?: FolderRow[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -112,6 +115,22 @@ export function DocumentList({
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex flex-wrap justify-end gap-1">
+                  {folders && !r.archived ? (
+                    <select
+                      aria-label={`Move ${r.title} to a folder`}
+                      className="h-6 max-w-44 rounded-md border bg-background px-1 text-xs"
+                      value={r.folderId && folders.some((f) => f.id === r.folderId) ? r.folderId : ""}
+                      disabled={pending}
+                      onChange={(e) => run(() => moveDocument({ documentId: r.id, folderId: e.target.value || null }), "Document moved.")}
+                    >
+                      <option value="">No folder</option>
+                      {folders.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
                   <DownloadButton documentId={r.id} label={r.title} />
                   {viewerIsHr && !showAudience && !r.archived ? (
                     <Button

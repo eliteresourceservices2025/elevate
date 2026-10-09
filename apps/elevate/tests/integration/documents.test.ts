@@ -58,6 +58,7 @@ type UploadArgs = {
   mime?: string;
   expiresOn?: string;
   clientId?: string;
+  folderId?: string;
   audience?: "all_staff" | "hr_only";
   send?: boolean;
   acknowledged?: boolean;
@@ -74,6 +75,7 @@ async function upload(a: UploadArgs) {
     typeId: await typeId(a.slug ?? (company ? "company_policy" : "contract")),
     title: uniq("Doc "),
     clientId: a.clientId,
+    folderId: a.folderId,
     expiresOn: a.expiresOn,
     audience: a.audience ?? "all_staff",
     fileName: "../../my file.pdf",
@@ -431,5 +433,103 @@ describe("notifications", () => {
     expect(await notifQueries.countMyUnread()).toBe(0);
     as(b.user);
     expect(await notifQueries.countMyUnread()).toBe(1);
+  });
+});
+
+describe("folders", () => {
+  const docId = (r: Awaited<ReturnType<typeof upload>>) => (r.ticket.ok ? r.ticket.data.documentId : "");
+  const folderOf = async (id: string) => (await rows<{ folder_id: string | null }>(sql`select folder_id from docs.documents where id = ${id}`))[0].folder_id;
+
+  it("a person makes their own folders, HR can too, nobody else can, and names are checked", async () => {
+    const p = await person("FolderOwner");
+    const stranger = await person("FolderStranger");
+    as(p.user);
+    const made = await docs.createFolder({ employeeId: p.id, name: "  Contracts " });
+    expect(made.ok).toBe(true);
+    expect(await docs.createFolder({ employeeId: p.id, name: "contracts" })).toEqual({ ok: false, error: "There is already a folder with that name." });
+    expect((await docs.createFolder({ employeeId: p.id, name: "   " })).ok).toBe(false);
+    expect((await docs.createFolder({ employeeId: p.id, name: "x".repeat(61) })).ok).toBe(false);
+    as(hr);
+    expect((await docs.createFolder({ employeeId: p.id, name: "IDs" })).ok).toBe(true);
+    for (const outsider of [stranger.user, lead]) {
+      as(outsider);
+      expect(await docs.createFolder({ employeeId: p.id, name: "Mine now" })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+    as(p.user);
+    expect((await docQueries.listEmployeeFolders(p.id)).map((f) => f.name)).toEqual(["Contracts", "IDs"]);
+    as(stranger.user);
+    await expect(docQueries.listEmployeeFolders(p.id)).rejects.toThrow();
+    // The audit entry names the folder by id only
+    const audit = await rows<{ metadata: Record<string, string> }>(sql`select metadata from ops.audit_log where action = 'document.folder_create' and target_id = ${p.id}`);
+    expect(audit.length).toBe(2);
+    expect(JSON.stringify(audit.map((a) => a.metadata))).not.toContain("Contracts");
+  });
+
+  it("limits a person to 30 folders", async () => {
+    const p = await person("FolderLimit");
+    as(hr);
+    for (let i = 0; i < 30; i++) expect((await docs.createFolder({ employeeId: p.id, name: `Folder ${i}` })).ok).toBe(true);
+    expect(await docs.createFolder({ employeeId: p.id, name: "One too many" })).toEqual({ ok: false, error: "A person can have 30 folders at most." });
+  });
+
+  it("uploads into a folder, moves between folders, and only within the same person", async () => {
+    const p = await person("Mover");
+    const other = await person("OtherOwner");
+    as(p.user);
+    const a = await docs.createFolder({ employeeId: p.id, name: "A" });
+    const b = await docs.createFolder({ employeeId: p.id, name: "B" });
+    as(other.user);
+    const foreign = await docs.createFolder({ employeeId: other.id, name: "Foreign" });
+    if (!a.ok || !b.ok || !foreign.ok) throw new Error("setup");
+
+    const filed = await upload({ actor: p.user, employeeId: p.id, folderId: a.data.id });
+    expect(filed.finalize).toEqual({ ok: true, data: undefined });
+    expect(await folderOf(docId(filed))).toBe(a.data.id);
+    // A folder of someone else cannot be chosen at upload
+    expect((await upload({ actor: p.user, employeeId: p.id, folderId: foreign.data.id })).ticket).toMatchObject({ ok: false, error: "Choose one of this person's folders." });
+
+    as(p.user);
+    expect((await docs.moveDocument({ documentId: docId(filed), folderId: b.data.id })).ok).toBe(true);
+    expect(await folderOf(docId(filed))).toBe(b.data.id);
+    expect(await docs.moveDocument({ documentId: docId(filed), folderId: foreign.data.id })).toEqual({ ok: false, error: "Choose one of this person's folders." });
+    expect((await docs.moveDocument({ documentId: docId(filed), folderId: null })).ok).toBe(true);
+    expect(await folderOf(docId(filed))).toBeNull();
+
+    as(other.user);
+    expect(await docs.moveDocument({ documentId: docId(filed), folderId: foreign.data.id })).toEqual({ ok: false, error: NO_ACCESS });
+    as(hr);
+    expect((await docs.moveDocument({ documentId: docId(filed), folderId: a.data.id })).ok).toBe(true);
+
+    const listed = await (as(p.user), docQueries.listEmployeeDocuments(p.id));
+    expect(listed.find((d) => d.id === docId(filed))?.folderId).toBe(a.data.id);
+  });
+
+  it("removing a folder keeps its documents (they go back to no folder) and frees the name", async () => {
+    const p = await person("Remover");
+    as(p.user);
+    const f = await docs.createFolder({ employeeId: p.id, name: "Old" });
+    if (!f.ok) throw new Error("setup");
+    const filed = await upload({ actor: p.user, employeeId: p.id, folderId: f.data.id });
+    as(p.user);
+    expect((await docs.archiveFolder({ folderId: f.data.id })).ok).toBe(true);
+    expect(await folderOf(docId(filed))).toBeNull();
+    expect((await docQueries.listEmployeeFolders(p.id)).length).toBe(0);
+    expect((await docs.archiveFolder({ folderId: f.data.id })).ok).toBe(false); // already gone
+    expect((await docs.createFolder({ employeeId: p.id, name: "Old" })).ok).toBe(true);
+    const [row] = await rows<{ status: string; archived_at: string | null }>(sql`select status, archived_at from docs.documents where id = ${docId(filed)}`);
+    expect(row).toMatchObject({ status: "active", archived_at: null });
+  });
+
+  it("renaming checks the name and the owner", async () => {
+    const p = await person("Renamer");
+    const stranger = await person("RenameStranger");
+    as(p.user);
+    const f = await docs.createFolder({ employeeId: p.id, name: "First" });
+    const g = await docs.createFolder({ employeeId: p.id, name: "Second" });
+    if (!f.ok || !g.ok) throw new Error("setup");
+    expect((await docs.renameFolder({ folderId: f.data.id, name: "Renamed" })).ok).toBe(true);
+    expect(await docs.renameFolder({ folderId: f.data.id, name: "second" })).toEqual({ ok: false, error: "There is already a folder with that name." });
+    as(stranger.user);
+    expect(await docs.renameFolder({ folderId: f.data.id, name: "Hijacked" })).toEqual({ ok: false, error: NO_ACCESS });
   });
 });

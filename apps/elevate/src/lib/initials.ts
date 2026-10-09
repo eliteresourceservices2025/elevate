@@ -11,7 +11,8 @@ export function initialsOf(name: string | null | undefined, email: string): stri
   };
   if (words.length > 0) return pick(words);
   const local = email.split("@")[0] ?? "";
-  const parts = local.split(/[._\-+]+/).filter((p) => /[\p{L}\p{N}]/u.test(p));
+  // Only parts that start with a letter count, so "e2e.hr.1791.2f3c" gives E and F, never a number.
+  const parts = local.split(/[._\-+]+/).filter((p) => /^\p{L}/u.test(p));
   const fromEmail = pick(parts);
   return fromEmail || "?";
 }

@@ -10,6 +10,8 @@ export const documentsPermissions = definePermissions({
   "documents.verify": { roles: { super_admin: "all", hr_admin: "all" } },
   // A person may archive their own file only while it is unverified (enforced in the action).
   "documents.archive": { roles: { super_admin: "all", hr_admin: "all", employee: "own" } },
+  // Sorting a person's documents into their own folders: HR for anyone, a person for their own.
+  "documents.organize": { roles: { super_admin: "all", hr_admin: "all", employee: "own" } },
   "documents.manage_types": { roles: { super_admin: "all", hr_admin: "all" } },
   "documents.view_overview": { roles: { super_admin: "all", hr_admin: "all" } },
   "documents.view_company": {

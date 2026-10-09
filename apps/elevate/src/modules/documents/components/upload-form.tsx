@@ -16,16 +16,18 @@ type Props = {
   employeeId?: string;
   types: TypeOption[];
   clients: { id: string; name: string }[];
+  /** The person's folders, for an employee upload (optional). */
+  folders?: { id: string; name: string }[];
   today: string;
 };
 
-const ACCEPT = ".pdf,.jpg,.jpeg,.png,.docx";
+const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx";
 
 /**
  * Three steps, all checked on the server: (1) ask for a one-time upload link for one exact path,
  * (2) send the file straight to private storage, (3) ask the server to inspect it and save it.
  */
-export function UploadForm({ target, employeeId, types, clients, today }: Props) {
+export function UploadForm({ target, employeeId, types, clients, folders = [], today }: Props) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
@@ -35,6 +37,7 @@ export function UploadForm({ target, employeeId, types, clients, today }: Props)
   const [title, setTitle] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
   const [clientId, setClientId] = useState("");
+  const [folderId, setFolderId] = useState("");
   const [audience, setAudience] = useState<"all_staff" | "hr_only">("all_staff");
   const [acknowledged, setAcknowledged] = useState(false);
 
@@ -55,6 +58,7 @@ export function UploadForm({ target, employeeId, types, clients, today }: Props)
         typeId,
         title,
         clientId: clientId || undefined,
+        folderId: folderId || undefined,
         expiresOn: expiresOn || undefined,
         audience,
         fileName: file.name,
@@ -123,6 +127,16 @@ export function UploadForm({ target, employeeId, types, clients, today }: Props)
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+              </option>
+            ))}
+          </SelectField>
+        ) : null}
+        {target === "employee" && folders.length > 0 ? (
+          <SelectField id="up-folder" label="Folder (optional)" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
+            <option value="">No folder</option>
+            {folders.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
               </option>
             ))}
           </SelectField>

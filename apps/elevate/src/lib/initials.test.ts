@@ -11,6 +11,7 @@ describe("initialsOf", () => {
     expect(initialsOf(null, "juan.dela-cruz@example.com")).toBe("JC"); // first and last part
     expect(initialsOf("", "lux_aeterna@example.com")).toBe("LA");
     expect(initialsOf(undefined, "admin@example.com")).toBe("A");
+    expect(initialsOf(null, "e2e.hr.1791573175299.2f3c@example.com")).toBe("EH"); // numbers are not initials
   });
   it("never returns an empty badge", () => {
     expect(initialsOf(null, "@example.com")).toBe("?");

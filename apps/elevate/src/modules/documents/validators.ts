@@ -13,6 +13,8 @@ export const requestUploadSchema = z.object({
   typeId: uuid,
   title: name("a title"),
   clientId: z.preprocess(blankToUndefined, uuid.optional()),
+  /** One of the person's own folders (optional). */
+  folderId: z.preprocess(blankToUndefined, uuid.optional()),
   expiresOn: z.preprocess(blankToUndefined, isoDate.optional()),
   audience: z.enum(["all_staff", "hr_only"]).default("all_staff"),
   fileName: z.string().trim().min(1).max(255),
@@ -23,6 +25,12 @@ export const requestUploadSchema = z.object({
 });
 
 export const documentIdSchema = z.object({ documentId: uuid });
+
+const folderName = z.string().trim().min(1, "Name the folder").max(60, "Use 60 characters or fewer");
+export const createFolderSchema = z.object({ employeeId: uuid, name: folderName });
+export const renameFolderSchema = z.object({ folderId: uuid, name: folderName });
+export const folderIdSchema = z.object({ folderId: uuid });
+export const moveDocumentSchema = z.object({ documentId: uuid, folderId: uuid.nullable() });
 
 export const verifyDocumentSchema = z.object({ documentId: uuid, verified: z.boolean() });
 

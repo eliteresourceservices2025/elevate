@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { todayInZone } from "@/modules/org/service";
 import { clients, employees } from "@/modules/people/schema";
 import { expiryStatus, type ExpiryStatus } from "./expiry";
-import { documentTypes, documents } from "./schema";
+import { documentFolders, documentTypes, documents } from "./schema";
 import { clientChoices } from "./service";
 
 export type DocumentRow = {
@@ -23,12 +23,14 @@ export type DocumentRow = {
   verified: boolean;
   archived: boolean;
   audience: "all_staff" | "hr_only";
+  /** The person's folder it sits in; null = no folder (and always null for company documents). */
+  folderId: string | null;
   createdAt: Date;
 };
 
 function toRow(r: {
   id: string; title: string; typeName: string; typeSlug: string; originalName: string; mimeType: string | null; sizeBytes: number | null;
-  clientName: string | null; expiresOn: string | null; verifiedAt: Date | null; archivedAt: Date | null; audience: string; createdAt: Date;
+  clientName: string | null; expiresOn: string | null; verifiedAt: Date | null; archivedAt: Date | null; audience: string; folderId: string | null; createdAt: Date;
 }, today: string): DocumentRow {
   return {
     id: r.id,
@@ -44,6 +46,7 @@ function toRow(r: {
     verified: r.verifiedAt !== null,
     archived: r.archivedAt !== null,
     audience: r.audience === "hr_only" ? "hr_only" : "all_staff",
+    folderId: r.folderId,
     createdAt: r.createdAt,
   };
 }
@@ -61,6 +64,7 @@ const columns = {
   verifiedAt: documents.verifiedAt,
   archivedAt: documents.archivedAt,
   audience: documents.audience,
+  folderId: documents.folderId,
   createdAt: documents.createdAt,
 };
 
@@ -81,6 +85,21 @@ export async function listEmployeeDocuments(employeeId: string): Promise<Documen
     .orderBy(desc(documents.createdAt));
   const today = todayInZone();
   return rows.map((r) => toRow(r, today));
+}
+
+export type FolderRow = { id: string; name: string };
+
+/** A person's folders (not removed ones), by name. HR and the person only. */
+export async function listEmployeeFolders(employeeId: string): Promise<FolderRow[]> {
+  const user = await requireUser();
+  const [owner] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, employeeId)).limit(1);
+  await authorize(user, "documents.view", { ownerUserId: owner?.userId ?? undefined });
+  if (!owner) return [];
+  return db
+    .select({ id: documentFolders.id, name: documentFolders.name })
+    .from(documentFolders)
+    .where(and(eq(documentFolders.employeeId, employeeId), isNull(documentFolders.archivedAt)))
+    .orderBy(asc(documentFolders.name));
 }
 
 /** Company policies and forms. "HR only" ones are hidden from everyone else. */
@@ -189,7 +208,7 @@ export async function getDocumentOverview() {
           id: String(r.id), title: String(r.title), typeName: String(r.type_name), typeSlug: String(r.type_slug), originalName: String(r.original_name),
           mimeType: (r.mime_type as string | null) ?? null, sizeBytes: r.size_bytes === null ? null : Number(r.size_bytes),
           clientName: (r.client_name as string | null) ?? null, expiresOn: (r.expires_on as string | null) ?? null,
-          verifiedAt: r.verified_at ? new Date(String(r.verified_at)) : null, archivedAt: null, audience: String(r.audience), createdAt: new Date(String(r.created_at)),
+          verifiedAt: r.verified_at ? new Date(String(r.verified_at)) : null, archivedAt: null, audience: String(r.audience), folderId: null, createdAt: new Date(String(r.created_at)),
         },
         today,
       ),
