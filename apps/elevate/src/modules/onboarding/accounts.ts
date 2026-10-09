@@ -13,6 +13,21 @@ export function setLoginDisabler(fn: LoginDisabler | null) {
   override = fn;
 }
 
+let enableOverride: LoginDisabler | null = null;
+
+/** Tests only: replace the call that switches a sign-in back on. Pass null to restore the real one. */
+export function setLoginEnabler(fn: LoginDisabler | null) {
+  enableOverride = fn;
+}
+
+/** Lifts the ban set by disableLogin. */
+export async function enableLogin(userId: string): Promise<void> {
+  if (enableOverride) return enableOverride(userId);
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, { ban_duration: "none" });
+  if (error) throw new Error("Could not enable the sign-in account");
+}
+
 export async function disableLogin(userId: string): Promise<void> {
   if (override) return override(userId);
   const admin = createSupabaseAdminClient();

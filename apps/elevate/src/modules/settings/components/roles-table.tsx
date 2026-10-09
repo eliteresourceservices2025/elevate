@@ -30,7 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BASE_ROLE, ROLE_SLUGS, roleLabel, type RoleSlug } from "@/lib/roles";
-import { resetAuthenticator, setSafevoiceHandler, setUserRoles } from "../actions";
+import { deactivateAccount, reactivateAccount, resetAuthenticator, setSafevoiceHandler, setUserRoles } from "../actions";
 import type { PersonRow } from "../queries";
 
 const ASSIGNABLE = ROLE_SLUGS.filter((r) => r !== BASE_ROLE);
@@ -135,6 +135,47 @@ function ResetAuthenticatorButton({ person }: { person: PersonRow }) {
   );
 }
 
+function DeactivateButton({ person }: { person: PersonRow }) {
+  const [pending, startTransition] = useTransition();
+
+  function run(kind: "deactivate" | "reactivate") {
+    startTransition(async () => {
+      const result = kind === "deactivate" ? await deactivateAccount({ userId: person.id }) : await reactivateAccount({ userId: person.id });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(kind === "deactivate" ? `${person.email} was deactivated.` : `${person.email} can sign in again.`);
+    });
+  }
+
+  if (person.archived) {
+    return (
+      <Button variant="outline" size="sm" disabled={pending} onClick={() => run("reactivate")}>
+        Reactivate
+      </Button>
+    );
+  }
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger render={<Button variant="ghost" size="sm" disabled={pending} />}>Deactivate</AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Deactivate {person.email}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            They are signed out and cannot sign in again until you reactivate the account. Nothing is deleted. This is for test accounts and mistakes.
+            Someone who works on the team is ended through Offboarding instead.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => run("deactivate")}>Deactivate</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function HandlerToggle({ person }: { person: PersonRow }) {
   const [pending, startTransition] = useTransition();
 
@@ -206,8 +247,9 @@ export function RolesTable({ people, currentUserId }: { people: PersonRow[]; cur
                   <span className="text-xs text-muted-foreground">You cannot change your own access.</span>
                 ) : (
                   <div className="flex justify-end gap-1">
-                    <EditRolesDialog person={person} />
-                    <ResetAuthenticatorButton person={person} />
+                    {person.archived ? null : <EditRolesDialog person={person} />}
+                    {person.archived ? null : <ResetAuthenticatorButton person={person} />}
+                    <DeactivateButton person={person} />
                   </div>
                 )}
               </TableCell>

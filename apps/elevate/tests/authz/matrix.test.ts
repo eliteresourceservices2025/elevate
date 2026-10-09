@@ -125,6 +125,7 @@ const EXPECTED: Record<string, string> = {
   "settings.manage_roles": "A - - - - -",
   "settings.set_safevoice_handler": "A - - - - -",
   "settings.reset_mfa": "A - - - - -",
+  "settings.deactivate_account": "A - - - - -",
   "settings.view_audit": "A - - - - -",
   "settings.manage_policies": "A A - - - -",
   "invitations.create": "A A - - - -",

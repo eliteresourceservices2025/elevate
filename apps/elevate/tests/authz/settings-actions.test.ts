@@ -20,7 +20,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 vi.mock("@/modules/audit/write", () => ({ writeAudit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const { setUserRoles, setSafevoiceHandler, resetAuthenticator, createInvitation, revokeInvitation } = await import(
+const { setUserRoles, setSafevoiceHandler, resetAuthenticator, deactivateAccount, reactivateAccount, createInvitation, revokeInvitation } = await import(
   "@/modules/settings/actions"
 );
 const { listPeopleWithRoles, listInvitations, listAuditEntries } = await import("@/modules/settings/queries");
@@ -43,6 +43,8 @@ const cases: Case[] = [
   { name: "setUserRoles", call: () => setUserRoles({ userId: OTHER, roles: ["team_lead"] }), allowed: ["super_admin"] },
   { name: "setSafevoiceHandler", call: () => setSafevoiceHandler({ userId: OTHER, enabled: true }), allowed: ["super_admin"] },
   { name: "resetAuthenticator", call: () => resetAuthenticator({ userId: OTHER }), allowed: ["super_admin"] },
+  { name: "deactivateAccount", call: () => deactivateAccount({ userId: OTHER }), allowed: ["super_admin"] },
+  { name: "reactivateAccount", call: () => reactivateAccount({ userId: OTHER }), allowed: ["super_admin"] },
   { name: "createInvitation", call: () => createInvitation({ email: "new@example.com" }), allowed: ["super_admin", "hr_admin"] },
   // Choosing roles or the Safe Voice handler flag in an invitation is the same right as on the Roles page: Super Admin only.
   { name: "createInvitation with roles", call: () => createInvitation({ email: "new@example.com", roles: ["hr_admin"] }), allowed: ["super_admin"] },

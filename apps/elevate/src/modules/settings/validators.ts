@@ -13,6 +13,8 @@ export const setSafevoiceHandlerSchema = z.object({ userId, enabled: z.boolean()
 
 export const resetAuthenticatorSchema = z.object({ userId });
 
+export const accountSchema = z.object({ userId });
+
 export const createInvitationSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address")),
   // Only a Super Admin may fill these in (the action checks); everyone invited is an Employee whatever is chosen here.

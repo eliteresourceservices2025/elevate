@@ -10,10 +10,15 @@ import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { writeAudit } from "@/modules/audit/write";
 import { invitations, userRoles, users } from "@/modules/core/schema";
+import { archiveUserAccount } from "@/modules/core/users";
+import { employees } from "@/modules/people/schema";
+import { disableLogin, enableLogin } from "@/modules/onboarding/accounts";
+import { planDeactivation, planReactivation } from "./deactivate";
 import { sendInvitationEmail } from "./invitation-email";
 import { ensureInvitation } from "./invite";
 import { planRoleChange } from "./plan";
 import {
+  accountSchema,
   createInvitationSchema,
   resetAuthenticatorSchema,
   revokeInvitationSchema,
@@ -27,6 +32,11 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /** Ends every session for a user, so role or authenticator changes apply immediately. */
 async function revokeSessions(tx: Tx, userId: string) {
   await tx.execute(sql`delete from auth.sessions where user_id = ${userId}`);
+}
+
+async function currentRolesOf(userId: string) {
+  const rows = await db.select({ slug: userRoles.roleSlug }).from(userRoles).where(eq(userRoles.userId, userId));
+  return rows.map((r) => r.slug).filter(isRoleSlug);
 }
 
 async function currentRoles(tx: Tx, userId: string) {
@@ -164,6 +174,84 @@ export async function resetAuthenticator(input: unknown): Promise<ActionResult<{
 
     revalidatePath("/settings/roles");
     return { ok: true, data: { removed } };
+  });
+}
+
+/**
+ * Switches an account off: the sign-in is banned at the auth service, the account is archived (a session still open is refused at its
+ * next request) and open sessions are ended. Nothing is deleted. For test accounts and mistakes; a working team member is ended
+ * through Offboarding.
+ */
+export async function deactivateAccount(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "settings.deactivate_account");
+    const parsed = accountSchema.safeParse(input);
+    if (!parsed.success) return fail("Check the request and try again.");
+    const { userId } = parsed.data;
+
+    const [target] = await db.select({ id: users.id, email: users.email, archivedAt: users.archivedAt }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!target) return fail("That account was not found.");
+    const roles = await currentRolesOf(userId);
+    const [profile] = await db.select({ status: employees.status }).from(employees).where(and(eq(employees.userId, userId), isNull(employees.archivedAt))).limit(1);
+    const [others] = await db
+      .select({ n: sql<number>`count(distinct ${userRoles.userId})::int` })
+      .from(userRoles)
+      .innerJoin(users, eq(users.id, userRoles.userId))
+      .where(and(eq(userRoles.roleSlug, "super_admin"), isNull(users.archivedAt), sql`${userRoles.userId} <> ${userId}`));
+
+    const plan = planDeactivation({
+      actorId: actor.id,
+      targetId: userId,
+      alreadyDeactivated: target.archivedAt !== null,
+      isSuperAdmin: roles.includes("super_admin"),
+      otherActiveSuperAdmins: others?.n ?? 0,
+      profileStatus: profile?.status ?? null,
+    });
+    if (!plan.ok) return fail(plan.error);
+
+    try {
+      await disableLogin(userId);
+    } catch {
+      return fail("Could not reach the sign-in service. Try again.");
+    }
+    await db.transaction(async (tx) => {
+      await archiveUserAccount(tx, userId);
+      await revokeSessions(tx, userId);
+      await writeAudit({ actor, action: "user.deactivate", targetType: "user", targetId: userId, before: { email: target.email } }, tx);
+    });
+    revalidatePath("/settings/roles");
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Switches a deactivated account back on. */
+export async function reactivateAccount(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "settings.deactivate_account");
+    const parsed = accountSchema.safeParse(input);
+    if (!parsed.success) return fail("Check the request and try again.");
+    const { userId } = parsed.data;
+
+    const [target] = await db.select({ id: users.id, email: users.email, archivedAt: users.archivedAt }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!target) return fail("That account was not found.");
+    const plan = planReactivation({ alreadyDeactivated: target.archivedAt !== null });
+    if (!plan.ok) return fail(plan.error);
+
+    try {
+      await enableLogin(userId);
+    } catch {
+      return fail("Could not reach the sign-in service. Try again.");
+    }
+    await db.transaction(async (tx) => {
+      await tx.update(users).set({ archivedAt: null }).where(eq(users.id, userId));
+      await writeAudit({ actor, action: "user.reactivate", targetType: "user", targetId: userId, after: { email: target.email } }, tx);
+    });
+    revalidatePath("/settings/roles");
+    return { ok: true, data: undefined };
   });
 }
 
