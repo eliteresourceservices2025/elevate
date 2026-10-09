@@ -55,7 +55,7 @@ async function seedAccounts(password: string): Promise<Account[]> {
     }
 
     await sql.begin(async (tx) => {
-      await tx`insert into core.users (id, email) values (${existing.id}, ${email}) on conflict (id) do nothing`;
+      await tx`insert into core.users (id, email, onboarding_tour_seen_at) values (${existing.id}, ${email}, now()) on conflict (id) do nothing`;
       await tx`insert into core.user_roles (user_id, role_slug) values (${existing.id}, 'employee') on conflict do nothing`;
       if (role !== "employee") {
         await tx`insert into core.user_roles (user_id, role_slug) values (${existing.id}, ${role}) on conflict do nothing`;

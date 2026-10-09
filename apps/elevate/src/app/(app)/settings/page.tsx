@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileText, FileUp, History, ListChecks, Mail, ShieldCheck } from "lucide-react";
+import { Compass, FileText, FileUp, History, ListChecks, Mail, ShieldCheck } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -8,6 +8,13 @@ import { requireUser } from "@/lib/auth";
 export const metadata: Metadata = { title: "Settings" };
 
 const SECTIONS = [
+  {
+    href: "/dashboard?tour=1",
+    action: null,
+    icon: Compass,
+    title: "Quick tour",
+    description: "A one-minute walk through the menu, the time clock and the header. Replay it any time.",
+  },
   {
     href: "/settings/roles",
     action: "settings.manage_roles",
@@ -54,13 +61,13 @@ const SECTIONS = [
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const visible = SECTIONS.filter((s) => can(user, s.action));
+  const visible = SECTIONS.filter((s) => s.action === null || can(user, s.action));
 
   return (
     <div className="w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="mt-1 text-muted-foreground">Access, invitations, policies, the TalentHR move and the audit log. You see only what your role allows.</p>
+        <p className="mt-1 text-muted-foreground">The quick tour, and (for HR and admins) access, invitations, policies, the TalentHR move and the audit log.</p>
       </div>
       {visible.length === 0 ? (
         <p className="text-muted-foreground">There is nothing for you to change here.</p>

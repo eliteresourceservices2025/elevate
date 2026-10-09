@@ -66,7 +66,7 @@ export function NotificationBell({ unread: initialUnread }: { unread: number }) 
   }
 
   return (
-    <div ref={root} className="relative">
+    <div ref={root} data-tour="bell" className="relative">
       <Button
         type="button"
         variant="ghost"

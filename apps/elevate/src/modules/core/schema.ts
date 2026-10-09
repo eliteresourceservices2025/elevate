@@ -15,6 +15,8 @@ export const users = core
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
+      // The quick tour starts by itself for a new account until this is set (finished or skipped); anyone can replay it from Settings.
+      onboardingTourSeenAt: timestamp("onboarding_tour_seen_at", { withTimezone: true }),
     },
     (t) => [uniqueIndex("users_email_lower_idx").on(sql`lower(${t.email})`)],
   )

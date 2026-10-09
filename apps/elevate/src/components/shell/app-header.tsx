@@ -62,6 +62,7 @@ export function AppHeader({
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger
           aria-label="Open menu"
+          data-tour="menu-button"
           className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "lg:hidden")}
         >
           <Menu aria-hidden />

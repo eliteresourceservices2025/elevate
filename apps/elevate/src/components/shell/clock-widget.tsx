@@ -356,7 +356,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   if (!status) {
     // No people record: say so, and point to where it is fixed, instead of silently showing nothing.
     return (
-      <Link href="/attendance" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "font-medium")}>
+      <Link href="/attendance" data-tour="clock" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "font-medium")}>
         <Clock aria-hidden />
         <span className="sm:hidden">Time clock</span>
         <span className="hidden sm:inline">Set up your time clock</span>
@@ -415,7 +415,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const shownLabel = onBreak ? (remaining === null ? "On break" : over ? "Over break by" : "Break left") : "Working";
 
   return (
-    <div className="relative flex items-center gap-2">
+    <div data-tour="clock" className="relative flex items-center gap-2">
       {working ? (
         <span className="hidden items-center gap-1.5 text-sm sm:flex" aria-live="off">
           <span className={cn("size-2.5 rounded-full", onBreak ? (over ? "bg-red-600" : "bg-amber-500") : "bg-green-600")} aria-hidden />

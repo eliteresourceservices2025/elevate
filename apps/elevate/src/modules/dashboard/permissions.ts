@@ -7,4 +7,6 @@ const EVERYONE = { super_admin: "own", hr_admin: "own", team_lead: "own", recrui
 export const dashboardPermissions = definePermissions({
   "dashboard.view": { roles: EVERYONE },
   "search.use": { roles: EVERYONE },
+  // Marking the quick tour as seen on your own account.
+  "tour.complete": { roles: EVERYONE },
 });

@@ -121,6 +121,7 @@ export function GlobalSearch({ pages }: { pages: PageEntry[] }) {
         className="gap-2 text-muted-foreground max-sm:size-8 max-sm:px-0"
         onClick={() => setOpen(true)}
         aria-label="Search"
+        data-tour="search"
         aria-keyshortcuts="Control+K Meta+K"
       >
         <Search aria-hidden />

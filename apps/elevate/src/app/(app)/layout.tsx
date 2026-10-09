@@ -15,6 +15,7 @@ import { todayInZone } from "@/modules/org/service";
 import { getClockStatus } from "@/modules/attendance/queries";
 import { countMyUnread } from "@/modules/notifications/queries";
 import { getMyDisplayName } from "@/modules/people/queries";
+import { tourStartsByItself } from "@/modules/dashboard/tour";
 import { roleLabel } from "@/lib/roles";
 import { PrivacyGate } from "@/modules/privacy/components/privacy-gate";
 import { getPrivacyGate } from "@/modules/privacy/queries";
@@ -30,7 +31,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     console.error("layout read skipped:", error instanceof Error ? error.name : "unknown error");
     return fallback;
   });
-  const [gate, unread, pending, clock, accountName] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null)]);
+  const [gate, unread, pending, clock, accountName, tourAutoStart] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null), optional(tourStartsByItself(), false)]);
   if (gate) {
     return (
       <PrivacyGate versionId={gate.versionId} title={gate.title} version={gate.version} updated={gate.updated} changeNote={gate.changeNote}>
@@ -48,6 +49,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <AppShell
       initialCollapsed={initialCollapsed}
+      tourAutoStart={tourAutoStart}
       hiddenNav={hiddenNav}
       searchPages={ALL_NAV_ITEMS.filter((i) => !hiddenNav.includes(i.href)).map((i) => ({ href: i.href, label: i.label, description: i.description }))}
       safeVoiceUrl={safeVoiceUrl}

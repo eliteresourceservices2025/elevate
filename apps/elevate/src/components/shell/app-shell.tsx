@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type ComponentProps, type ReactNode } from "react";
+import { Suspense, useState, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { UnsavedChangesProvider } from "@/components/unsaved-changes";
 import { AppHeader } from "./app-header";
+import { QuickTour } from "./quick-tour";
 import { SidebarNav } from "./sidebar-nav";
 import { SIDEBAR_COOKIE } from "./sidebar-cookie";
 
@@ -13,7 +14,7 @@ type HeaderProps = Omit<ComponentProps<typeof AppHeader>, "collapsed" | "onToggl
  * The frame of every signed-in page: the menu and the header stay put and only the content scrolls.
  * The menu can be narrowed to icons; the choice is a plain cookie so the server renders the right width at once.
  */
-export function AppShell({ initialCollapsed, banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; banner: ReactNode; children: ReactNode }) {
+export function AppShell({ initialCollapsed, tourAutoStart = false, banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; tourAutoStart?: boolean; banner: ReactNode; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
 
   function toggle() {
@@ -33,6 +34,7 @@ export function AppShell({ initialCollapsed, banner, children, ...header }: Head
     // cannot scroll at all, so only the content area below ever moves.
     <div data-app-shell className="relative flex h-dvh overflow-clip print:block print:h-auto print:overflow-visible">
       <aside
+        data-tour="menu"
         className={cn(
           "hidden shrink-0 transition-[width] duration-200 motion-reduce:transition-none lg:block print:hidden",
           collapsed ? "w-16" : "w-64",
@@ -52,6 +54,9 @@ export function AppShell({ initialCollapsed, banner, children, ...header }: Head
           </UnsavedChangesProvider>
         </div>
       </div>
+      <Suspense fallback={null}>
+        <QuickTour autoStart={tourAutoStart} />
+      </Suspense>
     </div>
   );
 }

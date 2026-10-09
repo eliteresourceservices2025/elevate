@@ -122,6 +122,7 @@ const EXPECTED: Record<string, string> = {
   "analytics.view_hiring": "A A - A A -",
   "dashboard.view": "O O O O O O",
   "search.use": "O O O O O O",
+  "tour.complete": "O O O O O O",
   "imports.manage": "A A - - - -",
   "analytics.export": "A A - - - -",
   "settings.manage_roles": "A - - - - -",

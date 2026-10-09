@@ -90,6 +90,7 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
               href={safeVoiceUrl}
               target="_blank"
               rel="noopener noreferrer"
+              data-tour="speak-up"
               title={collapsed ? "Report a concern (anonymous)" : undefined}
               className={cn(linkBase, linkSize, "text-sidebar-foreground/85 hover:bg-sidebar-accent/60")}
             >

@@ -39,7 +39,7 @@ function assertLocal() {
 export type TestAccount = { email: string; password: string };
 
 /** A fresh HR Admin account: invited, confirmed, and holding the HR Admin role. */
-export async function createHrAccount(): Promise<TestAccount> {
+export async function createHrAccount(options: { tour?: boolean } = {}): Promise<TestAccount> {
   assertLocal();
   const email = `e2e.hr.${Date.now()}.${randomBytes(2).toString("hex")}@example.com`;
   const password = randomBytes(15).toString("base64url");
@@ -53,7 +53,8 @@ export async function createHrAccount(): Promise<TestAccount> {
     const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
     if (error || !data.user) throw new Error(`Could not create test account: ${error?.message}`);
     const id = data.user.id ?? randomUUID();
-    await sql`insert into core.users (id, email) values (${id}, ${email})`;
+    // The quick tour starts by itself for a new account; tests skip it (it would cover the page) unless they ask for it.
+    await sql`insert into core.users (id, email, onboarding_tour_seen_at) values (${id}, ${email}, ${options.tour ? null : new Date()})`;
     await sql`insert into core.user_roles (user_id, role_slug) values (${id}, 'employee'), (${id}, 'hr_admin')`;
     await sql`update core.invitations set accepted_at = now() where lower(email) = ${email}`;
   } finally {
@@ -66,7 +67,7 @@ export async function createHrAccount(): Promise<TestAccount> {
 export async function createEmployeeAccount(
   firstName: string,
   lastName: string,
-  options: { roles?: string[]; managerId?: string } = {},
+  options: { roles?: string[]; managerId?: string; tour?: boolean } = {},
 ): Promise<TestAccount & { employeeId: string }> {
   assertLocal();
   const email = `e2e.emp.${Date.now()}.${randomBytes(2).toString("hex")}@example.com`;
@@ -81,7 +82,7 @@ export async function createEmployeeAccount(
     const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
     if (error || !data.user) throw new Error(`Could not create test account: ${error?.message}`);
     const id = data.user.id ?? randomUUID();
-    await sql`insert into core.users (id, email) values (${id}, ${email})`;
+    await sql`insert into core.users (id, email, onboarding_tour_seen_at) values (${id}, ${email}, ${options.tour ? null : new Date()})`;
     for (const role of new Set(["employee", ...(options.roles ?? [])])) await sql`insert into core.user_roles (user_id, role_slug) values (${id}, ${role})`;
     await sql`update core.invitations set accepted_at = now() where lower(email) = ${email}`;
     const [e] = await sql<{ id: string }[]>`

@@ -14,6 +14,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers(), cookies: async () => ({ get: () => undefined }) }));
 
 const actions = await import("@/modules/dashboard/search-actions");
+const tour = await import("@/modules/dashboard/tour-actions");
 const queries = await import("@/modules/dashboard/queries");
 
 const NO_ACCESS = "You do not have access to do that.";
@@ -37,6 +38,16 @@ describe("searchEverything, every role", () => {
     expect((await actions.searchEverything({ q: 42 })).ok).toBe(false);
     expect((await actions.searchEverything("maria")).ok).toBe(false);
   });
+});
+
+describe("completeTour, every role", () => {
+  for (const role of ROLE_SLUGS) {
+    it(`${role}: passes authorize() (only their own account is touched)`, async () => {
+      as(role);
+      const result = await tour.completeTour();
+      expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
+    });
+  }
 });
 
 describe("dashboard queries, every role", () => {
