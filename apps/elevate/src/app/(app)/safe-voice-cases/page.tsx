@@ -37,7 +37,7 @@ export default async function SafeVoiceCasesPage({ searchParams }: PageProps<"/s
   const loaded = await load(handler, filter, paging);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Safe Voice cases</h1>
         <p className="mt-1 text-muted-foreground">

@@ -57,7 +57,7 @@ export default async function SettingsPage() {
   const visible = SECTIONS.filter((s) => can(user, s.action));
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="mt-1 text-muted-foreground">Access, invitations, policies, the TalentHR move and the audit log. You see only what your role allows.</p>

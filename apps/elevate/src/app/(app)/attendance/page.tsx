@@ -57,7 +57,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const rules = tab === "rules" ? await orNotFound(listClockRules()) : null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Attendance</h1>
         <p className="mt-1 text-muted-foreground">The time clock is in the header. ELEVATE is the only source of your hours.</p>

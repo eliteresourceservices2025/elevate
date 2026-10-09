@@ -74,7 +74,7 @@ export default async function RequestsPage({ searchParams }: PageProps<"/people/
   const { rows: requests, info } = paginate(all, paging.page, paging.pageSize);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/people" className="text-sm text-primary underline-offset-4 hover:underline">
           ← People

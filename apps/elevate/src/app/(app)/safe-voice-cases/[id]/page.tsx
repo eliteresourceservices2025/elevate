@@ -40,7 +40,7 @@ export default async function SafeVoiceCasePage({ params }: PageProps<"/safe-voi
   if (!c) notFound();
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/safe-voice-cases" className="text-sm text-primary underline-offset-2 hover:underline">
           All cases

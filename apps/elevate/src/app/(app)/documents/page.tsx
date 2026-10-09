@@ -50,7 +50,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
   const types = isHr && tab === "types" ? await orNotFound(listDocumentTypes()) : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Documents</h1>
         <p className="mt-1 text-muted-foreground">

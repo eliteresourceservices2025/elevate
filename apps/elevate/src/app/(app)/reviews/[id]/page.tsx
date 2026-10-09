@@ -18,7 +18,7 @@ export default async function ReviewPage({ params }: PageProps<"/reviews/[id]">)
   const suggested = lead?.overallRating ?? null;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/reviews" className="text-sm text-primary underline-offset-2 hover:underline">
           All reviews

@@ -27,7 +27,7 @@ export default async function ImportBatchPage({ params, searchParams }: PageProp
   const s = batch.summary;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/settings/import" className="text-sm text-primary underline-offset-2 hover:underline">
           All imports

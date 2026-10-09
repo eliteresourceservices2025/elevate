@@ -18,7 +18,7 @@ export default async function OffboardingPage({ searchParams }: PageProps<"/offb
   const hr = scopeFor(user, "offboarding.manage") === "all";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">Offboarding</h1>

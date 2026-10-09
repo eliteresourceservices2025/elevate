@@ -133,6 +133,24 @@
 
 /* A table wider than the screen scrolls sideways inside its card. These edge shadows show there is more to the left or right and
    fade away at the ends (the cover gradients scroll with the content; the shadows stay put). */
+/* Every table in the content area: a tinted header and alternating rows, light and dark. The header rule is not in a layer so it wins
+   over the per-table colours; the row stripes are in the base layer so a row that sets its own colour (a warning, a selection) still wins. */
+#main table thead {
+  background-color: color-mix(in oklab, var(--primary) 10%, var(--card));
+}
+#main table thead th {
+  color: var(--foreground);
+  font-weight: 600;
+}
+@layer base {
+  #main table tbody tr:nth-child(even) {
+    background-color: color-mix(in oklab, var(--primary) 4.5%, transparent);
+  }
+  #main table tbody tr:hover {
+    background-color: color-mix(in oklab, var(--primary) 9%, transparent);
+  }
+}
+
 .scroll-shadow-x {
   background-image:
     linear-gradient(to right, var(--shadow-cover, var(--card)), var(--shadow-cover, var(--card))),

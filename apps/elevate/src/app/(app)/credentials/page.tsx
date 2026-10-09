@@ -36,7 +36,7 @@ export default async function CredentialsPage({ searchParams }: PageProps<"/cred
   const people = canManage ? await orNotFound(listCredentialPeople()) : [];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="w-full space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Certificates</h1>
         <p className="mt-1 text-muted-foreground">Training certificates that expire, such as HIPAA awareness. ELEVATE reminds the person and HR 30 days and 7 days before, and on the end date.</p>

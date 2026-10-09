@@ -16,7 +16,7 @@ export default async function InvitationsPage() {
   const now = new Date().getTime();
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/settings" className="text-sm text-primary underline-offset-4 hover:underline">
           ← Settings

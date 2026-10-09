@@ -45,7 +45,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   ) : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="w-full space-y-6">
       <Suspense fallback={<div className="h-20" aria-hidden />}>
         <GreetingHeader roles={user.roles} lenses={lenses} lens={lens} />
       </Suspense>

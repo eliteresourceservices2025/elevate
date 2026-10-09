@@ -30,7 +30,7 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
   const offerPanel = !candidate.removed && scopeFor(user, "offers.view") ? await orNotFound(getOfferPanel(app.id)) : null;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href={`/recruiting/${opening.id}`} className="text-sm text-primary underline-offset-4 hover:underline">
           ← {opening.title}

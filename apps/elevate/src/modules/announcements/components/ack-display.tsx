@@ -31,7 +31,7 @@ export function AckBanner({ items, today }: { items: PendingItem[]; today: strin
     <div
       role="region"
       aria-label="Acknowledgments needed"
-      className={`border-b px-4 py-2 text-sm sm:px-6 ${overdue ? "bg-destructive/10 text-destructive" : "bg-secondary text-secondary-foreground"}`}
+      className={`border-b px-4 py-2 text-sm md:px-10 2xl:px-12 ${overdue ? "bg-destructive/10 text-destructive" : "bg-secondary text-secondary-foreground"}`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="flex items-center gap-1.5 font-medium">

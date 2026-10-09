@@ -12,7 +12,7 @@ export default async function RolesPage() {
   const people = await orNotFound(listPeopleWithRoles()); // authorize("settings.manage_roles") inside
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/settings" className="text-sm text-primary underline-offset-4 hover:underline">
           ← Settings

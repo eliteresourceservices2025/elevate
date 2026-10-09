@@ -23,7 +23,7 @@ export default async function CyclePage({ params, searchParams }: PageProps<"/re
   const { rows, info } = paginate(reviews, paging.page, paging.pageSize);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/reviews" className="text-sm text-primary underline-offset-2 hover:underline">
           All reviews

@@ -10,7 +10,7 @@ export default async function JibblePage() {
   await requireUser();
   const overview = await orNotFound(getJibbleOverview());
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Jibble</h1>
         <p className="mt-1 text-muted-foreground">Connection status, people matching and the latest calls.</p>

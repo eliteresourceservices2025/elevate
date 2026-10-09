@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { LogOut, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { signOut } from "@/modules/auth/actions";
 import { NotificationBell } from "@/modules/notifications/components/notification-bell";
 import type { ClockStatus } from "@/modules/attendance/queries";
+import { AccountMenu } from "./account-menu";
 import { ClockWidget } from "./clock-widget";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { PageEntry } from "@/modules/dashboard/search";
@@ -18,6 +18,8 @@ import { ZoneClock } from "./zone-clock";
 export function AppHeader({
   zone,
   email,
+  accountName = null,
+  roles = [],
   unread = 0,
   clock = null,
   hiddenNav = [],
@@ -31,6 +33,8 @@ export function AppHeader({
   hiddenNav?: string[];
   zone?: string | null;
   email?: string;
+  accountName?: string | null;
+  roles?: string[];
   unread?: number;
   clock?: ClockStatus | null;
   collapsed?: boolean;
@@ -83,14 +87,8 @@ export function AppHeader({
       {/* keyed by the count so a fresh server count resets the bell */}
       <NotificationBell key={unread} unread={unread} />
       <ClockWidget status={clock} />
-      <form action={signOut} className="flex items-center gap-2">
-        {email ? <span className="hidden text-xs text-muted-foreground 2xl:inline">{email}</span> : null}
-        {/* On a phone only the icon shows, so the row fits; the name stays for screen readers */}
-        <Button type="submit" variant="ghost" size="sm" aria-label="Sign out" title="Sign out">
-          <LogOut aria-hidden />
-          <span className="hidden sm:inline">Sign out</span>
-        </Button>
-      </form>
+      {/* The badge (initials) opens the account menu: profile, my data, the quick tour and Sign out, which asks first */}
+      <AccountMenu name={accountName} email={email ?? ""} roles={roles} clocked={clock !== null && clock.state !== "out"} />
     </header>
   );
 }

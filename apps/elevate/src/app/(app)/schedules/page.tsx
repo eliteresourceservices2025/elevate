@@ -39,7 +39,7 @@ export default async function SchedulesPage({ searchParams }: PageProps<"/schedu
   const teamPage = team ? paginate(team.rows, paging.page, paging.pageSize) : null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Schedules</h1>
         <p className="mt-1 text-muted-foreground">Shifts in the client&apos;s time zone, also shown in Manila time. Your time clock uses them to flag late arrivals, early leaves, absences and extra hours.</p>

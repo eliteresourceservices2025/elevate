@@ -34,7 +34,7 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
   const page = openings ? paginate(openings.rows, paging.page, paging.pageSize) : null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Recruiting</h1>

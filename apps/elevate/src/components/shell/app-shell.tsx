@@ -43,7 +43,8 @@ export function AppShell({ initialCollapsed, banner, children, ...header }: Head
         <AppHeader {...header} collapsed={collapsed} onToggleSidebar={toggle} />
         <div className="flex-1 overflow-y-auto print:overflow-visible">
           {banner}
-          <main id="main" className="p-4 sm:p-6 lg:p-8 print:p-0">
+          {/* Side padding: 16px on a phone, 40px on a tablet or laptop, 48px on a large screen. Pages fill the width between. */}
+          <main id="main" className="px-4 py-5 md:px-10 md:py-6 2xl:px-12 print:p-0">
             {children}
           </main>
         </div>

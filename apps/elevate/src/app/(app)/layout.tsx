@@ -14,6 +14,8 @@ import { listMyPending } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
 import { getClockStatus } from "@/modules/attendance/queries";
 import { countMyUnread } from "@/modules/notifications/queries";
+import { getMyDisplayName } from "@/modules/people/queries";
+import { roleLabel } from "@/lib/roles";
 import { PrivacyGate } from "@/modules/privacy/components/privacy-gate";
 import { getPrivacyGate } from "@/modules/privacy/queries";
 
@@ -28,7 +30,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     console.error("layout read skipped:", error instanceof Error ? error.name : "unknown error");
     return fallback;
   });
-  const [gate, unread, pending, clock] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus()]);
+  const [gate, unread, pending, clock, accountName] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null)]);
   if (gate) {
     return (
       <PrivacyGate versionId={gate.versionId} title={gate.title} version={gate.version} updated={gate.updated} changeNote={gate.changeNote}>
@@ -51,6 +53,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       safeVoiceUrl={safeVoiceUrl}
       zone={DEFAULT_TIMEZONE}
       email={user.email}
+      accountName={accountName}
+      roles={user.roles.filter((r) => r !== "employee").map(roleLabel)}
       unread={unread}
       clock={clock}
       banner={<AckBanner items={pending} today={todayInZone()} />}

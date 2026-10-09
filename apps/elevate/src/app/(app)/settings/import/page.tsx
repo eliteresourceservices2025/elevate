@@ -12,7 +12,7 @@ const LABEL: Record<string, string> = { preview: "Preview", committed: "Committe
 export default async function ImportPage() {
   const batches = await orNotFound(listBatches());
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/settings" className="text-sm text-primary underline-offset-2 hover:underline">
           Settings

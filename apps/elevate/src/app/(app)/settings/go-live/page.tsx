@@ -10,7 +10,7 @@ export default async function GoLivePage() {
   const { rows, notProduction } = await orNotFound(getGoLive());
   const done = rows.filter((r) => r.done).length;
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/settings" className="text-sm text-primary underline-offset-2 hover:underline">
           Settings

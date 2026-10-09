@@ -71,7 +71,7 @@ export default async function ReviewsPage({ searchParams }: PageProps<"/reviews"
   const otherP = parsePaging({ page: q.opage, size: q.osize });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">Reviews</h1>

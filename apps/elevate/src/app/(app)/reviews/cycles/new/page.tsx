@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Launch a review cycle" };
 export default async function NewCyclePage() {
   const o = await orNotFound(getLaunchOptions());
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="w-full space-y-4">
       <div>
         <Link href="/reviews" className="text-sm text-primary underline-offset-2 hover:underline">
           All reviews

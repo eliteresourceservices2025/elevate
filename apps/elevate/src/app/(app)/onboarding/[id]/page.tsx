@@ -18,7 +18,7 @@ export default async function OnboardingCasePage({ params }: PageProps<"/onboard
   const c = await orNotFound(getOnboardingCase(id));
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/onboarding" className="text-sm text-primary underline-offset-2 hover:underline">
           All onboarding

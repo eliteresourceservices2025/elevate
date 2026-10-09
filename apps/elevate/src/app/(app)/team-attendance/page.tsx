@@ -28,7 +28,7 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
   const n = cut(notes.rows, query.npage, query.nsize, 10);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="w-full space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Team attendance</h1>
         <p className="mt-1 text-muted-foreground">Who is clocked in, what needs a look, and the end-of-day reports from your team.</p>

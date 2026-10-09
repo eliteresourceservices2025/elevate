@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Start an offboarding" };
 export default async function NewOffboardingPage() {
   const people = await orNotFound(listOffboardingCandidates());
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="w-full space-y-4">
       <div>
         <Link href="/offboarding" className="text-sm text-primary underline-offset-2 hover:underline">
           Offboarding

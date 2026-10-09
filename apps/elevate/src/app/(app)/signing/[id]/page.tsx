@@ -24,7 +24,7 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
   const manager = d.viewer === "manager";
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/signing" className="text-sm text-primary underline-offset-4 hover:underline">
           ← Signing

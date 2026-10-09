@@ -14,7 +14,7 @@ export default async function ChecklistTemplatesPage() {
     { kind: "offboarding" as const, title: "Offboarding templates" },
   ];
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="w-full space-y-8">
       <div>
         <Link href="/onboarding" className="text-sm text-primary underline-offset-2 hover:underline">
           Onboarding

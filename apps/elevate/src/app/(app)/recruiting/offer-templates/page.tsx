@@ -11,7 +11,7 @@ export default async function OfferTemplatesPage() {
   await requireUser();
   const templates = await orNotFound(listOfferTemplates()); // authorize("offers.manage_templates") inside
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/recruiting" className="text-sm text-primary underline-offset-4 hover:underline">
           ← Recruiting

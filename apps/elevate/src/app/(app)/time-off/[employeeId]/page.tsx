@@ -22,7 +22,7 @@ export default async function PersonTimeOffPage({ params }: PageProps<"/time-off
   const options = can(user, "timeoff.award") ? await orNotFound(getAwardOptions()) : null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/time-off?tab=balances" className="text-sm text-primary underline-offset-4 hover:underline">
           All balances

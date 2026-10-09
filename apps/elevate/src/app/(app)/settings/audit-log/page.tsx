@@ -23,7 +23,7 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/setting
   const info = pageInfo(total, page, pageSize);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/settings" className="text-sm text-primary underline-offset-4 hover:underline">
           ← Settings

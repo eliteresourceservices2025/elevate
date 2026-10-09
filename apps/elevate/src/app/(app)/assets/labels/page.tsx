@@ -12,7 +12,7 @@ export default async function LabelsPage({ searchParams }: PageProps<"/assets/la
   const tags = raw.split(",").map((t) => t.trim()).filter(Boolean);
   const items = await orNotFound(getLabelItems(tags));
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="print:hidden">
         <Link href="/assets" className="text-sm text-primary underline-offset-2 hover:underline">
           Assets

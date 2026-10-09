@@ -20,7 +20,7 @@ export default async function OffboardingCasePage({ params }: PageProps<"/offboa
   const open = c.status === "open";
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/offboarding" className="text-sm text-primary underline-offset-2 hover:underline">
           All offboarding

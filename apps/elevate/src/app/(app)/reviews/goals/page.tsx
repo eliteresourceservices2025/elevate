@@ -15,7 +15,7 @@ export default async function GoalsPage({ searchParams }: PageProps<"/reviews/go
   const paging = parsePaging({ page: one(sp.page), size: one(sp.size) }, 10);
   const { rows, info } = paginate(goals, paging.page, paging.pageSize);
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/reviews" className="text-sm text-primary underline-offset-2 hover:underline">
           All reviews

@@ -20,7 +20,7 @@ export default async function AssetPage({ params }: PageProps<"/assets/[tag]">) 
   const withPerson = asset.history.find((h) => !h.returnedAt);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full space-y-6">
       <div>
         <Link href="/assets" className="text-sm text-primary underline-offset-2 hover:underline">
           Assets

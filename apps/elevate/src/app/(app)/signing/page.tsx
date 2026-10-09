@@ -34,7 +34,7 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
   const waiting = mine?.filter((m) => m.myStatus === "pending" && m.envelopeStatus === "out").length ?? 0;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Signing</h1>

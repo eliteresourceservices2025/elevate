@@ -67,3 +67,34 @@ test("the menu and header stay fixed, and the menu can be narrowed to icons", as
   await page.getByRole("button", { name: "Show menu labels" }).click();
   await expect.poll(async () => (await aside.boundingBox())?.width ?? 999).toBeGreaterThan(200);
 });
+
+test("the header shows a badge with initials, and Sign out asks first", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 700 } })).newPage();
+  await signInEnrollingMfa(page, await createHrAccount());
+  await page.goto("/dashboard");
+  await waitForHydration(page, '[data-tour="account"]');
+
+  // No email text sits in the header any more; the badge holds the initials.
+  await expect(page.locator("header").getByText("@example.com")).toHaveCount(0);
+  const badge = page.getByRole("button", { name: /Account menu for/ });
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveText(/^[A-Z?]{1,2}$/);
+
+  // The menu names the person, then Sign out opens a question and Stay signed in keeps the session.
+  await badge.click();
+  await expect(page.getByRole("menuitem", { name: "My profile" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Quick tour" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Sign out of ELEVATE?" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Stay signed in" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(/\/dashboard/);
+
+  // Confirming signs out.
+  await badge.click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sign out" }).click();
+  await page.waitForURL(/\/login/);
+});

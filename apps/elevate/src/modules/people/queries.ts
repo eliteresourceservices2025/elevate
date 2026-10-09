@@ -159,6 +159,18 @@ export async function listClientsForFilter() {
   return db.select({ id: clients.id, name: clients.name, isActive: clients.isActive }).from(clients).where(isNull(clients.archivedAt)).orderBy(clients.name);
 }
 
+/** How the signed-in person is called (preferred name, else legal name), for the badge in the header. Null when they have no people record. */
+export async function getMyDisplayName(): Promise<string | null> {
+  const user = await requireUser();
+  const [row] = await db
+    .select({ preferred: employees.preferredName, first: employees.legalFirstName, last: employees.legalLastName })
+    .from(employees)
+    .where(and(eq(employees.userId, user.id), isNull(employees.archivedAt)))
+    .limit(1);
+  if (!row) return null;
+  return row.preferred?.trim() ? `${row.preferred.trim()} ${row.last}`.trim() : `${row.first} ${row.last}`.trim();
+}
+
 /** The signed-in person's own people record id, for the "My profile" shortcut. */
 export async function getMyEmployeeId(): Promise<string | null> {
   const user = await requireUser();

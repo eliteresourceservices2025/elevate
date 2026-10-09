@@ -36,7 +36,7 @@ export default async function AssetsPage({ searchParams }: PageProps<"/assets">)
   const canManage = scopeFor(user, "assets.manage") === "all";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="w-full space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">Assets</h1>
