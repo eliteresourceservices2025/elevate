@@ -32,6 +32,23 @@ test("the menu and header stay fixed, and the menu can be narrowed to icons", as
   expect(after.navTop).toBe(before.navTop);
   expect(await page.locator("#main").evaluate((el) => el.parentElement!.scrollTop)).toBeGreaterThan(0);
 
+  // Nothing but the content box and the menu list may ever scroll. A screen-reader-only field (the checkboxes and radio buttons our
+  // component library draws) is absolutely positioned against the shell, so far down a long page it makes the shell itself scrollable;
+  // focusing it then made the browser scroll the shell, which pushed the header and the top of the menu out of sight until a refresh.
+  const stuck = await page.evaluate(() => {
+    const shell = document.querySelector("[data-app-shell]") as HTMLElement;
+    const column = document.querySelector("header")!.parentElement as HTMLElement;
+    const menu = document.querySelector("#main-nav")!.parentElement as HTMLElement;
+    const field = document.createElement("input");
+    field.className = "sr-only";
+    field.setAttribute("aria-label", "hidden field far down the page");
+    document.querySelector("#main")!.appendChild(field);
+    field.focus();
+    for (const el of [shell, column, menu]) el.scrollTop = 150;
+    return { shell: shell.scrollTop, column: column.scrollTop, menu: menu.scrollTop, headerTop: document.querySelector("header")!.getBoundingClientRect().top, logoTop: menu.getBoundingClientRect().top };
+  });
+  expect(stuck).toEqual({ shell: 0, column: 0, menu: 0, headerTop: 0, logoTop: 0 });
+
   // Narrow to icons: labels leave the screen, every icon link keeps its name, the choice survives a reload.
   const aside = page.locator("aside");
   await expect(aside).toBeVisible();

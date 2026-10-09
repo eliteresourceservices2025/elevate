@@ -27,7 +27,10 @@ export function AppShell({ initialCollapsed, banner, children, ...header }: Head
 
   return (
     // "relative" makes this the containing block for the screen-reader-only text (absolutely positioned), so it cannot stretch the page.
-    <div className="relative flex h-dvh overflow-hidden print:block print:h-auto print:overflow-visible">
+    // "overflow-clip", not "overflow-hidden": a hidden box can still be scrolled by the browser itself (focusing a field, scrolling a
+    // link into view, a route change), which pushed the header and the top of the menu out of sight until a refresh. A clipped box
+    // cannot scroll at all, so only the content area below ever moves.
+    <div data-app-shell className="relative flex h-dvh overflow-clip print:block print:h-auto print:overflow-visible">
       <aside
         className={cn(
           "hidden shrink-0 transition-[width] duration-200 motion-reduce:transition-none lg:block print:hidden",
@@ -36,7 +39,7 @@ export function AppShell({ initialCollapsed, banner, children, ...header }: Head
       >
         <SidebarNav hidden={header.hiddenNav} safeVoiceUrl={header.safeVoiceUrl} collapsed={collapsed} />
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
         <AppHeader {...header} collapsed={collapsed} onToggleSidebar={toggle} />
         <div className="flex-1 overflow-y-auto print:overflow-visible">
           {banner}

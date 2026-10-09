@@ -24,7 +24,7 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
   const linkSize = collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-2.5 py-2";
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
+    <div className="flex h-full flex-col overflow-clip bg-sidebar text-sidebar-foreground">
       <div className={cn("flex shrink-0 items-center gap-3 py-5", collapsed ? "justify-center px-0" : "px-5")}>
         <Image src="/elite-logo-icon.png" alt="" width={36} height={36} className="h-auto w-9 shrink-0 rounded-full bg-white p-0.5" />
         {collapsed ? (
