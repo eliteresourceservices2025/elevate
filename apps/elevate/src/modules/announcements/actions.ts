@@ -410,6 +410,34 @@ export async function discardDraft(input: unknown): Promise<ActionResult> {
   });
 }
 
+/**
+ * Removes a policy that was never published (a test or a mistake). It is archived, not erased, and nothing that was published can be
+ * removed this way: published versions are the record of what people were asked to accept. The built-in privacy notice and monitoring
+ * policy are never archived (the sign-in gate and the Jibble switch read them).
+ */
+export async function archivePolicy(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "announcements.manage");
+    const parsed = policyIdSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD);
+    const { policyId } = parsed.data;
+
+    await db.transaction(async (tx) => {
+      const [p] = await tx.select({ id: policies.id, kind: policies.kind }).from(policies).where(and(eq(policies.id, policyId), isNull(policies.archivedAt))).limit(1);
+      if (!p) throw new ActionFailure("That policy was not found.");
+      if (p.kind !== "general") throw new ActionFailure("The privacy notice and the monitoring policy cannot be removed. Edit their text instead.");
+      const [published] = await tx.select({ id: policyVersions.id }).from(policyVersions).where(and(eq(policyVersions.policyId, policyId), eq(policyVersions.status, "published"))).limit(1);
+      if (published) throw new ActionFailure("A published policy cannot be removed.");
+      await tx.update(policies).set({ archivedAt: new Date() }).where(eq(policies.id, policyId));
+      await writeAudit({ actor, action: "policy.archive", targetType: "policy", targetId: policyId }, tx);
+    });
+    refresh();
+    return { ok: true, data: undefined };
+  });
+}
+
 /** Publishes the draft as the new current version: frozen from now on, everyone is notified. */
 export async function publishDraft(input: unknown): Promise<ActionResult<{ version: number }>> {
   const actor = await requireUser();

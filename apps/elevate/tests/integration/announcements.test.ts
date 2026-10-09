@@ -390,6 +390,21 @@ describe("policies", () => {
     expect(await actions.publishDraft({ policyId })).toEqual({ ok: false, error: "There is no draft to publish." });
   });
 
+  it("removes a never-published policy, but not a published one or the built-in notices", async () => {
+    as(hr);
+    const draftOnly = idOf(await actions.createPolicy({ title: uniq("Test policy "), body: "Draft.", requiresAck: false }));
+    expect((await actions.archivePolicy({ policyId: draftOnly })).ok).toBe(true);
+    expect(await rows(sql`select 1 from docs.policies where id = ${draftOnly} and archived_at is not null`)).toHaveLength(1);
+    expect(await actions.archivePolicy({ policyId: draftOnly })).toEqual({ ok: false, error: "That policy was not found." });
+
+    const published = idOf(await actions.createPolicy({ title: uniq("Real policy "), body: "Real.", requiresAck: false }));
+    expect((await actions.publishDraft({ policyId: published })).ok).toBe(true);
+    expect(await actions.archivePolicy({ policyId: published })).toEqual({ ok: false, error: "A published policy cannot be removed." });
+
+    const [notice] = await rows(sql`select id from docs.policies where kind = 'privacy_notice' limit 1`);
+    expect((await actions.archivePolicy({ policyId: (notice as { id: string }).id })).ok).toBe(false);
+  });
+
   it("does not ask for acknowledgment when the version does not require it", async () => {
     const p = await person("pol-info");
     as(hr);

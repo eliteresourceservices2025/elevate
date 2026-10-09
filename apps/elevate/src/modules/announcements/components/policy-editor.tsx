@@ -7,7 +7,7 @@ import { TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createPolicy, discardDraft, publishDraft, saveDraft } from "../actions";
+import { archivePolicy, createPolicy, discardDraft, publishDraft, saveDraft } from "../actions";
 
 const MARKDOWN_HINT = "Formatting: **bold**, *italic*, # heading, - bullet list, 1. numbered list, [link text](https://example.com).";
 
@@ -62,12 +62,15 @@ export function DraftEditor({
   nextVersion,
   initial,
   hasPublished,
+  canArchive,
   today,
 }: {
   policyId: string;
   nextVersion: number;
   initial: { body: string; changeNote: string | null; requiresAck: boolean; dueOn: string | null };
   hasPublished: boolean;
+  /** A never-published policy that is not the privacy notice or monitoring policy can be removed. */
+  canArchive: boolean;
   today: string;
 }) {
   const router = useRouter();
@@ -114,6 +117,24 @@ export function DraftEditor({
         {hasPublished ? (
           <Button type="button" variant="ghost" disabled={pending} onClick={() => window.confirm("Discard this draft?") && run(() => discardDraft({ policyId }), "Draft discarded.")}>
             Discard draft
+          </Button>
+        ) : null}
+        {canArchive ? (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={pending}
+            onClick={() =>
+              window.confirm("Remove this policy? It was never published, so nobody has seen it.") &&
+              startTransition(async () => {
+                const result = await archivePolicy({ policyId });
+                if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
+                toast.success("Policy removed.");
+                router.push("/announcements");
+              })
+            }
+          >
+            Remove policy
           </Button>
         ) : null}
       </div>

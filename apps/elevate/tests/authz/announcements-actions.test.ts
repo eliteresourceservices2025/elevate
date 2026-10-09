@@ -39,6 +39,7 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "createPolicy", call: () => actions.createPolicy({ title: "Code of conduct", body: "Be kind.", requiresAck: true }), allowed: HR },
   { name: "saveDraft", call: () => actions.saveDraft({ policyId: ID, body: "Be kind.", requiresAck: true }), allowed: HR },
   { name: "discardDraft", call: () => actions.discardDraft({ policyId: ID }), allowed: HR },
+  { name: "archivePolicy", call: () => actions.archivePolicy({ policyId: ID }), allowed: HR },
   { name: "publishDraft", call: () => actions.publishDraft({ policyId: ID }), allowed: HR },
   { name: "setDigestOptOut", call: () => notificationActions.setDigestOptOut({ optOut: true }), allowed: EVERYONE },
 ];

@@ -83,6 +83,7 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
               nextVersion={p.draft.version}
               initial={{ body: p.draft.body, changeNote: p.draft.changeNote, requiresAck: p.draft.requiresAck, dueOn: p.draft.dueOn }}
               hasPublished={p.current !== null}
+              canArchive={p.current === null && p.history.length === 0 && p.kind === "general"}
               today={today}
             />
           ) : p.current ? (
