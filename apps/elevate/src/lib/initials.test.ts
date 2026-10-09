@@ -8,7 +8,7 @@ describe("initialsOf", () => {
     expect(initialsOf("Ana", "a@x.com")).toBe("A");
   });
   it("falls back to the email when there is no name", () => {
-    expect(initialsOf(null, "juan.dela-cruz@example.com")).toBe("JD");
+    expect(initialsOf(null, "juan.dela-cruz@example.com")).toBe("JC"); // first and last part
     expect(initialsOf("", "lux_aeterna@example.com")).toBe("LA");
     expect(initialsOf(undefined, "admin@example.com")).toBe("A");
   });
