@@ -67,7 +67,11 @@ export function tableFromRecords(records: string[][]): ParsedCsv {
     if (seen.has(key)) return { error: `The column "${h}" appears twice.` };
     seen.add(key);
   }
-  const body = records.slice(1).filter((r) => r.some((v) => v.trim() !== ""));
+  // TalentHR's files carry a "GUIDE ROW" column: "yes" on the row of instructions under the headers, "no" on every person. The
+  // instruction row is not a person, so it is dropped here (for both CSV and spreadsheets).
+  const guideAt = headers.findIndex((h) => h.toLowerCase().startsWith("guide row"));
+  const isGuideRow = (r: string[]) => guideAt >= 0 && (r[guideAt] ?? "").trim().toLowerCase() === "yes";
+  const body = records.slice(1).filter((r) => r.some((v) => v.trim() !== "") && !isGuideRow(r));
   if (body.length === 0) return { error: "The file has headers but no rows." };
   if (body.length > MAX_ROWS) return { error: `The file has more than ${MAX_ROWS} rows.` };
   const rows: Record<string, string>[] = [];

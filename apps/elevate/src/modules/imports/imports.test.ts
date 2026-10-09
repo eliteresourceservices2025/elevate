@@ -9,6 +9,17 @@ const mapping = defaultMapping([...TALENTHR_HEADERS]);
 const norm = (over = {}) => normalizeRow(fakePerson(1, over) as Record<string, string>, mapping, opts);
 
 describe("parseCsv", () => {
+  it("drops TalentHR's instruction row (GUIDE ROW = yes) and keeps people (GUIDE ROW = no)", () => {
+    const guide = `GUIDE ROW
+(Do not edit this column)`;
+    const text = `Name,"${guide}"
+"REQUIRED.
+- Enter a name",yes
+Ana,no
+`;
+    expect(parseCsv(text)).toEqual({ headers: ["Name", guide], rows: [{ Name: "Ana", [guide]: "no" }] });
+  });
+
   it("reads quoted values, doubled quotes, commas and line breaks inside quotes", () => {
     const r = parseCsv('A,B\r\n"x, y","say ""hi""\nnext"\r\n1,2\r\n');
     expect(r).toEqual({ headers: ["A", "B"], rows: [{ A: "x, y", B: 'say "hi"\nnext' }, { A: "1", B: "2" }] });
