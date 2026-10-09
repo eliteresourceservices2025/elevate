@@ -42,7 +42,9 @@ const sensitiveLabel = (f: SensitiveField) => SENSITIVE_LABELS[f]; // eslint-dis
 
 export function PersonalSection({ profile }: { profile: Profile }) {
   const { employee: e, access } = profile;
-  const address = [e.addressLine, e.city, e.province, e.postalCode, e.country].filter(Boolean).join(", ");
+  // A country on its own is not an address, so it is shown only together with a street, city, province or postal code.
+  const place = [e.addressLine, e.city, e.province, e.postalCode].filter(Boolean);
+  const address = place.length > 0 ? [...place, e.country].filter(Boolean).join(", ") : "";
 
   return (
     <div className="space-y-6">
