@@ -112,6 +112,8 @@ You proved the API clock-in works with `pnpm jibble:probe`. For the real link al
 
 - [ ] Import people (Settings > Import): upload, check the preview, commit, reconcile, **sign off**. Do a dry run first (the quarantine) and read the "changed" and "errors" lists.
 - [ ] `pnpm talenthr:pull --dry-run --as <your email>` first, then without `--dry-run` (production connection and `ELEVATE_ENV=production` set in your PowerShell window, as DEPLOY Part 8 says). Keep the TalentHR key in `apps/elevate/.env.talenthr.local` only.
+- [ ] **Prize days from TalentHR** (decided with the owner): after the people import, award the 5 carried-over prize days from the "August Surprise Game" budget in Time off > Award prize days (1 day each, "Use by" 2026-12-31, reason "August Surprise Game, carried over from TalentHR"). Check the days are still unused first. Nobody can award their own, and the person gets a notice.
+- [ ] **HIPAA certificates** (decided with the owner): after the people import, open Certificates > Load from TalentHR, upload the TalentHR assets CSV, keep the name filter "HIPAA", press Preview, read the skipped reasons, then Load. Add any that are missing by hand with "Add a certificate". The physical equipment rows go into Assets by hand.
 - [ ] Re-run reconciliation daily during the parallel run; the documents comparison should reach zero gaps.
 - [ ] Remove or archive any test accounts and test people that are not real staff.
 

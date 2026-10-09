@@ -18,6 +18,7 @@ import {
   UserPlus,
   Users,
   Camera,
+  Award,
   Clock,
   Hourglass,
   ListChecks,
@@ -75,6 +76,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Engagement",
     items: [
       { href: "/reviews", label: "Reviews", icon: Star, description: "Review cycles, early-engagement reviews and goals." },
+      { href: "/credentials", label: "Certificates", icon: Award, description: "Training certificates that expire, such as HIPAA, with reminders.", access: { action: "credentials.view", scopes: ["all", "team", "own"] } },
       { href: "/assets", label: "Assets", icon: Boxes, description: "Equipment inventory and assignments.", access: { action: "assets.view", scopes: ["all", "team", "own"] } },
       { href: "/analytics", label: "Analytics", icon: BarChart3, description: "Headcount, turnover, attendance and hiring.", access: [{ action: "analytics.view", scopes: ["all", "team"] }, { action: "analytics.view_hiring", scopes: ["all"] }] },
       { href: "/safe-voice-cases", label: "Safe Voice cases", icon: ShieldQuestion, description: "Anonymous report handling (designated handlers only; Executives see counts).", access: [{ action: "safevoice.handle", scopes: ["all"] }, { action: "safevoice.view_counts", scopes: ["all"] }] },

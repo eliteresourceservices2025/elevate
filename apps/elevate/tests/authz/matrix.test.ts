@@ -116,6 +116,8 @@ const EXPECTED: Record<string, string> = {
   "assets.view": "A A T - - O",
   "assets.manage": "A A - - - -",
   "assets.assign": "A A - - - -",
+  "credentials.view": "A A T - - O",
+  "credentials.manage": "A A - - - -",
   "analytics.view": "A A T - A -",
   "analytics.view_hiring": "A A - A A -",
   "dashboard.view": "O O O O O O",

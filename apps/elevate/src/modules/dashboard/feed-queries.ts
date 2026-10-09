@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { listCorrectionQueue, listWorkingNow } from "@/modules/attendance/queries";
 import { listExtraHoursQueue } from "@/modules/attendance/extra-hours-queries";
 import { getTeamReview } from "@/modules/attendance/hours-queries";
+import { credentialCounts } from "@/modules/credentials/queries";
 import { jobHealth } from "@/modules/health/service";
 import { listMyTasks } from "@/modules/onboarding/queries";
 import { downlineEmployeeIds, todayInZone } from "@/modules/org/service";
@@ -50,7 +51,7 @@ export async function getAttention(lens: Lens): Promise<AttentionItem[]> {
   const items: AttentionItem[] = [];
   const add = (item: AttentionItem) => items.push(item);
 
-  const [working, review, changes, tasks, reviews, jobs, onboarding, expiring] = await Promise.all([
+  const [working, review, changes, tasks, reviews, jobs, onboarding, expiring, certs] = await Promise.all([
     orFallback(async () => (await listWorkingNow()).rows, []),
     orFallback(async () => (await getTeamReview()).pending, 0),
     orFallback(() => countPendingChangeRequests(), 0),
@@ -59,6 +60,7 @@ export async function getAttention(lens: Lens): Promise<AttentionItem[]> {
     scopeFor(user, "health.view") ? orFallback(() => jobHealth(), []) : Promise.resolve([]),
     orgOnboardingCounts(user.id),
     documentCounts(user),
+    orFallback(() => credentialCounts(), { expired: 0, expiring: 0 }),
   ]);
 
   const longOpen = working.filter((w) => w.longOpen).length;
@@ -75,6 +77,9 @@ export async function getAttention(lens: Lens): Promise<AttentionItem[]> {
   if (onboarding.leavingSoon > 0) add({ id: "leaving-soon", severity: "info", title: `${plural(onboarding.leavingSoon, "person", "people")} ${onboarding.leavingSoon === 1 ? "has" : "have"} a last working day in the next 3 days`, href: "/offboarding", lenses: ["admin", "hr", "team_lead"] });
   if (expiring.expired > 0) add({ id: "docs-expired", severity: "warn", title: `${plural(expiring.expired, "document has", "documents have")} expired`, href: "/documents", lenses: ["admin", "hr"] });
   if (expiring.soon > 0) add({ id: "docs-soon", severity: "info", title: `${plural(expiring.soon, "document expires", "documents expire")} in the next 30 days`, href: "/documents", lenses: ["admin", "hr"] });
+
+  if (certs.expired > 0) add({ id: "certs-expired", severity: "warn", title: `${plural(certs.expired, "certificate has", "certificates have")} expired`, href: "/credentials?status=expired", lenses: ["admin", "hr"] });
+  if (certs.expiring > 0) add({ id: "certs-soon", severity: "info", title: `${plural(certs.expiring, "certificate expires", "certificates expire")} in the next 30 days`, href: "/credentials?status=expiring", lenses: ["admin", "hr"] });
 
   const lateJobs = jobs.filter((j) => j.state === "late" || j.state === "failing").length;
   if (lateJobs > 0) add({ id: "jobs-late", severity: "urgent", title: `${plural(lateJobs, "background job is", "background jobs are")} late or failing`, detail: "Scheduled work such as the nightly hours rebuild may not have run.", href: "/attendance?tab=health", lenses: ["admin", "hr"] });
