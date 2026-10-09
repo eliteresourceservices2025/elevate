@@ -13,10 +13,15 @@ describe("views (lenses)", () => {
     expect(defaultLens(["employee"])).toBe("my_work");
   });
   it("dual roles get a view for each, most senior first, My work last", () => {
-    expect(availableLenses(["employee", "super_admin", "hr_admin"])).toEqual(["admin", "hr", "my_work"]);
-    expect(availableLenses(["employee", "super_admin", "team_lead"])).toEqual(["admin", "team_lead", "my_work"]);
-    expect(availableLenses(["employee", "executive", "super_admin"])).toEqual(["admin", "executive", "my_work"]);
+    expect(availableLenses(["employee", "hr_admin", "executive"])).toEqual(["hr", "executive", "my_work"]);
+    expect(availableLenses(["employee", "team_lead", "recruiter"])).toEqual(["team_lead", "recruiter", "my_work"]);
+    expect(availableLenses(["employee", "executive", "super_admin"])).toEqual(["admin", "hr", "executive", "team_lead", "recruiter", "my_work"]);
     expect(defaultLens(["employee", "team_lead", "recruiter"])).toBe("team_lead");
+  });
+  it("a Super Admin has the HR, My team and Hiring views as well as Admin", () => {
+    expect(availableLenses(["employee", "super_admin"])).toEqual(["admin", "hr", "team_lead", "recruiter", "my_work"]);
+    expect(defaultLens(["employee", "super_admin"])).toBe("admin");
+    expect(pickLens(["employee", "super_admin"], "recruiter")).toBe("recruiter");
   });
   it("only offers a view the person holds, falling back to the default", () => {
     expect(pickLens(["employee", "hr_admin"], "executive", undefined)).toBe("hr");

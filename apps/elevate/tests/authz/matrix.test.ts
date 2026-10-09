@@ -140,6 +140,23 @@ const SCOPE_CODE: Record<string, Scope | null> = { A: "all", T: "team", O: "own"
 const actions = Object.keys(PERMISSIONS) as ActionName[];
 const userWith = (...roles: RoleSlug[]) => ({ id: "actor", roles });
 
+// Super Admin can do everything HR Admin, Team Lead and Recruiter can do, at the widest scope any of them has. Safe Voice cases are
+// the one deliberate exception (a person flag, never a role).
+describe("Super Admin is never behind HR Admin, Team Lead or Recruiter", () => {
+  const rank = { own: 1, team: 2, all: 3 } as const;
+  for (const [action, rule] of Object.entries(PERMISSIONS)) {
+    if ((rule as { requiresFlag?: string }).requiresFlag) continue;
+    const roles = rule.roles as Partial<Record<RoleSlug, Scope>>;
+    const best = (["hr_admin", "team_lead", "recruiter"] as const).map((r) => roles[r]).filter((s): s is Scope => Boolean(s)).sort((a, b) => rank[b] - rank[a])[0];
+    if (!best) continue;
+    it(`${action}`, () => {
+      const own = roles.super_admin;
+      expect(own, `Super Admin has no access to ${action}`).toBeDefined();
+      expect(rank[own as Scope]).toBeGreaterThanOrEqual(rank[best]);
+    });
+  }
+});
+
 describe("permission matrix", () => {
   it("has an expected row for every action, and no extra rows", () => {
     expect(Object.keys(EXPECTED).sort()).toEqual([...actions].sort());

@@ -16,12 +16,13 @@ export const LENS_LABELS: Record<Lens, string> = {
   my_work: "My work",
 };
 
-const ROLE_LENS: Partial<Record<RoleSlug, Lens>> = {
-  super_admin: "admin",
-  hr_admin: "hr",
-  executive: "executive",
-  team_lead: "team_lead",
-  recruiter: "recruiter",
+// A Super Admin holds everything HR, a Team Lead and a Recruiter can do, so they get those views too (plus Admin).
+const ROLE_LENS: Partial<Record<RoleSlug, Lens[]>> = {
+  super_admin: ["admin", "hr", "team_lead", "recruiter"],
+  hr_admin: ["hr"],
+  executive: ["executive"],
+  team_lead: ["team_lead"],
+  recruiter: ["recruiter"],
 };
 
 /** The views a person holds, in the order they are offered. "My work" is always last and always there. */
@@ -29,8 +30,7 @@ export function availableLenses(roles: readonly RoleSlug[]): Lens[] {
   const held = new Set<Lens>(["my_work"]);
   for (const role of roles) {
     // eslint-disable-next-line security/detect-object-injection -- `role` is a RoleSlug
-    const lens = ROLE_LENS[role];
-    if (lens) held.add(lens);
+    for (const lens of ROLE_LENS[role] ?? []) held.add(lens);
   }
   return LENSES.filter((l) => held.has(l));
 }
