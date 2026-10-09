@@ -13,3 +13,7 @@ playwright-report
 .DS_Store
 coverage
 .seed-credentials.local
+
+# Presentation files (not committed)
+docs/*.pptx
+docs/*.mp4
