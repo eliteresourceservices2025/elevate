@@ -23,7 +23,11 @@ config({ path: ".env.talenthr.local" });
 
 const args = process.argv.slice(2).filter((a) => a !== "--");
 const flag = (n: string) => args.includes(n);
-const value = (n: string) => args[args.indexOf(n) + 1];
+// The word after a flag, or undefined when the flag is not there (indexOf gives -1 then, and -1 + 1 would read the first word).
+const value = (n: string) => {
+  const i = args.indexOf(n);
+  return i === -1 ? undefined : args[i + 1];
+};
 
 const apiKey = process.env.TALENTHR_API_KEY?.trim();
 if (!apiKey) {
