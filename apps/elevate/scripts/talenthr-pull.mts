@@ -4,6 +4,7 @@
 //   - all jobs and applicants, kept as one encrypted archive; ACTIVE applicants are also loaded into recruiting (jobs come in closed, no emails)
 //
 //   pnpm talenthr:pull -- --probe                          checks the API key (one read-only call) and says which way it works
+//   pnpm talenthr:pull -- --shape                          prints the field names of TalentHR's people list (names and counts only, no values)
 //   pnpm talenthr:pull -- --as hr@example.com --dry-run    counts what would be pulled, writes nothing
 //   pnpm talenthr:pull -- --as hr@example.com              does it (safe to run again: what was imported is skipped)
 //   add --only a@x.com,b@x.com to try a few people first (applicants are skipped then); add --no-applicants to leave recruiting alone
@@ -37,6 +38,17 @@ if (flag("--probe")) {
     process.exit(1);
   }
   console.log(`The key works (${scheme === "key-as-user" ? "sent as the user name" : "sent as the password"}).`);
+  process.exit(0);
+}
+
+if (flag("--shape")) {
+  // Which fields does TalentHR's people list carry? Prints field NAMES and how many people have a value, never a value.
+  const scheme = (await probeTalentHr(apiKey)) ?? "key-as-user";
+  const rows = (await createTalentHrClient({ apiKey, scheme }).directory()) as unknown as Record<string, unknown>[];
+  const names = new Map<string, number>();
+  for (const r of rows) for (const [k, v] of Object.entries(r)) if (v !== null && v !== undefined && String(v).trim() !== "") names.set(k, (names.get(k) ?? 0) + 1);
+  console.log(`People in the list: ${rows.length}. Fields and how many people have a value:`);
+  for (const [k, n] of [...names.entries()].sort()) console.log(`  ${k}: ${n}`);
   process.exit(0);
 }
 
