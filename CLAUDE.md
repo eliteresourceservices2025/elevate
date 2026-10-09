@@ -404,7 +404,7 @@ The audit log is insert-only at the database level (trigger). Test data written 
 - **Audit:** call `writeAudit()` for logins, role changes, approvals, exports, imports, sensitive views, and every create/update/delete on employee data (store before/after JSON, minus secrets).
 - **RLS:** every new table gets `ENABLE ROW LEVEL SECURITY` in its migration with no public policies.
 - **Secrets:** only `NEXT_PUBLIC_*` values may reach the browser. Never log tokens, passwords, government IDs or file contents. Sentry must not receive PII.
-- **Files:** private buckets only; signed URLs expire in 60 seconds; allowlist PDF, JPG, PNG, DOCX up to 10 MB; check MIME type server-side.
+- **Files:** private buckets only; signed URLs expire in 60 seconds; allowlist PDF, JPG, PNG, WEBP, DOC, DOCX up to 10 MB, judged by the file's bytes (`sniffFileKind`), never its name; check MIME type server-side. An old-format Word file (DOC) is accepted only when it holds a Word part and no macro project, a DOCX only with no `vbaProject`; Excel, PowerPoint, Outlook files and anything with macros stay refused.
 - **Rate limit** login, careers apply, and Safe Voice endpoints with Upstash.
 - **Safe Voice** is anonymous: it runs on its own subdomain/app, never reads auth cookies or sessions, never stores user ID, IP, user agent or file metadata. Reporters get a random case code + passphrase (hashed with a pepper). Only designated handlers can read cases.
 - **No patient data (HIPAA):** no module may have fields for client patient information. Upload screens show a warning not to upload client records.

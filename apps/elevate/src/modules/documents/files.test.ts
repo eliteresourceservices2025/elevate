@@ -19,6 +19,27 @@ describe("sniffFileKind (by bytes, not by name)", () => {
     expect(sniffFileKind(zip("readme.txt"))).toBeNull(); // plain zip
   });
 
+  it("refuses a Word file that carries a macro project, even one renamed to .docx", () => {
+    const zip = (...names: string[]) => new Uint8Array([0x50, 0x4b, 0x03, 0x04, ...names.flatMap((n) => [0, ...ascii(n)])]);
+    expect(sniffFileKind(zip("[Content_Types].xml", "word/document.xml", "word/vbaProject.bin"))).toBeNull();
+  });
+
+  it("recognises WEBP by its RIFF header and refuses other RIFF files", () => {
+    const riff = (form: string) => new Uint8Array([...ascii("RIFF"), 0x10, 0, 0, 0, ...ascii(form), 1, 2, 3, 4]);
+    expect(sniffFileKind(riff("WEBP"))).toBe("webp");
+    expect(sniffFileKind(riff("WAVE"))).toBeNull(); // audio
+    expect(sniffFileKind(riff("AVI "))).toBeNull(); // video
+  });
+
+  it("accepts an old Word file only: not Excel or PowerPoint, and not one with macros", () => {
+    const ole = (...parts: string[]) => new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, ...parts.flatMap((p) => [0, 0, ...ascii(p).flatMap((b) => [b, 0])])]);
+    expect(sniffFileKind(ole("Root Entry", "WordDocument", "SummaryInformation"))).toBe("doc");
+    expect(sniffFileKind(ole("Root Entry", "Workbook"))).toBeNull(); // Excel
+    expect(sniffFileKind(ole("Root Entry", "PowerPoint Document"))).toBeNull();
+    expect(sniffFileKind(ole("Root Entry", "WordDocument", "Macros", "_VBA_PROJECT"))).toBeNull(); // Word with macros
+    expect(sniffFileKind(ole("Root Entry", "WordDocument", "_VBA_PROJECT_CUR"))).toBeNull();
+  });
+
   it("rejects executables, scripts, HTML, SVG and tiny or empty files", () => {
     expect(sniffFileKind(new Uint8Array([...ascii("MZ"), 0x90, 0, 3, 0, 0, 0, 4, 0]))).toBeNull(); // Windows program
     expect(sniffFileKind(new Uint8Array(ascii("<html><script>alert(1)</script>")))).toBeNull();
@@ -34,9 +55,9 @@ describe("sniffFileKind (by bytes, not by name)", () => {
 });
 
 describe("mime allowlist", () => {
-  it("has exactly PDF, JPG, PNG and DOCX", () => {
+  it("has exactly PDF, JPG, PNG, WEBP, DOC and DOCX", () => {
     expect(ALLOWED_MIME_TYPES.sort()).toEqual(Object.values(FILE_TYPES).map((t) => t.mime).sort());
-    expect(ALLOWED_MIME_TYPES).toHaveLength(4);
+    expect(ALLOWED_MIME_TYPES).toHaveLength(6);
   });
   it("maps a declared type to a kind", () => {
     expect(kindFromMime("application/pdf")).toBe("pdf");

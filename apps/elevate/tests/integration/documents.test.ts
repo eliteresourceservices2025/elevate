@@ -128,7 +128,7 @@ describe("upload and checks", () => {
     expect(mismatch.finalize).toMatchObject({ ok: false, error: expect.stringMatching(/does not match/) });
 
     const exe = await upload({ actor: hr, employeeId: p.id, bytes: EXE_BYTES, mime: "application/pdf" });
-    expect(exe.finalize).toMatchObject({ ok: false, error: expect.stringMatching(/not a PDF, JPG, PNG or DOCX/) });
+    expect(exe.finalize).toMatchObject({ ok: false, error: expect.stringMatching(/not a PDF, JPG, PNG, WEBP, DOC or DOCX/) });
 
     // both attempts were discarded: no row, no stored object
     for (const r of [mismatch, exe]) {
@@ -162,7 +162,7 @@ describe("upload and checks", () => {
     expect((await upload({ ...base, slug: "nbi_clearance" })).ticket).toMatchObject({ ok: false, error: expect.stringMatching(/expiry date/) });
     expect((await upload({ ...base, slug: "nbi_clearance", expiresOn: addDays(today, -1) })).ticket).toMatchObject({ ok: false, error: expect.stringMatching(/already passed/) });
     expect((await upload({ ...base, acknowledged: false })).ticket).toMatchObject({ ok: false, error: expect.stringMatching(/no client or patient information/) });
-    expect((await upload({ ...base, mime: "text/html" })).ticket).toMatchObject({ ok: false, error: expect.stringMatching(/Only PDF, JPG, PNG and DOCX/) });
+    expect((await upload({ ...base, mime: "text/html" })).ticket).toMatchObject({ ok: false, error: expect.stringMatching(/Only PDF, JPG, PNG, WEBP, DOC or DOCX/) });
     expect((await upload({ ...base, slug: "company_policy" })).ticket).toMatchObject({ ok: false, error: "Choose a document type." }); // company type on a person
     expect((await upload({ ...base, slug: "nbi_clearance", expiresOn: addDays(today, 200) })).ticket.ok).toBe(true);
 

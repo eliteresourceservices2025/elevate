@@ -46,7 +46,7 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
 
   // A program disguised as a PDF is refused by the server and leaves nothing behind
   await fill("Sneaky", { name: "invoice.pdf", mimeType: "application/pdf", buffer: Buffer.from([0x4d, 0x5a, 0x90, 0, 3, 0, 0, 0, 4, 0, 0, 0, 0xff, 0xff, 0, 0]) });
-  await expect(page.getByText("not a PDF, JPG, PNG or DOCX")).toBeVisible();
+  await expect(page.getByText("not a PDF, JPG, PNG, WEBP, DOC or DOCX")).toBeVisible();
   await expect(page.getByRole("row", { name: /Sneaky/ })).toHaveCount(0);
 
   // The bucket itself is private: the stored object cannot be fetched without a signed link

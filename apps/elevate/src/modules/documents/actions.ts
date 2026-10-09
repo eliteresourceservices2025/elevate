@@ -12,7 +12,7 @@ import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-act
 import { writeAudit } from "@/modules/audit/write";
 import { todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
-import { MAX_FILE_BYTES, extensionOf, kindFromMime, mimeOf, sanitizeFileName, sniffFileKind } from "./files";
+import { ALLOWED_TYPES_TEXT, MAX_FILE_BYTES, extensionOf, kindFromMime, mimeOf, sanitizeFileName, sniffFileKind } from "./files";
 import { documentTypes, documents } from "./schema";
 import { clientChoices } from "./service";
 import { BUCKETS, getDocumentStorage, type Bucket } from "./storage";
@@ -83,7 +83,7 @@ export async function requestUpload(input: unknown): Promise<ActionResult<Upload
     }
 
     const kind = kindFromMime(v.mimeType);
-    if (!kind) return fail("Only PDF, JPG, PNG and DOCX files are allowed.");
+    if (!kind) return fail(`Only ${ALLOWED_TYPES_TEXT} files are allowed.`);
     if (!(await allowRequest("upload", actor.id))) return fail("Too many uploads. Wait a few minutes and try again.");
 
     const [{ pending }] = await db
@@ -164,7 +164,7 @@ export async function finalizeUpload(input: unknown): Promise<ActionResult> {
 
     if (bytes.length === 0 || bytes.length > MAX_FILE_BYTES) return rejectWith("size", "Files can be 10 MB at most.");
     const kind = sniffFileKind(bytes);
-    if (!kind) return rejectWith("type", "That file is not a PDF, JPG, PNG or DOCX, so it was not saved.");
+    if (!kind) return rejectWith("type", `That file is not a ${ALLOWED_TYPES_TEXT}, or a Word file with macros, so it was not saved.`);
     if (kind !== kindFromMime(doc.mimeType ?? "")) return rejectWith("mismatch", "The file does not match the type you chose, so it was not saved.");
 
     const sha256 = createHash("sha256").update(bytes).digest("hex");

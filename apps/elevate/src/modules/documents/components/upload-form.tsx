@@ -8,7 +8,7 @@ import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cancelUpload, finalizeUpload, requestUpload } from "../actions";
-import { ALLOWED_MIME_TYPES, MAX_FILE_BYTES, formatBytes } from "../files";
+import { ALLOWED_MIME_TYPES, ALLOWED_TYPES_TEXT, MAX_FILE_BYTES, formatBytes } from "../files";
 import type { TypeOption } from "../queries";
 
 type Props = {
@@ -45,7 +45,7 @@ export function UploadForm({ target, employeeId, types, clients, today }: Props)
     const file = fileInput.current?.files?.[0];
     if (!file) return void toast.error("Choose a file.");
     if (file.size > MAX_FILE_BYTES) return void toast.error(`That file is ${formatBytes(file.size)}. Files can be 10 MB at most.`);
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) return void toast.error("Only PDF, JPG, PNG and DOCX files are allowed.");
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) return void toast.error(`Only ${ALLOWED_TYPES_TEXT} files are allowed.`);
 
     startTransition(async () => {
       setStatus("Preparing…");
@@ -147,7 +147,7 @@ export function UploadForm({ target, employeeId, types, clients, today }: Props)
           className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:bg-secondary file:px-3 file:py-1.5 file:text-sm"
           required
         />
-        <p className="text-xs text-muted-foreground">PDF, JPG, PNG or DOCX, up to 10 MB.</p>
+        <p className="text-xs text-muted-foreground">{ALLOWED_TYPES_TEXT}, up to 10 MB.</p>
       </div>
 
       <label className="flex items-start gap-2 text-sm">

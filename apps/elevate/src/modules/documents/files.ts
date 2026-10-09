@@ -11,7 +11,13 @@ export const FILE_TYPES = {
     extension: "docx",
     label: "DOCX",
   },
+  webp: { mime: "image/webp", extension: "webp", label: "WEBP" },
+  // The old Word format. Judged by its contents (see sniffFileKind): only a Word document with no macros is accepted.
+  doc: { mime: "application/msword", extension: "doc", label: "DOC" },
 } as const;
+
+/** The types people see in messages and hints. */
+export const ALLOWED_TYPES_TEXT = "PDF, JPG, PNG, WEBP, DOC or DOCX";
 
 export type FileKind = keyof typeof FILE_TYPES;
 
@@ -36,8 +42,9 @@ export function kindFromMime(mime: string): FileKind | null {
 
 const startsWith = (bytes: Uint8Array, signature: readonly number[]) => signature.every((b, i) => bytes.at(i) === b);
 
-const includesAscii = (bytes: Uint8Array, text: string): boolean => {
-  const needle = Array.from(text, (c) => c.charCodeAt(0));
+/** Looks for plain text (`wide` = as UTF-16, how an old Word file names its parts, with a zero byte after each letter). */
+const includesAscii = (bytes: Uint8Array, text: string, wide = false): boolean => {
+  const needle = Array.from(text, (c) => c.charCodeAt(0)).flatMap((b) => (wide ? [b, 0] : [b]));
   outer: for (let i = 0; i <= bytes.length - needle.length; i++) {
     for (let j = 0; j < needle.length; j++) {
       // eslint-disable-next-line security/detect-object-injection -- numeric loop indexes
@@ -51,7 +58,10 @@ const includesAscii = (bytes: Uint8Array, text: string): boolean => {
 /**
  * What the file really is, judged by its bytes, never by its name or declared type.
  * DOCX must be a ZIP that contains [Content_Types].xml and word/, which rules out plain ZIPs,
- * spreadsheets and presentations.
+ * spreadsheets and presentations, and must carry no macro project (a .docm renamed to .docx is refused).
+ * DOC must be an old-format container (the shared signature of Word, Excel, PowerPoint and Outlook files) that holds a
+ * "WordDocument" part and no macro project, which rules out the other three and any Word file with macros.
+ * WEBP is a RIFF container whose form type is WEBP.
  */
 export function sniffFileKind(bytes: Uint8Array): FileKind | null {
   if (bytes.length < 8) return null;
@@ -59,7 +69,13 @@ export function sniffFileKind(bytes: Uint8Array): FileKind | null {
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "jpg";
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "png";
   if (startsWith(bytes, [0x50, 0x4b, 0x03, 0x04])) {
-    return includesAscii(bytes, "[Content_Types].xml") && includesAscii(bytes, "word/") ? "docx" : null;
+    return includesAscii(bytes, "[Content_Types].xml") && includesAscii(bytes, "word/") && !includesAscii(bytes, "vbaProject") ? "docx" : null;
+  }
+  if (bytes.length >= 12 && startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && bytes.at(8) === 0x57 && bytes.at(9) === 0x45 && bytes.at(10) === 0x42 && bytes.at(11) === 0x50) return "webp"; // RIFF....WEBP
+  if (startsWith(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) {
+    const isWord = includesAscii(bytes, "WordDocument", true);
+    const hasMacros = includesAscii(bytes, "_VBA_PROJECT", true) || includesAscii(bytes, "Macros", true);
+    return isWord && !hasMacros ? "doc" : null;
   }
   return null;
 }
