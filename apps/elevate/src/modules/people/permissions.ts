@@ -7,6 +7,8 @@ export const peoplePermissions = definePermissions({
   "people.view_directory": {
     roles: { super_admin: "all", hr_admin: "all", team_lead: "all", recruiter: "all", executive: "all", employee: "all" },
   },
+  // A profile photo: everyone sets and removes their own; HR and Super Admin can also remove anyone's.
+  "people.manage_photo": { roles: { super_admin: "all", hr_admin: "all", team_lead: "own", recruiter: "own", executive: "own", employee: "own" } },
   "people.view_profile": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", employee: "own" } },
   // Employees see their own values masked; decrypting any value is audited.
   "people.view_sensitive": { roles: { super_admin: "all", hr_admin: "all", employee: "own" } },

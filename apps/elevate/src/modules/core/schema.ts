@@ -17,6 +17,9 @@ export const users = core
       archivedAt: timestamp("archived_at", { withTimezone: true }),
       // The quick tour starts by itself for a new account until this is set (finished or skipped); anyone can replay it from Settings.
       onboardingTourSeenAt: timestamp("onboarding_tour_seen_at", { withTimezone: true }),
+      // Profile photo: a path in the private employee-docs bucket (avatars/<user id>/<random>.jpg), written only by the photo service.
+      photoPath: text("photo_path"),
+      photoUpdatedAt: timestamp("photo_updated_at", { withTimezone: true }),
     },
     (t) => [uniqueIndex("users_email_lower_idx").on(sql`lower(${t.email})`)],
   )

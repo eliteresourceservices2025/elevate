@@ -16,6 +16,7 @@ import { getClockStatus } from "@/modules/attendance/queries";
 import { countMyUnread } from "@/modules/notifications/queries";
 import { getMyDisplayName } from "@/modules/people/queries";
 import { tourStartsByItself } from "@/modules/dashboard/tour";
+import { getMyPhotoVersion } from "@/modules/people/photo-queries";
 import { roleLabel } from "@/lib/roles";
 import { PrivacyGate } from "@/modules/privacy/components/privacy-gate";
 import { getPrivacyGate } from "@/modules/privacy/queries";
@@ -31,7 +32,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     console.error("layout read skipped:", error instanceof Error ? error.name : "unknown error");
     return fallback;
   });
-  const [gate, unread, pending, clock, accountName, tourAutoStart] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null), optional(tourStartsByItself(), false)]);
+  const [gate, unread, pending, clock, accountName, tourAutoStart, photoVersion] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null), optional(tourStartsByItself(), false), optional(getMyPhotoVersion(), null)]);
   if (gate) {
     return (
       <PrivacyGate versionId={gate.versionId} title={gate.title} version={gate.version} updated={gate.updated} changeNote={gate.changeNote}>
@@ -56,6 +57,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       zone={DEFAULT_TIMEZONE}
       email={user.email}
       accountName={accountName}
+      userId={user.id}
+      photoVersion={photoVersion}
       roles={user.roles.filter((r) => r !== "employee").map(roleLabel)}
       unread={unread}
       clock={clock}

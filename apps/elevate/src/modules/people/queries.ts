@@ -7,6 +7,7 @@ import { fieldCrypto } from "@/lib/crypto";
 import { alias } from "drizzle-orm/pg-core";
 import { writeAudit } from "@/modules/audit/write";
 import { teams } from "@/modules/org/schema";
+import { users } from "@/modules/core/schema";
 import { managerChainUserIds } from "@/modules/org/service";
 import type { ChangeCategory, ChangeStatus, CustomFieldType, CustomFieldVisibility, EmployeeStatus } from "./constants";
 import {
@@ -297,6 +298,10 @@ export async function getProfile(employeeId: string) {
   // A manager sees a report's work details, not their private ones.
   const hide = access.limitedView;
 
+  // The photo (a picture, not a detail): its address needs the account id and the time it last changed.
+  const [photoRow] = e.userId ? await db.select({ path: users.photoPath, at: users.photoUpdatedAt }).from(users).where(eq(users.id, e.userId)).limit(1) : [];
+  const photo = e.userId && photoRow?.path && photoRow.at ? { userId: e.userId, version: photoRow.at.getTime() } : null;
+
   return {
     employee: {
       id: e.id,
@@ -328,6 +333,7 @@ export async function getProfile(employeeId: string) {
       endDate: e.endDate,
       linked: e.userId !== null,
       archived: e.archivedAt !== null,
+      photo,
     },
     access,
     emergencyContacts: contacts,

@@ -19,6 +19,8 @@ export function AppHeader({
   zone,
   email,
   accountName = null,
+  userId,
+  photoVersion = null,
   roles = [],
   unread = 0,
   clock = null,
@@ -34,6 +36,8 @@ export function AppHeader({
   zone?: string | null;
   email?: string;
   accountName?: string | null;
+  userId?: string;
+  photoVersion?: number | null;
   roles?: string[];
   unread?: number;
   clock?: ClockStatus | null;
@@ -89,7 +93,7 @@ export function AppHeader({
       <NotificationBell key={unread} unread={unread} />
       <ClockWidget status={clock} />
       {/* The badge (initials) opens the account menu: profile, my data, the quick tour and Sign out, which asks first */}
-      <AccountMenu name={accountName} email={email ?? ""} roles={roles} clocked={clock !== null && clock.state !== "out"} />
+      <AccountMenu name={accountName} email={email ?? ""} roles={roles} clocked={clock !== null && clock.state !== "out"} userId={userId} photoVersion={photoVersion} />
     </header>
   );
 }

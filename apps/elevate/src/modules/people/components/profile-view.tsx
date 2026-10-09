@@ -17,6 +17,8 @@ import {
 } from "@/modules/people/components/profile-sections";
 import { EmployeeDocuments } from "@/modules/documents/components/employee-documents";
 import { displayName } from "@/modules/people/format";
+import { initialsOf } from "@/lib/initials";
+import { ChangePhotoButton, ProfilePicture, RemovePhotoButton } from "@/modules/people/components/profile-picture";
 import { listOrgOptions } from "@/modules/org/queries";
 import { getProfile, listClientsForFilter } from "@/modules/people/queries";
 
@@ -57,7 +59,13 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
           </Link>
         )}
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="flex items-start gap-4">
+            <div className="flex flex-col items-center gap-1">
+              <ProfilePicture initials={initialsOf(displayName(e), e.workEmail)} photo={e.photo} />
+              {own || access.isSelf ? <ChangePhotoButton hasPhoto={e.photo !== null} /> : null}
+              {!own && !access.isSelf && e.photo && access.canEdit ? <RemovePhotoButton userId={e.photo.userId} /> : null}
+            </div>
+            <div>
             <h1 className="text-2xl font-bold">{displayName(e)}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span>{e.employeeNumber}</span>
@@ -67,6 +75,7 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
               {e.archived ? <Badge variant="outline">Archived</Badge> : null}
               {access.canEdit && !e.linked ? <Badge variant="outline">Not signed in yet</Badge> : null}
             </p>
+            </div>
           </div>
           {access.canEdit ? (
             <div className="flex gap-2">
