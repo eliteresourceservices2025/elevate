@@ -25,7 +25,10 @@ test("the quick tour starts for a new account, walks through, stops starting by 
     await expect(title).not.toHaveText(before!); // wait for the next step to be in place before pressing again
   }
   await expect(page.getByRole("dialog", { name: "You are all set" })).toBeVisible();
+  // Finishing records that the tour was seen; wait for that request to land before reloading (a reload would cancel it)
+  const recorded = page.waitForResponse((r) => r.request().method() === "POST" && r.request().headers()["next-action"] !== undefined);
   await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
+  await recorded;
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // Finished: a reload does not start it again.

@@ -40,6 +40,9 @@ test("a plain employee sees one view, no HR buttons, and no manager numbers", as
 
 test("search finds pages and people with Ctrl+K, and an employee never gets applicants", async ({ browser }) => {
   test.setTimeout(150_000);
+  // A person made just for this test, so it does not depend on what else is in the local database
+  const findable = `Findable${Date.now().toString(36)}`;
+  await createEmployeeAccount("Seek", findable);
   const hr = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(hr, await createHrAccount());
 
@@ -49,7 +52,7 @@ test("search finds pages and people with Ctrl+K, and an employee never gets appl
   await expect(box).toBeFocused();
   await box.fill("org ch");
   await expect(hr.getByRole("option", { name: /Org chart/ })).toBeVisible({ timeout: 15_000 });
-  await box.fill("Abear");
+  await box.fill(findable);
   await expect(hr.getByRole("group", { name: "People" }).getByRole("option").first()).toBeVisible({ timeout: 15_000 });
   await hr.keyboard.press("Enter");
   await hr.waitForURL(/\/people\//);
@@ -60,7 +63,7 @@ test("search finds pages and people with Ctrl+K, and an employee never gets appl
   await emp.keyboard.press("Control+k");
   await emp.getByRole("combobox", { name: "Search" }).fill("a");
   await expect(emp.getByText("Type at least two letters.")).toBeVisible();
-  await emp.getByRole("combobox", { name: "Search" }).fill("Abear");
+  await emp.getByRole("combobox", { name: "Search" }).fill(findable);
   await expect(emp.getByRole("group", { name: "People" }).getByRole("option").first()).toBeVisible({ timeout: 15_000 });
   await expect(emp.getByRole("group", { name: "Applicants" })).toHaveCount(0);
   await expect(emp.getByRole("group", { name: "Equipment" })).toHaveCount(0);
