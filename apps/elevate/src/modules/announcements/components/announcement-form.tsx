@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { MarkdownField } from "@/components/markdown-field";
+import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import { createAnnouncement, updateAnnouncement } from "../actions";
 
 type Option = { id: string; name?: string; title?: string };
@@ -45,6 +46,7 @@ export function AnnouncementForm({
   const [dueOn, setDueOn] = useState(edit?.dueOn ?? "");
   const [attachment, setAttachment] = useState(edit?.attachmentDocumentId ?? "");
 
+  useWarnWhenEdited({ title, body, audience, teamIds, pinned, requiresAck, dueOn, attachment });
   const locked = edit?.textLocked ?? false;
   const toggleTeam = (id: string) => setTeamIds((ids) => (ids.includes(id) ? ids.filter((t) => t !== id) : [...ids, id]));
 

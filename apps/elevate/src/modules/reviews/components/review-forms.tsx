@@ -2,6 +2,7 @@
 
 /* eslint-disable security/detect-object-injection -- keys are question ids from the cycle's own list */
 import { useState } from "react";
+import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -18,6 +19,7 @@ export function ReviewForm({ reviewId, questions, role }: { reviewId: string; qu
   const [answers, setAnswers] = useState<Answers>({});
   const [overall, setOverall] = useState("");
   const [comments, setComments] = useState("");
+  useWarnWhenEdited({ answers, overall, comments });
   const set = (id: string, patch: { rating?: number; text?: string }) => setAnswers((a) => ({ ...a, [id]: { ...a[id], ...patch } }));
   return (
     <form

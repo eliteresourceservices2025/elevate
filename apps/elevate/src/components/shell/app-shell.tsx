@@ -2,6 +2,7 @@
 
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { UnsavedChangesProvider } from "@/components/unsaved-changes";
 import { AppHeader } from "./app-header";
 import { SidebarNav } from "./sidebar-nav";
 import { SIDEBAR_COOKIE } from "./sidebar-cookie";
@@ -44,9 +45,11 @@ export function AppShell({ initialCollapsed, banner, children, ...header }: Head
         <div className="flex-1 overflow-y-auto print:overflow-visible">
           {banner}
           {/* Side padding: 16px on a phone, 40px on a tablet or laptop, 48px on a large screen. Pages fill the width between. */}
-          <main id="main" className="px-4 py-5 md:px-10 md:py-6 2xl:px-12 print:p-0">
-            {children}
-          </main>
+          <UnsavedChangesProvider>
+            <main id="main" className="px-4 py-5 md:px-10 md:py-6 2xl:px-12 print:p-0">
+              {children}
+            </main>
+          </UnsavedChangesProvider>
         </div>
       </div>
     </div>

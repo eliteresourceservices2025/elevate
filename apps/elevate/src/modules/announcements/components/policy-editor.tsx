@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { MarkdownField } from "@/components/markdown-field";
+import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import { archivePolicy, createPolicy, discardDraft, publishDraft, saveDraft } from "../actions";
 
 const MARKDOWN_HINT = "Formatting: **bold**, *italic*, # heading, - bullet list, 1. numbered list, [link text](https://example.com).";
@@ -29,6 +30,7 @@ export function NewPolicyForm({ today }: { today: string }) {
   const [body, setBody] = useState("");
   const [requiresAck, setRequiresAck] = useState(true);
   const [dueOn, setDueOn] = useState("");
+  useWarnWhenEdited({ title, body, requiresAck, dueOn });
 
   return (
     <form
@@ -74,12 +76,14 @@ export function DraftEditor({
   const [changeNote, setChangeNote] = useState(initial.changeNote ?? "");
   const [requiresAck, setRequiresAck] = useState(initial.requiresAck);
   const [dueOn, setDueOn] = useState(initial.dueOn ?? "");
+  const { markSaved } = useWarnWhenEdited({ body, changeNote, requiresAck, dueOn });
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string) =>
     startTransition(async () => {
       const result = await fn();
       if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
       toast.success(success);
+      markSaved();
       router.refresh();
     });
   const save = () => saveDraft({ policyId, body, changeNote, requiresAck, dueOn });

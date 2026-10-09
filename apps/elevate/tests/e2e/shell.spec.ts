@@ -98,3 +98,31 @@ test("the header shows a badge with initials, and Sign out asks first", async ({
   await page.getByRole("alertdialog").getByRole("button", { name: "Sign out" }).click();
   await page.waitForURL(/\/login/);
 });
+
+test("leaving a form with unsaved changes asks first; a clean form does not", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 700 } })).newPage();
+  await signInEnrollingMfa(page, await createHrAccount());
+  const menuLink = page.locator("#main-nav").getByRole("link", { name: "People", exact: true });
+
+  // Nothing typed: the menu link just goes.
+  await page.goto("/announcements/new");
+  await waitForHydration(page, "#an-title");
+  await menuLink.click();
+  await page.waitForURL(/\/people$/);
+
+  // Typed something: the link stops and asks. Keep editing stays, Leave page goes.
+  await page.goto("/announcements/new");
+  await waitForHydration(page, "#an-title");
+  await page.getByLabel("Title").fill("A half-written announcement");
+  await menuLink.click();
+  const dialog = page.getByRole("alertdialog", { name: "Leave without saving?" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Keep editing" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(/\/announcements\/new/);
+  await expect(page.getByLabel("Title")).toHaveValue("A half-written announcement");
+  await menuLink.click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Leave page" }).click();
+  await page.waitForURL(/\/people$/);
+});

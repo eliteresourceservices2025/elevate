@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { FormSection, SelectField, TextField } from "@/components/form-fields";
 import { PersonPicker, type PickerOption } from "@/components/person-picker";
 import { Button } from "@/components/ui/button";
+import { useUnsavedChanges } from "@/components/unsaved-changes";
 import { createEmployee, updateEmployee } from "../actions";
 import { CIVIL_STATUSES, EMPLOYEE_STATUSES, WORKER_TYPES, statusLabel } from "../constants";
 import { createEmployeeSchema, employeeFieldsSchema, type EmployeeFieldsInput } from "../validators";
@@ -33,11 +34,12 @@ export function EmployeeForm(props: Props) {
     register,
     handleSubmit,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(creating ? createEmployeeSchema : employeeFieldsSchema) as unknown as Resolver<FormValues>,
     defaultValues: { status: "onboarding", workerType: "contractor", country: "PH", ...props.defaults },
   });
+  useUnsavedChanges(isDirty && !isSubmitting);
   const status = useWatch({ control, name: "status" });
 
   async function onSubmit(values: FormValues) {

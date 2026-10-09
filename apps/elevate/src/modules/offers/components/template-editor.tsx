@@ -6,6 +6,7 @@ import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { archiveOfferTemplate, saveOfferTemplate } from "../actions";
 import { DEFAULT_OFFER_TEMPLATE, MERGE_FIELDS, renderText, templateProblem } from "../merge";
@@ -21,6 +22,7 @@ export function TemplateEditor({ templates }: { templates: TemplateRow[] }) {
   const [description, setDescription] = useState("");
   const [body, setBody] = useState(DEFAULT_OFFER_TEMPLATE);
 
+  useWarnWhenEdited({ name, description, body }, editing?.id ?? "new");
   const problem = templateProblem(body);
   const load = (t: TemplateRow | null) => {
     setEditing(t);

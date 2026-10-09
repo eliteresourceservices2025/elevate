@@ -5,6 +5,7 @@ import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import { saveOpening, saveRetention, setOpeningStatus } from "../actions";
 import type { OpeningStatus } from "../constants";
 import type { PersonChoice } from "../queries";
@@ -15,6 +16,7 @@ type OpeningValues = { id?: string; title: string; description: string; location
 export function OpeningForm({ initial, teams, people }: { initial?: Partial<OpeningValues>; teams: { id: string; name: string }[]; people: PersonChoice[] }) {
   const { run, pending, router } = useRun();
   const [v, setV] = useState<OpeningValues>({ title: "", description: "", location: "Remote", payNote: "", teamId: "", sendAck: true, sendRejection: true, hiringTeamUserIds: [], ...initial });
+  useWarnWhenEdited(v);
   const set = <K extends keyof OpeningValues>(k: K, value: OpeningValues[K]) => setV((s) => ({ ...s, [k]: value }));
 
   return (
