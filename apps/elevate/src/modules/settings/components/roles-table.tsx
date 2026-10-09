@@ -213,7 +213,7 @@ export function RolesTable({ people, currentUserId }: { people: PersonRow[]; cur
         </Label>
         <Input id="roles-filter" className="h-8 w-64" value={filter} onChange={(e) => setFilter(e.target.value)} />
       </div>
-    <Table>
+    <Table containerClassName="[--shadow-cover:var(--background)]">
       <TableHeader>
         <TableRow>
           <TableHead>Person</TableHead>

@@ -27,7 +27,7 @@ export function CaseList({ rows, info, filter }: { rows: CaseRow[]; info: PageIn
   if (info.total === 0) return <p className="text-sm text-muted-foreground">No cases here.</p>;
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-xl border bg-card">
+      <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
         <Table>
           <TableHeader>
             <TableRow>

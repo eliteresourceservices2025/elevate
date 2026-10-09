@@ -72,7 +72,7 @@ export function StatusTable({ rows }: { rows: StatusRow[] }) {
       {rows.length === 0 ? (
         <p className="text-muted-foreground">Nobody is expected to acknowledge this yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border bg-card">
+        <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
           <Table>
             <TableHeader>
               <TableRow>

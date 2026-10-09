@@ -103,7 +103,7 @@ export function InvitationsPanel({ invitations, now, canAssign }: { invitations:
         email is set up. If they do not receive it, tell them to use <strong>Accept an invite</strong> on the sign-in page with this exact
         address.
       </p>
-      <Table>
+      <Table containerClassName="[--shadow-cover:var(--background)]">
         <TableHeader>
           <TableRow>
             <TableHead>Email</TableHead>

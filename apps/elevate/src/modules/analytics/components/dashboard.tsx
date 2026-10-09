@@ -32,7 +32,7 @@ function BreakdownTable({ title, data }: { title: string; data: Breakdown }) {
       {data.rows.length === 0 && !data.other ? (
         <p className="text-sm text-muted-foreground">{data.hiddenAll ? "Every group here has fewer than 5 people, so none is shown." : "Nothing to show yet."}</p>
       ) : (
-        <Table>
+        <Table containerClassName="[--shadow-cover:var(--background)]">
           <caption className="sr-only">{title}</caption>
           <TableHeader>
             <TableRow>
@@ -197,7 +197,7 @@ export function AnalyticsDashboard({ data, canExport }: { data: Dashboard; canEx
           <section aria-label="Hiring funnel" className="space-y-2 rounded-xl border bg-card p-4">
             <h3 className="text-lg font-semibold">Hiring funnel</h3>
             <p className="text-sm text-muted-foreground">Applications that reached each stage, counted in the month they applied.</p>
-            <Table>
+            <Table containerClassName="[--shadow-cover:var(--background)]">
               <caption className="sr-only">Hiring funnel, all jobs</caption>
               <TableHeader>
                 <TableRow>
@@ -224,7 +224,7 @@ export function AnalyticsDashboard({ data, canExport }: { data: Dashboard; canEx
           {h.byJob.length > 0 || h.otherJobs ? (
             <section aria-label="Funnel by job" className="space-y-2 rounded-xl border bg-card p-4">
               <h3 className="text-lg font-semibold">By job</h3>
-              <Table>
+              <Table containerClassName="[--shadow-cover:var(--background)]">
                 <caption className="sr-only">Applications by job and stage</caption>
                 <TableHeader>
                   <TableRow>

@@ -45,7 +45,7 @@ export default async function AuditLogPage({ searchParams }: PageProps<"/setting
         </Button>
       </form>
 
-      <Table>
+      <Table containerClassName="[--shadow-cover:var(--background)]">
         <TableHeader>
           <TableRow>
             <TableHead>When</TableHead>

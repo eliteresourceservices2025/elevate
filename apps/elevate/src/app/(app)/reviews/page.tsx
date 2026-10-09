@@ -20,7 +20,7 @@ function ReviewTable({ rows, paging, label }: { rows: ReviewRow[]; paging: Pagin
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">Nothing here yet.</p>;
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-xl border bg-card">
+      <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -101,7 +101,7 @@ export default async function ReviewsPage({ searchParams }: PageProps<"/reviews"
           {summary.length === 0 ? (
             <p className="text-sm text-muted-foreground">No cycles yet.</p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border bg-card">
+            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
               <Table>
                 <TableHeader>
                   <TableRow>

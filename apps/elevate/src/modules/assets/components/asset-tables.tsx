@@ -23,7 +23,7 @@ export function StatusBadge({ status }: { status: AssetStatus }) {
 export function InventoryTable({ rows }: { rows: AssetRow[] }) {
   if (rows.length === 0) return <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">No items match.</p>;
   return (
-    <div className="overflow-x-auto rounded-xl border bg-card">
+    <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
       <table className="w-full text-sm">
         <thead className="border-b bg-secondary/40">
           <tr>
@@ -61,7 +61,7 @@ export function InventoryTable({ rows }: { rows: AssetRow[] }) {
 export function HeldTable({ rows, showPerson, empty }: { rows: HeldRow[]; showPerson?: boolean; empty: string }) {
   if (rows.length === 0) return <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">{empty}</p>;
   return (
-    <div className="overflow-x-auto rounded-xl border bg-card">
+    <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
       <table className="w-full text-sm">
         <thead className="border-b bg-secondary/40">
           <tr>
@@ -97,7 +97,7 @@ export function HeldTable({ rows, showPerson, empty }: { rows: HeldRow[]; showPe
 export function HistoryTable({ rows, showPerson, showStaff }: { rows: HistoryRow[]; showPerson: boolean; showStaff: boolean }) {
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">No hand-overs yet.</p>;
   return (
-    <div className="overflow-x-auto rounded-xl border bg-card">
+    <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
       <table className="w-full text-sm">
         <thead className="border-b bg-secondary/40">
           <tr>

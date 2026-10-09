@@ -40,7 +40,7 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
           <p className="text-muted-foreground">Nobody is clocked in right now.</p>
         ) : (
           <>
-            <div className="overflow-x-auto rounded-xl border bg-card">
+            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -81,7 +81,7 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
           <p className="text-muted-foreground">Nothing to look at.</p>
         ) : (
           <>
-            <div className="overflow-x-auto rounded-xl border bg-card">
+            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
               <Table>
                 <TableHeader>
                   <TableRow>

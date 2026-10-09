@@ -89,7 +89,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
           <p className="text-muted-foreground">Nothing is expiring in the next 30 days. Expired documents would appear here too.</p>
         ) : (
           <>
-          <div className="overflow-x-auto rounded-xl border bg-card">
+          <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -121,7 +121,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
           <p className="text-muted-foreground">Everyone has the documents marked &quot;Everyone needs one&quot;.</p>
         ) : (
           <>
-          <div className="overflow-x-auto rounded-xl border bg-card">
+          <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -151,7 +151,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
           <p className="text-muted-foreground">Everything uploaded has been verified.</p>
         ) : (
           <>
-          <div className="overflow-x-auto rounded-xl border bg-card">
+          <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>

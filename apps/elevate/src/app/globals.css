@@ -131,6 +131,20 @@
   --sidebar-ring: #e2be2b;
 }
 
+/* A table wider than the screen scrolls sideways inside its card. These edge shadows show there is more to the left or right and
+   fade away at the ends (the cover gradients scroll with the content; the shadows stay put). */
+.scroll-shadow-x {
+  background-image:
+    linear-gradient(to right, var(--shadow-cover, var(--card)), var(--shadow-cover, var(--card))),
+    linear-gradient(to left, var(--shadow-cover, var(--card)), var(--shadow-cover, var(--card))),
+    radial-gradient(farthest-side at 0 50%, color-mix(in srgb, var(--foreground) 24%, transparent), transparent),
+    radial-gradient(farthest-side at 100% 50%, color-mix(in srgb, var(--foreground) 24%, transparent), transparent);
+  background-position: left center, right center, left center, right center;
+  background-repeat: no-repeat;
+  background-size: 28px 100%, 28px 100%, 14px 100%, 14px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

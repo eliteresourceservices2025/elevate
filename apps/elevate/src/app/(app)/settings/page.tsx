@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileUp, History, ListChecks, Mail, ShieldCheck } from "lucide-react";
+import { FileText, FileUp, History, ListChecks, Mail, ShieldCheck } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -21,6 +21,13 @@ const SECTIONS = [
     icon: Mail,
     title: "Invitations",
     description: "Invite people to create an ELEVATE account.",
+  },
+  {
+    href: "/announcements?tab=policies",
+    action: "settings.manage_policies",
+    icon: FileText,
+    title: "Policies",
+    description: "Write and publish policies, including the privacy notice and the monitoring policy.",
   },
   {
     href: "/settings/import",
@@ -53,7 +60,7 @@ export default async function SettingsPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="mt-1 text-muted-foreground">Roles, policies, templates, time zones and the audit log.</p>
+        <p className="mt-1 text-muted-foreground">Access, invitations, policies, the TalentHR move and the audit log. You see only what your role allows.</p>
       </div>
       {visible.length === 0 ? (
         <p className="text-muted-foreground">There is nothing for you to change here.</p>

@@ -86,7 +86,7 @@ export default async function ImportBatchPage({ params, searchParams }: PageProp
         {rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No rows here.</p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border bg-card">
+          <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>

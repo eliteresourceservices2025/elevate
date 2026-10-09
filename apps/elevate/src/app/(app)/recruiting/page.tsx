@@ -76,7 +76,7 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
             <p className="text-muted-foreground">{canManage ? "No jobs yet. Create one to start receiving applications." : "You are not on the hiring team of any job."}</p>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-xl border bg-card">
+              <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -125,7 +125,7 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
         <p className="text-sm">
           <Link href="/recruiting/offer-templates" className="font-medium text-primary underline-offset-4 hover:underline">
             Offer templates
-          </Link>{" "}
+          </Link>
           <span className="text-muted-foreground">: the letters recruiters send for signature.</span>
         </p>
       ) : null}

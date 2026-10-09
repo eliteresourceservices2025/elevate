@@ -35,7 +35,7 @@ export default async function CyclePage({ params, searchParams }: PageProps<"/re
       </div>
       <CycleControls cycleId={cycle.id} open={cycle.status === "open"} />
       <div className="space-y-2">
-        <div className="overflow-x-auto rounded-xl border bg-card">
+        <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
           <Table>
             <TableHeader>
               <TableRow>

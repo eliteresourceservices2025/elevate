@@ -22,7 +22,7 @@ export function StatusBadge({ row }: { row: Pick<CredentialRow, "status" | "rene
 export function CredentialTable({ rows, empty, showPerson = false, canRemove = false }: { rows: CredentialRow[]; empty: string; showPerson?: boolean; canRemove?: boolean }) {
   if (rows.length === 0) return <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">{empty}</p>;
   return (
-    <div className="overflow-x-auto rounded-xl border bg-card">
+    <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
       <table className="w-full text-sm">
         <thead className="border-b bg-secondary/40">
           <tr>

@@ -49,7 +49,7 @@ export function HealthPanel({ health }: { health: SystemHealth }) {
       <section aria-label="Scheduled jobs" className="space-y-2">
         <h2 className="text-lg font-semibold">Scheduled jobs</h2>
         <p className="text-sm text-muted-foreground">A job that has not succeeded for more than two and a half times its usual interval shows as stopped, and HR is told. The host&apos;s own scheduler also runs the health check every 15 minutes in case the job service is down.</p>
-        <div className="overflow-x-auto rounded-xl border bg-card">
+        <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
           <Table>
             <TableHeader>
               <TableRow>

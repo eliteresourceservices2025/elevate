@@ -93,7 +93,13 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
         mine ? (
           <BalanceView data={mine} empty="You have no prize days yet. HR awards them, for example as a game prize." />
         ) : (
-          <p className="text-muted-foreground">No people record is linked to your account yet, so there are no prize days to show.</p>
+          <p className="text-muted-foreground">
+            No people record is linked to your account yet, so there are no prize days to show.{" "}
+            <Link href="/attendance" className="text-primary underline-offset-4 hover:underline">
+              Set up your profile
+            </Link>
+            .
+          </p>
         )
       ) : null}
 
@@ -136,7 +142,7 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
           {holidays.rows.length === 0 ? (
             <p className="text-muted-foreground">No holidays for {year} yet.</p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border bg-card">
+            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -187,7 +193,7 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
           {balances.rows.length === 0 ? (
             <p className="text-muted-foreground">Nobody holds prize days yet.</p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border bg-card">
+            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
               <Table>
                 <TableHeader>
                   <TableRow>

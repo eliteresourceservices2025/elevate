@@ -15,7 +15,7 @@ export function CaseTable({ rows, kind, page, pageSize, basePath }: { rows: Case
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">Nothing here yet.</p>;
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-xl border bg-card">
+      <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
         <Table>
           <TableHeader>
             <TableRow>

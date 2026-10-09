@@ -41,7 +41,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
           <h1 className="text-2xl font-bold">People</h1>
           <p className="mt-1 text-muted-foreground">{total} {total === 1 ? "person" : "people"}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {can(user, "people.approve_change") ? (
             <Link href="/people/requests" className={cn(buttonVariants({ variant: "outline" }))}>
               Change requests
@@ -70,14 +70,14 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
         </div>
       </div>
 
-      <form action="/people" className="flex flex-wrap items-end gap-3">
+      <form action="/people" className="flex flex-wrap items-end gap-3 [&>div]:w-full sm:[&>div]:w-auto">
         <div className="space-y-1.5">
           <Label htmlFor="q">Search</Label>
-          <Input id="q" name="q" defaultValue={query.q ?? ""} placeholder="Name, email, number, position" className="w-64" />
+          <Input id="q" name="q" defaultValue={query.q ?? ""} placeholder="Name, email, number, position" className="w-full sm:w-64" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="status">Status</Label>
-          <NativeSelect id="status" name="status" defaultValue={query.status ?? ""} className="w-40">
+          <NativeSelect id="status" name="status" defaultValue={query.status ?? ""} className="w-full sm:w-40">
             <option value="">All</option>
             {EMPLOYEE_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -88,7 +88,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="team">Team</Label>
-          <NativeSelect id="team" name="team" defaultValue={query.team ?? ""} className="w-48">
+          <NativeSelect id="team" name="team" defaultValue={query.team ?? ""} className="w-full sm:w-48">
             <option value="">All</option>
             {teamOptions.map((t) => (
               <option key={t.id} value={t.id}>
@@ -100,7 +100,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
         {clientOptions.length > 0 ? (
           <div className="space-y-1.5">
             <Label htmlFor="client">Client</Label>
-            <NativeSelect id="client" name="client" defaultValue={query.client ?? ""} className="w-56">
+            <NativeSelect id="client" name="client" defaultValue={query.client ?? ""} className="w-full sm:w-56">
               <option value="">All</option>
               {clientOptions.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -128,7 +128,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
         ) : null}
       </form>
 
-      <div className="overflow-x-auto rounded-xl border bg-card">
+      <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
         <DirectoryTable rows={rows} seesClients={seesClients} sort={query.sort} dir={query.dir} params={filters} />
       </div>
 

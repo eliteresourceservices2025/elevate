@@ -3,11 +3,16 @@
 import * as React from "react"
 import { cn } from "cn"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * A table wider than its box scrolls sideways inside this container, with edge shadows that show there is more to see
+ * (see .scroll-shadow-x). The shadows fade into the colour of whatever the table sits on: a card by default; for a table that
+ * sits straight on the page pass containerClassName="[--shadow-cover:var(--background)]".
+ */
+function Table({ className, containerClassName, ...props }: React.ComponentProps<"table"> & { containerClassName?: string }) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn("scroll-shadow-x relative w-full overflow-x-auto", containerClassName)}
     >
       <table
         data-slot="table"

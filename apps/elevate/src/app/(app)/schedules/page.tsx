@@ -75,7 +75,7 @@ export default async function SchedulesPage({ searchParams }: PageProps<"/schedu
           {team.rows.length === 0 ? (
             <p className="text-muted-foreground">Nobody reports to you yet.</p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border bg-card">
+            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
               <Table>
                 <TableHeader>
                   <TableRow>

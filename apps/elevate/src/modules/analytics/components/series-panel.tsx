@@ -117,7 +117,7 @@ export function SeriesPanel({
         </div>
       ) : (
         <div className="space-y-2">
-          <Table>
+          <Table containerClassName="[--shadow-cover:var(--background)]">
             <caption className="sr-only">{title}</caption>
             <TableHeader>
               <TableRow>

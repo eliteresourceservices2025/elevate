@@ -43,7 +43,7 @@ export function BalanceView({ data, empty }: { data: PersonTimeOff; empty?: stri
         {data.lines.length === 0 ? (
           <p className="text-muted-foreground">Nothing yet. Every award, use, correction and expiry appears here.</p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border bg-card">
+          <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
