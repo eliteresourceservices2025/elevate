@@ -5,8 +5,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { MarkdownField } from "@/components/markdown-field";
 import { archivePolicy, createPolicy, discardDraft, publishDraft, saveDraft } from "../actions";
 
 const MARKDOWN_HINT = "Formatting: **bold**, *italic*, # heading, - bullet list, 1. numbered list, [link text](https://example.com).";
@@ -45,11 +44,7 @@ export function NewPolicyForm({ today }: { today: string }) {
       }}
     >
       <TextField id="np-title" label="Policy title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required />
-      <div className="space-y-1.5">
-        <Label htmlFor="np-body">Text</Label>
-        <Textarea id="np-body" value={body} onChange={(e) => setBody(e.target.value)} rows={8} maxLength={10000} required aria-describedby="np-hint" />
-        <p id="np-hint" className="text-xs text-muted-foreground">{MARKDOWN_HINT}</p>
-      </div>
+      <MarkdownField id="np-body" label="Text" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={8} required />
       <AckFields {...{ requiresAck, setRequiresAck, dueOn, setDueOn, today }} idPrefix="np" />
       <Button type="submit" disabled={pending}>Create draft</Button>
     </form>
@@ -92,11 +87,7 @@ export function DraftEditor({
   return (
     <form className="space-y-4 rounded-xl border bg-card p-4" onSubmit={(e) => { e.preventDefault(); run(save, "Draft saved."); }}>
       <h3 className="font-semibold">Draft of version {nextVersion}</h3>
-      <div className="space-y-1.5">
-        <Label htmlFor="pd-body">Text</Label>
-        <Textarea id="pd-body" value={body} onChange={(e) => setBody(e.target.value)} rows={14} maxLength={10000} required aria-describedby="pd-hint" />
-        <p id="pd-hint" className="text-xs text-muted-foreground">{MARKDOWN_HINT}</p>
-      </div>
+      <MarkdownField id="pd-body" label="Text" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={14} required />
       {hasPublished ? <TextField id="pd-note" label="What changed (shown to readers)" value={changeNote} onChange={(e) => setChangeNote(e.target.value)} maxLength={500} /> : null}
       <AckFields {...{ requiresAck, setRequiresAck, dueOn, setDueOn, today }} idPrefix="pd" />
       <div className="flex flex-wrap gap-2">

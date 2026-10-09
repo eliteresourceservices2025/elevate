@@ -5,8 +5,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { MarkdownField } from "@/components/markdown-field";
 import { createAnnouncement, updateAnnouncement } from "../actions";
 
 type Option = { id: string; name?: string; title?: string };
@@ -78,11 +77,7 @@ export function AnnouncementForm({
     <form onSubmit={submit} className="space-y-5">
       {locked ? <p className="rounded-lg border bg-muted/50 p-3 text-sm">People have already acknowledged this, so the title and text are locked. You can still change the due date, pinning and attachment.</p> : null}
       <TextField id="an-title" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required disabled={locked} />
-      <div className="space-y-1.5">
-        <Label htmlFor="an-body">Message</Label>
-        <Textarea id="an-body" value={body} onChange={(e) => setBody(e.target.value)} rows={10} maxLength={10000} required disabled={locked} aria-describedby="an-body-hint" />
-        <p id="an-body-hint" className="text-xs text-muted-foreground">{MARKDOWN_HINT}</p>
-      </div>
+      <MarkdownField id="an-body" label="Message" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={10} required disabled={locked} />
 
       {!edit ? (
         <fieldset className="space-y-3">
