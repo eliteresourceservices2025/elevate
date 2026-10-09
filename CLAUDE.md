@@ -83,6 +83,8 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 ## Announcements, policies and email (Phase 1.4)
 
 - `src/modules/announcements/`: announcements (Markdown, audience everyone or teams, recipients frozen at posting), versioned policies (`docs.policy_versions`: a published version is frozen by a database trigger; changes are new versions), and `docs.acknowledgments` (insert-only trigger; one row per person and item/version). For policies the `id` in actions is the policy **version** id.
+- **Write/Preview:** every Markdown text box for policies and announcements is `MarkdownField` (`src/components/markdown-field.tsx`): a Write/Preview toggle that renders with the same `Markdown` component and frame as the published page, plus a character count. Use it for any new Markdown input.
+- **Removing a policy:** `archivePolicy` archives (never erases) a policy that was never published and has kind `general`; the built-in privacy notice and monitoring policy, and anything published, cannot be removed. `createPolicy` always makes kind `general`: the sign-in gate and the Jibble switch read the built-in ones by kind, so their text is edited in those policies, not in new ones.
 - Markdown goes through `src/lib/markdown.ts` into React elements, never an HTML string. Do not add `dangerouslySetInnerHTML` for user text.
 - The seeded privacy notice and monitoring policy are DRAFT placeholders; publishing refuses text containing "DRAFT PLACEHOLDER". Phase 1.5 and the Jibble mirror gate read them by `kind`.
 - **Email:** everything is queued in `ops.email_queue` and sent by the `email-sender` job under a rolling 24-hour budget (`EMAIL_DAILY_BUDGET`, default 90 of Resend's free 100). Acknowledgment emails go first, then the weekday 8:00 AM Manila digest. Bodies carry counts and a link only. With no `RESEND_API_KEY`/`EMAIL_FROM` nothing is sent and the queue waits. Tests use `setEmailSender()`.
@@ -361,6 +363,11 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 - **Nothing is granted when inviting.** `provisionCoreUser` (first sign-in) reads the invitation in the same statement that marks it accepted, so the choices are applied **exactly once**, and **only if the invitation had not expired**. It writes the roles (`granted_by` = the inviter), sets the handler flag and audits `invitation.grants_applied` (roles and flag, `invitedBy` in the metadata).
 - Only someone who may give roles sees what was chosen (`listInvitations` blanks roles and the flag for HR), so who is a Safe Voice handler is not read off the invitation list. The invitation email says nothing about roles.
 - Tests: `src/modules/settings/invitation-grants.test.ts`, `tests/authz/settings-actions.test.ts`, `tests/integration/invitations.test.ts` (apply once, expired grants nothing, HR refused, re-invite rules, database constraint), `tests/e2e/invitations.spec.ts`.
+
+## Deactivating an account (Settings > Roles and access)
+
+- `deactivateAccount` / `reactivateAccount` (`settings.deactivate_account`, Super Admin only; rules in `settings/deactivate.ts`): bans the sign-in at the auth service (`onboarding/accounts.ts` `disableLogin` / `enableLogin`), archives the `core.users` row, ends open sessions, audits `user.deactivate` / `user.reactivate`. Nothing is deleted. For test accounts and mistakes: **a person with an active people record is refused** (use Offboarding, which also ends schedule, leave and equipment), you cannot deactivate yourself, and the last active Super Admin stays. An accepted invitation stays as history.
+- Tests: `src/modules/settings/deactivate.test.ts`, `tests/authz/settings-actions.test.ts`, `tests/integration/account-deactivation.test.ts`.
 
 ## Adding a permission or action
 

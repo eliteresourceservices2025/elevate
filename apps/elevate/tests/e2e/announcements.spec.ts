@@ -20,6 +20,15 @@ test("HR posts, an employee acknowledges, and HR sees the status", async ({ brow
   await waitForHydration(hrPage, "#an-title");
   await hrPage.getByLabel("Title").fill(title);
   await hrPage.getByLabel("Message").fill("We are closed on **Friday**.\n\n<script>alert('x')</script>\n\n[Bad link](javascript:alert(1))");
+  // The preview shows it as readers will see it (same renderer: markup stays text, bad links are not links), and Write brings the text back.
+  await hrPage.getByRole("button", { name: "Preview" }).click();
+  const previewBox = hrPage.getByRole("article", { name: "Preview of message" });
+  await expect(previewBox.locator("strong", { hasText: "Friday" })).toBeVisible();
+  await expect(previewBox.getByText("<script>alert('x')</script>")).toBeVisible();
+  await expect(previewBox.locator("a[href^='javascript']")).toHaveCount(0);
+  await expect(hrPage.getByText("This is how it will look when published.")).toBeVisible();
+  await hrPage.getByRole("button", { name: "Write" }).click();
+  await expect(hrPage.getByLabel("Message")).toHaveValue(/We are closed on/);
   await hrPage.getByLabel("Require acknowledgment").check();
   await hrPage.getByRole("button", { name: "Post announcement" }).click();
   await hrPage.waitForURL(/\/announcements\/[0-9a-f-]{36}$/);
@@ -35,7 +44,7 @@ test("HR posts, an employee acknowledges, and HR sees the status", async ({ brow
   await empPage.goto("/dashboard");
   const banner = empPage.getByRole("region", { name: "Acknowledgments needed" });
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText("need your acknowledgment"); // it lists only the first 3; the dashboard list below has them all
+  await expect(banner).toContainText(/needs? your acknowledgment/); // it lists only the first 3; the dashboard list below has them all
   await expect(empPage.getByRole("button", { name: /Notifications, \d+ unread/ })).toBeVisible();
 
   await empPage.getByRole("region", { name: "Waiting for you" }).getByRole("link", { name: title }).click();

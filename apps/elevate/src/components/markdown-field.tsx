@@ -38,7 +38,7 @@ export function MarkdownField({
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Label htmlFor={id}>{label}</Label>
-        <div role="group" aria-label={`${label} view`} className="flex gap-1">
+        <div role="group" aria-label="Write or preview" className="flex gap-1">
           <Button type="button" size="sm" variant={preview ? "ghost" : "secondary"} aria-pressed={!preview} onClick={() => setPreview(false)}>
             Write
           </Button>
@@ -50,7 +50,7 @@ export function MarkdownField({
 
       {preview ? (
         <div className="space-y-2">
-          <article aria-label={`${label}, preview`} className="min-h-24 rounded-xl border bg-card p-5">
+          <article aria-label={`Preview of ${label.toLowerCase()}`} className="min-h-24 rounded-xl border bg-card p-5">
             {value.trim() ? <Markdown source={value} /> : <p className="text-sm text-muted-foreground">Nothing to preview yet.</p>}
           </article>
           <p className="text-xs text-muted-foreground">This is how it will look when published.</p>
