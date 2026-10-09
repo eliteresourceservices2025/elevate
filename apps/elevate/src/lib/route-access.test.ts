@@ -37,6 +37,8 @@ describe("decideAccess", () => {
     expect(decideAccess("/auth/callback", null)).toEqual(allow);
     expect(decideAccess("/verify", null)).toEqual(allow);
     expect(decideAccess("/sign/abc", null)).toEqual(allow);
+    expect(decideAccess("/privacy", null)).toEqual(allow);
+    expect(decideAccess("/terms", "aal1")).toEqual(allow);
     expect(decideAccess("/reset-password", null)).toEqual(to("/login"));
     expect(decideAccess("/reset-password", "aal1")).toEqual(allow);
   });
