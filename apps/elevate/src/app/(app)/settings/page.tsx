@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Compass, FileText, FileUp, History, ListChecks, Mail, ShieldCheck } from "lucide-react";
+import { Bell, Compass, FileText, FileUp, History, ListChecks, Mail, ShieldCheck } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -14,6 +14,13 @@ const SECTIONS = [
     icon: Compass,
     title: "Quick tour",
     description: "A one-minute walk through the menu, the time clock and the header. Replay it any time.",
+  },
+  {
+    href: "/settings/notifications",
+    action: null,
+    icon: Bell,
+    title: "Email notifications",
+    description: "Choose which emails ELEVATE sends you, such as the weekday summary.",
   },
   {
     href: "/settings/roles",
@@ -67,7 +74,7 @@ export default async function SettingsPage() {
     <div className="w-full space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="mt-1 text-muted-foreground">The quick tour, and (for HR and admins) access, invitations, policies, the TalentHR move and the audit log.</p>
+        <p className="mt-1 text-muted-foreground">Your email notifications and the quick tour, and (for HR and admins) access, invitations, policies, the TalentHR move and the audit log.</p>
       </div>
       {visible.length === 0 ? (
         <p className="text-muted-foreground">There is nothing for you to change here.</p>

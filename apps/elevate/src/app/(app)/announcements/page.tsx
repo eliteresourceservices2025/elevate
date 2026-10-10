@@ -13,8 +13,6 @@ import { cn } from "@/lib/utils";
 import { DueBadge } from "@/modules/announcements/components/ack-display";
 import { NewPolicyForm } from "@/modules/announcements/components/policy-editor";
 import { listAnnouncements, listPolicies } from "@/modules/announcements/queries";
-import { DigestPreference } from "@/modules/notifications/components/digest-preference";
-import { getMyDigestOptOut } from "@/modules/notifications/queries";
 import { todayInZone } from "@/modules/org/service";
 
 export const metadata: Metadata = { title: "Announcements" };
@@ -39,7 +37,6 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
   const policies = tab === "policies" ? await orNotFound(listPolicies()) : null;
   const itemPage = items ? paginate(items, paging.page, paging.pageSize) : null;
   const policyPage = policies ? paginate(policies, paging.page, paging.pageSize) : null;
-  const optedOut = await getMyDigestOptOut();
 
   return (
     <div className="w-full space-y-6">
@@ -128,9 +125,9 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
         </div>
       ) : null}
 
-      <div className="rounded-xl border bg-card p-4">
-        <DigestPreference optedOut={optedOut} />
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Choose which emails you get in <Link href="/settings/notifications" className="text-primary underline-offset-4 hover:underline">Settings, Email notifications</Link>.
+      </p>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { Camera, Compass, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { Bell, Camera, Compass, LogOut, ShieldCheck, UserRound } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -81,6 +81,9 @@ export function AccountMenu({
           </DropdownMenuItem>
           <DropdownMenuItem render={<Link href="/my-data" className={item} />}>
             <ShieldCheck aria-hidden /> My data
+          </DropdownMenuItem>
+          <DropdownMenuItem render={<Link href="/settings/notifications" className={item} />}>
+            <Bell aria-hidden /> Email notifications
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setChoosingPhoto(true)}>
             <Camera aria-hidden /> {photoVersion ? "Change photo" : "Add a photo"}

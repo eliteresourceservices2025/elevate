@@ -126,3 +126,32 @@ test("leaving a form with unsaved changes asks first; a clean form does not", as
   await page.getByRole("alertdialog").getByRole("button", { name: "Leave page" }).click();
   await page.waitForURL(/\/people$/);
 });
+
+test("email notification choices live in Settings and the account menu, not on the announcements page", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
+  await signInEnrollingMfa(page, await createHrAccount());
+
+  // Not on the announcements page any more; a plain link points to the new place.
+  await page.goto("/announcements");
+  await expect(page.getByLabel(/Email me a weekday summary/)).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Settings, Email notifications" })).toBeVisible();
+
+  // Settings has a card, and the account menu has a shortcut. Both open the same page.
+  await page.goto("/settings");
+  await expect(page.getByRole("link", { name: /Email notifications/ })).toBeVisible();
+  await page.goto("/dashboard");
+  await waitForHydration(page, '[data-tour="account"]');
+  await page.getByRole("button", { name: /Account menu for/ }).click();
+  await page.getByRole("menuitem", { name: "Email notifications" }).click();
+  await page.waitForURL(/\/settings\/notifications/);
+
+  // The checkbox saves straight away and survives a reload.
+  const box = page.getByLabel(/Email me a weekday summary/);
+  await waitForHydration(page, "#digest-pref");
+  await expect(box).toBeChecked();
+  await box.click(); // it changes once the server has saved it
+  await expect(page.getByText("Daily summary email turned off.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel(/Email me a weekday summary/)).not.toBeChecked();
+});
