@@ -12,6 +12,10 @@ describe("signUpFailureMessage", () => {
     expect(signUpFailureMessage({ status: 403, code: "hook_payload_invalid", message: "Sign-up is by invitation only." })).toBeNull();
   });
 
+  it("names a CAPTCHA requirement the app cannot satisfy", () => {
+    expect(signUpFailureMessage({ status: 400, code: "captcha_failed", message: "captcha protection: request disallowed" })).toMatch(/not available right now/);
+  });
+
   it("names a weak password", () => {
     expect(signUpFailureMessage({ status: 422, code: "weak_password", message: "Password should be at least 8 characters." })).toMatch(/stronger password/);
   });

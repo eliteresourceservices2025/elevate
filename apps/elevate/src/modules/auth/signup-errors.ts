@@ -15,6 +15,9 @@ export function signUpFailureMessage(error: SignUpError | null | undefined): str
   // The invitation check rejects with 403 before anything else happens: it must read as success.
   if (error.status === 403) return null;
 
+  // The sign-in service wants a CAPTCHA answer ELEVATE does not send (a setting in Supabase). Checked before the invitation, so naming it reveals nothing.
+  if (code === "captcha_failed") return "Sign-up is not available right now. Please ask HR for help.";
+
   if (code === "weak_password" || text.includes("password")) {
     return "Choose a stronger password: at least 8 characters, not a common word or one that has appeared in a data breach.";
   }
