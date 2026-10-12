@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { isSendingSlow } from "@/modules/jibble/mirror-rules";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { JOBS, jobState } from "./registry";
 
@@ -54,7 +55,7 @@ async function alertHr(title: string, body: string, windowHours: number): Promis
   return true;
 }
 
-export type HealthCheck = { lateJobs: string[]; queueMinutes: number | null; alerted: boolean };
+export type HealthCheck = { lateJobs: string[]; queueMinutes: number | null; slowSends: boolean; alerted: boolean };
 
 /**
  * Every 30 minutes (by the job service and again by the host's own scheduler): HR is told once every 6 hours when a scheduled job
@@ -69,13 +70,19 @@ export async function runHealthCheck(now = new Date()): Promise<HealthCheck> {
   const queueMinutes = q?.oldest === null || q?.oldest === undefined ? null : Math.round(Number(q.oldest));
   const queueLate = queueMinutes !== null && queueMinutes >= 15;
 
+  const [delay] = (await db.execute(sql`
+    select count(*) filter (where sent_at - created_at > interval '3 minutes')::int as slow, count(*)::int as total
+    from time.jibble_link_log where status = 'sent' and attempts <= 1 and source <> 'repair' and sent_at > now() - interval '6 hours'`)) as unknown as { slow: number; total: number }[];
+  const slowSends = isSendingSlow(delay?.slow ?? 0, delay?.total ?? 0);
+
   let alerted = false;
-  if (late.length > 0 || queueLate) {
+  if (late.length > 0 || queueLate || slowSends) {
     const parts = [
       late.length > 0 ? `${late.length} scheduled ${late.length === 1 ? "job has" : "jobs have"} stopped running: ${late.slice(0, 5).map((j) => j.label).join(", ")}${late.length > 5 ? ", and more" : ""}.` : null,
       queueLate ? `A clock call to Jibble has waited ${queueMinutes} minutes.` : null,
+      slowSends ? "Clock calls are reaching Jibble late (more than 3 minutes), so screenshots start and stop late. Check the job service's event key." : null,
     ].filter(Boolean);
     alerted = await alertHr("ELEVATE needs a look", `${parts.join(" ")} See the Health tab.`, 6);
   }
-  return { lateJobs: late.map((j) => j.job), queueMinutes, alerted };
+  return { lateJobs: late.map((j) => j.job), queueMinutes, slowSends, alerted };
 }

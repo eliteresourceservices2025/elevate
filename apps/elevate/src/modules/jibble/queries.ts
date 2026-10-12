@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { monitoringPolicyPublished } from "@/modules/attendance/service";
 import { reportName } from "@/modules/org/service";
 import { breakMode, getJibbleClient, mirrorSendsEnabled, mismatchToleranceMinutes, selfTestEmails } from "./client";
+import { SLOW_SEND_MINUTES } from "./mirror-rules";
 import type { BreakMode } from "./mirror-rules";
 
 export type JibblePersonRow = { employeeId: string; name: string; email: string | null; team: string | null; jibblePersonId: string | null; matchedBy: string | null };
@@ -20,6 +21,8 @@ export type JibbleOverview = {
   monitoringPublished: boolean;
   /** How many people are listed in JIBBLE_SELF_TEST_EMAILS (testing on their own account, without the policy). Normally 0. */
   selfTestPeople: number;
+  /** Calls from the last 6 hours that went through on the first try, and how many of them waited over 3 minutes. */
+  sendDelay: { slow: number; total: number };
   teamsOn: number;
   /** HR's pause switch is on: nothing is being sent. */
   paused: boolean;
@@ -47,6 +50,9 @@ export async function getJibbleOverview(): Promise<JibbleOverview> {
   const [counts] = (await db.execute(sql`
     select count(*) filter (where status = 'queued')::int as queued, count(*) filter (where status = 'failed')::int as failed,
            count(*) filter (where status = 'sent' and sent_at > now() - interval '24 hours')::int as sent24h from time.jibble_link_log`)) as unknown as { queued: number; failed: number; sent24h: number }[];
+  const [delay] = (await db.execute(sql`
+    select count(*) filter (where sent_at - created_at > interval '${sql.raw(String(SLOW_SEND_MINUTES))} minutes')::int as slow, count(*)::int as total
+    from time.jibble_link_log where status = 'sent' and attempts <= 1 and source <> 'repair' and sent_at > now() - interval '6 hours'`)) as unknown as { slow: number; total: number }[];
   const [teams] = (await db.execute(sql`select count(*)::int as n from time.clock_rules where jibble_mirror`)) as unknown as { n: number }[];
   const [state] = (await db.execute(sql`select (select paused from time.jibble_settings where id = 1) as paused, (select extract(epoch from now() - min(created_at)) / 60 from time.jibble_link_log where status = 'queued')::float8 as oldest`)) as unknown as { paused: boolean | null; oldest: number | null }[];
 
@@ -57,6 +63,7 @@ export async function getJibbleOverview(): Promise<JibbleOverview> {
     toleranceMinutes: mismatchToleranceMinutes(),
     monitoringPublished: await monitoringPolicyPublished(db),
     selfTestPeople: selfTestEmails().length,
+    sendDelay: { slow: delay?.slow ?? 0, total: delay?.total ?? 0 },
     teamsOn: teams.n,
     paused: Boolean(state?.paused),
     oldestQueuedMinutes: state?.oldest === null || state?.oldest === undefined ? null : Math.round(Number(state.oldest)),

@@ -117,6 +117,16 @@ export function parseSelfTestEmails(raw: string | undefined): string[] {
 
 export const isSelfTestEmail = (email: string | null | undefined, list: readonly string[]): boolean => Boolean(email) && list.includes((email as string).trim().toLowerCase());
 
+/**
+ * Are clock calls reaching Jibble late? A click should be sent within seconds (the job service is told at once). When the "send now"
+ * message is not arriving (a missing or wrong event key), every call waits for the 15-minute sweep. Looked at over recent calls that
+ * went through on the first try: two or more took over 3 minutes, and at least half of them did.
+ */
+export const SLOW_SEND_MINUTES = 3;
+export function isSendingSlow(slow: number, total: number): boolean {
+  return slow >= 2 && total > 0 && slow / total >= 0.5;
+}
+
 export const isRetryable = (status: number | null) => status === null || status === 408 || status === 429 || status >= 500;
 
 /** Where a person is in Jibble, from their latest time entry. */

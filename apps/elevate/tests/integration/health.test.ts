@@ -101,6 +101,29 @@ describe("the health check", () => {
     await db.execute(sql`delete from time.jibble_link_log where employee_id = ${emp.id}`);
   });
 
+  it("tells HR when clock calls keep reaching Jibble late (the send-now message is not arriving)", async () => {
+    await db.execute(sql`delete from ops.notifications where kind = 'system.health'`);
+    await db.execute(sql`update ops.job_runs set last_success_at = now(), last_error_at = null`);
+    await db.execute(sql`delete from time.jibble_link_log`);
+    const [emp] = await rows<{ id: string }>(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status) values ('Slow', ${uniq("S")}, ${`${uniq("s")}@example.com`}, 'active') returning id`);
+    // Sent within seconds: fine.
+    for (let i = 0; i < 3; i++) {
+      const [ev] = await rows<{ id: string }>(sql`insert into time.clock_events (employee_id, type) values (${emp.id}, 'clock_in') returning id`);
+      await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, status, attempts, created_at, sent_at) values (${emp.id}, ${ev.id}, 'In', 'sent', 1, now() - interval '10 minutes', now() - interval '9 minutes 55 seconds')`);
+    }
+    expect((await service.runHealthCheck()).slowSends).toBe(false);
+    // Sent only at the next quarter hour: late.
+    for (let i = 0; i < 4; i++) {
+      const [ev] = await rows<{ id: string }>(sql`insert into time.clock_events (employee_id, type) values (${emp.id}, 'clock_out') returning id`);
+      await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, status, attempts, created_at, sent_at) values (${emp.id}, ${ev.id}, 'Out', 'sent', 1, now() - interval '40 minutes', now() - interval '33 minutes')`);
+    }
+    const check = await service.runHealthCheck();
+    expect(check.slowSends).toBe(true);
+    expect(check.alerted).toBe(true);
+    expect((await alertsFor(hr.id))[0].body).toContain("reaching Jibble late");
+    await db.execute(sql`delete from time.jibble_link_log where employee_id = ${emp.id}`);
+  });
+
   it("says nothing when everything is fine", async () => {
     await db.execute(sql`delete from ops.notifications where kind = 'system.health'`);
     await db.execute(sql`update ops.job_runs set last_success_at = now(), last_error_at = null`);

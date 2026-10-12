@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatInZone } from "@/lib/time";
 import { retryJibbleSend, setJibblePaused, setJibblePerson, syncJibblePeopleNow, testJibbleConnection } from "../actions";
+import { SLOW_SEND_MINUTES, isSendingSlow } from "../mirror-rules";
 import type { JibbleOverview } from "../queries";
 
 const BREAK_TEXT = { clock: "Breaks stop screenshots (clock out and back in)", native: "Breaks use Jibble's own breaks from each person's schedule (an unpaid one, preferring a flexible one)", off: "Breaks are not sent (screenshots keep running)" } as const;
@@ -44,6 +45,12 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
         <div role="status" className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
           <strong>Sending to Jibble is paused.</strong> Nothing is being sent, so screenshots may not be running. The ELEVATE clock is not affected. {overview.counts.queued} {overview.counts.queued === 1 ? "call is" : "calls are"} waiting. When you resume, calls that waited more than 10 minutes are dropped and everyone&apos;s Jibble status is set right from ELEVATE.
         </div>
+      ) : null}
+      {isSendingSlow(overview.sendDelay.slow, overview.sendDelay.total) ? (
+        <p role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <strong>Calls are reaching Jibble late.</strong> {overview.sendDelay.slow} of the last {overview.sendDelay.total} waited over {SLOW_SEND_MINUTES} minutes, so screenshots start and stop late.
+          The usual cause is the job service&apos;s event key (INNGEST_EVENT_KEY) missing or from the wrong environment in the host settings. Check Settings &gt; Go-live, then the events in the job service.
+        </p>
       ) : null}
       {!overview.paused && overview.oldestQueuedMinutes !== null && overview.oldestQueuedMinutes >= 15 ? (
         <div role="status" className="rounded-xl border border-red-500/50 bg-red-500/10 p-4 text-sm">

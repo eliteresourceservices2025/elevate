@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ATTEMPTS, backoffMs, describeFailure, isMismatch, isRetryable, isSelfTestEmail, parseSelfTestEmails, mirrorSteps, parseBreakMode, parseDuration, pickBreak, repairAction, targetState } from "./mirror-rules";
+import { MAX_ATTEMPTS, backoffMs, describeFailure, isMismatch, isRetryable, isSelfTestEmail, isSendingSlow, parseSelfTestEmails, mirrorSteps, parseBreakMode, parseDuration, pickBreak, repairAction, targetState } from "./mirror-rules";
 import { configFromEnv } from "./http-client";
 
 const ev = (id: string, type: "clock_in" | "break_start" | "break_end" | "clock_out") => ({ id, type });
@@ -190,5 +190,16 @@ describe("self-test list (JIBBLE_SELF_TEST_EMAILS)", () => {
     expect(isSelfTestEmail("someone-owner@example.com", list)).toBe(false);
     expect(isSelfTestEmail(null, list)).toBe(false);
     expect(isSelfTestEmail("owner@example.com", [])).toBe(false);
+  });
+});
+
+describe("late sending", () => {
+  it("needs at least two slow calls and at least half of them", () => {
+    expect(isSendingSlow(0, 0)).toBe(false);
+    expect(isSendingSlow(1, 1)).toBe(false); // one slow call can be a blip
+    expect(isSendingSlow(1, 10)).toBe(false);
+    expect(isSendingSlow(2, 10)).toBe(false); // mostly fine
+    expect(isSendingSlow(2, 4)).toBe(true);
+    expect(isSendingSlow(8, 8)).toBe(true);
   });
 });
