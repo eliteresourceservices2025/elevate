@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { updatePassword } from "../actions";
 import { PASSWORD_MIN_LENGTH, resetPasswordSchema, type ResetPasswordInput } from "../validators";
-import { Field } from "./field";
+import { PasswordField } from "./password-field";
 
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -27,19 +27,17 @@ export function ResetPasswordForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-      <Field
+      <PasswordField
         id="password"
         label="New password"
-        type="password"
         autoComplete="new-password"
         error={errors.password?.message}
         {...register("password")}
       />
       <p className="-mt-2 text-xs text-muted-foreground">At least {PASSWORD_MIN_LENGTH} characters.</p>
-      <Field
+      <PasswordField
         id="confirmPassword"
         label="Confirm new password"
-        type="password"
         autoComplete="new-password"
         error={errors.confirmPassword?.message}
         {...register("confirmPassword")}

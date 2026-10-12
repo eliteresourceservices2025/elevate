@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { signUpWithInvite } from "../actions";
 import { PASSWORD_MIN_LENGTH, signUpSchema, type SignUpInput } from "../validators";
 import { Field } from "./field";
+import { PasswordField } from "./password-field";
 
 export function SignUpForm() {
   const [sent, setSent] = useState(false);
@@ -45,19 +46,17 @@ export function SignUpForm() {
         error={errors.email?.message}
         {...register("email")}
       />
-      <Field
+      <PasswordField
         id="password"
         label="Password"
-        type="password"
         autoComplete="new-password"
         error={errors.password?.message}
         {...register("password")}
       />
       <p className="-mt-2 text-xs text-muted-foreground">At least {PASSWORD_MIN_LENGTH} characters.</p>
-      <Field
+      <PasswordField
         id="confirmPassword"
         label="Confirm password"
-        type="password"
         autoComplete="new-password"
         error={errors.confirmPassword?.message}
         {...register("confirmPassword")}

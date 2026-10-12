@@ -426,6 +426,7 @@ The audit log is insert-only at the database level (trigger). Test data written 
 - File names kebab-case; React components PascalCase; server actions verb-first (`approveLeaveRequest`).
 - Return `{ ok: true, data } | { ok: false, error }` from actions; show errors with toasts; never leak stack traces.
 - UI copy: plain, short, sentence case. Brand: ERS colors via Tailwind theme tokens in `globals.css`.
+- Password boxes use `PasswordField` (`modules/auth/components/password-field.tsx`): hidden by default with a Show/Hide button. Sign-in and sign-up failures that are about the platform (not the person's credentials) are told apart from a wrong password (`signup-errors.ts`); a wrong password, an unknown email and an unconfirmed email still read the same, and the not-invited rejection still reads as sign-up success.
 - Accessibility: labels on every input, keyboard-usable dialogs and boards, 4.5:1 contrast.
 - Write tests with each feature: Zod validators, authz for every new action, one Playwright happy path per flow.
 

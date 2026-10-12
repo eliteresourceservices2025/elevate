@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { signInWithGoogle, signInWithPassword } from "../actions";
 import { signInSchema, type SignInInput } from "../validators";
 import { Field } from "./field";
+import { PasswordField } from "./password-field";
 
 function urlErrorMessage(code?: string) {
   if (code === "oauth") return "Google sign-in did not work. Your email may not be invited yet.";
@@ -67,10 +68,9 @@ export function SignInForm({ errorCode, next }: { errorCode?: string; next?: str
           error={errors.email?.message}
           {...register("email")}
         />
-        <Field
+        <PasswordField
           id="password"
           label="Password"
-          type="password"
           autoComplete="current-password"
           error={errors.password?.message}
           {...register("password")}
