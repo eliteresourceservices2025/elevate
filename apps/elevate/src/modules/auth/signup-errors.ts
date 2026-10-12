@@ -27,3 +27,19 @@ export function signUpFailureMessage(error: SignUpError | null | undefined): str
   // Includes the 403 "Sign-up is by invitation only" rejection: it must look the same as success.
   return null;
 }
+
+/**
+ * The message for a failed password sign-in. A wrong password, an unknown email and an unconfirmed email all read the same, so the form
+ * cannot reveal which emails exist. Anything that is NOT about the person's credentials (the sign-in service refusing, a bad key, a
+ * rate limit, a server problem) is told apart, so a platform problem is not mistaken for "wrong password".
+ */
+export function signInFailureMessage(error: SignUpError): string {
+  const code = (error.code ?? "").toLowerCase();
+  const credentialProblem = code === "invalid_credentials" || code === "email_not_confirmed" || code === "user_not_found" || code === "user_banned";
+  if (credentialProblem) return "Invalid email or password, or the email is not confirmed yet.";
+  if (code === "over_request_rate_limit" || error.status === 429) return "Too many attempts. Wait a few minutes and try again.";
+  if (code !== "" || (error.status !== null && error.status !== undefined && error.status >= 500)) {
+    return "We could not sign you in right now. This is not a wrong password. Please try again in a few minutes, or ask HR for help.";
+  }
+  return "Invalid email or password, or the email is not confirmed yet.";
+}

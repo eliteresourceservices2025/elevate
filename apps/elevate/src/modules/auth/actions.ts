@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { allowRequest, clientIp } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { writeAudit, type AuditEntry } from "@/modules/audit/write";
-import { signUpFailureMessage } from "./signup-errors";
+import { signInFailureMessage, signUpFailureMessage } from "./signup-errors";
 import {
   forgotPasswordSchema,
   mfaCodeSchema,
@@ -46,8 +46,10 @@ export async function signInWithPassword(input: unknown): Promise<ActionResult> 
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
   // One message for every failure so the form cannot reveal which emails exist.
   if (error) {
-    await auditAuth({ actor: null, action: "auth.login_failed", metadata: { email: parsed.data.email, method: "password" } });
-    return fail("Invalid email or password, or the email is not confirmed yet.");
+    // The reason code (never the address) goes to the server log, so a platform problem can be told from a wrong password.
+    console.error("sign-in failed:", error.status ?? "no status", error.code ?? "no code");
+    await auditAuth({ actor: null, action: "auth.login_failed", metadata: { email: parsed.data.email, method: "password", reason: error.code ?? null } });
+    return fail(signInFailureMessage(error));
   }
   return { ok: true, data: undefined };
 }
