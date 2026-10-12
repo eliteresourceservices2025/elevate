@@ -30,11 +30,16 @@ export async function enqueueMirror(tx: Executor, input: { employeeId: string; e
 
 /** After the transaction commits: ask the job runner to send now instead of waiting for the 15-minute sweep. Best effort. */
 export async function kickMirror(): Promise<void> {
-  if (!process.env.INNGEST_EVENT_KEY && !process.env.INNGEST_DEV) return;
+  if (!process.env.INNGEST_EVENT_KEY && !process.env.INNGEST_DEV) {
+    // Without the event key the call waits for the 15-minute sweep. Say so in the log (once per click), never anything about the person.
+    console.error("jibble mirror kick skipped: INNGEST_EVENT_KEY is not set");
+    return;
+  }
   try {
     const { inngest } = await import("@/inngest/client");
     await Promise.race([inngest.send({ name: "jibble/mirror.requested", data: {} }), new Promise((resolve) => setTimeout(resolve, 3000))]);
-  } catch {
+  } catch (error) {
     // The 15-minute sweep picks it up.
+    console.error("jibble mirror kick failed:", error instanceof Error ? error.name : "unknown error");
   }
 }
