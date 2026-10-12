@@ -132,6 +132,9 @@ export const extraUploadSchema = evidenceUploadSchema.extend({ employeeId: z.pre
 
 /** Approve one person's week (any Monday) through the last finished day. */
 export const approveWeekSchema = z.object({ employeeId: uuid, weekStart: ymd, note: z.preprocess(blankToUndefined, z.string().trim().max(300).optional()) });
+/** Mark one person's day as test only (a note says why), or take the mark off. */
+export const markTestDaySchema = z.object({ employeeId: uuid, date: ymd, note: z.string().trim().min(3, "Say why in a few words").max(200, "Use 200 characters or fewer") });
+export const clearTestDaySchema = z.object({ employeeId: uuid, date: ymd });
 export const approveCleanSchema = z.object({ weekStart: ymd });
 export const payPeriodSchema = z.object({ kind: z.enum(["semi_monthly", "weekly", "biweekly", "monthly"]), biweeklyAnchor: z.preprocess(blankToUndefined, ymd.optional()) });
 export const exportHoursSchema = z.object({ periodStart: ymd, kind: z.enum(["daily", "summary"]), includeUnapproved: z.boolean().default(false) });

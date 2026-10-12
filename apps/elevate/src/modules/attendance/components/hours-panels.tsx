@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateOnly, formatInZone } from "@/lib/time";
 import { MINUTE, formatDuration } from "../clock";
-import { approveCleanWeeks, approveHoursWeek, exportHours, savePayPeriod } from "../hours-actions";
+import { approveCleanWeeks, approveHoursWeek, clearTestDay, exportHours, markTestDay, savePayPeriod } from "../hours-actions";
 import type { HoursSettings, ReviewRow, TeamReview } from "../hours-queries";
 import { PAY_PERIOD_LABELS, type PayPeriodKind } from "../pay-periods";
 
@@ -34,6 +34,48 @@ function useRun() {
       }
     });
   return { run, pending, router };
+}
+
+/** "Mark as test" on one day: asks for a few words, then marks it. The day leaves this list and appears under "Marked test only". */
+function MarkTestButton({ employeeId, date, name }: { employeeId: string; date: string; name: string }) {
+  const { run, pending } = useRun();
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  if (!open) {
+    return (
+      <Button type="button" size="xs" variant="ghost" onClick={() => setOpen(true)} aria-label={`Mark ${name} on ${date} as test only`}>
+        Mark as test
+      </Button>
+    );
+  }
+  return (
+    <form
+      className="flex flex-wrap items-center gap-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => markTestDay({ employeeId, date, note }), () => "Marked test only. It is left out of review and payroll.");
+      }}
+    >
+      <label className="sr-only" htmlFor={`test-note-${employeeId}-${date}`}>
+        Why is this a test?
+      </label>
+      <input
+        id={`test-note-${employeeId}-${date}`}
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        maxLength={200}
+        placeholder="Why? For example: testing the time clock"
+        className="h-7 w-64 max-w-full rounded-md border bg-background px-2 text-xs"
+        autoFocus
+      />
+      <Button type="submit" size="xs" disabled={pending || note.trim().length < 3}>
+        Mark
+      </Button>
+      <Button type="button" size="xs" variant="ghost" onClick={() => setOpen(false)}>
+        Cancel
+      </Button>
+    </form>
+  );
 }
 
 /** A lead (their team) or HR (everyone) reviews a week and approves it person by person, or everyone with no flags at once. */
@@ -146,6 +188,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
                                 ))}
                               </span>
                               <Badge variant={d.state === "approved" ? "default" : d.state === "changed" ? "destructive" : "outline"}>{d.state === "approved" ? "Approved" : d.state === "changed" ? "Changed after approval" : d.finished ? "Not approved" : "Day not over"}</Badge>
+                              {review.canMarkTest ? <MarkTestButton employeeId={r.employeeId} date={d.date} name={r.name} /> : null}
                             </li>
                           ))}
                         </ul>
@@ -159,7 +202,38 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
         </div>
       )}
       {review.rows.length > 0 ? <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="people" /> : null}
+      {review.testDays.length > 0 ? (
+        <section className="space-y-2 rounded-xl border bg-card p-4" aria-label="Marked test only">
+          <h3 className="text-sm font-semibold">Marked test only ({review.testDays.length})</h3>
+          <p className="text-xs text-muted-foreground">These days stay in the clock history but are left out of this review, of payroll exports and of the &quot;not approved&quot; counts.</p>
+          <ul className="space-y-1 text-sm">
+            {review.testDays.map((t) => (
+              <TestDayRow key={`${t.employeeId}|${t.date}`} day={t} canClear={review.canMarkTest} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
+  );
+}
+
+function TestDayRow({ day, canClear }: { day: TeamReview["testDays"][number]; canClear: boolean }) {
+  const { run, pending } = useRun();
+  return (
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      <span className="w-48 font-medium">{day.name}</span>
+      <span className="w-32">
+        {day.weekday}, {formatDateOnly(day.date)}
+      </span>
+      <span className="min-w-0 flex-1 text-muted-foreground">
+        {day.note} <span className="text-xs">(marked by {day.markedBy})</span>
+      </span>
+      {canClear ? (
+        <Button type="button" size="xs" variant="outline" disabled={pending} onClick={() => run(() => clearTestDay({ employeeId: day.employeeId, date: day.date }), () => "The mark was taken off. The day counts as normal hours again.")}>
+          Not a test
+        </Button>
+      ) : null}
+    </li>
   );
 }
 
@@ -197,7 +271,7 @@ export function ExportPanel({ settings }: { settings: HoursSettings }) {
   const [anchor, setAnchor] = useState(settings.biweeklyAnchor);
 
   const download = (what: "daily" | "summary") =>
-    run<{ fileName: string; csv: string; rows: number; unapprovedDays: number }>(
+    run<{ fileName: string; csv: string; rows: number; unapprovedDays: number; testDays: number }>(
       async () => {
         const result = await exportHours({ periodStart: period, kind: what, includeUnapproved: includeAll });
         if (result.ok) {
@@ -210,7 +284,7 @@ export function ExportPanel({ settings }: { settings: HoursSettings }) {
         }
         return result;
       },
-      (d) => `Downloaded ${d?.rows ?? 0} ${(d?.rows ?? 0) === 1 ? "row" : "rows"}.${!includeAll && (d?.unapprovedDays ?? 0) > 0 ? ` ${d?.unapprovedDays} finished ${d?.unapprovedDays === 1 ? "day is" : "days are"} not approved and left out.` : ""}`,
+      (d) => `Downloaded ${d?.rows ?? 0} ${(d?.rows ?? 0) === 1 ? "row" : "rows"}.${!includeAll && (d?.unapprovedDays ?? 0) > 0 ? ` ${d?.unapprovedDays} finished ${d?.unapprovedDays === 1 ? "day is" : "days are"} not approved and left out.` : ""}${(d?.testDays ?? 0) > 0 ? ` ${d?.testDays} ${d?.testDays === 1 ? "day is" : "days are"} marked test only and left out.` : ""}`,
     );
 
   return (

@@ -48,13 +48,19 @@ export function dayState(current: DayNumbers, approval: Approval | undefined): D
 
 export type AttendanceRow = DayNumbers & { employeeId: string; date: string; sessions: number; flags: string[]; lateMinutes: number; earlyLeaveMinutes: number; firstIn: Date | null; lastOut: Date | null };
 
-/** The rebuilt attendance days of some people in a range. */
-export async function attendanceRows(executor: Executor, employeeIds: string[] | null, from: string, to: string): Promise<AttendanceRow[]> {
+/**
+ * The rebuilt attendance days of some people in a range. Days marked "test only" are left out (hours review, the export, the
+ * unapproved counts and the reminders all read days through here), unless `includeTest` asks for them.
+ */
+export async function attendanceRows(executor: Executor, employeeIds: string[] | null, from: string, to: string, options: { includeTest?: boolean } = {}): Promise<AttendanceRow[]> {
   if (employeeIds && employeeIds.length === 0) return [];
-  const filter = employeeIds ? sql`and employee_id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})` : sql``;
+  const filter = employeeIds ? sql`and d.employee_id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})` : sql``;
+  const testFilter = options.includeTest
+    ? sql``
+    : sql`and not coalesce((select m.test_only from time.hours_marks m where m.employee_id = d.employee_id and m.date = d.date order by m.set_at desc, m.id desc limit 1), false)`;
   const rows = (await executor.execute(sql`
-    select employee_id, date::text as date, sessions, scheduled_minutes, worked_minutes, break_minutes, extra_minutes, approved_extra_minutes, late_minutes, early_leave_minutes, flags, first_in, last_out
-    from time.attendance_days where date between ${from}::date and ${to}::date ${filter} order by date`)) as unknown as {
+    select d.employee_id, d.date::text as date, d.sessions, d.scheduled_minutes, d.worked_minutes, d.break_minutes, d.extra_minutes, d.approved_extra_minutes, d.late_minutes, d.early_leave_minutes, d.flags, d.first_in, d.last_out
+    from time.attendance_days d where d.date between ${from}::date and ${to}::date ${filter} ${testFilter} order by d.date`)) as unknown as {
     employee_id: string; date: string; sessions: number; scheduled_minutes: number | null; worked_minutes: number; break_minutes: number; extra_minutes: number; approved_extra_minutes: number; late_minutes: number; early_leave_minutes: number; flags: string[]; first_in: Date | null; last_out: Date | null;
   }[];
   return rows.map((r) => ({
@@ -72,6 +78,21 @@ export async function attendanceRows(executor: Executor, employeeIds: string[] |
     firstIn: r.first_in ? new Date(r.first_in) : null,
     lastOut: r.last_out ? new Date(r.last_out) : null,
   }));
+}
+
+export type TestMark = { employeeId: string; date: string; note: string; setBy: string; setAt: Date };
+
+/** The days currently marked "test only" in a range (the newest row per person and day says test_only = true). */
+export async function testMarks(executor: Executor, employeeIds: string[] | null, from: string, to: string): Promise<TestMark[]> {
+  if (employeeIds && employeeIds.length === 0) return [];
+  const filter = employeeIds ? sql`and employee_id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})` : sql``;
+  const rows = (await executor.execute(sql`
+    select * from (
+      select distinct on (employee_id, date) employee_id, date::text as date, test_only, note, set_by, set_at
+      from time.hours_marks where date between ${from}::date and ${to}::date ${filter}
+      order by employee_id, date, set_at desc, id desc
+    ) latest where test_only`)) as unknown as { employee_id: string; date: string; note: string; set_by: string; set_at: Date }[];
+  return rows.map((r) => ({ employeeId: r.employee_id, date: r.date, note: r.note, setBy: r.set_by, setAt: new Date(r.set_at) }));
 }
 
 /** Each person's own time zone (their clock setting), defaulting to the company zone elsewhere. */

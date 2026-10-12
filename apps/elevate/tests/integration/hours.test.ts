@@ -220,6 +220,84 @@ describe("the review view", () => {
   });
 });
 
+describe("days marked test only", () => {
+  it("leaves a marked day out of review, approval, export and the unapproved counts, keeps it in the history, and can be taken off", async () => {
+    const W = lastWeek();
+    const lead = await person("MkLead", { roles: ["team_lead", "employee"] });
+    const worker = await person("MkWorker", { managerId: lead.employeeId });
+    await normalWeek(worker.employeeId, W);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
+    const day = W; // the Monday
+
+    // The lead marks Monday as a test, with a reason.
+    as(lead.user);
+    expect(await actions.markTestDay({ employeeId: worker.employeeId, date: day, note: "x" })).toMatchObject({ ok: false }); // a note needs a few words
+    expect(await actions.markTestDay({ employeeId: worker.employeeId, date: day, note: "Testing the time clock" })).toEqual({ ok: true, data: undefined });
+    expect(await actions.markTestDay({ employeeId: worker.employeeId, date: day, note: "Again" })).toEqual({ ok: false, error: "That day is already marked test only." });
+    expect((await notes(worker.user.id, "hours.test_marked")).length).toBe(1);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'hours.mark_test' and target_id = ${worker.employeeId}`)).toHaveLength(1);
+
+    // Review: only Tuesday is listed; Monday is under the marked days with its reason.
+    const review = await queries.getTeamReview(W);
+    expect(review.canMarkTest).toBe(true);
+    const mine = review.rows.find((r) => r.employeeId === worker.employeeId)!;
+    expect(mine.days.map((d) => d.date)).toEqual([addDays(W, 1)]);
+    expect(mine.workedMinutes).toBe(420);
+    expect(review.testDays).toEqual([expect.objectContaining({ employeeId: worker.employeeId, date: day, note: "Testing the time clock" })]);
+
+    // Approving the week approves only the unmarked day; the marked one is not in the approvals or the export.
+    as(hr);
+    expect(await actions.approveHoursWeek({ employeeId: worker.employeeId, weekStart: W })).toEqual({ ok: true, data: { approved: 1 } });
+    expect((await approvals(worker.employeeId)).map((a) => a.date)).toEqual([addDays(W, 1)]);
+    await actions.savePayPeriod({ kind: "weekly" });
+    const out = await actions.exportHours({ periodStart: W, kind: "daily", includeUnapproved: true });
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.data.testDays).toBeGreaterThanOrEqual(1);
+      const table = out.data.csv.trim().split(/\r?\n/).map((line) => line.split(","));
+      expect(table.filter((r) => r[1] === worker.user.email).map((r) => r[table[0].indexOf("Date")])).toEqual([addDays(W, 1)]);
+    }
+
+    // The clock history and the attendance day are untouched.
+    expect(await rows(sql`select 1 from time.clock_events where employee_id = ${worker.employeeId} and type = 'clock_in'`)).toHaveLength(2);
+    expect(await rows(sql`select 1 from time.attendance_days where employee_id = ${worker.employeeId} and date = ${day}::date`)).toHaveLength(1);
+
+    // Taking the mark off brings the day back.
+    as(lead.user);
+    expect(await actions.clearTestDay({ employeeId: worker.employeeId, date: day })).toEqual({ ok: true, data: undefined });
+    expect(await actions.clearTestDay({ employeeId: worker.employeeId, date: day })).toEqual({ ok: false, error: "That day is not marked test only." });
+    expect((await queries.getTeamReview(W)).testDays).toHaveLength(0);
+    expect((await queries.getTeamReview(W)).rows.find((r) => r.employeeId === worker.employeeId)!.days).toHaveLength(2);
+    // The marks are a record: they cannot be edited or deleted.
+    await expect(db.execute(sql`update time.hours_marks set note = 'x' where employee_id = ${worker.employeeId}`)).rejects.toThrow();
+    await expect(db.execute(sql`delete from time.hours_marks where employee_id = ${worker.employeeId}`)).rejects.toThrow();
+  });
+
+  it("is for a lead's own team and HR only, and refuses days with no hours, in the future, or too far back", async () => {
+    const W = lastWeek();
+    const lead = await person("MkLead2", { roles: ["team_lead", "employee"] });
+    const mine = await person("MkMine", { managerId: lead.employeeId });
+    const other = await person("MkOther");
+    await normalWeek(mine.employeeId, W);
+    await normalWeek(other.employeeId, W);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
+
+    as(lead.user);
+    expect((await actions.markTestDay({ employeeId: other.employeeId, date: W, note: "Not my team" })).ok).toBe(false); // outside the chain
+    expect(await actions.markTestDay({ employeeId: mine.employeeId, date: addDays(W, 3), note: "A day with no hours" })).toMatchObject({ ok: false });
+    expect(await actions.markTestDay({ employeeId: mine.employeeId, date: addDays(today(), 3), note: "In the future" })).toEqual({ ok: false, error: "That day has not happened yet." });
+    expect(await actions.markTestDay({ employeeId: mine.employeeId, date: addDays(today(), -200), note: "Too old" })).toMatchObject({ ok: false });
+
+    for (const role of ["employee", "recruiter", "executive"] as RoleSlug[]) {
+      as(await makeUser("nomark", [role]));
+      expect(await actions.markTestDay({ employeeId: mine.employeeId, date: W, note: "Not allowed" })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+    // HR may mark anyone, including their own test day.
+    as(hr);
+    expect((await actions.markTestDay({ employeeId: other.employeeId, date: W, note: "HR marks it" })).ok).toBe(true);
+  });
+});
+
 describe("the payroll export", () => {
   async function approvedWeek(label: string, lastName?: string) {
     const W = lastWeek();

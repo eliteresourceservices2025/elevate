@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatInZone, resolveTimeZone } from "@/lib/time";
 import { downlineEmployeeIds, reportName, todayInZone } from "@/modules/org/service";
-import { approvalKey, attendanceRows, dayState, latestApprovals, zonesFor, type DayState } from "./hours-service";
+import { approvalKey, attendanceRows, dayState, latestApprovals, testMarks, zonesFor, type DayState } from "./hours-service";
 import { addDays, mondayOf, recentPeriods, type PayPeriod, type PayPeriodKind } from "./pay-periods";
 import { hoursSettings } from "./schema";
 
@@ -49,7 +49,10 @@ export type ReviewRow = {
   canApprove: boolean;
 };
 
-export type TeamReview = { weekStart: string; weekEnd: string; rows: ReviewRow[]; scope: "all" | "team"; pending: number };
+/** A day someone marked "test only": it is not in the list above, and can be taken off again. */
+export type TestDay = { employeeId: string; name: string; date: string; weekday: string; note: string; markedBy: string; markedOn: string };
+
+export type TeamReview = { weekStart: string; weekEnd: string; rows: ReviewRow[]; scope: "all" | "team"; pending: number; /** The signed-in person may mark days as test only (and take the mark off). */ canMarkTest: boolean; testDays: TestDay[] };
 
 /** One week of every person the signed-in lead (their team) or HR (everyone) reviews, with approval state. Defaults to last week. */
 export async function getTeamReview(weekStartInput?: string): Promise<TeamReview> {
@@ -63,7 +66,9 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
   const restrict = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
   const days = (await attendanceRows(db, restrict, weekStart, weekEnd)).filter((r) => r.sessions > 0 || r.scheduledMinutes !== null);
   const ids = [...new Set(days.map((d) => d.employeeId))];
-  if (ids.length === 0) return { weekStart, weekEnd, rows: [], scope, pending: 0 };
+  const canMarkTest = ["all", "team"].includes(scopeFor(user, "hours.mark_test") ?? "");
+  const testDays = await testDaysOf(restrict, weekStart, weekEnd);
+  if (ids.length === 0) return { weekStart, weekEnd, rows: [], scope, pending: 0, canMarkTest, testDays };
 
   const approvals = await latestApprovals(db, ids, weekStart, weekEnd);
   const zones = await zonesFor(db, ids);
@@ -115,7 +120,20 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
-  return { weekStart, weekEnd, rows, scope, pending: rows.filter((r) => r.canApprove).length };
+  return { weekStart, weekEnd, rows, scope, pending: rows.filter((r) => r.canApprove).length, canMarkTest, testDays };
+}
+
+/** The days marked test only in a week, with who marked them and why (names, not ids). */
+async function testDaysOf(restrict: string[] | null, from: string, to: string): Promise<TestDay[]> {
+  const marks = await testMarks(db, restrict, from, to);
+  if (marks.length === 0) return [];
+  const people = (await db.execute(sql`select id, legal_first_name as first, legal_last_name as last, preferred_name as preferred from core.employees where id in (${sql.join([...new Set(marks.map((m) => m.employeeId))].map((id) => sql`${id}`), sql`, `)})`)) as unknown as { id: string; first: string; last: string; preferred: string | null }[];
+  const nameOf = new Map(people.map((p) => [p.id, reportName({ first: p.first, last: p.last, preferred: p.preferred })]));
+  const by = (await db.execute(sql`select u.id, u.email, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred from core.users u left join core.employees e on e.user_id = u.id where u.id in (${sql.join([...new Set(marks.map((m) => m.setBy))].map((id) => sql`${id}`), sql`, `)})`)) as unknown as { id: string; email: string; first: string | null; last: string | null; preferred: string | null }[];
+  const byName = new Map(by.map((r) => [r.id, r.first && r.last ? reportName({ first: r.first, last: r.last, preferred: r.preferred }) : r.email]));
+  return marks
+    .map((m) => ({ employeeId: m.employeeId, name: nameOf.get(m.employeeId) ?? "Unknown", date: m.date, weekday: WEEKDAY.format(new Date(`${m.date}T00:00:00Z`)), note: m.note, markedBy: byName.get(m.setBy) ?? "Someone", markedOn: m.setAt.toISOString() }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.date.localeCompare(b.date));
 }
 
 export type PeriodProgress = { start: string; totalDays: number; pendingDays: number; pendingPeople: number; teams: { team: string; pendingDays: number; pendingPeople: number }[] };

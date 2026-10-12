@@ -14,7 +14,8 @@ import { approvePersonWeek } from "./hours-approve";
 import { CLEAN_FLAGS, attendanceRows } from "./hours-service";
 import { addDays, periodContaining, type PayPeriodKind } from "./pay-periods";
 import { hoursSettings } from "./schema";
-import { approveCleanSchema, approveWeekSchema, exportHoursSchema, payPeriodSchema } from "./validators";
+import { setTestMark } from "./hours-marks";
+import { approveCleanSchema, approveWeekSchema, clearTestDaySchema, exportHoursSchema, markTestDaySchema, payPeriodSchema } from "./validators";
 
 // Hours approval (lead or HR, per person and week) and the payroll export (HR). ELEVATE labels and totals hours; it never computes pay.
 
@@ -77,6 +78,37 @@ export async function approveCleanWeeks(input: unknown): Promise<ActionResult<{ 
   });
 }
 
+/**
+ * Marks one person's day "test only": kept in the history, left out of review, export and the unapproved counts. A lead can do it
+ * for their team, HR for anyone. The person is told, and the audit log names who did it.
+ */
+export async function markTestDay(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    const reach = scopeFor(actor, "hours.mark_test");
+    if (reach !== "all" && reach !== "team") throw new ForbiddenError("hours.mark_test");
+    const parsed = markTestDaySchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    await setTestMark(actor, { employeeId: parsed.data.employeeId, date: parsed.data.date, testOnly: true, note: parsed.data.note });
+    refresh();
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Takes the "test only" mark off a day: it counts as normal hours again. */
+export async function clearTestDay(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    const reach = scopeFor(actor, "hours.mark_test");
+    if (reach !== "all" && reach !== "team") throw new ForbiddenError("hours.mark_test");
+    const parsed = clearTestDaySchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    await setTestMark(actor, { employeeId: parsed.data.employeeId, date: parsed.data.date, testOnly: false, note: "Mark taken off" });
+    refresh();
+    return { ok: true, data: undefined };
+  });
+}
+
 /** How pay periods are cut for the export. HR only. */
 export async function savePayPeriod(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
@@ -98,7 +130,7 @@ export async function savePayPeriod(input: unknown): Promise<ActionResult> {
 }
 
 /** A CSV of a pay period's hours: the daily detail or a per-person summary. Approved days only unless asked otherwise. Audited. */
-export async function exportHours(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number; unapprovedDays: number }>> {
+export async function exportHours(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number; unapprovedDays: number; testDays: number }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "hours.export");

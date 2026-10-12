@@ -404,6 +404,29 @@ export const hoursApprovals = time
   )
   .enableRLS();
 
+/**
+ * A day marked "test only" (someone tried the clock; it is not real work). Append-only: the newest row per person and day decides
+ * (test_only true = marked, false = the mark was taken off). Marked days stay in the clock history and the attendance days; they are
+ * left out of hours review, the payroll export and the "not approved" counts.
+ */
+export const hoursMarks = time
+  .table(
+    "hours_marks",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      date: date("date", { mode: "string" }).notNull(),
+      testOnly: boolean("test_only").notNull(),
+      note: text("note").notNull(),
+      setBy: uuid("set_by").notNull(),
+      setAt: timestamp("set_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [index("hours_marks_employee_idx").on(t.employeeId, t.date, t.setAt)],
+  )
+  .enableRLS();
+
 export const PAY_PERIOD_KINDS = ["semi_monthly", "weekly", "biweekly", "monthly"] as const;
 
 /** One row: how HR's pay periods are cut, for the hours export. */

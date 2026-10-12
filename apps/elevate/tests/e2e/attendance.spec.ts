@@ -578,3 +578,49 @@ test("long lists show one page at a time: Schedules pages through everyone and k
   await hrPage.getByRole("button", { name: "Previous", exact: true }).click();
   await expect(hrPage.getByRole("button", { name: /Set schedule for 1 person/ })).toBeVisible();
 });
+
+test("a lead marks a day as test only, it leaves the review list, and the mark can be taken off", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const slow = { timeout: 30_000 };
+  const stamp = Date.now();
+  const lead = await createEmployeeAccount("Tess", `TstLead${stamp}`, { roles: ["team_lead"] });
+  const worker = await createEmployeeAccount("Tom", `Tst${stamp}`, { managerId: lead.employeeId });
+
+  const phxDate = (offset: number) => new Date(Date.now() + offset * 86_400_000).toLocaleDateString("sv-SE", { timeZone: "America/Phoenix" });
+  const mondayOf = (d: string) => {
+    const dt = new Date(`${d}T00:00:00Z`);
+    dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7));
+    return dt.toISOString().slice(0, 10);
+  };
+  const monday = mondayOf(phxDate(-7));
+  const tuesday = new Date(Date.parse(`${monday}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    for (const d of [monday, tuesday]) {
+      await sql`insert into time.attendance_days (employee_id, date, sessions, worked_minutes, break_minutes, scheduled_minutes, first_in, last_out)
+        values (${worker.employeeId}, ${d}::date, 1, 420, 60, 420, timezone('America/Phoenix', ${d}::date + time '09:00'), timezone('America/Phoenix', ${d}::date + time '17:00'))`;
+    }
+  } finally {
+    await sql.end();
+  }
+
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+  await signInEnrollingMfa(page, lead);
+  await page.goto(`/hours-review?rweek=${monday}`);
+  await expect(page.getByText(`Tom Tst${stamp}`)).toBeVisible(slow);
+  await page.getByText("Days (2)").click();
+  await expect(page.getByText("Marked test only (")).toHaveCount(0);
+
+  // Mark the Monday as a test: it leaves the list and appears under "Marked test only" with the reason.
+  await (await hydrated(page.getByRole("button", { name: new RegExp(`Mark Tom Tst${stamp} on ${monday} as test only`) }))).click();
+  await page.getByLabel("Why is this a test?").fill("Testing the time clock");
+  await page.getByRole("button", { name: "Mark", exact: true }).click();
+  await expect(page.getByText("Marked test only (1)")).toBeVisible(slow);
+  await expect(page.getByText("Testing the time clock")).toBeVisible();
+  await expect(page.getByText("Days (1)")).toBeVisible(slow);
+
+  // Take the mark off: the day is back.
+  await page.getByRole("button", { name: "Not a test" }).click();
+  await expect(page.getByText("Marked test only (")).toHaveCount(0, slow);
+  await expect(page.getByText("Days (2)")).toBeVisible(slow);
+});

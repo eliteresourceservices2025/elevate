@@ -98,7 +98,7 @@ export async function createEmployeeAccount(
 export async function signInEnrollingMfa(page: Page, account: TestAccount) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(account.email);
-  await page.getByLabel("Password").fill(account.password);
+  await page.getByLabel("Password", { exact: true }).fill(account.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
   await page.waitForURL(/\/mfa(\?|$)/);
