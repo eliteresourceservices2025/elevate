@@ -266,11 +266,17 @@ export async function syncJibblePeople(client: JibbleClient | null = getJibbleCl
       unmatched += 1;
       continue;
     }
-    const taken = await db.select({ id: jibblePeople.employeeId }).from(jibblePeople).where(and(eq(jibblePeople.jibblePersonId, found.id), sql`${jibblePeople.employeeId} <> ${e.id}`)).limit(1);
-    if (taken.length > 0) {
+    // Who else holds this Jibble account? A record that was archived or has left no longer needs it (a duplicate after an import, a
+    // person who left): its old link is dropped so the account goes to the current record. A current person's link is never taken.
+    const holders = (await db.execute(sql`
+      select p.employee_id as id, (e.archived_at is not null or e.status = 'separated') as stale
+      from time.jibble_people p join core.employees e on e.id = p.employee_id
+      where p.jibble_person_id = ${found.id} and p.employee_id <> ${e.id}`)) as unknown as { id: string; stale: boolean }[];
+    if (holders.some((h) => !h.stale)) {
       unmatched += 1;
       continue;
     }
+    for (const h of holders) await db.delete(jibblePeople).where(eq(jibblePeople.employeeId, h.id));
     await db
       .insert(jibblePeople)
       .values({ employeeId: e.id, jibblePersonId: found.id, matchedBy: "email" })

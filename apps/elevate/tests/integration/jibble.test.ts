@@ -418,6 +418,28 @@ describe("matching people to Jibble accounts", () => {
     expect((await mapOf(b.employeeId)).length + (await mapOf(dupe.employeeId)).length).toBe(1);
   });
 
+  it("gives a Jibble account held by an archived duplicate to the current record, but never takes it from a current person", async () => {
+    // The old record (archived after an import made a duplicate) still holds the Jibble account.
+    const oldRecord = await person("OldDupe");
+    await rows(sql`update core.employees set archived_at = now() where id = ${oldRecord.employeeId}`);
+    const current = await person("NewDupe", { mapped: false });
+    fake.people = [{ id: oldRecord.jibbleId, email: current.user.email, fullName: "Same Person", status: "Active" }];
+    const result = await jobs.syncJibblePeople(fake);
+    expect(result.matched).toBeGreaterThanOrEqual(1);
+    expect(await rows(sql`select jibble_person_id from time.jibble_people where employee_id = ${current.employeeId}`)).toEqual([{ jibble_person_id: oldRecord.jibbleId }]);
+    expect(await rows(sql`select 1 from time.jibble_people where employee_id = ${oldRecord.employeeId}`)).toHaveLength(0);
+
+    // A current person holding the account is never overridden, by email or by hand.
+    const holder = await person("Holder");
+    const claimer = await person("Claimer", { mapped: false });
+    fake.people = [{ id: holder.jibbleId, email: claimer.user.email, fullName: "Claimer", status: "Active" }];
+    await jobs.syncJibblePeople(fake);
+    expect(await rows(sql`select 1 from time.jibble_people where employee_id = ${claimer.employeeId}`)).toHaveLength(0);
+    expect(await rows(sql`select 1 from time.jibble_people where employee_id = ${holder.employeeId}`)).toHaveLength(1);
+    as(hr);
+    expect(await actions.setJibblePerson({ employeeId: claimer.employeeId, jibblePersonId: holder.jibbleId })).toEqual({ ok: false, error: "That Jibble account is already matched to someone else." });
+  });
+
   it("lets HR match and unmatch by hand, refusing an account that someone else has, and only HR", async () => {
     const x = await person("HandX", { mapped: false });
     const y = await person("HandY", { mapped: false });

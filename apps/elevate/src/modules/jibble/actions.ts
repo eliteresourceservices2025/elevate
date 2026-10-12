@@ -72,8 +72,13 @@ export async function setJibblePerson(input: unknown): Promise<ActionResult> {
       if (jibblePersonId === null) {
         await tx.delete(jibblePeople).where(eq(jibblePeople.employeeId, employeeId));
       } else {
-        const [taken] = await tx.select({ employeeId: jibblePeople.employeeId }).from(jibblePeople).where(eq(jibblePeople.jibblePersonId, jibblePersonId)).limit(1);
-        if (taken && taken.employeeId !== employeeId) throw new ActionFailure("That Jibble account is already matched to someone else.");
+        const holders = (await tx.execute(sql`
+          select p.employee_id as id, (e.archived_at is not null or e.status = 'separated') as stale
+          from time.jibble_people p join core.employees e on e.id = p.employee_id
+          where p.jibble_person_id = ${jibblePersonId} and p.employee_id <> ${employeeId}`)) as unknown as { id: string; stale: boolean }[];
+        if (holders.some((h) => !h.stale)) throw new ActionFailure("That Jibble account is already matched to someone else.");
+        // An archived or departed record's old link is dropped, so the account can move to the current record.
+        for (const h of holders) await tx.delete(jibblePeople).where(eq(jibblePeople.employeeId, h.id));
         await tx
           .insert(jibblePeople)
           .values({ employeeId, jibblePersonId, matchedBy: "manual" })
