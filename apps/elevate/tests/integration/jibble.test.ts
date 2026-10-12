@@ -189,6 +189,33 @@ describe("when a clock click is queued for Jibble", () => {
     expect(await logOf(late.employeeId)).toHaveLength(0);
   });
 
+  it("mirrors a person listed for a self-test without the policy or the team switch, and nobody else", async () => {
+    const owner = await person("SelfTest");
+    const other = await person("NotListed");
+    process.env.JIBBLE_SELF_TEST_EMAILS = owner.user.email.toUpperCase();
+    try {
+      // no monitoring policy is published here, and neither person is on a team that uses Jibble
+      as(owner.user);
+      expect((await attendance.clockIn({})).ok).toBe(true);
+      expect((await attendance.clockOut()).ok).toBe(true);
+      expect((await logOf(owner.employeeId)).map((l) => `${l.action}:${l.status}`).sort()).toEqual(["In:queued", "Out:queued"]);
+
+      as(other.user);
+      expect((await attendance.clockIn({})).ok).toBe(true);
+      expect((await attendance.clockOut()).ok).toBe(true);
+      expect(await logOf(other.employeeId)).toHaveLength(0);
+
+      // the setting is only read: it is off again as soon as it is removed
+      delete process.env.JIBBLE_SELF_TEST_EMAILS;
+      as(owner.user);
+      await attendance.clockIn({});
+      await attendance.clockOut();
+      expect(await logOf(owner.employeeId)).toHaveLength(2);
+    } finally {
+      delete process.env.JIBBLE_SELF_TEST_EMAILS;
+    }
+  });
+
   it("refuses to turn the switch on until the monitoring policy is published", async () => {
     const team = await makeTeam();
     expect(await turnOn(hr, team)).toEqual({ ok: false, error: "Publish the monitoring policy before turning on Jibble screenshots." });

@@ -1,6 +1,6 @@
 import "server-only";
 import { JibbleHttpClient, configFromEnv, type JibbleClient } from "./http-client";
-import { parseBreakMode, type BreakMode } from "./mirror-rules";
+import { parseBreakMode, parseSelfTestEmails, type BreakMode } from "./mirror-rules";
 
 // The configured Jibble client, or null when no token is set (then nothing is sent and the clock works as usual).
 // Tests install a fake with setJibbleClient().
@@ -24,6 +24,8 @@ export function getJibbleClient(): JibbleClient | null {
 
 /** JIBBLE_MIRROR_ENABLED=false = fallback mode: ELEVATE sends nothing to Jibble, people clock into both apps, and the nightly comparison finds gaps. */
 export const mirrorSendsEnabled = () => process.env.JIBBLE_MIRROR_ENABLED !== "false";
+/** See parseSelfTestEmails: people who test the link on their own account without the policy. Empty (the normal state) = nobody. */
+export const selfTestEmails = (): string[] => parseSelfTestEmails(process.env.JIBBLE_SELF_TEST_EMAILS);
 export const breakMode = (): BreakMode => parseBreakMode(process.env.JIBBLE_BREAK_MODE);
 export const mismatchToleranceMinutes = () => {
   const n = Number(process.env.JIBBLE_MISMATCH_MINUTES);

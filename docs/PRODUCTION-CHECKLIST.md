@@ -85,6 +85,7 @@ You proved the API clock-in works with `pnpm jibble:probe`. For the real link al
 - [ ] `JIBBLE_ACCESS_TOKEN` in Vercel Production, made from a Jibble account that will stay; redeploy.
 - [ ] `ELEVATE_ENV=production` on Production (safety lock: without it, calls are logged as skipped).
 - [ ] A real **monitoring policy** is published (section 6). Turning a team's Jibble switch on needs it.
+- [ ] *Testing on your own account before the policy exists:* set `JIBBLE_SELF_TEST_EMAILS` (your sign-in email) in Vercel Production and redeploy; your own clock is then mirrored without the policy and team switch (the Jibble page shows a "Self-test is on" notice). **Remove it when testing is done.**
 - [ ] Attendance > Jibble > **Match people** (work email must equal the Jibble email) and check every pilot person is matched.
 - [ ] Attendance > Rules: the **Jibble switch on for the pilot team only**, with that team's allowed IP ranges if you use them.
 - [ ] A pilot person clocks in on ELEVATE and the Jibble desktop app starts tracking; clock-out stops it. The page's "Recent calls" shows the calls as sent.

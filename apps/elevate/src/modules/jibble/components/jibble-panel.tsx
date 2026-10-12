@@ -60,6 +60,12 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
           ELEVATE is the time clock and the only source of hours. Jibble is used only for screenshots; they stay in Jibble and are never copied here. {BREAK_TEXT[overview.breakMode]}. Mirroring works for a team once the monitoring
           policy is published{overview.monitoringPublished ? " (it is)" : " (it is not yet)"} and the switch for the team is on in the Rules tab ({overview.teamsOn} {overview.teamsOn === 1 ? "team is" : "teams are"} on). Each night ELEVATE compares totals and flags days that differ by more than {overview.toleranceMinutes} minutes.
         </p>
+        {overview.selfTestPeople > 0 ? (
+          <p role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <strong>Self-test is on</strong> for {overview.selfTestPeople} {overview.selfTestPeople === 1 ? "person" : "people"} (set in the host settings as JIBBLE_SELF_TEST_EMAILS). Their clock is mirrored to Jibble even
+            without the published policy or the team switch. Remove the setting when testing is finished.
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <Button size="sm" disabled={pending || !overview.configured} onClick={() => run(() => testJibbleConnection(), (d) => { const r = d as { people: number; breaks: number | null }; return `Connected. Jibble has ${r.people} people${r.breaks === null ? "" : ` and ${r.breaks} break ${r.breaks === 1 ? "type" : "types"}`}.${overview.breakMode === "native" && r.breaks === 0 ? " Breaks will fail until breaks are set up for people in Jibble (Settings > Breaks, and on their schedule)." : ""}`; })}>
             Test connection

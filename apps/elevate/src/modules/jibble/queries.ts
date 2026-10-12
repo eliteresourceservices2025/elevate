@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { monitoringPolicyPublished } from "@/modules/attendance/service";
 import { reportName } from "@/modules/org/service";
-import { breakMode, getJibbleClient, mirrorSendsEnabled, mismatchToleranceMinutes } from "./client";
+import { breakMode, getJibbleClient, mirrorSendsEnabled, mismatchToleranceMinutes, selfTestEmails } from "./client";
 import type { BreakMode } from "./mirror-rules";
 
 export type JibblePersonRow = { employeeId: string; name: string; email: string | null; team: string | null; jibblePersonId: string | null; matchedBy: string | null };
@@ -18,6 +18,8 @@ export type JibbleOverview = {
   breakMode: BreakMode;
   toleranceMinutes: number;
   monitoringPublished: boolean;
+  /** How many people are listed in JIBBLE_SELF_TEST_EMAILS (testing on their own account, without the policy). Normally 0. */
+  selfTestPeople: number;
   teamsOn: number;
   /** HR's pause switch is on: nothing is being sent. */
   paused: boolean;
@@ -54,6 +56,7 @@ export async function getJibbleOverview(): Promise<JibbleOverview> {
     breakMode: breakMode(),
     toleranceMinutes: mismatchToleranceMinutes(),
     monitoringPublished: await monitoringPolicyPublished(db),
+    selfTestPeople: selfTestEmails().length,
     teamsOn: teams.n,
     paused: Boolean(state?.paused),
     oldestQueuedMinutes: state?.oldest === null || state?.oldest === undefined ? null : Math.round(Number(state.oldest)),

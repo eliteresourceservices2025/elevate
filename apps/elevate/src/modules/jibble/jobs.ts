@@ -6,7 +6,7 @@ import { MINUTE, replayClock } from "@/modules/attendance/clock";
 import { loadRecentEvents, prefsFor } from "@/modules/attendance/service";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { reportName } from "@/modules/org/service";
-import { breakMode, getJibbleClient, mirrorSendsEnabled, mismatchToleranceMinutes, sendsAllowed } from "./client";
+import { breakMode, getJibbleClient, mirrorSendsEnabled, mismatchToleranceMinutes, selfTestEmails, sendsAllowed } from "./client";
 import { JibbleError, type JibbleClient } from "./http-client";
 import { MAX_ATTEMPTS, backoffMs, isMismatch, repairAction, targetState, type JibbleAction } from "./mirror-rules";
 import { jibbleDaily, jibbleLinkLog, jibblePeople } from "./schema";
@@ -166,12 +166,16 @@ export async function runJibbleRepair(now = new Date(), client: JibbleClient | n
   const run: RepairRun = { checked: 0, repaired: 0, failed: 0 };
   if (!client || !mirrorSendsEnabled() || (await jibblePaused())) return run;
 
+  // People on a team that uses Jibble, plus anyone listed for a self-test (JIBBLE_SELF_TEST_EMAILS).
+  const selfTest = selfTestEmails();
+  const selfTestMatch = selfTest.length > 0 ? sql`lower(u.email) in (${sql.join(selfTest.map((e) => sql`${e}`), sql`, `)})` : sql`false`;
   const candidates = (await db.execute(sql`
     select e.id as employee_id, p.jibble_person_id
     from core.employees e
-    join time.clock_rules r on r.team_id = e.team_id and r.jibble_mirror
+    left join time.clock_rules r on r.team_id = e.team_id
+    left join core.users u on u.id = e.user_id
     join time.jibble_people p on p.employee_id = e.id
-    where e.archived_at is null and e.status <> 'separated'
+    where (coalesce(r.jibble_mirror, false) or ${selfTestMatch}) and e.archived_at is null and e.status <> 'separated'
       and exists (select 1 from time.clock_events c where c.employee_id = e.id and c.occurred_at > ${new Date(now.getTime() - 2 * DAY_MS).toISOString()}::timestamptz)
     limit 400`)) as unknown as { employee_id: string; jibble_person_id: string }[];
 

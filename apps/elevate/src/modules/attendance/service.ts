@@ -9,7 +9,9 @@ import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds, reportName } from "@/modules/org/service";
+import { selfTestEmails } from "@/modules/jibble/client";
 import { enqueueMirror, kickMirror } from "@/modules/jibble/enqueue";
+import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
 import { employees } from "@/modules/people/schema";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
 import { clockEvents, clockPrefs, clockRules, clockSelfies, correctionEvidence, overbreakNotices } from "./schema";
@@ -207,7 +209,9 @@ export async function performClock(actor: { id: string; email: string }, type: C
     await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired) } }, tx);
     if (type === "clock_in") await touchPresence(tx, person.id);
     // Jibble screenshots: queued in this same transaction when the team uses Jibble and monitoring is published (never blocks the clock).
-    mirrored = await enqueueMirror(tx, { employeeId: person.id, events: inserted, allowed: monitoring && rules.jibbleMirror });
+    // A person listed in JIBBLE_SELF_TEST_EMAILS is testing the link on their own account: allowed without the policy and team switch.
+    const selfTest = isSelfTestEmail(actor.email, selfTestEmails());
+    mirrored = await enqueueMirror(tx, { employeeId: person.id, events: inserted, allowed: (monitoring && rules.jibbleMirror) || selfTest });
 
     return {
       state: transition(endsBreakToo ? "working" : replay.state, endsBreakToo ? "clock_out" : type)!,

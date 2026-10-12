@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ATTEMPTS, backoffMs, describeFailure, isMismatch, isRetryable, mirrorSteps, parseBreakMode, parseDuration, pickBreak, repairAction, targetState } from "./mirror-rules";
+import { MAX_ATTEMPTS, backoffMs, describeFailure, isMismatch, isRetryable, isSelfTestEmail, parseSelfTestEmails, mirrorSteps, parseBreakMode, parseDuration, pickBreak, repairAction, targetState } from "./mirror-rules";
 import { configFromEnv } from "./http-client";
 
 const ev = (id: string, type: "clock_in" | "break_start" | "break_end" | "clock_out") => ({ id, type });
@@ -171,5 +171,24 @@ describe("putting Jibble back in step with ELEVATE", () => {
     expect(repairAction("break", "in", "clock")).toBe("Out");
     expect(repairAction("break", "out", "off")).toBe("In");
     expect(repairAction("break", "break", "off")).toBe("EndBreak");
+  });
+});
+
+describe("self-test list (JIBBLE_SELF_TEST_EMAILS)", () => {
+  it("is empty unless set, and ignores blanks and non-emails", () => {
+    expect(parseSelfTestEmails(undefined)).toEqual([]);
+    expect(parseSelfTestEmails("")).toEqual([]);
+    expect(parseSelfTestEmails("  , nonsense ,")).toEqual([]);
+  });
+  it("splits on commas, semicolons and spaces and lower-cases", () => {
+    expect(parseSelfTestEmails("Owner@Example.com, second@example.com; third@example.com")).toEqual(["owner@example.com", "second@example.com", "third@example.com"]);
+  });
+  it("matches an email by exact address, ignoring case, and never by part of it", () => {
+    const list = parseSelfTestEmails("owner@example.com");
+    expect(isSelfTestEmail("OWNER@example.com", list)).toBe(true);
+    expect(isSelfTestEmail("owner@example.com.evil.test", list)).toBe(false);
+    expect(isSelfTestEmail("someone-owner@example.com", list)).toBe(false);
+    expect(isSelfTestEmail(null, list)).toBe(false);
+    expect(isSelfTestEmail("owner@example.com", [])).toBe(false);
   });
 });

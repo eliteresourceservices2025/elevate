@@ -103,6 +103,20 @@ export function describeFailure(status: number | null, code: string): string {
 }
 
 /** Whether another try could help: network trouble, rate limits and server errors yes; a refusal no. */
+/**
+ * JIBBLE_SELF_TEST_EMAILS: sign-in emails of people who test the Jibble link on THEIR OWN account before the monitoring policy exists.
+ * A listed person is mirrored whatever the policy and their team's switch say. It is a deployment setting (only whoever manages the
+ * host can set it), never a screen, so HR cannot use it to monitor others. Parsed to lower case; blanks dropped.
+ */
+export function parseSelfTestEmails(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(/[,;\s]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.includes("@"));
+}
+
+export const isSelfTestEmail = (email: string | null | undefined, list: readonly string[]): boolean => Boolean(email) && list.includes((email as string).trim().toLowerCase());
+
 export const isRetryable = (status: number | null) => status === null || status === 408 || status === 429 || status >= 500;
 
 /** Where a person is in Jibble, from their latest time entry. */
