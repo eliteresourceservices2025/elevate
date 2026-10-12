@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { allowRequest, clientIp } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { writeAudit, type AuditEntry } from "@/modules/audit/write";
+import { signUpFailureMessage } from "./signup-errors";
 import {
   forgotPasswordSchema,
   mfaCodeSchema,
@@ -72,11 +73,18 @@ export async function signUpWithInvite(input: unknown): Promise<ActionResult> {
   // The before-user-created hook in the database rejects emails that were not invited.
   // The same message is returned either way, so this form cannot reveal who is invited.
   const supabase = await createSupabaseServerClient();
-  await supabase.auth.signUp({
+  const { error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: { emailRedirectTo: `${await siteUrl()}/auth/confirm?next=/mfa` },
   });
+  // Only failures that do not depend on being invited are shown (weak password, too many emails, confirmation email not sent).
+  // The invitation rejection (403) still reads as success. The address is never logged: only the status and code.
+  if (error) {
+    console.error("sign-up failed:", error.status ?? "no status", error.code ?? "no code");
+    const message = signUpFailureMessage(error);
+    if (message) return fail(message);
+  }
   return { ok: true, data: undefined };
 }
 
