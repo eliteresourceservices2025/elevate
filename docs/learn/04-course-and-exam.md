@@ -32,7 +32,7 @@ topic coverage compared against the organization's HIPAA course. Nothing is copi
 | 6 | Privacy and security incidents | What an incident is and what usually goes wrong, breach and the presumption, why speed matters, what to do and not do, encryption, no retaliation | 9 |
 | 7 | Scenario lab | Mixed, realistic situations that combine the modules; readiness check | 10 |
 
-Minimum time per module is **60% of the estimate** (rounded), enforced on the server; the player shows the estimate, not the
+Minimum time per module is **40% of the estimate** (lowered from 60% on 2026-10-13: a fast reader was kept waiting) (rounded), enforced on the server; the player shows the estimate, not the
 minimum.
 
 ## Lesson format

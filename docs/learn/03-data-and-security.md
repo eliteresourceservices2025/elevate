@@ -9,7 +9,7 @@ ELEVATE's non-negotiables (RLS on every table, append-only evidence, least privi
 | --- | --- | --- |
 | `courses` | One row per course (HIPAA first), slug, title | HR edits title; archived, never deleted |
 | `course_versions` | A numbered version: lesson content JSON, exam rules (`exam_config`), status draft, published or retired, reviewer and counsel approval | Frozen by trigger once published; can only be retired; one published version per course |
-| `version_modules` | Per module: order, estimated minutes, minimum seconds (60%), screen count, tracks that include it | Frozen with the version |
+| `version_modules` | Per module: order, estimated minutes, minimum seconds (40%), screen count, tracks that include it | Frozen with the version |
 | `questions` | Stem, options with stable ids, **`correct_ids` and `rationale` (the answer key)**, topic, module | Frozen with the version; key unreadable by the app role |
 | `assignments` | Person, course, version, track, reason (new hire, renewal, update, manual), due date, status | Identity never changes; status only moves forward; never deleted |
 | `module_screens` | A screen the person opened | Insert-only |

@@ -82,7 +82,7 @@ export const versionModules = learn
       position: smallint("position").notNull(),
       title: text("title").notNull(),
       estimatedMinutes: smallint("estimated_minutes").notNull(),
-      /** Active seconds a person must spend (60% of the estimate), counted on the server. */
+      /** Active seconds a person must spend (40% of the estimate), counted on the server. */
       minSeconds: integer("min_seconds").notNull(),
       /** How many screens the module has; all must be opened before it can complete. */
       screenCount: smallint("screen_count").notNull(),

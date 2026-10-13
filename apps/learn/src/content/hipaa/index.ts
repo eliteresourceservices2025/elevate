@@ -38,4 +38,4 @@ export const hipaaExamConfig = {
 } as const;
 
 /** A module must be open at least this share of its estimated time before it can be completed. */
-export const MIN_TIME_SHARE = 0.6;
+export const MIN_TIME_SHARE = 0.4;

@@ -81,10 +81,10 @@ describe("loading and publishing the HIPAA course", () => {
     expect(again.created).toBe(false);
   });
 
-  it("sets each module's minimum time to 60% of its estimate, with the tracks that include it", async () => {
+  it("sets each module's minimum time to 40% of its estimate, with the tracks that include it", async () => {
     const [v] = await admin`select v.id from learn.course_versions v join learn.courses c on c.id = v.course_id where c.slug = 'hipaa' order by v.version desc limit 1`;
     const rows = await admin`select module_key, estimated_minutes, min_seconds, screen_count, tracks from learn.version_modules where version_id = ${v.id} order by position`;
-    for (const r of rows) expect(r.min_seconds).toBe(Math.round((r.estimated_minutes as number) * 60 * 0.6));
+    for (const r of rows) expect(r.min_seconds).toBe(Math.round((r.estimated_minutes as number) * 60 * 0.4));
     expect(rows.find((r) => r.module_key === "security")!.tracks).toEqual(["full"]);
     expect(rows.find((r) => r.module_key === "incidents")!.tracks).toEqual(["full", "essentials", "refresher"]);
     const modules = hipaaCourse.modules;
@@ -185,7 +185,7 @@ describe("a learner going through the course", () => {
     await call(cookie, "screen", { assignmentId, moduleKey: first.key, screen: first.screens.length - 1 });
     const early = await call(cookie, "complete", { assignmentId, moduleKey: first.key });
     expect(early.body.code).toBe("time_missing");
-    expect(early.body.remainingSeconds).toBe(Math.round(first.estimatedMinutes * 60 * 0.6) - 35);
+    expect(early.body.remainingSeconds).toBe(Math.round(first.estimatedMinutes * 60 * 0.4) - 35);
 
     // The exam stays locked until every module is done.
     expect((await call(cookie, "startExam", { assignmentId })).body.code).toBe("modules_incomplete");
@@ -196,7 +196,7 @@ describe("a learner going through the course", () => {
         const r = await call(cookie, "screen", { assignmentId, moduleKey: m.key, screen: s });
         expect(r.status, `${m.key} screen ${s}`).toBe(200);
       }
-      const need = Math.round(m.estimatedMinutes * 60 * 0.6);
+      const need = Math.round(m.estimatedMinutes * 60 * 0.4);
       await admin`
         insert into learn.module_time (assignment_id, user_id, module_key, day, seconds) values (${assignmentId}, ${p.id}, ${m.key}, '2026-10-20', ${need})
         on conflict (assignment_id, module_key, day) do update set seconds = excluded.seconds`;
@@ -284,7 +284,7 @@ describe("a learner going through the course", () => {
     const required = hipaaCourse.modules.filter((m) => m.tracks.includes("essentials"));
     for (const m of required) {
       for (let s = 0; s < m.screens.length; s++) await call(cookie, "screen", { assignmentId, moduleKey: m.key, screen: s });
-      await admin`insert into learn.module_time (assignment_id, user_id, module_key, day, seconds) values (${assignmentId}, ${p.id}, ${m.key}, '2026-10-20', ${Math.round(m.estimatedMinutes * 60 * 0.6)})`;
+      await admin`insert into learn.module_time (assignment_id, user_id, module_key, day, seconds) values (${assignmentId}, ${p.id}, ${m.key}, '2026-10-20', ${Math.round(m.estimatedMinutes * 60 * 0.4)})`;
       expect((await call(cookie, "complete", { assignmentId, moduleKey: m.key })).status).toBe(200);
     }
     // Essentials never opens the modules it does not include.

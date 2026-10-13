@@ -15,7 +15,7 @@ export const RENEWAL_MONTHS = 12;
 export const RENEWAL_OPENS_DAYS_BEFORE = 60;
 
 /** A module's minimum active time is this share of its estimate. */
-export const MIN_TIME_SHARE = 0.6;
+export const MIN_TIME_SHARE = 0.4;
 /** One time credit per 30 seconds while the page is visible and there was input in the last 5 minutes. */
 export const HEARTBEAT_SECONDS = 30;
 export const ACTIVITY_PROMPT_SECONDS = 5 * 60;
