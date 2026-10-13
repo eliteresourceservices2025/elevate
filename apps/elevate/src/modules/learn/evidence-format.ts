@@ -36,24 +36,32 @@ export type EvidenceRow = {
   assignedSince: string;
   hipaa: CourseStatus;
   cybersecurity: CourseStatus;
+  /** The client's own add-on course, when it has a live one (see `EvidenceReport.addon`). */
+  addon?: CourseStatus | null;
 };
 
 export type EvidenceReport = {
   clientName: string;
   asOf: string;
   generatedAt: string;
+  /** The client's add-on course (its short name), or null when the client has none. Adds a column to the CSV and PDF. */
+  addon?: { label: string } | null;
   rows: EvidenceRow[];
 };
 
-export function summarize(report: EvidenceReport): { people: number; hipaaValid: number; hipaaNot: number; cyberValid: number } {
+export function summarize(report: EvidenceReport): { people: number; hipaaValid: number; hipaaNot: number; cyberValid: number; addonValid: number | null } {
   const hipaaValid = report.rows.filter((r) => r.hipaa.status === "valid").length;
   return {
     people: report.rows.length,
     hipaaValid,
     hipaaNot: report.rows.length - hipaaValid,
     cyberValid: report.rows.filter((r) => r.cybersecurity.status === "valid").length,
+    addonValid: report.addon ? report.rows.filter((r) => r.addon?.status === "valid").length : null,
   };
 }
+
+const NONE: CourseStatus = { status: "none", reference: null, issuedOn: null, validUntil: null };
+const SHORT: Record<CourseStatus["status"], string> = { valid: "Valid", expired: "Expired", revoked: "Revoked", later: "Later", none: "None" };
 
 const NOTE = "Training completion only. Scores and answers are not included. Status is as of the date shown.";
 
@@ -71,6 +79,7 @@ export function evidenceCsv(report: EvidenceReport): string {
     "Cybersecurity status",
     "Cybersecurity certificate",
     "Cybersecurity valid until",
+    ...(report.addon ? [`${report.addon.label} status`, `${report.addon.label} certificate`, `${report.addon.label} valid until`] : []),
   ];
   const rows = report.rows.map((r) => [
     report.clientName,
@@ -85,6 +94,7 @@ export function evidenceCsv(report: EvidenceReport): string {
     STATUS_WORDS[r.cybersecurity.status],
     r.cybersecurity.reference,
     r.cybersecurity.validUntil,
+    ...(report.addon ? [STATUS_WORDS[(r.addon ?? NONE).status], (r.addon ?? NONE).reference, (r.addon ?? NONE).validUntil] : []),
   ]);
   rows.push([], [NOTE]);
   return toCsv(header, rows);
@@ -118,13 +128,23 @@ export async function evidencePdf(report: EvidenceReport): Promise<Uint8Array> {
   const W = 595;
   const H = 842;
   const M = 40;
-  const cols = [
-    { label: "Name", x: M, w: 150 },
-    { label: "Assigned since", x: M + 150, w: 72 },
-    { label: "HIPAA status", x: M + 222, w: 120 },
-    { label: "Certificate", x: M + 342, w: 100 },
-    { label: "Valid until", x: M + 442, w: 73 },
-  ];
+  const withAddon = Boolean(report.addon);
+  const cols = withAddon
+    ? [
+        { label: "Name", x: M, w: 118 },
+        { label: "Assigned since", x: M + 118, w: 66 },
+        { label: "HIPAA status", x: M + 184, w: 104 },
+        { label: "Certificate", x: M + 288, w: 92 },
+        { label: "Valid until", x: M + 380, w: 62 },
+        { label: fitText(bold, report.addon?.label ?? "Add-on", 8.5, 70), x: M + 442, w: 73 },
+      ]
+    : [
+        { label: "Name", x: M, w: 150 },
+        { label: "Assigned since", x: M + 150, w: 72 },
+        { label: "HIPAA status", x: M + 222, w: 120 },
+        { label: "Certificate", x: M + 342, w: 100 },
+        { label: "Valid until", x: M + 442, w: 73 },
+      ];
   const s = summarize(report);
 
   let page = pdf.addPage([W, H]);
@@ -146,7 +166,7 @@ export async function evidencePdf(report: EvidenceReport): Promise<Uint8Array> {
     y -= 13;
   };
   header();
-  page.drawText(`${s.people} ${s.people === 1 ? "person" : "people"} assigned. HIPAA training valid: ${s.hipaaValid}. Not valid: ${s.hipaaNot}.`, { x: M, y, size: 10.5, font: bold, color: ink });
+  page.drawText(`${s.people} ${s.people === 1 ? "person" : "people"} assigned. HIPAA training valid: ${s.hipaaValid}. Not valid: ${s.hipaaNot}.${s.addonValid !== null ? ` ${report.addon?.label}: ${s.addonValid} valid.` : ""}`, { x: M, y, size: 10.5, font: bold, color: ink });
   y -= 24;
   tableHead();
 
@@ -156,7 +176,7 @@ export async function evidencePdf(report: EvidenceReport): Promise<Uint8Array> {
       y = H - M;
       tableHead();
     }
-    const cells = [r.name, r.assignedSince, STATUS_WORDS[r.hipaa.status], r.hipaa.reference ?? "", r.hipaa.validUntil ?? ""];
+    const cells = [r.name, r.assignedSince, withAddon ? SHORT[r.hipaa.status] : STATUS_WORDS[r.hipaa.status], r.hipaa.reference ?? "", r.hipaa.validUntil ?? "", ...(withAddon ? [SHORT[(r.addon ?? NONE).status]] : [])];
     cells.forEach((text, i) => page.drawText(fitText(sans, text, 9, cols[i].w - 6), { x: cols[i].x, y, size: 9, font: sans, color: r.hipaa.status === "valid" || i < 2 ? ink : rgb(0.6, 0.1, 0.1) }));
     y -= 15;
   }

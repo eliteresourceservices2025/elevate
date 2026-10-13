@@ -41,7 +41,7 @@ const report = (n = 2): EvidenceReport => ({
 
 describe("the evidence files", () => {
   it("summarizes who is trained", () => {
-    expect(summarize(report(4))).toEqual({ people: 4, hipaaValid: 2, hipaaNot: 2, cyberValid: 0 });
+    expect(summarize(report(4))).toEqual({ people: 4, hipaaValid: 2, hipaaNot: 2, cyberValid: 0, addonValid: null });
   });
   it("writes a CSV that cannot run as a formula and carries no scores", () => {
     const csv = evidenceCsv(report(2));
@@ -62,5 +62,34 @@ describe("the evidence files", () => {
     expect(Buffer.from(empty).subarray(0, 5).toString()).toBe("%PDF-");
     const odd = await evidencePdf({ ...report(1), clientName: "Clínica 日本" });
     expect((await PDFDocument.load(odd)).getPageCount()).toBe(1);
+  });
+});
+
+describe("a client add-on in the report", () => {
+  const valid = { status: "valid" as const, reference: "ERSCL-2026-ABCDEF", issuedOn: "2026-03-01", validUntil: "2027-03-01" };
+  const withAddon = (): EvidenceReport => {
+    const r = report(3);
+    return { ...r, addon: { label: "Acme requirements" }, rows: r.rows.map((row, i) => ({ ...row, addon: i === 0 ? valid : none })) };
+  };
+
+  it("adds three CSV columns, and none when the client has no add-on", () => {
+    const plain = evidenceCsv(report(2)).split("\n")[0];
+    const lines = evidenceCsv(withAddon()).split("\n");
+    expect(plain).not.toContain("Acme requirements");
+    expect(lines[0]).toContain("Acme requirements status,Acme requirements certificate,Acme requirements valid until");
+    expect(lines[1]).toContain("ERSCL-2026-ABCDEF");
+    expect(lines[1]).toContain("2027-03-01");
+  });
+
+  it("counts valid add-on certificates and draws a PDF with the extra column", async () => {
+    expect(summarize(withAddon()).addonValid).toBe(1);
+    expect(summarize(report(2)).addonValid).toBeNull();
+    const bytes = await evidencePdf(withAddon());
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  it("still carries no scores or answers", () => {
+    const head = evidenceCsv(withAddon()).split("\n").slice(0, 4).join(" ").toLowerCase();
+    expect(head).not.toMatch(/score|attempt|answer\b|ip address/);
   });
 });

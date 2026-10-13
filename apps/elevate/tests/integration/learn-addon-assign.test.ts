@@ -127,3 +127,22 @@ describe("client add-on assignment", () => {
     expect(list.rows.map((r) => r.userId)).not.toContain(outside.id);
   });
 });
+
+describe("add-on certificates and the evidence report", () => {
+  it("issues an ERSCL reference and shows the add-on in the client's evidence report", async () => {
+    const a = await liveAddon();
+    const p = await makePerson("Certified");
+    await onClient(p.employeeId, a.clientId, "2026-01-05");
+    const [asg] = await rows<{ id: string }>(sql`
+      insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${p.id}, ${a.courseId}, ${a.versionId}, 'full', 'manual', '2026-12-01') returning id`);
+    await db.execute(sql`update learn.assignments set status = 'in_progress' where id = ${asg.id}`);
+    await db.execute(sql`update learn.assignments set status = 'passed', passed_at = now() where id = ${asg.id}`);
+    const cert = await rows<{ reference: string }>(sql`select * from learn.accept_and_certify(${p.id}, ${asg.id}, 'v1', 'Certified Addon', '203.0.113.9', array['password']::text[])`);
+    expect(cert[0].reference).toMatch(/^ERSCL-\d{4}-[A-Z2-9]{6}$/);
+
+    const { buildClientEvidence } = await import("@/modules/learn/evidence");
+    const report = await buildClientEvidence(db, a.clientId, plus(new Date().toISOString().slice(0, 10), 1));
+    expect(report?.addon?.label).toContain("requirements");
+    expect(report?.rows.find((r) => r.name.startsWith("Certified"))?.addon).toMatchObject({ status: "valid", reference: cert[0].reference });
+  });
+});

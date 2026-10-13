@@ -41,7 +41,7 @@ export default async function CertificatePage({ params }: { params: Promise<{ as
           </p>
           <p className="muted">Reference {certificate.reference}</p>
           {certificate.revoked ? <p className="feedback bad">This certificate was revoked.</p> : null}
-          <p className="muted small">This is ERS training completion, not an official HIPAA certification. Anyone can check it at the verify page with the reference and your full name.</p>
+          <p className="muted small">This is ERS training completion, not an official certification from an outside body. Anyone can check it at the verify page with the reference and your full name.</p>
         </section>
         <p className="no-print">
           {certificate.revoked ? null : (

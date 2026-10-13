@@ -14,11 +14,11 @@ Time needed: about 90 minutes, plus waiting for DNS. Do it outside the Manila sh
    select count(*) from drizzle.__drizzle_migrations;
    ```
 
-   The repository has 66 migrations (0000 to 0065). Production is behind by the ones not yet applied (the last time this was checked,
+   The repository has 67 migrations (0000 to 0066). Production is behind by the ones not yet applied (the last time this was checked,
    the learn migrations 0054 to 0059 and the incident migration 0057 had not been applied; earlier ones may be missing too, which is
-   fine: the command applies whatever is missing, in order). Note the number you see; step 1 should end at 66.
+   fine: the command applies whatever is missing, in order). Note the number you see; step 1 should end at 67.
 2. **Pull the latest commits** on your computer (`git pull`) and confirm `apps/elevate/drizzle` ends with
-   `0064_learn_preview.sql`, `0065_learn_client_addons.sql`.
+   `0064_learn_preview.sql`, `0065_learn_client_addons.sql`, `0066_learn_addon_certificate_prefix.sql`.
 3. **Take a backup point.** Supabase dashboard > Database > Backups: note the latest backup time (Pro plan keeps daily backups).
 4. **Decide on the roll-out** (read step 9 first): which teams are the pilot, and whether HIPAA, which is already live, should be
    paused until then.
@@ -32,7 +32,7 @@ $env:DATABASE_URL_DIRECT = "<the session pooler string, port 5432>"
 pnpm db:migrate
 ```
 
-It should end with "migrations applied successfully". Then check the count again (should be 66) and that these exist:
+It should end with "migrations applied successfully". Then check the count again (should be 67) and that these exist:
 
 ```sql
 select to_regclass('learn.assignments'), to_regclass('ops.privacy_incidents'), to_regclass('talent.credentials');
