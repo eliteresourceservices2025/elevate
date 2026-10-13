@@ -48,7 +48,7 @@ export const m7: CourseModule = {
       title: "Why speed matters",
       blocks: [
         { type: "paragraph", text: "When a breach is confirmed, the covered entity must notify the people affected without unreasonable delay and no later than 60 days. A business associate must tell the covered entity first, and many contracts require it much sooner than that." },
-        { type: "paragraph", text: "The clock may start when anyone in the workforce knew. A few hours of delay on your side can use up time the client needs." },
+        { type: "paragraph", text: "A breach counts as discovered on the first day it is known, or would have been known with reasonable care, to anyone other than the person who caused it. A few hours of delay on your side can use up time the client needs." },
       ],
     },
     {
@@ -83,7 +83,7 @@ export const m7: CourseModule = {
       id: "no-retaliation",
       title: "You are protected",
       blocks: [
-        { type: "paragraph", text: "HIPAA prohibits retaliation against people who report possible violations in good faith. ERS does not punish people for reporting. It does apply sanctions for deliberate violations and for hiding incidents." },
+        { type: "paragraph", text: "HIPAA prohibits retaliating against someone for filing a complaint about a possible violation or taking part in an investigation. ERS goes further: it does not punish anyone for reporting a possible incident in good faith. It does apply sanctions for deliberate violations and for hiding incidents." },
         {
           type: "check",
           question: "You made an honest mistake and sent a message to the wrong client contact. What is the best next step?",
@@ -122,7 +122,7 @@ export const q7: QuestionSeed[] = [
   q("incidents", "Breach", "single", "Who decides whether an incident is a reportable breach?", ["The client and ERS, through their risk assessment", "The person who made the mistake", "A coworker", "The patient"], [0], "A breach determination follows a formal risk assessment by the responsible organization. You report; they decide."),
   q("incidents", "Breach", "single", "Under HIPAA, a covered entity must notify affected individuals of a breach without unreasonable delay and no later than:", ["60 days after discovery", "6 months", "1 year", "Whenever convenient"], [0], "The outer limit for individual notification is 60 days from discovery, and delay should not be unreasonable."),
   q("incidents", "Report details", "single", "What should you include when you write an incident report?", ["What happened, when and where, with no patient names or details", "The full patient record", "Your guess about whose fault it was", "Only that something went wrong"], [0], "Give facts about the event. Keep patient details out of the report itself."),
-  q("incidents", "No retaliation", "true_false", "True or false: HIPAA protects people who report possible violations in good faith from retaliation.", ["True", "False"], [0], "HIPAA prohibits retaliation against people who report possible violations in good faith."),
+  q("incidents", "No retaliation", "true_false", "True or false: HIPAA prohibits an organization from retaliating against someone for filing a complaint about a possible violation.", ["True", "False"], [0], "The Privacy Rule bars intimidating or retaliatory acts against people who file complaints or take part in investigations. ERS also does not punish good-faith internal reports."),
   q("incidents", "Preserve", "single", "You suspect a phishing email caused a problem. What should you do with the email?", ["Keep it and report it", "Delete it immediately", "Forward it to everyone", "Print it and throw it away"], [0], "Do not delete evidence. The message helps responders understand what happened."),
   q("incidents", "Scenario", "scenario", "You find a printout with patient names left on a shared printer at a co-working space. What do you do?", ["Keep it secure, report it to your lead and HR, and follow instructions", "Throw it in the bin", "Leave it where it is", "Take a photo and post it to ask whose it is"], [0], "Secure the document, then report it. Throwing it away or posting a photo spreads the exposure."),
 ];

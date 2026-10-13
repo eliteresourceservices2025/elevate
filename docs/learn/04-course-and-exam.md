@@ -11,15 +11,15 @@
 Pass mark for every track: **85%**. The track is resolved by ELEVATE from the person's client assignments (a new
 `core.clients.handles_phi` setting HR maintains); a person can be moved by hand with a reason.
 
-## Core curriculum (8 modules, about 85 minutes)
+## Core curriculum (8 modules, about 90 minutes)
 
 Original text, drafted from HHS/OCR public guidance, then reviewed. The sample's list is a starting point, not a script.
 
 | # | Module | Learning goals (plain language) | Min. time |
 | --- | --- | --- | --- |
-| 1 | HIPAA foundations and ERS's role | Who the parties are (covered entity, business associate, subcontractor, workforce); where ERS and a VA sit; why "I can see it" is not "I may use it" | 9 |
+| 1 | HIPAA foundations and ERS's role | Who the parties are (covered entity, business associate, subcontractor, workforce); where ERS and a VA sit; why "I can see it" is not "I may use it"; how ERS runs its program | 10 |
 | 2 | PHI, ePHI and identifiers | What counts, the 18 identifier families, context, screenshots and paper, de-identification limits | 10 |
-| 3 | Privacy Rule and minimum necessary | Use vs disclosure vs request, treatment/payment/operations awareness, the ERS 5-point send check (who, what, why, where, how) | 11 |
+| 3 | Privacy Rule and minimum necessary | Use vs disclosure vs request, treatment/payment/operations, written authorization, minimum necessary, patient rights, state laws as a floor, the ERS 5-point send check (who, what, why, where, how) | 13 |
 | 4 | Security Rule and safeguards | Administrative, physical, technical safeguards; access control, audit controls, transmission security; passwords and MFA | 12 |
 | 5 | Remote work and device security | Home workspace, screen privacy, shared devices, networks, approved systems, lost devices | 14 |
 | 6 | Phishing and social engineering | Spotting and reporting, vishing, MFA fatigue, safe handling of attachments and links | 11 |
@@ -60,7 +60,7 @@ minimum.
 | Tries | 3, then HR grants more (reason required; counted in `retry_grants`) |
 | Wait after a failed try | 1 hour, and the missed topics' modules must be reopened |
 | Question types | Single answer, multiple answers (all or nothing), true/false, scenario best-answer |
-| Bank size | 80 built (10 per module; the Essentials pool is 50), each tagged by topic and module, each with a rationale. A lint test (`apps/learn/src/content/hipaa/content.test.ts`) checks every question |
+| Bank size | 85 built (10 per module, 11 for Module 1 and 14 for Module 3; the Essentials pool is 55), each tagged by topic and module, each with a rationale. A lint test (`apps/learn/src/content/hipaa/content.test.ts`) checks every question |
 | Accommodation | HR can grant extra time (a retry grant of type "time") |
 
 Question quality rules (also checked by an automated content lint): one correct idea, plausible distractors, no "all of the

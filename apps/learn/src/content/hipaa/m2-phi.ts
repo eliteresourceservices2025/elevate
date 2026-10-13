@@ -57,7 +57,7 @@ export const m2: CourseModule = {
           type: "list",
           items: [
             "**Identity**: name, photo of a face, biometric prints.",
-            "**Contact and place**: address, city, ZIP code, phone, fax, email.",
+            "**Contact and place**: any place smaller than a state (street address, city, ZIP code), phone, fax, email.",
             "**Dates and ages**: birth date, admission or discharge date, appointment date, age over 89.",
             "**Numbers**: Social Security number, medical record number, insurance or account number, license numbers.",
             "**Digital and device**: IP address, website address, device serial numbers, vehicle plate numbers.",

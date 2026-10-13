@@ -13,12 +13,12 @@ const allText = (value: unknown): string[] => {
 };
 
 describe("the HIPAA course", () => {
-  it("is valid content with 8 modules of about 85 minutes", () => {
+  it("is valid content with 8 modules of about 90 minutes", () => {
     const parsed = courseContentSchema.safeParse(hipaaCourse);
     expect(parsed.success).toBe(true);
     expect(hipaaCourse.modules.map((m) => m.key)).toEqual(["foundations", "phi", "privacy", "security", "remote", "phishing", "incidents", "lab"]);
     const total = hipaaCourse.modules.reduce((n, m) => n + m.estimatedMinutes, 0);
-    expect(total).toBe(85);
+    expect(total).toBe(88);
   });
 
   it("has unique module keys and screen ids, and something to do in every module", () => {
@@ -54,8 +54,8 @@ describe("the HIPAA course", () => {
 });
 
 describe("the exam bank", () => {
-  it("has at least 80 valid questions", () => {
-    expect(hipaaQuestions.length).toBeGreaterThanOrEqual(80);
+  it("has at least 85 valid questions", () => {
+    expect(hipaaQuestions.length).toBeGreaterThanOrEqual(85);
     for (const question of hipaaQuestions) {
       const r = questionSeedSchema.safeParse(question);
       expect(r.success, question.stem).toBe(true);

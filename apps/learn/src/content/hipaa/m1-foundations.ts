@@ -7,7 +7,7 @@ export const m1: CourseModule = {
   key: "foundations",
   title: "HIPAA foundations and your role at ERS",
   summary: "What HIPAA is, who it applies to, where ERS and you fit, and the one habit that keeps you safe: when unsure, stop and ask.",
-  estimatedMinutes: 9,
+  estimatedMinutes: 10,
   tracks: ["full", "essentials", "refresher"],
   keyPoints: [
     "HIPAA protects the privacy and security of people's health information.",
@@ -15,6 +15,7 @@ export const m1: CourseModule = {
     "Being able to open information is not the same as being allowed to use it.",
     "Use or share only what your job and your client's rules allow.",
     "When you are not sure, stop, do not share, and ask your lead.",
+    "ERS runs a privacy and security program, and training is one required part of it.",
   ],
   screens: [
     {
@@ -23,7 +24,7 @@ export const m1: CourseModule = {
       blocks: [
         { type: "paragraph", text: "Many ERS clients are doctors' offices, clinics, billing companies and other healthcare organizations. When you work for them, you may see information about real patients: who they are, what is wrong with them, and what they owe." },
         { type: "paragraph", text: "That information belongs to the patient. A law called **HIPAA** says how it must be protected, and it applies to you as soon as you start work." },
-        { type: "callout", tone: "info", title: "Good news", text: "You do not need to be a lawyer. You need a few clear habits, and this course teaches them in about 85 minutes. Your progress is saved, so you can stop and come back." },
+        { type: "callout", tone: "info", title: "Good news", text: "You do not need to be a lawyer. You need a few clear habits, and this course teaches them in about 90 minutes. Your progress is saved, so you can stop and come back." },
       ],
     },
     {
@@ -53,7 +54,7 @@ export const m1: CourseModule = {
             "**Covered entity**: a health plan, a healthcare clearinghouse, or a healthcare provider that bills electronically. Most of our clients are covered entities.",
             "**Business associate**: a company that does work for a covered entity and handles patient information while doing it.",
             "**Subcontractor**: a company that a business associate uses to do part of that work.",
-            "**Workforce member**: the people who work under these organizations, including contractors like you.",
+            "**Workforce member**: people whose work is under the organization's direct control, paid by it or not, including contractors like you.",
           ],
         },
         { type: "callout", tone: "tip", text: "Depending on the client, ERS is a business associate or a subcontractor. Either way, the same protections follow the information to you." },
@@ -107,6 +108,25 @@ export const m1: CourseModule = {
       ],
     },
     {
+      id: "program",
+      title: "How ERS keeps this program running",
+      blocks: [
+        { type: "paragraph", text: "Following HIPAA is not only about individuals. Organizations must run a privacy and security program, and ERS does. You will see its parts in your daily work:" },
+        {
+          type: "list",
+          items: [
+            "**A named privacy contact**: the Privacy Officer, who owns the rules and answers questions.",
+            "**Written policies and agreements**: ERS's policies, and each client's business associate agreement.",
+            "**Risk checks**: regular reviews of where information could be exposed, and fixes.",
+            "**Training**: HIPAA requires every workforce member to be trained, and ERS repeats it every year.",
+            "**Sanctions and reporting**: consequences for breaking the rules, and a way to report problems.",
+            "**Records**: ERS keeps its policy and training records for six years.",
+          ],
+        },
+        { type: "callout", tone: "tip", text: "You are not expected to run the program. Your part is to follow it, ask when unsure, and report problems." },
+      ],
+    },
+    {
       id: "consequences",
       title: "Why it matters to you",
       blocks: [
@@ -119,7 +139,7 @@ export const m1: CourseModule = {
             "Clients can end their contract with ERS, which affects every teammate.",
           ],
         },
-        { type: "callout", tone: "info", text: "Reporting a problem in good faith is protected. Nobody at ERS will be punished for speaking up about a possible incident." },
+        { type: "callout", tone: "info", text: "ERS does not punish good-faith reports, and HIPAA prohibits retaliating against people who file a complaint about a possible violation. Speak up." },
       ],
     },
     {
@@ -166,6 +186,7 @@ export const q1: QuestionSeed[] = [
   q("foundations", "The agreement sets the rules", "single", "What does a business associate agreement (BAA) do?", ["Sets what the business associate may do with patient information and what safeguards it must use", "Lists the salaries of the client's staff", "Replaces the need for training", "Lets the team share patient information freely among themselves"], [0], "A BAA is the contract that sets the permitted uses, the required safeguards and the reporting duties for the information."),
   q("foundations", "Client rules", "single", "ERS's rules and your client's instructions differ on how to send a file. What do you do?", ["Follow the stricter rule and ask your lead if you are unsure", "Follow the one that is quicker", "Follow whichever you saw a coworker use", "Ignore both and use your own method"], [0], "When two sets of rules apply and differ, the stricter one protects the information. Ask your lead when unsure."),
   q("foundations", "When unsure", "single", "You are asked to do something with patient information that you have never done and are not sure is allowed. What is the best first step?", ["Stop and ask your team lead or client contact", "Do it quickly so the task is not late", "Do it, then mention it afterward", "Ask a friend who works in healthcare"], [0], "When unsure, stop, do not share, and ask. A short question is always cheaper than a wrong disclosure."),
-  q("foundations", "Reporting", "true_false", "True or false: ERS will punish you for reporting a possible privacy incident you noticed, even if it turns out to be nothing.", ["True", "False"], [1], "Good-faith reporting is encouraged and protected. Fast reporting is how problems are limited."),
+  q("foundations", "Compliance program", "multiple", "Which of these are part of the privacy and security program ERS runs? Select all that apply.", ["Training for the workforce", "Written policies and client agreements", "Sanctions for people who break the rules", "Letting each person decide their own rules"], [0, 1, 2], "A program has training, written policies and agreements, sanctions, risk checks and records. Individuals do not set their own rules."),
+  q("foundations", "Reporting", "true_false", "True or false: ERS will punish you for reporting a possible privacy incident you noticed, even if it turns out to be nothing.", ["True", "False"], [1], "ERS does not punish good-faith reports, and fast reporting is how problems are limited."),
   q("foundations", "Consequences", "multiple", "Which of these can follow a deliberate privacy violation? Select all that apply.", ["Penalties for the organization", "Criminal penalties for knowingly misusing patient information", "ERS sanctions, up to ending the engagement", "A bonus for finding the record first"], [0, 1, 2], "HIPAA has civil and criminal penalties, and ERS applies sanctions. Nothing rewards misuse."),
 ];

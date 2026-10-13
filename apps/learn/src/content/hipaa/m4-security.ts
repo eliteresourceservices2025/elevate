@@ -65,7 +65,7 @@ export const m4: CourseModule = {
       title: "Strong passwords and MFA",
       blocks: [
         { type: "paragraph", text: "A long passphrase of several unrelated words is stronger and easier to remember than a short complex password. Use a password manager if your client allows one." },
-        { type: "paragraph", text: "**Multi-factor authentication (MFA)** adds a second proof, such as a code from an app. It stops most attackers even when a password is stolen." },
+        { type: "paragraph", text: "**Multi-factor authentication (MFA)** adds a second proof, such as a code from an app. It greatly reduces the chance that a stolen password alone is enough to get in." },
         { type: "callout", tone: "warning", title: "Unexpected prompts", text: "If you get an MFA prompt you did not start, deny it and report it. Someone may be trying to sign in as you." },
       ],
     },

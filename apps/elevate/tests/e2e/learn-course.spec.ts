@@ -42,20 +42,20 @@ test("a person reads a module, finishes it when the time is reached, and starts 
 
   // The player: screen by screen, up to the last, where finishing is blocked until the time is reached.
   await expect(page.getByRole("heading", { name: "HIPAA foundations and your role at ERS" })).toBeVisible(slow);
-  await expect(page.getByText("Screen 1 of 9")).toBeVisible();
+  await expect(page.getByText("Screen 1 of 10")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Why this training matters" })).toBeVisible();
-  for (let i = 0; i < 8; i++) await page.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(page.getByText("Screen 9 of 9")).toBeVisible();
+  for (let i = 0; i < 9; i++) await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByText("Screen 10 of 10")).toBeVisible();
   await expect(page.getByText("Key points")).toBeVisible();
   const finish = page.getByRole("button", { name: "Finish this module" });
   await expect(finish).toBeDisabled();
-  await expect(page.getByText(/Reading time: 0:00 of 5:24 needed/)).toBeVisible();
+  await expect(page.getByText(/Reading time: 0:00 of 6:00 needed/)).toBeVisible();
 
   // The server saw every screen. Reaching the reading time (added directly: the real minimum is minutes long) opens the button.
   await expect
     .poll(async () => (await sql`select count(*)::int as n from learn.module_screens where assignment_id = ${assignmentId}`)[0].n, { timeout: 15_000 })
-    .toBe(9);
-  await sql`insert into learn.module_time (assignment_id, user_id, module_key, day, seconds) values (${assignmentId}, ${userId}, 'foundations', current_date, 324)`;
+    .toBe(10);
+  await sql`insert into learn.module_time (assignment_id, user_id, module_key, day, seconds) values (${assignmentId}, ${userId}, 'foundations', current_date, 360)`;
   await page.reload();
   await expect(page.getByText("You have spent enough time on this module.")).toBeVisible(slow);
   await page.getByRole("button", { name: "Finish this module" }).click();

@@ -6,7 +6,7 @@ export const m3: CourseModule = {
   key: "privacy",
   title: "The Privacy Rule and minimum necessary",
   summary: "When patient information may be used or shared, how to keep to the minimum needed, and the ERS 5-point send check.",
-  estimatedMinutes: 11,
+  estimatedMinutes: 13,
   tracks: ["full", "essentials", "refresher"],
   keyPoints: [
     "Using, disclosing and requesting information are three different actions.",
@@ -14,6 +14,8 @@ export const m3: CourseModule = {
     "Access is by role: you see what your job needs, nothing more.",
     "Before you send: Who, What, Why, Where, How.",
     "Verify who is asking before you share anything.",
+    "Anything beyond the permitted purposes needs the patient's written authorization, and the client decides that.",
+    "HIPAA is the minimum: a stricter state law or client rule can apply as well.",
   ],
   screens: [
     {
@@ -54,6 +56,23 @@ export const m3: CourseModule = {
       ],
     },
     {
+      id: "authorization",
+      title: "When the patient's written permission is needed",
+      blocks: [
+        { type: "paragraph", text: "For anything outside treatment, payment, healthcare operations and the other purposes the rule permits, the patient must give a **written authorization**: a signed form that says what may be shared, with whom, and why." },
+        {
+          type: "list",
+          items: [
+            "Marketing messages that use patient information",
+            "Sharing information with an employer or an outside company for its own purposes",
+            "Most uses of psychotherapy notes",
+            "Selling patient information (generally not allowed without authorization)",
+          ],
+        },
+        { type: "callout", tone: "warning", text: "You will never decide this yourself. Your client keeps the authorizations and decides. If a request is outside your task, route it to your lead or client contact." },
+      ],
+    },
+    {
       id: "minimum-necessary",
       title: "Minimum necessary",
       blocks: [
@@ -71,6 +90,40 @@ export const m3: CourseModule = {
       blocks: [
         { type: "paragraph", text: "There are a few exceptions, for example sharing for a patient's treatment between providers, giving the patient their own information, or disclosures the law requires." },
         { type: "callout", tone: "tip", text: "These exceptions are for your client to apply, not for you to decide. If you think one applies, ask your lead or client contact. Do not rely on your own reading." },
+      ],
+    },
+    {
+      id: "patient-rights",
+      title: "When a patient asks for something",
+      blocks: [
+        { type: "paragraph", text: "Patients have rights over their own information. The client handles them, and you may be the first person who hears the request." },
+        {
+          type: "list",
+          items: [
+            "See or get a copy of their records",
+            "Ask for a correction",
+            "Get a list of certain disclosures",
+            "Ask for limits on use or sharing, or for confidential communications",
+            "Receive the clinic's notice of privacy practices, and complain",
+          ],
+        },
+        { type: "paragraph", text: "**Your part:** do not answer or send anything yourself. Be kind, take down only the request, and pass it on the way your client instructs. The client has its own deadlines and checks." },
+      ],
+    },
+    {
+      id: "state-laws",
+      title: "HIPAA is the minimum, not the maximum",
+      blocks: [
+        { type: "paragraph", text: "HIPAA is a federal floor. Where a state law gives patients **more** privacy protection, that stricter law can apply as well. Some kinds of information, such as mental health, substance use treatment or HIV records, often have extra rules." },
+        {
+          type: "list",
+          items: [
+            "Your client and ERS decide which rules apply to a task. Their instructions already reflect them.",
+            "If a request involves sensitive records or something unusual, stop and ask.",
+            "A rule being different in another state is a reason to ask, not a reason to guess.",
+          ],
+        },
+        { type: "callout", tone: "tip", text: "Whichever rule is stricter is the one you follow." },
       ],
     },
     {
@@ -150,5 +203,9 @@ export const q3: QuestionSeed[] = [
   q("privacy", "Verification", "single", "A caller says he is a patient's spouse and wants the appointment date. What is the right approach?", ["Follow your client's verification and sharing rules, and share nothing until the person is confirmed as allowed", "Share it, since spouses can usually know", "Share it if he sounds sure", "Ask him to prove it by reading the patient's address back"], [0], "Confirmed identity and permission come first. A confident voice is not proof."),
   q("privacy", "Five-point check", "single", "In the ERS 5-point send check, which question asks whether you are using the approved system or address?", ["Where?", "Who?", "What?", "Why?"], [0], "\"Where?\" is about the destination: the approved system or address."),
   q("privacy", "Five-point check", "multiple", "Which of these are part of the ERS 5-point send check? Select all that apply.", ["Who is the recipient", "What is the minimum information needed", "Why is it being sent", "How popular the patient is"], [0, 1, 2], "The five points are Who, What, Why, Where and How. Popularity is not part of it."),
+  q("privacy", "Authorization", "single", "A marketing company asks your client for a list of its patients so it can send them advertisements. What is generally needed first?", ["The patients' written authorization", "Nothing, because the list is only names", "A verbal okay from the receptionist", "A note from an ERS manager"], [0], "Using patient information for marketing generally requires the patient's written authorization. It is not a treatment, payment or operations purpose."),
+  q("privacy", "Patient rights", "single", "A patient calls and asks for a copy of their medical records. What should you do?", ["Do not send anything yourself; take the request the way your client instructs and pass it to the client contact", "Email the records right away", "Read the records to them over the phone", "Tell them they are not allowed to have them"], [0], "Patients have a right of access, and the client handles it with its own checks and deadlines. Your part is to pass the request on correctly."),
+  q("privacy", "Patient rights", "multiple", "Which of these are rights patients have over their information? Select all that apply.", ["To see or get a copy of their records", "To ask for a correction", "To get a list of certain disclosures", "To choose which ERS team member opens their file"], [0, 1, 2], "Access, amendment and an accounting of disclosures are patient rights. Patients do not choose who works on a file."),
+  q("privacy", "State laws", "single", "A state law gives patients more privacy protection than HIPAA for a certain kind of record. What does that mean for your work?", ["The stricter protection can apply as well, so follow your client's instructions and ask when a request looks unusual", "HIPAA always overrides it, so you can ignore it", "Only the state law matters and your client's rules do not", "It only applies to paper records"], [0], "HIPAA is a federal floor. A state law that gives greater privacy protection is generally not overridden by HIPAA, so the stricter rule applies."),
   q("privacy", "Mindset", "scenario", "A friend who is a nurse messages you: \"My neighbor went to your client's clinic. Can you check if her results are in?\" What do you do?", ["Decline, do not look, and carry on with your assigned tasks", "Look quickly and give a vague answer", "Look and tell her only that results are in", "Ask the neighbor's name and check later"], [0], "Looking for a personal reason is a violation and disclosing even a vague answer is a disclosure."),
 ];
