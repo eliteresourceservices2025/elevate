@@ -9,4 +9,5 @@ export const learnPermissions = definePermissions({
   "learn.view_results": { roles: { super_admin: "all", hr_admin: "all" } },
   "learn.assign": { roles: { super_admin: "all", hr_admin: "all" } },
   "learn.grant_retry": { roles: { super_admin: "all", hr_admin: "all" } },
+  "learn.export_evidence": { roles: { super_admin: "all", hr_admin: "all" } },
 });

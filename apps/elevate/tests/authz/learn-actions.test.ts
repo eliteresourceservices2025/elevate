@@ -68,6 +68,18 @@ describe("HR's training actions and the status list, every role", () => {
       if (hr) expect(outcome).not.toMatchObject({ name: "ForbiddenError" });
       else expect(outcome).toMatchObject({ name: "ForbiddenError" });
     });
+    it(`${role}: ${hr ? "may download client evidence" : "is refused client evidence"}`, async () => {
+      as(role);
+      const result = await actions.exportClientEvidence({ clientId: ID, asOf: "2026-06-01", format: "csv" });
+      if (hr) expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
+      else expect(result).toEqual({ ok: false, error: NO_ACCESS });
+    });
+    it(`${role}: ${hr ? "may list clients for the evidence report" : "cannot list clients for the evidence report"}`, async () => {
+      as(role);
+      const outcome = await queries.listEvidenceClients().catch((e: unknown) => e);
+      if (hr) expect(outcome).not.toMatchObject({ name: "ForbiddenError" });
+      else expect(outcome).toMatchObject({ name: "ForbiddenError" });
+    });
     const sees = hr || role === "team_lead";
     it(`${role}: ${sees ? "may read the status list" : "cannot read the status list"}`, async () => {
       as(role);

@@ -135,6 +135,44 @@ describe("automatic assignment rules (pilot limit)", () => {
   });
 });
 
+describe("the client evidence report", () => {
+  it("lists the people assigned on the date with their certificate status, and exports it audited", async () => {
+    const { buildClientEvidence } = await import("@/modules/learn/evidence");
+    const hr = await makePerson({ roles: ["hr_admin"], first: "Hr" });
+    const client = await makeClient(true);
+    const trained = await makePerson({ first: "Trina" });
+    const untrained = await makePerson({ first: "Ulrich" });
+    const gone = await makePerson({ first: "Gone" });
+    const later = await makePerson({ first: "Later" });
+    await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date) values (${trained.employeeId}, ${client}, '2026-01-05'), (${untrained.employeeId}, ${client}, '2026-02-01')`);
+    await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date, end_date) values (${gone.employeeId}, ${client}, '2025-01-05', '2025-12-31')`);
+    await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date) values (${later.employeeId}, ${client}, '2026-12-01')`);
+    await withCertificate(trained, "2027-03-01", "2026-03-01");
+
+    const report = (await buildClientEvidence(db, client, "2026-06-01"))!;
+    const byName = new Map(report.rows.map((r) => [r.name.split(" ")[0], r]));
+    expect([...byName.keys()].sort()).toEqual(["Trina", "Ulrich"]); // not the person who left or who starts later
+    expect(byName.get("Trina")!.hipaa).toMatchObject({ status: "valid", validUntil: "2027-03-01" });
+    expect(byName.get("Ulrich")!.hipaa.status).toBe("none");
+    expect(await buildClientEvidence(db, randomUUID(), "2026-06-01")).toBeNull();
+
+    // the export action: CSV and PDF, audited with counts only
+    as(hr);
+    const csv = await actions.exportClientEvidence({ clientId: client, asOf: "2026-06-01", format: "csv" });
+    expect(csv).toMatchObject({ ok: true, data: { base64: false, people: 2, trained: 1 } });
+    expect(csv.ok && csv.data.content).toContain("Trina");
+    const pdf = await actions.exportClientEvidence({ clientId: client, asOf: "2026-06-01", format: "pdf" });
+    expect(pdf.ok && pdf.data.base64).toBe(true);
+    expect(pdf.ok && Buffer.from(pdf.data.content, "base64").subarray(0, 5).toString()).toBe("%PDF-");
+    const audit = await rows<{ metadata: Record<string, unknown> }>(sql`select metadata from ops.audit_log where action = 'learn.export_evidence' and target_id = ${client}`);
+    expect(audit.length).toBe(2);
+    expect(JSON.stringify(audit)).not.toContain("Trina");
+    // someone without the permission is refused
+    as(await makePerson());
+    expect(await actions.exportClientEvidence({ clientId: client, asOf: "2026-06-01", format: "csv" })).toEqual({ ok: false, error: "You do not have access to do that." });
+  });
+});
+
 describe("training readiness for client assignment", () => {
   it("tells passed, open, overdue, expired and none apart", async () => {
     const { trainingReadiness } = await import("@/modules/learn/certificate-status");

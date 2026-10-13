@@ -187,3 +187,11 @@ export async function getTrainingCounts(): Promise<TrainingCountsByCourse> {
   }
   return out;
 }
+
+/** Clients to choose from for the evidence report (active, by name). HR and Super Admin. */
+export async function listEvidenceClients(): Promise<{ id: string; name: string; handlesPhi: boolean }[]> {
+  const user = await requireUser();
+  await authorize(user, "learn.export_evidence");
+  const rows = (await db.execute(sql`select id, name, handles_phi from core.clients where archived_at is null and is_active order by name`)) as unknown as { id: string; name: string; handles_phi: boolean }[];
+  return rows.map((r) => ({ id: r.id, name: r.name, handlesPhi: r.handles_phi }));
+}

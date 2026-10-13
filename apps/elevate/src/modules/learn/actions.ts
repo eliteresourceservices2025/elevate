@@ -13,7 +13,9 @@ import { currentSignInMethods } from "@/modules/signing/session";
 import { courseInfo } from "./constants";
 import { createLaunchToken } from "./service";
 import { handoffUrl, learnBaseUrl } from "./token";
-import { assignTrainingSchema, autoAssignSchema, grantRetrySchema } from "./validators";
+import { buildClientEvidence } from "./evidence";
+import { evidenceCsv, evidencePdf, summarize } from "./evidence-format";
+import { assignTrainingSchema, autoAssignSchema, evidenceExportSchema, grantRetrySchema } from "./validators";
 
 /**
  * Starts the sign-in handoff to ELEVATE Learn: makes a one-time token (60 seconds, stored only as a hash) and returns it with the
@@ -142,5 +144,32 @@ export async function setAutoAssign(input: unknown): Promise<ActionResult> {
     });
     revalidatePath("/training");
     return { ok: true, data: undefined };
+  });
+}
+
+/**
+ * HR downloads the training evidence for one client on one date, as a CSV or a PDF: the people assigned that day with their HIPAA
+ * and Cybersecurity certificate status. Completion only (no scores, tries or answers). Rate limited and audited with counts.
+ */
+export async function exportClientEvidence(input: unknown): Promise<ActionResult<{ fileName: string; mimeType: string; content: string; base64: boolean; people: number; trained: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.export_evidence");
+    const parsed = evidenceExportSchema.safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the request and try again.");
+    const { clientId, asOf, format } = parsed.data;
+    if (!(await allowRequest("download", actor.id))) return fail("Too many downloads. Wait a few minutes and try again.");
+
+    const report = await buildClientEvidence(db, clientId, asOf);
+    if (!report) return fail("That client was not found.");
+    const s = summarize(report);
+    await writeAudit({ actor, action: "learn.export_evidence", targetType: "client", targetId: clientId, metadata: { asOf, format, people: s.people, trained: s.hipaaValid } });
+
+    const slug = report.clientName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "client";
+    if (format === "csv") {
+      return { ok: true, data: { fileName: `training-evidence-${slug}-${asOf}.csv`, mimeType: "text/csv;charset=utf-8", content: evidenceCsv(report), base64: false as boolean, people: s.people, trained: s.hipaaValid } };
+    }
+    const bytes = await evidencePdf(report);
+    return { ok: true, data: { fileName: `training-evidence-${slug}-${asOf}.pdf`, mimeType: "application/pdf", content: Buffer.from(bytes).toString("base64"), base64: true as boolean, people: s.people, trained: s.hipaaValid } };
   });
 }

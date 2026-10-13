@@ -10,7 +10,9 @@ import { parsePaging } from "@/lib/pagination";
 import { LEARN_COURSES } from "@/modules/learn/constants";
 import { TrainingRowActions } from "@/modules/learn/components/training-actions";
 import { AutoAssignCard } from "@/modules/learn/components/auto-assign-card";
-import { getAutoAssign, listTrainingStatus } from "@/modules/learn/queries";
+import { EvidenceCard } from "@/modules/learn/components/evidence-card";
+import { getAutoAssign, listEvidenceClients, listTrainingStatus } from "@/modules/learn/queries";
+import { todayInZone } from "@/modules/org/service";
 
 export const metadata: Metadata = { title: "Training status" };
 
@@ -23,6 +25,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
   const paging = parsePaging({ page: one(params.page), size: one(params.size) });
   const { rows, counts, info, canSeeResults, canManage, course, published } = await orNotFound(listTrainingStatus(filters, paging));
   const auto = canManage ? await orNotFound(getAutoAssign(course)) : null;
+  const evidenceClients = canManage ? await orNotFound(listEvidenceClients()) : null;
   const courseLabel = LEARN_COURSES.find((c) => c.slug === course)?.label ?? "HIPAA";
   const withCourse = (extra: Record<string, string | undefined>) => {
     const q = new URLSearchParams();
@@ -79,6 +82,8 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
           />
         </>
       ) : null}
+
+      {evidenceClients ? <EvidenceCard clients={evidenceClients} today={todayInZone()} /> : null}
 
       <ul className="flex flex-wrap gap-2 text-sm" aria-label="Filter by status">
         {chips.map((c) => (

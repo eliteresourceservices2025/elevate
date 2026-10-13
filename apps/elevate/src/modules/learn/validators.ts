@@ -25,6 +25,13 @@ export const autoAssignSchema = z
   })
   .refine((v) => v.mode !== "teams" || v.teamIds.length > 0, { message: "Tick at least one team, or choose Paused.", path: ["teamIds"] });
 
+/** HR downloads the training evidence for one client on one date. */
+export const evidenceExportSchema = z.object({
+  clientId: uuid,
+  asOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date").refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), "Choose a date"),
+  format: z.enum(["csv", "pdf"]),
+});
+
 export const trainingFilterSchema = z.object({
   state: z.enum(["overdue", "open", "passed", "none"]).optional(),
   q: z.string().trim().max(80).optional(),
