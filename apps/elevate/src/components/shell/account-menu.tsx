@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { Bell, Camera, Compass, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { Bell, Camera, Compass, LifeBuoy, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { usePathname } from "next/navigation";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +42,7 @@ export function AccountMenu({
   /** When the photo last changed, or null when there is none (the initials show instead). */
   photoVersion?: number | null;
 }) {
+  const pathname = usePathname();
   const [confirming, setConfirming] = useState(false);
   const [choosingPhoto, setChoosingPhoto] = useState(false);
 
@@ -84,6 +86,9 @@ export function AccountMenu({
           </DropdownMenuItem>
           <DropdownMenuItem render={<Link href="/settings/notifications" className={item} />}>
             <Bell aria-hidden /> Email notifications
+          </DropdownMenuItem>
+          <DropdownMenuItem render={<Link href={pathname && pathname !== "/support" ? `/support?from=${encodeURIComponent(pathname)}` : "/support"} className={item} />}>
+            <LifeBuoy aria-hidden /> Contact support
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setChoosingPhoto(true)}>
             <Camera aria-hidden /> {photoVersion ? "Change photo" : "Add a photo"}

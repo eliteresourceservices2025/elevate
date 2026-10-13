@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import { supportAddress } from "@/modules/support/constants";
 
 export function AuthCard({
   title,
@@ -23,6 +24,9 @@ export function AuthCard({
         <CardContent>{children}</CardContent>
       </Card>
       <p className="mt-4 text-center text-xs text-muted-foreground">
+        Trouble signing in? Email <a href={`mailto:${supportAddress()}`} className="underline">{supportAddress()}</a>
+      </p>
+      <p className="mt-2 text-center text-xs text-muted-foreground">
         <Link href="/privacy" className="underline">Privacy policy</Link> · <Link href="/terms" className="underline">Terms of use</Link>
       </p>
     </main>

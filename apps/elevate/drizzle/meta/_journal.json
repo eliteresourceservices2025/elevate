@@ -358,6 +358,13 @@
       "when": 1791849354169,
       "tag": "0050_careers_page_slugs",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1791850758383,
+      "tag": "0051_anniversaries_support",
+      "breakpoints": true
     }
   ]
 }

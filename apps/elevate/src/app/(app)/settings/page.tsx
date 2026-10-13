@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bell, Compass, FileText, FileUp, History, ListChecks, Mail, ShieldCheck } from "lucide-react";
+import { Bell, Compass, FileText, FileUp, History, LifeBuoy, ListChecks, Mail, ShieldCheck } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -14,6 +14,13 @@ const SECTIONS = [
     icon: Compass,
     title: "Quick tour",
     description: "A one-minute walk through the menu, the time clock and the header. Replay it any time.",
+  },
+  {
+    href: "/support",
+    action: null,
+    icon: LifeBuoy,
+    title: "Contact support",
+    description: "Ask for help with signing in, the time clock or anything not working.",
   },
   {
     href: "/settings/notifications",

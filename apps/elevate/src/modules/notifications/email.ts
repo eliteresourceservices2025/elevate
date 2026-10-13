@@ -4,7 +4,7 @@ import "server-only";
 // the queue simply waits. Tests install a fake with setEmailSender().
 
 export type EmailAttachment = { fileName: string; mimeType: string; /** The file's text (a calendar invite). */ content: string };
-export type OutgoingEmail = { to: string; subject: string; text: string; html: string; attachments?: EmailAttachment[]; /** A silent copy to a shared mailbox (applicant emails only). */ bcc?: string };
+export type OutgoingEmail = { to: string; subject: string; text: string; html: string; attachments?: EmailAttachment[]; /** A silent copy to a shared mailbox (applicant emails only). */ bcc?: string; /** Replies go here instead of the default address (support requests: the person who asked). */ replyTo?: string };
 export interface EmailSender {
   send(mail: OutgoingEmail): Promise<void>;
 }
@@ -23,7 +23,7 @@ class ResendSender implements EmailSender {
       body: JSON.stringify({
         from: this.from,
         to: [mail.to],
-        ...(this.replyTo ? { reply_to: this.replyTo } : {}),
+        ...(mail.replyTo || this.replyTo ? { reply_to: mail.replyTo ?? this.replyTo } : {}),
         ...(mail.bcc ? { bcc: [mail.bcc] } : {}),
         subject: mail.subject,
         text: mail.text,

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { supportAddress } from "@/modules/support/constants";
 
 // Public pages: the one place that search engines may index.
 export const metadata: Metadata = { title: "Careers", description: "Open positions at Elite Resource Services.", robots: { index: true, follow: true } };
@@ -19,6 +20,13 @@ export default function CareersLayout({ children }: LayoutProps<"/careers">) {
       <main id="main" className="mx-auto max-w-3xl px-4 py-8">
         {children}
       </main>
+      <footer className="mx-auto max-w-3xl px-4 pb-10 text-sm text-muted-foreground">
+        Questions about applying? Email{" "}
+        <a href={`mailto:${supportAddress()}`} className="text-primary underline-offset-4 hover:underline">
+          {supportAddress()}
+        </a>
+        .
+      </footer>
     </div>
   );
 }

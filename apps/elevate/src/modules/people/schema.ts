@@ -267,3 +267,19 @@ export const changeRequests = core
     ],
   )
   .enableRLS();
+
+/** One row per person and anniversary year once the reminder went out, so a repeat run or a missed day never sends it twice. */
+export const anniversaryNotices = core
+  .table(
+    "anniversary_notices",
+    {
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      /** The calendar year of the anniversary. */
+      year: integer("year").notNull(),
+      noticedAt: timestamp("noticed_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [primaryKey({ columns: [t.employeeId, t.year] })],
+  )
+  .enableRLS();

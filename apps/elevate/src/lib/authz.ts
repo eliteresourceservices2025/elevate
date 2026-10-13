@@ -19,6 +19,7 @@ import { reviewsPermissions } from "@/modules/reviews/permissions";
 import { safevoicePermissions } from "@/modules/safevoice/permissions";
 import { signingPermissions } from "@/modules/signing/permissions";
 import { settingsPermissions } from "@/modules/settings/permissions";
+import { supportPermissions } from "@/modules/support/permissions";
 import { timeoffPermissions } from "@/modules/timeoff/permissions";
 import type { PermissionRule, RoleSlug, Scope } from "./roles";
 
@@ -44,6 +45,7 @@ export const PERMISSIONS = {
   ...safevoicePermissions,
   ...assetsPermissions,
   ...credentialsPermissions,
+  ...supportPermissions,
   ...analyticsPermissions,
   ...dashboardPermissions,
   ...settingsPermissions,

@@ -10,6 +10,7 @@ const WEEKLY = 10_080;
 export const JOBS: Record<string, JobInfo> = {
   "document-expiry-reminders": { label: "Document expiry reminders", everyMinutes: DAILY },
   "credential-reminders": { label: "Certificate expiry reminders", everyMinutes: DAILY },
+  "anniversary-reminders": { label: "Work anniversary reminders", everyMinutes: DAILY },
   "document-pending-cleanup": { label: "Unfinished upload cleanup", everyMinutes: DAILY },
   "acknowledgment-reminders": { label: "Acknowledgment reminders", everyMinutes: DAILY },
   "daily-digest": { label: "Daily notification digest", everyMinutes: DAILY * 3 }, // weekdays only: a weekend is a gap
