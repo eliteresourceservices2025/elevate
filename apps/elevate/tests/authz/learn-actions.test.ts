@@ -56,6 +56,18 @@ describe("HR's training actions and the status list, every role", () => {
       if (hr) expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
       else expect(result).toEqual({ ok: false, error: NO_ACCESS });
     });
+    it(`${role}: ${hr ? "may set automatic assignment" : "is refused setting automatic assignment"}`, async () => {
+      as(role);
+      const result = await actions.setAutoAssign({ course: "hipaa", mode: "paused", teamIds: [] });
+      if (hr) expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
+      else expect(result).toEqual({ ok: false, error: NO_ACCESS });
+    });
+    it(`${role}: ${hr ? "may read the automatic assignment setting" : "cannot read the automatic assignment setting"}`, async () => {
+      as(role);
+      const outcome = await queries.getAutoAssign("hipaa").catch((e: unknown) => e);
+      if (hr) expect(outcome).not.toMatchObject({ name: "ForbiddenError" });
+      else expect(outcome).toMatchObject({ name: "ForbiddenError" });
+    });
     const sees = hr || role === "team_lead";
     it(`${role}: ${sees ? "may read the status list" : "cannot read the status list"}`, async () => {
       as(role);

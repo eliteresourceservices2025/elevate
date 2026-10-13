@@ -25,7 +25,7 @@ const rows = async <T = Row>(q: ReturnType<typeof sql>): Promise<T[]> => (await 
 
 // ---- Assigning ------------------------------------------------------------------------------------------------------------------
 
-export type AssignRun = { skipped: boolean; assigned: number; renewals: number; cancelled: number; expired: number };
+export type AssignRun = { skipped: boolean; mode?: "all" | "teams" | "paused"; assigned: number; renewals: number; cancelled: number; expired: number };
 
 /**
  * Daily: makes sure everyone who should be trained has an open assignment on the right track, closes assignments of people who left,
@@ -38,6 +38,11 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
     select v.id as version_id, c.id as course_id from learn.course_versions v join learn.courses c on c.id = v.course_id
     where c.slug = ${info.slug} and v.status = 'published' and c.archived_at is null`);
   if (!version) return { skipped: true, assigned: 0, renewals: 0, cancelled: 0, expired: 0 };
+
+  // Who is assigned automatically (no rule = everyone). Closing out leavers and expired certificates happens in every mode.
+  const [rule] = await rows<{ mode: "all" | "teams" | "paused"; team_ids: string[] }>(sql`select mode, team_ids from learn.assignment_rules where course_id = ${version.course_id}`);
+  const mode = rule?.mode ?? "all";
+  const pilotTeams = new Set(rule?.team_ids ?? []);
 
   // People who left, or whose account was closed: their open assignments end.
   const cancelled = await rows<{ id: string }>(sql`
@@ -56,8 +61,8 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
       ${onUsers(sql`a.user_id`, scope)}
     returning a.id`);
 
-  const people = await rows<{ user_id: string; start_date: string | null; phi: boolean; open_id: string | null; cert_ends: string | null }>(sql`
-    select u.id as user_id, e.start_date::text as start_date,
+  const people = await rows<{ user_id: string; start_date: string | null; team_id: string | null; phi: boolean; open_id: string | null; cert_ends: string | null }>(sql`
+    select u.id as user_id, e.start_date::text as start_date, e.team_id::text as team_id,
            exists (select 1 from core.client_assignments ca join core.clients cl on cl.id = ca.client_id
                    where ca.employee_id = e.id and ca.end_date is null and cl.handles_phi and cl.archived_at is null) as phi,
            (select a.id from learn.assignments a where a.user_id = u.id and a.course_id = ${version.course_id} and a.status in ('assigned', 'in_progress') limit 1) as open_id,
@@ -70,7 +75,8 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
 
   let assigned = 0;
   let renewals = 0;
-  for (const p of people) {
+  for (const p of mode === "paused" ? [] : people) {
+    if (mode === "teams" && !(p.team_id && pilotTeams.has(p.team_id))) continue;
     const need = assignmentNeed({ today, startDate: p.start_date, openAssignment: p.open_id !== null, latestCertificateEndsOn: p.cert_ends, assignedToPhiClient: p.phi });
     if (!need.assign) continue;
     const track = info.fixedTrack ?? need.track;
@@ -97,9 +103,9 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
   }
 
   if (assigned || cancelled.length || expired.length) {
-    await writeAudit({ actor: null, action: "learn.assign_run", metadata: { course: info.slug, assigned, renewals, cancelled: cancelled.length, expired: expired.length } });
+    await writeAudit({ actor: null, action: "learn.assign_run", metadata: { course: info.slug, mode, assigned, renewals, cancelled: cancelled.length, expired: expired.length } });
   }
-  return { skipped: false, assigned, renewals, cancelled: cancelled.length, expired: expired.length };
+  return { skipped: false, mode, assigned, renewals, cancelled: cancelled.length, expired: expired.length };
 }
 
 // ---- Reminders ------------------------------------------------------------------------------------------------------------------

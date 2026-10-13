@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { ForbiddenError, scopeFor } from "@/lib/authz";
+import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { pageInfo, type PageInfo } from "@/lib/pagination";
@@ -133,4 +133,21 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
 
   const info = pageInfo(filtered.length, paging.page, paging.pageSize);
   return { rows: filtered.slice(info.offset, info.offset + info.pageSize), counts, info, canSeeResults, canManage, course, published };
+}
+
+export type AutoAssign = { mode: "all" | "teams" | "paused"; teamIds: string[]; updatedAt: string | null; configured: boolean };
+
+/** How a course is assigned automatically, and the teams to choose from (HR and Super Admin). */
+export async function getAutoAssign(courseSlug: string): Promise<{ rule: AutoAssign; teams: { id: string; name: string }[] }> {
+  const user = await requireUser();
+  await authorize(user, "learn.assign");
+  const slug = courseInfo(courseSlug).slug;
+  const rule = (await db.execute(sql`
+    select r.mode, r.team_ids::text[] as team_ids, r.updated_at::text as updated_at
+    from learn.assignment_rules r join learn.courses c on c.id = r.course_id where c.slug = ${slug}`)) as unknown as { mode: AutoAssign["mode"]; team_ids: string[]; updated_at: string }[];
+  const teams = (await db.execute(sql`select id, name from core.teams where archived_at is null order by name`)) as unknown as { id: string; name: string }[];
+  return {
+    rule: rule[0] ? { mode: rule[0].mode, teamIds: rule[0].team_ids, updatedAt: rule[0].updated_at, configured: true } : { mode: "all", teamIds: [], updatedAt: null, configured: false },
+    teams,
+  };
 }

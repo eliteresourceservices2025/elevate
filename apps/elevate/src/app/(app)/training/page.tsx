@@ -9,7 +9,8 @@ import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
 import { LEARN_COURSES } from "@/modules/learn/constants";
 import { TrainingRowActions } from "@/modules/learn/components/training-actions";
-import { listTrainingStatus } from "@/modules/learn/queries";
+import { AutoAssignCard } from "@/modules/learn/components/auto-assign-card";
+import { getAutoAssign, listTrainingStatus } from "@/modules/learn/queries";
 
 export const metadata: Metadata = { title: "Training status" };
 
@@ -21,6 +22,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
   const filters = { state: one(params.state), q: one(params.q), course: one(params.course) };
   const paging = parsePaging({ page: one(params.page), size: one(params.size) });
   const { rows, counts, info, canSeeResults, canManage, course, published } = await orNotFound(listTrainingStatus(filters, paging));
+  const auto = canManage ? await orNotFound(getAutoAssign(course)) : null;
   const courseLabel = LEARN_COURSES.find((c) => c.slug === course)?.label ?? "HIPAA";
   const withCourse = (extra: Record<string, string | undefined>) => {
     const q = new URLSearchParams();
@@ -58,6 +60,24 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         <p role="note" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           This course is not published yet, so nobody is assigned and people cannot be added. Publishing needs a reviewer and the date counsel approved it.
         </p>
+      ) : null}
+
+      {auto ? (
+        <>
+          {auto.rule.mode === "paused" && published ? (
+            <p role="note" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              Automatic assignment is <strong>paused</strong> for this course: nobody is assigned until you choose a pilot or everyone below.
+            </p>
+          ) : null}
+          <AutoAssignCard
+            key={`${course}-${auto.rule.mode}-${auto.rule.teamIds.join(",")}`}
+            course={course}
+            courseLabel={courseLabel}
+            initial={{ mode: auto.rule.mode, teamIds: auto.rule.teamIds }}
+            teams={auto.teams}
+            updatedText={auto.rule.updatedAt ? `Last changed ${auto.rule.updatedAt.slice(0, 10)}.` : auto.rule.configured ? null : "Not set: everyone is assigned automatically."}
+          />
+        </>
       ) : null}
 
       <ul className="flex flex-wrap gap-2 text-sm" aria-label="Filter by status">

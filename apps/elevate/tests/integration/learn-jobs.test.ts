@@ -88,6 +88,53 @@ async function withCertificate(p: Person, endsOn: string, issuedOn = plus(endsOn
   return { assignmentId: a.id, certificateId: c.id };
 }
 
+describe("automatic assignment rules (pilot limit)", () => {
+  const setRule = (mode: string, teamIds: string[] = []) =>
+    db.execute(sql`
+      insert into learn.assignment_rules (course_id, mode, team_ids) values (${courseId}, ${mode}, ${`{${teamIds.join(",")}}`}::uuid[])
+      on conflict (course_id) do update set mode = excluded.mode, team_ids = excluded.team_ids`);
+  const clearRule = () => db.execute(sql`delete from learn.assignment_rules where course_id = ${courseId}`);
+  const teamOf = async (employeeId: string) => {
+    const [dep] = await rows<{ id: string }>(sql`insert into core.departments (name) values (${uniq("Dept ")}) returning id`);
+    const [t] = await rows<{ id: string }>(sql`insert into core.teams (department_id, name) values (${dep.id}, ${uniq("Team ")}) returning id`);
+    await db.execute(sql`update core.employees set team_id = ${t.id} where id = ${employeeId}`);
+    return t.id;
+  };
+
+  it("paused assigns nobody but still closes out leavers; teams assigns only the chosen teams; no rule means everyone", async () => {
+    const inPilot = await makePerson({ start: plus(TODAY, -4) });
+    const outside = await makePerson({ start: plus(TODAY, -4) });
+    const pilotTeam = await teamOf(inPilot.employeeId);
+    await teamOf(outside.employeeId);
+    const leaver = await makePerson({ start: "2024-02-01" });
+    await db.execute(sql`insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${leaver.id}, ${courseId}, ${versionId}, 'full', 'manual', ${plus(TODAY, 20)})`);
+    await db.execute(sql`update core.employees set status = 'separated' where id = ${leaver.employeeId}`);
+    const scope = { userIds: [inPilot.id, outside.id, leaver.id] };
+
+    await setRule("paused");
+    const paused = await jobs.runLearnAssign(TODAY, scope);
+    expect(paused).toMatchObject({ mode: "paused", assigned: 0, cancelled: 1 });
+    expect(await assignmentOf(inPilot.id)).toBeUndefined();
+
+    await setRule("teams", [pilotTeam]);
+    const pilot = await jobs.runLearnAssign(TODAY, scope);
+    expect(pilot).toMatchObject({ mode: "teams", assigned: 1 });
+    expect(await assignmentOf(inPilot.id)).toBeDefined();
+    expect(await assignmentOf(outside.id)).toBeUndefined();
+
+    await clearRule();
+    const everyone = await jobs.runLearnAssign(TODAY, scope);
+    expect(everyone).toMatchObject({ mode: "all", assigned: 1 });
+    expect(await assignmentOf(outside.id)).toBeDefined();
+  });
+
+  it("the database refuses a teams rule with no teams and an unknown mode", async () => {
+    await expect(setRule("teams", [])).rejects.toThrow();
+    await expect(setRule("sometimes")).rejects.toThrow();
+    await clearRule();
+  });
+});
+
 describe("the Cybersecurity basics course", () => {
   it("puts everyone on its one track once published, apart from HIPAA", async () => {
     const p = await makePerson({ start: plus(TODAY, -3) });

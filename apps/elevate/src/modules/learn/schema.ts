@@ -460,3 +460,28 @@ export const certificateSync = learn
     syncedAt: stamp("synced_at"),
   })
   .enableRLS();
+
+/**
+ * Who a course is assigned to AUTOMATICALLY each night. No row = everyone (how courses worked before this table existed). The publish
+ * command adds a "paused" row for a newly published course, so publishing alone assigns nobody until HR chooses a pilot or everyone.
+ * Only ELEVATE reads it; the Learn app role has no grant.
+ */
+export const assignmentRules = learn
+  .table(
+    "assignment_rules",
+    {
+      courseId: uuid("course_id")
+        .primaryKey()
+        .references(() => courses.id),
+      mode: text("mode").notNull(),
+      /** Teams (core.teams ids) when the mode is "teams". */
+      teamIds: uuid("team_ids").array().notNull().default(sql`'{}'::uuid[]`),
+      updatedBy: uuid("updated_by").references(() => users.id),
+      updatedAt: stamp("updated_at"),
+    },
+    (t) => [
+      check("assignment_rules_mode_chk", sql`${t.mode} in ('all','teams','paused')`),
+      check("assignment_rules_teams_chk", sql`${t.mode} <> 'teams' or cardinality(${t.teamIds}) > 0`),
+    ],
+  )
+  .enableRLS();

@@ -14,14 +14,14 @@ Time needed: about 90 minutes, plus waiting for DNS. Do it outside the Manila sh
    select count(*) from drizzle.__drizzle_migrations;
    ```
 
-   The repository has 60 migrations (0000 to 0059). Production is behind by the ones not yet applied (the last time this was checked,
+   The repository has 61 migrations (0000 to 0060). Production is behind by the ones not yet applied (the last time this was checked,
    the learn migrations 0054 to 0059 and the incident migration 0057 had not been applied; earlier ones may be missing too, which is
-   fine: the command applies whatever is missing, in order). Note the number you see; step 1 should end at 60.
+   fine: the command applies whatever is missing, in order). Note the number you see; step 1 should end at 61.
 2. **Pull the latest commits** on your computer (`git pull`) and confirm `apps/elevate/drizzle` ends with
-   `0059_learn_certificate_transcript.sql`.
+   `0060_learn_assignment_rules.sql`.
 3. **Take a backup point.** Supabase dashboard > Database > Backups: note the latest backup time (Pro plan keeps daily backups).
-4. **Decide on the roll-out** (read step 9 first). Publishing a course makes the nightly job assign it to **everyone** at
-   1:35 AM Phoenix. If you want a small pilot, do steps 1 to 8, then stop before step 9 until the pilot rule is built.
+4. **Decide on the roll-out** (read step 9 first): which teams are the pilot, and whether HIPAA, which is already live, should be
+   paused until then.
 
 ## 1. Apply the migrations (10 minutes)
 
@@ -32,7 +32,7 @@ $env:DATABASE_URL_DIRECT = "<the session pooler string, port 5432>"
 pnpm db:migrate
 ```
 
-It should end with "migrations applied successfully". Then check the count again (should be 60) and that these exist:
+It should end with "migrations applied successfully". Then check the count again (should be 61) and that these exist:
 
 ```sql
 select to_regclass('learn.assignments'), to_regclass('ops.privacy_incidents'), to_regclass('talent.credentials');
@@ -142,14 +142,19 @@ confirm the Finish button unlocks after the time shown, take the exam, accept th
 
 Delete nothing afterwards: your test certificate is real evidence. If you do not want it, ask HR to revoke it with a reason.
 
-## 9. Turn it on for everyone
+## 9. Choose who gets each course
 
-**The nightly job assigns everyone as soon as a course is published** (1:35 AM Phoenix, each active person, due in 30 days; new hires
-due 30 days after their start). There is currently no per-team switch. So:
+A course published for the **first time** starts **paused**: the publish command adds a "paused" rule, so publishing alone assigns
+nobody (migration 0060). A course that was already live before that migration (HIPAA in production today) has no rule and keeps
+assigning everyone each night, so **set it before the next 1:35 AM Phoenix run** if you want a pilot.
 
-- To roll out to everyone: just wait for the next night after step 7. People get an in-app notice and see **My training**.
-- To pilot first (10 VAs and 2 leads, as planned): **do not publish yet**; ask for the pilot switch to be built (a setting on
-  Training status that limits automatic assignment to chosen teams), then publish.
+In ELEVATE open **Training status**, pick the course tab, and use **Automatic assignment**:
+
+- **Everyone:** each night everyone active who needs the course is assigned it (due in 30 days; new hires 30 days after their start).
+- **Chosen teams only:** tick the pilot teams (10 VAs and 2 leads, as planned). Anyone else can still be assigned by hand.
+- **Paused:** nobody is assigned automatically. Leavers are still closed out and existing assignments keep their reminders.
+
+Widen it to everyone when the pilot went well. It takes effect at the next nightly run; assignments already made stay.
 
 Reminders go out in the app at 30 days, 7 days and the due date. HR and leads see progress on **Training status**.
 

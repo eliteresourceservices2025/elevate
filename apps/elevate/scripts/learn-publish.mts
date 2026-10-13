@@ -33,6 +33,11 @@ try {
     if (!u) throw new Error(`No ELEVATE account for ${email}`);
     reviewerUserId = u.id as string;
   }
+  // Was this course ever live before? (Only a first publication starts paused: re-publishing never changes who is assigned.)
+  const [seen] = await sql`
+    select count(*)::int as n from learn.course_versions v join learn.courses c on c.id = v.course_id
+    where c.slug = ${value("course") ?? "hipaa"} and v.status in ('published', 'retired')`;
+  const wasLive = (seen?.n as number) > 0;
   const result = await loadCourse(sql, {
     publish: flag("publish"),
     reviewerUserId,
@@ -42,6 +47,14 @@ try {
     newVersion: flag("new-version"),
     courseSlug: value("course"),
   });
+  if (result.status === "published" && !wasLive) {
+    // A course published for the first time starts PAUSED: the nightly job assigns nobody until HR chooses a pilot or everyone
+    // (Training status > Automatic assignment). A course that already has a rule keeps it.
+    const made = await sql`
+      insert into learn.assignment_rules (course_id, mode, updated_by) values (${result.courseId}, 'paused', ${reviewerUserId ?? null})
+      on conflict (course_id) do nothing returning course_id`;
+    if (made.length) console.log("Automatic assignment starts PAUSED for this course. Choose who gets it on Training status when you are ready.");
+  }
   console.log(`${result.status === "published" ? "Published" : "Saved as a draft"}: version ${result.version} (${result.modules} modules, ${result.questions} questions)${result.created ? "" : ", no change"}.`);
 } finally {
   await sql.end();

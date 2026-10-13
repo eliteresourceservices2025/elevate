@@ -13,7 +13,7 @@ import { currentSignInMethods } from "@/modules/signing/session";
 import { courseInfo } from "./constants";
 import { createLaunchToken } from "./service";
 import { handoffUrl, learnBaseUrl } from "./token";
-import { assignTrainingSchema, grantRetrySchema } from "./validators";
+import { assignTrainingSchema, autoAssignSchema, grantRetrySchema } from "./validators";
 
 /**
  * Starts the sign-in handoff to ELEVATE Learn: makes a one-time token (60 seconds, stored only as a hash) and returns it with the
@@ -107,5 +107,40 @@ export async function assignLearnTraining(input: unknown): Promise<ActionResult<
     });
     revalidatePath("/training");
     return { ok: true, data: { created } };
+  });
+}
+
+/**
+ * HR chooses who a course is assigned to automatically each night: everyone, chosen teams (a pilot), or nobody. Takes effect at the
+ * next run; assignments already made are not touched. Audited with the mode and how many teams, never names.
+ */
+export async function setAutoAssign(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.assign");
+    const parsed = autoAssignSchema.safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the form and try again.");
+    const { course, mode } = parsed.data;
+    const teamIds = mode === "teams" ? [...new Set(parsed.data.teamIds)] : [];
+
+    await db.transaction(async (tx) => {
+      const found = (await tx.execute(sql`select id from learn.courses where slug = ${course} and archived_at is null`)) as unknown as { id: string }[];
+      if (!found[0]) throw new ActionFailure("That course has not been loaded yet.");
+      if (teamIds.length > 0) {
+        const known = (await tx.execute(sql`select count(*)::int as n from core.teams where id = any(${`{${teamIds.join(",")}}`}::uuid[]) and archived_at is null`)) as unknown as { n: number }[];
+        if (known[0].n !== teamIds.length) throw new ActionFailure("One of those teams was not found.");
+      }
+      const before = (await tx.execute(sql`select mode, cardinality(team_ids)::int as teams from learn.assignment_rules where course_id = ${found[0].id}`)) as unknown as { mode: string; teams: number }[];
+      await tx.execute(sql`
+        insert into learn.assignment_rules (course_id, mode, team_ids, updated_by, updated_at)
+        values (${found[0].id}, ${mode}, ${`{${teamIds.join(",")}}`}::uuid[], ${actor.id}, now())
+        on conflict (course_id) do update set mode = excluded.mode, team_ids = excluded.team_ids, updated_by = excluded.updated_by, updated_at = excluded.updated_at`);
+      await writeAudit(
+        { actor, action: "learn.auto_assign", targetType: "learn_course", targetId: found[0].id, before: before[0] ? { mode: before[0].mode, teams: before[0].teams } : { mode: "all", teams: 0 }, after: { mode, teams: teamIds.length }, metadata: { course } },
+        tx,
+      );
+    });
+    revalidatePath("/training");
+    return { ok: true, data: undefined };
   });
 }
