@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { orNotFound } from "@/lib/or-not-found";
 import { QuestionEditor } from "@/modules/learn/components/studio-editors";
+import { AddQuestionForm } from "@/modules/learn/components/studio-structure";
 import { getStudioVersion } from "@/modules/learn/studio-queries";
 
 export const metadata: Metadata = { title: "Exam question bank" };
@@ -30,7 +31,7 @@ export default async function StudioQuestionsPage({ params }: PageProps<"/course
       </div>
       {loaded.content.modules.map((m) => {
         const list = loaded.questions.filter((q) => q.moduleKey === m.key);
-        if (list.length === 0) return null;
+        if (list.length === 0 && !draft) return null;
         return (
           <section key={m.key} className="space-y-2">
             <h2 className="text-lg font-semibold">
@@ -57,6 +58,7 @@ export default async function StudioQuestionsPage({ params }: PageProps<"/course
                 </div>
               );
             })}
+            {draft ? <AddQuestionForm key={`add-${loaded.version.editStamp}`} versionId={loaded.version.id} stamp={loaded.version.editStamp} moduleKey={m.key} /> : null}
           </section>
         );
       })}

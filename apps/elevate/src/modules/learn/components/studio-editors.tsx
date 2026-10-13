@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import type { Block, CourseContent, CourseModule, QuestionSeed } from "../../../../../learn/src/content/schema";
 import { createStudioDraft, discardStudioDraft, publishStudioDraft, saveStudioCourseMeta, saveStudioModuleMeta, saveStudioQuestion, saveStudioScreen } from "../studio-actions";
+import { newBlock } from "../studio-scaffold";
+import { RemoveQuestionButton, ScreenControls } from "./studio-structure";
 
 type Saved = { ok: true } | { ok: false; error: string };
 
@@ -357,8 +359,19 @@ function BlockEditor({ block, onChange, idp }: { block: Block; onChange: (b: Blo
   }
 }
 
-export function ScreenEditor({ versionId, stamp, moduleKey, screen, index }: { versionId: string; stamp: number; moduleKey: string; screen: CourseModule["screens"][number]; index: number }) {
+const BLOCK_TYPES: { value: Block["type"]; label: string }[] = [
+  { value: "paragraph", label: "Paragraph" },
+  { value: "list", label: "List" },
+  { value: "callout", label: "Callout" },
+  { value: "compare", label: "Do and do not" },
+  { value: "steps", label: "Steps" },
+  { value: "scenario", label: "Scenario" },
+  { value: "check", label: "Knowledge check" },
+];
+
+export function ScreenEditor({ versionId, stamp, moduleKey, screen, index, count }: { versionId: string; stamp: number; moduleKey: string; screen: CourseModule["screens"][number]; index: number; count: number }) {
   const { run, pending } = useSave();
+  const [addType, setAddType] = useState<Block["type"]>("paragraph");
   const [title, setTitle] = useState(screen.title);
   const [blocks, setBlocks] = useState<Block[]>(screen.blocks);
   const { markSaved } = useWarnWhenEdited({ title, blocks });
@@ -379,13 +392,47 @@ export function ScreenEditor({ versionId, stamp, moduleKey, screen, index }: { v
         </Field>
         {blocks.map((b, i) => (
           <div key={i} className="rounded-lg border bg-background p-3">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{b.type}</p>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{b.type}</p>
+              <span className="inline-flex gap-1">
+                <Button type="button" size="xs" variant="outline" disabled={i === 0} onClick={() => setBlocks((cur) => cur.map((x, j) => (j === i - 1 ? cur[i] : j === i ? cur[i - 1] : x)))}>
+                  Up
+                </Button>
+                <Button type="button" size="xs" variant="outline" disabled={i === blocks.length - 1} onClick={() => setBlocks((cur) => cur.map((x, j) => (j === i + 1 ? cur[i] : j === i ? cur[i + 1] : x)))}>
+                  Down
+                </Button>
+                <Button type="button" size="xs" variant="outline" disabled={blocks.length <= 1} onClick={() => setBlocks((cur) => cur.filter((_, j) => j !== i))}>
+                  Remove
+                </Button>
+              </span>
+            </div>
             <BlockEditor idp={`s-${screen.id}-b${i}`} block={b} onChange={(nb) => setBlocks((cur) => cur.map((x, j) => (j === i ? nb : x)))} />
           </div>
         ))}
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? "Saving..." : "Save this screen"}
-        </Button>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <Label htmlFor={`s-${screen.id}-add`} className="text-xs">
+              Add a block to this screen
+            </Label>
+            <NativeSelect id={`s-${screen.id}-add`} value={addType} onChange={(e) => setAddType(e.target.value as Block["type"])} className="w-48">
+              {BLOCK_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+          <Button type="button" size="sm" variant="outline" disabled={blocks.length >= 6} onClick={() => setBlocks((cur) => [...cur, newBlock(addType)])}>
+            Add block
+          </Button>
+          <p className="text-xs text-muted-foreground">A screen holds 1 to 6 blocks. Block changes are saved with Save this screen.</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button type="submit" size="sm" disabled={pending}>
+            {pending ? "Saving..." : "Save this screen"}
+          </Button>
+          <ScreenControls versionId={versionId} stamp={stamp} moduleKey={moduleKey} screenId={screen.id} title={screen.title} index={index} count={count} />
+        </div>
       </form>
     </details>
   );
@@ -440,9 +487,12 @@ export function QuestionEditor({ versionId, stamp, question, number }: { version
         <Field id={`q-${question.id}-why`} label="Why the answer is right (shown only after a pass)">
           <Textarea id={`q-${question.id}-why`} rows={2} value={why} onChange={(e) => setWhy(e.target.value)} maxLength={700} />
         </Field>
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? "Saving..." : "Save this question"}
-        </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button type="submit" size="sm" disabled={pending}>
+            {pending ? "Saving..." : "Save this question"}
+          </Button>
+          <RemoveQuestionButton versionId={versionId} stamp={stamp} questionId={question.id} />
+        </div>
       </form>
     </details>
   );

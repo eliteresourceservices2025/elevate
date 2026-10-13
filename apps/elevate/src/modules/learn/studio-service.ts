@@ -7,7 +7,7 @@ import { courseContentSchema, type CourseContent, type QuestionSeed } from "../.
 import { users } from "@/modules/core/schema";
 import { courses, courseVersions, questions, versionModules } from "./schema";
 import { diffCourses, type DiffQuestion } from "./studio-diff";
-import { hasErrors, lintCourse, type ExamConfigLike, type LintIssue } from "./studio-lint";
+import { hasPlaceholders, lintCourse, type ExamConfigLike, type LintIssue } from "./studio-lint";
 
 // The course studio's database side. No authorization here: callers (studio-actions.ts, studio-queries.ts) check permissions first.
 // Rules: only a DRAFT can change; every save carries the stamp it was loaded with and is refused if the draft moved on; a save
@@ -209,6 +209,40 @@ export async function editContent(tx: Tx, p: { versionId: string; stamp: number;
   return stamp;
 }
 
+export type DraftState = { content: CourseContent; examConfig: Record<string, unknown>; questions: (QuestionSeed & { id?: string })[] };
+
+/**
+ * A structural edit: `apply` receives copies of the whole draft (content, exam rules, questions) and returns the new state. A
+ * question with an `id` is updated, one without is added, and one that is no longer listed is removed. The result must pass the
+ * checks. Returns the new stamp.
+ */
+export async function editDraft(tx: Tx, p: { versionId: string; stamp: number; actorId: string; apply: (s: DraftState) => DraftState }): Promise<number> {
+  const v = await lockDraft(tx, p.versionId, p.stamp);
+  const rows = await tx.select().from(questions).where(eq(questions.versionId, p.versionId)).orderBy(asc(questions.moduleKey), asc(questions.createdAt), asc(questions.id));
+  const before: DraftState = {
+    content: courseContentSchema.parse(v.content),
+    examConfig: structuredClone(v.examConfig as Record<string, unknown>),
+    questions: rows.map((q) => ({ id: q.id, moduleKey: q.moduleKey, topic: q.topic, type: q.type as QuestionSeed["type"], stem: q.stem, options: q.options as QuestionSeed["options"], correctIds: q.correctIds, rationale: q.rationale })),
+  };
+  const next = p.apply(structuredClone(before));
+  failIfErrors(lintCourse(next.content, next.questions, next.examConfig as ExamConfigLike));
+
+  const keep = new Set(next.questions.flatMap((q) => (q.id ? [q.id] : [])));
+  for (const old of rows) if (!keep.has(old.id)) await tx.delete(questions).where(eq(questions.id, old.id));
+  for (const q of next.questions) {
+    if (q.id) {
+      await tx.update(questions).set({ moduleKey: q.moduleKey, topic: q.topic, stem: q.stem, options: q.options, correctIds: q.correctIds, rationale: q.rationale }).where(and(eq(questions.id, q.id), eq(questions.versionId, p.versionId)));
+    } else {
+      await tx.insert(questions).values({ versionId: p.versionId, moduleKey: q.moduleKey, topic: q.topic, type: q.type, stem: q.stem, options: q.options, correctIds: q.correctIds, rationale: q.rationale });
+    }
+  }
+  const stamp = v.editStamp + 1;
+  await tx.update(courseVersions).set({ content: next.content, examConfig: next.examConfig, updatedBy: p.actorId, updatedAt: new Date(), editStamp: stamp }).where(eq(courseVersions.id, p.versionId));
+  await writeModules(tx, p.versionId, next.content);
+  await tx.update(courses).set({ title: next.content.title }).where(eq(courses.id, v.courseId));
+  return stamp;
+}
+
 export type QuestionPatch = { topic: string; stem: string; options: { id: string; text: string }[]; correctIds: string[]; rationale: string };
 
 /** Changes one exam question of a draft (its wording, options, key and reason; the type and module stay). Returns the new stamp. */
@@ -250,7 +284,9 @@ export async function publishDraft(tx: Tx, p: { versionId: string; actorId: stri
   const [course] = await tx.select({ slug: courses.slug }).from(courses).where(eq(courses.id, v.courseId));
   const draft = await loadVersion(tx, course.slug, v.version);
   if (!draft) throw new ActionFailure("That version was not found.");
-  failIfErrors(lintLoaded(draft));
+  const issues = lintLoaded(draft);
+  failIfErrors(issues);
+  if (hasPlaceholders(issues)) throw new ActionFailure("Some text still says TO WRITE:. Finish it before publishing.");
   const [published] = await tx.select({ version: courseVersions.version }).from(courseVersions).where(and(eq(courseVersions.courseId, v.courseId), eq(courseVersions.status, "published")));
   if (published) {
     const base = await loadVersion(tx, course.slug, published.version);

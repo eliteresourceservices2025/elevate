@@ -172,3 +172,102 @@ describe("diff, publish and the code publish command", () => {
     }
   });
 });
+
+// ---- Phase 3 and 4: structure, exam rules, the placeholder rule, and previewing a draft as the Learn app role ----------------------
+
+describe("structure edits", () => {
+  let id: string;
+  let st: number;
+  const edit = (apply: Parameters<typeof svc.editDraft>[1]["apply"]) => tx((t) => svc.editDraft(t, { versionId: id, stamp: st, actorId: editor, apply }));
+
+  it("starts from a fresh draft", async () => {
+    const made = await tx((t) => svc.createDraft(t, { courseSlug: slug, note: "Structure", actorId: editor }));
+    id = made.versionId;
+    st = 0;
+    expect(made.version).toBeGreaterThan(2);
+  });
+
+  it("adds a module with placeholder text, and refuses to publish it until the text is written", async () => {
+    const { newModule } = await import("@/modules/learn/studio-scaffold");
+    st = await edit((s) => {
+      s.content.modules.push(newModule({ title: "Working from a cafe", estimatedMinutes: 6, tracks: ["full"] }, s.content.modules.map((m) => m.key)));
+      return s;
+    });
+    const mods = await rows<{ module_key: string; position: number }>(sql`select module_key, position from learn.version_modules where version_id = ${id} order by position`);
+    expect(mods.at(-1)).toMatchObject({ module_key: "working_from_a_cafe" });
+    await expect(tx((t) => svc.publishDraft(t, { versionId: id, actorId: publisher, reviewerUserId: reviewer, counselApprovedOn: "2026-10-15", material: false }))).rejects.toThrow(/TO WRITE/);
+  });
+
+  it("adds and removes a question, keeping the others; a removed question leaves no row", async () => {
+    const { newQuestion } = await import("@/modules/learn/studio-scaffold");
+    const before = await rows(sql`select 1 from learn.questions where version_id = ${id}`);
+    st = await edit((s) => {
+      s.questions.push(newQuestion({ moduleKey: "working_from_a_cafe", type: "multiple", existingStems: s.questions.map((q) => q.stem) }));
+      return s;
+    });
+    const added = await rows<{ id: string; correct_ids: string[]; lineage: string }>(sql`select id, correct_ids, lineage from learn.questions where version_id = ${id} and module_key = 'working_from_a_cafe'`);
+    expect(added.length).toBe(1);
+    expect(added[0].correct_ids.length).toBe(2);
+    st = await edit((s) => {
+      s.questions = s.questions.filter((q) => q.id !== added[0].id);
+      return s;
+    });
+    expect((await rows(sql`select 1 from learn.questions where version_id = ${id}`)).length).toBe(before.length);
+  });
+
+  it("moves modules and screens, and removing a module removes its questions", async () => {
+    const first = (await rows<{ module_key: string }>(sql`select module_key from learn.version_modules where version_id = ${id} order by position limit 1`))[0].module_key;
+    st = await edit((s) => {
+      const [m, ...rest] = s.content.modules;
+      s.content.modules = [...rest, m];
+      return s;
+    });
+    const last = await rows<{ module_key: string }>(sql`select module_key from learn.version_modules where version_id = ${id} order by position desc limit 1`);
+    expect(last[0].module_key).toBe(first);
+    const countBefore = (await rows<{ n: number }>(sql`select count(*)::int as n from learn.questions where version_id = ${id}`))[0].n;
+    const ofCafe = "working_from_a_cafe";
+    st = await edit((s) => {
+      s.content.modules = s.content.modules.filter((m) => m.key !== ofCafe);
+      s.questions = s.questions.filter((q) => q.moduleKey !== ofCafe);
+      return s;
+    });
+    expect((await rows(sql`select 1 from learn.version_modules where version_id = ${id} and module_key = ${ofCafe}`)).length).toBe(0);
+    expect((await rows<{ n: number }>(sql`select count(*)::int as n from learn.questions where version_id = ${id}`))[0].n).toBe(countBefore);
+  });
+
+  it("refuses removing questions below what an exam draws, and changes the exam rules", async () => {
+    await expect(edit((s) => ({ ...s, questions: s.questions.slice(0, 3) }))).rejects.toThrow(/needs \d+ questions/);
+    st = await edit((s) => {
+      s.examConfig = { ...s.examConfig, passPercent: 85, renewalMonths: 24 };
+      return s;
+    });
+    const [v] = await rows<{ exam_config: { passPercent: number; renewalMonths: number } }>(sql`select exam_config from learn.course_versions where id = ${id}`);
+    expect(v.exam_config).toMatchObject({ passPercent: 85, renewalMonths: 24 });
+  });
+
+  it("is previewable in Learn by an editor and by nobody else", async () => {
+    const APP_PASSWORD = "learn-app-test-password-not-a-secret";
+    await admin.unsafe(`alter role learn_app login password '${APP_PASSWORD}'`);
+    const url = new URL(testDatabaseUrl(process.env.TEST_DB_ADMIN_URL!));
+    url.username = "learn_app";
+    url.password = APP_PASSWORD;
+    const app = postgres(url.toString(), { max: 2, onnotice: () => {}, prepare: false });
+    try {
+      const { getPreview } = await import("../../../learn/src/lib/preview");
+      const [{ version }] = await rows<{ version: number }>(sql`select version from learn.course_versions where id = ${id}`);
+      // the editor (HR role) sees the draft; a plain employee does not, and neither does an unknown person
+      const hrUser = await makeUser("prevhr");
+      await db.execute(sql`insert into core.user_roles (user_id, role_slug) values (${hrUser}, 'hr_admin')`);
+      const plain = await makeUser("prevemp");
+      const officer = await makeUser("prevpo");
+      await db.execute(sql`update core.users set is_privacy_officer = true where id = ${officer}`);
+      expect(await getPreview(app, hrUser, slug, version)).toMatchObject({ status: "draft", version });
+      expect(await getPreview(app, officer, slug, version)).toMatchObject({ status: "draft" });
+      expect(await getPreview(app, plain, slug, version)).toBeNull();
+      // and the answer key is still out of reach of the app role
+      await expect(app`select correct_ids from learn.questions limit 1`).rejects.toThrow(/permission denied/);
+    } finally {
+      await app.end();
+    }
+  });
+});

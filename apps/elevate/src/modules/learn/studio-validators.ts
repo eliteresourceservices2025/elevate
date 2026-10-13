@@ -59,3 +59,30 @@ export const publishDraftSchema = z.object({
 });
 
 export const discardDraftSchema = z.object({ versionId: uuid, stamp });
+
+const moduleKey = z.string().regex(/^[a-z0-9_]{1,40}$/);
+const direction = z.enum(["up", "down"]);
+
+export const addModuleSchema = z.object({
+  versionId: uuid,
+  stamp,
+  title: short,
+  estimatedMinutes: z.number().int().min(1).max(120),
+  tracks: z.array(z.enum(["full", "essentials", "refresher"])).min(1, "Pick at least one track"),
+});
+export const moduleRefSchema = z.object({ versionId: uuid, stamp, moduleKey });
+export const moveModuleSchema = moduleRefSchema.extend({ direction });
+export const addScreenSchema = z.object({ versionId: uuid, stamp, moduleKey, title: short });
+export const screenRefSchema = z.object({ versionId: uuid, stamp, moduleKey, screenId: z.string().regex(/^[a-z0-9-]{1,40}$/) });
+export const moveScreenSchema = screenRefSchema.extend({ direction });
+export const addQuestionSchema = z.object({ versionId: uuid, stamp, moduleKey, type: z.enum(["single", "multiple", "true_false", "scenario"]) });
+export const removeQuestionSchema = z.object({ versionId: uuid, stamp, questionId: uuid });
+export const examRulesSchema = z.object({
+  versionId: uuid,
+  stamp,
+  passPercent: z.number().int().min(50, "At least 50").max(100),
+  maxTries: z.number().int().min(1).max(10),
+  waitMinutesAfterFail: z.number().int().min(0).max(1440),
+  renewalMonths: z.number().int().min(1).max(60),
+  tracks: z.record(z.string().regex(/^[a-z]{1,20}$/), z.number().int().min(1).max(50)),
+});

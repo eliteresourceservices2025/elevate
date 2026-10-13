@@ -1,10 +1,12 @@
 import { courseContentSchema, questionSeedSchema, type CourseContent, type QuestionSeed } from "../../../../learn/src/content/schema";
+import { placeholdersIn } from "./studio-scaffold";
 
 // The checks a course must pass before it can be saved or published from the studio. Pure (no database). The same rules the content
 // tests in apps/learn apply to the files in code, so a studio edit cannot slip below what code content has to meet.
 // ERRORS block saving and publishing. WARNINGS are shown and do not block (a thin question bank, for example).
 
-export type LintIssue = { level: "error" | "warning"; where: string; message: string };
+/** `code: "placeholder"` marks unfinished "TO WRITE:" text: allowed in a draft, never in a published version. */
+export type LintIssue = { level: "error" | "warning"; where: string; message: string; code?: "placeholder" };
 
 export type ExamConfigLike = { tracks?: Record<string, { questions: number }> };
 
@@ -85,7 +87,10 @@ export function lintCourse(content: CourseContent, questions: QuestionSeed[], ex
     if (pool < need) out.push({ level: "warning", where: `${track} track`, message: `The exam draws ${n} questions from ${pool}; at least ${need} are recommended so attempts differ.` });
     if (pool < n) out.push({ level: "error", where: `${track} track`, message: `The exam needs ${n} questions but only ${pool} are available for this track.` });
   }
+  const unfinished = placeholdersIn(content, questions);
+  if (unfinished > 0) out.push({ level: "warning", code: "placeholder", where: "course", message: `${unfinished} ${unfinished === 1 ? "place still has" : "places still have"} the placeholder text "TO WRITE:". Replace ${unfinished === 1 ? "it" : "them"} before publishing.` });
   return out;
 }
 
 export const hasErrors = (issues: LintIssue[]) => issues.some((i) => i.level === "error");
+export const hasPlaceholders = (issues: LintIssue[]) => issues.some((i) => i.code === "placeholder");

@@ -6,8 +6,9 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
-import { courseMetaSchema, createDraftSchema, discardDraftSchema, moduleMetaSchema, publishDraftSchema, questionEditSchema, screenSchemaInput } from "./studio-validators";
-import { createDraft, discardDraft, editContent, editQuestion, publishDraft, userIdByEmail } from "./studio-service";
+import { addModuleSchema, addQuestionSchema, addScreenSchema, courseMetaSchema, createDraftSchema, discardDraftSchema, examRulesSchema, moduleMetaSchema, moduleRefSchema, moveModuleSchema, moveScreenSchema, publishDraftSchema, questionEditSchema, removeQuestionSchema, screenRefSchema, screenSchemaInput } from "./studio-validators";
+import { newModule, newQuestion, newScreen } from "./studio-scaffold";
+import { createDraft, discardDraft, editContent, editDraft, editQuestion, publishDraft, userIdByEmail, type DraftState } from "./studio-service";
 
 // The course studio's write actions. Each one: sign-in, permission `learn.manage_content`, validation, then the service (which
 // refuses a save on a stale draft or one that would leave the course invalid). Audit entries carry course, version, module or
@@ -178,5 +179,180 @@ export async function publishStudioDraft(input: unknown): Promise<ActionResult<{
     });
     touched();
     return { ok: true, data: { version: result.version } };
+  });
+}
+
+// ---- Structure (phase 3) ------------------------------------------------------------------------------------------------------
+
+/** Runs one structural change on a draft: authorize, validate, edit, audit (the part and ids only), and give back the new stamp. */
+async function structural(
+  actor: Awaited<ReturnType<typeof requireUser>>,
+  versionId: string,
+  stamp: number,
+  part: string,
+  meta: Record<string, unknown>,
+  apply: (s: DraftState) => DraftState,
+): Promise<ActionResult<{ stamp: number }>> {
+  const next = await db.transaction(async (tx) => {
+    const s = await editDraft(tx, { versionId, stamp, actorId: actor.id, apply });
+    await writeAudit({ actor, action: "learn.studio_edit", targetType: "learn_course_version", targetId: versionId, metadata: { part, ...meta } }, tx);
+    return s;
+  });
+  touched();
+  return { ok: true, data: { stamp: next } };
+}
+
+function swap<T>(list: T[], index: number, direction: "up" | "down"): T[] {
+  const to = direction === "up" ? index - 1 : index + 1;
+  if (index < 0 || to < 0 || to >= list.length) throw new ActionFailure("It cannot move further that way.");
+  const copy = [...list];
+  [copy[index], copy[to]] = [copy[to], copy[index]];
+  return copy;
+}
+
+export async function addStudioModule(input: unknown): Promise<ActionResult<{ stamp: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const p = addModuleSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const v = p.data;
+    return structural(actor, v.versionId, v.stamp, "module_add", {}, (s) => {
+      s.content.modules.push(newModule({ title: v.title, estimatedMinutes: v.estimatedMinutes, tracks: v.tracks }, s.content.modules.map((m) => m.key)));
+      return s;
+    });
+  });
+}
+
+export async function removeStudioModule(input: unknown): Promise<ActionResult<{ stamp: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const p = moduleRefSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const v = p.data;
+    return structural(actor, v.versionId, v.stamp, "module_remove", { module: v.moduleKey }, (s) => {
+      if (s.content.modules.length <= 1) throw new ActionFailure("A course needs at least one module.");
+      if (!s.content.modules.some((m) => m.key === v.moduleKey)) throw new ActionFailure("That module was not found.");
+      s.content.modules = s.content.modules.filter((m) => m.key !== v.moduleKey);
+      s.questions = s.questions.filter((q) => q.moduleKey !== v.moduleKey);
+      return s;
+    });
+  });
+}
+
+export async function moveStudioModule(input: unknown): Promise<ActionResult<{ stamp: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const p = moveModuleSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const v = p.data;
+    return structural(actor, v.versionId, v.stamp, "module_move", { module: v.moduleKey, direction: v.direction }, (s) => {
+      s.content.modules = swap(s.content.modules, s.content.modules.findIndex((m) => m.key === v.moduleKey), v.direction);
+      return s;
+    });
+  });
+}
+
+export async function addStudioScreen(input: unknown): Promise<ActionResult<{ stamp: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const p = addScreenSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const v = p.data;
+    return structural(actor, v.versionId, v.stamp, "screen_add", { module: v.moduleKey }, (s) => {
+      const m = s.content.modules.find((x) => x.key === v.moduleKey);
+      if (!m) throw new ActionFailure("That module was not found.");
+      m.screens.push(newScreen(v.title, m.screens.map((x) => x.id)));
+      return s;
+    });
+  });
+}
+
+export async function removeStudioScreen(input: unknown): Promise<ActionResult<{ stamp: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const p = screenRefSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const v = p.data;
+    return structural(actor, v.versionId, v.stamp, "screen_remove", { module: v.moduleKey, screen: v.screenId }, (s) => {
+      const m = s.content.modules.find((x) => x.key === v.moduleKey);
+      if (!m || !m.screens.some((x) => x.id === v.screenId)) throw new ActionFailure("That screen was not found.");
+      m.screens = m.screens.filter((x) => x.id !== v.screenId);
+      return s;
+    });
+  });
+}
+
+export async function moveStudioScreen(input: unknown): Promise<ActionResult<{ stamp: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const p = moveScreenSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const v = p.data;
+    return structural(actor, v.versionId, v.stamp, "screen_move", { module: v.moduleKey, screen: v.screenId, direction: v.direction }, (s) => {
+      const m = s.content.modules.find((x) => x.key === v.moduleKey);
+      if (!m) throw new ActionFailure("That module was not found.");
+      m.screens = swap(m.screens, m.screens.findIndex((x) => x.id === v.screenId), v.direction);
+      return s;
+    });
+  });
+}
+
+export async function addStudioQuestion(input: unknown): Promise<ActionResult<{ stamp: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const p = addQuestionSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const v = p.data;
+    return structural(actor, v.versionId, v.stamp, "question_add", { module: v.moduleKey, type: v.type }, (s) => {
+      if (!s.content.modules.some((m) => m.key === v.moduleKey)) throw new ActionFailure("That module was not found.");
+      s.questions.push(newQuestion({ moduleKey: v.moduleKey, type: v.type, existingStems: s.questions.map((q) => q.stem) }));
+      return s;
+    });
+  });
+}
+
+export async function removeStudioQuestion(input: unknown): Promise<ActionResult<{ stamp: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const p = removeQuestionSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const v = p.data;
+    return structural(actor, v.versionId, v.stamp, "question_remove", { question: v.questionId }, (s) => {
+      if (!s.questions.some((q) => q.id === v.questionId)) throw new ActionFailure("That question was not found.");
+      s.questions = s.questions.filter((q) => q.id !== v.questionId);
+      return s;
+    });
+  });
+}
+
+/** The exam and certificate rules of a draft: pass mark, tries, wait, how long a certificate lasts, and questions per track. */
+export async function saveStudioExamRules(input: unknown): Promise<ActionResult<{ stamp: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const p = examRulesSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const v = p.data;
+    return structural(actor, v.versionId, v.stamp, "exam_rules", {}, (s) => {
+      const tracks = (s.examConfig.tracks ?? {}) as Record<string, Record<string, unknown>>;
+      for (const t of Object.keys(v.tracks)) if (!(t in tracks)) throw new ActionFailure(`There is no ${t} track.`);
+      s.examConfig = {
+        ...s.examConfig,
+        passPercent: v.passPercent,
+        maxTries: v.maxTries,
+        waitMinutesAfterFail: v.waitMinutesAfterFail,
+        renewalMonths: v.renewalMonths,
+        tracks: Object.fromEntries(Object.entries(tracks).map(([t, cfg]) => [t, { ...cfg, questions: v.tracks[t] ?? (cfg.questions as number) }])),
+      };
+      return s;
+    });
   });
 }

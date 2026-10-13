@@ -449,6 +449,13 @@
       "when": 1791920437276,
       "tag": "0063_course_studio",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1791921465415,
+      "tag": "0064_learn_preview",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { orNotFound } from "@/lib/or-not-found";
 import { ModuleMetaForm, ScreenEditor } from "@/modules/learn/components/studio-editors";
+import { AddScreenForm } from "@/modules/learn/components/studio-structure";
 import { BlockView } from "@/modules/learn/components/studio-view";
 import { getStudioVersion } from "@/modules/learn/studio-queries";
 
@@ -36,8 +37,9 @@ export default async function StudioModulePage({ params }: PageProps<"/course-st
           <section aria-label="Screens" className="space-y-3">
             <h2 className="text-lg font-semibold">Screens</h2>
             {m.screens.map((s, i) => (
-              <ScreenEditor key={`${s.id}-${stamp}`} versionId={loaded.version.id} stamp={stamp} moduleKey={m.key} screen={s} index={i} />
+              <ScreenEditor key={`${s.id}-${stamp}`} versionId={loaded.version.id} stamp={stamp} moduleKey={m.key} screen={s} index={i} count={m.screens.length} />
             ))}
+            <AddScreenForm key={`add-${stamp}`} versionId={loaded.version.id} stamp={stamp} moduleKey={m.key} />
           </section>
         </>
       ) : (
