@@ -4,21 +4,41 @@
     {
       "name": "elevate-dev",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "elevate", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "elevate",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true
     },
     {
       "name": "learn-dev",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "learn", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "learn",
+        "dev"
+      ],
       "port": 3200
     },
     {
       "name": "safe-voice-dev",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "safe-voice", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "safe-voice",
+        "dev"
+      ],
       "port": 3100
+    },
+    {
+      "name": "omniroute",
+      "runtimeExecutable": "omniroute",
+      "runtimeArgs": [
+        "serve"
+      ],
+      "port": 20128
     }
   ]
 }

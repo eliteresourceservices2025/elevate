@@ -1,0 +1,7 @@
+{
+  "_readme": "Copy this file to .claude/settings.local.json (git-ignored) AFTER the OmniRoute server is running, a provider is connected and you created an OmniRoute API key. Replace the token placeholder; never commit the real key. Delete the _readme line if Claude Code complains.",
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:20128",
+    "ANTHROPIC_AUTH_TOKEN": "PASTE_YOUR_OMNIROUTE_API_KEY_HERE"
+  }
+}

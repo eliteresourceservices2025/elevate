@@ -17,3 +17,6 @@ coverage
 # Presentation files (not committed)
 docs/*.pptx
 docs/*.mp4
+
+# Claude Code local settings (may hold the OmniRoute access key)
+.claude/settings.local.json
