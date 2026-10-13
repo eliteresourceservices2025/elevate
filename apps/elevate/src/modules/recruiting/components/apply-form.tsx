@@ -80,7 +80,14 @@ export function ApplyForm({ openingId, noticeTitle, noticeBody }: { openingId: s
         ) : null}
         <label htmlFor="ap-consent" className="flex items-start gap-2 text-sm">
           <input id="ap-consent" name="consent" type="checkbox" required className="mt-1 size-4 accent-primary" />
-          <span>I have read the privacy notice and agree that Elite Resource Services may keep and use my application to consider me for this and other roles.</span>
+          <span>
+            I have read the{" "}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-4" onClick={(e) => e.stopPropagation()}>
+              privacy notice
+            </a>{" "}
+            <span className="sr-only">(opens in a new tab)</span>
+            and agree that Elite Resource Services may keep and use my application to consider me for this and other roles.
+          </span>
         </label>
         {fieldError("consent") ? <p className="text-sm text-destructive">{fieldError("consent")}</p> : null}
       </div>

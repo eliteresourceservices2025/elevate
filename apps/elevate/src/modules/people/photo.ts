@@ -24,8 +24,15 @@ const SOF_UNSUPPORTED = new Set([0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd,
  * returns the cleaned file. Anything else (a PNG, a damaged file, a huge picture) is refused with one friendly message.
  */
 export function cleanProfilePhoto(input: Uint8Array): CleanPhoto {
+  return cleanJpeg(input, { maxBytes: MAX_PHOTO_BYTES, minSide: MIN_PHOTO_SIDE, maxSide: MAX_PHOTO_SIDE });
+}
+
+export type JpegLimits = { maxBytes: number; minSide: number; maxSide: number };
+
+/** The shared JPEG check and metadata removal (see cleanProfilePhoto); the limits say how big a picture may be. */
+export function cleanJpeg(input: Uint8Array, limits: JpegLimits): CleanPhoto {
   const n = input.length;
-  if (n < 4 || n > MAX_PHOTO_BYTES) return { ok: false, error: n > MAX_PHOTO_BYTES ? "That picture is too large. Choose a smaller one." : BAD };
+  if (n < 4 || n > limits.maxBytes) return { ok: false, error: n > limits.maxBytes ? "That picture is too large. Choose a smaller one." : BAD };
   if (input[0] !== 0xff || input[1] !== 0xd8) return { ok: false, error: BAD };
 
   const parts: Uint8Array[] = [input.subarray(0, 2)];
@@ -90,8 +97,8 @@ export function cleanProfilePhoto(input: Uint8Array): CleanPhoto {
   }
 
   if (!finished || !sawScan || width === 0 || height === 0) return { ok: false, error: BAD };
-  if (width < MIN_PHOTO_SIDE || height < MIN_PHOTO_SIDE) return { ok: false, error: "That picture is too small. Choose one at least 64 pixels wide." };
-  if (width > MAX_PHOTO_SIDE || height > MAX_PHOTO_SIDE) return { ok: false, error: "That picture is too large. Choose a smaller one." };
+  if (width < limits.minSide || height < limits.minSide) return { ok: false, error: `That picture is too small. Choose one at least ${limits.minSide} pixels wide.` };
+  if (width > limits.maxSide || height > limits.maxSide) return { ok: false, error: "That picture is too large. Choose a smaller one." };
 
   const total = parts.reduce((sum, p) => sum + p.length, 0);
   const bytes = new Uint8Array(total);
@@ -112,6 +119,21 @@ export function sourceSquare(width: number, height: number, zoom: number, px: nu
   const side = Math.min(width, height) / z;
   const clamp = (v: number) => Math.min(Math.max(v, -1), 1);
   return { side, sx: (width - side) * (0.5 + clamp(px) / 2), sy: (height - side) * (0.5 + clamp(py) / 2) };
+}
+
+/**
+ * A source rectangle with a fixed shape (width / height = `aspect`) for the banner crop. `zoom` is 1 (the biggest such rectangle that fits) or
+ * more; px and py (-1 to 1) move it across the slack. Returns the rectangle to draw from.
+ */
+export function sourceRect(width: number, height: number, aspect: number, zoom: number, px: number, py: number): { sx: number; sy: number; sw: number; sh: number } {
+  const z = Math.min(Math.max(zoom, 1), 4);
+  const fitsWidth = width / aspect <= height;
+  const baseW = fitsWidth ? width : height * aspect;
+  const baseH = fitsWidth ? width / aspect : height;
+  const sw = baseW / z;
+  const sh = baseH / z;
+  const clamp = (v: number) => Math.min(Math.max(v, -1), 1);
+  return { sw, sh, sx: (width - sw) * (0.5 + clamp(px) / 2), sy: (height - sh) * (0.5 + clamp(py) / 2) };
 }
 
 /** Where a person's photo lives: a fresh random name each time, so a replaced picture is never served from a stale cache. */

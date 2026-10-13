@@ -10,6 +10,7 @@ import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { notify } from "@/modules/notifications/service";
 import { RESUME_KINDS, RESUME_MAX_BYTES, isApplyable, type OpeningStatus } from "./constants";
 import { receivedMail } from "./mail";
+import { slugify, uniqueSlug } from "./slug";
 import { applicationStageHistory, applications, candidateEmails, candidates, jobOpenings, openingHiringTeam, recruitingSettings } from "./schema";
 import { applySchema } from "./validators";
 
@@ -150,10 +151,22 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
 
 export const IMPORT_NOTICE = "talenthr-import";
 
+/** The readable address for a job: the title's, numbered when another job already has it. `excludeId` is the job being edited. */
+export async function freeSlug(tx: Executor, title: string, excludeId?: string): Promise<string> {
+  const rows = await tx.select({ slug: jobOpenings.slug }).from(jobOpenings).where(excludeId ? and(sql`${jobOpenings.slug} is not null`, sql`${jobOpenings.id} <> ${excludeId}`) : sql`${jobOpenings.slug} is not null`);
+  return uniqueSlug(slugify(title), new Set(rows.map((r) => (r.slug as string).toLowerCase())));
+}
+
+/** Whether another job already uses this address. */
+export async function slugTaken(tx: Executor, slug: string, excludeId?: string): Promise<boolean> {
+  const rows = await tx.select({ id: jobOpenings.id }).from(jobOpenings).where(and(sql`lower(${jobOpenings.slug}) = ${slug.toLowerCase()}`, excludeId ? sql`${jobOpenings.id} <> ${excludeId}` : sql`true`)).limit(1);
+  return rows.length > 0;
+}
+
 export async function createImportedOpening(tx: Executor, actor: { id: string; email: string }, input: { title: string; description: string; location?: string | null }): Promise<string> {
   const [o] = await tx
     .insert(jobOpenings)
-    .values({ title: input.title.trim().slice(0, 120) || "Imported job", description: (input.description.trim() || "Imported from TalentHR.").slice(0, 8000), location: (input.location ?? "").trim().slice(0, 80) || "Remote", status: "closed", sendAck: false, sendRejection: false, createdBy: actor.id, closedAt: new Date() })
+    .values({ title: input.title.trim().slice(0, 120) || "Imported job", slug: await freeSlug(tx, input.title.trim().slice(0, 120) || "Imported job"), description: (input.description.trim() || "Imported from TalentHR.").slice(0, 8000), location: (input.location ?? "").trim().slice(0, 80) || "Remote", status: "closed", sendAck: false, sendRejection: false, createdBy: actor.id, closedAt: new Date() })
     .returning({ id: jobOpenings.id });
   await writeAudit({ actor, action: "recruiting.import_opening", targetType: "job_opening", targetId: o.id }, tx);
   return o.id;

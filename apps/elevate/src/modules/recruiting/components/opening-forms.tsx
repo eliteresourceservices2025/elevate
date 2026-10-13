@@ -11,11 +11,11 @@ import type { OpeningStatus } from "../constants";
 import type { PersonChoice } from "../queries";
 import { useRun } from "./use-run";
 
-type OpeningValues = { id?: string; title: string; description: string; location: string; payNote: string; teamId: string; sendAck: boolean; sendRejection: boolean; hiringTeamUserIds: string[] };
+type OpeningValues = { id?: string; title: string; slug: string; description: string; location: string; payNote: string; teamId: string; sendAck: boolean; sendRejection: boolean; hiringTeamUserIds: string[] };
 
-export function OpeningForm({ initial, teams, people }: { initial?: Partial<OpeningValues>; teams: { id: string; name: string }[]; people: PersonChoice[] }) {
+export function OpeningForm({ initial, teams, people, status }: { initial?: Partial<OpeningValues>; teams: { id: string; name: string }[]; people: PersonChoice[]; /** The job's status; its web address can only change while it is a draft. */ status?: OpeningStatus }) {
   const { run, pending, router } = useRun();
-  const [v, setV] = useState<OpeningValues>({ title: "", description: "", location: "Remote", payNote: "", teamId: "", sendAck: true, sendRejection: true, hiringTeamUserIds: [], ...initial });
+  const [v, setV] = useState<OpeningValues>({ title: "", slug: "", description: "", location: "Remote", payNote: "", teamId: "", sendAck: true, sendRejection: true, hiringTeamUserIds: [], ...initial });
   useWarnWhenEdited(v);
   const set = <K extends keyof OpeningValues>(k: K, value: OpeningValues[K]) => setV((s) => ({ ...s, [k]: value }));
 
@@ -28,6 +28,15 @@ export function OpeningForm({ initial, teams, people }: { initial?: Partial<Open
       }}
     >
       <TextField id="op-title" label="Job title" value={v.title} onChange={(e) => set("title", e.target.value)} maxLength={120} required />
+      <TextField
+        id="op-slug"
+        label="Web address"
+        value={v.slug}
+        onChange={(e) => set("slug", e.target.value.toLowerCase())}
+        maxLength={60}
+        disabled={Boolean(v.id) && status !== undefined && status !== "draft"}
+        hint={`/careers/${v.slug || "made-from-the-title"}. Leave blank to make it from the title. Lower-case letters, numbers and dashes. It can only be changed while the job is a draft, because the link may already be shared.`}
+      />
       <div className="space-y-1.5">
         <Label htmlFor="op-desc">Description (shown on the public careers page)</Label>
         <Textarea id="op-desc" value={v.description} onChange={(e) => set("description", e.target.value)} rows={10} maxLength={10000} required aria-describedby="op-desc-hint" />

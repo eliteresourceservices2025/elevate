@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { Markdown } from "@/components/markdown";
 import { ApplyForm } from "@/modules/recruiting/components/apply-form";
 import { getPublicOpening, getPublicPrivacyNotice } from "@/modules/recruiting/queries";
+import { looksLikeId } from "@/modules/recruiting/slug";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,11 @@ export async function generateMetadata({ params }: PageProps<"/careers/[id]">): 
 }
 
 export default async function CareerDetailPage({ params }: PageProps<"/careers/[id]">) {
-  const opening = await getPublicOpening((await params).id);
+  const { id } = await params;
+  const opening = await getPublicOpening(id);
   if (!opening) notFound();
+  // An old link by id goes to the readable address.
+  if (opening.slug && looksLikeId(id)) permanentRedirect(`/careers/${opening.slug}`);
   const notice = await getPublicPrivacyNotice();
   return (
     <div className="space-y-8">

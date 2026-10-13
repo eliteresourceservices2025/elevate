@@ -15,6 +15,8 @@ export const jobOpenings = talent
     {
       id: uuid("id").primaryKey().defaultRandom(),
       title: text("title").notNull(),
+      /** The readable public address (/careers/<slug>). Null only for rows made before addresses existed; the id still works. */
+      slug: text("slug"),
       description: text("description").notNull(),
       location: text("location").notNull().default("Remote"),
       /** Free text shown on the public page, optional. No promises of salary or benefits (1099 contractors). */
@@ -31,7 +33,31 @@ export const jobOpenings = talent
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     },
-    (t) => [index("job_openings_status_idx").on(t.status), check("job_openings_status_chk", sql`${t.status} in ('draft','open','closed')`)],
+    (t) => [
+      index("job_openings_status_idx").on(t.status),
+      uniqueIndex("job_openings_slug_idx").on(sql`lower(${t.slug})`).where(sql`${t.slug} is not null`),
+      check("job_openings_status_chk", sql`${t.status} in ('draft','open','closed')`),
+    ],
+  )
+  .enableRLS();
+
+/**
+ * The public careers page's own words and picture (one row). Null title or intro = the built-in wording. The banner is one wide
+ * picture stored in the private company-docs bucket and served through /api/careers/banner.
+ */
+export const careersPage = talent
+  .table(
+    "careers_page",
+    {
+      id: smallint("id").primaryKey().default(1),
+      title: text("title"),
+      intro: text("intro"),
+      bannerPath: text("banner_path"),
+      bannerUpdatedAt: timestamp("banner_updated_at", { withTimezone: true }),
+      updatedBy: uuid("updated_by").references(() => users.id),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [check("careers_page_single_chk", sql`${t.id} = 1`)],
   )
   .enableRLS();
 

@@ -9,29 +9,48 @@ import { users, userRoles } from "@/modules/core/schema";
 import { reportName } from "@/modules/org/service";
 import { getPrivacyNotice } from "@/modules/privacy/queries";
 import { BOARD_STAGES, STAGES, type CriterionKey, type Stage } from "./constants";
-import { applicationStageHistory, applications, candidateNotes, candidates, interviewers, interviews, jobOpenings, openingHiringTeam, scorecards } from "./schema";
+import { looksLikeId } from "./slug";
+import { applicationStageHistory, applications, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, scorecards } from "./schema";
 import { calendarStatus } from "./calendar";
 import { authorizeForOpening, getRetentionSettings, hiringTeamIds } from "./service";
 
 // ---- Public (no sign-in): only open jobs, only what the page shows -------------------------------------------------------
 
-export type PublicOpening = { id: string; title: string; location: string; payNote: string | null; description: string; openedAt: Date | null };
+export type PublicOpening = { id: string; slug: string | null; title: string; location: string; payNote: string | null; description: string; openedAt: Date | null };
 
 export async function listPublicOpenings(): Promise<Omit<PublicOpening, "description">[]> {
   return db
-    .select({ id: jobOpenings.id, title: jobOpenings.title, location: jobOpenings.location, payNote: jobOpenings.payNote, openedAt: jobOpenings.openedAt })
+    .select({ id: jobOpenings.id, slug: jobOpenings.slug, title: jobOpenings.title, location: jobOpenings.location, payNote: jobOpenings.payNote, openedAt: jobOpenings.openedAt })
     .from(jobOpenings)
     .where(and(eq(jobOpenings.status, "open"), isNull(jobOpenings.archivedAt)))
     .orderBy(desc(jobOpenings.openedAt));
 }
 
-export async function getPublicOpening(id: string): Promise<PublicOpening | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+/** One open job by its readable address, or by its id (old links keep working). */
+export async function getPublicOpening(idOrSlug: string): Promise<PublicOpening | null> {
+  const value = idOrSlug.trim().toLowerCase();
+  if (!value || value.length > 80 || !/^[a-z0-9-]+$/.test(value)) return null;
+  const match = looksLikeId(value) ? eq(jobOpenings.id, value) : sql`lower(${jobOpenings.slug}) = ${value}`;
   const [row] = await db
-    .select({ id: jobOpenings.id, title: jobOpenings.title, location: jobOpenings.location, payNote: jobOpenings.payNote, description: jobOpenings.description, openedAt: jobOpenings.openedAt })
+    .select({ id: jobOpenings.id, slug: jobOpenings.slug, title: jobOpenings.title, location: jobOpenings.location, payNote: jobOpenings.payNote, description: jobOpenings.description, openedAt: jobOpenings.openedAt })
     .from(jobOpenings)
-    .where(and(eq(jobOpenings.id, id), eq(jobOpenings.status, "open"), isNull(jobOpenings.archivedAt)));
+    .where(and(match, eq(jobOpenings.status, "open"), isNull(jobOpenings.archivedAt)));
   return row ?? null;
+}
+
+export type CareersPageContent = { title: string | null; intro: string | null; bannerVersion: number | null };
+
+/** The careers page's own wording and banner (public). Null fields mean the built-in wording. */
+export async function getCareersPage(): Promise<CareersPageContent> {
+  const [row] = await db.select().from(careersPage).where(eq(careersPage.id, 1)).limit(1);
+  return { title: row?.title ?? null, intro: row?.intro ?? null, bannerVersion: row?.bannerPath && row.bannerUpdatedAt ? row.bannerUpdatedAt.getTime() : null };
+}
+
+/** The same, for the staff editor (needs the permission). */
+export async function getCareersPageForEdit(): Promise<CareersPageContent> {
+  const user = await requireUser();
+  await authorize(user, "recruiting.manage_careers_page");
+  return getCareersPage();
 }
 
 export async function getPublicPrivacyNotice() {

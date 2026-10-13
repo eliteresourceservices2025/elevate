@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CLOSE_KINDS, CRITERIA, INTERVIEW_KINDS, OPENING_STATUSES, RECOMMENDATIONS, STAGES } from "./constants";
+import { SLUG_PATTERN } from "./slug";
 
 const uuid = z.string().uuid("Invalid id");
 const text = (max: number) => z.string().trim().max(max);
@@ -8,6 +9,8 @@ const blankToUndefined = (v: unknown) => (typeof v === "string" && v.trim() === 
 export const openingSchema = z.object({
   id: uuid.optional(),
   title: text(120).min(3, "Give the job a title"),
+  /** The readable web address. Blank = made from the title. Only changeable while the job is a draft. */
+  slug: z.preprocess(blankToUndefined, z.string().trim().toLowerCase().max(60).regex(SLUG_PATTERN, "Use lower-case letters, numbers and single dashes").optional()),
   description: text(10_000).min(20, "Describe the job (at least a few sentences)"),
   location: text(120).default("Remote"),
   payNote: z.preprocess(blankToUndefined, text(200).optional()),
@@ -79,3 +82,8 @@ export const retentionSchema = z.object({
 });
 
 export const resumeSchema = z.object({ applicationId: uuid });
+
+export const careersPageSchema = z.object({
+  title: z.preprocess(blankToUndefined, text(120).optional()),
+  intro: z.preprocess(blankToUndefined, text(2000).optional()),
+});

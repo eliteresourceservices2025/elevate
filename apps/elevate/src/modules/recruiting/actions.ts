@@ -18,9 +18,10 @@ import { queueEmails } from "@/modules/notifications/email-queue";
 import { notify } from "@/modules/notifications/service";
 import { canMove } from "./constants";
 import { buildInterviewIcs, interviewMail, rejectionMail } from "./mail";
-import { applicationStageHistory, applications, candidateNotes, candidates, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
-import { authorizeForOpening, openingIdOfApplication, queueCandidateEmail } from "./service";
-import { cancelInterviewSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
+import { applicationStageHistory, applications, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
+import { authorizeForOpening, freeSlug, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
+import { clearBanner } from "./careers-banner";
+import { careersPageSchema, cancelInterviewSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
 const MANILA = "Asia/Manila";
@@ -51,10 +52,20 @@ export async function saveOpening(input: unknown): Promise<ActionResult<{ id: st
       if (openingId) {
         const [before] = await tx.select().from(jobOpenings).where(and(eq(jobOpenings.id, openingId), isNull(jobOpenings.archivedAt)));
         if (!before) throw new ActionFailure("That job was not found.");
-        await tx.update(jobOpenings).set(fields).where(eq(jobOpenings.id, openingId));
+        // The web address is kept stable (shared links). It can be changed only while the job is a draft; a job with none gets one.
+        let slug = before.slug;
+        if (v.slug && v.slug !== before.slug) {
+          if (before.status !== "draft") throw new ActionFailure("The web address can only be changed while the job is a draft.");
+          if (await slugTaken(tx, v.slug, openingId)) throw new ActionFailure("Another job already uses that web address.");
+          slug = v.slug;
+        }
+        if (!slug) slug = await freeSlug(tx, v.title, openingId);
+        await tx.update(jobOpenings).set({ ...fields, slug }).where(eq(jobOpenings.id, openingId));
         await writeAudit({ actor, action: "recruiting.opening_update", targetType: "job_opening", targetId: openingId, before: { title: before.title, status: before.status }, after: { title: v.title } }, tx);
       } else {
-        const [row] = await tx.insert(jobOpenings).values({ ...fields, createdBy: actor.id }).returning({ id: jobOpenings.id });
+        if (v.slug && (await slugTaken(tx, v.slug))) throw new ActionFailure("Another job already uses that web address.");
+        const slug = v.slug ?? (await freeSlug(tx, v.title));
+        const [row] = await tx.insert(jobOpenings).values({ ...fields, slug, createdBy: actor.id }).returning({ id: jobOpenings.id });
         openingId = row.id;
         await writeAudit({ actor, action: "recruiting.opening_create", targetType: "job_opening", targetId: openingId, after: { title: v.title } }, tx);
       }
@@ -65,6 +76,36 @@ export async function saveOpening(input: unknown): Promise<ActionResult<{ id: st
     });
     refresh(id);
     return { ok: true, data: { id } };
+  });
+}
+
+/** The careers page's title and introduction. Blank = the built-in wording. */
+export async function saveCareersPage(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.manage_careers_page");
+    const parsed = careersPageSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const values = { title: parsed.data.title ?? null, intro: parsed.data.intro ?? null, updatedBy: actor.id, updatedAt: new Date() };
+    await db.transaction(async (tx) => {
+      await tx.insert(careersPage).values({ id: 1, ...values }).onConflictDoUpdate({ target: careersPage.id, set: values });
+      await writeAudit({ actor, action: "recruiting.careers_page", targetType: "careers_page", targetId: undefined, after: { title: values.title !== null, intro: values.intro !== null } }, tx);
+    });
+    revalidatePath("/careers");
+    revalidatePath("/recruiting/careers-page");
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Takes the banner off the careers page. */
+export async function removeCareersBanner(): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.manage_careers_page");
+    await clearBanner(actor);
+    revalidatePath("/careers");
+    revalidatePath("/recruiting/careers-page");
+    return { ok: true, data: undefined };
   });
 }
 

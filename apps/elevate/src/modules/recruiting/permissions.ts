@@ -12,5 +12,7 @@ export const recruitingPermissions = definePermissions({
   "recruiting.scorecard": { roles: { super_admin: "own", hr_admin: "own", recruiter: "own", team_lead: "own" } },
   "recruiting.download_resume": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all", team_lead: "team" } },
   "recruiting.connect_calendar": { roles: { super_admin: "own", hr_admin: "own", recruiter: "own" } },
+  // The wording and banner of the public careers page.
+  "recruiting.manage_careers_page": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   "recruiting.manage_retention": { roles: { super_admin: "all", hr_admin: "all" } },
 });

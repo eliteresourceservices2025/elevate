@@ -171,6 +171,75 @@ describe("the public application", () => {
   });
 });
 
+describe("readable addresses and the careers page", () => {
+  it("gives each job a readable address, numbers repeats, resolves the old id link, and only changes it while a draft", async () => {
+    as(recruiter);
+    const title = `Medical Billing Assistant ${uniq("")}`;
+    const a = idOf(await actions.saveOpening({ title, description: "Support our clients with billing questions every day." }));
+    const b = idOf(await actions.saveOpening({ title, description: "A second opening with exactly the same title as the first." }));
+    const slugOf = async (id: string) => (await rows<{ slug: string }>(sql`select slug from talent.job_openings where id = ${id}`))[0].slug;
+    const first = await slugOf(a);
+    expect(first).toMatch(/^medical-billing-assistant-[a-z0-9]+$/);
+    expect(await slugOf(b)).toBe(`${first}-2`);
+
+    // Open it: the public page finds it by the address and by the old id.
+    expect((await actions.setOpeningStatus({ id: a, status: "open" })).ok).toBe(true);
+    const byAddress = await queries.getPublicOpening(first.toUpperCase());
+    expect(byAddress?.id).toBe(a);
+    const byId = await queries.getPublicOpening(a);
+    expect(byId).toMatchObject({ id: a, slug: first });
+    expect(await queries.getPublicOpening("../../etc")).toBeNull();
+    expect(await queries.getPublicOpening("no-such-job")).toBeNull();
+    expect((await queries.listPublicOpenings()).find((o) => o.id === a)?.slug).toBe(first);
+
+    // The address can be set while a draft (and must be free and well formed), not once the job has been opened.
+    const base = { title, description: "Support our clients with billing questions every day." };
+    expect((await actions.saveOpening({ ...base, id: b, slug: first })).ok).toBe(false); // taken by the first job
+    expect((await actions.saveOpening({ ...base, id: b, slug: "Not Valid!" })).ok).toBe(false);
+    const wanted = `billing-help-${uniq("")}`;
+    expect((await actions.saveOpening({ ...base, id: b, slug: wanted })).ok).toBe(true);
+    expect(await slugOf(b)).toBe(wanted);
+    expect(await actions.saveOpening({ ...base, id: a, slug: `other-${uniq("")}` })).toEqual({ ok: false, error: "The web address can only be changed while the job is a draft." });
+    // Saving an open job without touching the address keeps it.
+    expect((await actions.saveOpening({ ...base, id: a, slug: first })).ok).toBe(true);
+    expect(await slugOf(a)).toBe(first);
+  });
+
+  it("saves the careers page wording and banner (cleaned, wide only), served publicly, and only for HR and recruiters", async () => {
+    const banner = await import("@/modules/recruiting/careers-banner");
+    setDocumentStorage(fake);
+    const seg = (marker: number, body: number[]) => [0xff, marker, (body.length + 2) >> 8, (body.length + 2) & 0xff, ...body];
+    const jpeg = (w: number, h: number) =>
+      new Uint8Array([0xff, 0xd8, ...seg(0xe1, [...Buffer.from("Exif\0\0GPS-secret-location")]), ...seg(0xdb, [0, ...new Array<number>(64).fill(8)]), ...seg(0xc0, [8, h >> 8, h & 0xff, w >> 8, w & 0xff, 1, 1, 0x11, 0]), ...seg(0xda, [1, 1, 0, 0, 63, 0]), 0x12, 0x34, 0xff, 0xd9]);
+
+    as(recruiter);
+    expect(await actions.saveCareersPage({ title: "Join our team", intro: "We are **hiring**." })).toEqual({ ok: true, data: undefined });
+    expect(await queries.getCareersPage()).toMatchObject({ title: "Join our team", intro: "We are **hiring**.", bannerVersion: null });
+    // Blank goes back to the built-in wording
+    expect((await actions.saveCareersPage({ title: "", intro: "" })).ok).toBe(true);
+    expect(await queries.getCareersPage()).toMatchObject({ title: null, intro: null });
+
+    // A wide picture is cleaned and stored; a square one is refused
+    expect(await banner.saveBanner(recruiter as never, jpeg(1600, 400))).toEqual({ ok: true });
+    const page = await queries.getCareersPage();
+    expect(page.bannerVersion).not.toBeNull();
+    const served = await banner.readBanner();
+    expect(served).not.toBeNull();
+    expect(Buffer.from(served!).includes(Buffer.from("GPS-secret-location"))).toBe(false);
+    expect((await banner.saveBanner(recruiter as never, jpeg(400, 400))).ok).toBe(false);
+    expect((await banner.saveBanner(recruiter as never, new TextEncoder().encode("%PDF-1.4 not a picture"))).ok).toBe(false);
+    expect((await actions.removeCareersBanner()).ok).toBe(true);
+    expect(await banner.readBanner()).toBeNull();
+
+    // Others cannot change the page
+    for (const u of [lead, exec, employee]) {
+      as(u);
+      expect(await actions.saveCareersPage({ title: "No", intro: "No" })).toEqual({ ok: false, error: NO_ACCESS });
+      await expect(banner.saveBanner(u as never, jpeg(1600, 400))).rejects.toThrow();
+    }
+  });
+});
+
 describe("the pipeline", () => {
   it("moves, closes and reopens an application, keeping every step in an append-only history", async () => {
     const opening = await openJob();

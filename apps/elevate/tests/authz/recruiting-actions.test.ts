@@ -35,6 +35,8 @@ const cases: { name: string; allowed: RoleSlug[]; call: () => Promise<{ ok: bool
   { name: "cancelInterview", allowed: MANAGERS, call: () => actions.cancelInterview({ interviewId: ID }) },
   { name: "submitScorecard", allowed: INTERVIEWERS, call: () => actions.submitScorecard({}) },
   { name: "disconnectCalendar", allowed: MANAGERS, call: () => actions.disconnectCalendar() },
+  { name: "saveCareersPage", allowed: MANAGERS, call: () => actions.saveCareersPage({ title: "Join us", intro: "Hello" }) },
+  { name: "removeCareersBanner", allowed: MANAGERS, call: () => actions.removeCareersBanner() },
   { name: "saveRetention", allowed: HR, call: () => actions.saveRetention({ enabled: false, rejectedMonths: 12, withdrawnMonths: 6 }) },
 ];
 

@@ -141,10 +141,18 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
 
       <p className="text-xs text-muted-foreground">
         The public job list is at{" "}
-        <Link href="/careers" className="text-primary underline-offset-4 hover:underline">
+        <a href="/careers" target="_blank" rel="noopener noreferrer" className="text-primary underline-offset-4 hover:underline">
           /careers
-        </Link>
-        .
+        </a>{" "}
+        (opens in a new tab).{scopeFor(user, "recruiting.manage_careers_page") ? (
+          <>
+            {" "}
+            <Link href="/recruiting/careers-page" className="text-primary underline-offset-4 hover:underline">
+              Edit the careers page
+            </Link>{" "}
+            (title, introduction and banner).
+          </>
+        ) : null}
       </p>
     </div>
   );

@@ -39,8 +39,18 @@ test("HR publishes a job, an applicant applies on the public page, HR moves them
   // The applicant, not signed in
   await anon.goto("/careers");
   await anon.getByRole("link", { name: title }).click();
-  await anon.waitForURL(/\/careers\/[0-9a-f-]{36}$/, slow);
+  // A readable address made from the title, and the old id link goes to it
+  await anon.waitForURL(/\/careers\/e2e-virtual-assistant-\d+$/, slow);
+  const readable = anon.url();
+  const openingId = boardUrl.split("/").pop()!;
+  await anon.goto(`/careers/${openingId}`);
+  await anon.waitForURL(readable, slow);
   await expect(anon.getByText("Clear written English")).toBeVisible();
+  // The privacy notice in the consent line is a real link that opens in a new tab
+  const privacy = anon.getByRole("link", { name: "privacy notice", exact: false }).filter({ hasText: "privacy notice" }).last();
+  await expect(privacy).toHaveAttribute("href", "/privacy");
+  await expect(privacy).toHaveAttribute("target", "_blank");
+  await expect(privacy).toHaveAttribute("rel", /noopener/);
   await waitForHydration(anon, "#ap-name");
   await anon.getByLabel("Full name").fill(`Pia Applicant${stamp}`);
   await anon.getByLabel("Email", { exact: true }).fill(`pia.${stamp}@example.com`);
@@ -158,4 +168,79 @@ test("the Google Calendar card is for HR and recruiters only; connecting is refu
   const empPage = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(empPage, await createEmployeeAccount("Eli", `Cal${Date.now()}`));
   expect((await empPage.request.get("/api/google/connect", { maxRedirects: 0 })).status()).toBe(404);
+});
+
+function wideBanner(): Buffer {
+  // A plain 1000 x 300 PNG: wide enough for the banner, made by the browser into the final JPEG
+  const { deflateSync } = require("node:zlib") as typeof import("node:zlib");
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (buf: Buffer) => {
+    let c = 0xffffffff;
+    for (const byte of buf) c = (crcTable[(c ^ byte) & 0xff] as number) ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const out = Buffer.alloc(8 + data.length + 4);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(crc(body), 8 + data.length);
+    return out;
+  };
+  const w = 1000;
+  const h = 300;
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(w, 0);
+  header.writeUInt32BE(h, 4);
+  header[8] = 8;
+  header[9] = 2;
+  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: w }, () => [0xe2, 0xbe, 0x2b]).flat())]);
+  const raw = Buffer.concat(Array.from({ length: h }, () => row));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+}
+
+test("HR edits the careers page wording and banner, and the public page shows them", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const slow = { timeout: 45_000 };
+  const stamp = Date.now();
+  const hrPage = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+  await signInEnrollingMfa(hrPage, await createHrAccount());
+  await hrPage.goto("/recruiting");
+  // The public page link opens in a new tab
+  const publicLink = hrPage.getByRole("link", { name: "/careers" });
+  await expect(publicLink).toHaveAttribute("target", "_blank");
+  await hrPage.getByRole("link", { name: "Edit the careers page" }).click();
+  await hrPage.waitForURL("**/recruiting/careers-page", slow);
+  await waitForHydration(hrPage, "#cp-title");
+
+  await hrPage.getByLabel("Page title").fill(`Join the team ${stamp}`);
+  await hrPage.getByLabel("Introduction").fill("We are **growing** and looking for reliable assistants.");
+  await hrPage.getByRole("button", { name: "Save wording" }).click();
+  await expect(hrPage.getByText("Careers page saved.")).toBeVisible(slow);
+
+  await hrPage.getByLabel("Choose a banner picture").setInputFiles({ name: "banner.png", mimeType: "image/png", buffer: wideBanner() });
+  await hrPage.getByRole("button", { name: "Save banner" }).click();
+  await expect(hrPage.getByText("Banner saved.")).toBeVisible(slow);
+  await expect(hrPage.getByAltText("The current careers page banner")).toBeVisible(slow);
+
+  const anon = await (await browser.newContext()).newPage();
+  await anon.goto("/careers");
+  await expect(anon.getByRole("heading", { name: `Join the team ${stamp}` })).toBeVisible(slow);
+  await expect(anon.getByText("growing", { exact: false })).toBeVisible();
+  const served = await anon.request.get("/api/careers/banner");
+  expect(served.status()).toBe(200);
+  expect(served.headers()["content-type"]).toBe("image/jpeg");
+  expect([...(await served.body()).subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
+
+  // Put the page back to the built-in wording for the next run
+  await hrPage.getByLabel("Page title").fill("");
+  await hrPage.getByLabel("Introduction").fill("");
+  await hrPage.getByRole("button", { name: "Save wording" }).click();
+  await expect(hrPage.getByText("Careers page saved.")).toBeVisible(slow);
+  await hrPage.getByRole("button", { name: "Remove banner" }).click();
+  await expect(hrPage.getByText("Banner removed.")).toBeVisible(slow);
 });

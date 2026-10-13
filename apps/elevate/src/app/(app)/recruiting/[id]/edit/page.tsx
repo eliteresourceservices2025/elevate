@@ -26,7 +26,8 @@ export default async function EditOpeningPage({ params }: PageProps<"/recruiting
       <OpeningForm
         teams={options.teams}
         people={options.people}
-        initial={{ id: o.id, title: o.title, description: o.description, location: o.location, payNote: o.payNote ?? "", teamId: o.teamId ?? "", sendAck: o.sendAck, sendRejection: o.sendRejection, hiringTeamUserIds: options.hiringTeamUserIds }}
+        status={o.status as "draft" | "open" | "closed"}
+        initial={{ id: o.id, title: o.title, slug: o.slug ?? "", description: o.description, location: o.location, payNote: o.payNote ?? "", teamId: o.teamId ?? "", sendAck: o.sendAck, sendRejection: o.sendRejection, hiringTeamUserIds: options.hiringTeamUserIds }}
       />
     </div>
   );
