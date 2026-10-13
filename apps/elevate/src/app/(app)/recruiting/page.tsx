@@ -1,6 +1,7 @@
 /* eslint-disable security/detect-object-injection -- keys are typed stage and status names */
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import { notFound } from "next/navigation";
 import { PagerLinks } from "@/components/pager";
 import { Badge } from "@/components/ui/badge";
@@ -40,11 +41,21 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
           <h1 className="text-2xl font-bold">Recruiting</h1>
           <p className="mt-1 text-muted-foreground">Jobs, applicants, interviews and scorecards. Applicants are kept apart from people records until they are hired.</p>
         </div>
-        {canManage ? (
-          <Link href="/recruiting/new" className={buttonVariants()}>
-            New job
-          </Link>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <a href="/careers" target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline" })}>
+            View careers page <ExternalLink aria-hidden /> <span className="sr-only">(opens in a new tab)</span>
+          </a>
+          {scopeFor(user, "recruiting.manage_careers_page") ? (
+            <Link href="/recruiting/careers-page" className={buttonVariants({ variant: "outline" })}>
+              Edit careers page
+            </Link>
+          ) : null}
+          {canManage ? (
+            <Link href="/recruiting/new" className={buttonVariants()}>
+              New job
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       {summary ? (

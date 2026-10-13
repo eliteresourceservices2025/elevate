@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -35,6 +36,11 @@ export default async function OpeningPage({ params }: PageProps<"/recruiting/[id
         {board.canManage ? (
           <div className="flex flex-wrap items-center gap-2">
             <OpeningStatusButtons id={opening.id} status={opening.status as OpeningStatus} />
+            {opening.status === "open" ? (
+              <a href={`/careers/${opening.slug ?? opening.id}`} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                View job ad <ExternalLink aria-hidden /> <span className="sr-only">(opens in a new tab)</span>
+              </a>
+            ) : null}
             <Link href={`/recruiting/${opening.id}/edit`} className={buttonVariants({ variant: "outline", size: "sm" })}>
               Edit job
             </Link>

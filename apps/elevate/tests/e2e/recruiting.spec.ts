@@ -211,9 +211,9 @@ test("HR edits the careers page wording and banner, and the public page shows th
   await signInEnrollingMfa(hrPage, await createHrAccount());
   await hrPage.goto("/recruiting");
   // The public page link opens in a new tab
-  const publicLink = hrPage.getByRole("link", { name: "/careers" });
+  const publicLink = hrPage.getByRole("link", { name: /View careers page/ });
   await expect(publicLink).toHaveAttribute("target", "_blank");
-  await hrPage.getByRole("link", { name: "Edit the careers page" }).click();
+  await hrPage.getByRole("link", { name: "Edit careers page" }).click();
   await hrPage.waitForURL("**/recruiting/careers-page", slow);
   await waitForHydration(hrPage, "#cp-title");
 
@@ -231,6 +231,9 @@ test("HR edits the careers page wording and banner, and the public page shows th
   await anon.goto("/careers");
   await expect(anon.getByRole("heading", { name: `Join the team ${stamp}` })).toBeVisible(slow);
   await expect(anon.getByText("growing", { exact: false })).toBeVisible();
+  // Questions about applying go to the recruiting address, never the technical support one
+  await expect(anon.getByRole("link", { name: "elitetsp@ersva.com" })).toBeVisible();
+  await expect(anon.getByText("eliteresourceservices2025@gmail.com")).toHaveCount(0);
   const served = await anon.request.get("/api/careers/banner");
   expect(served.status()).toBe(200);
   expect(served.headers()["content-type"]).toBe("image/jpeg");

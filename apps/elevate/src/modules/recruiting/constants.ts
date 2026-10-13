@@ -78,6 +78,13 @@ export function retentionMonths(kind: CloseKind | null, settings: { rejectedMont
   return null;
 }
 
+/**
+ * Where people write with questions about applying. This is NOT the technical support address (support/constants.ts): that one is for
+ * ELEVATE trouble only. A deployment can change this one with CAREERS_EMAIL.
+ */
+export const DEFAULT_CAREERS_EMAIL = "elitetsp@ersva.com";
+export const careersAddress = (): string => process.env.CAREERS_EMAIL?.trim() || DEFAULT_CAREERS_EMAIL;
+
 /** The careers page's built-in wording, used while HR has not written their own. */
 export const DEFAULT_CAREERS_TITLE = "Careers at Elite Resource Services";
 export const DEFAULT_CAREERS_INTRO = "We place skilled virtual assistants with clients, many in healthcare. These roles are independent contractor engagements.";
