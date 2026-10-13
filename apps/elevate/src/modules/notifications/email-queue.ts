@@ -28,7 +28,7 @@ export type QueuedEmail = {
   /** Relative in-app path. */
   link: string;
   /** Optional file to attach (a calendar invite). */
-  attachment?: { fileName: string; mimeType: string; content: string };
+  attachment?: { fileName: string; mimeType: string; content: string; base64?: boolean };
   /** Queuing the same key for the same person twice does nothing. */
   dedupeKey: string;
 };

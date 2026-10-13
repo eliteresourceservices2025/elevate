@@ -2,9 +2,12 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/modules/audit/write";
+import { queueEmails } from "@/modules/notifications/email-queue";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds } from "@/modules/org/service";
+import { renderCertificatePdf } from "./certificate-pdf";
 import { HIPAA_SLUG } from "./constants";
+import { learnBaseUrl } from "./token";
 import { assignmentNeed, describeDue, isOverdue, isoWeekKey, reminderDue, type ReminderKind } from "./rules";
 
 // The nightly work of ELEVATE Learn on ELEVATE's side (docs/learn/02-architecture.md). Learn itself runs no scheduled work.
@@ -187,8 +190,8 @@ export type SyncRun = { recorded: number; archived: number; waiting: number };
  * unique per person, name and end date. A revoked certificate archives its credential. A person with no people record is left waiting.
  */
 export async function runLearnSync(scope?: Scope): Promise<SyncRun> {
-  const todo = await rows<{ id: string; user_id: string; issued_on: string; ends_on: string; title: string; employee_id: string | null }>(sql`
-    select c.id, c.user_id, c.issued_on::text, c.ends_on::text, co.title,
+  const todo = await rows<{ id: string; user_id: string; issued_on: string; ends_on: string; title: string; reference: string; holder_name: string; employee_id: string | null }>(sql`
+    select c.id, c.user_id, c.issued_on::text, c.ends_on::text, co.title, c.reference, c.holder_name,
            (select e.id from core.employees e where e.user_id = c.user_id and e.archived_at is null order by e.created_at desc limit 1) as employee_id
     from learn.certificates c join learn.assignments a on a.id = c.assignment_id join learn.courses co on co.id = a.course_id
     where not exists (select 1 from learn.certificate_sync s where s.certificate_id = c.id)
@@ -214,7 +217,28 @@ export async function runLearnSync(scope?: Scope): Promise<SyncRun> {
         credentialId = made[0].id;
       }
       await tx.execute(sql`insert into learn.certificate_sync (certificate_id, credential_id) values (${c.id}, ${credentialId}) on conflict do nothing`);
-      await notify(tx, { userId: c.user_id, kind: "learn.certified", title: "Your HIPAA training certificate is recorded", body: `Valid until ${c.ends_on}. It also appears under Certificates.`, link: "/credentials" });
+      await notify(tx, { userId: c.user_id, kind: "learn.certified", title: "Your training certificate is recorded", body: `${c.title}, valid until ${c.ends_on}. It also appears under Certificates.`, link: "/credentials" });
+      // The emailed copy: a PDF of the certificate, attached once (the queue's dedupe key). The email says nothing else.
+      const pdf = await renderCertificatePdf({
+        holderName: c.holder_name,
+        courseTitle: c.title,
+        issuedOn: c.issued_on,
+        endsOn: c.ends_on,
+        reference: c.reference,
+        verifyUrl: learnBaseUrl() ? `${learnBaseUrl()}/verify` : "the verify page of ELEVATE Learn",
+      });
+      await queueEmails(tx, [
+        {
+          userId: c.user_id,
+          kind: "invite",
+          subject: "Your ELEVATE Learn certificate",
+          heading: "Your certificate of completion",
+          lines: ["Your certificate is attached as a PDF.", "You can also download it again, or print it, from ELEVATE Learn."],
+          link: "/learn",
+          attachment: { fileName: `ers-certificate-${c.reference}.pdf`, mimeType: "application/pdf", content: Buffer.from(pdf).toString("base64"), base64: true },
+          dedupeKey: `learn-certificate:${c.id}`,
+        },
+      ]);
     });
     recorded += 1;
   }

@@ -111,11 +111,11 @@ export function VerifyForm() {
   );
 }
 
-/** Opens the browser's print dialog (which can also save the certificate as a PDF). */
+/** Opens the browser's print dialog. */
 export function PrintButton() {
   return (
     <button type="button" className="secondary" onClick={() => window.print()}>
-      Print or save as PDF
+      Print
     </button>
   );
 }

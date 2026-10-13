@@ -3,7 +3,7 @@ import "server-only";
 // Sending email. Production uses Resend over its HTTP API; with no key configured nothing is sent and
 // the queue simply waits. Tests install a fake with setEmailSender().
 
-export type EmailAttachment = { fileName: string; mimeType: string; /** The file's text (a calendar invite). */ content: string };
+export type EmailAttachment = { fileName: string; mimeType: string; /** The file's text (a calendar invite), or base64 when `base64` is true (a PDF). */ content: string; base64?: boolean };
 export type OutgoingEmail = { to: string; subject: string; text: string; html: string; attachments?: EmailAttachment[]; /** A silent copy to a shared mailbox (applicant emails only). */ bcc?: string; /** Replies go here instead of the default address (support requests: the person who asked). */ replyTo?: string };
 export interface EmailSender {
   send(mail: OutgoingEmail): Promise<void>;
@@ -28,7 +28,7 @@ class ResendSender implements EmailSender {
         subject: mail.subject,
         text: mail.text,
         html: mail.html,
-        ...(mail.attachments?.length ? { attachments: mail.attachments.map((a) => ({ filename: a.fileName, content: Buffer.from(a.content, "utf8").toString("base64") })) } : {}),
+        ...(mail.attachments?.length ? { attachments: mail.attachments.map((a) => ({ filename: a.fileName, content: a.base64 ? a.content : Buffer.from(a.content, "utf8").toString("base64") })) } : {}),
       }),
       signal: AbortSignal.timeout(15_000),
     });

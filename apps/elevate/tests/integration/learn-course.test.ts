@@ -24,6 +24,7 @@ const { getOverview, getModuleView, getAttemptView } = await import("../../../le
 const { hipaaCourse, hipaaQuestions } = await import("../../../learn/src/content/hipaa");
 const { sessionCookie } = await import("../../../learn/src/lib/cookie");
 const { hashValue, newSessionValue } = await import("../../../learn/src/lib/tokens");
+const { handleCertificateDownload } = await import("../../../learn/src/lib/certificate-download");
 
 afterAll(async () => {
   await app.end();
@@ -241,6 +242,18 @@ describe("a learner going through the course", () => {
     expect(reference).toMatch(/^HC-\d{4}-[A-Z2-9]{6}$/);
     const certified = await getOverview(app, p.id, assignmentId);
     expect(certified!.certificate).toMatchObject({ reference, holderName: "Lia Santos", revoked: false });
+
+    // The PDF: only the signed-in owner gets it, and it is a real PDF named by the reference.
+    const download = (cookieHeader: string | null, id = assignmentId) =>
+      handleCertificateDownload(new Request(`${LEARN}/api/certificate/${id}`, { headers: cookieHeader ? { cookie: cookieHeader } : {} }), id, { sql: app, production: true });
+    const pdfRes = await download(cookie);
+    expect(pdfRes.status).toBe(200);
+    expect(pdfRes.headers.get("content-type")).toBe("application/pdf");
+    expect(pdfRes.headers.get("content-disposition")).toContain(reference);
+    expect(Buffer.from(await pdfRes.arrayBuffer()).subarray(0, 5).toString()).toBe("%PDF-");
+    expect((await download(null)).status).toBe(401);
+    expect((await download(await signIn((await makePerson("Eve", "Other")).id))).status).toBe(404);
+    expect((await download(cookie, "not-an-id")).status).toBe(404);
 
     // The public check needs the reference and the name, and no session.
     const check = async (reference: string, name: string, over: Partial<typeof deps> = {}) => {

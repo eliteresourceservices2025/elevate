@@ -43,7 +43,7 @@ export const emailQueue = ops
       /** Relative in-app path; the sender prefixes the app address. */
       link: text("link").notNull(),
       /** One optional attachment, stored as text (a calendar invite). */
-      attachment: jsonb("attachment").$type<{ fileName: string; mimeType: string; content: string }>(),
+      attachment: jsonb("attachment").$type<{ fileName: string; mimeType: string; content: string; base64?: boolean }>(),
       /** Queuing the same key twice does nothing, e.g. "digest:2026-10-01". */
       dedupeKey: text("dedupe_key").notNull(),
       /** queued, sent, failed (gave up) or skipped (no longer relevant). */

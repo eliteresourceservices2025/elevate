@@ -90,7 +90,8 @@ statement version, time, IP and sign-in methods, like ELEVATE's policy acknowled
 - Wording: "completion of ERS HIPAA training". HIPAA has no official certification; we never imply one.
 - A certificate can be **revoked** by HR or the Privacy Officer with a reason (for example a finding of cheating); the check page
   then says revoked.
-- Emailed copy: a link to the signed-in record and the PDF; no scores.
+- **PDF certificate:** drawn with `pdf-lib` (`certificate-pdf.ts`, A4 landscape, ERS purple and gold, holder, course, issued and valid-until dates, reference, the verify address, and a line that this is ERS training completion, not an official certification). The Download PDF button on the certificate page calls `/api/certificate/<assignment id>` (own certificate only, `no-store`, revoked certificates refused). The renderer file exists in two places (Learn and ELEVATE) and a test checks they are identical.
+- **Emailed copy:** when `learn-sync` records the certificate in Certificates it queues one email (kind `invite`, dedupe key `learn-certificate:<id>`, sent within the daily budget) with the PDF attached (base64; `EmailAttachment.base64`). The email text says only that the certificate is attached; no scores, no course content.
 
 ## Renewals and updates
 

@@ -194,8 +194,18 @@ describe("certificates into Certificates", () => {
     expect(creds[0].name).toMatch(/HIPAA Privacy, Security and Awareness \(ERS\)/);
     expect((await notices(person.id, "learn.certified")).length).toBe(1);
 
+    // the emailed copy: one email with the certificate attached as a PDF, and no scores or other detail in it
+    const mails = await rows<{ subject: string; body: string; attachment: { fileName: string; mimeType: string; content: string; base64?: boolean } }>(sql`
+      select subject, body, attachment from ops.email_queue where user_id = ${person.id} and dedupe_key like 'learn-certificate:%'`);
+    expect(mails.length).toBe(1);
+    expect(mails[0].attachment).toMatchObject({ mimeType: "application/pdf", base64: true });
+    expect(mails[0].attachment.fileName).toMatch(/^ers-certificate-HC-[0-9]{4}-[A-Z2-9]{6}.pdf$/);
+    expect(Buffer.from(mails[0].attachment.content, "base64").subarray(0, 5).toString()).toBe("%PDF-");
+    expect(mails[0].body).not.toMatch(/score|percent|%/i);
+
     // repeating records nothing more
     expect(await jobs.runLearnSync({ userIds: [person.id] })).toMatchObject({ recorded: 0 });
+    expect((await rows(sql`select 1 from ops.email_queue where user_id = ${person.id} and dedupe_key like 'learn-certificate:%'`)).length).toBe(1);
     expect((await rows(sql`select 1 from talent.credentials where employee_id = ${person.employeeId}`)).length).toBe(1);
 
     // a revocation archives the credential

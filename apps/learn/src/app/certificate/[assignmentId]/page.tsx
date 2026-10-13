@@ -36,6 +36,11 @@ export default async function CertificatePage({ params }: { params: Promise<{ as
           <p className="muted small">This is ERS training completion, not an official HIPAA certification. Anyone can check it at the verify page with the reference and your full name.</p>
         </section>
         <p className="no-print">
+          {certificate.revoked ? null : (
+            <a className="button" href={`/api/certificate/${assignment.id}`} download>
+              Download PDF
+            </a>
+          )}{" "}
           <PrintButton />
         </p>
       </>
