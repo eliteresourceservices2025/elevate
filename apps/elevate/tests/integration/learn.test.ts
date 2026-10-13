@@ -421,7 +421,7 @@ describe("attestation, certificate and the public check", () => {
     const { p, asg } = await passed("Ana", "Cruz");
     expect(await failure(app`select * from learn.accept_and_certify(${p.id}::uuid, ${asg}::uuid, 'v1', 'Someone Else', '203.0.113.5', ${["password"]}::text[])`)).toMatch(/name_mismatch/);
     const cert = (await app`select * from learn.accept_and_certify(${p.id}::uuid, ${asg}::uuid, 'v1', '  ana   CRUZ ', '203.0.113.5', ${["password", "totp"]}::text[])`)[0];
-    expect(cert.reference).toMatch(/^(HC|ERSHC)-\d{4}-[A-Z2-9]{6}$/);
+    expect(cert.reference).toMatch(/^(HC|ERSHC|ERSLN)-\d{4}-[A-Z2-9]{6}$/);
     const issued = new Date(`${cert.issued_on instanceof Date ? cert.issued_on.toISOString().slice(0, 10) : cert.issued_on}T00:00:00Z`);
     const ends = new Date(`${cert.ends_on instanceof Date ? cert.ends_on.toISOString().slice(0, 10) : cert.ends_on}T00:00:00Z`);
     expect(ends.getUTCFullYear() - issued.getUTCFullYear()).toBe(1);
