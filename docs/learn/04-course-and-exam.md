@@ -5,7 +5,7 @@
 | Track | Who | Modules | Exam |
 | --- | --- | --- | --- |
 | **Full** | People assigned to a client flagged "handles patient information" and anyone whose job touches client data | All 8 core modules + any client add-ons | 25 questions |
-| **Essentials** | Internal staff with no client data (finance, HR, recruiting, leadership) | Modules 1, 2, 3, 7 and a short security basics module | 15 questions |
+| **Essentials** | Internal staff with no client data (finance, HR, recruiting, leadership) | Modules 1, 2, 3, 6 (phishing) and 7: foundations, PHI, privacy, phishing, incidents | 15 questions |
 | **Refresher** | Anyone renewing within 60 days before or after expiry | Changed modules plus a "what you should already know" recap | 15 questions |
 
 Pass mark for every track: **85%**. The track is resolved by ELEVATE from the person's client assignments (a new
@@ -60,7 +60,7 @@ minimum.
 | Tries | 3, then HR grants more (reason required; counted in `retry_grants`) |
 | Wait after a failed try | 1 hour, and the missed topics' modules must be reopened |
 | Question types | Single answer, multiple answers (all or nothing), true/false, scenario best-answer |
-| Bank size | 80 at launch (50 minimum), each tagged by topic and module, each with a rationale |
+| Bank size | 80 built (10 per module; the Essentials pool is 50), each tagged by topic and module, each with a rationale. A lint test (`apps/learn/src/content/hipaa/content.test.ts`) checks every question |
 | Accommodation | HR can grant extra time (a retry grant of type "time") |
 
 Question quality rules (also checked by an automated content lint): one correct idea, plausible distractors, no "all of the

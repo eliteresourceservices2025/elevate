@@ -3,6 +3,8 @@
 ## Three releases
 
 ### Release 1: the learner and the record (core)
+
+**Built so far:** the `learn` schema (migration 0054), the sign-in handoff, **the 8 modules and the 80-question bank (authored in `apps/learn/src/content/hipaa`)**, the publish step (`pnpm learn:publish`, draft first; publishing needs a reviewer and counsel's date), assigning (`pnpm learn:assign` until the HR page and the nightly job exist), the course overview, the module player (server-credited time, activity check), the exam runner, results and review, the attestation and an on-screen printable certificate, and the public check page. **Still to build for release 1:** the PDF certificate with its email copy, the `learn-assign`, `learn-remind`, `learn-sync` and `learn-purge` jobs, the HR Training page, and the status view for leads.
 - `learn` schema, roles and triggers (migration), `apps/learn` shell, handoff, sessions.
 - Core course written in code (8 modules, bank of at least 50), tracks Full and Essentials, pacing, exam engine, attestation,
   certificate and check page, My HIPAA record.

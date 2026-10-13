@@ -9,6 +9,10 @@ type Policy = { requests: number; window: `${number} ${"s" | "m" | "h"}` };
 export const POLICIES = {
   /** Handoff attempts per address: a person opens training a few times, never dozens. */
   handoff: { requests: 20, window: "10 m" },
+  /** The player and exam calls, per person: a heartbeat every 30 seconds plus clicks stays far below this. */
+  api: { requests: 600, window: "10 m" },
+  /** The public certificate check, per address. */
+  verify: { requests: 30, window: "10 m" },
 } satisfies Record<string, Policy>;
 
 export type PolicyName = keyof typeof POLICIES;

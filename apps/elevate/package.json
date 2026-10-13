@@ -21,6 +21,8 @@
     "talenthr:pull": "tsx --conditions react-server scripts/talenthr-pull.mts",
     "dev:mfa": "tsx scripts/dev-mfa.mts",
     "db:bootstrap": "tsx scripts/bootstrap-super-admins.mts",
+    "learn:publish": "tsx scripts/learn-publish.mts",
+    "learn:assign": "tsx scripts/learn-assign.mts",
     "format": "prettier --write .",
     "test:integration": "vitest run --config vitest.integration.config.mts"
   },

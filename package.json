@@ -20,6 +20,8 @@
     "talenthr:pull": "pnpm --filter elevate --reporter=append-only talenthr:pull",
     "storage:setup": "pnpm --filter elevate --reporter=append-only storage:setup",
     "db:bootstrap": "pnpm --filter elevate --reporter=append-only db:bootstrap",
+    "learn:publish": "pnpm --filter elevate --reporter=append-only learn:publish",
+    "learn:assign": "pnpm --filter elevate --reporter=append-only learn:assign",
     "test:integration": "pnpm --filter elevate test:integration"
   }
 }

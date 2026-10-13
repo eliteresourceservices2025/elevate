@@ -142,6 +142,16 @@ Do this **after** migration 0054 is applied to the production database (the `lea
 7. **Check:** sign in to ELEVATE, open **HIPAA training** in the menu, press **Open HIPAA training**. You should land on Learn saying "Hello, <your name>" and "You have no training assigned yet". Sign out of training: you return to ELEVATE.
 8. Optional: Settings > Git > **Ignored Build Step**, and Deployment Protection (Vercel Authentication) on Preview, as for the other projects. Add no Web Analytics or log drains to Learn: it shows people's names.
 
+9. **Load the course** (after counsel and the Privacy Officer have read it: `docs/learn/06-testing-and-review.md`). From your computer, with `DATABASE_URL_DIRECT` for production in `apps/elevate/.env.local`:
+
+   ```powershell
+   pnpm learn:publish                     # saves it as a draft (safe to repeat)
+   pnpm learn:publish --publish --reviewer <email of the reviewer> --counsel-date 2026-MM-DD
+   pnpm learn:assign --email <person> --track full     # until the HR Training page exists
+   ```
+
+   Publishing freezes that version. Changing the text later means saving a new version.
+
 If the page says "Your sign-in link expired" straight away: check `NEXT_PUBLIC_ELEVATE_URL` matches the ELEVATE address exactly (scheme and host), then look at the Learn project's function logs for `handoff failed: learn:<code>` (`token_invalid` = used, expired or never issued; `inactive` = the account is deactivated; a PostgresError = `LEARN_DATABASE_URL` or the role password is wrong).
 
 ## Part 6. First sign-in and checks
