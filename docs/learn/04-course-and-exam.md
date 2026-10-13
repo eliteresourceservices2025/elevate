@@ -62,7 +62,7 @@ minimum.
 | --- | --- |
 | Questions | 15 on every track, spread across the track's modules, unseen questions first |
 | Pass mark | 80% (matches the organization's existing course) |
-| Time limit | 20 minutes |
+| Time limit | **None.** People take the exam at their own pace (a course can still set one by adding `minutes` to its exam configuration; the database then enforces it) |
 | Tries | 3, then HR grants more (reason required; counted in `retry_grants`). The existing course allows unlimited tries; ours caps at 3 so a person must go back to the lessons between tries |
 | Wait after a failed try | 1 hour, and the missed topics' modules must be reopened |
 | Question types | Single answer, multiple answers (all or nothing), true/false, scenario best-answer |

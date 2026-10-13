@@ -26,8 +26,8 @@ export const cybersecurityExamConfig = {
   waitMinutesAfterFail: 60,
   renewalMonths: 12,
   tracks: {
-    full: { questions: 15, minutes: 20 },
-    essentials: { questions: 15, minutes: 20 },
-    refresher: { questions: 15, minutes: 20 },
+    full: { questions: 15 },
+    essentials: { questions: 15 },
+    refresher: { questions: 15 },
   },
 } as const;

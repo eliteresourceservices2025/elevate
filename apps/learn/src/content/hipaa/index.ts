@@ -24,16 +24,16 @@ export const hipaaCourse: CourseContent = {
 
 export const hipaaQuestions: QuestionSeed[] = [...q1, ...q2, ...q3, ...q4, ...q5, ...q6, ...q7];
 
-/** Exam rules (matches the organization's existing HIPAA course: 15 questions, 80% to pass). */
+/** Exam rules (matches the organization's existing HIPAA course: 15 questions, 80% to pass). No time limit: leave `minutes` out. */
 export const hipaaExamConfig = {
   passPercent: 80,
   maxTries: 3,
   waitMinutesAfterFail: 60,
   renewalMonths: 12,
   tracks: {
-    full: { questions: 15, minutes: 20 },
-    essentials: { questions: 15, minutes: 20 },
-    refresher: { questions: 15, minutes: 20 },
+    full: { questions: 15 },
+    essentials: { questions: 15 },
+    refresher: { questions: 15 },
   },
 } as const;
 

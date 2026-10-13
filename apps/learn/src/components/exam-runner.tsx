@@ -9,7 +9,7 @@ import { clock, post } from "./api-client";
  * The exam: one question at a time, each answer saved as it is chosen. The countdown is only a display (the server has the real
  * deadline and refuses answers after it). The answer key is not on this page at all.
  */
-export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemptId: string; items: ExamItem[]; deadlineAt: string; serverNow: string }) {
+export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemptId: string; items: ExamItem[]; deadlineAt: string | null; serverNow: string }) {
   const router = useRouter();
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string[]>>(() => Object.fromEntries(items.map((i) => [i.questionId, i.selected])));
@@ -19,7 +19,7 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
   const [error, setError] = useState<string | null>(null);
   // Remaining time from the server's clock at page load, so a wrong device clock does not matter.
   const offset = useRef(0);
-  const [remaining, setRemaining] = useState(() => Math.max(0, Math.floor((Date.parse(deadlineAt) - Date.parse(serverNow)) / 1000)));
+  const [remaining, setRemaining] = useState<number | null>(() => (deadlineAt ? Math.max(0, Math.floor((Date.parse(deadlineAt) - Date.parse(serverNow)) / 1000)) : null));
   const submitted = useRef(false);
 
   const item = items[index];
@@ -40,6 +40,7 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
   };
 
   useEffect(() => {
+    if (!deadlineAt) return;
     offset.current = Date.parse(serverNow) - Date.now();
     const timer = window.setInterval(() => {
       const left = Math.max(0, Math.floor((Date.parse(deadlineAt) - (Date.now() + offset.current)) / 1000));
@@ -50,7 +51,7 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
 
   // Time is up: the server grades what was saved before the deadline.
   useEffect(() => {
-    if (remaining === 0 && !submitted.current) void submit();
+    if (remaining === 0 && deadlineAt && !submitted.current) void submit();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- submit is stable enough; this must run only when the countdown reaches zero
   }, [remaining]);
 
@@ -66,7 +67,7 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
     else setError(null);
   };
 
-  const low = remaining <= 120;
+  const low = remaining !== null && remaining <= 120;
 
   return (
     <div className="player">
@@ -74,9 +75,13 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
         <span>
           Question {index + 1} of {items.length}
         </span>
-        <span className={low ? "timer low" : "timer"} role="timer" aria-label={`Time left ${clock(remaining)}`}>
-          {clock(remaining)} left
-        </span>
+        {remaining !== null ? (
+          <span className={low ? "timer low" : "timer"} role="timer" aria-label={`Time left ${clock(remaining)}`}>
+            {clock(remaining)} left
+          </span>
+        ) : (
+          <span className="muted">No time limit: take your time</span>
+        )}
         <span className="muted" role="status" aria-live="polite">
           {saveState === "saving" ? "Saving..." : saveState === "failed" ? "Not saved" : "Saved"}
         </span>

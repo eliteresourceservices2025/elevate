@@ -47,7 +47,7 @@ async function makePerson(first = "Ana", last = "Cruz", status = "active") {
   return { id, email, first, last, fullName: `${first} ${last}` };
 }
 
-type CourseOpts = { wait?: number; maxTries?: number; minutes?: number; full?: number; essentials?: number; publish?: boolean };
+type CourseOpts = { wait?: number; maxTries?: number; /** minutes of the exam; null = no time limit */ minutes?: number | null; full?: number; essentials?: number; publish?: boolean };
 
 async function makeCourse(o: CourseOpts = {}) {
   const [course] = await admin`insert into learn.courses (slug, title) values (${uniq("hipaa-")}, 'HIPAA test') returning id`;
@@ -56,7 +56,10 @@ async function makeCourse(o: CourseOpts = {}) {
     maxTries: o.maxTries ?? 3,
     waitMinutesAfterFail: o.wait ?? 0,
     renewalMonths: 12,
-    tracks: { full: { questions: o.full ?? 4, minutes: o.minutes ?? 30 }, essentials: { questions: o.essentials ?? 2, minutes: o.minutes ?? 30 } },
+    tracks: {
+      full: { questions: o.full ?? 4, ...(o.minutes === null ? {} : { minutes: o.minutes ?? 30 }) },
+      essentials: { questions: o.essentials ?? 2, ...(o.minutes === null ? {} : { minutes: o.minutes ?? 30 }) },
+    },
   };
   const [version] = await admin`insert into learn.course_versions (course_id, version, exam_config) values (${course.id}, 1, ${admin.json(config)}) returning id`;
   await admin`insert into learn.version_modules (version_id, module_key, position, title, estimated_minutes, min_seconds, screen_count, tracks) values
@@ -352,6 +355,19 @@ describe("the exam", () => {
     await answer(q.id, a, 2);
     await grade(q.id, a);
     expect(await failure(app`select learn.start_exam(${q.id}::uuid, ${asgW}::uuid)`)).toMatch(/wait_after_fail/);
+  });
+
+  it("has no deadline at all when the exam sets no time limit, and answers can be saved at any time", async () => {
+    const c = await makeCourse({ minutes: null, full: 2 });
+    const p = await makePerson();
+    const asg = await assign(p.id, c);
+    await finishModules(p.id, asg);
+    const attempt = await startExam(p.id, asg);
+    const [row] = await admin`select deadline_at from learn.exam_attempts where id = ${attempt}`;
+    expect(row.deadline_at).toBeNull();
+    await answer(p.id, attempt, 0);
+    const graded = await grade(p.id, attempt);
+    expect(graded.passed).toBe(true);
   });
 
   it("refuses answers after the deadline, unknown questions and unknown options", async () => {

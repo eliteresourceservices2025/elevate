@@ -155,7 +155,7 @@ describe("a learner going through the course", () => {
     // The overview: 7 modules, only the first open, the exam locked.
     const overview = await getOverview(app, p.id, assignmentId);
     expect(overview!.modules.map((m) => m.locked)).toEqual([false, true, true, true, true, true, true]);
-    expect(overview!.exam).toMatchObject({ questions: 15, minutes: 20, passPercent: 80, triesAllowed: 3 });
+    expect(overview!.exam).toMatchObject({ questions: 15, minutes: null, passPercent: 80, triesAllowed: 3 });
     expect(await getModuleView(app, p.id, assignmentId, "phi")).toBeNull(); // locked
 
     // Out of order and unknown things are refused.

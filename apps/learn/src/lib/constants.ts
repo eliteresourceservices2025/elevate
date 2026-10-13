@@ -6,8 +6,7 @@ export const EXAM_PASS_PERCENT = 80;
 export const EXAM_MAX_TRIES = 3;
 export const EXAM_QUESTIONS_FULL = 15;
 export const EXAM_QUESTIONS_SHORT = 15;
-export const EXAM_MINUTES_FULL = 20;
-export const EXAM_MINUTES_SHORT = 20;
+/** There is no exam time limit (a course may still set one by adding `minutes` to its exam configuration). */
 export const EXAM_WAIT_MINUTES_AFTER_FAIL = 60;
 
 /** New people finish within 30 days of their start; everyone renews every 12 months. */

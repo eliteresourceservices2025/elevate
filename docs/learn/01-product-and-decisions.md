@@ -42,7 +42,7 @@ people outside ERS, SCORM import/export, gamification and leaderboards.
    them.
 7. **Pacing:** modules in order, server-measured minimum time per module, an "are you still there?" prompt.
 8. **Exam:** server-graded, **15 questions** drawn from a larger bank, **80% to pass** (matching the organization's existing
-   course), 3 tries, review between tries, HR can grant more.
+   course), **no time limit**, 3 tries, review between tries, HR can grant more.
 8b. **HIPAA only:** the HIPAA course covers HIPAA. General cybersecurity basics (phishing, passwords, home network) are a
    separate course for the organization.
 9. **Visibility:** the person and HR see scores; leads see only passed / not yet.

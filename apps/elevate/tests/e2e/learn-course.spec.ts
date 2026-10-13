@@ -73,7 +73,9 @@ test("a person reads a module, finishes it when the time is reached, and starts 
   await page.getByRole("button", { name: "Start the exam" }).click();
   await page.waitForURL(/\/exam\//, slow);
   await expect(page.getByText("Question 1 of 15")).toBeVisible(slow);
-  await expect(page.getByRole("timer")).toBeVisible();
+  // no time limit on the exam
+  await expect(page.getByText("No time limit")).toBeVisible();
+  await expect(page.getByRole("timer")).toHaveCount(0);
   const choices = page.getByRole("group", { name: "Answer choices" }).getByRole("radio");
   await choices.first().check();
   await expect(page.getByText("Saved")).toBeVisible(slow);

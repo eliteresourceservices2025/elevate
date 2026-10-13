@@ -75,7 +75,7 @@ budget). Video, if added, is the only item that may need storage or bandwidth be
 | 3 | Whether training time is paid or counted anywhere (we only record it) | Before release 1 |
 | 4 | Which clients handle patient information (`handles_phi`) so tracks resolve correctly | Before the first assignments |
 | 5 | Certificate issuer name and title | Before release 1 |
-| 6 | Exam time limit (20 min), wait after failure (1 hour), 3 tries and pass mark (80%, matching the existing course) confirmed by counsel/HR | Release 1 pilot |
+| 6 | Wait after failure (1 hour), 3 tries and pass mark (80%, matching the existing course) confirmed by counsel/HR. There is no exam time limit | Release 1 pilot |
 | 7 | Motion graphics: who produces them and where they are hosted | Release 3 |
 | 8 | Incident handling timelines per client BAA (notice windows) | Release 2 |
 | 9 | Whether overdue training should ever affect client assignment (default: warning only) | Release 2 |

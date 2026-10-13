@@ -268,8 +268,8 @@ export const examAttempts = learn
       attemptNo: smallint("attempt_no").notNull(),
       status: text("status").notNull().default("in_progress"),
       startedAt: stamp("started_at"),
-      /** Server value; answers saved after it are refused. */
-      deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(),
+      /** Server value; answers saved after it are refused. Null when the course sets no time limit. */
+      deadlineAt: timestamp("deadline_at", { withTimezone: true }),
       submittedAt: timestamp("submitted_at", { withTimezone: true }),
       totalCount: smallint("total_count").notNull(),
       correctCount: smallint("correct_count"),

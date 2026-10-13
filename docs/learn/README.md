@@ -30,7 +30,7 @@ Postgres database and is read by ELEVATE for reports, reminders and certificates
   **Essentials** (internal staff with no client data).
 - **How long:** new people finish within **30 days** of starting; everyone renews every **12 months** (a shorter refresher).
 - **What:** short lessons, scenarios and checks per module, in order, with a server-measured minimum time; a final exam of 15
-  randomized questions, **80% to pass, 3 tries**; a responsibility attestation; a PDF certificate with a public check page.
+  randomized questions, **80% to pass, 3 tries, no time limit**; a responsibility attestation; a PDF certificate with a public check page.
 - **Who sees what:** the person and HR (and the designated Privacy Officer) see scores; a team lead sees only "passed" or "not yet".
 - **Links to ELEVATE:** the HIPAA certificate appears in ELEVATE's Certificates (with its existing expiry reminders), onboarding
   checklist task, client-assignment readiness warning, HR compliance reports, client audit evidence report, reminders by

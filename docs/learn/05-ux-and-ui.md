@@ -3,8 +3,7 @@
 ## Principles
 
 1. **One next step.** The home page always shows what to do now (continue module 4, take the exam, you are current until X).
-2. **Calm and fair.** No countdown on lessons, no red alarms for being human. The exam timer is the only timer and it is gentle
-   and stated before the person starts.
+2. **Calm and fair.** No countdown on lessons, no red alarms for being human. There is no timer anywhere: the exam has no time limit, so people can think.
 3. **Save everything.** The person can leave at any time and return to the same screen, on a phone or a laptop.
 4. **Plain words.** Sentence case, short sentences, no legal terms without a one-line explanation.
 5. **Accessible by default** (below).

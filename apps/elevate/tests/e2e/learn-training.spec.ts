@@ -4,7 +4,7 @@ import { loadCourse } from "../../src/modules/learn/publish";
 import { createEmployeeAccount, createHrAccount, signInEnrollingMfa, waitForHydration } from "./helpers";
 
 // HR's Training status page in a real browser: find a person who has no training yet, assign it, see them as "Not yet", and give
-// them more exam time with a reason. A team lead sees the same list for their team without scores or actions.
+// them another try with a reason. A team lead sees the same list for their team without scores or actions.
 
 test("HR assigns HIPAA training from the Training status page and a lead sees only status", async ({ browser }) => {
   test.setTimeout(240_000);
@@ -37,11 +37,10 @@ test("HR assigns HIPAA training from the Training status page and a lead sees on
   await expect(row.getByText("Not yet")).toBeVisible(slow);
   await expect(row.getByText(/Full|Essentials/)).toBeVisible();
 
-  await row.getByRole("button", { name: "More tries or time" }).click();
-  await row.getByLabel("What to give").selectOption("time");
-  await row.getByLabel("Reason").fill("Slow connection during the exam");
+  await row.getByRole("button", { name: "More tries" }).click();
+  await row.getByLabel("Reason").fill("Connection dropped during the exam");
   await row.getByRole("button", { name: "Give", exact: true }).click();
-  await expect(hrPage.getByText("Extra time given.")).toBeVisible(slow);
+  await expect(hrPage.getByText("More tries given.")).toBeVisible(slow);
 
   // The person is told, in the app.
   const personPage = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();

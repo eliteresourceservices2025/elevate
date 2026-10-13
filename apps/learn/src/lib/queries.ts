@@ -4,7 +4,7 @@ import { withUser, type Sql } from "./db";
 // What the pages read. Every query runs as the signed-in person (row-level security keyed on learn.user_id), so even a mistake here
 // cannot return another person's rows. Nothing here can read the exam answer key: the app role has no grant on it.
 
-export type ExamConfig = { passPercent: number; maxTries: number; waitMinutesAfterFail: number; renewalMonths: number; tracks: Record<string, { questions: number; minutes: number }> };
+export type ExamConfig = { passPercent: number; maxTries: number; waitMinutesAfterFail: number; renewalMonths: number; tracks: Record<string, { questions: number; minutes?: number }> };
 
 export type AssignmentSummary = { id: string; title: string; track: string; status: string; dueOn: string };
 
@@ -37,7 +37,7 @@ export type Overview = {
   assignment: { id: string; courseTitle: string; track: string; status: string; dueOn: string };
   modules: ModuleState[];
   allModulesDone: boolean;
-  exam: { questions: number; minutes: number; passPercent: number; triesAllowed: number; attempts: AttemptSummary[]; openAttemptId: string | null; waitUntil: string | null; waitMinutes: number };
+  exam: { questions: number; minutes: number | null; passPercent: number; triesAllowed: number; attempts: AttemptSummary[]; openAttemptId: string | null; waitUntil: string | null; waitMinutes: number };
   certificate: { reference: string; holderName: string; issuedOn: string; endsOn: string; revoked: boolean } | null;
   attestation: { version: string; text: string };
 };
@@ -91,7 +91,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
     const [grants] = await tx`select coalesce(sum(extra_tries), 0)::int as tries from learn.retry_grants where assignment_id = ${assignmentId} and kind = 'tries'`;
     const lastFail = attempts.filter((x) => x.status === "submitted" && x.passed !== true).at(-1);
     const waitUntil = lastFail?.submittedAt ? new Date(Date.parse(lastFail.submittedAt) + (config.waitMinutesAfterFail ?? 60) * 60_000) : null;
-    const trackConfig = config.tracks[a.track as string] ?? { questions: 0, minutes: 0 };
+    const trackConfig = config.tracks[a.track as string] ?? { questions: 0 };
 
     const [cert] = await tx`
       select c.reference, c.holder_name, c.issued_on::text as issued_on, c.ends_on::text as ends_on,
@@ -104,7 +104,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
       allModulesDone: modules.length > 0 && modules.every((m) => m.completed),
       exam: {
         questions: trackConfig.questions,
-        minutes: trackConfig.minutes,
+        minutes: trackConfig.minutes ?? null,
         passPercent: config.passPercent,
         triesAllowed: config.maxTries + (grants.tries as number),
         attempts,
@@ -159,7 +159,8 @@ export type AttemptView = {
   id: string;
   assignmentId: string;
   status: string;
-  deadlineAt: string;
+  /** Null when the exam has no time limit. */
+  deadlineAt: string | null;
   serverNow: string;
   total: number;
   result: { scorePercent: number; correct: number; passed: boolean } | null;
@@ -219,7 +220,7 @@ export async function getAttemptView(sql: Sql, userId: string, attemptId: string
       id: x.id as string,
       assignmentId: x.assignment_id as string,
       status: x.status as string,
-      deadlineAt: (x.deadline_at as Date).toISOString(),
+      deadlineAt: x.deadline_at ? (x.deadline_at as Date).toISOString() : null,
       serverNow: (x.server_now as Date).toISOString(),
       total: x.total_count as number,
       result: x.status === "submitted" ? { scorePercent: x.score as number, correct: x.correct_count as number, passed: x.passed as boolean } : null,

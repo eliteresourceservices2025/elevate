@@ -56,7 +56,7 @@ export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant }
   if (!open)
     return (
       <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
-        More tries or time
+        More tries
       </Button>
     );
   return (
@@ -69,7 +69,6 @@ export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant }
     >
       <NativeSelect aria-label="What to give" value={kind} onChange={(e) => { setKind(e.target.value as typeof kind); setAmount(e.target.value === "tries" ? 1 : 15); }} className="h-8 w-32 text-xs">
         <option value="tries">Tries</option>
-        <option value="time">Exam minutes</option>
       </NativeSelect>
       <Input aria-label="Amount" type="number" min={kind === "tries" ? 1 : 5} max={kind === "tries" ? 5 : 60} value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="h-8 w-20 text-xs" />
       <Input aria-label="Reason" placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} className="h-8 w-44 text-xs" required minLength={3} maxLength={500} />

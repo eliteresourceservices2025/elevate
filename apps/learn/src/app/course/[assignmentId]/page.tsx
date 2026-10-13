@@ -51,7 +51,7 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
       <section className="card" aria-labelledby="exam-h">
         <h2 id="exam-h">Final exam</h2>
         <p>
-          {exam.questions} questions · {exam.minutes} minutes · {exam.passPercent}% to pass · {exam.triesAllowed} tries
+          {exam.questions} questions · {exam.minutes ? `${exam.minutes} minutes` : "no time limit"} · {exam.passPercent}% to pass · {exam.triesAllowed} tries
         </p>
         {exam.attempts.filter((a) => a.status === "submitted").length > 0 ? (
           <ul>
