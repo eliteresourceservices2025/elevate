@@ -1,4 +1,5 @@
 import "server-only";
+import { sql } from "drizzle-orm";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -37,4 +38,16 @@ export async function getStudioDiff(slug: string, from: number, to: number): Pro
   const [a, b] = [await loadVersion(db, slug, from), await loadVersion(db, slug, to)];
   if (!a || !b) return null;
   return { from: a, to: b, diff: diffLoaded(a, b) };
+}
+
+/** Active clients that do not have an add-on course yet (for "New client add-on"). */
+export async function listAddonClients(): Promise<{ id: string; name: string }[]> {
+  const user = await requireUser();
+  await authorize(user, "learn.manage_content");
+  const rows = (await db.execute(sql`
+    select cl.id::text as id, cl.name from core.clients cl
+    where cl.archived_at is null and cl.is_active
+      and not exists (select 1 from learn.courses c where c.client_id = cl.id and c.kind = 'client_addon' and c.archived_at is null)
+    order by cl.name`)) as unknown as { id: string; name: string }[];
+  return rows;
 }

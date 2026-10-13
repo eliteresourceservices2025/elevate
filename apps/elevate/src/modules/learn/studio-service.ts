@@ -7,7 +7,8 @@ import { courseContentSchema, type CourseContent, type QuestionSeed } from "../.
 import { users } from "@/modules/core/schema";
 import { courses, courseVersions, questions, versionModules } from "./schema";
 import { diffCourses, type DiffQuestion } from "./studio-diff";
-import { hasPlaceholders, lintCourse, type ExamConfigLike, type LintIssue } from "./studio-lint";
+import { hasPlaceholders, lintCourse, textIsAllowed, type ExamConfigLike, type LintIssue } from "./studio-lint";
+import { addonSlugFor, newAddonCourse } from "./studio-scaffold";
 
 // The course studio's database side. No authorization here: callers (studio-actions.ts, studio-queries.ts) check permissions first.
 // Rules: only a DRAFT can change; every save carries the stamp it was loaded with and is refused if the draft moved on; a save
@@ -31,14 +32,26 @@ export type StudioVersion = {
   material: boolean;
 };
 
-export type StudioCourse = { id: string; slug: string; title: string; studioManaged: boolean; versions: StudioVersion[] };
+export type StudioCourse = { id: string; slug: string; title: string; studioManaged: boolean; kind: "core" | "client_addon"; clientId: string | null; clientName: string | null; versions: StudioVersion[] };
 
 const status = (s: string): StudioVersion["status"] => (s === "published" ? "published" : s === "retired" ? "retired" : "draft");
 
 export async function listStudioCourses(tx: Tx): Promise<StudioCourse[]> {
   const rows = await tx.select().from(courses).where(sql`${courses.archivedAt} is null`).orderBy(asc(courses.title));
+  const names = (await tx.execute(sql`select c.id::text as id, cl.name from learn.courses c join core.clients cl on cl.id = c.client_id`)) as unknown as { id: string; name: string }[];
   const out: StudioCourse[] = [];
-  for (const c of rows) out.push({ id: c.id, slug: c.slug, title: c.title, studioManaged: c.studioManaged, versions: await listVersions(tx, c.id) });
+  for (const c of rows) {
+    out.push({
+      id: c.id,
+      slug: c.slug,
+      title: c.title,
+      studioManaged: c.studioManaged,
+      kind: c.kind === "client_addon" ? "client_addon" : "core",
+      clientId: c.clientId,
+      clientName: names.find((n) => n.id === c.id)?.name ?? null,
+      versions: await listVersions(tx, c.id),
+    });
+  }
   return out;
 }
 
@@ -74,7 +87,7 @@ async function listVersions(tx: Tx, courseId: string): Promise<StudioVersion[]> 
 export type StudioQuestion = DiffQuestion & { id: string };
 
 export type LoadedVersion = {
-  course: { id: string; slug: string; title: string; studioManaged: boolean };
+  course: { id: string; slug: string; title: string; studioManaged: boolean; kind: "core" | "client_addon" };
   version: StudioVersion;
   content: CourseContent;
   examConfig: ExamConfigLike & Record<string, unknown>;
@@ -92,7 +105,7 @@ export async function loadVersion(tx: Tx, slug: string, versionNumber: number): 
   if (!parsed.success) throw new ActionFailure("This version's content could not be read.");
   const qs = await tx.select().from(questions).where(eq(questions.versionId, version.id)).orderBy(asc(questions.moduleKey), asc(questions.createdAt), asc(questions.id));
   return {
-    course: { id: course.id, slug: course.slug, title: course.title, studioManaged: course.studioManaged },
+    course: { id: course.id, slug: course.slug, title: course.title, studioManaged: course.studioManaged, kind: course.kind === "client_addon" ? "client_addon" : "core" },
     version,
     content: parsed.data,
     examConfig: row.examConfig as LoadedVersion["examConfig"],
@@ -303,4 +316,32 @@ export async function publishDraft(tx: Tx, p: { versionId: string; actorId: stri
 export async function userIdByEmail(tx: Tx, email: string): Promise<string | null> {
   const [u] = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${email.toLowerCase()}`).limit(1);
   return u?.id ?? null;
+}
+
+/**
+ * Creates a client's add-on course and its first draft (one module, three screens, five placeholder questions). One add-on per
+ * client for now. The course is studio-managed from the start (it has no code files). Nothing is assigned until it is published.
+ */
+export async function createClientAddon(tx: Tx, p: { clientId: string; actorId: string }): Promise<{ slug: string; versionId: string; version: number; clientName: string }> {
+  const [client] = (await tx.execute(sql`select id::text as id, name from core.clients where id = ${p.clientId} and archived_at is null for update`)) as unknown as { id: string; name: string }[];
+  if (!client) throw new ActionFailure("That client was not found.");
+  const existing = (await tx.execute(sql`select 1 from learn.courses where client_id = ${p.clientId} and kind = 'client_addon' and archived_at is null`)) as unknown as unknown[];
+  if (existing.length > 0) throw new ActionFailure("This client already has an add-on course.");
+
+  const taken = ((await tx.execute(sql`select slug from learn.courses`)) as unknown as { slug: string }[]).map((r) => r.slug);
+  const slug = addonSlugFor(client.name, taken);
+  const draft = newAddonCourse(client.name, textIsAllowed);
+  failIfErrors(lintCourse(draft.content, draft.questions, draft.examConfig));
+
+  const [course] = await tx
+    .insert(courses)
+    .values({ slug, title: draft.title, kind: "client_addon", clientId: p.clientId, label: draft.label, noun: draft.noun, fixedTrack: "full", studioManaged: true })
+    .returning({ id: courses.id });
+  const [created] = await tx
+    .insert(courseVersions)
+    .values({ courseId: course.id, version: 1, status: "draft", content: draft.content, examConfig: draft.examConfig, material: false, createdBy: p.actorId, changeNote: "New client add-on", updatedBy: p.actorId, updatedAt: new Date() })
+    .returning({ id: courseVersions.id, version: courseVersions.version });
+  await writeModules(tx, created.id, draft.content);
+  await tx.insert(questions).values(draft.questions.map((q) => ({ versionId: created.id, moduleKey: q.moduleKey, topic: q.topic, type: q.type, stem: q.stem, options: q.options, correctIds: q.correctIds, rationale: q.rationale })));
+  return { slug, versionId: created.id, version: created.version, clientName: client.name };
 }

@@ -120,7 +120,7 @@ export default async function StudioVersionPage({ params }: PageProps<"/course-s
               ))}
             </ul>
           </section>
-          <PublishCard versionId={v.id} canPublish={ready} blocked={ready ? null : "Finish the required items above first."} />
+          <PublishCard addon={loaded.course.kind === "client_addon"} versionId={v.id} canPublish={ready} blocked={ready ? null : "Finish the required items above first."} />
           <DiscardDraftButton versionId={v.id} stamp={v.editStamp} course={course} />
         </>
       ) : (

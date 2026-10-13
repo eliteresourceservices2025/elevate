@@ -100,3 +100,50 @@ export function placeholdersIn(content: CourseContent, questions: QuestionSeed[]
   const walk = (v: unknown): number => (typeof v === "string" ? (hasPlaceholder(v) ? 1 : 0) : Array.isArray(v) ? v.reduce<number>((n, x) => n + walk(x), 0) : v && typeof v === "object" ? Object.values(v as Record<string, unknown>).reduce<number>((n, x) => n + walk(x), 0) : 0);
   return walk(content) + walk(questions);
 }
+
+// ---- Client add-ons ---------------------------------------------------------------------------------------------------------------
+
+const ADDON_QUESTIONS = 5;
+
+/** The address of a client's add-on: the client's name in lower case words plus "-requirements", unique among the taken addresses. */
+export function addonSlugFor(clientName: string, taken: string[]): string {
+  const words = clientName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/g, "");
+  const base = `${words || "client"}-requirements`;
+  let slug = base;
+  for (let i = 2; taken.includes(slug); i += 1) slug = `${base}-${i}`;
+  return slug;
+}
+
+/**
+ * The first draft of a client add-on: one module of three screens and a short exam of placeholder questions, all on the full track
+ * (an add-on has one track, so a renewal repeats it). `safe` says whether a piece of text is allowed in course text; a client name
+ * that would trip the text checks (for example a web address) is kept out of lessons and used only in titles.
+ */
+export function newAddonCourse(clientName: string, safe: (text: string) => boolean) {
+  const name = clientName.trim().replace(/\s+/g, " ").slice(0, 70);
+  const inText = safe(name) ? name : "this client";
+  const first = newModule({ title: `Working with ${inText}`.slice(0, 160), estimatedMinutes: 10, tracks: ["full"] }, []);
+  const content: CourseContent = {
+    title: `${name} requirements`,
+    attestation: {
+      version: "v1",
+      text: `${PLACEHOLDER} I have completed the training on ${inText}'s requirements and understand what is expected of me when I work for this client.`,
+    },
+    modules: [first],
+  };
+  const questions: QuestionSeed[] = [];
+  for (let i = 0; i < ADDON_QUESTIONS; i += 1) questions.push(newQuestion({ moduleKey: first.key, type: "single", existingStems: questions.map((q) => q.stem) }));
+  return {
+    title: content.title,
+    label: `${name} requirements`.slice(0, 60),
+    noun: `${name} requirements training`.slice(0, 100),
+    content,
+    questions,
+    examConfig: { passPercent: 80, maxTries: 3, waitMinutesAfterFail: 60, renewalMonths: 12, tracks: { full: { questions: ADDON_QUESTIONS } } },
+  };
+}

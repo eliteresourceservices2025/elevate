@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
-import { getStudioCourses } from "@/modules/learn/studio-queries";
+import { NewAddonForm } from "@/modules/learn/components/studio-editors";
+import { getStudioCourses, listAddonClients } from "@/modules/learn/studio-queries";
 
 export const metadata: Metadata = { title: "Course studio" };
 
 export default async function CourseStudioPage() {
   const courses = await orNotFound(getStudioCourses());
+  const addonClients = await orNotFound(listAddonClients());
   return (
     <div className="w-full max-w-4xl space-y-6">
       <div>
@@ -30,6 +32,7 @@ export default async function CourseStudioPage() {
                 </Link>
                 {live ? <Badge>Live: version {live.version}</Badge> : <Badge variant="outline">Not published</Badge>}
                 {draft ? <Badge variant="outline">Draft: version {draft.version}</Badge> : null}
+                {c.kind === "client_addon" ? <Badge variant="outline">Client add-on{c.clientName ? `: ${c.clientName}` : ""}</Badge> : null}
                 {c.studioManaged ? <Badge variant="outline">Edited in the studio</Badge> : null}
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -40,6 +43,11 @@ export default async function CourseStudioPage() {
           );
         })}
       </ul>
+
+      <section aria-label="New client add-on" className="space-y-2 rounded-xl border bg-card p-4">
+        <h2 className="text-lg font-semibold">New client add-on</h2>
+        <NewAddonForm clients={addonClients} />
+      </section>
     </div>
   );
 }

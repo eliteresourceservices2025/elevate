@@ -12,6 +12,8 @@ export const createDraftSchema = z.object({
   note: z.string().trim().min(3, "Say what this draft is for").max(300),
 });
 
+export const createAddonSchema = z.object({ clientId: uuid });
+
 export const courseMetaSchema = z.object({
   versionId: uuid,
   stamp,

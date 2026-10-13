@@ -10,7 +10,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import type { Block, CourseContent, CourseModule, QuestionSeed } from "../../../../../learn/src/content/schema";
-import { createStudioDraft, discardStudioDraft, publishStudioDraft, saveStudioCourseMeta, saveStudioModuleMeta, saveStudioQuestion, saveStudioScreen } from "../studio-actions";
+import { createStudioAddon, createStudioDraft, discardStudioDraft, publishStudioDraft, saveStudioCourseMeta, saveStudioModuleMeta, saveStudioQuestion, saveStudioScreen } from "../studio-actions";
 import { newBlock } from "../studio-scaffold";
 import { RemoveQuestionButton, ScreenControls } from "./studio-structure";
 
@@ -79,6 +79,44 @@ export function NewDraftForm({ course, fromVersion }: { course: string; fromVers
   );
 }
 
+export function NewAddonForm({ clients }: { clients: { id: string; name: string }[] }) {
+  const { run, pending, router } = useSave();
+  const [clientId, setClientId] = useState("");
+  if (clients.length === 0) return <p className="text-sm text-muted-foreground">Every active client already has an add-on course.</p>;
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(
+          async () => {
+            const r = await createStudioAddon({ clientId });
+            if (r.ok) router.push(`/course-studio/${r.data.slug}/${r.data.version}`);
+            return r;
+          },
+          "Add-on created. Write its lessons and questions.",
+        );
+      }}
+    >
+      <div className="min-w-72 flex-1">
+        <Field id="addon-client" label="Client" hint="A short course for the people assigned to this client. Nothing is assigned until you publish it.">
+          <NativeSelect id="addon-client" value={clientId} onChange={(e) => setClientId(e.target.value)} required>
+            <option value="">Choose a client</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+      </div>
+      <Button type="submit" size="sm" disabled={pending || !clientId}>
+        Create the add-on
+      </Button>
+    </form>
+  );
+}
+
 export function DiscardDraftButton({ versionId, stamp, course }: { versionId: string; stamp: number; course: string }) {
   const { run, pending, router } = useSave();
   return (
@@ -104,7 +142,7 @@ export function DiscardDraftButton({ versionId, stamp, course }: { versionId: st
   );
 }
 
-export function PublishCard({ versionId, canPublish, blocked }: { versionId: string; canPublish: boolean; blocked: string | null }) {
+export function PublishCard({ versionId, canPublish, blocked, addon = false }: { versionId: string; canPublish: boolean; blocked: string | null; addon?: boolean }) {
   const { run, pending, router } = useSave();
   const [reviewer, setReviewer] = useState("");
   const [date, setDate] = useState("");
@@ -132,7 +170,7 @@ export function PublishCard({ versionId, canPublish, blocked }: { versionId: str
           <Field id="pub-reviewer" label="Who reviewed it (sign-in email)">
             <Input id="pub-reviewer" type="email" value={reviewer} onChange={(e) => setReviewer(e.target.value)} required disabled={!canPublish} />
           </Field>
-          <Field id="pub-date" label="Date counsel approved the text">
+          <Field id="pub-date" label={addon ? "Date the text was approved (by counsel or the client)" : "Date counsel approved the text"}>
             <Input id="pub-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required disabled={!canPublish} />
           </Field>
         </div>

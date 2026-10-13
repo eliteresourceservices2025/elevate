@@ -6,9 +6,9 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
-import { addModuleSchema, addQuestionSchema, addScreenSchema, courseMetaSchema, createDraftSchema, discardDraftSchema, examRulesSchema, moduleMetaSchema, moduleRefSchema, moveModuleSchema, moveScreenSchema, publishDraftSchema, questionEditSchema, removeQuestionSchema, screenRefSchema, screenSchemaInput } from "./studio-validators";
+import { addModuleSchema, addQuestionSchema, addScreenSchema, courseMetaSchema, createAddonSchema, createDraftSchema, discardDraftSchema, examRulesSchema, moduleMetaSchema, moduleRefSchema, moveModuleSchema, moveScreenSchema, publishDraftSchema, questionEditSchema, removeQuestionSchema, screenRefSchema, screenSchemaInput } from "./studio-validators";
 import { newModule, newQuestion, newScreen } from "./studio-scaffold";
-import { createDraft, discardDraft, editContent, editDraft, editQuestion, publishDraft, userIdByEmail, type DraftState } from "./studio-service";
+import { createClientAddon, createDraft, discardDraft, editContent, editDraft, editQuestion, publishDraft, userIdByEmail, type DraftState } from "./studio-service";
 
 // The course studio's write actions. Each one: sign-in, permission `learn.manage_content`, validation, then the service (which
 // refuses a save on a stale draft or one that would leave the course invalid). Audit entries carry course, version, module or
@@ -36,6 +36,27 @@ export async function createStudioDraft(input: unknown): Promise<ActionResult<{ 
     });
     touched(v.course);
     return { ok: true, data: { version: made.version } };
+  });
+}
+
+/**
+ * Creates a client add-on course (extra training for the people assigned to one client) with a first draft to write. Nothing is
+ * assigned until it is published, and nobody learns of it from this step.
+ */
+export async function createStudioAddon(input: unknown): Promise<ActionResult<{ slug: string; version: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const parsed = createAddonSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const made = await db.transaction(async (tx) => {
+      const r = await createClientAddon(tx, { clientId: parsed.data.clientId, actorId: actor.id });
+      // The course address and ids only: never the lesson text.
+      await writeAudit({ actor, action: "learn.studio_addon_create", targetType: "learn_course_version", targetId: r.versionId, metadata: { course: r.slug, clientId: parsed.data.clientId } }, tx);
+      return r;
+    });
+    touched(made.slug);
+    return { ok: true, data: { slug: made.slug, version: made.version } };
   });
 }
 

@@ -33,6 +33,7 @@ beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
 
 const calls: { name: string; call: () => Promise<{ ok: boolean; error?: string }> }[] = [
   { name: "createStudioDraft", call: () => actions.createStudioDraft({ course: "hipaa", note: "A change for review" }) },
+  { name: "createStudioAddon", call: () => actions.createStudioAddon({ clientId: ID }) },
   { name: "saveStudioCourseMeta", call: () => actions.saveStudioCourseMeta({ versionId: ID, stamp: 0, title: "A title", attestationVersion: "v2", attestationText: "x".repeat(60) }) },
   { name: "saveStudioModuleMeta", call: () => actions.saveStudioModuleMeta({ versionId: ID, stamp: 0, moduleKey: "foundations", title: "T", summary: "A summary text", estimatedMinutes: 10, tracks: ["full"], keyPoints: ["one", "two", "three"] }) },
   { name: "saveStudioQuestion", call: () => actions.saveStudioQuestion({ versionId: ID, stamp: 0, questionId: ID, topic: "Topic", stem: "A question long enough to pass?", options: [{ id: "a", text: "x" }, { id: "b", text: "y" }], correctIds: ["a"], rationale: "Because this is the reason." }) },

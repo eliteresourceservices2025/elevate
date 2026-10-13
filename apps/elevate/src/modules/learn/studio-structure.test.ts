@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { COURSES } from "../../../../learn/src/content";
 import { courseContentSchema, questionSeedSchema } from "../../../../learn/src/content/schema";
 import { canPublish, publishChecklist } from "./studio-checklist";
-import { hasErrors, hasPlaceholders, lintCourse, type ExamConfigLike } from "./studio-lint";
-import { moduleKeyFor, newBlock, newModule, newQuestion, newScreen, placeholdersIn, screenIdFor } from "./studio-scaffold";
+import { hasErrors, hasPlaceholders, lintCourse, textIsAllowed, type ExamConfigLike } from "./studio-lint";
+import { addonSlugFor, moduleKeyFor, newAddonCourse, newBlock, newModule, newQuestion, newScreen, placeholdersIn, screenIdFor } from "./studio-scaffold";
 
 const course = COURSES.cybersecurity;
 const cfg = course.examConfig as ExamConfigLike;
@@ -66,5 +66,32 @@ describe("publishChecklist", () => {
     const items = publishChecklist({ ...clean, unchangedVsLive: null, issues: [{ level: "warning", where: "M", message: "Only 3 exam questions for this module (aim for 8 or more)." }] });
     expect(canPublish(items)).toBe(true);
     expect(items.find((i) => i.label.includes("at least 8"))?.ok).toBe(false);
+  });
+});
+
+describe("client add-on scaffold", () => {
+  it("builds a draft the checks accept, with placeholders that block publishing", () => {
+    const a = newAddonCourse("Acme Health", textIsAllowed);
+    expect(courseContentSchema.safeParse(a.content).success).toBe(true);
+    const issues = lintCourse(a.content, a.questions, a.examConfig);
+    expect(hasErrors(issues)).toBe(false);
+    expect(hasPlaceholders(issues)).toBe(true);
+    expect(a.questions).toHaveLength(5);
+    expect(a.content.modules).toHaveLength(1);
+    expect(a.content.modules[0].screens).toHaveLength(3);
+    expect(a.content.modules[0].tracks).toEqual(["full"]);
+  });
+
+  it("keeps a name with a web address out of lesson text", () => {
+    const a = newAddonCourse("clinic.com Group", textIsAllowed);
+    expect(a.content.modules[0].title).toBe("Working with this client");
+    expect(hasErrors(lintCourse(a.content, a.questions, a.examConfig))).toBe(false);
+  });
+
+  it("makes plain, unique addresses", () => {
+    expect(addonSlugFor("Acme Health, Inc.", [])).toBe("acme-health-inc-requirements");
+    expect(addonSlugFor("Acme Health, Inc.", ["acme-health-inc-requirements"])).toBe("acme-health-inc-requirements-2");
+    expect(addonSlugFor("***", [])).toBe("client-requirements");
+    expect(/^[a-z0-9]+(-[a-z0-9]+)*$/.test(addonSlugFor("A".repeat(200), []))).toBe(true);
   });
 });

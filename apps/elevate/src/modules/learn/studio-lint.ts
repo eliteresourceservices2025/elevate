@@ -94,3 +94,10 @@ export function lintCourse(content: CourseContent, questions: QuestionSeed[], ex
 
 export const hasErrors = (issues: LintIssue[]) => issues.some((i) => i.level === "error");
 export const hasPlaceholders = (issues: LintIssue[]) => issues.some((i) => i.code === "placeholder");
+
+/** Would this text pass the course-text rules (no markup, numbers that look like identifiers, or web addresses)? */
+export function textIsAllowed(text: string): boolean {
+  const out: LintIssue[] = [];
+  textRules("text", [text], out);
+  return out.length === 0;
+}
