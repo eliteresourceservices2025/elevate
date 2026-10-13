@@ -243,6 +243,33 @@ describe("reminders", () => {
     const nextWeek = await jobs.runLearnReminders(plus(TODAY, 7), scope);
     expect(nextWeek.leadNotices).toBe(1);
     expect(nextWeek.hrSummaries).toBe(1);
+
+    // Emails: one at each threshold, then weekly while overdue; the person is also told in the app; no scores or content.
+    const mailsFor = (userId: string) =>
+      rows<{ subject: string; body: string; dedupe_key: string; kind: string }>(sql`
+        select kind, subject, body, dedupe_key from ops.email_queue where user_id = ${userId} and kind = 'reminder' order by created_at, dedupe_key`);
+    const weekMails = await mailsFor(week.id);
+    expect(weekMails.map((m) => m.dedupe_key.split(":").slice(2).join(":"))).toEqual(["d7", "d0"]);
+    const monthMails = await mailsFor(month.id);
+    expect(monthMails.length).toBe(1);
+    const lateMails = await mailsFor(late.id);
+    // due today notice, then the overdue notice of each of the two weeks seen
+    expect(lateMails.length).toBe(3);
+    expect(lateMails.filter((m) => m.dedupe_key.includes(":overdue-")).length).toBe(2);
+    expect(lateMails.some((m) => /overdue/i.test(m.subject))).toBe(true);
+    expect(JSON.stringify(lateMails)).not.toMatch(/score|percent|attempt/i);
+    expect((await notices(late.id, "learn.overdue_self")).length).toBe(2);
+  });
+
+  it("sends no reminder email to someone who turned them off, but still tells them in the app", async () => {
+    const quiet = await makePerson();
+    await db.execute(sql`insert into ops.email_preferences (user_id, training_reminder_opt_out) values (${quiet.id}, true)`);
+    await db.execute(sql`insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${quiet.id}, ${courseId}, ${versionId}, 'full', 'manual', ${plus(TODAY, -2)})`);
+    const run = await jobs.runLearnReminders(TODAY, { userIds: [quiet.id], hrUserIds: [] });
+    expect(run.personNotices).toBe(1);
+    expect((await notices(quiet.id, "learn.reminder")).length).toBe(1);
+    expect((await notices(quiet.id, "learn.overdue_self")).length).toBe(1);
+    expect((await rows(sql`select 1 from ops.email_queue where user_id = ${quiet.id} and kind = 'reminder'`)).length).toBe(0);
   });
 });
 

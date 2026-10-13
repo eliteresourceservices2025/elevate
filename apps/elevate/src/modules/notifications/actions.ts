@@ -40,6 +40,20 @@ export async function markAllNotificationsRead(): Promise<ActionResult> {
 }
 
 /** Opts the signed-in person in or out of the daily digest email. Emails about something you must acknowledge are required. */
+export async function setTrainingReminderOptOut(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "notifications.read", { ownerUserId: actor.id });
+    const parsed = z.object({ optOut: z.boolean() }).safeParse(input);
+    if (!parsed.success) return fail("Check the request and try again.");
+    await db
+      .insert(emailPreferences)
+      .values({ userId: actor.id, trainingReminderOptOut: parsed.data.optOut })
+      .onConflictDoUpdate({ target: emailPreferences.userId, set: { trainingReminderOptOut: parsed.data.optOut, updatedAt: new Date() } });
+    return { ok: true, data: undefined };
+  });
+}
+
 export async function setDigestOptOut(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
   return runAction(async () => {

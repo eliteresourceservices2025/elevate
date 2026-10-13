@@ -2,7 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/modules/audit/write";
-import { queueEmails } from "@/modules/notifications/email-queue";
+import { queueEmails, type QueuedEmail } from "@/modules/notifications/email-queue";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds } from "@/modules/org/service";
 import { renderCertificatePdf } from "./certificate-pdf";
@@ -127,6 +127,27 @@ export async function runLearnReminders(today: string, scope?: Scope & { hrUserI
     where a.status in ('assigned', 'in_progress') and u.archived_at is null and (e.id is null or e.status <> 'separated')
       ${onUsers(sql`a.user_id`, scope)}`);
 
+  // People who turned training reminder emails off (the in-app reminders still show).
+  const emailOff = new Set<string>();
+  if (open.length) {
+    const off = await rows<{ user_id: string }>(sql`
+      select user_id from ops.email_preferences where training_reminder_opt_out and user_id = any(${uuidArray([...new Set(open.map((o) => o.user_id))])}::uuid[])`);
+    for (const o of off) emailOff.add(o.user_id);
+  }
+  const remindByEmail = async (a: (typeof open)[number], key: string, subject: string, heading: string, line: string) => {
+    if (emailOff.has(a.user_id)) return;
+    const mail: QueuedEmail = {
+      userId: a.user_id,
+      kind: "reminder",
+      subject,
+      heading,
+      lines: [line, "Open ELEVATE and choose My training to continue where you stopped."],
+      link: "/learn",
+      dedupeKey: `learn-reminder:${a.id}:${key}`,
+    };
+    await queueEmails(db, [mail]);
+  };
+
   const sentBy = new Map<string, Set<string>>();
   if (open.length) {
     const sent = await rows<{ assignment_id: string; kind: string }>(sql`select assignment_id, kind from learn.reminders where assignment_id = any(${uuidArray(open.map((o) => o.id))}::uuid[])`);
@@ -153,9 +174,22 @@ export async function runLearnReminders(today: string, scope?: Scope & { hrUserI
         body: "Open training from the menu to continue where you stopped.",
         link: "/learn",
       });
+      await remindByEmail(
+        a,
+        kind,
+        `ELEVATE: your ${courseInfo(a.slug).noun} is ${kind === "d0" ? "due today" : describeDue(a.due_on, today)}`,
+        kind === "d0" ? `Your ${courseInfo(a.slug).noun} is due today` : `Your ${courseInfo(a.slug).noun} is ${describeDue(a.due_on, today)}`,
+        `It is due on ${a.due_on}. Your progress is saved as you go.`,
+      );
       personNotices += 1;
     }
-    if (isOverdue(a.due_on, today) && (await claim(a.id, `overdue-${week}`))) newlyOverdue.push(a);
+    if (isOverdue(a.due_on, today) && (await claim(a.id, `overdue-${week}`))) {
+      newlyOverdue.push(a);
+      // The person hears about it too, once a week while it stays overdue.
+      const noun = courseInfo(a.slug).noun;
+      await notify(db, { userId: a.user_id, kind: "learn.overdue_self", title: `Your ${noun} is overdue`, body: `It was due on ${a.due_on}. Please finish it as soon as you can.`, link: "/learn" });
+      await remindByEmail(a, `overdue-${week}`, `ELEVATE: your ${noun} is overdue`, `Your ${noun} is overdue`, `It was due on ${a.due_on}. Please finish it as soon as you can.`);
+    }
   }
 
   // Overdue, once a week: each lead hears about their own people; HR hears one count.

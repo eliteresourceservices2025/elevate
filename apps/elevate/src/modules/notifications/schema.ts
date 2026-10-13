@@ -57,7 +57,7 @@ export const emailQueue = ops
       uniqueIndex("email_queue_dedupe_idx").on(t.userId, t.dedupeKey),
       index("email_queue_pending_idx").on(t.priority, t.createdAt).where(sql`${t.status} = 'queued'`),
       index("email_queue_sent_idx").on(t.sentAt).where(sql`${t.status} = 'sent'`),
-      check("email_queue_kind_chk", sql`${t.kind} in ('ack_due','digest','invite')`),
+      check("email_queue_kind_chk", sql`${t.kind} in ('ack_due','digest','invite','reminder')`),
       check("email_queue_status_chk", sql`${t.status} in ('queued','sent','failed','skipped')`),
     ],
   )
@@ -70,6 +70,8 @@ export const emailPreferences = ops
       .references(() => users.id),
     /** Opts out of the daily digest only. Emails about something you must acknowledge are required. */
     digestOptOut: boolean("digest_opt_out").notNull().default(false),
+    /** Opts out of training reminder emails (due soon, due today, weekly while overdue). In-app reminders always show. */
+    trainingReminderOptOut: boolean("training_reminder_opt_out").notNull().default(false),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   })
   .enableRLS();

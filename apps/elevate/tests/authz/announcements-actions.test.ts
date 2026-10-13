@@ -42,6 +42,7 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "archivePolicy", call: () => actions.archivePolicy({ policyId: ID }), allowed: HR },
   { name: "publishDraft", call: () => actions.publishDraft({ policyId: ID }), allowed: HR },
   { name: "setDigestOptOut", call: () => notificationActions.setDigestOptOut({ optOut: true }), allowed: EVERYONE },
+  { name: "setTrainingReminderOptOut", call: () => notificationActions.setTrainingReminderOptOut({ optOut: true }), allowed: EVERYONE },
 ];
 
 beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));

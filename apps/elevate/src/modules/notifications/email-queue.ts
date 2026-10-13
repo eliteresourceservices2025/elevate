@@ -8,7 +8,8 @@ import { emailQueue } from "./schema";
 
 type Executor = Pick<typeof db, "insert">;
 
-export const EMAIL_PRIORITY = { ack_due: 1, invite: 1, digest: 2 } as const;
+/** Acknowledgments and invitations (certificate copies) first; the digest and training reminders fill the rest of the budget. */
+export const EMAIL_PRIORITY = { ack_due: 1, invite: 1, digest: 2, reminder: 2 } as const;
 const MAX_ATTEMPTS = 3;
 const DIGEST_MAX_AGE_HOURS = 24;
 
