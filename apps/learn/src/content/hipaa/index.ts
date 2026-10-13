@@ -29,7 +29,7 @@ export const hipaaExamConfig = {
   passPercent: 80,
   maxTries: 3,
   waitMinutesAfterFail: 60,
-  renewalMonths: 12,
+  renewalMonths: 24,
   tracks: {
     full: { questions: 15 },
     essentials: { questions: 15 },

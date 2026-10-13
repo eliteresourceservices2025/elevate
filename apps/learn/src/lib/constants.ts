@@ -9,7 +9,7 @@ export const EXAM_QUESTIONS_SHORT = 15;
 /** There is no exam time limit (a course may still set one by adding `minutes` to its exam configuration). */
 export const EXAM_WAIT_MINUTES_AFTER_FAIL = 60;
 
-/** New people finish within 30 days of their start; everyone renews every 12 months. */
+/** New people finish within 30 days of their start; each course sets its own renewal period in its exam configuration: HIPAA every 24 months (HR decision, 2026-10-13), Cybersecurity basics every 12. */
 export const NEW_HIRE_DUE_DAYS = 30;
 export const RENEWAL_MONTHS = 12;
 export const RENEWAL_OPENS_DAYS_BEFORE = 60;

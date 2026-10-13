@@ -35,7 +35,7 @@ people outside ERS, SCORM import/export, gamification and leaderboards.
 2. **Name and address:** ELEVATE Learn at `learn.eliteresourceservices.com`. HIPAA is the first course, so later courses need no
    rename.
 3. **Audience:** everyone, with role-based tracks. Overdue is flagged to the lead and HR; it never blocks sign-in or work.
-4. **Deadlines:** new hires 30 days from start; renew every 12 months. Reminders at 30 days, 7 days and the due date.
+4. **Deadlines:** new hires 30 days from start; renew on each course's own period (HIPAA 24 months, Cybersecurity basics 12). Reminders at 30 days, 7 days and the due date.
 5. **Content:** versioned in the app and edited by HR, Super Admin and the Privacy Officer; a published version is frozen.
    Original text drafted from public HHS/OCR guidance, **reviewed by counsel or the privacy officer before launch**.
 6. **Lesson style:** short screens, scenarios and per-module checks; motion graphics or narrated slides only for topics that need
