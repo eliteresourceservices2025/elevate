@@ -9,7 +9,7 @@ const input = {
   courseTitle: "HIPAA training",
   issuedOn: "2026-10-13",
   endsOn: "2027-10-13",
-  reference: "HC-2026-ABCDEF",
+  reference: "ERSHC-2026-ABCDEF",
   verifyUrl: "https://learn.example.test/verify",
 };
 

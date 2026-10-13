@@ -98,7 +98,7 @@ export function VerifyForm() {
   return (
     <form onSubmit={(e) => void submit(e)} className="card">
       <label htmlFor="ref">Certificate reference</label>
-      <input id="ref" placeholder="HC-2026-ABC234" value={reference} onChange={(e) => setReference(e.target.value)} required maxLength={30} autoComplete="off" />
+      <input id="ref" placeholder="ERSHC-2026-ABC234" value={reference} onChange={(e) => setReference(e.target.value)} required maxLength={30} autoComplete="off" />
       <label htmlFor="holder">Full name on the certificate</label>
       <input id="holder" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} autoComplete="off" />
       <button type="submit" disabled={busy || reference.trim().length < 5 || name.trim().length < 2}>

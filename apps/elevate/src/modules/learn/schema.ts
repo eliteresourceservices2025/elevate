@@ -350,7 +350,7 @@ export const certificates = learn
     "certificates",
     {
       id: uuid("id").primaryKey().defaultRandom(),
-      /** HC-YYYY-XXXXXX */
+      /** ERSHC-YYYY-XXXXXX (HIPAA), ERSCSC-YYYY-XXXXXX (Cybersecurity basics), ERSLN-... (other); the old HC- form is still accepted */
       reference: text("reference").notNull(),
       userId: uuid("user_id")
         .notNull()
@@ -373,7 +373,7 @@ export const certificates = learn
       uniqueIndex("certificates_reference_idx").on(t.reference),
       uniqueIndex("certificates_assignment_idx").on(t.assignmentId),
       index("certificates_user_idx").on(t.userId, t.endsOn),
-      check("certificates_reference_chk", sql`${t.reference} ~ '^HC-[0-9]{4}-[A-Z2-9]{6}$'`),
+      check("certificates_reference_chk", sql`${t.reference} ~ '^(HC|ERSHC|ERSCSC|ERSLN)-[0-9]{4}-[A-Z2-9]{6}$'`),
       check("certificates_dates_chk", sql`${t.issuedOn} < ${t.endsOn}`),
     ],
   )

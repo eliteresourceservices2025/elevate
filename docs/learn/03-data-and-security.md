@@ -19,7 +19,7 @@ ELEVATE's non-negotiables (RLS on every table, append-only evidence, least privi
 | `exam_attempt_items` | The frozen question selection and shuffled option order | Insert-only |
 | `exam_answers` | The person's answers | Changeable only while the attempt is open; final once submitted; purged after 12 months |
 | `attestations` | Statement version, typed name, IP, sign-in methods | Insert-only; one per assignment |
-| `certificates` | Reference `HC-YYYY-XXXXXX`, holder name, version, track, issued, ends | Insert-only |
+| `certificates` | Reference `ERSHC-YYYY-XXXXXX` (HIPAA) or `ERSCSC-YYYY-XXXXXX` (Cybersecurity basics), holder name, version, track, issued, ends | Insert-only |
 | `certificate_revocations` | A revocation with who and why | Insert-only (a revoked certificate is shown as revoked, never edited) |
 | `retry_grants` | Extra tries or extra time granted by HR, with reason and who | Insert-only |
 | `launch_tokens`, `sessions` | Handoff and session hashes (never the values) | Short-lived; purged by `learn-purge` |

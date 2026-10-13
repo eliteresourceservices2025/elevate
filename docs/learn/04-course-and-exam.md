@@ -81,7 +81,7 @@ statement version, time, IP and sign-in methods, like ELEVATE's policy acknowled
 
 ## Certificate
 
-- Reference `HC-YYYY-XXXXXX`; holder's name, course and version, track, issue date, **expiry date (12 months)**, ERS company
+- Reference `ERSHC-YYYY-XXXXXX` (HIPAA) or `ERSCSC-YYYY-XXXXXX` (Cybersecurity basics; other courses `ERSLN-`; migration 0058); holder's name, course and version, track, issue date, **expiry date (12 months)**, ERS company
   name and the Privacy Officer's name and title as issuer.
 - PDF drawn with `pdf-lib` (Helvetica; non-Latin text becomes "?", the same limitation as ELEVATE's other PDFs). The file's SHA-256
   is stored; the PDF is regenerated on request and checked against it.

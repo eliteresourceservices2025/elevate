@@ -22,6 +22,7 @@ const { loadCourse, assignCourse } = await import("@/modules/learn/publish");
 const { handleApi, handleVerify } = await import("../../../learn/src/lib/api");
 const { getOverview, getModuleView, getAttemptView } = await import("../../../learn/src/lib/queries");
 const { hipaaCourse, hipaaQuestions } = await import("../../../learn/src/content/hipaa");
+const { cybersecurityCourse } = await import("../../../learn/src/content/cybersecurity");
 const { sessionCookie } = await import("../../../learn/src/lib/cookie");
 const { hashValue, newSessionValue } = await import("../../../learn/src/lib/tokens");
 const { handleCertificateDownload } = await import("../../../learn/src/lib/certificate-download");
@@ -133,6 +134,13 @@ describe("the separate cybersecurity course", () => {
     const cyber = await assignCourse(admin, { userId: p.id, track: "full", courseSlug: "cybersecurity" });
     expect(cyber.assignmentId).not.toBe(hipaa.assignmentId);
     expect(cyber.created).toBe(true);
+
+    // The certificate reference carries the course's own code: ERSCSC for Cybersecurity basics.
+    await admin`update learn.assignments set status = 'in_progress' where id = ${cyber.assignmentId}`;
+    await admin`update learn.assignments set status = 'passed', passed_at = now() where id = ${cyber.assignmentId}`;
+    const accepted = await call(await signIn(p.id), "accept", { assignmentId: cyber.assignmentId, statementVersion: cybersecurityCourse.attestation.version, typedName: p.fullName });
+    expect(accepted.status).toBe(200);
+    expect(accepted.body.reference as string).toMatch(/^ERSCSC-\d{4}-[A-Z2-9]{6}$/);
   });
 });
 
@@ -239,7 +247,7 @@ describe("a learner going through the course", () => {
     const accepted = await call(cookie, "accept", { assignmentId, statementVersion: statement.version, typedName: "lia  santos" });
     expect(accepted.status).toBe(200);
     const reference = accepted.body.reference as string;
-    expect(reference).toMatch(/^HC-\d{4}-[A-Z2-9]{6}$/);
+    expect(reference).toMatch(/^ERSHC-\d{4}-[A-Z2-9]{6}$/);
     const certified = await getOverview(app, p.id, assignmentId);
     expect(certified!.certificate).toMatchObject({ reference, holderName: "Lia Santos", revoked: false });
 
@@ -265,7 +273,7 @@ describe("a learner going through the course", () => {
     };
     expect((await check(reference, "Lia Santos")).body.status).toBe("valid");
     expect((await check(reference, "Lia Santo")).body.status).toBe("not_found");
-    expect((await check("HC-2026-AAAAAA", "Lia Santos")).body.status).toBe("not_found");
+    expect((await check("ERSHC-2026-AAAAAA", "Lia Santos")).body.status).toBe("not_found");
     expect((await check(reference, "Lia Santos", { allow: async () => false })).status).toBe(429);
   });
 
