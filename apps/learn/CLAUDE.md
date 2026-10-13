@@ -16,8 +16,10 @@ from those documents and the decisions made with the owner.
 - **Content is data, not HTML.** Validated JSON blocks rendered as React elements; no `dangerouslySetInnerHTML`.
 - **No patient information anywhere**, including examples (invented people, obviously fake data) and free-text fields.
 - **No third-party scripts, fonts or trackers.** The CSP in `next.config.ts` stays strict.
-- Do not add a dependency without the owner's OK. Do not store anything in browser storage except the exam's unsynced local
-  answers (and never the time).
+- Do not add a dependency without the owner's OK. Nothing goes in browser storage except the light/dark choice (kept by
+  `next-themes`, as in ELEVATE) and the exam's unsynced local answers (never the time).
+- **Look and feel is ELEVATE's:** the same fonts (Inter, Source Sans 3 headings, JetBrains Mono, via `next/font`), the same colour
+  tokens and the same light / device / dark switch. Keep `src/app/globals.css` tokens identical to ELEVATE's `:root` and `.dark`.
 
 ## Commands
 

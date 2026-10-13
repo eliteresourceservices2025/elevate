@@ -1,44 +1,69 @@
-/* ELEVATE Learn base styles: ERS brand tokens, light and dark following the device, system fonts until the design pass. */
+/*
+  ELEVATE Learn uses the same design tokens, fonts and light/dark themes as ELEVATE (apps/elevate/src/app/globals.css).
+  Keep the values below identical to ELEVATE's :root and .dark blocks; change them there first.
+*/
 :root {
-  --purple: #6c1aba;
-  --purple-dark: #4f1389;
-  --on-purple: #ffffff;
-  --gold: #e2be2b;
-  --ink: #231a33;
-  --muted: #5d5275;
-  --line: #d9d2e6;
-  --bg: #faf8fd;
+  --background: #faf8ff;
+  --foreground: #231a33;
   --card: #ffffff;
-  --danger: #b00020;
+  --card-foreground: #231a33;
+  --primary: #6c1aba;
+  --primary-foreground: #ffffff;
+  --secondary: #efe6fa;
+  --secondary-foreground: #3b2360;
+  --muted: #f4eefb;
+  --muted-foreground: #62567c;
+  --accent: #e2be2b;
+  --accent-foreground: #2b2000;
+  --destructive: #c62828;
+  --border: rgb(108 26 186 / 0.16);
+  --input: rgb(108 26 186 / 0.28);
+  --ring: #6c1aba;
+  --radius: 0.625rem;
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --purple: #b98cee;
-    --purple-dark: #d7bdf6;
-    --on-purple: #1a1028;
-    --ink: #f1ecf8;
-    --muted: #b9aed0;
-    --line: #3a2f55;
-    --bg: #14101c;
-    --card: #1d1728;
-    --danger: #ff8a9b;
-    color-scheme: dark;
-  }
+.dark {
+  --background: #14101c;
+  --foreground: #f1ecf8;
+  --card: #1d1728;
+  --card-foreground: #f1ecf8;
+  --primary: #b98cee;
+  --primary-foreground: #1a1028;
+  --secondary: #2c2140;
+  --secondary-foreground: #f1ecf8;
+  --muted: #251d35;
+  --muted-foreground: #b9aed0;
+  --accent: #e2be2b;
+  --accent-foreground: #1d1500;
+  --destructive: #ef7c7c;
+  --border: rgb(255 255 255 / 0.12);
+  --input: rgb(255 255 255 / 0.2);
+  --ring: #e2be2b;
+  color-scheme: dark;
 }
+
 * { box-sizing: border-box; }
-html { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); line-height: 1.55; }
-body { margin: 0; }
+html { font-family: var(--font-body), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--foreground); background: var(--background); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--background); color: var(--foreground); }
+h1, h2, h3, h4 { font-family: var(--font-head), system-ui, sans-serif; font-weight: 600; letter-spacing: -0.01em; }
+code, kbd, pre { font-family: var(--font-code), ui-monospace, monospace; }
 main { max-width: 44rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
-header.site { border-bottom: 4px solid var(--gold); background: var(--card); }
-header.site div { max-width: 44rem; margin: 0 auto; padding: 0.9rem 1rem; }
-header.site strong { color: var(--purple-dark); font-size: 1.15rem; }
+header.site { border-bottom: 4px solid var(--accent); background: var(--card); }
+header.site > div { max-width: 44rem; margin: 0 auto; padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+header.site strong { font-family: var(--font-head), system-ui, sans-serif; color: var(--primary); font-size: 1.2rem; font-weight: 700; }
 h1 { font-size: 1.75rem; margin: 0 0 0.5rem; }
 p { margin: 0.5rem 0; }
-.muted { color: var(--muted); font-size: 0.92rem; }
+.muted { color: var(--muted-foreground); font-size: 0.92rem; }
 ul.plain { list-style: none; padding: 0; margin: 1rem 0; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 0.75rem; padding: 1rem 1.1rem; margin: 0.75rem 0; }
-button { font: inherit; background: var(--purple); color: var(--on-purple); border: 0; border-radius: 0.5rem; padding: 0.6rem 1rem; cursor: pointer; }
-a { color: var(--purple-dark); }
-:focus-visible { outline: 3px solid var(--purple); outline-offset: 2px; }
+.card { background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; margin: 0.75rem 0; }
+button { font: inherit; background: var(--primary); color: var(--primary-foreground); border: 0; border-radius: calc(var(--radius) - 2px); padding: 0.6rem 1rem; cursor: pointer; }
+a { color: var(--primary); }
+
+/* The light / device / dark switch (same look as ELEVATE's). */
+.theme-toggle { display: flex; align-items: center; border: 1px solid var(--border); border-radius: var(--radius); padding: 2px; }
+.theme-toggle button { display: grid; place-items: center; padding: 0.35rem; border-radius: calc(var(--radius) - 3px); background: transparent; color: var(--muted-foreground); }
+.theme-toggle button:hover { color: var(--foreground); }
+.theme-toggle button[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
+
+:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
