@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { allowRequest } from "@/lib/rate-limit";
 import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
-import { downlineEmployeeIds } from "@/modules/org/service";
+import { timeDownlineEmployeeIds } from "@/modules/org/service";
 import { buildHoursExport } from "./hours-export";
 import { approvePersonWeek } from "./hours-approve";
 import { CLEAN_FLAGS, attendanceRows } from "./hours-service";
@@ -51,7 +51,7 @@ export async function approveCleanWeeks(input: unknown): Promise<ActionResult<{ 
     const { weekStart } = parsed.data;
     const ids =
       reach === "team"
-        ? await downlineEmployeeIds(db, actor.id)
+        ? await timeDownlineEmployeeIds(db, actor.id)
         : ((await db.execute(sql`select distinct employee_id from time.attendance_days where date between ${weekStart}::date and ${addDays(weekStart, 6)}::date`)) as unknown as { employee_id: string }[]).map((r) => r.employee_id);
     let approved = 0;
     let withFlags = 0;

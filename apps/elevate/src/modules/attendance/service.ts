@@ -8,7 +8,7 @@ import { formatInZone, resolveTimeZone } from "@/lib/time";
 import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
-import { managerChainUserIds, reportName } from "@/modules/org/service";
+import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { selfTestEmails } from "@/modules/jibble/client";
 import { enqueueMirror, kickMirror } from "@/modules/jibble/enqueue";
 import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
@@ -234,7 +234,7 @@ export async function notifyOverbreak(tx: Executor, employeeId: string, startEve
   if (claimed.length === 0) return false;
 
   const [me] = await tx.select({ userId: employees.userId, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName }).from(employees).where(eq(employees.id, employeeId));
-  const chain = await managerChainUserIds(tx, employeeId);
+  const chain = await timeChainUserIds(tx, employeeId);
   const targets = (chain.length > 0 ? chain.slice(0, 1) : await hrUserIds()).filter((id) => id !== me.userId);
   await notify(
     tx,

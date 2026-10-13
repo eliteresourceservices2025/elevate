@@ -91,6 +91,7 @@ export function EmploymentSection({ profile, orgOptions, today }: { profile: Pro
         </Detail>
         <Detail label="Team">{dash(e.teamName)}</Detail>
         <Detail label="Manager">{dash(e.managerName)}</Detail>
+        {e.attendanceLeadName ? <Detail label="Attendance lead">{e.attendanceLeadName}</Detail> : null}
         {e.reportsCount > 0 ? <Detail label="Direct reports">{e.reportsCount}</Detail> : null}
         <Detail label="Worker type">{cap(e.workerType)}</Detail>
         <Detail label="Start date">{formatDateOnly(e.startDate)}</Detail>
@@ -107,7 +108,7 @@ export function EmploymentSection({ profile, orgOptions, today }: { profile: Pro
         <Section title="Reporting">
           <ReportingForm
             employeeId={e.id}
-            current={{ teamId: e.teamId, managerId: e.managerId }}
+            current={{ teamId: e.teamId, managerId: e.managerId, attendanceLeadId: e.attendanceLeadId }}
             teams={orgOptions.teams}
             managers={orgOptions.managers}
             today={today}

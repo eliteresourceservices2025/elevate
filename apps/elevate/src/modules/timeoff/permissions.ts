@@ -5,7 +5,8 @@ import { definePermissions } from "@/lib/roles";
 // Approval rows (level 1 team lead, level 2 HR) are used from Phase 2.2.
 // Source of truth: docs/architecture-plan.md, "Users, roles and permissions".
 export const timeoffPermissions = definePermissions({
-  "timeoff.approve": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  // An Executive who manages people approves their time off too (their own team only); HR and Super Admin approve anyone's.
+  "timeoff.approve": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", executive: "team" } },
   "timeoff.approve_final": { roles: { super_admin: "all", hr_admin: "all" } },
   // Requests: anyone asks for their own days off; HR can file for someone (including a past date).
   "timeoff.request": {

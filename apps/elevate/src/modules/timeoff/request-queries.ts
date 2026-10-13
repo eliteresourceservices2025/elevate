@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { downlineEmployeeIds, managerChainUserIds, reportName, todayInZone } from "@/modules/org/service";
+import { timeDownlineEmployeeIds, timeChainUserIds, reportName, todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import type { RequestStatus } from "./schema";
 import { peerEmployeeIds } from "./request-service";
@@ -109,7 +109,7 @@ export async function listApprovalQueue(): Promise<{ items: RequestItem[]; scope
   if (approve !== "all" && approve !== "team") await authorize(user, "timeoff.approve"); // throws
   const scope = approve === "all" ? "all" : "team";
 
-  const restrict = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  const restrict = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
   if (restrict && restrict.length === 0) return { items: [], scope };
   const filter = restrict ? sql`and r.employee_id in (${list(restrict)})` : sql``;
   const rows = (await db.execute(sql`${SELECT} where r.status in ('pending_lead', 'pending_hr') ${filter} order by r.step_started_on, r.created_at limit 200`)) as unknown as Row[];
@@ -118,7 +118,7 @@ export async function listApprovalQueue(): Promise<{ items: RequestItem[]; scope
   const items = await toItems(rows, user, async (r) => {
     if (r.status === "pending_hr") return canFinal;
     // Lead step: the viewer must be above the person in the chain.
-    return (await managerChainUserIds(db, String(r.employee_id))).includes(user.id);
+    return (await timeChainUserIds(db, String(r.employee_id))).includes(user.id);
   });
   return { items, scope };
 }
@@ -128,7 +128,7 @@ export async function listRequestsFor(employeeId: string): Promise<RequestItem[]
   const user = await requireUser();
   const [e] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, employeeId)).limit(1);
   if (!e) return [];
-  await authorize(user, "timeoff.view_requests", { ownerUserId: e.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, employeeId) });
+  await authorize(user, "timeoff.view_requests", { ownerUserId: e.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, employeeId) });
   const rows = (await db.execute(sql`${SELECT} where r.employee_id = ${employeeId} order by r.created_at desc limit 100`)) as unknown as Row[];
   return toItems(rows, user, async () => false);
 }
@@ -168,7 +168,7 @@ export async function getTeamCalendar(month: string): Promise<CalendarView> {
     visible = null;
   } else if (view === "team") {
     mode = "team";
-    visible = [...(await downlineEmployeeIds(db, user.id)), ...(me ? [me.id] : [])];
+    visible = [...(await timeDownlineEmployeeIds(db, user.id)), ...(me ? [me.id] : [])];
   } else if (user.roles.includes("executive")) {
     mode = "counts";
     visible = null;

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { formatInZone } from "@/lib/time";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
-import { managerChainUserIds, reportName } from "@/modules/org/service";
+import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { MAX_OPEN_SESSION_MS, QUIET_AFTER_MS, buildDays } from "./clock";
 import { attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices, quietNotices } from "./schema";
 import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
@@ -215,7 +215,7 @@ async function missedAtShiftEnd(now: Date): Promise<number> {
       const name = reportName({ first: o.first, last: o.last, preferred: o.preferred });
       const ended = formatInZone(shift.endMs, prefs.zone, "h:mm a");
       if (o.user_id) await notify(tx, { userId: o.user_id, kind: "attendance.missed_clockout", title: "Your shift has ended and you are still clocked in", body: `Your shift ended at ${ended}. Clock out, or ask for extra hours if you are working past it.`, link: "/attendance" });
-      const chain = await managerChainUserIds(tx, o.employee_id);
+      const chain = await timeChainUserIds(tx, o.employee_id);
       const targets = (chain.length > 0 ? chain.slice(0, 1) : hr).filter((id) => id !== o.user_id);
       await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.missed_clockout_lead", title: `${name} is still clocked in after their shift`, body: `Their shift ended at ${ended}. They may have forgotten to clock out.`, link: "/team-attendance" })));
     });
@@ -249,7 +249,7 @@ async function missedAfterTwelveHours(now: Date): Promise<{ noticed: number }> {
       noticed += 1;
       const name = reportName({ first: o.first, last: o.last, preferred: o.preferred });
       if (o.user_id) await notify(tx, { userId: o.user_id, kind: "attendance.missed_clockout", title: "You may have forgotten to clock out", body: "Your session has been open for over 12 hours. Clock out, or ask for a time correction.", link: "/attendance" });
-      const chain = await managerChainUserIds(tx, o.employee_id);
+      const chain = await timeChainUserIds(tx, o.employee_id);
       const targets = (chain.length > 0 ? chain.slice(0, 1) : hr).filter((id) => id !== o.user_id);
       await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.missed_clockout_lead", title: `${name} has been clocked in for over 12 hours`, body: "They may have forgotten to clock out.", link: "/team-attendance" })));
     });
@@ -288,7 +288,7 @@ export async function runQuietSessionAlerts(now = new Date()): Promise<{ noticed
       if (claimed.length === 0) return;
       noticed += 1;
       const name = reportName({ first: o.first, last: o.last, preferred: o.preferred });
-      const chain = await managerChainUserIds(tx, o.employee_id);
+      const chain = await timeChainUserIds(tx, o.employee_id);
       const targets = (chain.length > 0 ? chain.slice(0, 1) : hr).filter((id) => id !== o.user_id);
       await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.quiet_lead", title: `${name} has not been seen for 2 hours`, body: "They are still clocked in. Their page may be closed, their device off or their connection down.", link: "/team-attendance" })));
     });
@@ -375,7 +375,7 @@ export async function runExtraHoursReminders(now = new Date()): Promise<{ remind
       const name = reportName({ first: r.first, last: r.last, preferred: r.preferred });
       const when = formatInZone(Number(r.ws), undefined, "EEE MMM d, h:mm a");
       if (r.status === "pending_lead") {
-        const chain = await managerChainUserIds(tx, r.employee_id);
+        const chain = await timeChainUserIds(tx, r.employee_id);
         const targets = [...new Set([...chain.slice(0, 1), ...hr])].filter((id) => id !== r.user_id);
         await notify(tx, targets.map((userId) => ({ userId, kind: "extrahours.reminder", title: `${name}'s extra hours request is still waiting`, body: `The window starts ${when}.`, link: "/extra-hours" })));
       } else {
@@ -419,7 +419,7 @@ async function pendingApprovals(weekStart: string, today: string): Promise<{ per
   for (const id of pendingIds) {
     const [p] = (await db.execute(sql`select legal_first_name as first, legal_last_name as last, preferred_name as preferred from core.employees where id = ${id} and archived_at is null`)) as unknown as { first: string; last: string; preferred: string | null }[];
     if (!p) continue;
-    out.push({ person: { employeeId: id, name: reportName({ first: p.first, last: p.last, preferred: p.preferred }) }, leadUserId: (await managerChainUserIds(db, id))[0] ?? null });
+    out.push({ person: { employeeId: id, name: reportName({ first: p.first, last: p.last, preferred: p.preferred }) }, leadUserId: (await timeChainUserIds(db, id))[0] ?? null });
   }
   return out;
 }

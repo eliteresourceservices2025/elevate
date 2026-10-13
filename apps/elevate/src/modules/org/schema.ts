@@ -55,6 +55,28 @@ export const positions = core
   )
   .enableRLS();
 
+/**
+ * A second lead for time matters (the "attendance lead"): someone who reports hours, corrections, extra hours and time off to a lead
+ * who is not their manager. One row per person. It gives the lead reach over that person's TIME only (see timeChainUserIds); the
+ * reporting line (manager) and everything about the person's record stays with the manager.
+ */
+export const attendanceLeads = core
+  .table(
+    "attendance_leads",
+    {
+      employeeId: uuid("employee_id")
+        .primaryKey()
+        .references(() => employees.id),
+      leadEmployeeId: uuid("lead_employee_id")
+        .notNull()
+        .references(() => employees.id),
+      setBy: uuid("set_by"),
+      setAt: timestamp("set_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [index("attendance_leads_lead_idx").on(t.leadEmployeeId), check("attendance_leads_not_self_chk", sql`${t.leadEmployeeId} <> ${t.employeeId}`)],
+  )
+  .enableRLS();
+
 // One open row per person (effective_to is null). A change closes it on the day the next one starts.
 export const reportingLines = core
   .table(

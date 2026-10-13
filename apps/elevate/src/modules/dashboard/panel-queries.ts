@@ -10,7 +10,7 @@ import { getHoursSettings } from "@/modules/attendance/hours-queries";
 import { getRecruitingSummary } from "@/modules/recruiting/queries";
 import { listReviews } from "@/modules/reviews/queries";
 import { getTeamCalendar } from "@/modules/timeoff/request-queries";
-import { downlineEmployeeIds, reportName, todayInZone } from "@/modules/org/service";
+import { timeDownlineEmployeeIds, reportName, todayInZone } from "@/modules/org/service";
 import type { Lens } from "./lens";
 import { orFallback } from "./or-fallback";
 import { attendanceRisk, crowdedDayRisk, netLossRisk, overdueReviewsRisk, payrollRisks, rankRisks, rateTrend, thinPipelineRisk, type RiskCard } from "./risks";
@@ -86,7 +86,7 @@ export async function getTracker(): Promise<Tracker | null> {
   const offScope = scopeFor(user, "offboarding.view");
   if ((scope !== "all" && scope !== "team") || (offScope !== "all" && offScope !== "team")) return null;
   const today = todayInZone();
-  const ids = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  const ids = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
   if (ids && ids.length === 0) return { onboarding: [], onboardingTotal: 0, offboarding: [], offboardingTotal: 0 };
   const only = ids ? sql`and e.id in (${idList(ids)})` : sql``;
 

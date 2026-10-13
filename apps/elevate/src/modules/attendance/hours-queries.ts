@@ -4,7 +4,7 @@ import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatInZone, resolveTimeZone } from "@/lib/time";
-import { downlineEmployeeIds, reportName, todayInZone } from "@/modules/org/service";
+import { timeDownlineEmployeeIds, reportName, todayInZone } from "@/modules/org/service";
 import { approvalKey, attendanceRows, dayState, latestApprovals, testMarks, zonesFor, type DayState } from "./hours-service";
 import { addDays, mondayOf, recentPeriods, type PayPeriod, type PayPeriodKind } from "./pay-periods";
 import { hoursSettings } from "./schema";
@@ -63,7 +63,7 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
   const weekStart = mondayOf(requested);
   const weekEnd = addDays(weekStart, 6);
 
-  const restrict = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  const restrict = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
   const days = (await attendanceRows(db, restrict, weekStart, weekEnd)).filter((r) => r.sessions > 0 || r.scheduledMinutes !== null);
   const ids = [...new Set(days.map((d) => d.employeeId))];
   const canMarkTest = ["all", "team"].includes(scopeFor(user, "hours.mark_test") ?? "");

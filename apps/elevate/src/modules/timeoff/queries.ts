@@ -3,7 +3,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { ForbiddenError, authorize, can, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { downlineEmployeeIds, managerChainUserIds, reportName, todayInZone } from "@/modules/org/service";
+import { timeDownlineEmployeeIds, timeChainUserIds, reportName, todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { balanceOf, unusedByPool, type LedgerEntryType } from "./ledger";
 import { holidays, leaveTypes } from "./schema";
@@ -117,7 +117,7 @@ export async function getPersonTimeOff(employeeId: string): Promise<PersonTimeOf
     .where(eq(employees.id, employeeId))
     .limit(1);
   if (!e) return null;
-  await authorize(user, "timeoff.view_balance", { ownerUserId: e.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, e.id) });
+  await authorize(user, "timeoff.view_balance", { ownerUserId: e.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, e.id) });
   return buildPersonTimeOff(e.id, reportName({ first: e.first, last: e.last, preferred: e.preferred }), e.number, user.id);
 }
 
@@ -135,7 +135,7 @@ export async function listBalances(): Promise<{ rows: BalanceOverviewRow[]; scop
   const user = await requireUser();
   const scope = scopeFor(user, "timeoff.view_overview");
   if (scope !== "all" && scope !== "team") throw new ForbiddenError("timeoff.view_overview");
-  const restrict = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  const restrict = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
   if (restrict && restrict.length === 0) return { rows: [], scope };
 
   const today = todayInZone();

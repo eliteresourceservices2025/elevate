@@ -6,7 +6,7 @@ import { ActionFailure } from "@/lib/run-action";
 import { formatInZone } from "@/lib/time";
 import { writeAudit } from "@/modules/audit/write";
 import { notify } from "@/modules/notifications/service";
-import { managerChainUserIds } from "@/modules/org/service";
+import { timeChainUserIds } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { addDays } from "./schedule";
 import { hoursMarks } from "./schema";
@@ -26,7 +26,7 @@ export const MAX_MARK_AGE_DAYS = 90;
 export async function setTestMark(actor: Actor, input: { employeeId: string; date: string; testOnly: boolean; note: string }): Promise<void> {
   const [person] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, input.employeeId));
   if (!person) throw new ActionFailure("That person was not found.");
-  await authorize(actor as never, "hours.mark_test", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, input.employeeId) });
+  await authorize(actor as never, "hours.mark_test", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, input.employeeId) });
 
   const prefs = await prefsFor(db, input.employeeId);
   const today = formatInZone(new Date(), prefs.zone, "yyyy-MM-dd");

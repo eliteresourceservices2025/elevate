@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { resolveTimeZone } from "@/lib/time";
 import { clockPrefs } from "@/modules/attendance/schema";
 import { employees } from "@/modules/people/schema";
-import { downlineEmployeeIds, todayInZone } from "@/modules/org/service";
+import { timeDownlineEmployeeIds, todayInZone } from "@/modules/org/service";
 import { listWorkingNow } from "@/modules/attendance/queries";
 import { getTeamReview } from "@/modules/attendance/hours-queries";
 import { getRecruitingSummary } from "@/modules/recruiting/queries";
@@ -55,7 +55,7 @@ export async function getKpis(lens: Lens): Promise<Kpi[]> {
 
   if (lens === "team_lead") {
     if (scopeFor(user, "attendance.view") !== "team" && scopeFor(user, "attendance.view") !== "all") return [];
-    const team = await downlineEmployeeIds(db, user.id);
+    const team = await timeDownlineEmployeeIds(db, user.id);
     const [approvals, review] = await Promise.all([getApprovalQueue().then((x) => x.length), orFallback(async () => (await getTeamReview()).pending, null)]);
     return [
       { id: "team-size", label: "People in my team", value: team.length, href: "/org-chart" },

@@ -6,11 +6,11 @@ import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { PersonPicker, type PickerOption } from "@/components/person-picker";
 import { Button } from "@/components/ui/button";
-import { reassignReports, setReporting } from "../actions";
+import { reassignReports, setAttendanceLead, setReporting } from "../actions";
 
 type Props = {
   employeeId: string;
-  current: { teamId: string | null; managerId: string | null };
+  current: { teamId: string | null; managerId: string | null; attendanceLeadId: string | null };
   teams: { id: string; name: string }[];
   /** Everyone who could be a manager, without this person. */
   managers: PickerOption[];
@@ -29,6 +29,9 @@ export function ReportingForm({ employeeId, current, teams, managers, today, rep
   const [teamId, setTeamId] = useState(current.teamId ?? "");
   const [manager, setManager] = useState<string | undefined>(current.managerId ?? undefined);
   const [date, setDate] = useState(today);
+
+  const [lead, setLead] = useState<string | undefined>(current.attendanceLeadId ?? undefined);
+  const leadInvalid = lead !== undefined && !UUID.test(lead);
 
   const [moveTo, setMoveTo] = useState<string | undefined>(undefined);
   const [moveDate, setMoveDate] = useState(today);
@@ -51,6 +54,17 @@ export function ReportingForm({ employeeId, current, teams, managers, today, rep
       });
       if (!result.ok) return void toast.error(result.error);
       toast.success("Reporting updated.");
+      router.refresh();
+    });
+  }
+
+  function saveLead(e: React.FormEvent) {
+    e.preventDefault();
+    if (leadInvalid) return toast.error("Choose a person from the list.");
+    startTransition(async () => {
+      const result = await setAttendanceLead({ employeeId, leadEmployeeId: lead ?? null });
+      if (!result.ok) return void toast.error(result.error);
+      toast.success(lead ? "Attendance lead saved." : "Attendance lead removed.");
       router.refresh();
     });
   }
@@ -85,6 +99,19 @@ export function ReportingForm({ employeeId, current, teams, managers, today, rep
         </div>
         <Button type="submit" disabled={pending}>
           Save
+        </Button>
+      </form>
+
+      <form onSubmit={saveLead} className="space-y-4 rounded-xl border bg-card p-4" noValidate>
+        <h3 className="text-sm font-semibold">Attendance lead (optional)</h3>
+        <p className="text-sm text-muted-foreground">
+          For someone who reports their time to a lead who is not their manager. This lead also receives and decides their hours, time corrections, extra hours and time off. The manager keeps everything else and can still decide time off. A lead needs the Team Lead role to decide anything. Leave empty for none.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <PersonPicker id="r-lead" label="Attendance lead" options={others} value={lead} onChange={setLead} error={leadInvalid ? "Choose a person from the list" : undefined} />
+        </div>
+        <Button type="submit" variant="outline" disabled={pending}>
+          Save attendance lead
         </Button>
       </form>
 

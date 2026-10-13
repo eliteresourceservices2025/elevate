@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { downlineEmployeeIds, managerChainUserIds, reportName } from "@/modules/org/service";
+import { timeDownlineEmployeeIds, timeChainUserIds, reportName } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { needsHrForAge } from "./extra-hours";
 import { assignedClients } from "./extra-hours-service";
@@ -76,7 +76,7 @@ async function toItems(rows: Raw[], viewerUserId: string, viewerScope: "all" | "
     const hrOnly = r.after_the_fact && needsHrForAge(Number(r.ws), new Date(r.created_at).getTime());
     let allowed = false;
     if (viewerScope === "all") allowed = true;
-    else if (viewerScope === "team") allowed = !hrOnly && (await managerChainUserIds(db, r.employee_id)).includes(viewerUserId);
+    else if (viewerScope === "team") allowed = !hrOnly && (await timeChainUserIds(db, r.employee_id)).includes(viewerUserId);
     const waiting = r.status === "pending_lead" || r.status === "pending_confirm";
     items.push({
       id: r.id,
@@ -135,7 +135,7 @@ export async function listExtraHoursQueue(): Promise<{ pending: ExtraItem[]; rec
   const user = await requireUser();
   const scope = scopeFor(user, "extra_hours.decide");
   if (scope !== "all" && scope !== "team") throw new ForbiddenError("extra_hours.decide");
-  const restrict = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  const restrict = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
   if (restrict && restrict.length === 0) return { pending: [], recent: [], scope };
   const filter = restrict ? sql`and r.employee_id in (${list(restrict)})` : sql``;
   const pending = (await db.execute(sql`${SELECT} where r.status in ('pending_lead', 'pending_confirm') ${filter} order by r.window_start limit 100`)) as unknown as Raw[];

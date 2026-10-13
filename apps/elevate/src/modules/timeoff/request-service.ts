@@ -43,7 +43,7 @@ export async function peerEmployeeIds(executor: Executor, employeeId: string): P
 
 export type Approver = { userId: string };
 
-/** Tells the right people a request is waiting on them: the nearest lead with an account, or HR. */
+/** Tells the right people a request is waiting on them: the leads given (the attendance lead and the manager, see timeNoticeUserIds), or HR. */
 export async function notifyWaiting(
   tx: Executor,
   request: Pick<RequestRow, "id" | "status" | "days" | "startDate" | "endDate">,
@@ -52,7 +52,7 @@ export async function notifyWaiting(
   hrIds: string[],
   excludeUserIds: string[],
 ) {
-  const targets = request.status === "pending_lead" ? leadUserIds.slice(0, 1) : hrIds;
+  const targets = request.status === "pending_lead" ? leadUserIds : hrIds;
   const userIds = targets.filter((id) => !excludeUserIds.includes(id));
   await notify(
     tx,

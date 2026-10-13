@@ -220,6 +220,31 @@ describe("the review view", () => {
   });
 });
 
+describe("an attendance lead", () => {
+  it("sees and approves the hours of people who report their time to them, without being their manager", async () => {
+    const W = lastWeek();
+    const manager = await person("AlMgr", { roles: ["executive", "employee"] });
+    const attLead = await person("AlLead", { roles: ["team_lead", "employee"] });
+    const worker = await person("AlWorker", { managerId: manager.employeeId });
+    await normalWeek(worker.employeeId, W);
+    await jobs.rebuildAttendanceDays(new Date(), REBUILD_DAYS);
+
+    // Not their lead yet: nothing to see or approve
+    as(attLead.user);
+    expect((await queries.getTeamReview(W)).rows.map((r) => r.employeeId)).not.toContain(worker.employeeId);
+    expect(await actions.approveHoursWeek({ employeeId: worker.employeeId, weekStart: W })).toEqual({ ok: false, error: NO_ACCESS });
+
+    await db.execute(sql`insert into core.attendance_leads (employee_id, lead_employee_id) values (${worker.employeeId}, ${attLead.employeeId})`);
+    const review = await queries.getTeamReview(W);
+    expect(review.rows.map((r) => r.employeeId)).toContain(worker.employeeId);
+    expect(await actions.approveHoursWeek({ employeeId: worker.employeeId, weekStart: W })).toEqual({ ok: true, data: { approved: 2 } });
+
+    // The manager is an Executive: no hours reach (only time off, tested elsewhere)
+    as(manager.user);
+    await expect(queries.getTeamReview(W)).rejects.toThrow();
+  });
+});
+
 describe("days marked test only", () => {
   it("leaves a marked day out of review, approval, export and the unapproved counts, keeps it in the history, and can be taken off", async () => {
     const W = lastWeek();

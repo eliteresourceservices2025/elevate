@@ -11,7 +11,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { employees } from "@/modules/people/schema";
 import { recordHistory } from "@/modules/people/service";
 import { departments, positions, teams } from "./schema";
-import { activeDirectReports, applyReporting, reportName } from "./service";
+import { activeDirectReports, applyAttendanceLead, applyReporting, reportName } from "./service";
 import {
   archiveDepartmentSchema,
   archivePositionSchema,
@@ -20,6 +20,7 @@ import {
   createPositionSchema,
   createTeamSchema,
   reassignReportsSchema,
+  setAttendanceLeadSchema,
   setReportingSchema,
   updateDepartmentSchema,
   updatePositionSchema,
@@ -271,6 +272,31 @@ export async function setReporting(input: unknown): Promise<ActionResult> {
       if (isCheckViolation(e)) return fail("That would make a loop in the reporting lines.");
       throw e;
     }
+  });
+}
+
+/**
+ * Sets or clears the attendance lead: the lead who also receives and decides this person's time matters (hours, corrections, extra
+ * hours, time off) without being their manager. HR only. The manager keeps the record and the time off approval too.
+ */
+export async function setAttendanceLead(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "org.manage_reporting");
+    const p = setAttendanceLeadSchema.safeParse(input);
+    if (!p.success) return fail(first(p.error));
+    const r = await db.transaction(async (tx) => {
+      const result = await applyAttendanceLead(tx, p.data, actor.id);
+      if (!result.ok) return fail(result.error);
+      if (!result.changed) return fail("No changes to save.");
+      await writeAudit({ actor, action: "org.attendance_lead", targetType: "employee", targetId: p.data.employeeId, after: { leadEmployeeId: p.data.leadEmployeeId } }, tx);
+      return done();
+    });
+    if (r.ok) {
+      refresh();
+      revalidatePath(`/people/${p.data.employeeId}`);
+    }
+    return r;
   });
 }
 

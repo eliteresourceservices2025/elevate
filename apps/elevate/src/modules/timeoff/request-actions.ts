@@ -10,7 +10,7 @@ import { isExclusionViolation } from "@/lib/db-errors";
 import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { notify, hrUserIds } from "@/modules/notifications/service";
-import { managerChainUserIds, reportName, todayInZone } from "@/modules/org/service";
+import { timeChainUserIds, timeNoticeUserIds, reportName, todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { buildLeaveIcs } from "./ics";
 import { balanceOf, canTake, formatDays } from "./ledger";
@@ -96,13 +96,13 @@ export async function requestLeave(input: unknown): Promise<ActionResult<{ id: s
           }
         }
 
-        const chain = await managerChainUserIds(tx, subject.id);
+        const chain = await timeChainUserIds(tx, subject.id);
         const status = chain.length > 0 ? "pending_lead" : "pending_hr";
         const [row] = await tx
           .insert(leaveRequests)
           .values({ id: requestId, employeeId: subject.id, leaveTypeId: type.id, startDate: v.startDate, endDate: v.endDate, halfDay: v.halfDay, days: String(days), note: v.note ?? null, status, filedBy: actor.id, stepStartedOn: today })
           .returning();
-        await notifyWaiting(tx, row, nameOf(subject), chain, hrIds, [subject.userId ?? "", actor.id]);
+        await notifyWaiting(tx, row, nameOf(subject), await timeNoticeUserIds(tx, subject.id), hrIds, [subject.userId ?? "", actor.id]);
         if (forOther && subject.userId) {
           await notify(tx, { userId: subject.userId, kind: "timeoff.filed_for_you", title: "HR filed a time off request for you", body: `${v.startDate}${v.endDate !== v.startDate ? ` to ${v.endDate}` : ""}`, link: "/time-off" });
         }
@@ -193,7 +193,7 @@ export async function decideRequest(input: unknown): Promise<ActionResult> {
       const [type] = await tx.select().from(leaveTypes).where(eq(leaveTypes.id, req.leaveTypeId));
       if (person.userId === actor.id || req.filedBy === actor.id) throw new ActionFailure("Someone else must decide on your own request.");
 
-      const chain = await managerChainUserIds(tx, person.id);
+      const chain = await timeChainUserIds(tx, person.id);
       const inChain = chain.includes(actor.id);
       let level: "lead" | "hr";
       if (req.status === "pending_lead") {
@@ -215,7 +215,7 @@ export async function decideRequest(input: unknown): Promise<ActionResult> {
         if (person.userId) await notify(tx, { userId: person.userId, kind: "timeoff.declined", title: "Your time off request was declined", body: note, link: "/time-off" });
       } else if (level === "lead" && !type.skipHr) {
         await tx.update(leaveRequests).set({ status: "pending_hr", stepStartedOn: today, remindedAt: null, updatedAt: now }).where(eq(leaveRequests.id, req.id));
-        await notifyWaiting(tx, { ...req, status: "pending_hr" }, employeeName, chain, hrIds, [person.userId ?? "", req.filedBy, actor.id]);
+        await notifyWaiting(tx, { ...req, status: "pending_hr" }, employeeName, await timeNoticeUserIds(tx, person.id), hrIds, [person.userId ?? "", req.filedBy, actor.id]);
         if (person.userId) await notify(tx, { userId: person.userId, kind: "timeoff.lead_approved", title: "Your lead approved your time off", body: "It now waits for HR.", link: "/time-off" });
       } else {
         await finalizeApproval(tx, req, type.tracksBalance, actor.id);
@@ -302,7 +302,7 @@ export async function getLeaveInvite(input: unknown): Promise<ActionResult<{ fil
     const [req] = await db.select().from(leaveRequests).where(eq(leaveRequests.id, parsed.data.requestId)).limit(1);
     if (!req) return fail("That request was not found.");
     const [person] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, req.employeeId));
-    await authorize(actor, "timeoff.view_requests", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, req.employeeId) });
+    await authorize(actor, "timeoff.view_requests", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, req.employeeId) });
     if (req.status !== "approved") return fail("Only approved time off has a calendar file.");
     const content = buildLeaveIcs({ uid: req.id, summary: "Day off", startDate: req.startDate, endDate: req.endDate, stampIso: new Date().toISOString() });
     return { ok: true, data: { fileName: "time-off.ics", content } };

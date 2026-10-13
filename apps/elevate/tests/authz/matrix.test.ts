@@ -44,7 +44,7 @@ const EXPECTED: Record<string, string> = {
   "privacy.view_my_data": "O O O O O O",
   "privacy.export_my_data": "O O O O O O",
   "privacy.request_data_rights": "O O O O O O",
-  "timeoff.approve": "A A T - - -",
+  "timeoff.approve": "A A T - T -",
   "timeoff.approve_final": "A A - - - -",
   "timeoff.request": "O O O O O O",
   "timeoff.file_for_others": "A A - - - -",

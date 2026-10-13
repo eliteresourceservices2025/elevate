@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/modules/audit/write";
 import { hrUserIds, notify } from "@/modules/notifications/service";
-import { managerChainUserIds, reportName } from "@/modules/org/service";
+import { timeChainUserIds, timeNoticeUserIds, reportName } from "@/modules/org/service";
 import { holidaysInRange, notifyWaiting } from "./request-service";
 import { leaveApprovals, leaveRequests } from "./schema";
 import { workingDaysBetween } from "./workdays";
@@ -43,7 +43,7 @@ export async function runLeaveRequestReminders(today: string): Promise<RequestRe
       const [req] = await tx.select().from(leaveRequests).where(eq(leaveRequests.id, p.id)).for("update");
       if (!req || req.status !== p.status) return; // decided in the meantime
 
-      const chain = await managerChainUserIds(tx, p.employee_id);
+      const chain = await timeNoticeUserIds(tx, p.employee_id);
       const exclude = [p.user_id ?? "", req.filedBy];
 
       if (req.status === "pending_lead" && waited >= ESCALATE_AFTER_WORKING_DAYS && !req.escalatedAt) {
@@ -52,7 +52,7 @@ export async function runLeaveRequestReminders(today: string): Promise<RequestRe
         await notifyWaiting(tx, { ...req, status: "pending_hr" }, name, chain, hrIds, exclude);
         await notify(
           tx,
-          chain.slice(0, 1).map((userId) => ({ userId, kind: "timeoff.escalated", title: `${name}'s time off request went to HR`, body: "It waited too long for your answer.", link: "/time-off?tab=approvals" })),
+          chain.map((userId) => ({ userId, kind: "timeoff.escalated", title: `${name}'s time off request went to HR`, body: "It waited too long for your answer.", link: "/time-off?tab=approvals" })),
         );
         await writeAudit({ actor: null, action: "leave.escalate", targetType: "employee", targetId: p.employee_id, metadata: { requestId: req.id, waitedWorkingDays: waited } }, tx);
         escalated += 1;

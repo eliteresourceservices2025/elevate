@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { fieldCrypto } from "@/lib/crypto";
 import { alias } from "drizzle-orm/pg-core";
 import { writeAudit } from "@/modules/audit/write";
-import { teams } from "@/modules/org/schema";
+import { attendanceLeads, teams } from "@/modules/org/schema";
 import { users } from "@/modules/core/schema";
 import { managerChainUserIds } from "@/modules/org/service";
 import type { ChangeCategory, ChangeStatus, CustomFieldType, CustomFieldVisibility, EmployeeStatus } from "./constants";
@@ -298,6 +298,14 @@ export async function getProfile(employeeId: string) {
   // A manager sees a report's work details, not their private ones.
   const hide = access.limitedView;
 
+  // The attendance lead (a second lead for time matters), shown with the manager.
+  const [leadRow] = await db
+    .select({ id: employees.id, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
+    .from(attendanceLeads)
+    .innerJoin(employees, eq(employees.id, attendanceLeads.leadEmployeeId))
+    .where(eq(attendanceLeads.employeeId, e.id))
+    .limit(1);
+
   // The photo (a picture, not a detail): its address needs the account id and the time it last changed.
   const [photoRow] = e.userId ? await db.select({ path: users.photoPath, at: users.photoUpdatedAt }).from(users).where(eq(users.id, e.userId)).limit(1) : [];
   const photo = e.userId && photoRow?.path && photoRow.at ? { userId: e.userId, version: photoRow.at.getTime() } : null;
@@ -331,6 +339,8 @@ export async function getProfile(employeeId: string) {
       workerType: e.workerType,
       startDate: e.startDate,
       endDate: e.endDate,
+      attendanceLeadId: leadRow?.id ?? null,
+      attendanceLeadName: leadRow ? `${leadRow.preferred?.trim() || leadRow.first} ${leadRow.last}` : null,
       linked: e.userId !== null,
       archived: e.archivedAt !== null,
       photo,

@@ -12,7 +12,7 @@ import { formatInZone } from "@/lib/time";
 import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
-import { managerChainUserIds, reportName } from "@/modules/org/service";
+import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { checkWindow, dayLimitWarning, isAfterTheFact, needsHrForAge, windowMinutes } from "./extra-hours";
 import { assignedToClient, liveMinutesOnDay } from "./extra-hours-service";
@@ -41,7 +41,7 @@ async function nameOf(tx: Pick<typeof db, "select">, employeeId: string): Promis
 
 /** Where a request goes first: the person's lead, or HR when nobody is above them or it is too old for a lead. */
 async function reviewerIds(tx: Pick<typeof db, "execute" | "select">, employeeId: string, hrOnly: boolean, actorId: string): Promise<string[]> {
-  const chain = await managerChainUserIds(tx as never, employeeId);
+  const chain = await timeChainUserIds(tx as never, employeeId);
   const ids = hrOnly || chain.length === 0 ? await hrUserIds() : chain.slice(0, 1);
   return ids.filter((id) => id !== actorId);
 }
@@ -59,7 +59,7 @@ export async function requestExtraEvidenceUpload(input: unknown): Promise<Action
       if (target.userId === actor.id) {
         await authorize(actor, "extra_hours.request", { ownerUserId: actor.id });
       } else {
-        await authorize(actor, "extra_hours.file_for_others", { ownerUserId: target.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, parsed.data.employeeId) });
+        await authorize(actor, "extra_hours.file_for_others", { ownerUserId: target.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, parsed.data.employeeId) });
       }
       employeeId = parsed.data.employeeId;
     } else {
@@ -135,7 +135,7 @@ export async function fileExtraHoursFor(input: unknown): Promise<ActionResult> {
     const target = await nameOf(db, v.employeeId);
     const [exists] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, v.employeeId), isNull(employees.archivedAt)));
     if (!exists) return fail("That person was not found.");
-    await authorize(actor, "extra_hours.file_for_others", { ownerUserId: target.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, v.employeeId) });
+    await authorize(actor, "extra_hours.file_for_others", { ownerUserId: target.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, v.employeeId) });
     if (target.userId === actor.id) return fail("Ask for your own extra hours from the Extra hours page.");
 
     const prefs = await prefsFor(db, v.employeeId);
@@ -160,7 +160,7 @@ export async function fileExtraHoursFor(input: unknown): Promise<ActionResult> {
         if (attached.length > 0) await tx.update(correctionEvidence).set({ extraRequestId: row.id }).where(inArray(correctionEvidence.id, attached));
         if (target.userId) await notify(tx, { userId: target.userId, kind: "extrahours.confirm_needed", title: "Your client asked for extra hours", body: `${fmt(startMs, prefs.zone)} to ${formatInZone(endMs, prefs.zone, "h:mm a")}. Please confirm or decline.`, link: "/extra-hours" });
         // A lead who is not the filer hears about it (HR filed it); HR hears when a lead filed it.
-        const chain = await managerChainUserIds(tx as never, v.employeeId);
+        const chain = await timeChainUserIds(tx as never, v.employeeId);
         const fyi = [...new Set([...chain.slice(0, 1), ...hr])].filter((id) => id !== actor.id && id !== target.userId);
         await notify(tx, fyi.map((userId) => ({ userId, kind: "extrahours.filed_for", title: `Extra hours were filed for ${target.name}`, body: `The client asked. ${v.reason}`, link: "/extra-hours" })));
         await writeAudit({ actor, action: "extra_hours.file_for", targetType: "employee", targetId: v.employeeId, metadata: { requestId: row.id, minutes, confirmedByPhone: v.confirmedByPhone, evidence: attached.length } }, tx);
@@ -221,7 +221,7 @@ export async function decideExtraHours(input: unknown): Promise<ActionResult> {
         if (r.status !== "pending_lead") throw new ActionFailure("That request was already handled.");
         const person = await nameOf(tx, r.employeeId);
         if (person.userId === actor.id || r.filedBy === actor.id) throw new ActionFailure("Someone else must decide on your own request.");
-        await authorize(actor, "extra_hours.decide", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await managerChainUserIds(tx as never, r.employeeId) });
+        await authorize(actor, "extra_hours.decide", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await timeChainUserIds(tx as never, r.employeeId) });
         if (r.afterTheFact && needsHrForAge(r.windowStart.getTime(), r.createdAt.getTime()) && scopeFor(actor, "extra_hours.decide") !== "all") throw new ActionFailure("Only HR can decide this request.");
 
         const prefs = await prefsFor(tx as never, r.employeeId);
@@ -281,7 +281,7 @@ export async function cancelExtraHours(input: unknown): Promise<ActionResult> {
       if (!r) throw new ActionFailure("That request was not found.");
       const person = await nameOf(tx, r.employeeId);
       if (person.userId === actor.id || r.filedBy === actor.id) await authorize(actor, "extra_hours.request", { ownerUserId: actor.id });
-      else await authorize(actor, "extra_hours.decide", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await managerChainUserIds(tx as never, r.employeeId) });
+      else await authorize(actor, "extra_hours.decide", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await timeChainUserIds(tx as never, r.employeeId) });
       const waiting = r.status === "pending_lead" || r.status === "pending_confirm";
       if (!waiting && !(r.status === "approved" && r.windowStart.getTime() > Date.now())) throw new ActionFailure("That request can no longer be cancelled.");
       await tx.update(extraHoursRequests).set({ status: "cancelled", decidedAt: new Date(), decidedBy: actor.id }).where(eq(extraHoursRequests.id, r.id));

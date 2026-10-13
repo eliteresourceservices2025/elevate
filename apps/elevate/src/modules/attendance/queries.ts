@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatInZone } from "@/lib/time";
 import { holidaysInRange } from "@/modules/timeoff/request-service";
-import { downlineEmployeeIds, managerChainUserIds, reportName, todayInZone } from "@/modules/org/service";
+import { timeDownlineEmployeeIds, timeChainUserIds, reportName, todayInZone } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { EOD_EDIT_WINDOW_MS, MAX_OPEN_SESSION_MS, buildDays, isPossiblyOffline, needsHrDecision, replayClock, type ClockState, type DayTotals, type SessionDetail } from "./clock";
@@ -232,7 +232,7 @@ export async function listWorkingNow(): Promise<{ rows: WorkingNowRow[]; scope: 
   const user = await requireUser();
   const scope = scopeFor(user, "attendance.view");
   if (scope !== "all" && scope !== "team") throw new ForbiddenError("attendance.view");
-  const restrict = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  const restrict = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
   if (restrict && restrict.length === 0) return { rows: [], scope };
   const filter = restrict ? sql`and e.employee_id in (${list(restrict)})` : sql``;
 
@@ -282,7 +282,7 @@ export async function listFlags(): Promise<{ rows: FlagRow[]; scope: "all" | "te
   const user = await requireUser();
   const scope = scopeFor(user, "attendance.view");
   if (scope !== "all" && scope !== "team") throw new ForbiddenError("attendance.view");
-  const restrict = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  const restrict = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
   if (restrict && restrict.length === 0) return { rows: [], scope };
   const filter = restrict ? sql`and d.employee_id in (${list(restrict)})` : sql``;
   const rows = (await db.execute(sql`
@@ -298,7 +298,7 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
   const user = await requireUser();
   const scope = scopeFor(user, "attendance.approve_correction");
   if (scope !== "all" && scope !== "team") throw new ForbiddenError("attendance.approve_correction");
-  const restrict = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  const restrict = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
   if (restrict && restrict.length === 0) return { items: [], scope };
   const filter = restrict ? sql`and c.employee_id in (${list(restrict)})` : sql``;
   const rows = (await db.execute(sql`
@@ -316,7 +316,7 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
     const proposed = r.proposed as { type: string; at: string }[];
     const filedFor = r.requested_by !== r.user_id;
     const hrOnly = filedFor || needsHrDecision(Math.min(...proposed.map((p) => Date.parse(p.at))), new Date(r.created_at as string | Date).getTime());
-    const allowed = scope === "all" || (!hrOnly && (await managerChainUserIds(db, String(r.employee_id))).includes(user.id));
+    const allowed = scope === "all" || (!hrOnly && (await timeChainUserIds(db, String(r.employee_id))).includes(user.id));
     items.push({
       id: String(r.id),
       employeeId: String(r.employee_id),
@@ -362,7 +362,7 @@ export async function listFilablePeople(): Promise<FilablePerson[]> {
   const user = await requireUser();
   const scope = scopeFor(user, "attendance.file_for_others");
   if (scope !== "all" && scope !== "team") throw new ForbiddenError("attendance.file_for_others");
-  const restrict = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  const restrict = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
   if (restrict && restrict.length === 0) return [];
   const filter = restrict ? sql`and e.id in (${list(restrict)})` : sql``;
   const rows = (await db.execute(sql`
@@ -379,7 +379,7 @@ export async function listShiftNotes(): Promise<{ rows: NoteRow[]; scope: "all" 
   const user = await requireUser();
   const scope = scopeFor(user, "attendance.notes_view");
   if (scope !== "all" && scope !== "team") throw new ForbiddenError("attendance.notes_view");
-  const restrict = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  const restrict = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
   if (restrict && restrict.length === 0) return { rows: [], scope };
   const filter = restrict ? sql`and n.employee_id in (${list(restrict)})` : sql``;
   const rows = (await db.execute(sql`
@@ -481,7 +481,7 @@ export async function listTeamSchedules(): Promise<{ rows: ScheduleListRow[] }> 
   const user = await requireUser();
   const scope = scopeFor(user, "schedules.view");
   if (scope !== "team") throw new ForbiddenError("schedules.view");
-  const ids = await downlineEmployeeIds(db, user.id);
+  const ids = await timeDownlineEmployeeIds(db, user.id);
   if (ids.length === 0) return { rows: [] };
   const people = (await db.execute(sql`
     select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team

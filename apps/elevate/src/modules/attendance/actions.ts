@@ -12,7 +12,7 @@ import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-act
 import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
-import { managerChainUserIds, reportName } from "@/modules/org/service";
+import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { groupByPerson, parseCorrectionsCsv } from "./bulk-corrections";
@@ -200,7 +200,7 @@ export async function requestCorrection(input: unknown): Promise<ActionResult> {
       const attached = await verifyEvidence(tx, person.id, evidenceIds, EVIDENCE_MAX_BYTES, actor.id);
       if (attached.length > 0) await tx.update(correctionEvidence).set({ correctionId: row.id }).where(inArray(correctionEvidence.id, attached));
       const [me] = await tx.select({ first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName }).from(employees).where(eq(employees.id, person.id));
-      const chain = await managerChainUserIds(tx, person.id);
+      const chain = await timeChainUserIds(tx, person.id);
       const targets = (hrOnly || chain.length === 0 ? hrIds : chain.slice(0, 1)).filter((id) => id !== actor.id);
       await notify(tx, targets.map((userId) => ({ userId, kind: "attendance.correction_needed", title: `${reportName(me)} asked for a time correction`, body: reason, link: "/attendance?tab=corrections" })));
       await writeAudit({ actor, action: "clock.correction_request", targetType: "employee", targetId: person.id, metadata: { correctionId: row.id, events: events.length, kind, evidence: attached.length } }, tx);
@@ -221,7 +221,7 @@ export async function fileCorrectionForOthers(input: unknown): Promise<ActionRes
     const { employeeId, events, kind, reason } = parsed.data;
     const [target] = await db.select({ id: employees.id, userId: employees.userId, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName }).from(employees).where(and(eq(employees.id, employeeId), isNull(employees.archivedAt)));
     if (!target) return fail("That person was not found.");
-    await authorize(actor, "attendance.file_for_others", { ownerUserId: target.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, employeeId) });
+    await authorize(actor, "attendance.file_for_others", { ownerUserId: target.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, employeeId) });
     if (target.userId === actor.id) return fail("File your own corrections from My time.");
     const problem = await checkProposal(employeeId, events, Date.now());
     if (problem) return fail(problem);
@@ -273,7 +273,7 @@ export async function openEvidence(input: unknown): Promise<ActionResult<{ url: 
     if (!ev || (!ev.correctionId && !ev.extraRequestId) || ev.purgedAt) return fail("That screenshot is no longer available.");
     const [person] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, ev.employeeId));
     if (person?.userId === actor.id) await authorize(actor, "attendance.request_correction", { ownerUserId: actor.id });
-    else await authorize(actor, "attendance.approve_correction", { ownerUserId: person?.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, ev.employeeId) });
+    else await authorize(actor, "attendance.approve_correction", { ownerUserId: person?.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, ev.employeeId) });
     const url = await getDocumentStorage().createSignedDownload(BUCKETS.employee, ev.storagePath, 60, `evidence.${ev.mime === "image/png" ? "png" : "jpg"}`);
     await writeAudit({ actor, action: "clock.evidence_view", targetType: "employee", targetId: ev.employeeId, metadata: { evidenceId: ev.id, correctionId: ev.correctionId, extraRequestId: ev.extraRequestId } });
     return { ok: true, data: { url } };
@@ -317,7 +317,7 @@ export async function decideCorrection(input: unknown): Promise<ActionResult> {
       if (c.status !== "pending") throw new ActionFailure("That request was already handled.");
       const [person] = await tx.select({ userId: employees.userId }).from(employees).where(eq(employees.id, c.employeeId));
       if (person.userId === actor.id || c.requestedBy === actor.id) throw new ActionFailure("Someone else must decide on your own request.");
-      await authorize(actor, "attendance.approve_correction", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await managerChainUserIds(tx, c.employeeId) });
+      await authorize(actor, "attendance.approve_correction", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await timeChainUserIds(tx, c.employeeId) });
       // Something filed by a lead or HR for the person, or older than a week when it was filed, is decided by HR only.
       const original = c.proposed as Proposed;
       const hrOnly = c.requestedBy !== person.userId || needsHrDecision(Math.min(...original.map((p) => Date.parse(p.at))), c.createdAt.getTime());

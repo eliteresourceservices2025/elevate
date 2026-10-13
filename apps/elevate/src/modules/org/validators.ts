@@ -33,3 +33,6 @@ export const reassignReportsSchema = z.object({
   toManagerId: z.union([uuid, z.null()]),
   effectiveDate: isoDate,
 });
+
+/** One person's attendance lead: a person, or null to clear it. */
+export const setAttendanceLeadSchema = z.object({ employeeId: uuid, leadEmployeeId: z.union([uuid, z.null()]) });

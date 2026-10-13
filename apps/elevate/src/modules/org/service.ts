@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { employees } from "@/modules/people/schema";
 import { recordHistory, type Tx } from "@/modules/people/service";
-import { reportingLines, teamMemberships, teams } from "./schema";
+import { attendanceLeads, reportingLines, teamMemberships, teams } from "./schema";
 
 // Shared organization rules. Callers authorize first (CLAUDE.md rule 4).
 
@@ -29,6 +29,30 @@ export async function managerChainUserIds(executor: Db, employeeId: string): Pro
     )
     select user_id from up where user_id is not null order by depth`)) as unknown as { user_id: string }[];
   return rows.map((r) => r.user_id);
+}
+
+/** The sign-in account of this person's attendance lead, or null when they have none (or the lead has no account). */
+export async function attendanceLeadUserId(executor: Db, employeeId: string): Promise<string | null> {
+  const rows = (await executor.execute(sql`
+    select l.user_id from core.attendance_leads a join core.employees l on l.id = a.lead_employee_id
+    where a.employee_id = ${employeeId} and l.user_id is not null and l.archived_at is null and l.status <> 'separated'`)) as unknown as { user_id: string }[];
+  return rows[0]?.user_id ?? null;
+}
+
+/**
+ * For time matters (hours, corrections, extra hours, time off): the people who count as "above" this person. The attendance lead comes
+ * first (attendance matters go to them), then the manager chain. A lead only holds the reach their ROLE gives them, so an attendance
+ * lead who is not a Team Lead gains nothing. Use managerChainUserIds for everything that is not about time.
+ */
+export async function timeChainUserIds(executor: Db, employeeId: string): Promise<string[]> {
+  const [lead, chain] = await Promise.all([attendanceLeadUserId(executor, employeeId), managerChainUserIds(executor, employeeId)]);
+  return lead ? [lead, ...chain.filter((id) => id !== lead)] : chain;
+}
+
+/** The people to tell first about a time matter: the attendance lead and the direct manager (or just the manager). */
+export async function timeNoticeUserIds(executor: Db, employeeId: string): Promise<string[]> {
+  const [lead, chain] = await Promise.all([attendanceLeadUserId(executor, employeeId), managerChainUserIds(executor, employeeId)]);
+  return [...new Set([...(lead ? [lead] : []), ...chain.slice(0, 1)])];
 }
 
 /** Friendly pre-check; the database trigger is the real guarantee. */
@@ -160,6 +184,17 @@ export async function applyReporting(tx: Tx, change: ReportingChange, actorId: s
 }
 
 /** Everyone below this sign-in account in the reporting chain (direct and indirect), as employee ids. Used to filter "team" scope lists. */
+/** For time matters: everyone below this person in the chain, plus the people who report their time to them as attendance lead. */
+export async function timeDownlineEmployeeIds(executor: Db, userId: string): Promise<string[]> {
+  const [below, direct] = await Promise.all([
+    downlineEmployeeIds(executor, userId),
+    executor.execute(sql`
+      select a.employee_id as id from core.attendance_leads a join core.employees l on l.id = a.lead_employee_id
+      where l.user_id = ${userId}`) as unknown as Promise<{ id: string }[]>,
+  ]);
+  return [...new Set([...below, ...direct.map((r) => r.id)])];
+}
+
 export async function downlineEmployeeIds(executor: Db, userId: string): Promise<string[]> {
   const rows = (await executor.execute(sql`
     with recursive down(id, depth) as (
@@ -173,4 +208,45 @@ export async function downlineEmployeeIds(executor: Db, userId: string): Promise
     )
     select distinct id from down`)) as unknown as { id: string }[];
   return rows.map((r) => r.id);
+}
+
+export type AttendanceLeadResult = { ok: true; changed: boolean } | { ok: false; error: string };
+
+/**
+ * Sets (or clears, with null) a person's attendance lead. The lead must be someone still with ERS, not the person, and not below the
+ * person in the chain (that would have people approving their own boss's time). Written to the person's history. Callers authorize.
+ */
+export async function applyAttendanceLead(tx: Tx, input: { employeeId: string; leadEmployeeId: string | null }, actorId: string): Promise<AttendanceLeadResult> {
+  const [emp] = await tx.select({ id: employees.id, archivedAt: employees.archivedAt }).from(employees).where(eq(employees.id, input.employeeId)).for("update");
+  if (!emp || emp.archivedAt) return { ok: false, error: "That person was not found." };
+
+  const [current] = await tx.select().from(attendanceLeads).where(eq(attendanceLeads.employeeId, emp.id)).limit(1);
+  if ((current?.leadEmployeeId ?? null) === input.leadEmployeeId) return { ok: true, changed: false };
+
+  if (input.leadEmployeeId) {
+    if (input.leadEmployeeId === emp.id) return { ok: false, error: "A person cannot be their own attendance lead." };
+    const [lead] = await tx.select({ archivedAt: employees.archivedAt, status: employees.status }).from(employees).where(eq(employees.id, input.leadEmployeeId)).limit(1);
+    if (!lead) return { ok: false, error: "That lead was not found." };
+    if (lead.archivedAt || lead.status === "separated") return { ok: false, error: "That lead is no longer with ERS." };
+    // The lead must not already report (directly or indirectly) to this person.
+    if (await wouldCreateCycle(tx, emp.id, input.leadEmployeeId)) return { ok: false, error: "That person reports to them, so they cannot be their attendance lead." };
+  }
+
+  if (input.leadEmployeeId) {
+    await tx
+      .insert(attendanceLeads)
+      .values({ employeeId: emp.id, leadEmployeeId: input.leadEmployeeId, setBy: actorId })
+      .onConflictDoUpdate({ target: attendanceLeads.employeeId, set: { leadEmployeeId: input.leadEmployeeId, setBy: actorId, setAt: new Date() } });
+  } else {
+    await tx.delete(attendanceLeads).where(eq(attendanceLeads.employeeId, emp.id));
+  }
+  await recordHistory(tx, {
+    employeeId: emp.id,
+    eventType: "profile_changed",
+    summary: `Attendance lead: ${await nameOf(tx, current?.leadEmployeeId ?? null)} → ${await nameOf(tx, input.leadEmployeeId)}`,
+    before: { attendanceLeadId: current?.leadEmployeeId ?? null },
+    after: { attendanceLeadId: input.leadEmployeeId },
+    changedBy: actorId,
+  });
+  return { ok: true, changed: true };
 }

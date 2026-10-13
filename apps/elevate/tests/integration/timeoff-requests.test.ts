@@ -596,3 +596,62 @@ describe("previewing a request", () => {
     expect(preview.data.balance).toEqual({ balance: 2, reserved: 1, available: 1 });
   });
 });
+
+describe("a second lead for time matters (attendance lead)", () => {
+  const setLead = async (employeeId: string, leadEmployeeId: string | null, actor = hr) => {
+    const org = await import("@/modules/org/actions");
+    as(actor);
+    return org.setAttendanceLead({ employeeId, leadEmployeeId });
+  };
+
+  it("lets both the attendance lead and an Executive manager decide time off, and tells both", async () => {
+    const exec = await person("ExecMgr", ["executive", "employee"]);
+    const tl = await person("AttLead", ["team_lead", "employee"]);
+    const va = await person("TwoLeads", ["employee"], { managerId: exec.employeeId });
+    await award(va.employeeId, 3);
+    expect(await setLead(va.employeeId, tl.employeeId)).toEqual({ ok: true, data: undefined });
+
+    const first = idOf(await request(va.user));
+    expect(await notes(tl.user.id, "timeoff.approval_needed")).toHaveLength(1);
+    expect(await notes(exec.user.id, "timeoff.approval_needed")).toHaveLength(1);
+    // the attendance lead decides the lead step; the request goes on to HR
+    expect((await decide(tl.user, first, "approve")).ok).toBe(true);
+    expect(await statusOf(first)).toBe("pending_hr");
+
+    // the Executive manager can decide another one
+    const second = idOf(await request(va.user));
+    expect((await decide(exec.user, second, "approve")).ok).toBe(true);
+    expect(await statusOf(second)).toBe("pending_hr");
+
+    // Removing the attendance lead takes the reach away; a stranger never had it
+    expect(await setLead(va.employeeId, null)).toEqual({ ok: true, data: undefined });
+    const third = idOf(await request(va.user));
+    expect(await decide(tl.user, third, "approve")).toEqual({ ok: false, error: NO_ACCESS });
+    expect((await decide(exec.user, third, "approve")).ok).toBe(true);
+  });
+
+  it("gives an attendance lead only the reach their role has (an employee-role lead decides nothing)", async () => {
+    const plain = await person("PlainLead", ["employee"]);
+    const va = await person("NeedsLead", ["employee"]);
+    await award(va.employeeId, 1);
+    expect(await setLead(va.employeeId, plain.employeeId)).toEqual({ ok: true, data: undefined });
+    const id = idOf(await request(va.user));
+    expect(await decide(plain.user, id, "approve")).toEqual({ ok: false, error: NO_ACCESS });
+  });
+
+  it("is HR's to set, refuses a person as their own lead, a lead below them, and someone who has left, and is written to the history", async () => {
+    const boss = await person("LoopBoss", ["team_lead", "employee"]);
+    const under = await person("LoopUnder", ["team_lead", "employee"], { managerId: boss.employeeId });
+    const gone = await person("LeadGone", ["team_lead", "employee"], { status: "separated" });
+    const target = await person("LeadTarget", ["employee"]);
+
+    expect(await setLead(target.employeeId, under.employeeId, under.user)).toEqual({ ok: false, error: NO_ACCESS });
+    expect(await setLead(target.employeeId, target.employeeId)).toMatchObject({ ok: false });
+    expect(await setLead(boss.employeeId, under.employeeId)).toMatchObject({ ok: false }); // they report to the person
+    expect(await setLead(target.employeeId, gone.employeeId)).toMatchObject({ ok: false });
+    expect(await setLead(target.employeeId, boss.employeeId)).toEqual({ ok: true, data: undefined });
+    expect(await setLead(target.employeeId, boss.employeeId)).toMatchObject({ ok: false }); // nothing changed
+    expect(await rows(sql`select 1 from core.employment_history where employee_id = ${target.employeeId} and summary like 'Attendance lead:%'`)).toHaveLength(1);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'org.attendance_lead' and target_id = ${target.employeeId}`)).toHaveLength(1);
+  });
+});

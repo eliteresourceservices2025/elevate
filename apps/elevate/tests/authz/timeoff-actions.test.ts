@@ -114,7 +114,7 @@ describe("leave request actions and queries that authorize first, every role", (
   const queryCases: { name: string; call: () => Promise<unknown>; allowed: RoleSlug[] }[] = [
     { name: "listMyRequests", call: () => requestQueries.listMyRequests(), allowed: EVERYONE },
     { name: "listRequestTypes", call: () => requestQueries.listRequestTypes(), allowed: EVERYONE },
-    { name: "listApprovalQueue", call: () => requestQueries.listApprovalQueue(), allowed: ["super_admin", "hr_admin", "team_lead"] },
+    { name: "listApprovalQueue", call: () => requestQueries.listApprovalQueue(), allowed: ["super_admin", "hr_admin", "team_lead", "executive"] },
     { name: "getTeamCalendar", call: () => requestQueries.getTeamCalendar("2030-01"), allowed: EVERYONE },
   ];
   for (const q of queryCases) {

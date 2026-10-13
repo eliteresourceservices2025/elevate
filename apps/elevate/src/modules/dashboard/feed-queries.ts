@@ -10,7 +10,7 @@ import { getTeamReview } from "@/modules/attendance/hours-queries";
 import { credentialCounts } from "@/modules/credentials/queries";
 import { jobHealth } from "@/modules/health/service";
 import { listMyTasks } from "@/modules/onboarding/queries";
-import { downlineEmployeeIds, todayInZone } from "@/modules/org/service";
+import { timeDownlineEmployeeIds, todayInZone } from "@/modules/org/service";
 import { countPendingChangeRequests } from "@/modules/people/queries";
 import { listReviews } from "@/modules/reviews/queries";
 import { getTeamCalendar, listApprovalQueue } from "@/modules/timeoff/request-queries";
@@ -100,7 +100,7 @@ async function orgOnboardingCounts(userId: string): Promise<{ overdueTasks: numb
   const scope = scopeFor(user, "onboarding.view");
   if (scope !== "all" && scope !== "team") return { overdueTasks: 0, leavingSoon: 0 };
   const today = todayInZone();
-  const ids = scope === "team" ? await downlineEmployeeIds(db, userId) : null;
+  const ids = scope === "team" ? await timeDownlineEmployeeIds(db, userId) : null;
   if (ids && ids.length === 0) return { overdueTasks: 0, leavingSoon: 0 };
   const restrict = ids ? sql`and t.employee_id in (${sql.join(ids.map((i) => sql`${i}::uuid`), sql`, `)})` : sql``;
   const [t] = (await db.execute(sql`
@@ -147,7 +147,7 @@ export async function getWhosOut(): Promise<WhosOut | null> {
   if (scope === "all" || scope === "team") {
     const end = new Date(`${today}T00:00:00Z`);
     end.setUTCDate(end.getUTCDate() + 6);
-    const ids = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+    const ids = scope === "team" ? await timeDownlineEmployeeIds(db, user.id) : null;
     if (!ids || ids.length > 0) {
       const restrict = ids ? sql`and e.id in (${sql.join(ids.map((i) => sql`${i}::uuid`), sql`, `)})` : sql``;
       const rows = (await db.execute(sql`

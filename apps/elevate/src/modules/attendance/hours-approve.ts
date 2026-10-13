@@ -6,7 +6,7 @@ import { ActionFailure } from "@/lib/run-action";
 import { formatInZone } from "@/lib/time";
 import { writeAudit } from "@/modules/audit/write";
 import { notify } from "@/modules/notifications/service";
-import { managerChainUserIds } from "@/modules/org/service";
+import { timeChainUserIds } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { replayClock } from "./clock";
 import { CLEAN_FLAGS, approvalKey, attendanceRows, dayState, latestApprovals } from "./hours-service";
@@ -30,7 +30,7 @@ export async function approvePersonWeek(actor: Actor, employeeId: string, weekSt
   const [person] = await db.select({ userId: employees.userId }).from(employees).where(and(eq(employees.id, employeeId), sql`${employees.archivedAt} is null`));
   if (!person) throw new ActionFailure("That person was not found.");
   if (person.userId === actor.id) throw new ActionFailure("Someone else must approve your hours.");
-  await authorize(actor as never, "hours.approve", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, employeeId) });
+  await authorize(actor as never, "hours.approve", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, employeeId) });
   if (new Date(`${weekStart}T00:00:00Z`).getUTCDay() !== 1) throw new ActionFailure("A week starts on a Monday.");
 
   const prefs = await prefsFor(db, employeeId);
