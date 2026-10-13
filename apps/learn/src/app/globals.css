@@ -1,0 +1,40 @@
+/* ELEVATE Learn base styles: ERS brand tokens, light and dark following the device, system fonts until the design pass. */
+:root {
+  --purple: #6c1aba;
+  --purple-dark: #4f1389;
+  --on-purple: #ffffff;
+  --gold: #e2be2b;
+  --ink: #231a33;
+  --muted: #5d5275;
+  --line: #d9d2e6;
+  --bg: #faf8fd;
+  --card: #ffffff;
+  --danger: #b00020;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --purple: #b98cee;
+    --purple-dark: #d7bdf6;
+    --on-purple: #1a1028;
+    --ink: #f1ecf8;
+    --muted: #b9aed0;
+    --line: #3a2f55;
+    --bg: #14101c;
+    --card: #1d1728;
+    --danger: #ff8a9b;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); line-height: 1.55; }
+body { margin: 0; }
+main { max-width: 44rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+header.site { border-bottom: 4px solid var(--gold); background: var(--card); }
+header.site div { max-width: 44rem; margin: 0 auto; padding: 0.9rem 1rem; }
+header.site strong { color: var(--purple-dark); font-size: 1.15rem; }
+h1 { font-size: 1.75rem; margin: 0 0 0.5rem; }
+p { margin: 0.5rem 0; }
+.muted { color: var(--muted); font-size: 0.92rem; }
+:focus-visible { outline: 3px solid var(--purple); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

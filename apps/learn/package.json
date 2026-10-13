@@ -1,0 +1,31 @@
+{
+  "name": "learn",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ELEVATE Learn: training app (HIPAA first). Separate subdomain and Vercel project; people arrive from ELEVATE through a one-time sign-in handoff.",
+  "scripts": {
+    "dev": "next dev -p 3200",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "next": "16.3.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "eslint-plugin-security": "^4.1.0",
+    "typescript": "^5",
+    "vitest": "^5.0.2"
+  },
+  "packageManager": "pnpm@12.5.1"
+}

@@ -10,6 +10,7 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 - `apps/elevate/` — the main Next.js app (`pnpm dev` from the repo root runs it)
 - `apps/safe-voice/` — separate anonymous app, deployed on its own subdomain (Phase 4.2; see the Safe Voice section)
+- `apps/learn/` — ELEVATE Learn, the training app (HIPAA training first; own subdomain; see the ELEVATE Learn section). **Scaffold only so far; the plan is in `docs/learn/`.**
 - `packages/` — shared code (empty for now)
 - `supabase/` — Supabase CLI config (repo root). The CLI is a dev dependency: `pnpm --filter elevate exec supabase ...` with `--workdir ../..`
 - `brand/` — ERS brand kit and logos; theme tokens live in `apps/elevate/src/app/globals.css`
@@ -398,6 +399,13 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 - **Contact support** (`src/modules/support/`, table `ops.support_requests`, migration 0051, page `/support`, permissions `support.create` for everyone and `support.manage` for HR and Super Admin): a short form (topic, title, what happened, optionally the page the person was on, which only a path inside the app is accepted for). It is **saved first**, HR and Super Admin are notified in the app (`support.new`), and it is **emailed straight away** to the support address (`DEFAULT_SUPPORT_EMAIL`, overridable with `SUPPORT_EMAIL`) with the person as reply-to (`OutgoingEmail.replyTo`). A missing or failing email service never loses the request (`emailed` records it). Five requests an hour per person (`support` policy). HR works an inbox on the same page and marks requests handled or reopens them (audited). The form warns against passwords, client names and patient information. The login screen and the public careers page show the address as a plain mailto link. Reached from the account menu ("Contact support") and Settings.
 - **Work anniversary reminders** (`runAnniversaryReminders`, `people/anniversary.ts` pure, daily 1:25 AM Phoenix, job `anniversary-reminders`, in the health registry; table `core.anniversary_notices`, one row per person and year): seven days before a start-date anniversary of **one year or more** (a missed day is made up until the day before, never on or after the day), **Super Admin, HR, every recruiter and the person's leads who hold the Team Lead role** get one in-app notice listing who and when. Executives in the chain are not notified. People who have left, people with no start date and first-year starters are skipped. A 29 February start falls on 28 February in a non-leap year.
+
+## ELEVATE Learn: HIPAA training (planned, scaffold only)
+
+- **Plan:** `docs/learn/` (start at `README.md`; seven documents covering decisions, architecture, data and security, course and exam, UX, testing and review, rollout). **Read it before touching `apps/learn` or adding `learn` tables.** Status: planning approved, only the empty app exists.
+- **Shape:** `apps/learn` is its own Next.js app and Vercel project at `learn.eliteresourceservices.com` (port 3200 locally). People use their ELEVATE account through a **one-time POST handoff** (60-second single-use token stored hashed; Learn then keeps its own session). A shared cookie across the parent domain was rejected because it would reach Safe Voice. Learn has no Supabase keys and none of ELEVATE's secrets; ELEVATE owns the `learn` schema migrations and the HR pages, jobs and certificate sync (into `talent.credentials`).
+- **Rules decided:** Full track (healthcare-client VAs) and Essentials track (internal staff); new hires within 30 days, renew every 12 months; modules in order with a server-measured minimum time; exam of 25 (or 15) questions, **85% to pass, 3 tries**, graded on the server by a definer function so the answer key never reaches the app role; leads see only passed / not yet, scores belong to the person, HR and the designated Privacy Officer; results kept 6 years, per-question answers 12 months; no patient data, no proctoring, no pay or hours computed from training time; overdue warns, never blocks.
+- **Constants** are in `apps/learn/src/lib/constants.ts` (with a test that keeps the agreed values).
 
 ## Adding a permission or action
 
