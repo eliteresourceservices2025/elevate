@@ -368,9 +368,12 @@ describe("the exam", () => {
     const asg2 = await assign(q.id, d);
     await finishModules(q.id, asg2);
     const a2 = await startExam(q.id, asg2);
-    const [it] = await items(a2);
+    const inAttempt = await items(a2);
+    const [it] = inAttempt;
+    // a question of the same bank that is NOT one of this attempt's
+    const outside = d.questionIds.find((id) => !inAttempt.some((i) => i.question_id === id))!;
     expect(await failure(app`select learn.save_answer(${q.id}::uuid, ${a2}::uuid, ${it.question_id}::uuid, ${["zzz"]}::text[])`)).toMatch(/bad_option/);
-    expect(await failure(app`select learn.save_answer(${q.id}::uuid, ${a2}::uuid, ${d.questionIds[0] === it.question_id ? d.questionIds[1] : d.questionIds[0]}::uuid, ${["a"]}::text[])`)).toMatch(/not_in_attempt|not_found/);
+    expect(await failure(app`select learn.save_answer(${q.id}::uuid, ${a2}::uuid, ${outside}::uuid, ${["a"]}::text[])`)).toMatch(/not_in_attempt|not_found/);
     // the answer can be changed before submitting
     await app`select learn.save_answer(${q.id}::uuid, ${a2}::uuid, ${it.question_id}::uuid, ${["b"]}::text[])`;
     await app`select learn.save_answer(${q.id}::uuid, ${a2}::uuid, ${it.question_id}::uuid, ${["a"]}::text[])`;

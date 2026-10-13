@@ -16,6 +16,7 @@ import { privacyPermissions } from "@/modules/privacy/permissions";
 import { peoplePermissions } from "@/modules/people/permissions";
 import { recruitingPermissions } from "@/modules/recruiting/permissions";
 import { reviewsPermissions } from "@/modules/reviews/permissions";
+import { learnPermissions } from "@/modules/learn/permissions";
 import { safevoicePermissions } from "@/modules/safevoice/permissions";
 import { signingPermissions } from "@/modules/signing/permissions";
 import { settingsPermissions } from "@/modules/settings/permissions";
@@ -42,6 +43,7 @@ export const PERMISSIONS = {
   ...signingPermissions,
   ...onboardingPermissions,
   ...reviewsPermissions,
+  ...learnPermissions,
   ...safevoicePermissions,
   ...assetsPermissions,
   ...credentialsPermissions,

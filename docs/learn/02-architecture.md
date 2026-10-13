@@ -35,16 +35,19 @@
 A shared cookie on `.eliteresourceservices.com` was rejected: the browser would send ELEVATE's auth cookie to
 `safevoice.eliteresourceservices.com` too, which breaks Safe Voice's promise. Instead:
 
-1. In ELEVATE a person clicks **HIPAA training** (menu item under "Learning"). The page `/learn/launch` requires a signed-in
-   AAL2 session and calls a server action that creates a **launch token**: 256 random bits, stored only as a SHA-256 hash in
+1. In ELEVATE a person clicks **HIPAA training** (menu item under "Learning", the page `/learn`, which already requires a
+   signed-in AAL2 session) and presses **Open HIPAA training** (it starts by itself with `?auto=1`). A server action
+   (`startLearnLaunch`, permission `learn.launch`, rate limit `learnLaunch`) creates a **launch token**: 256 random bits, stored only as a SHA-256 hash in
    `learn.launch_tokens` with the user id, expiry (60 seconds) and a one-use flag.
-2. ELEVATE renders a tiny page that **POSTs** the token to `https://learn.../auth/handoff` (a form post, so the token is never in
-   a URL, history or referrer).
+2. The browser then **POSTs** the token to `https://learn.../auth/handoff` with a form (so the token is never in a URL, history or
+   referrer). Learn accepts it only when the `Origin` is ELEVATE's address.
 3. Learn consumes it with a single atomic `UPDATE ... WHERE used_at IS NULL AND expires_at > now() RETURNING`, so a replay
    fails. It then creates a Learn session: a random 256-bit value in an `httpOnly`, `Secure`, `SameSite=Lax` cookie, stored as a
    hash in `learn.sessions` with user id, the sign-in methods ("password, totp") copied from ELEVATE's session, a 30-minute idle
    timeout and an 8-hour absolute limit.
-4. A visitor with no Learn session is redirected to ELEVATE's launch page (which signs them in with MFA first, then posts back).
+4. A visitor with no Learn session is redirected to ELEVATE's `/learn?auto=1` (which signs them in with MFA first, then posts
+   back). A failed handoff goes to `/expired`, which links to `/learn` without `auto`, so there is no loop. Signing out of Learn ends
+   only the Learn session (POST `/auth/signout`, accepted only from Learn's own pages) and returns to `/signed-out`, then ELEVATE.
 5. On every request Learn checks the session and that the account is still active (`learn.v_learners.active`); deactivating a
    person in ELEVATE ends their Learn access within the next request.
 
@@ -97,8 +100,7 @@ course version id.
 ## Hosting and environment
 
 - Vercel project `elevate-learn` (root `apps/learn`), region `sin1`, custom domain `learn.eliteresourceservices.com`.
-- Environment (names only): `LEARN_DATABASE_URL` (the `learn_app` role), `LEARN_SESSION_SECRET` (random, 32+ chars; changing it
-  signs everyone out), `NEXT_PUBLIC_ELEVATE_URL`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.
+- Environment (names only): `LEARN_DATABASE_URL` (the `learn_app` role), `NEXT_PUBLIC_ELEVATE_URL` (no session secret: a session is a random value and only its hash is stored), `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.
 - ELEVATE gains `NEXT_PUBLIC_LEARN_URL` (public address of Learn, like `NEXT_PUBLIC_SAFEVOICE_URL`) and
   `LEARN_LAUNCH_SECRET` is **not** needed: tokens are random values checked in the database, not signed.
 - No new paid service. Videos (release 3) are static assets with captions; hosting is decided with the owner then.

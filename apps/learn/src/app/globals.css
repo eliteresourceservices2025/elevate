@@ -36,5 +36,9 @@ header.site strong { color: var(--purple-dark); font-size: 1.15rem; }
 h1 { font-size: 1.75rem; margin: 0 0 0.5rem; }
 p { margin: 0.5rem 0; }
 .muted { color: var(--muted); font-size: 0.92rem; }
+ul.plain { list-style: none; padding: 0; margin: 1rem 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 0.75rem; padding: 1rem 1.1rem; margin: 0.75rem 0; }
+button { font: inherit; background: var(--purple); color: var(--on-purple); border: 0; border-radius: 0.5rem; padding: 0.6rem 1rem; cursor: pointer; }
+a { color: var(--purple-dark); }
 :focus-visible { outline: 3px solid var(--purple); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

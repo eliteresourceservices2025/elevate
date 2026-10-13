@@ -9,6 +9,12 @@
       "autoPort": true
     },
     {
+      "name": "learn-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "learn", "dev"],
+      "port": 3200
+    },
+    {
       "name": "safe-voice-dev",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "safe-voice", "dev"],

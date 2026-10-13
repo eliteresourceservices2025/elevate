@@ -39,7 +39,7 @@
 
 | Where | Variables |
 | --- | --- |
-| Learn on Vercel | `LEARN_DATABASE_URL`, `LEARN_SESSION_SECRET`, `NEXT_PUBLIC_ELEVATE_URL`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` |
+| Learn on Vercel | `LEARN_DATABASE_URL`, `NEXT_PUBLIC_ELEVATE_URL`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` |
 | ELEVATE on Vercel | `NEXT_PUBLIC_LEARN_URL` |
 
 Order of operations for each release: (1) migration against production with `DATABASE_URL_DIRECT`; (2) `ALTER ROLE learn_app
@@ -55,7 +55,7 @@ LOGIN PASSWORD '...'` out of band; (3) Vercel project, domain and variables; (4)
 - **Someone locked out of the exam:** HR page, "Grant a retry" with a reason (audited).
 - **Content mistake found after publishing:** publish a new version; mark "material" only if people must relearn it.
 - **Suspected cheating:** the Privacy Officer reviews attempt timing; a certificate can be revoked with a reason.
-- **Rotating `LEARN_SESSION_SECRET`:** signs everyone out; no data is lost.
+- **Signing everyone out of Learn:** `update learn.sessions set ended_at = now() where ended_at is null` (nothing else is lost).
 - **Backups and restore:** the `learn` schema is part of the same database backup; the restore test covers it.
 
 ## Cost

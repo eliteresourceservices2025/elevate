@@ -21,6 +21,7 @@ import {
   Award,
   Clock,
   Hourglass,
+  GraduationCap,
   ListChecks,
   UsersRound,
   type LucideIcon,
@@ -80,6 +81,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/assets", label: "Assets", icon: Boxes, description: "Equipment inventory and assignments.", access: { action: "assets.view", scopes: ["all", "team", "own"] } },
       { href: "/analytics", label: "Analytics", icon: BarChart3, description: "Headcount, turnover, attendance and hiring.", access: [{ action: "analytics.view", scopes: ["all", "team"] }, { action: "analytics.view_hiring", scopes: ["all"] }] },
       { href: "/safe-voice-cases", label: "Safe Voice cases", icon: ShieldQuestion, description: "Anonymous report handling (designated handlers only; Executives see counts).", access: [{ action: "safevoice.handle", scopes: ["all"] }, { action: "safevoice.view_counts", scopes: ["all"] }] },
+    ],
+  },
+  {
+    label: "Learning",
+    items: [
+      { href: "/learn", label: "HIPAA training", icon: GraduationCap, description: "Your assigned HIPAA training, exam and certificate (opens ELEVATE Learn)." },
     ],
   },
   {

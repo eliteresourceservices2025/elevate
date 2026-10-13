@@ -26,6 +26,8 @@ export const POLICIES = {
   signPublic: { requests: 120, window: "10 m" },
   /** Contact support: a few requests an hour per person. */
   support: { requests: 5, window: "1 h" },
+  /** Opening ELEVATE Learn (the sign-in handoff), per person. */
+  learnLaunch: { requests: 20, window: "10 m" },
   /** The header search box (it asks as people type, so the allowance is generous). */
   search: { requests: 200, window: "10 m" },
 } satisfies Record<string, Policy>;

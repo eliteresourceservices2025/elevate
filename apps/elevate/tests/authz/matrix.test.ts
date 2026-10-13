@@ -126,6 +126,7 @@ const EXPECTED: Record<string, string> = {
   "tour.complete": "O O O O O O",
   "people.manage_photo": "A A O O O O",
   "hours.mark_test": "A A T - - -",
+  "learn.launch": "O O O O O O",
   "support.create": "O O O O O O",
   "support.manage": "A A - - - -",
   "recruiting.manage_careers_page": "A A - A - -",
