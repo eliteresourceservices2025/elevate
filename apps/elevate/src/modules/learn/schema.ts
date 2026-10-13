@@ -433,3 +433,30 @@ export const sessions = learn
     (t) => [uniqueIndex("sessions_token_idx").on(t.tokenHash), index("sessions_user_idx").on(t.userId)],
   )
   .enableRLS();
+
+/** One row per reminder sent, so a reminder is never sent twice (daily 30 / 7 / 0 days, and one overdue notice a week). */
+export const reminders = learn
+  .table(
+    "reminders",
+    {
+      assignmentId: uuid("assignment_id")
+        .notNull()
+        .references(() => assignments.id),
+      /** d30, d7, d0 or overdue-YYYY-Www */
+      kind: text("kind").notNull(),
+      sentAt: stamp("sent_at"),
+    },
+    (t) => [primaryKey({ columns: [t.assignmentId, t.kind] }), check("reminders_kind_chk", sql`${t.kind} ~ '^(d30|d7|d0|overdue-[0-9]{4}-W[0-9]{2})$'`)],
+  )
+  .enableRLS();
+
+/** Which Learn certificates were recorded in ELEVATE's Certificates (so syncing is idempotent and a revocation can be followed). */
+export const certificateSync = learn
+  .table("certificate_sync", {
+    certificateId: uuid("certificate_id")
+      .primaryKey()
+      .references(() => certificates.id),
+    credentialId: uuid("credential_id").notNull(),
+    syncedAt: stamp("synced_at"),
+  })
+  .enableRLS();

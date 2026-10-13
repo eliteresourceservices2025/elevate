@@ -11,6 +11,10 @@ export const JOBS: Record<string, JobInfo> = {
   "document-expiry-reminders": { label: "Document expiry reminders", everyMinutes: DAILY },
   "credential-reminders": { label: "Certificate expiry reminders", everyMinutes: DAILY },
   "anniversary-reminders": { label: "Work anniversary reminders", everyMinutes: DAILY },
+  "learn-assign": { label: "HIPAA training assignments", everyMinutes: DAILY },
+  "learn-remind": { label: "HIPAA training reminders", everyMinutes: DAILY },
+  "learn-sync": { label: "Training certificates into Certificates", everyMinutes: 30 },
+  "learn-purge": { label: "Training clean-up", everyMinutes: DAILY },
   "document-pending-cleanup": { label: "Unfinished upload cleanup", everyMinutes: DAILY },
   "acknowledgment-reminders": { label: "Acknowledgment reminders", everyMinutes: DAILY },
   "daily-digest": { label: "Daily notification digest", everyMinutes: DAILY * 3 }, // weekdays only: a weekend is a gap

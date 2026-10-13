@@ -142,7 +142,8 @@ Do this **after** migration 0054 is applied to the production database (the `lea
 7. **Check:** sign in to ELEVATE, open **HIPAA training** in the menu, press **Open HIPAA training**. You should land on Learn saying "Hello, <your name>" and "You have no training assigned yet". Sign out of training: you return to ELEVATE.
 8. Optional: Settings > Git > **Ignored Build Step**, and Deployment Protection (Vercel Authentication) on Preview, as for the other projects. Add no Web Analytics or log drains to Learn: it shows people's names.
 
-9. **Load the course** (after counsel and the Privacy Officer have read it: `docs/learn/06-testing-and-review.md`). From your computer, with `DATABASE_URL_DIRECT` for production in `apps/elevate/.env.local`:
+9. **Migrations 0054 and 0055 must both be applied** before ELEVATE is deployed with the Training page and the new jobs (0055 adds the client setting "works with patient information", default on, and the reminder and sync tables). After deploying, press **Sync** in Inngest so the four new jobs (`learn-assign`, `learn-remind`, `learn-sync`, `learn-purge`) are registered.
+10. **Load the course** (after counsel and the Privacy Officer have read it: `docs/learn/06-testing-and-review.md`). From your computer, with `DATABASE_URL_DIRECT` for production in `apps/elevate/.env.local`:
 
    ```powershell
    pnpm learn:publish                     # saves it as a draft (safe to repeat)

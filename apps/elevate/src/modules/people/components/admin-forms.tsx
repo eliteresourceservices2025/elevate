@@ -51,12 +51,13 @@ export function NewClientForm() {
   const [name, setName] = useState("");
   const [timeZone, setTimeZone] = useState("America/New_York");
   const [holidayCalendar, setHolidayCalendar] = useState<"PH" | "US">("US");
+  const [handlesPhi, setHandlesPhi] = useState(true);
   return (
     <form
       className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-4 sm:items-end"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => createClient({ name, timeZone, holidayCalendar, isActive: true }), "Client added.", () => setName(""));
+        run(() => createClient({ name, timeZone, holidayCalendar, isActive: true, handlesPhi }), "Client added.", () => setName(""));
       }}
     >
       <ZoneList />
@@ -66,6 +67,7 @@ export function NewClientForm() {
         <option value="US">US holidays</option>
         <option value="PH">Philippine holidays</option>
       </SelectField>
+      <PhiToggle id="nc-phi" checked={handlesPhi} onChange={setHandlesPhi} />
       <Button type="submit" disabled={pending || !name.trim()}>
         Add client
       </Button>
@@ -73,19 +75,33 @@ export function NewClientForm() {
   );
 }
 
-export function ClientRow({ client }: { client: { id: string; name: string; timeZone: string; holidayCalendar: "PH" | "US"; isActive: boolean } }) {
+/** Whether the client's work involves patient information: it decides the HIPAA training track of the people assigned to it. */
+function PhiToggle({ id, checked, onChange }: { id: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label htmlFor={id} className="flex items-start gap-2 text-sm sm:col-span-2">
+      <input id={id} type="checkbox" className="mt-1" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>
+        Works with patient information
+        <span className="block text-xs text-muted-foreground">People assigned here take the full HIPAA training. Turn off for clients with no patient data.</span>
+      </span>
+    </label>
+  );
+}
+
+export function ClientRow({ client }: { client: { id: string; name: string; timeZone: string; holidayCalendar: "PH" | "US"; isActive: boolean; handlesPhi: boolean } }) {
   const { run, pending } = useRun();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(client.name);
   const [timeZone, setTimeZone] = useState(client.timeZone);
   const [holidayCalendar, setHolidayCalendar] = useState(client.holidayCalendar);
+  const [handlesPhi, setHandlesPhi] = useState(client.handlesPhi);
 
   if (!editing)
     return (
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="font-medium">{client.name}</span>
-          <span className="ml-2 text-sm text-muted-foreground">{client.timeZone} · {client.holidayCalendar === "PH" ? "PH" : "US"} holidays</span>
+          <span className="ml-2 text-sm text-muted-foreground">{client.timeZone} · {client.holidayCalendar === "PH" ? "PH" : "US"} holidays{client.handlesPhi ? " · patient information" : " · no patient information"}</span>
           {client.isActive ? null : <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
         </div>
         <div className="flex gap-1">
@@ -96,7 +112,7 @@ export function ClientRow({ client }: { client: { id: string; name: string; time
             variant="ghost"
             size="sm"
             disabled={pending}
-            onClick={() => run(() => updateClient({ clientId: client.id, name: client.name, timeZone: client.timeZone, holidayCalendar: client.holidayCalendar, isActive: !client.isActive }), client.isActive ? "Marked inactive." : "Marked active.")}
+            onClick={() => run(() => updateClient({ clientId: client.id, name: client.name, timeZone: client.timeZone, holidayCalendar: client.holidayCalendar, isActive: !client.isActive, handlesPhi: client.handlesPhi }), client.isActive ? "Marked inactive." : "Marked active.")}
           >
             {client.isActive ? "Mark inactive" : "Mark active"}
           </Button>
@@ -109,7 +125,7 @@ export function ClientRow({ client }: { client: { id: string; name: string; time
       className="grid gap-3 sm:grid-cols-4 sm:items-end"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => updateClient({ clientId: client.id, name, timeZone, holidayCalendar, isActive: client.isActive }), "Client updated.", () => setEditing(false));
+        run(() => updateClient({ clientId: client.id, name, timeZone, holidayCalendar, isActive: client.isActive, handlesPhi }), "Client updated.", () => setEditing(false));
       }}
     >
       <ZoneList />
@@ -119,6 +135,7 @@ export function ClientRow({ client }: { client: { id: string; name: string; time
         <option value="US">US holidays</option>
         <option value="PH">Philippine holidays</option>
       </SelectField>
+      <PhiToggle id={`ec-phi-${client.id}`} checked={handlesPhi} onChange={setHandlesPhi} />
       <div className="flex gap-2">
         <Button type="submit" disabled={pending}>
           Save

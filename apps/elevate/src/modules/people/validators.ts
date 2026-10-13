@@ -178,6 +178,8 @@ export const clientSchema = z.object({
   timeZone: z.string().refine(isValidTimeZone, "Choose a valid time zone"),
   holidayCalendar: z.enum(["PH", "US"]).default("US"),
   isActive: z.boolean().default(true),
+  /** The work involves patient information: people assigned here take the Full HIPAA training track. */
+  handlesPhi: z.boolean().default(true),
 });
 export const updateClientSchema = clientSchema.extend({ clientId: uuid });
 

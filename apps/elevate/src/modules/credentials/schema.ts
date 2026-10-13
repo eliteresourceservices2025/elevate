@@ -19,7 +19,7 @@ export const credentials = talent
       name: text("name").notNull(),
       issuedOn: date("issued_on", { mode: "string" }),
       expiresOn: date("expires_on", { mode: "string" }).notNull(),
-      /** manual = typed in by HR; talenthr = loaded from the TalentHR assets file. */
+      /** manual = typed in by HR; talenthr = loaded from the TalentHR assets file; learn = recorded from a certificate earned in ELEVATE Learn. */
       source: text("source").notNull().default("manual"),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
       createdBy: uuid("created_by").references(() => users.id),
@@ -30,7 +30,7 @@ export const credentials = talent
       uniqueIndex("credentials_unique_idx").on(t.employeeId, sql`lower(${t.name})`, t.expiresOn).where(sql`${t.archivedAt} is null`),
       index("credentials_expiry_idx").on(t.expiresOn),
       index("credentials_employee_idx").on(t.employeeId),
-      check("credentials_source_chk", sql`${t.source} in ('manual','talenthr')`),
+      check("credentials_source_chk", sql`${t.source} in ('manual','talenthr','learn')`),
       check("credentials_name_chk", sql`char_length(${t.name}) between 2 and 120`),
       check("credentials_dates_chk", sql`${t.issuedOn} is null or ${t.issuedOn} <= ${t.expiresOn}`),
     ],

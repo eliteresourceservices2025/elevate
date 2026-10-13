@@ -160,6 +160,8 @@ export const clients = core
       /** Which public holiday calendar applies to people assigned to this client ('US' or 'PH'). */
       holidayCalendar: text("holiday_calendar").notNull().default("US"),
       isActive: boolean("is_active").notNull().default(true),
+      /** The client's work involves patient information: people assigned to it take the Full HIPAA training track. On by default (safer). */
+      handlesPhi: boolean("handles_phi").notNull().default(true),
       createdBy: uuid("created_by"),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
       ...stamps,

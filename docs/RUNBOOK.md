@@ -172,6 +172,17 @@ Counts shown to the Executive hide any category with fewer than 5 reports. Handl
 
 Assets hold no prices or values. Item notes are for HR only: never put passwords, client names or patient information in them. Labels print from Assets > Print labels (or "Print this label" on an item); set margins to default and turn off headers and footers in the print window.
 
+## 5f. HIPAA training problems (ELEVATE Learn)
+
+- **"HIPAA training is not available yet" in ELEVATE:** `NEXT_PUBLIC_LEARN_URL` is missing on ELEVATE, or ELEVATE was not redeployed after setting it (docs/DEPLOY.md Part 5b).
+- **Someone lands on "Your sign-in link expired":** open HIPAA training from ELEVATE again. If it repeats for everyone, check `NEXT_PUBLIC_ELEVATE_URL` on Learn and the Learn project's function logs for `handoff failed: <code>`.
+- **Nobody is being assigned:** the course must be **published** (`pnpm learn:publish --publish --reviewer ... --counsel-date ...`); the `learn-assign` job does nothing until then. The Training status page and Attendance > Health show whether the job ran.
+- **Someone is on the wrong track:** the track comes from their client assignments. A client marked "works with patient information" (People > Clients) puts its people on Full; others are Essentials. HR can assign a track by hand on Training status.
+- **A person failed three times:** Training status > "More tries or time" gives more tries or exam minutes, with a reason (kept in the record).
+- **A certificate is missing from Certificates:** it is recorded by the `learn-sync` job within 30 minutes; a person with an account but no people record waits until they have one.
+- **A mistake in the course after publishing:** change the content, save and publish a new version (`pnpm learn:publish`), marking it `--material` only when people already trained must relearn it.
+- **Turning Learn off:** remove `NEXT_PUBLIC_LEARN_URL` from ELEVATE and redeploy.
+
 ## 6. Deploying changes (developer)
 
 - Deploy at the **Manila shift change**, not in the middle of a night shift (that is the US day, when most VAs are working). Check Attendance > Health before and after.

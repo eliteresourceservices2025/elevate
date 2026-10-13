@@ -5,6 +5,7 @@ import { runAckReminders } from "@/modules/announcements/jobs";
 import { purgeOrphanContentFiles } from "@/modules/announcements/content-files";
 import { processMirrorQueue, purgeJibbleData, runJibbleComparison, runJibbleRepair, runJibbleUnmatchedReport, syncJibblePeople } from "@/modules/jibble/jobs";
 import { runCredentialReminders } from "@/modules/credentials/jobs";
+import { runLearnAssign, runLearnPurge, runLearnReminders, runLearnSync } from "@/modules/learn/jobs";
 import { runAnniversaryReminders } from "@/modules/people/anniversary-jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
 import { runLeaveExpiry } from "@/modules/timeoff/jobs";
@@ -34,6 +35,30 @@ export const documentExpiryReminders = inngest.createFunction(
 export const credentialReminders = inngest.createFunction(
   { id: "credential-reminders", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 5 1 * * *` } },
   async ({ step }) => step.run("send-reminders", () => track("credential-reminders", () => runCredentialReminders(todayInZone()))),
+);
+
+/** Daily at 1:35 AM: HIPAA training assignments (new people, renewals, people who left, expired certificates). */
+export const learnAssign = inngest.createFunction(
+  { id: "learn-assign", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 35 1 * * *` } },
+  async ({ step }) => step.run("assign", () => track("learn-assign", () => runLearnAssign(todayInZone()))),
+);
+
+/** Daily at 8:50 AM Manila: HIPAA training reminders (30 days, 7 days, the due date) and the weekly overdue notices. */
+export const learnRemind = inngest.createFunction(
+  { id: "learn-remind", triggers: { cron: `TZ=${SECONDARY_TIMEZONE} 50 8 * * *` } },
+  async ({ step }) => step.run("remind", () => track("learn-remind", () => runLearnReminders(todayInZone()))),
+);
+
+/** Every 30 minutes: certificates earned in Learn are recorded in Certificates. */
+export const learnSync = inngest.createFunction(
+  { id: "learn-sync", triggers: { cron: "*/30 * * * *" } },
+  async ({ step }) => step.run("sync", () => track("learn-sync", () => runLearnSync())),
+);
+
+/** Daily at 3:50 AM: finished sign-in tokens and sessions, and exam answers older than 12 months. */
+export const learnPurge = inngest.createFunction(
+  { id: "learn-purge", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 50 3 * * *` } },
+  async ({ step }) => step.run("purge", () => track("learn-purge", () => runLearnPurge())),
 );
 
 /** Daily at 1:25 AM in the company time zone: seven days before a work anniversary, tell Super Admin, HR, recruiters and the person's leads. */
@@ -257,4 +282,4 @@ export const importPurge = inngest.createFunction(
   async ({ step }) => step.run("purge", () => track("import-purge", () => runImportPurge())),
 );
 
-export const functions = [documentExpiryReminders, credentialReminders, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge];
+export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge];

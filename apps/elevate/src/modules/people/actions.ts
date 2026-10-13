@@ -649,7 +649,7 @@ export async function updateClient(input: unknown): Promise<ActionResult> {
             action: "client.update",
             targetType: "client",
             targetId: clientId,
-            before: { name: before.name, timeZone: before.timeZone, holidayCalendar: before.holidayCalendar, isActive: before.isActive },
+            before: { name: before.name, timeZone: before.timeZone, holidayCalendar: before.holidayCalendar, isActive: before.isActive, handlesPhi: before.handlesPhi },
             after: v,
           },
           tx,

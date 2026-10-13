@@ -87,6 +87,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Learning",
     items: [
       { href: "/learn", label: "HIPAA training", icon: GraduationCap, description: "Your assigned HIPAA training, exam and certificate (opens ELEVATE Learn)." },
+      { href: "/training", label: "Training status", icon: ClipboardCheck, description: "Who has passed HIPAA training, who is not yet, and who is overdue.", access: { action: "learn.view_status", scopes: ["all", "team"] } },
     ],
   },
   {
