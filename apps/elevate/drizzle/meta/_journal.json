@@ -442,6 +442,13 @@
       "when": 1791918808835,
       "tag": "0062_checklist_hipaa_training",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1791920437276,
+      "tag": "0063_course_studio",
+      "breakpoints": true
     }
   ]
 }

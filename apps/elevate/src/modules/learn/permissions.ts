@@ -10,4 +10,6 @@ export const learnPermissions = definePermissions({
   "learn.assign": { roles: { super_admin: "all", hr_admin: "all" } },
   "learn.grant_retry": { roles: { super_admin: "all", hr_admin: "all" } },
   "learn.export_evidence": { roles: { super_admin: "all", hr_admin: "all" } },
+  /** The course studio: read versions, edit drafts, publish (publishing also needs someone other than the last editor). The Privacy Officer holds it through the flag. */
+  "learn.manage_content": { roles: { super_admin: "all", hr_admin: "all" }, alsoFlag: { privacy_officer: "all" } },
 });

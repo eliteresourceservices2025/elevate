@@ -1,5 +1,6 @@
 import {
   LifeBuoy,
+  PencilRuler,
   ShieldAlert,
   Bell,
   BarChart3,
@@ -89,6 +90,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Learning",
     items: [
       { href: "/learn", label: "My training", icon: GraduationCap, description: "Your assigned training (HIPAA, Cybersecurity basics), exams and certificates (opens ELEVATE Learn)." },
+      { href: "/course-studio", label: "Course studio", icon: PencilRuler, description: "Read and edit the training courses and exam questions, and publish new versions.", access: { action: "learn.manage_content", scopes: ["all"] } },
       { href: "/training", label: "Training status", icon: ClipboardCheck, description: "Who has passed each course (HIPAA, Cybersecurity basics), who is not yet, and who is overdue.", access: { action: "learn.view_status", scopes: ["all", "team"] } },
     ],
   },

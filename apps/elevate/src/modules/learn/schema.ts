@@ -29,6 +29,8 @@ export const courses = learn
       id: uuid("id").primaryKey().defaultRandom(),
       slug: text("slug").notNull(),
       title: text("title").notNull(),
+      /** Edited in the course studio from now on: the code files are no longer loaded over it (the publish command refuses). */
+      studioManaged: boolean("studio_managed").notNull().default(false),
       createdAt: stamp("created_at"),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
     },
@@ -59,6 +61,13 @@ export const courseVersions = learn
       retiredAt: timestamp("retired_at", { withTimezone: true }),
       createdBy: uuid("created_by").references(() => users.id),
       createdAt: stamp("created_at"),
+      /** Studio drafts: what this version changes, in the editor's own words (frozen once published). */
+      changeNote: text("change_note"),
+      /** Studio drafts: who saved last and when. Publishing needs someone else (a second pair of eyes). */
+      updatedBy: uuid("updated_by").references(() => users.id),
+      updatedAt: timestamp("updated_at", { withTimezone: true }),
+      /** Goes up by one with every studio save; a save made on an older number is refused instead of overwriting. */
+      editStamp: integer("edit_stamp").notNull().default(0),
     },
     (t) => [
       uniqueIndex("course_versions_number_idx").on(t.courseId, t.version),
@@ -117,6 +126,8 @@ export const questions = learn
       correctIds: text("correct_ids").array().notNull(),
       /** Why the answer is right. Shown to the person only after a passed attempt, by `attempt_review()`. */
       rationale: text("rationale").notNull(),
+      /** The same question across versions (a studio copy keeps it), so a diff can say "changed" rather than "removed and added". */
+      lineage: uuid("lineage").notNull().defaultRandom(),
       createdAt: stamp("created_at"),
     },
     (t) => [

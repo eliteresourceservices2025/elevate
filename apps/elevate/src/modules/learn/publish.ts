@@ -62,7 +62,11 @@ export async function loadCourse(sql: Sql, options: PublishOptions = {}): Promis
 
   return (await sql.begin(async (transaction) => {
     const tx = transaction as unknown as Sql;
-    const [existing] = await tx`select id from learn.courses where slug = ${course.slug}`;
+    const [existing] = await tx`select id, studio_managed from learn.courses where slug = ${course.slug}`;
+    // A course edited in the course studio is not loaded over from the code files (that would overwrite the studio's work).
+    if (existing?.studio_managed && !options.course) {
+      throw new Error(`The ${course.slug} course is edited in the course studio now. Change and publish it there; this command no longer loads it from code.`);
+    }
     const courseId: string =
       existing?.id ?? (await tx`insert into learn.courses (slug, title) values (${course.slug}, ${course.content.title}) returning id`)[0].id;
 
