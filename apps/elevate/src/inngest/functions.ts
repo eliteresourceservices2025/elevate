@@ -5,7 +5,8 @@ import { runAckReminders } from "@/modules/announcements/jobs";
 import { purgeOrphanContentFiles } from "@/modules/announcements/content-files";
 import { processMirrorQueue, purgeJibbleData, runJibbleComparison, runJibbleRepair, runJibbleUnmatchedReport, syncJibblePeople } from "@/modules/jibble/jobs";
 import { runCredentialReminders } from "@/modules/credentials/jobs";
-import { LEARN_COURSES } from "@/modules/learn/constants";
+import { listLearnCourses } from "@/modules/learn/course-catalog";
+import { db } from "@/lib/db";
 import { runLearnAssign, runLearnPurge, runLearnReminders, runLearnSync } from "@/modules/learn/jobs";
 import { runAnniversaryReminders } from "@/modules/people/anniversary-jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
@@ -46,7 +47,7 @@ export const learnAssign = inngest.createFunction(
       track("learn-assign", async () => {
         // One run per course; each does nothing until its course has a published version.
         const runs = [];
-        for (const course of LEARN_COURSES) runs.push(await runLearnAssign(todayInZone(), undefined, course.slug));
+        for (const course of await listLearnCourses(db)) runs.push(await runLearnAssign(todayInZone(), undefined, course.slug));
         return runs;
       }),
     ),

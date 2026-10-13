@@ -7,7 +7,6 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
-import { LEARN_COURSES } from "@/modules/learn/constants";
 import { TrainingRowActions } from "@/modules/learn/components/training-actions";
 import { AutoAssignCard } from "@/modules/learn/components/auto-assign-card";
 import { EvidenceCard } from "@/modules/learn/components/evidence-card";
@@ -23,10 +22,9 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
   const params = await searchParams;
   const filters = { state: one(params.state), q: one(params.q), course: one(params.course) };
   const paging = parsePaging({ page: one(params.page), size: one(params.size) });
-  const { rows, counts, info, canSeeResults, canManage, course, published } = await orNotFound(listTrainingStatus(filters, paging));
+  const { rows, counts, info, canSeeResults, canManage, course, courseLabel, courses, fixedTrack, published } = await orNotFound(listTrainingStatus(filters, paging));
   const auto = canManage ? await orNotFound(getAutoAssign(course)) : null;
   const evidenceClients = canManage ? await orNotFound(listEvidenceClients()) : null;
-  const courseLabel = LEARN_COURSES.find((c) => c.slug === course)?.label ?? "HIPAA";
   const withCourse = (extra: Record<string, string | undefined>) => {
     const q = new URLSearchParams();
     if (course !== "hipaa") q.set("course", course);
@@ -53,7 +51,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
       </div>
 
       <nav aria-label="Course" className="flex flex-wrap gap-2 text-sm">
-        {LEARN_COURSES.map((c) => (
+        {courses.map((c) => (
           <Link key={c.slug} href={c.slug === "hipaa" ? "/training" : `/training?course=${c.slug}`} aria-current={c.slug === course ? "true" : undefined} className="rounded-lg border px-3 py-1.5 font-medium hover:bg-secondary/50 aria-[current=true]:bg-primary aria-[current=true]:text-primary-foreground">
             {c.label}
           </Link>
@@ -148,7 +146,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
                 {canSeeResults ? <TableCell>{r.lastScore === null ? "-" : `${r.lastScore}%`}</TableCell> : null}
                 {canManage ? (
                   <TableCell>
-                    <TrainingRowActions course={course} fixedTrack={course !== "hipaa"} userId={r.userId} assignmentId={r.state === "open" || r.state === "overdue" ? r.assignmentId : null} canAssign={canManage} canGrant={canManage} />
+                    <TrainingRowActions course={course} fixedTrack={fixedTrack} userId={r.userId} assignmentId={r.state === "open" || r.state === "overdue" ? r.assignmentId : null} canAssign={canManage} canGrant={canManage} />
                   </TableCell>
                 ) : null}
               </TableRow>

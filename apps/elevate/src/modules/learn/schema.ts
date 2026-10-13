@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, customType, date, index, integer, jsonb, numeric, pgSchema, primaryKey, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
+import { clients } from "@/modules/people/schema";
 
 // ELEVATE Learn (HIPAA training), release 1. Everything here is the TRAINING RECORD, so most of it is append-only or frozen:
 // a published course version cannot change, progress, answers, attestations, certificates and grants are insert-only, and an
@@ -31,10 +32,24 @@ export const courses = learn
       title: text("title").notNull(),
       /** Edited in the course studio from now on: the code files are no longer loaded over it (the publish command refuses). */
       studioManaged: boolean("studio_managed").notNull().default(false),
+      /** `core` = a course for everyone (HIPAA, Cybersecurity; listed in code). `client_addon` = extra training for the people assigned to one client. */
+      kind: text("kind").notNull().default("core"),
+      /** The client an add-on belongs to (null for core courses). */
+      clientId: uuid("client_id").references(() => clients.id),
+      /** Add-ons only: short name for tabs, how notices name it, and a fixed track (core courses keep these in code). */
+      label: text("label"),
+      noun: text("noun"),
+      fixedTrack: text("fixed_track"),
       createdAt: stamp("created_at"),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
     },
-    (t) => [uniqueIndex("courses_slug_idx").on(t.slug), check("courses_slug_chk", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`)],
+    (t) => [
+      uniqueIndex("courses_slug_idx").on(t.slug),
+      check("courses_slug_chk", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
+      check("courses_kind_chk", sql`${t.kind} in ('core', 'client_addon')`),
+      check("courses_client_chk", sql`(${t.kind} = 'core' and ${t.clientId} is null) or (${t.kind} = 'client_addon' and ${t.clientId} is not null)`),
+      check("courses_fixed_track_chk", sql`${t.fixedTrack} is null or ${t.fixedTrack} in ('full', 'essentials', 'refresher')`),
+    ],
   )
   .enableRLS();
 

@@ -6,7 +6,8 @@ import { queueEmails, type QueuedEmail } from "@/modules/notifications/email-que
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds } from "@/modules/org/service";
 import { renderCertificatePdf } from "./certificate-pdf";
-import { HIPAA_SLUG, courseInfo } from "./constants";
+import { HIPAA_SLUG } from "./constants";
+import { findLearnCourse, listLearnCourses } from "./course-catalog";
 import { learnBaseUrl } from "./token";
 import { assignmentNeed, describeDue, isOverdue, isoWeekKey, reminderDue, type ReminderKind } from "./rules";
 
@@ -33,7 +34,9 @@ export type AssignRun = { skipped: boolean; mode?: "all" | "teams" | "paused"; a
  * and a second run on the same day changes nothing. Does nothing until a version of the course is published.
  */
 export async function runLearnAssign(today: string, scope?: Scope, courseSlug: string = HIPAA_SLUG): Promise<AssignRun> {
-  const info = courseInfo(courseSlug);
+  // Core courses only for now: a client add-on is assigned by the people on its client (a later step), never by this rule.
+  const info = await findLearnCourse(db, courseSlug);
+  if (!info || info.kind !== "core") return { skipped: true, assigned: 0, renewals: 0, cancelled: 0, expired: 0 };
   const [version] = await rows<{ version_id: string; course_id: string }>(sql`
     select v.id as version_id, c.id as course_id from learn.course_versions v join learn.courses c on c.id = v.course_id
     where c.slug = ${info.slug} and v.status = 'published' and c.archived_at is null`);
@@ -118,6 +121,9 @@ export type RemindRun = { personNotices: number; leadNotices: number; hrSummarie
  * attempts. Each notice is claimed with a unique row first, so a repeat run or a missed day never sends twice.
  */
 export async function runLearnReminders(today: string, scope?: Scope & { hrUserIds?: string[] }): Promise<RemindRun> {
+  // Course names for the wording (an archived add-on with an open assignment still has its name).
+  const catalog = await listLearnCourses(db, { includeArchived: true });
+  const courseInfo = (slug: string) => catalog.find((c) => c.slug === slug) ?? { slug, label: "Training", noun: "training" };
   const open = await rows<{ id: string; user_id: string; employee_id: string | null; name: string; due_on: string; slug: string }>(sql`
     select a.id, a.user_id, e.id as employee_id, co.slug,
            coalesce(nullif(btrim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), u.email) as name,

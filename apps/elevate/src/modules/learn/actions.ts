@@ -10,7 +10,7 @@ import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-act
 import { writeAudit } from "@/modules/audit/write";
 import { notify } from "@/modules/notifications/service";
 import { currentSignInMethods } from "@/modules/signing/session";
-import { courseInfo } from "./constants";
+import { describeCourse, findLearnCourse } from "./course-catalog";
 import { createLaunchToken } from "./service";
 import { handoffUrl, learnBaseUrl } from "./token";
 import { buildClientEvidence } from "./evidence";
@@ -64,10 +64,11 @@ export async function grantLearnRetry(input: unknown): Promise<ActionResult> {
         insert into learn.retry_grants (assignment_id, user_id, kind, extra_tries, extra_minutes, reason, granted_by)
         values (${v.assignmentId}, ${a.user_id}, ${v.kind}, ${v.kind === "tries" ? v.amount : 0}, ${v.kind === "time" ? v.amount : 0}, ${v.reason}, ${actor.id})`);
       await writeAudit({ actor, action: "learn.grant_retry", targetType: "learn_assignment", targetId: v.assignmentId, metadata: { kind: v.kind, amount: v.amount } }, tx);
+      const courseLabel = (await describeCourse(tx, a.slug)).label;
       await notify(tx, {
         userId: a.user_id,
         kind: "learn.retry",
-        title: v.kind === "tries" ? `You can try the ${courseInfo(a.slug).label} exam again` : `You have extra time for the ${courseInfo(a.slug).label} exam`,
+        title: v.kind === "tries" ? `You can try the ${courseLabel} exam again` : `You have extra time for the ${courseLabel} exam`,
         body: "Open training from the menu to continue.",
         link: "/learn",
       });
@@ -85,7 +86,8 @@ export async function assignLearnTraining(input: unknown): Promise<ActionResult<
     const parsed = assignTrainingSchema.safeParse(input);
     if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the form and try again.");
     const { userId, course } = parsed.data;
-    const info = courseInfo(course);
+    const info = await findLearnCourse(db, course);
+    if (!info) return fail("That course was not found.");
     const track = info.fixedTrack ?? parsed.data.track;
 
     const created = await db.transaction(async (tx) => {

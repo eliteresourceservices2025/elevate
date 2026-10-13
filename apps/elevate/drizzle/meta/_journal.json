@@ -456,6 +456,13 @@
       "when": 1791921465415,
       "tag": "0064_learn_preview",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1791922649112,
+      "tag": "0065_learn_client_addons",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,8 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { pageInfo, type PageInfo } from "@/lib/pagination";
 import { downlineEmployeeIds, todayInZone } from "@/modules/org/service";
-import { LEARN_COURSES, courseInfo } from "./constants";
+import { listLearnCourses, pickCourse } from "./course-catalog";
+import type { LearnCourseInfo } from "./constants";
 import { uuidArray } from "./jobs";
 import { describeDue } from "./rules";
 import { trainingFilterSchema } from "./validators";
@@ -55,7 +56,7 @@ type Raw = {
  * Everyone in the viewer's reach with their HIPAA training state. HR (and Super Admin) see everyone; a Team Lead sees people below
  * them in the reporting chain, with no scores. Filtered, counted and paged here (the lists are a few hundred people at most).
  */
-export async function listTrainingStatus(rawFilters: unknown, paging: { page: number; pageSize: number }): Promise<{ rows: TrainingRow[]; counts: TrainingCounts; info: PageInfo; canSeeResults: boolean; canManage: boolean; course: string; published: boolean }> {
+export async function listTrainingStatus(rawFilters: unknown, paging: { page: number; pageSize: number }): Promise<{ rows: TrainingRow[]; counts: TrainingCounts; info: PageInfo; canSeeResults: boolean; canManage: boolean; course: string; courseLabel: string; courses: LearnCourseInfo[]; fixedTrack: boolean; published: boolean }> {
   const user = await requireUser();
   // Team scope needs the resource's reporting chain, so a list checks the scope itself and narrows the rows to the viewer's downline.
   const scope = scopeFor(user, "learn.view_status");
@@ -64,13 +65,16 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
   const canManage = scopeFor(user, "learn.assign") === "all";
   const f = trainingFilterSchema.safeParse(rawFilters ?? {});
   const filters = f.success ? f.data : {};
-  const course = courseInfo(filters.course).slug;
+  const courses = await listLearnCourses(db);
+  const picked = pickCourse(courses, filters.course);
+  const course = picked.slug;
+  const extra = { courseLabel: picked.label, courses, fixedTrack: picked.fixedTrack !== null };
   const publishedRows = (await db.execute(sql`select 1 from learn.course_versions v join learn.courses c on c.id = v.course_id where c.slug = ${course} and v.status = 'published' limit 1`)) as unknown as unknown[];
   const published = publishedRows.length > 0;
   const today = todayInZone();
 
   const team = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
-  if (team && team.length === 0) return { rows: [], counts: { people: 0, passed: 0, open: 0, overdue: 0, none: 0 }, info: pageInfo(0, paging.page, paging.pageSize), canSeeResults, canManage, course, published };
+  if (team && team.length === 0) return { rows: [], counts: { people: 0, passed: 0, open: 0, overdue: 0, none: 0 }, info: pageInfo(0, paging.page, paging.pageSize), canSeeResults, canManage, course, ...extra, published };
 
   const raw = (await db.execute(sql`
     with latest as (
@@ -132,7 +136,7 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
   filtered.sort((a, b) => rank[a.state] - rank[b.state] || (a.dueOn ?? "").localeCompare(b.dueOn ?? "") || a.name.localeCompare(b.name));
 
   const info = pageInfo(filtered.length, paging.page, paging.pageSize);
-  return { rows: filtered.slice(info.offset, info.offset + info.pageSize), counts, info, canSeeResults, canManage, course, published };
+  return { rows: filtered.slice(info.offset, info.offset + info.pageSize), counts, info, canSeeResults, canManage, course, ...extra, published };
 }
 
 export type AutoAssign = { mode: "all" | "teams" | "paused"; teamIds: string[]; updatedAt: string | null; configured: boolean };
@@ -141,7 +145,7 @@ export type AutoAssign = { mode: "all" | "teams" | "paused"; teamIds: string[]; 
 export async function getAutoAssign(courseSlug: string): Promise<{ rule: AutoAssign; teams: { id: string; name: string }[] }> {
   const user = await requireUser();
   await authorize(user, "learn.assign");
-  const slug = courseInfo(courseSlug).slug;
+  const slug = pickCourse(await listLearnCourses(db), courseSlug).slug;
   const rule = (await db.execute(sql`
     select r.mode, r.team_ids::text[] as team_ids, r.updated_at::text as updated_at
     from learn.assignment_rules r join learn.courses c on c.id = r.course_id where c.slug = ${slug}`)) as unknown as { mode: AutoAssign["mode"]; team_ids: string[]; updated_at: string }[];
@@ -171,7 +175,7 @@ export async function getTrainingCounts(): Promise<TrainingCountsByCourse> {
   const people = team ? sql`and u.id in (select e.user_id from core.employees e where e.id = any(${uuidArray(team)}::uuid[]) and e.user_id is not null)` : sql``;
 
   const out: TrainingCountsByCourse = [];
-  for (const c of LEARN_COURSES) {
+  for (const c of await listLearnCourses(db)) {
     const rows = (await db.execute(sql`
       select
         (select count(distinct a.user_id)::int from learn.assignments a join learn.courses co on co.id = a.course_id join core.users u on u.id = a.user_id

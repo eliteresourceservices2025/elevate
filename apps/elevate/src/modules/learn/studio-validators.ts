@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { blockSchema } from "../../../../learn/src/content/schema";
-import { LEARN_COURSE_SLUGS } from "./constants";
+import { COURSE_SLUG_PATTERN } from "./constants";
 
 const uuid = z.string().uuid("That does not look right. Please try again.");
 const stamp = z.number().int().min(0);
 const short = z.string().trim().min(1, "This cannot be empty").max(160, "Use 160 characters or fewer");
 
 export const createDraftSchema = z.object({
-  course: z.enum(LEARN_COURSE_SLUGS),
+  course: z.string().max(80).regex(COURSE_SLUG_PATTERN, "That course was not found."),
   fromVersion: z.number().int().min(1).optional(),
   note: z.string().trim().min(3, "Say what this draft is for").max(300),
 });
