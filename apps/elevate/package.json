@@ -23,6 +23,7 @@
     "db:bootstrap": "tsx scripts/bootstrap-super-admins.mts",
     "learn:publish": "tsx scripts/learn-publish.mts",
     "learn:assign": "tsx scripts/learn-assign.mts",
+    "learn:export": "tsx scripts/learn-export-content.mts",
     "format": "prettier --write .",
     "test:integration": "vitest run --config vitest.integration.config.mts"
   },
