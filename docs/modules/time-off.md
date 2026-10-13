@@ -1,0 +1,20 @@
+# Time off
+
+> Moved out of CLAUDE.md to keep that file short. These are the full working notes for this area: read them before changing it. The hard rules are repeated in CLAUDE.md's "Module notes" index.
+
+## Time off: prize days and holidays (Phase 2.1)
+
+- ERS engages 1099 contractors, so there is **no accrual, policy table, carry-over or eligibility rule**. Days off exist only as **prize days** HR awards (`awardDays`, max 5 per award, whole or half days, reason required, optional "use by" date). UI copy says "prize days off", never "PTO" or "paid time off". If ERS ever adds paid leave, add policies and an accrual job on top of the same ledger.
+- `time.leave_ledger` (`src/modules/timeoff/`) is append-only (trigger). Entry types: award, usage, reversal, adjustment, expiry, opening_balance; `days` is signed and checked per type. Balance = sum of rows, never stored. Writes for one person take `lockEmployeeLedger()` (advisory lock) so balance checks cannot race. Nobody awards or adjusts their own days (another admin must). Balances never go below zero.
+- **Expiry** (`runLeaveExpiry`, daily 1:15 AM Phoenix): writes an `expiry` row (unique per award, so it is idempotent) for what was left unused. What is "left" comes from the pure replay in `ledger.ts`: usage draws from the days that expire soonest first, expired days cannot be drawn, a reversal gives back the most recent draws. Phase 2.2's request flow must write `usage`/`reversal` rows with `effective_on` set to the leave date and use the same lock.
+- **Holidays** (`time.holidays`, calendars PH and US, seeded for 2026 and 2027): US federal dates are marked verified; Philippine dates start unverified because each year's list is proclaimed by the government (HR checks them and ticks "verified"). `core.clients.holiday_calendar` picks a client's calendar; a person sees the Philippines plus their current clients' calendars.
+- A CHECK constraint passes when it evaluates to NULL: wrap nullable columns in `coalesce` (this bit `leave_ledger_reason_chk`).
+
+## Time off requests and approvals (Phase 2.2)
+
+- `time.leave_requests`: pending_lead -> pending_hr -> approved, or declined / cancelled. The lead step is decided by anyone above the person in the chain, including their attendance lead (`timeoff.approve` team scope: Team Lead and Executive); HR (`timeoff.approve_final`) decides the last step, may only **decline** (not approve) at the lead step, and a lead step that waits 4 working days is escalated to HR by the daily job. A leave type with `skip_hr` finishes at the lead. Nobody decides their own request or one they filed. Nobody above the person = HR decides alone.
+- **Days** are working days (Monday to Friday minus PH and client holidays) until schedules exist in 2.5; `workdays.ts` is the one place that rule lives. Requests cannot start in the past (HR files those, `timeoff.file_for_others`), prize-day types need 1 working day's notice, and two live requests for the same person may not overlap (a Postgres exclusion constraint, needs `btree_gist`).
+- **Ledger:** approval writes one `usage` row (effective on the first day, tagged with the request id) after `canTake()` passes inside the ledger lock; cancelling approved leave writes a `reversal` dated no earlier than the usage, tagged with the same request id so the replay returns exactly that request's days. Days cannot be used before they were awarded or after they expire.
+- **Invites:** approval and cancellation queue an email of kind `invite` with an .ics attachment (`ics.ts`, all-day, title "Day off", no leave type). Email attachments are stored in `ops.email_queue.attachment` and sent through Resend.
+- **Calendar** (`getTeamCalendar`): HR sees everyone with leave types and pending requests; a Team Lead their downline; an Executive only counts per day; everyone else their teammates by name (approved only, leave type hidden except their own).
+- E2E tip: in the dev server a page can load before React hydrates, and text typed into a controlled field before then is lost. Use `waitForHydration(page, selector)` from `tests/e2e/helpers.ts` before filling forms.
