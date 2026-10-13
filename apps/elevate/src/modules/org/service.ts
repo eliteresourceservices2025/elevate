@@ -186,12 +186,11 @@ export async function applyReporting(tx: Tx, change: ReportingChange, actorId: s
 /** Everyone below this sign-in account in the reporting chain (direct and indirect), as employee ids. Used to filter "team" scope lists. */
 /** For time matters: everyone below this person in the chain, plus the people who report their time to them as attendance lead. */
 export async function timeDownlineEmployeeIds(executor: Db, userId: string): Promise<string[]> {
-  const [below, direct] = await Promise.all([
-    downlineEmployeeIds(executor, userId),
-    executor.execute(sql`
-      select a.employee_id as id from core.attendance_leads a join core.employees l on l.id = a.lead_employee_id
-      where l.user_id = ${userId}`) as unknown as Promise<{ id: string }[]>,
-  ]);
+  // One after the other: starting both at once leaves the first promise unobserved if the second call throws before it returns.
+  const below = await downlineEmployeeIds(executor, userId);
+  const direct = (await executor.execute(sql`
+    select a.employee_id as id from core.attendance_leads a join core.employees l on l.id = a.lead_employee_id
+    where l.user_id = ${userId}`)) as unknown as { id: string }[];
   return [...new Set([...below, ...direct.map((r) => r.id)])];
 }
 

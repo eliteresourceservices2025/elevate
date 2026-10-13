@@ -7,37 +7,47 @@ ELEVATE's non-negotiables (RLS on every table, append-only evidence, least privi
 
 | Table | Purpose | Mutability |
 | --- | --- | --- |
-| `courses` | One row per course (HIPAA first), slug, owner | HR edits title |
-| `course_versions` | A numbered version with its content JSON, status draft, published or retired | Frozen by trigger once published |
-| `modules` (inside the version JSON, indexed in `module_index`) | Order, estimated minutes, minimum seconds, topic tags | Frozen with the version |
-| `question_bank` / `questions` | Question stem, options with stable ids, correct ids, rationale, topic tag, module link, status | Belongs to a version; frozen on publish |
-| `tracks` | Full, Essentials; which modules, exam size | With the version |
-| `client_addons` | A short module attached to a client | Versioned the same way |
-| `assignments` | Person, course, track, version, due date, reason (new hire, renewal, update), status | Status moves forward; never deleted |
-| `module_progress` | Events: started, completed (per person, module, version) | Append-only |
-| `module_time` | Server-validated seconds per person, module and day | Append-only increments |
-| `exam_attempts` | Attempt number, started, deadline, submitted, score, passed | Moves forward once; then final |
-| `exam_attempt_items` | The frozen question selection and option order for the attempt | Insert-only |
-| `exam_answers` | The person's answers | Insert-only; purged after 12 months |
-| `attestations` | Statement version, accepted at, sign-in methods, IP | Insert-only (trigger) |
-| `certificates` | Reference `HC-YYYY-XXXXXX`, person, course version, issued, ends, status | Insert-only; a revocation is a new row |
-| `retry_grants` | Extra tries or extra time granted by HR, with reason | Insert-only |
-| `launch_tokens`, `sessions` | Handoff and session hashes | Short-lived; purged |
-| `drills`, `drill_results` | Micro-drill scenarios and answers | Append-only |
+| `courses` | One row per course (HIPAA first), slug, title | HR edits title; archived, never deleted |
+| `course_versions` | A numbered version: lesson content JSON, exam rules (`exam_config`), status draft, published or retired, reviewer and counsel approval | Frozen by trigger once published; can only be retired; one published version per course |
+| `version_modules` | Per module: order, estimated minutes, minimum seconds (60%), screen count, tracks that include it | Frozen with the version |
+| `questions` | Stem, options with stable ids, **`correct_ids` and `rationale` (the answer key)**, topic, module | Frozen with the version; key unreadable by the app role |
+| `assignments` | Person, course, version, track, reason (new hire, renewal, update, manual), due date, status | Identity never changes; status only moves forward; never deleted |
+| `module_screens` | A screen the person opened | Insert-only |
+| `module_time` | Server-credited seconds per person, module and day | Only ever grows; never deleted |
+| `module_completions` | A module completed | Insert-only |
+| `exam_attempts` | Attempt number, start, **server deadline**, submitted, score, passed | Submitted once, then final; never deleted |
+| `exam_attempt_items` | The frozen question selection and shuffled option order | Insert-only |
+| `exam_answers` | The person's answers | Changeable only while the attempt is open; final once submitted; purged after 12 months |
+| `attestations` | Statement version, typed name, IP, sign-in methods | Insert-only; one per assignment |
+| `certificates` | Reference `HC-YYYY-XXXXXX`, holder name, version, track, issued, ends | Insert-only |
+| `certificate_revocations` | A revocation with who and why | Insert-only (a revoked certificate is shown as revoked, never edited) |
+| `retry_grants` | Extra tries or extra time granted by HR, with reason and who | Insert-only |
+| `launch_tokens`, `sessions` | Handoff and session hashes (never the values) | Short-lived; purged by `learn-purge` |
+
+Later releases add `client_addons`, `drills` and `drill_results` (append-only), and `ops.privacy_incidents` lives in ELEVATE.
 
 Score and answers: the person and HR (and the Privacy Officer) read them. Everything else, including team leads, reads only
 the **status view** (`learn.v_status`: assigned, in progress, passed, due, overdue, expires on).
 
-## Database roles
+## Database roles and functions (built in migration 0054)
 
-- `learn_app` (NOLOGIN at creation): SELECT on published content and its own rows (enforced by the application checking the
-  session user id in every query, plus RLS policies `TO learn_app` that require `user_id = current_setting('learn.user_id')::uuid`
-  set per transaction), INSERT on the append-only tables, UPDATE only on the specific columns that move forward, **no DELETE,
-  no access to `core`, `talent`, `ops` or `docs` tables**; reads people data only through the two views.
-- `learn_elevate`: not needed. ELEVATE uses its owner connection; its code goes through `src/modules/learn/` only.
-- The answer key (`correct_ids`, `rationale`) is **not readable by `learn_app` at all**. Grading runs in a `SECURITY DEFINER`
-  function `learn.grade_attempt(attempt_id)` owned by the migration owner, which compares stored answers with the key and
-  writes the score. The browser can never receive the key because the app role cannot read it either.
+- **`learn_app`** is created NOLOGIN (ops sets the password out of band). It has **SELECT only**, on its own rows (RLS policies
+  `TO learn_app` keyed on `learn.user_id`, set per transaction with `set_config`), the published content, the question text
+  and options (column grant: **no `correct_ids`, no `rationale`**), and two filtered views (`v_learners`, `v_staff_roles`: only
+  the signed-in person, never a list). It has **no INSERT, UPDATE or DELETE on any table**, no access to `core`, `talent`,
+  `ops` or `docs`, and no grant on `launch_tokens` or `sessions`.
+- **Everything it writes goes through `SECURITY DEFINER` functions** owned by the migration owner, each with a pinned
+  `search_path`, executable only by `learn_app` (EXECUTE is revoked from PUBLIC for every function in the schema):
+  `open_screen`, `credit_time`, `complete_module`, `start_exam`, `save_answer`, `grade_attempt`, `attempt_review`,
+  `accept_and_certify`, `verify_certificate`, `consume_launch_token`, `create_session`, `resolve_session`, `end_session`.
+  Rules (module order, screens opened, minimum time, tries, wait after a fail, deadline, name match) live in these functions,
+  not in the app, so a bug or a compromised app cannot skip them. Errors are raised as `learn:<code>`.
+- **ELEVATE** uses its owner connection and goes through `src/modules/learn/` only. It creates assignments, grants retries,
+  issues launch tokens and reads `learn.v_status` (status without scores) for team leads.
+- The answer key is read only inside `grade_attempt` and `attempt_review`. After a **failed** attempt `attempt_review` returns
+  only the missed module and topic (no right option, no reason); after a **passed** attempt it returns the full review.
+- Training time is credited by `credit_time`: at most 35 seconds per call and nothing if the previous credit for that module
+  was under 25 seconds ago, so a script cannot speed it up. A module needs every screen opened **and** the minimum seconds.
 
 ## Exam integrity
 

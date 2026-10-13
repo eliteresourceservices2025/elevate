@@ -379,6 +379,13 @@
       "when": 1791852553433,
       "tag": "0053_attendance_leads",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1791860844189,
+      "tag": "0054_learn_schema",
+      "breakpoints": true
     }
   ]
 }

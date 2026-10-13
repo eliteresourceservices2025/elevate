@@ -1,0 +1,435 @@
+import { sql } from "drizzle-orm";
+import { boolean, check, customType, date, index, integer, jsonb, numeric, pgSchema, primaryKey, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { users } from "@/modules/core/schema";
+
+// ELEVATE Learn (HIPAA training), release 1. Everything here is the TRAINING RECORD, so most of it is append-only or frozen:
+// a published course version cannot change, progress, answers, attestations, certificates and grants are insert-only, and an
+// exam is graded by `learn.grade_attempt()` (a definer function), so the app's own database role never reads the answer key.
+// The roles, grants, row-level-security policies, triggers, views and functions are in migration 0054; see docs/learn/03-data-and-security.md.
+
+export const learn = pgSchema("learn");
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+const stamp = (name: string) => timestamp(name, { withTimezone: true }).notNull().defaultNow();
+
+export const COURSE_VERSION_STATUSES = ["draft", "published", "retired"] as const;
+export const TRACKS = ["full", "essentials", "refresher"] as const;
+export const ASSIGNMENT_REASONS = ["new_hire", "renewal", "update", "manual"] as const;
+export const ASSIGNMENT_STATUSES = ["assigned", "in_progress", "passed", "expired", "cancelled"] as const;
+export const ATTEMPT_STATUSES = ["in_progress", "submitted"] as const;
+export const QUESTION_TYPES = ["single", "multiple", "true_false", "scenario"] as const;
+export const GRANT_KINDS = ["tries", "time"] as const;
+
+const list = (values: readonly string[]) => sql.raw(values.map((v) => `'${v}'`).join(","));
+
+export const courses = learn
+  .table(
+    "courses",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      slug: text("slug").notNull(),
+      title: text("title").notNull(),
+      createdAt: stamp("created_at"),
+      archivedAt: timestamp("archived_at", { withTimezone: true }),
+    },
+    (t) => [uniqueIndex("courses_slug_idx").on(t.slug), check("courses_slug_chk", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`)],
+  )
+  .enableRLS();
+
+export const courseVersions = learn
+  .table(
+    "course_versions",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      courseId: uuid("course_id")
+        .notNull()
+        .references(() => courses.id),
+      version: integer("version").notNull(),
+      status: text("status").notNull().default("draft"),
+      /** The lesson content: validated JSON blocks (never HTML). Frozen once published. */
+      content: jsonb("content").notNull().default(sql`'{}'::jsonb`),
+      /** Exam rules for this version: pass percent, tries, minutes and question counts per track, wait after a fail. */
+      examConfig: jsonb("exam_config").notNull(),
+      /** A material change sends the people already trained an update module. */
+      material: boolean("material").notNull().default(false),
+      reviewedBy: uuid("reviewed_by").references(() => users.id),
+      counselApprovedOn: date("counsel_approved_on", { mode: "string" }),
+      publishedAt: timestamp("published_at", { withTimezone: true }),
+      publishedBy: uuid("published_by").references(() => users.id),
+      retiredAt: timestamp("retired_at", { withTimezone: true }),
+      createdBy: uuid("created_by").references(() => users.id),
+      createdAt: stamp("created_at"),
+    },
+    (t) => [
+      uniqueIndex("course_versions_number_idx").on(t.courseId, t.version),
+      // One published version per course at a time.
+      uniqueIndex("course_versions_published_idx").on(t.courseId).where(sql`${t.status} = 'published'`),
+      check("course_versions_status_chk", sql`${t.status} in (${list(COURSE_VERSION_STATUSES)})`),
+      check("course_versions_published_chk", sql`(${t.status} = 'draft') or (${t.publishedAt} is not null)`),
+    ],
+  )
+  .enableRLS();
+
+/** The modules of a version (and which tracks include each): what the time and order rules are checked against. Frozen with the version. */
+export const versionModules = learn
+  .table(
+    "version_modules",
+    {
+      versionId: uuid("version_id")
+        .notNull()
+        .references(() => courseVersions.id),
+      moduleKey: text("module_key").notNull(),
+      position: smallint("position").notNull(),
+      title: text("title").notNull(),
+      estimatedMinutes: smallint("estimated_minutes").notNull(),
+      /** Active seconds a person must spend (60% of the estimate), counted on the server. */
+      minSeconds: integer("min_seconds").notNull(),
+      /** How many screens the module has; all must be opened before it can complete. */
+      screenCount: smallint("screen_count").notNull(),
+      tracks: text("tracks").array().notNull(),
+    },
+    (t) => [
+      primaryKey({ columns: [t.versionId, t.moduleKey] }),
+      uniqueIndex("version_modules_position_idx").on(t.versionId, t.position),
+      check("version_modules_key_chk", sql`${t.moduleKey} ~ '^[a-z0-9_]{1,40}$'`),
+      check("version_modules_time_chk", sql`${t.minSeconds} between 0 and 7200 and ${t.estimatedMinutes} between 1 and 120`),
+      check("version_modules_screens_chk", sql`${t.screenCount} between 1 and 60`),
+    ],
+  )
+  .enableRLS();
+
+/** Exam questions. `correct_ids` and `rationale` are the answer key: the app role has NO column grant on them. */
+export const questions = learn
+  .table(
+    "questions",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      versionId: uuid("version_id")
+        .notNull()
+        .references(() => courseVersions.id),
+      moduleKey: text("module_key").notNull(),
+      topic: text("topic").notNull(),
+      type: text("type").notNull(),
+      stem: text("stem").notNull(),
+      /** [{ "id": "a", "text": "..." }, ...] */
+      options: jsonb("options").notNull(),
+      /** The answer key (option ids). Never readable by the app role. */
+      correctIds: text("correct_ids").array().notNull(),
+      /** Why the answer is right. Shown to the person only after a passed attempt, by `attempt_review()`. */
+      rationale: text("rationale").notNull(),
+      createdAt: stamp("created_at"),
+    },
+    (t) => [
+      index("questions_version_idx").on(t.versionId, t.moduleKey),
+      check("questions_type_chk", sql`${t.type} in (${list(QUESTION_TYPES)})`),
+      check("questions_options_chk", sql`jsonb_typeof(${t.options}) = 'array' and jsonb_array_length(${t.options}) between 2 and 8`),
+      check("questions_correct_chk", sql`cardinality(${t.correctIds}) between 1 and 8`),
+      check("questions_text_chk", sql`char_length(${t.stem}) between 5 and 1500 and char_length(${t.rationale}) between 5 and 2000`),
+    ],
+  )
+  .enableRLS();
+
+export const assignments = learn
+  .table(
+    "assignments",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      courseId: uuid("course_id")
+        .notNull()
+        .references(() => courses.id),
+      /** The published version this assignment is taken on: the person finishes the version they started. */
+      versionId: uuid("version_id")
+        .notNull()
+        .references(() => courseVersions.id),
+      track: text("track").notNull(),
+      reason: text("reason").notNull(),
+      dueOn: date("due_on", { mode: "string" }).notNull(),
+      status: text("status").notNull().default("assigned"),
+      assignedAt: stamp("assigned_at"),
+      passedAt: timestamp("passed_at", { withTimezone: true }),
+      closedAt: timestamp("closed_at", { withTimezone: true }),
+      createdBy: uuid("created_by").references(() => users.id),
+    },
+    (t) => [
+      // One open assignment per person and course.
+      uniqueIndex("assignments_open_idx").on(t.userId, t.courseId).where(sql`${t.status} in ('assigned','in_progress')`),
+      index("assignments_due_idx").on(t.dueOn),
+      index("assignments_user_idx").on(t.userId),
+      check("assignments_track_chk", sql`${t.track} in (${list(TRACKS)})`),
+      check("assignments_reason_chk", sql`${t.reason} in (${list(ASSIGNMENT_REASONS)})`),
+      check("assignments_status_chk", sql`${t.status} in (${list(ASSIGNMENT_STATUSES)})`),
+    ],
+  )
+  .enableRLS();
+
+/** A screen the person opened (so a module cannot complete until every screen was seen). */
+export const moduleScreens = learn
+  .table(
+    "module_screens",
+    {
+      assignmentId: uuid("assignment_id")
+        .notNull()
+        .references(() => assignments.id),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      moduleKey: text("module_key").notNull(),
+      screenIndex: smallint("screen_index").notNull(),
+      seenAt: stamp("seen_at"),
+    },
+    (t) => [primaryKey({ columns: [t.assignmentId, t.moduleKey, t.screenIndex] })],
+  )
+  .enableRLS();
+
+/** Active seconds credited by the server per person, module and day. Only ever grows. */
+export const moduleTime = learn
+  .table(
+    "module_time",
+    {
+      assignmentId: uuid("assignment_id")
+        .notNull()
+        .references(() => assignments.id),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      moduleKey: text("module_key").notNull(),
+      day: date("day", { mode: "string" }).notNull(),
+      seconds: integer("seconds").notNull().default(0),
+      /** When the last credit was given: a credit is refused if the previous one was under 25 seconds ago. */
+      lastCreditAt: timestamp("last_credit_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      primaryKey({ columns: [t.assignmentId, t.moduleKey, t.day] }),
+      check("module_time_seconds_chk", sql`${t.seconds} between 0 and 14400`),
+    ],
+  )
+  .enableRLS();
+
+export const moduleCompletions = learn
+  .table(
+    "module_completions",
+    {
+      assignmentId: uuid("assignment_id")
+        .notNull()
+        .references(() => assignments.id),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      moduleKey: text("module_key").notNull(),
+      completedAt: stamp("completed_at"),
+    },
+    (t) => [primaryKey({ columns: [t.assignmentId, t.moduleKey] })],
+  )
+  .enableRLS();
+
+export const retryGrants = learn
+  .table(
+    "retry_grants",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      assignmentId: uuid("assignment_id")
+        .notNull()
+        .references(() => assignments.id),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      kind: text("kind").notNull(),
+      extraTries: smallint("extra_tries").notNull().default(0),
+      extraMinutes: smallint("extra_minutes").notNull().default(0),
+      reason: text("reason").notNull(),
+      grantedBy: uuid("granted_by")
+        .notNull()
+        .references(() => users.id),
+      grantedAt: stamp("granted_at"),
+    },
+    (t) => [
+      index("retry_grants_assignment_idx").on(t.assignmentId),
+      check("retry_grants_kind_chk", sql`${t.kind} in (${list(GRANT_KINDS)})`),
+      check("retry_grants_amount_chk", sql`(${t.kind} = 'tries' and ${t.extraTries} between 1 and 5 and ${t.extraMinutes} = 0) or (${t.kind} = 'time' and ${t.extraMinutes} between 5 and 60 and ${t.extraTries} = 0)`),
+      check("retry_grants_reason_chk", sql`char_length(${t.reason}) between 3 and 500`),
+    ],
+  )
+  .enableRLS();
+
+export const examAttempts = learn
+  .table(
+    "exam_attempts",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      assignmentId: uuid("assignment_id")
+        .notNull()
+        .references(() => assignments.id),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      attemptNo: smallint("attempt_no").notNull(),
+      status: text("status").notNull().default("in_progress"),
+      startedAt: stamp("started_at"),
+      /** Server value; answers saved after it are refused. */
+      deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(),
+      submittedAt: timestamp("submitted_at", { withTimezone: true }),
+      totalCount: smallint("total_count").notNull(),
+      correctCount: smallint("correct_count"),
+      scorePercent: numeric("score_percent", { precision: 5, scale: 2 }),
+      passed: boolean("passed"),
+    },
+    (t) => [
+      uniqueIndex("exam_attempts_number_idx").on(t.assignmentId, t.attemptNo),
+      // One open attempt per assignment.
+      uniqueIndex("exam_attempts_open_idx").on(t.assignmentId).where(sql`${t.status} = 'in_progress'`),
+      check("exam_attempts_status_chk", sql`${t.status} in (${list(ATTEMPT_STATUSES)})`),
+      check("exam_attempts_done_chk", sql`(${t.status} = 'submitted') = (${t.submittedAt} is not null and ${t.passed} is not null)`),
+    ],
+  )
+  .enableRLS();
+
+/** The questions of one attempt, in order, with the shuffled option order, fixed at the start. */
+export const examAttemptItems = learn
+  .table(
+    "exam_attempt_items",
+    {
+      attemptId: uuid("attempt_id")
+        .notNull()
+        .references(() => examAttempts.id),
+      position: smallint("position").notNull(),
+      questionId: uuid("question_id")
+        .notNull()
+        .references(() => questions.id),
+      optionOrder: text("option_order").array().notNull(),
+    },
+    (t) => [primaryKey({ columns: [t.attemptId, t.position] }), uniqueIndex("exam_attempt_items_question_idx").on(t.attemptId, t.questionId)],
+  )
+  .enableRLS();
+
+/** The person's answers. They may change an answer while the attempt is open; once it is submitted nothing can change. */
+export const examAnswers = learn
+  .table(
+    "exam_answers",
+    {
+      attemptId: uuid("attempt_id")
+        .notNull()
+        .references(() => examAttempts.id),
+      questionId: uuid("question_id")
+        .notNull()
+        .references(() => questions.id),
+      selectedIds: text("selected_ids").array().notNull(),
+      answeredAt: stamp("answered_at"),
+    },
+    (t) => [primaryKey({ columns: [t.attemptId, t.questionId] })],
+  )
+  .enableRLS();
+
+export const attestations = learn
+  .table(
+    "attestations",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      assignmentId: uuid("assignment_id")
+        .notNull()
+        .references(() => assignments.id),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      /** The version of the statement text the person accepted. */
+      statementVersion: text("statement_version").notNull(),
+      typedName: text("typed_name").notNull(),
+      ip: text("ip"),
+      /** How the person signed in to ELEVATE (for example password, totp), copied from the session. */
+      authMethods: text("auth_methods").array().notNull().default(sql`'{}'::text[]`),
+      acceptedAt: stamp("accepted_at"),
+    },
+    (t) => [uniqueIndex("attestations_assignment_idx").on(t.assignmentId), check("attestations_name_chk", sql`char_length(${t.typedName}) between 2 and 120`)],
+  )
+  .enableRLS();
+
+export const certificates = learn
+  .table(
+    "certificates",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      /** HC-YYYY-XXXXXX */
+      reference: text("reference").notNull(),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      assignmentId: uuid("assignment_id")
+        .notNull()
+        .references(() => assignments.id),
+      versionId: uuid("version_id")
+        .notNull()
+        .references(() => courseVersions.id),
+      track: text("track").notNull(),
+      /** The name printed on the certificate, fixed at issue so the document is stable. */
+      holderName: text("holder_name").notNull(),
+      issuedOn: date("issued_on", { mode: "string" }).notNull(),
+      endsOn: date("ends_on", { mode: "string" }).notNull(),
+      pdfSha256: text("pdf_sha256"),
+      createdAt: stamp("created_at"),
+    },
+    (t) => [
+      uniqueIndex("certificates_reference_idx").on(t.reference),
+      uniqueIndex("certificates_assignment_idx").on(t.assignmentId),
+      index("certificates_user_idx").on(t.userId, t.endsOn),
+      check("certificates_reference_chk", sql`${t.reference} ~ '^HC-[0-9]{4}-[A-Z2-9]{6}$'`),
+      check("certificates_dates_chk", sql`${t.issuedOn} < ${t.endsOn}`),
+    ],
+  )
+  .enableRLS();
+
+export const certificateRevocations = learn
+  .table(
+    "certificate_revocations",
+    {
+      certificateId: uuid("certificate_id")
+        .primaryKey()
+        .references(() => certificates.id),
+      revokedBy: uuid("revoked_by")
+        .notNull()
+        .references(() => users.id),
+      reason: text("reason").notNull(),
+      revokedAt: stamp("revoked_at"),
+    },
+    (t) => [check("certificate_revocations_reason_chk", sql`char_length(${t.reason}) between 3 and 500`)],
+  )
+  .enableRLS();
+
+/** One-time handoff tokens from ELEVATE. Only the hash is stored; a token works once, for 60 seconds. */
+export const launchTokens = learn
+  .table(
+    "launch_tokens",
+    {
+      tokenHash: bytea("token_hash").primaryKey(),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      authMethods: text("auth_methods").array().notNull().default(sql`'{}'::text[]`),
+      expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+      usedAt: timestamp("used_at", { withTimezone: true }),
+      createdAt: stamp("created_at"),
+    },
+    (t) => [index("launch_tokens_expiry_idx").on(t.expiresAt)],
+  )
+  .enableRLS();
+
+/** Learn's own sessions. Only the hash of the cookie value is stored. */
+export const sessions = learn
+  .table(
+    "sessions",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      tokenHash: bytea("token_hash").notNull(),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      authMethods: text("auth_methods").array().notNull().default(sql`'{}'::text[]`),
+      createdAt: stamp("created_at"),
+      lastSeenAt: stamp("last_seen_at"),
+      expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+      endedAt: timestamp("ended_at", { withTimezone: true }),
+    },
+    (t) => [uniqueIndex("sessions_token_idx").on(t.tokenHash), index("sessions_user_idx").on(t.userId)],
+  )
+  .enableRLS();
