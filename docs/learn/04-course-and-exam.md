@@ -14,7 +14,7 @@ by hand with a reason.
 
 **This course is about HIPAA only.** General cybersecurity habits (phishing and social engineering, passwords and sign-in codes,
 updates, home network, public Wi-Fi) are a separate course for the organization, "Cybersecurity basics for the ERS team"
-(`apps/learn/src/content/cybersecurity`, 2 modules, its own 15-question exam at 80%). HIPAA's own requirement that a workforce
+(`apps/learn/src/content/cybersecurity`, 8 modules, its own 15-question exam at 80%, sources in `09-cybersecurity-sources.md`). HIPAA's own requirement that a workforce
 is trained on malicious software and password management is covered in Module 4 in HIPAA terms, with a pointer to that course.
 
 ## Core curriculum (7 modules, about 80 minutes; version 2)

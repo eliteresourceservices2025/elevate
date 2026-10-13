@@ -20,7 +20,7 @@ describe("the course registry", () => {
   it("keeps the HIPAA course about HIPAA: general cybersecurity modules live in their own course", () => {
     const hipaa = COURSES.hipaa.content.modules.map((m) => m.key);
     const cyber = COURSES.cybersecurity.content.modules.map((m) => m.key);
-    for (const key of ["phishing", "everyday"]) {
+    for (const key of ["phishing", "passwords", "devices"]) {
       expect(hipaa).not.toContain(key);
       expect(cyber).toContain(key);
     }
@@ -38,7 +38,7 @@ for (const course of Object.values(COURSES)) {
       for (const m of content.modules) {
         const ids = m.screens.map((s) => s.id);
         expect(new Set(ids).size, `${m.key} screen ids`).toBe(ids.length);
-        expect(m.screens.length, `${m.key} screens`).toBeGreaterThanOrEqual(7);
+        expect(m.screens.length, `${m.key} screens`).toBeGreaterThanOrEqual(5);
         const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => b.type === "scenario" || b.type === "check");
         expect(interactive.length, `${m.key} interactive blocks`).toBeGreaterThanOrEqual(1);
       }

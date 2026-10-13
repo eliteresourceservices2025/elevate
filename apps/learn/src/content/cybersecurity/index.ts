@@ -1,6 +1,12 @@
 import type { CourseContent, QuestionSeed } from "../schema";
-import { everydayModule, everydayQuestions } from "./everyday";
+import { browsingModule, browsingQuestions } from "./browsing";
+import { devicesModule, devicesQuestions } from "./devices";
+import { malwareModule, malwareQuestions } from "./malware";
+import { passwordsModule, passwordsQuestions } from "./passwords";
 import { phishingModule, phishingQuestions } from "./phishing";
+import { physicalModule, physicalQuestions } from "./physical";
+import { responseModule, responseQuestions } from "./response";
+import { whyModule, whyQuestions } from "./why";
 
 /**
  * The Cybersecurity basics course: general good practice for everyone at ERS, kept apart from the HIPAA course so that one stays
@@ -15,10 +21,19 @@ export const cybersecurityCourse: CourseContent = {
     version: "v1-draft",
     text: "I have completed ERS's cybersecurity basics training. I understand that I must keep my passwords and sign-in codes private, use only approved devices, software and networks for work, keep my devices updated, and report anything suspicious or any lost device to my team lead and HR right away.",
   },
-  modules: [phishingModule, everydayModule],
+  modules: [whyModule, passwordsModule, phishingModule, malwareModule, browsingModule, devicesModule, physicalModule, responseModule],
 };
 
-export const cybersecurityQuestions: QuestionSeed[] = [...phishingQuestions, ...everydayQuestions];
+export const cybersecurityQuestions: QuestionSeed[] = [
+  ...whyQuestions,
+  ...passwordsQuestions,
+  ...phishingQuestions,
+  ...malwareQuestions,
+  ...browsingQuestions,
+  ...devicesQuestions,
+  ...physicalQuestions,
+  ...responseQuestions,
+];
 
 export const cybersecurityExamConfig = {
   passPercent: 80,

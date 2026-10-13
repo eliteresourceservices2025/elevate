@@ -7,7 +7,7 @@ export const phishingModule: CourseModule = {
   key: "phishing",
   title: "Phishing and social engineering",
   summary: "How attackers trick people, the signs to look for, and what to do when something feels off.",
-  estimatedMinutes: 11,
+  estimatedMinutes: 13,
   tracks: ["full"],
   keyPoints: [
     "Attackers target people, not only computers.",
@@ -15,6 +15,8 @@ export const phishingModule: CourseModule = {
     "Check the sender and the link before you act. Use a known channel to verify.",
     "Never give a password or MFA code to anyone who contacts you.",
     "If you clicked or answered, report it immediately. Speed limits the damage.",
+    "Requests to move money or change payment details are checked by phone on a number you already know.",
+    "Unexpected calls from \"tech support\" are scams. Hang up and never give remote access.",
   ],
   screens: [
     {
@@ -102,6 +104,39 @@ export const phishingModule: CourseModule = {
       ],
     },
     {
+      id: "imposters",
+      title: "Fake bosses, fake invoices and fake tech support",
+      blocks: [
+        { type: "paragraph", text: "Some of the most costly scams are not technical at all. They are well-written requests that look like normal business:" },
+        {
+          type: "list",
+          items: [
+            "**Business email imposters**: a message from a \"manager\" or \"supplier\" asking you to pay, change bank details or buy gift cards.",
+            "**Tech support scams**: a call or pop-up about a problem with your computer, asking for remote access or payment.",
+            "**Delivery and account tricks**: a \"missed delivery\" or \"account locked\" message with a link.",
+          ],
+        },
+        { type: "callout", tone: "warning", title: "The rule", text: "Never act on a request to move money, change payment details or give access without confirming it by phone, on a number you already know to be right, not the one in the message." },
+      ],
+    },
+    {
+      id: "newer-tricks",
+      title: "Newer tricks: QR codes, texts and cloned voices",
+      blocks: [
+        { type: "paragraph", text: "Attackers use whatever people have started to trust:" },
+        {
+          type: "list",
+          items: [
+            "**QR codes** on a poster, parking meter or in an email can lead to a fake page. Treat a QR code like a link.",
+            "**Text messages** pretending to be a delivery, a bank or your manager, with a link.",
+            "**Cloned voices and fake video** made by software can sound like someone you know. A voice is not proof.",
+            "**Fake job or support chat** that moves you to a messaging app and asks for details.",
+          ],
+        },
+        { type: "callout", tone: "tip", text: "If a call or message from someone you know asks for money, codes or secrets in a hurry, hang up and call them back on their usual number." },
+      ],
+    },
+    {
       id: "clicked",
       title: "If you clicked",
       blocks: [
@@ -147,5 +182,8 @@ export const phishingQuestions: QuestionSeed[] = [
   q("phishing", "Clicked", "single", "You realize you entered your password on a fake page. What is the best response?", ["Report it immediately to your lead and HR, and change the password through the official path", "Say nothing in case nothing happens", "Delete the email and move on", "Wait until the end of the day to report"], [0], "Speed limits damage. Report right away and use the official path to reset."),
   q("phishing", "Clicked", "true_false", "True or false: After clicking a bad link, you should delete the email so nobody finds out.", ["True", "False"], [1], "Do not delete it. The message helps the response, and hiding the event makes harm worse."),
   q("phishing", "Attachments", "single", "An unexpected attachment named \"Invoice.zip\" arrives from an unknown sender. What do you do?", ["Do not open it and report it", "Open it in a safe-looking window", "Forward it to your personal email to check", "Save it and open it later"], [0], "Unexpected attachments are a common way to deliver malware. Do not open them."),
+  q("phishing", "Imposters", "single", "An email that looks like it is from your manager asks you to buy gift cards urgently and send the codes. What should you do?", ["Confirm by phone on a number you already know, and report the message", "Buy them quickly, since it is your manager", "Reply to ask if it is really them", "Ask a coworker to buy them instead"], [0], "Urgent payment requests that appear to come from a boss are a classic scam. Confirm independently."),
+  q("phishing", "Tech support", "single", "A pop-up says your computer is infected and tells you to call a number and allow remote access. What do you do?", ["Close it, do not call, and report it to your lead", "Call and follow the instructions", "Allow remote access to be safe", "Give them your password to check"], [0], "Unexpected tech support messages are scams. Never give remote access or passwords to someone who contacted you."),
+  q("phishing", "QR codes", "single", "You find a QR code on a poster that promises a prize and asks you to sign in. What is the safest approach?", ["Do not scan it, or treat the destination like any untrusted link", "Scan it and sign in with your work password", "Scan it and share it with colleagues", "Scan it with a work phone only"], [0], "A QR code is just a link. Never enter work passwords on a page you reached from one."),
   q("phishing", "Calls", "single", "A caller claims to be from a government office and demands payment now or you face penalties. What is the right response?", ["Hang up and contact the organization through an official number you find yourself", "Pay to avoid the penalties", "Give your bank details to confirm", "Read back your patient list"], [0], "Pressure and payment demands are signs of fraud. Verify independently."),
 ];

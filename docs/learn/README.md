@@ -22,6 +22,7 @@ Postgres database and is read by ELEVATE for reports, reminders and certificates
 | [05-ux-and-ui.md](05-ux-and-ui.md) | Journeys, screens, copy rules, accessibility, brand, empty and error states |
 | [06-testing-and-review.md](06-testing-and-review.md) | Test layers, security and content review, launch gates, definition of done |
 | [07-rollout-and-operations.md](07-rollout-and-operations.md) | Three releases, ELEVATE-side work, environment, pilot, runbook, cost, open items |
+| [09-cybersecurity-sources.md](09-cybersecurity-sources.md) | The separate Cybersecurity basics course: its sources (CISA, FTC and three training lists) and what each topic maps to |
 | [08-source-check.md](08-source-check.md) | **Review packet:** every factual claim in the course with its HHS or regulation source, what was corrected, coverage against the paid course, open items for counsel |
 
 ## One-page summary

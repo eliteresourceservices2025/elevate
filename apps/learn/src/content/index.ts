@@ -16,5 +16,5 @@ export type CourseDefinition = {
 /** Every course ELEVATE Learn can load. Add a course here and it can be published and assigned like the others. */
 export const COURSES: Record<string, CourseDefinition> = {
   [HIPAA_COURSE_SLUG]: { slug: HIPAA_COURSE_SLUG, content: hipaaCourse, questions: hipaaQuestions, examConfig: hipaaExamConfig, minPoolFactor: 3 },
-  [CYBERSECURITY_COURSE_SLUG]: { slug: CYBERSECURITY_COURSE_SLUG, content: cybersecurityCourse, questions: cybersecurityQuestions, examConfig: cybersecurityExamConfig, minPoolFactor: 1.4 },
+  [CYBERSECURITY_COURSE_SLUG]: { slug: CYBERSECURITY_COURSE_SLUG, content: cybersecurityCourse, questions: cybersecurityQuestions, examConfig: cybersecurityExamConfig, minPoolFactor: 3 },
 };
