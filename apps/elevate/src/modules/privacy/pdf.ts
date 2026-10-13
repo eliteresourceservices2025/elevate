@@ -125,6 +125,13 @@ export async function renderMyDataPdf(data: MyData): Promise<Uint8Array> {
   if (data.acknowledgments.length === 0) empty("None yet.");
   for (const a of data.acknowledgments) write(`${a.at.slice(0, 10)}  ${a.kind}: ${a.title}${a.version ? ` (version ${a.version})` : ""}`, { indent: 6 });
 
+  heading("Training (ELEVATE Learn)");
+  if (data.training.length === 0) empty("None yet.");
+  for (const t of data.training) {
+    write(`${t.course} (version ${t.version}, ${t.track}): ${t.status}, assigned ${t.assignedOn}, due ${t.dueOn}${t.passedOn ? `, passed ${t.passedOn}` : ""}`, { indent: 6 });
+    write(`about ${t.minutesSpent} minutes${t.certificate ? `; certificate ${t.certificate}, valid until ${t.validUntil}` : ""}`, { indent: 12 });
+  }
+
   heading("Your requests");
   if (data.requests.length === 0) empty("None.");
   for (const r of data.requests) write(`${r.createdAt.slice(0, 10)}  ${r.category}: ${r.status}`, { indent: 6 });

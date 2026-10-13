@@ -37,6 +37,9 @@ export default async function Home() {
           ))}
         </ul>
       )}
+      <p>
+        <Link href="/record">My training record</Link>
+      </p>
       <form method="post" action="/auth/signout">
         <button type="submit" className="secondary">
           Sign out of training

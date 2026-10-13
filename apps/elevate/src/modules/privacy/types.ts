@@ -31,6 +31,8 @@ export type MyData = {
   clients: { client: string; startDate: string; endDate: string | null; hoursPerWeek: string | null }[];
   documents: { title: string; type: string; expiresOn: string | null; verified: boolean; uploadedAt: string }[];
   acknowledgments: { title: string; kind: string; version: number | null; at: string }[];
+  /** Training from ELEVATE Learn: dates, status, time and certificate references. Never answers or question text. */
+  training: { course: string; version: number; track: string; status: string; assignedOn: string; dueOn: string; passedOn: string | null; minutesSpent: number; certificate: string | null; validUntil: string | null }[];
   requests: { category: string; status: string; createdAt: string }[];
   activity: { at: string; action: string; by: string }[];
 };

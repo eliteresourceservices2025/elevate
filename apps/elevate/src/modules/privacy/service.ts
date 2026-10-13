@@ -57,6 +57,17 @@ export async function collectMyData(userId: string, email: string): Promise<MyDa
     left join docs.policies p on p.id = pv.policy_id
     where k.user_id = ${userId}
     order by k.acknowledged_at desc limit 200`);
+  // Training from ELEVATE Learn: dates, status, time and the certificate reference. No answers or question text.
+  const training = await query(sql`
+    select co.title, cv.version, a.track, a.status, a.assigned_at::date as assigned_on, a.due_on, a.passed_at::date as passed_on,
+           coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = a.id), 0)::int as seconds,
+           c.reference, c.ends_on
+    from learn.assignments a
+    join learn.courses co on co.id = a.course_id
+    join learn.course_versions cv on cv.id = a.version_id
+    left join learn.certificates c on c.assignment_id = a.id
+    where a.user_id = ${userId}
+    order by a.assigned_at desc limit 100`);
   // Audit entries about this person's own record or made by them. Who else acted is not named.
   const activity = await query(sql`
     select occurred_at, action, (actor_user_id = ${userId}) as by_me
@@ -95,6 +106,7 @@ export async function collectMyData(userId: string, email: string): Promise<MyDa
     clients: clients.map((c) => ({ client: String(c.name), startDate: dateOnly(c.start_date)!, endDate: dateOnly(c.end_date), hoursPerWeek: str(c.hours) })),
     documents: documents.map((d) => ({ title: String(d.title), type: String(d.type), expiresOn: dateOnly(d.expires_on), verified: d.verified_at !== null, uploadedAt: iso(d.created_at)! })),
     acknowledgments: acknowledgments.map((a) => ({ title: String(a.title), kind: String(a.kind), version: a.version === null ? null : Number(a.version), at: iso(a.acknowledged_at)! })),
+    training: training.map((t) => ({ course: String(t.title), version: Number(t.version), track: String(t.track), status: String(t.status), assignedOn: dateOnly(t.assigned_on)!, dueOn: dateOnly(t.due_on)!, passedOn: dateOnly(t.passed_on), minutesSpent: Math.round(Number(t.seconds) / 60), certificate: str(t.reference), validUntil: dateOnly(t.ends_on) })),
     requests: requests.map((r) => ({ category: CHANGE_CATEGORY_LABELS[r.category as ChangeCategory] ?? String(r.category), status: String(r.status), createdAt: iso(r.created_at)! })),
     activity: activity.map((a) => ({ at: iso(a.occurred_at)!, action: String(a.action), by: a.by_me ? "You" : "HR or system" })),
   };

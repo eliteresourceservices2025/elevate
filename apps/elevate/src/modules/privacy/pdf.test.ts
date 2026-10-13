@@ -31,6 +31,7 @@ const sample = (over: Partial<MyData> = {}): MyData => ({
   clients: [],
   documents: [],
   acknowledgments: [],
+  training: [],
   requests: [],
   activity: [],
   ...over,

@@ -170,6 +170,23 @@ export default async function MyDataPage() {
         )}
       </Section>
 
+      <Section title="Training (ELEVATE Learn)">
+        <p className="text-xs text-muted-foreground">Dates, status, time spent and certificates. Your answers are not included.</p>
+        {data.training.length === 0 ? (
+          <Empty>None yet.</Empty>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {data.training.map((t, i) => (
+              <li key={i}>
+                {t.course} (version {t.version}): {t.status}, assigned {t.assignedOn}, due {t.dueOn}
+                {t.passedOn ? `, passed ${t.passedOn}` : ""}, about {t.minutesSpent} minutes
+                {t.certificate ? `; certificate ${t.certificate}, valid until ${t.validUntil}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
       <Section title="Activity on your record">
         <p className="text-xs text-muted-foreground">What you did, and what was done to your record. Other people are not named.</p>
         {data.activity.length === 0 ? (

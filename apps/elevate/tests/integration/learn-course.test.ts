@@ -20,7 +20,8 @@ const app = postgres(appUrl.toString(), { max: 2, onnotice: () => {}, prepare: f
 
 const { loadCourse, assignCourse } = await import("@/modules/learn/publish");
 const { handleApi, handleVerify } = await import("../../../learn/src/lib/api");
-const { getOverview, getModuleView, getAttemptView } = await import("../../../learn/src/lib/queries");
+const { getOverview, getModuleView, getAttemptView, getRecord } = await import("../../../learn/src/lib/queries");
+const { collectMyData } = await import("@/modules/privacy/service");
 const { hipaaCourse, hipaaQuestions } = await import("../../../learn/src/content/hipaa");
 const { cybersecurityCourse } = await import("../../../learn/src/content/cybersecurity");
 const { sessionCookie } = await import("../../../learn/src/lib/cookie");
@@ -268,6 +269,23 @@ describe("a learner going through the course", () => {
     expect(reference).toMatch(/^ERSHC-\d{4}-[A-Z2-9]{6}$/);
     const certified = await getOverview(app, p.id, assignmentId);
     expect(certified!.certificate).toMatchObject({ reference, holderName: "Lia Santos", revoked: false });
+
+    // The person's own record: this assignment with its certificate, score and time; nobody else's rows.
+    const record = await getRecord(app, p.id);
+    const mine = record.find((r) => r.assignmentId === assignmentId)!;
+    expect(mine.status).toBe("passed");
+    expect(mine.attempts).toBeGreaterThanOrEqual(1);
+    expect(mine.certificate).toMatchObject({ reference, revoked: false });
+    expect(mine.scorePercent).toBeGreaterThanOrEqual(80);
+    expect(mine.minutesSpent).toBeGreaterThan(0);
+    const someoneElse = await makePerson("Zed", "Other");
+    expect((await getRecord(app, someoneElse.id)).length).toBe(0);
+    // My data includes it as dates and counts, with no answers.
+    const myData = await collectMyData(p.id, p.email);
+    const entry = myData.training.find((t) => t.certificate === reference)!;
+    expect(entry.status).toBe("passed");
+    expect(entry.track).toBe(mine.track);
+    expect(JSON.stringify(myData.training)).not.toMatch(/correct|answer|stem/i);
 
     // The PDF: only the signed-in owner gets it, and it is a real PDF named by the reference.
     const download = (cookieHeader: string | null, id = assignmentId) =>

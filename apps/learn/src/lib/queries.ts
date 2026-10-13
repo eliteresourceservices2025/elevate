@@ -230,3 +230,53 @@ export async function getAttemptView(sql: Sql, userId: string, attemptId: string
     } satisfies AttemptView;
   });
 }
+
+export type RecordEntry = {
+  assignmentId: string;
+  courseTitle: string;
+  version: number;
+  track: string;
+  status: string;
+  assignedOn: string;
+  dueOn: string;
+  passedOn: string | null;
+  /** Active reading time on the modules, in minutes (as credited by the server). */
+  minutesSpent: number;
+  attempts: number;
+  /** The score of the passing try (the person's own score: it is theirs to see). */
+  scorePercent: number | null;
+  certificate: { reference: string; issuedOn: string; endsOn: string; revoked: boolean } | null;
+};
+
+/** Everything the person has done in training, newest first: one entry per assignment, with its certificate if there is one. */
+export async function getRecord(sql: Sql, userId: string): Promise<RecordEntry[]> {
+  return withUser(sql, userId, async (tx) => {
+    const rows = await tx`
+      select a.id, co.title, cv.version, a.track, a.status, a.assigned_at::date::text as assigned_on, a.due_on::text as due_on,
+             a.passed_at::date::text as passed_on,
+             coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = a.id), 0)::int as seconds,
+             (select count(*) from learn.exam_attempts x where x.assignment_id = a.id and x.status = 'submitted')::int as attempts,
+             (select x.score_percent::float from learn.exam_attempts x where x.assignment_id = a.id and x.passed order by x.attempt_no desc limit 1) as score,
+             c.reference, c.issued_on::text as issued_on, c.ends_on::text as ends_on,
+             exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id) as revoked
+      from learn.assignments a
+      join learn.courses co on co.id = a.course_id
+      join learn.course_versions cv on cv.id = a.version_id
+      left join learn.certificates c on c.assignment_id = a.id
+      order by a.assigned_at desc`;
+    return rows.map((r) => ({
+      assignmentId: r.id as string,
+      courseTitle: r.title as string,
+      version: r.version as number,
+      track: r.track as string,
+      status: r.status as string,
+      assignedOn: r.assigned_on as string,
+      dueOn: r.due_on as string,
+      passedOn: (r.passed_on as string | null) ?? null,
+      minutesSpent: Math.round((r.seconds as number) / 60),
+      attempts: r.attempts as number,
+      scorePercent: (r.score as number | null) ?? null,
+      certificate: r.reference ? { reference: r.reference as string, issuedOn: r.issued_on as string, endsOn: r.ends_on as string, revoked: r.revoked as boolean } : null,
+    }));
+  });
+}
