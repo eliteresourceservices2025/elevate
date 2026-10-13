@@ -93,24 +93,25 @@ export function AssignClientForm({
 }) {
   const { run, pending } = useRun();
   const [clientId, setClientId] = useState("");
-  const [readiness, setReadiness] = useState<{ state: string; validUntil?: string; dueOn?: string; overdue?: boolean; endedOn?: string } | null>(null);
+  const [fetched, setFetched] = useState<{ key: string; value: { state: string; validUntil?: string; dueOn?: string; overdue?: boolean; endedOn?: string } } | null>(null);
   const chosen = clients.find((c) => c.id === clientId);
   const handlesPhi = Boolean(chosen?.handlesPhi);
+  const key = ;
+  const readiness = handlesPhi && fetched?.key === key ? fetched.value : null;
 
   // When the chosen client works with patient information, show where the person stands on HIPAA training. Warns only.
   useEffect(() => {
-    let cancelled = false;
-    setReadiness(null);
     if (!handlesPhi) return;
+    let cancelled = false;
     getTrainingReadiness({ employeeId })
       .then((r) => {
-        if (!cancelled && r.ok) setReadiness(r.data.readiness);
+        if (!cancelled && r.ok) setFetched({ key, value: r.data.readiness });
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [handlesPhi, employeeId, clientId]);
+  }, [handlesPhi, employeeId, key]);
   const [startDate, setStartDate] = useState(today);
   const [hours, setHours] = useState("");
   const open = clients.filter((c) => c.isActive);
