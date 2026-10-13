@@ -172,7 +172,7 @@ test("the Google Calendar card is for HR and recruiters only; connecting is refu
 });
 
 function wideBanner(): Buffer {
-  const { deflateSync } = require("node:zlib") as typeof import("node:zlib");
+  // A plain 1000 x 300 PNG: wide enough for the banner, made by the browser into the final JPEG
   const crcTable = Array.from({ length: 256 }, (_, n) => {
     let c = n;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
