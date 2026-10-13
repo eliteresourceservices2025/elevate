@@ -22,6 +22,11 @@ export type PublishOptions = {
   actorUserId?: string;
   /** Marks a version whose changes people already trained must relearn. */
   material?: boolean;
+  /**
+   * Save the SAME content as a new version even though it equals the latest one. A published version is frozen, so this is how a
+   * wrong reviewer or counsel date is corrected: the old version is retired and people already on it finish it.
+   */
+  newVersion?: boolean;
   /** Which course to load: a slug from the registry in apps/learn/src/content (default: hipaa). */
   courseSlug?: string;
   /** Tests may load a smaller course of their own. */
@@ -69,7 +74,7 @@ export async function loadCourse(sql: Sql, options: PublishOptions = {}): Promis
     const latest = versions[0];
 
     // The same content again: nothing to load (but it may still be published now).
-    const sameAsLatest = Boolean(latest) && stableEquals(latest.content as string, content) && stableEquals(latest.config as string, config);
+    const sameAsLatest = !options.newVersion && Boolean(latest) && stableEquals(latest.content as string, content) && stableEquals(latest.config as string, config);
     let versionId: string;
     let version: number;
     let created = false;
@@ -78,7 +83,7 @@ export async function loadCourse(sql: Sql, options: PublishOptions = {}): Promis
       versionId = latest.id as string;
       version = latest.version as number;
       if (latest.status === "draft") await replaceQuestions(tx, versionId, course.questions); // keeps a draft's bank current
-    } else if (latest && latest.status === "draft") {
+    } else if (latest && latest.status === "draft" && !options.newVersion) {
       // A draft is still editable: bring it up to date in place.
       versionId = latest.id as string;
       version = latest.version as number;

@@ -3,6 +3,9 @@
 //   pnpm learn:publish --course cybersecurity                  the same for another course (hipaa or cybersecurity)
 //   pnpm learn:publish --publish --reviewer you@ers.example --counsel-date 2026-11-01
 //                                                              makes it live; needs who reviewed it and when counsel approved
+//   pnpm learn:publish --publish --new-version --reviewer ... --counsel-date ...
+//                                                              the SAME content as a NEW version (the way to correct a wrong counsel
+//                                                              date: a published version is frozen; people on the old one finish it)
 // Publishing freezes the version. Run it against production only after counsel's review (docs/learn/06-testing-and-review.md).
 import { config } from "dotenv";
 import postgres from "postgres";
@@ -36,6 +39,7 @@ try {
     counselApprovedOn: value("counsel-date"),
     actorUserId: reviewerUserId,
     material: flag("material"),
+    newVersion: flag("new-version"),
     courseSlug: value("course"),
   });
   console.log(`${result.status === "published" ? "Published" : "Saved as a draft"}: version ${result.version} (${result.modules} modules, ${result.questions} questions)${result.created ? "" : ", no change"}.`);

@@ -142,6 +142,24 @@ describe("the separate cybersecurity course", () => {
     expect(accepted.status).toBe(200);
     expect(accepted.body.reference as string).toMatch(/^ERSCSC-\d{4}-[A-Z2-9]{6}$/);
   });
+
+  it("corrects a wrong counsel date with a new version of the same content, retiring the old one", async () => {
+    const before = await loadCourse(admin, { courseSlug: "cybersecurity" });
+    expect(before.status).toBe("published");
+    // The same content does nothing by itself (a published version is frozen)...
+    const same = await loadCourse(admin, { courseSlug: "cybersecurity", publish: true, reviewerUserId: reviewer.id, counselApprovedOn: "2025-11-01" });
+    expect(same.versionId).toBe(before.versionId);
+    const [still] = await admin`select counsel_approved_on::text as counsel from learn.course_versions where id = ${before.versionId}`;
+    expect(still.counsel).toBe("2026-11-01");
+    // ...a new version carries the corrected date and retires the old one.
+    const fixed = await loadCourse(admin, { courseSlug: "cybersecurity", publish: true, newVersion: true, reviewerUserId: reviewer.id, counselApprovedOn: "2026-10-13", actorUserId: reviewer.id });
+    expect(fixed.created).toBe(true);
+    expect(fixed.version).toBe(before.version + 1);
+    expect(fixed.status).toBe("published");
+    const rows = await admin`select version, status, counsel_approved_on::text as counsel from learn.course_versions where course_id = ${fixed.courseId} order by version`;
+    expect(rows.map((r) => [r.version, r.status])).toEqual([[before.version, "retired"], [fixed.version, "published"]]);
+    expect(rows.at(-1)!.counsel).toBe("2026-10-13");
+  });
 });
 
 describe("assigning the course", () => {
