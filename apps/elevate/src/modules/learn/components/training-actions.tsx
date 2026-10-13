@@ -57,9 +57,12 @@ export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant, 
   if (!canGrant) return null;
   if (!open)
     return (
-      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
-        More tries
-      </Button>
+      <span className="flex items-center gap-1">
+        <span className="text-xs text-muted-foreground">Already assigned</span>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+          More tries
+        </Button>
+      </span>
     );
   return (
     <form
