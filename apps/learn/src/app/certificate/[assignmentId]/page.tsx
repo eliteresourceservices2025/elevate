@@ -22,12 +22,20 @@ export default async function CertificatePage({ params }: { params: Promise<{ as
         </p>
         <section className="certificate" aria-label="Certificate">
           <p className="muted">Elite Resource Services</p>
-          <h1>Certificate of completion</h1>
+          <h1>Certificate of Completion</h1>
           <p>This certifies that</p>
           <p className="holder">{certificate.holderName}</p>
           <p>
             completed <strong>{assignment.courseTitle}</strong> training for Elite Resource Services.
           </p>
+          {overview.modules.length > 0 ? (
+            <>
+              <p>
+                <strong>This course covered:</strong>
+              </p>
+              <p className="muted small">{overview.modules.map((m) => m.title).join("  |  ")}</p>
+            </>
+          ) : null}
           <p>
             Issued {certificate.issuedOn} · Valid until {certificate.endsOn}
           </p>

@@ -1,7 +1,7 @@
 import { renderCertificatePdf } from "./certificate-pdf";
 import { resolveSession } from "./handlers";
 import { getOverview } from "./queries";
-import type { Sql } from "./db";
+import { withUser, type Sql } from "./db";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,6 +21,11 @@ export async function handleCertificateDownload(
   const overview = await getOverview(deps.sql, session.userId, assignmentId);
   if (!overview?.certificate || overview.certificate.revoked) return plain(404, "Not found");
   const { certificate, assignment } = overview;
+  // The transcript page: modules finished, the passing score and day, the address recorded at acceptance (read through the person's own rows).
+  const transcript = await withUser(deps.sql, session.userId, async (tx) => {
+    const [r] = await tx`select learn.certificate_transcript(${assignmentId}::uuid) as t`;
+    return (r?.t ?? null) as { modules?: { title: string; completedOn: string | null }[]; scorePercent?: number | null; takenOn?: string | null; ipAddress?: string | null } | null;
+  });
   const pdf = await renderCertificatePdf({
     holderName: certificate.holderName,
     courseTitle: assignment.courseTitle,
@@ -28,6 +33,10 @@ export async function handleCertificateDownload(
     endsOn: certificate.endsOn,
     reference: certificate.reference,
     verifyUrl: `${new URL(request.url).origin}/verify`,
+    modules: transcript?.modules ?? [],
+    scorePercent: transcript?.scorePercent ?? null,
+    takenOn: transcript?.takenOn ?? null,
+    ipAddress: transcript?.ipAddress ?? null,
   });
   return new Response(Buffer.from(pdf), {
     status: 200,

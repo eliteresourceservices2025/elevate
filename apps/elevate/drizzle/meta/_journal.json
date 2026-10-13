@@ -414,6 +414,13 @@
       "when": 1791877044252,
       "tag": "0058_learn_certificate_prefix",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1791878216042,
+      "tag": "0059_learn_certificate_transcript",
+      "breakpoints": true
     }
   ]
 }

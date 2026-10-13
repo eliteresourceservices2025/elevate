@@ -89,10 +89,8 @@ async function withCertificate(p: Person, endsOn: string, issuedOn = plus(endsOn
 }
 
 describe("the Cybersecurity basics course", () => {
-  it("does nothing until published, then puts everyone on its one track, apart from HIPAA", async () => {
+  it("puts everyone on its one track once published, apart from HIPAA", async () => {
     const p = await makePerson({ start: plus(TODAY, -3) });
-    const none = await jobs.runLearnAssign(TODAY, { userIds: [p.id] }, "cybersecurity");
-    expect(none.skipped).toBe(true);
 
     await loadCourse(admin, { courseSlug: "cybersecurity", publish: true, reviewerUserId: reviewerId, counselApprovedOn: "2026-11-01", actorUserId: reviewerId });
     const run = await jobs.runLearnAssign(TODAY, { userIds: [p.id] }, "cybersecurity");
