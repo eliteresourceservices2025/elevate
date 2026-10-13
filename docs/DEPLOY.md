@@ -94,6 +94,8 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"        
    | `SAFEVOICE_HANDLER_DATABASE_URL` | the `safevoice_handler` string |
    | `NEXT_PUBLIC_SAFEVOICE_URL` | the Safe Voice address (set after Part 5, then redeploy) |
 
+   Optional addresses (each has a built-in default, set only to change it): `CAREERS_EMAIL` (where people write with questions about applying, shown on the careers page footer; default `elitetsp@ersva.com`) and `SUPPORT_EMAIL` (where Contact support and the sign-in screen's "Trouble signing in?" point; technical trouble only; default is the technical support address).
+
    Not needed on Vercel: `DATABASE_URL_DIRECT`, any `JIBBLE_*` (add `JIBBLE_ACCESS_TOKEN` only when a team is ready for it), `GOOGLE_*` (only for interview calendars), `TALENTHR_API_KEY` (used from your own computer, Part 8).
 4. Settings > Deployment Protection: keep Vercel Authentication on for **Preview** deployments.
 5. Deploy.
