@@ -1,4 +1,5 @@
 import {
+  LifeBuoy,
   ShieldAlert,
   Bell,
   BarChart3,
@@ -87,15 +88,21 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Learning",
     items: [
-      { href: "/learn", label: "HIPAA training", icon: GraduationCap, description: "Your assigned HIPAA training, exam and certificate (opens ELEVATE Learn)." },
-      { href: "/incidents", label: "Privacy incidents", icon: ShieldAlert, description: "Report a privacy or security mistake or worry; the privacy team handles reports here." },
-      { href: "/training", label: "Training status", icon: ClipboardCheck, description: "Who has passed HIPAA training, who is not yet, and who is overdue.", access: { action: "learn.view_status", scopes: ["all", "team"] } },
+      { href: "/learn", label: "My training", icon: GraduationCap, description: "Your assigned training (HIPAA, Cybersecurity basics), exams and certificates (opens ELEVATE Learn)." },
+      { href: "/training", label: "Training status", icon: ClipboardCheck, description: "Who has passed each course (HIPAA, Cybersecurity basics), who is not yet, and who is overdue.", access: { action: "learn.view_status", scopes: ["all", "team"] } },
     ],
   },
   {
     label: "Admin",
     items: [
       { href: "/settings", label: "Settings", icon: Settings, description: "Roles, policies, templates, time zones and audit log." },
+    ],
+  },
+  {
+    label: "Speak up",
+    items: [
+      { href: "/incidents", label: "Privacy incidents", icon: ShieldAlert, description: "Report a privacy or security mistake or worry; the privacy team handles reports here." },
+      { href: "/support", label: "Contact support", icon: LifeBuoy, description: "Something not working in ELEVATE? Ask for help." },
     ],
   },
 ];

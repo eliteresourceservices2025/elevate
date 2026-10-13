@@ -73,18 +73,8 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
                 );
               })}
             </ul>
-          </div>
-        ))}
-        {safeVoiceUrl ? (
-          <div>
-            {collapsed ? (
-              <>
-                <p className="sr-only">Speak up</p>
-                <div aria-hidden className="mx-2 mb-2 border-t border-sidebar-foreground/15" />
-              </>
-            ) : (
-              <p className={groupLabel}>Speak up</p>
-            )}
+            {group.label === "Speak up" && safeVoiceUrl ? (
+          <div className="mt-0.5">
             {/* An ordinary link to a separate site: no referrer is sent, so the anonymous page never learns it came from ELEVATE */}
             <a
               href={safeVoiceUrl}
@@ -100,7 +90,9 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
             </a>
             {collapsed ? null : <p className="px-2.5 pt-1 text-xs text-sidebar-foreground/80">Anonymous: no sign-in, nothing links it to you.</p>}
           </div>
-        ) : null}
+            ) : null}
+          </div>
+        ))}
       </nav>
     </div>
   );

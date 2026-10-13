@@ -7,6 +7,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
+import { LEARN_COURSES } from "@/modules/learn/constants";
 import { TrainingRowActions } from "@/modules/learn/components/training-actions";
 import { listTrainingStatus } from "@/modules/learn/queries";
 
@@ -17,9 +18,17 @@ const TRACK: Record<string, string> = { full: "Full", essentials: "Essentials", 
 
 export default async function TrainingPage({ searchParams }: PageProps<"/training">) {
   const params = await searchParams;
-  const filters = { state: one(params.state), q: one(params.q) };
+  const filters = { state: one(params.state), q: one(params.q), course: one(params.course) };
   const paging = parsePaging({ page: one(params.page), size: one(params.size) });
-  const { rows, counts, info, canSeeResults, canManage } = await orNotFound(listTrainingStatus(filters, paging));
+  const { rows, counts, info, canSeeResults, canManage, course, published } = await orNotFound(listTrainingStatus(filters, paging));
+  const courseLabel = LEARN_COURSES.find((c) => c.slug === course)?.label ?? "HIPAA";
+  const withCourse = (extra: Record<string, string | undefined>) => {
+    const q = new URLSearchParams();
+    if (course !== "hipaa") q.set("course", course);
+    for (const [k, v] of Object.entries(extra)) if (v) q.set(k, v);
+    const s = q.toString();
+    return s ? `/training?${s}` : "/training";
+  };
 
   const chips: { label: string; state?: string; n: number }[] = [
     { label: "Everyone", n: counts.people },
@@ -34,14 +43,27 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
       <div>
         <h1 className="text-2xl font-bold">Training status</h1>
         <p className="mt-1 max-w-3xl text-muted-foreground">
-          HIPAA training for each person: passed, not yet, or overdue. {canSeeResults ? "As HR you also see tries and the latest score." : "Scores stay with the person and HR."}
+          {courseLabel} training for each person: passed, not yet, or overdue. {canSeeResults ? "As HR you also see tries and the latest score." : "Scores stay with the person and HR."}
         </p>
       </div>
+
+      <nav aria-label="Course" className="flex flex-wrap gap-2 text-sm">
+        {LEARN_COURSES.map((c) => (
+          <Link key={c.slug} href={c.slug === "hipaa" ? "/training" : `/training?course=${c.slug}`} aria-current={c.slug === course ? "true" : undefined} className="rounded-lg border px-3 py-1.5 font-medium hover:bg-secondary/50 aria-[current=true]:bg-primary aria-[current=true]:text-primary-foreground">
+            {c.label}
+          </Link>
+        ))}
+      </nav>
+      {!published ? (
+        <p role="note" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          This course is not published yet, so nobody is assigned and people cannot be added. Publishing needs a reviewer and the date counsel approved it.
+        </p>
+      ) : null}
 
       <ul className="flex flex-wrap gap-2 text-sm" aria-label="Filter by status">
         {chips.map((c) => (
           <li key={c.label}>
-            <Link href={c.state ? `/training?state=${c.state}` : "/training"} aria-current={filters.state === c.state ? "true" : undefined} className="rounded-full border px-3 py-1 hover:bg-secondary/50 aria-[current=true]:bg-primary aria-[current=true]:text-primary-foreground">
+            <Link href={withCourse({ state: c.state })} aria-current={filters.state === c.state ? "true" : undefined} className="rounded-full border px-3 py-1 hover:bg-secondary/50 aria-[current=true]:bg-primary aria-[current=true]:text-primary-foreground">
               {c.label}: {c.n}
             </Link>
           </li>
@@ -49,6 +71,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
       </ul>
 
       <form method="get" action="/training" className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-3" aria-label="Search the list">
+        {course !== "hipaa" ? <input type="hidden" name="course" value={course} /> : null}
         <div className="space-y-1">
           <Label htmlFor="t-q">Search</Label>
           <Input id="t-q" name="q" defaultValue={filters.q ?? ""} placeholder="Name or team" className="w-60" />
@@ -100,7 +123,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
                 {canSeeResults ? <TableCell>{r.lastScore === null ? "-" : `${r.lastScore}%`}</TableCell> : null}
                 {canManage ? (
                   <TableCell>
-                    <TrainingRowActions userId={r.userId} assignmentId={r.state === "open" || r.state === "overdue" ? r.assignmentId : null} canAssign={canManage} canGrant={canManage} />
+                    <TrainingRowActions course={course} fixedTrack={course !== "hipaa"} userId={r.userId} assignmentId={r.state === "open" || r.state === "overdue" ? r.assignmentId : null} canAssign={canManage} canGrant={canManage} />
                   </TableCell>
                 ) : null}
               </TableRow>
@@ -108,7 +131,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
           </TableBody>
         </Table>
       )}
-      <PagerLinks info={info} basePath="/training" query={{ state: filters.state, q: filters.q }} label="people" />
+      <PagerLinks info={info} basePath="/training" query={{ state: filters.state, q: filters.q, course: course !== "hipaa" ? course : undefined }} label="people" />
     </div>
   );
 }

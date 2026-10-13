@@ -6,7 +6,7 @@ import { queueEmails } from "@/modules/notifications/email-queue";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds } from "@/modules/org/service";
 import { renderCertificatePdf } from "./certificate-pdf";
-import { HIPAA_SLUG } from "./constants";
+import { HIPAA_SLUG, courseInfo } from "./constants";
 import { learnBaseUrl } from "./token";
 import { assignmentNeed, describeDue, isOverdue, isoWeekKey, reminderDue, type ReminderKind } from "./rules";
 
@@ -32,10 +32,11 @@ export type AssignRun = { skipped: boolean; assigned: number; renewals: number; 
  * and marks passed assignments whose certificate has ended as expired. Safe to repeat: a person with an open assignment is skipped,
  * and a second run on the same day changes nothing. Does nothing until a version of the course is published.
  */
-export async function runLearnAssign(today: string, scope?: Scope): Promise<AssignRun> {
+export async function runLearnAssign(today: string, scope?: Scope, courseSlug: string = HIPAA_SLUG): Promise<AssignRun> {
+  const info = courseInfo(courseSlug);
   const [version] = await rows<{ version_id: string; course_id: string }>(sql`
     select v.id as version_id, c.id as course_id from learn.course_versions v join learn.courses c on c.id = v.course_id
-    where c.slug = ${HIPAA_SLUG} and v.status = 'published' and c.archived_at is null`);
+    where c.slug = ${info.slug} and v.status = 'published' and c.archived_at is null`);
   if (!version) return { skipped: true, assigned: 0, renewals: 0, cancelled: 0, expired: 0 };
 
   // People who left, or whose account was closed: their open assignments end.
@@ -72,18 +73,19 @@ export async function runLearnAssign(today: string, scope?: Scope): Promise<Assi
   for (const p of people) {
     const need = assignmentNeed({ today, startDate: p.start_date, openAssignment: p.open_id !== null, latestCertificateEndsOn: p.cert_ends, assignedToPhiClient: p.phi });
     if (!need.assign) continue;
+    const track = info.fixedTrack ?? need.track;
     const made = await db.transaction(async (tx) => {
       const inserted = (await tx.execute(sql`
         insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on)
-        select ${p.user_id}, ${version.course_id}, ${version.version_id}, ${need.track}, ${need.reason}, ${need.dueOn}::date
+        select ${p.user_id}, ${version.course_id}, ${version.version_id}, ${track}, ${need.reason}, ${need.dueOn}::date
         where not exists (select 1 from learn.assignments a where a.user_id = ${p.user_id} and a.course_id = ${version.course_id} and a.status in ('assigned', 'in_progress'))
         returning id`)) as unknown as { id: string }[];
       if (inserted.length === 0) return false;
       await notify(tx, {
         userId: p.user_id,
         kind: "learn.assigned",
-        title: need.reason === "renewal" ? "Your HIPAA training needs renewing" : "HIPAA training is assigned to you",
-        body: `Please finish it by ${need.dueOn}. It takes about an hour and your progress is saved.`,
+        title: need.reason === "renewal" ? `Your ${info.noun} needs renewing` : `${info.noun.charAt(0).toUpperCase()}${info.noun.slice(1)} is assigned to you`,
+        body: `Please finish it by ${need.dueOn}. Your progress is saved as you go.`,
         link: "/learn",
       });
       return true;
@@ -95,7 +97,7 @@ export async function runLearnAssign(today: string, scope?: Scope): Promise<Assi
   }
 
   if (assigned || cancelled.length || expired.length) {
-    await writeAudit({ actor: null, action: "learn.assign_run", metadata: { assigned, renewals, cancelled: cancelled.length, expired: expired.length } });
+    await writeAudit({ actor: null, action: "learn.assign_run", metadata: { course: info.slug, assigned, renewals, cancelled: cancelled.length, expired: expired.length } });
   }
   return { skipped: false, assigned, renewals, cancelled: cancelled.length, expired: expired.length };
 }
@@ -110,11 +112,11 @@ export type RemindRun = { personNotices: number; leadNotices: number; hrSummarie
  * attempts. Each notice is claimed with a unique row first, so a repeat run or a missed day never sends twice.
  */
 export async function runLearnReminders(today: string, scope?: Scope & { hrUserIds?: string[] }): Promise<RemindRun> {
-  const open = await rows<{ id: string; user_id: string; employee_id: string | null; name: string; due_on: string }>(sql`
-    select a.id, a.user_id, e.id as employee_id,
+  const open = await rows<{ id: string; user_id: string; employee_id: string | null; name: string; due_on: string; slug: string }>(sql`
+    select a.id, a.user_id, e.id as employee_id, co.slug,
            coalesce(nullif(btrim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), u.email) as name,
            a.due_on::text as due_on
-    from learn.assignments a join core.users u on u.id = a.user_id
+    from learn.assignments a join core.users u on u.id = a.user_id join learn.courses co on co.id = a.course_id
     left join lateral (select * from core.employees x where x.user_id = a.user_id and x.archived_at is null order by x.created_at desc limit 1) e on true
     where a.status in ('assigned', 'in_progress') and u.archived_at is null and (e.id is null or e.status <> 'separated')
       ${onUsers(sql`a.user_id`, scope)}`);
@@ -141,7 +143,7 @@ export async function runLearnReminders(today: string, scope?: Scope & { hrUserI
       await notify(db, {
         userId: a.user_id,
         kind: "learn.reminder",
-        title: kind === "d0" ? "Your HIPAA training is due today" : `Your HIPAA training is ${describeDue(a.due_on, today)}`,
+        title: kind === "d0" ? `Your ${courseInfo(a.slug).noun} is due today` : `Your ${courseInfo(a.slug).noun} is ${describeDue(a.due_on, today)}`,
         body: "Open training from the menu to continue where you stopped.",
         link: "/learn",
       });
@@ -152,18 +154,22 @@ export async function runLearnReminders(today: string, scope?: Scope & { hrUserI
 
   // Overdue, once a week: each lead hears about their own people; HR hears one count.
   let leadNotices = 0;
-  const byLead = new Map<string, string[]>();
+  const byLead = new Map<string, { lead: string; noun: string; names: string[] }>();
   for (const a of newlyOverdue) {
     if (!a.employee_id) continue;
     const chain = await managerChainUserIds(db, a.employee_id);
     const lead = chain[0];
-    if (lead) byLead.set(lead, [...(byLead.get(lead) ?? []), a.name]);
+    if (!lead) continue;
+    const noun = courseInfo(a.slug).noun;
+    const entry = byLead.get(`${lead}|${noun}`) ?? { lead, noun, names: [] };
+    entry.names.push(a.name);
+    byLead.set(`${lead}|${noun}`, entry);
   }
-  for (const [lead, names] of byLead) {
+  for (const { lead, noun, names } of byLead.values()) {
     await notify(db, {
       userId: lead,
       kind: "learn.overdue_team",
-      title: names.length === 1 ? "A team member's HIPAA training is overdue" : `${names.length} team members' HIPAA training is overdue`,
+      title: names.length === 1 ? `A team member's ${noun} is overdue` : `${names.length} team members' ${noun} is overdue`,
       body: `${names.slice(0, 6).join(", ")}${names.length > 6 ? `, and ${names.length - 6} more` : ""}.`,
       link: "/training",
     });
@@ -172,9 +178,15 @@ export async function runLearnReminders(today: string, scope?: Scope & { hrUserI
 
   let hrSummaries = 0;
   if (newlyOverdue.length) {
-    for (const hr of scope?.hrUserIds ?? (await hrUserIds())) {
-      await notify(db, { userId: hr, kind: "learn.overdue", title: `${newlyOverdue.length} ${newlyOverdue.length === 1 ? "person has" : "people have"} overdue HIPAA training`, body: "See who is behind and what each needs.", link: "/training" });
-      hrSummaries += 1;
+    const hrIds = scope?.hrUserIds ?? (await hrUserIds());
+    const perCourse = new Map<string, number>();
+    for (const a of newlyOverdue) perCourse.set(a.slug, (perCourse.get(a.slug) ?? 0) + 1);
+    for (const [slug, n] of perCourse) {
+      const info = courseInfo(slug);
+      for (const hr of hrIds) {
+        await notify(db, { userId: hr, kind: "learn.overdue", title: `${n} ${n === 1 ? "person has" : "people have"} overdue ${info.noun}`, body: "See who is behind and what each needs.", link: `/training?course=${info.slug}` });
+        hrSummaries += 1;
+      }
     }
   }
   return { personNotices, leadNotices, hrSummaries };

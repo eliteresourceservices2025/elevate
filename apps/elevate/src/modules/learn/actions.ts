@@ -10,7 +10,7 @@ import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-act
 import { writeAudit } from "@/modules/audit/write";
 import { notify } from "@/modules/notifications/service";
 import { currentSignInMethods } from "@/modules/signing/session";
-import { HIPAA_SLUG } from "./constants";
+import { courseInfo } from "./constants";
 import { createLaunchToken } from "./service";
 import { handoffUrl, learnBaseUrl } from "./token";
 import { assignTrainingSchema, grantRetrySchema } from "./validators";
@@ -53,7 +53,7 @@ export async function grantLearnRetry(input: unknown): Promise<ActionResult> {
     const v = parsed.data;
 
     await db.transaction(async (tx) => {
-      const found = (await tx.execute(sql`select user_id, status from learn.assignments where id = ${v.assignmentId} for update`)) as unknown as { user_id: string; status: string }[];
+      const found = (await tx.execute(sql`select a.user_id, a.status, c.slug from learn.assignments a join learn.courses c on c.id = a.course_id where a.id = ${v.assignmentId} for update of a`)) as unknown as { user_id: string; status: string; slug: string }[];
       const a = found[0];
       if (!a) throw new ActionFailure("That training was not found.");
       if (a.user_id === actor.id) throw new ActionFailure("Another HR admin has to give you more tries.");
@@ -65,7 +65,7 @@ export async function grantLearnRetry(input: unknown): Promise<ActionResult> {
       await notify(tx, {
         userId: a.user_id,
         kind: "learn.retry",
-        title: v.kind === "tries" ? "You can try the HIPAA exam again" : "You have extra time for the HIPAA exam",
+        title: v.kind === "tries" ? `You can try the ${courseInfo(a.slug).label} exam again` : `You have extra time for the ${courseInfo(a.slug).label} exam`,
         body: "Open training from the menu to continue.",
         link: "/learn",
       });
@@ -75,19 +75,21 @@ export async function grantLearnRetry(input: unknown): Promise<ActionResult> {
   });
 }
 
-/** HR puts someone on the HIPAA training now, on a track (the nightly job does this for everyone who needs it). */
+/** HR puts someone on a course now, on a track (the nightly job does this for everyone who needs it). */
 export async function assignLearnTraining(input: unknown): Promise<ActionResult<{ created: boolean }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "learn.assign");
     const parsed = assignTrainingSchema.safeParse(input);
     if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the form and try again.");
-    const { userId, track } = parsed.data;
+    const { userId, course } = parsed.data;
+    const info = courseInfo(course);
+    const track = info.fixedTrack ?? parsed.data.track;
 
     const created = await db.transaction(async (tx) => {
       const version = (await tx.execute(sql`
         select v.id as version_id, c.id as course_id from learn.course_versions v join learn.courses c on c.id = v.course_id
-        where c.slug = ${HIPAA_SLUG} and v.status = 'published'`)) as unknown as { version_id: string; course_id: string }[];
+        where c.slug = ${info.slug} and v.status = 'published'`)) as unknown as { version_id: string; course_id: string }[];
       if (!version[0]) throw new ActionFailure("The course is not published yet.");
       const person = (await tx.execute(sql`
         select 1 from core.users u where u.id = ${userId} and u.archived_at is null
@@ -99,8 +101,8 @@ export async function assignLearnTraining(input: unknown): Promise<ActionResult<
         where not exists (select 1 from learn.assignments a where a.user_id = ${userId} and a.course_id = ${version[0].course_id} and a.status in ('assigned', 'in_progress'))
         returning id`)) as unknown as { id: string }[];
       if (made.length === 0) return false;
-      await writeAudit({ actor, action: "learn.assign", targetType: "learn_assignment", targetId: made[0].id, metadata: { track } }, tx);
-      await notify(tx, { userId, kind: "learn.assigned", title: "HIPAA training is assigned to you", body: "It takes about an hour and your progress is saved.", link: "/learn" });
+      await writeAudit({ actor, action: "learn.assign", targetType: "learn_assignment", targetId: made[0].id, metadata: { track, course: info.slug } }, tx);
+      await notify(tx, { userId, kind: "learn.assigned", title: `${info.noun.charAt(0).toUpperCase()}${info.noun.slice(1)} is assigned to you`, body: "Your progress is saved as you go.", link: "/learn" });
       return true;
     });
     revalidatePath("/training");

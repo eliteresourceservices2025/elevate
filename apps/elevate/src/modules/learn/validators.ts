@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LEARN_COURSE_SLUGS } from "./constants";
 
 const uuid = z.string().uuid("That does not look right. Please try again.");
 
@@ -12,10 +13,12 @@ export const grantRetrySchema = z.discriminatedUnion("kind", [
 export const assignTrainingSchema = z.object({
   userId: uuid,
   track: z.enum(["full", "essentials", "refresher"]),
+  course: z.enum(LEARN_COURSE_SLUGS).default("hipaa"),
 });
 
 export const trainingFilterSchema = z.object({
   state: z.enum(["overdue", "open", "passed", "none"]).optional(),
   q: z.string().trim().max(80).optional(),
+  course: z.enum(LEARN_COURSE_SLUGS).optional(),
 });
 export type TrainingFilter = z.infer<typeof trainingFilterSchema>;

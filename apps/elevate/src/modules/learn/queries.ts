@@ -5,12 +5,13 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { pageInfo, type PageInfo } from "@/lib/pagination";
 import { downlineEmployeeIds, todayInZone } from "@/modules/org/service";
+import { courseInfo } from "./constants";
 import { uuidArray } from "./jobs";
 import { describeDue } from "./rules";
 import { trainingFilterSchema } from "./validators";
 
 // Training status for HR and for leads. A lead sees status only (passed, not yet, overdue); scores and attempts are HR's. The
-// course is the HIPAA course; each person's NEWEST assignment decides what is shown.
+// course is chosen by the filter (HIPAA by default); each person's NEWEST assignment for it decides what is shown.
 
 export type TrainingState = "none" | "open" | "overdue" | "passed" | "expired" | "cancelled";
 
@@ -54,7 +55,7 @@ type Raw = {
  * Everyone in the viewer's reach with their HIPAA training state. HR (and Super Admin) see everyone; a Team Lead sees people below
  * them in the reporting chain, with no scores. Filtered, counted and paged here (the lists are a few hundred people at most).
  */
-export async function listTrainingStatus(rawFilters: unknown, paging: { page: number; pageSize: number }): Promise<{ rows: TrainingRow[]; counts: TrainingCounts; info: PageInfo; canSeeResults: boolean; canManage: boolean }> {
+export async function listTrainingStatus(rawFilters: unknown, paging: { page: number; pageSize: number }): Promise<{ rows: TrainingRow[]; counts: TrainingCounts; info: PageInfo; canSeeResults: boolean; canManage: boolean; course: string; published: boolean }> {
   const user = await requireUser();
   // Team scope needs the resource's reporting chain, so a list checks the scope itself and narrows the rows to the viewer's downline.
   const scope = scopeFor(user, "learn.view_status");
@@ -63,20 +64,24 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
   const canManage = scopeFor(user, "learn.assign") === "all";
   const f = trainingFilterSchema.safeParse(rawFilters ?? {});
   const filters = f.success ? f.data : {};
+  const course = courseInfo(filters.course).slug;
+  const publishedRows = (await db.execute(sql`select 1 from learn.course_versions v join learn.courses c on c.id = v.course_id where c.slug = ${course} and v.status = 'published' limit 1`)) as unknown as unknown[];
+  const published = publishedRows.length > 0;
   const today = todayInZone();
 
   const team = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
-  if (team && team.length === 0) return { rows: [], counts: { people: 0, passed: 0, open: 0, overdue: 0, none: 0 }, info: pageInfo(0, paging.page, paging.pageSize), canSeeResults, canManage };
+  if (team && team.length === 0) return { rows: [], counts: { people: 0, passed: 0, open: 0, overdue: 0, none: 0 }, info: pageInfo(0, paging.page, paging.pageSize), canSeeResults, canManage, course, published };
 
   const raw = (await db.execute(sql`
     with latest as (
       select distinct on (a.user_id) a.* from learn.assignments a join learn.courses c on c.id = a.course_id
-      where c.slug = 'hipaa' order by a.user_id, a.assigned_at desc
+      where c.slug = ${course} order by a.user_id, a.assigned_at desc
     )
     select e.id as employee_id, u.id as user_id,
            coalesce(nullif(btrim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), u.email) as name,
            tm.name as team_name, l.id as assignment_id, l.track, l.status, l.due_on::text as due_on,
-           (select max(c.ends_on)::text from learn.certificates c where c.user_id = u.id
+           (select max(c.ends_on)::text from learn.certificates c join learn.assignments ca on ca.id = c.assignment_id join learn.courses cc on cc.id = ca.course_id
+              where c.user_id = u.id and cc.slug = ${course}
               and not exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id)) as cert_ends,
            ${canSeeResults ? sql`(select count(*)::int from learn.exam_attempts x where x.assignment_id = l.id and x.status = 'submitted')` : sql`null::int`} as attempts,
            ${canSeeResults ? sql`(select x.score_percent::float from learn.exam_attempts x where x.assignment_id = l.id and x.status = 'submitted' order by x.attempt_no desc limit 1)` : sql`null::float`} as last_score
@@ -127,5 +132,5 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
   filtered.sort((a, b) => rank[a.state] - rank[b.state] || (a.dueOn ?? "").localeCompare(b.dueOn ?? "") || a.name.localeCompare(b.name));
 
   const info = pageInfo(filtered.length, paging.page, paging.pageSize);
-  return { rows: filtered.slice(info.offset, info.offset + info.pageSize), counts, info, canSeeResults, canManage };
+  return { rows: filtered.slice(info.offset, info.offset + info.pageSize), counts, info, canSeeResults, canManage, course, published };
 }

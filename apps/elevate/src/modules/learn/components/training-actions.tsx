@@ -9,7 +9,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { assignLearnTraining, grantLearnRetry } from "../actions";
 
 /** What HR can do for one person: put them on the training, or give more tries or more exam time (with a reason). */
-export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant }: { userId: string; assignmentId: string | null; canAssign: boolean; canGrant: boolean }) {
+export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant, course = "hipaa", fixedTrack = false }: { userId: string; assignmentId: string | null; canAssign: boolean; canGrant: boolean; course?: string; fixedTrack?: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
@@ -20,7 +20,7 @@ export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant }
 
   const assign = () =>
     start(async () => {
-      const r = await assignLearnTraining({ userId, track });
+      const r = await assignLearnTraining({ userId, track, course });
       if (!r.ok) return void toast.error(r.error);
       toast.success(r.data.created ? "Training assigned." : "Already assigned.");
       router.refresh();
@@ -40,11 +40,13 @@ export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant }
     if (!canAssign) return null;
     return (
       <div className="flex items-center gap-1">
+        {fixedTrack ? null : (
         <NativeSelect aria-label="Track" value={track} onChange={(e) => setTrack(e.target.value as typeof track)} className="h-8 w-32 text-xs">
           <option value="full">Full</option>
           <option value="essentials">Essentials</option>
           <option value="refresher">Refresher</option>
         </NativeSelect>
+        )}
         <Button size="sm" variant="outline" disabled={pending} onClick={assign}>
           Assign
         </Button>

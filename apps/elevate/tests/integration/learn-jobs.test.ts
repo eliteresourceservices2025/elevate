@@ -88,6 +88,26 @@ async function withCertificate(p: Person, endsOn: string, issuedOn = plus(endsOn
   return { assignmentId: a.id, certificateId: c.id };
 }
 
+describe("the Cybersecurity basics course", () => {
+  it("does nothing until published, then puts everyone on its one track, apart from HIPAA", async () => {
+    const p = await makePerson({ start: plus(TODAY, -3) });
+    const none = await jobs.runLearnAssign(TODAY, { userIds: [p.id] }, "cybersecurity");
+    expect(none.skipped).toBe(true);
+
+    await loadCourse(admin, { courseSlug: "cybersecurity", publish: true, reviewerUserId: reviewerId, counselApprovedOn: "2026-11-01", actorUserId: reviewerId });
+    const run = await jobs.runLearnAssign(TODAY, { userIds: [p.id] }, "cybersecurity");
+    expect(run).toMatchObject({ skipped: false, assigned: 1 });
+    const cyber = await rows<{ track: string; slug: string; due_on: string }>(sql`
+      select a.track, c.slug, a.due_on::text as due_on from learn.assignments a join learn.courses c on c.id = a.course_id where a.user_id = ${p.id} and c.slug = 'cybersecurity'`);
+    expect(cyber).toEqual([{ track: "full", slug: "cybersecurity", due_on: plus(TODAY, 27) }]);
+    expect((await notices(p.id, "learn.assigned")).map((n) => n.title)).toContain("Cybersecurity basics training is assigned to you");
+    // The HIPAA course is separate: this person has none from that run.
+    expect((await rows(sql`select 1 from learn.assignments a join learn.courses c on c.id = a.course_id where a.user_id = ${p.id} and c.slug = 'hipaa'`)).length).toBe(0);
+    // Repeating assigns nothing more.
+    expect(await jobs.runLearnAssign(TODAY, { userIds: [p.id] }, "cybersecurity")).toMatchObject({ assigned: 0 });
+  });
+});
+
 describe("the nightly assignment", () => {
   it("puts new people on the right track with the right due date, and does nothing for people it should not touch", async () => {
     const phi = await makeClient(true);

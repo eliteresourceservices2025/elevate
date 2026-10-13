@@ -5,6 +5,7 @@ import { runAckReminders } from "@/modules/announcements/jobs";
 import { purgeOrphanContentFiles } from "@/modules/announcements/content-files";
 import { processMirrorQueue, purgeJibbleData, runJibbleComparison, runJibbleRepair, runJibbleUnmatchedReport, syncJibblePeople } from "@/modules/jibble/jobs";
 import { runCredentialReminders } from "@/modules/credentials/jobs";
+import { LEARN_COURSES } from "@/modules/learn/constants";
 import { runLearnAssign, runLearnPurge, runLearnReminders, runLearnSync } from "@/modules/learn/jobs";
 import { runAnniversaryReminders } from "@/modules/people/anniversary-jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
@@ -37,10 +38,18 @@ export const credentialReminders = inngest.createFunction(
   async ({ step }) => step.run("send-reminders", () => track("credential-reminders", () => runCredentialReminders(todayInZone()))),
 );
 
-/** Daily at 1:35 AM: HIPAA training assignments (new people, renewals, people who left, expired certificates). */
+/** Daily at 1:35 AM: training assignments for each course (new people, renewals, people who left, expired certificates). */
 export const learnAssign = inngest.createFunction(
   { id: "learn-assign", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 35 1 * * *` } },
-  async ({ step }) => step.run("assign", () => track("learn-assign", () => runLearnAssign(todayInZone()))),
+  async ({ step }) =>
+    step.run("assign", () =>
+      track("learn-assign", async () => {
+        // One run per course; each does nothing until its course has a published version.
+        const runs = [];
+        for (const course of LEARN_COURSES) runs.push(await runLearnAssign(todayInZone(), undefined, course.slug));
+        return runs;
+      }),
+    ),
 );
 
 /** Daily at 8:50 AM Manila: HIPAA training reminders (30 days, 7 days, the due date) and the weekly overdue notices. */
