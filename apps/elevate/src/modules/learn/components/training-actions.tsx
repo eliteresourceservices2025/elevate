@@ -60,7 +60,7 @@ export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant, 
       <span className="flex items-center gap-1">
         <span className="text-xs text-muted-foreground">Already assigned</span>
         <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
-          More tries
+          More tries or time
         </Button>
       </span>
     );

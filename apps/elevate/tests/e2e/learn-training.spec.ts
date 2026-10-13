@@ -37,7 +37,7 @@ test("HR assigns HIPAA training from the Training status page and a lead sees on
   await expect(row.getByText("Not yet")).toBeVisible(slow);
   await expect(row.getByText(/Full|Essentials/)).toBeVisible();
 
-  await row.getByRole("button", { name: "More tries" }).click();
+  await row.getByRole("button", { name: "More tries or time" }).click();
   await row.getByLabel("Reason").fill("Connection dropped during the exam");
   await row.getByRole("button", { name: "Give", exact: true }).click();
   await expect(hrPage.getByText("More tries given.")).toBeVisible(slow);
