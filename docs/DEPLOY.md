@@ -1,4 +1,4 @@
-# Deploying ELEVATE and Safe Voice (first go-live walkthrough)
+# Deploying ELEVATE, Safe Voice and ELEVATE Learn (first go-live walkthrough)
 
 One GitHub repository, **two Vercel projects**: ELEVATE (`apps/elevate`) and Safe Voice (`apps/safe-voice`), one Supabase project, and a few small services. Follow the parts in order. Nothing here needs real people's data until Part 8.
 
@@ -96,6 +96,8 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"        
 
    Optional addresses (each has a built-in default, set only to change it): `CAREERS_EMAIL` (where people write with questions about applying, shown on the careers page footer; default `elitetsp@ersva.com`) and `SUPPORT_EMAIL` (where Contact support and the sign-in screen's "Trouble signing in?" point; technical trouble only; default is the technical support address).
 
+   Optional: `NEXT_PUBLIC_LEARN_URL` (the ELEVATE Learn address, Part 5b; without it the HIPAA training page says it is not available).
+
    Not needed on Vercel: `DATABASE_URL_DIRECT`, any `JIBBLE_*` (add `JIBBLE_ACCESS_TOKEN` only when a team is ready for it), `GOOGLE_*` (only for interview calendars), `TALENTHR_API_KEY` (used from your own computer, Part 8).
 4. Settings > Deployment Protection: keep Vercel Authentication on for **Preview** deployments.
 5. Deploy.
@@ -116,6 +118,31 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"        
 4. **Privacy settings (cannot be set from code):** in this project add no Web Analytics, no Speed Insights, no log drains and no Sentry; set log retention to the shortest available. See `docs/SETUP.md` 14b.
 5. Deploy. Copy its address into ELEVATE's `NEXT_PUBLIC_SAFEVOICE_URL` and redeploy ELEVATE.
 6. Optional: Settings > Git > **Ignored Build Step** on each project so a change to one app does not rebuild the other.
+
+## Part 5b. Vercel project 3: ELEVATE Learn (HIPAA training)
+
+Do this **after** migration 0054 is applied to the production database (the `learn` schema and the `learn_app` role come from it). Learn needs ELEVATE to be deployed with the same migrations, because the sign-in handoff writes a token into `learn.launch_tokens`.
+
+1. **Database role.** In the Supabase SQL editor (one long random password, saved in the password manager):
+
+   ```sql
+   ALTER ROLE learn_app LOGIN PASSWORD '<long random password>';
+   ```
+
+   Build the connection string from the transaction pooler string (port 6543), replacing the user name with `learn_app.<project-ref>` and the password with the one above. This is `LEARN_DATABASE_URL`.
+2. **Vercel:** Add New > Project > import the **same** repository again. Name it `elevate-learn`.
+3. **Root Directory:** `apps/learn`. Framework: Next.js (detected). Node 24.x. Leave "Include source files outside of the Root Directory" on. `apps/learn/vercel.json` already pins the Singapore region.
+4. **Environment variables** (Production; mark the first two Sensitive). `NEXT_PUBLIC_*` values are baked in at build, so set them **before** the first deploy:
+   - `LEARN_DATABASE_URL`: the `learn_app` string;
+   - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`: ELEVATE's can be reused (the keys are prefixed `learn:`); without them production refuses every handoff on purpose;
+   - `NEXT_PUBLIC_ELEVATE_URL`: the ELEVATE address with https and no trailing slash, for example `https://elevate.eliteresourceservices.com`.
+   Learn needs nothing else, and none of ELEVATE's secrets. There is no session secret.
+5. **Deploy**, then Settings > Domains > add `learn.eliteresourceservices.com`. At the DNS host add the record Vercel shows (a CNAME for `learn`). Wait for the certificate.
+6. **Tell ELEVATE where Learn is:** in the ELEVATE project add `NEXT_PUBLIC_LEARN_URL` = `https://learn.eliteresourceservices.com` (Production), then **redeploy ELEVATE**. Until then the HIPAA training page says it is not available yet. Removing the variable and redeploying is the switch that turns Learn off.
+7. **Check:** sign in to ELEVATE, open **HIPAA training** in the menu, press **Open HIPAA training**. You should land on Learn saying "Hello, <your name>" and "You have no training assigned yet". Sign out of training: you return to ELEVATE.
+8. Optional: Settings > Git > **Ignored Build Step**, and Deployment Protection (Vercel Authentication) on Preview, as for the other projects. Add no Web Analytics or log drains to Learn: it shows people's names.
+
+If the page says "Your sign-in link expired" straight away: check `NEXT_PUBLIC_ELEVATE_URL` matches the ELEVATE address exactly (scheme and host), then look at the Learn project's function logs for `handoff failed: learn:<code>` (`token_invalid` = used, expired or never issued; `inactive` = the account is deactivated; a PostgresError = `LEARN_DATABASE_URL` or the role password is wrong).
 
 ## Part 6. First sign-in and checks
 
