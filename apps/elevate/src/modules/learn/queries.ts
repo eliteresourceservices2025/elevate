@@ -94,6 +94,9 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
     left join core.teams tm on tm.id = e.team_id
     left join latest l on l.user_id = u.id
     where e.archived_at is null and u.archived_at is null and e.status in ('onboarding', 'active', 'probation', 'on_leave')
+      ${picked.kind === "client_addon" && picked.clientId
+        ? sql`and (l.id is not null or exists (select 1 from core.client_assignments cx where cx.employee_id = e.id and cx.client_id = ${picked.clientId}::uuid and cx.end_date is null))`
+        : sql``}
       ${team ? sql`and e.id = any(${uuidArray(team)}::uuid[])` : sql``}
     order by name`)) as unknown as Raw[];
 

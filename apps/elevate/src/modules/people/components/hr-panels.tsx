@@ -93,25 +93,28 @@ export function AssignClientForm({
 }) {
   const { run, pending } = useRun();
   const [clientId, setClientId] = useState("");
-  const [fetched, setFetched] = useState<{ key: string; value: { state: string; validUntil?: string; dueOn?: string; overdue?: boolean; endedOn?: string } } | null>(null);
+  type Ready = { state: string; validUntil?: string; dueOn?: string; overdue?: boolean; endedOn?: string };
+  const [fetched, setFetched] = useState<{ key: string; value: Ready; addon: { label: string; readiness: Ready } | null } | null>(null);
   const chosen = clients.find((c) => c.id === clientId);
   const handlesPhi = Boolean(chosen?.handlesPhi);
   const key = `${employeeId}:${clientId}`;
   const readiness = handlesPhi && fetched?.key === key ? fetched.value : null;
+  const addon = clientId && fetched?.key === key ? fetched.addon : null;
 
-  // When the chosen client works with patient information, show where the person stands on HIPAA training. Warns only.
+  // Show where the person stands: HIPAA when the chosen client works with patient information, and the client's own add-on course
+  // when it has one. Reminders only: assigning is never blocked.
   useEffect(() => {
-    if (!handlesPhi) return;
+    if (!clientId) return;
     let cancelled = false;
-    getTrainingReadiness({ employeeId })
+    getTrainingReadiness({ employeeId, clientId })
       .then((r) => {
-        if (!cancelled && r.ok) setFetched({ key, value: r.data.readiness });
+        if (!cancelled && r.ok) setFetched({ key, value: r.data.readiness, addon: r.data.addon });
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [handlesPhi, employeeId, key]);
+  }, [clientId, employeeId, key]);
   const [startDate, setStartDate] = useState(today);
   const [hours, setHours] = useState("");
   const open = clients.filter((c) => c.isActive);
@@ -150,6 +153,18 @@ export function AssignClientForm({
                 ? `HIPAA training: the certificate ended on ${readiness.endedOn}. `
                 : "HIPAA training: nothing on record yet. "}
           {readiness.state !== "passed" ? "This client works with patient information. You can still assign; this is a reminder only." : null}
+        </p>
+      ) : null}
+      {addon ? (
+        <p role="status" className={`text-sm sm:col-span-4 ${addon.readiness.state === "passed" ? "text-muted-foreground" : "rounded-lg border border-amber-500/40 bg-amber-500/10 p-2"}`}>
+          {addon.readiness.state === "passed"
+            ? `${addon.label}: passed, valid until ${addon.readiness.validUntil}.`
+            : addon.readiness.state === "open"
+              ? `${addon.label}: ${addon.readiness.overdue ? "overdue since" : "not yet passed, due"} ${addon.readiness.dueOn}. `
+              : addon.readiness.state === "expired"
+                ? `${addon.label}: the certificate ended on ${addon.readiness.endedOn}. `
+                : `${addon.label}: nothing on record yet. This course is assigned automatically once the person is on the client. `}
+          {addon.readiness.state !== "passed" ? "A reminder only." : null}
         </p>
       ) : null}
     </form>

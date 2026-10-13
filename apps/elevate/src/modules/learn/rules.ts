@@ -45,6 +45,15 @@ export function assignmentNeed(input: { today: string; startDate: string | null;
   return { assign: true, reason: "manual", track, dueOn: addDays(today, ROLLOUT_GRACE_DAYS) };
 }
 
+/**
+ * What a client add-on needs for a person, with the same shape as a core course: due 30 days after they joined the client (or 30
+ * days from today when they joined long ago), a renewal when the certificate ends within 60 days. One track (full), never refresher.
+ */
+export function addonNeed(input: { today: string; joinedOn: string | null; openAssignment: boolean; latestCertificateEndsOn: string | null }): AssignmentNeed {
+  const need = assignmentNeed({ today: input.today, startDate: input.joinedOn, openAssignment: input.openAssignment, latestCertificateEndsOn: input.latestCertificateEndsOn, assignedToPhiClient: true });
+  return need.assign ? { ...need, track: "full" } : need;
+}
+
 /** The ISO week of a date as "YYYY-Www" (a week starts on Monday), for the weekly overdue notice. */
 export function isoWeekKey(iso: string): string {
   const d = new Date(ms(iso));

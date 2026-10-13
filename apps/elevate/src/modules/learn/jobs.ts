@@ -9,7 +9,7 @@ import { renderCertificatePdf } from "./certificate-pdf";
 import { HIPAA_SLUG } from "./constants";
 import { findLearnCourse, listLearnCourses } from "./course-catalog";
 import { learnBaseUrl } from "./token";
-import { assignmentNeed, describeDue, isOverdue, isoWeekKey, reminderDue, type ReminderKind } from "./rules";
+import { addonNeed, assignmentNeed, describeDue, isOverdue, isoWeekKey, reminderDue, type ReminderKind } from "./rules";
 
 // The nightly work of ELEVATE Learn on ELEVATE's side (docs/learn/02-architecture.md). Learn itself runs no scheduled work.
 // Everything here uses ELEVATE's owner connection and goes through the `learn` schema tables; the Learn app never sees any of it.
@@ -34,9 +34,10 @@ export type AssignRun = { skipped: boolean; mode?: "all" | "teams" | "paused"; a
  * and a second run on the same day changes nothing. Does nothing until a version of the course is published.
  */
 export async function runLearnAssign(today: string, scope?: Scope, courseSlug: string = HIPAA_SLUG): Promise<AssignRun> {
-  // Core courses only for now: a client add-on is assigned by the people on its client (a later step), never by this rule.
   const info = await findLearnCourse(db, courseSlug);
-  if (!info || info.kind !== "core") return { skipped: true, assigned: 0, renewals: 0, cancelled: 0, expired: 0 };
+  // A client add-on is for the people currently assigned to its client; a core course is for everyone.
+  const addonClient = info?.kind === "client_addon" ? info.clientId : null;
+  if (!info || (info.kind === "client_addon" && !addonClient)) return { skipped: true, assigned: 0, renewals: 0, cancelled: 0, expired: 0 };
   const [version] = await rows<{ version_id: string; course_id: string }>(sql`
     select v.id as version_id, c.id as course_id from learn.course_versions v join learn.courses c on c.id = v.course_id
     where c.slug = ${info.slug} and v.status = 'published' and c.archived_at is null`);
@@ -52,7 +53,11 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
     update learn.assignments a set status = 'cancelled', closed_at = now()
     where a.course_id = ${version.course_id} and a.status in ('assigned', 'in_progress')
       and (exists (select 1 from core.users u where u.id = a.user_id and u.archived_at is not null)
-        or exists (select 1 from core.employees e where e.user_id = a.user_id and e.archived_at is null and e.status = 'separated'))
+        or exists (select 1 from core.employees e where e.user_id = a.user_id and e.archived_at is null and e.status = 'separated')
+        ${addonClient ? sql`or (a.created_by is null
+              and exists (select 1 from core.employees e2 where e2.user_id = a.user_id and e2.archived_at is null)
+              and not exists (select 1 from core.client_assignments ca join core.employees e3 on e3.id = ca.employee_id
+                              where e3.user_id = a.user_id and ca.client_id = ${addonClient}::uuid and ca.end_date is null))` : sql``})
       ${onUsers(sql`a.user_id`, scope)}
     returning a.id`);
 
@@ -64,8 +69,9 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
       ${onUsers(sql`a.user_id`, scope)}
     returning a.id`);
 
-  const people = await rows<{ user_id: string; start_date: string | null; team_id: string | null; phi: boolean; open_id: string | null; cert_ends: string | null }>(sql`
+  const people = await rows<{ user_id: string; start_date: string | null; joined_on: string | null; team_id: string | null; phi: boolean; open_id: string | null; cert_ends: string | null }>(sql`
     select u.id as user_id, e.start_date::text as start_date, e.team_id::text as team_id,
+           ${addonClient ? sql`(select min(ca2.start_date)::text from core.client_assignments ca2 where ca2.employee_id = e.id and ca2.client_id = ${addonClient}::uuid and ca2.end_date is null)` : sql`null::text`} as joined_on,
            exists (select 1 from core.client_assignments ca join core.clients cl on cl.id = ca.client_id
                    where ca.employee_id = e.id and ca.end_date is null and cl.handles_phi and cl.archived_at is null) as phi,
            (select a.id from learn.assignments a where a.user_id = u.id and a.course_id = ${version.course_id} and a.status in ('assigned', 'in_progress') limit 1) as open_id,
@@ -74,13 +80,17 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
               and not exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id)) as cert_ends
     from core.employees e join core.users u on u.id = e.user_id
     where e.archived_at is null and u.archived_at is null and e.status in ('onboarding', 'active', 'probation', 'on_leave')
+      ${addonClient ? sql`and exists (select 1 from core.client_assignments ca3 where ca3.employee_id = e.id and ca3.client_id = ${addonClient}::uuid and ca3.end_date is null)` : sql``}
       ${onUsers(sql`u.id`, scope)}`);
 
   let assigned = 0;
   let renewals = 0;
   for (const p of mode === "paused" ? [] : people) {
     if (mode === "teams" && !(p.team_id && pilotTeams.has(p.team_id))) continue;
-    const need = assignmentNeed({ today, startDate: p.start_date, openAssignment: p.open_id !== null, latestCertificateEndsOn: p.cert_ends, assignedToPhiClient: p.phi });
+    // An add-on counts from the day the person joined the client; a core course from their start date.
+    const need = addonClient
+      ? addonNeed({ today, joinedOn: p.joined_on, openAssignment: p.open_id !== null, latestCertificateEndsOn: p.cert_ends })
+      : assignmentNeed({ today, startDate: p.start_date, openAssignment: p.open_id !== null, latestCertificateEndsOn: p.cert_ends, assignedToPhiClient: p.phi });
     if (!need.assign) continue;
     const track = info.fixedTrack ?? need.track;
     const made = await db.transaction(async (tx) => {

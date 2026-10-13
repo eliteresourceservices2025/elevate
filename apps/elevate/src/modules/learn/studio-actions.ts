@@ -195,7 +195,7 @@ export async function publishStudioDraft(input: unknown): Promise<ActionResult<{
       const reviewerId = await userIdByEmail(tx, v.reviewerEmail);
       if (!reviewerId) throw new ActionFailure("No ELEVATE account has that reviewer email.");
       const r = await publishDraft(tx, { versionId: v.versionId, actorId: actor.id, reviewerUserId: reviewerId, counselApprovedOn: v.counselApprovedOn, material: v.material });
-      await writeAudit({ actor, action: "learn.studio_publish", targetType: "learn_course_version", targetId: v.versionId, metadata: { version: r.version, counselApprovedOn: v.counselApprovedOn, material: v.material } }, tx);
+      await writeAudit({ actor, action: "learn.studio_publish", targetType: "learn_course_version", targetId: v.versionId, metadata: { version: r.version, counselApprovedOn: v.counselApprovedOn, material: v.material, startedPaused: r.startedPaused } }, tx);
       return r;
     });
     touched();

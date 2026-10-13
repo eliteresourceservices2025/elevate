@@ -57,6 +57,12 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
           </Link>
         ))}
       </nav>
+      {courses.find((c) => c.slug === course)?.kind === "client_addon" ? (
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          A client add-on: it is for the people currently assigned to that client, and the list shows only them (and anyone you added by hand). It is assigned
+          when someone joins the client and closed when they leave it; the certificate stays on record.
+        </p>
+      ) : null}
       {!published ? (
         <p role="note" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           This course is not published yet, so nobody is assigned and people cannot be added. Publishing needs a reviewer and the date counsel approved it.

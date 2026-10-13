@@ -288,7 +288,7 @@ export async function discardDraft(tx: Tx, p: { versionId: string; stamp: number
  * Publishes a draft. Rules: the draft must differ from the current published version, pass the checks, and be published by someone
  * OTHER than the person who saved it last (a second pair of eyes). The previous published version is retired in the same step.
  */
-export async function publishDraft(tx: Tx, p: { versionId: string; actorId: string; reviewerUserId: string; counselApprovedOn: string; material: boolean }): Promise<{ version: number }> {
+export async function publishDraft(tx: Tx, p: { versionId: string; actorId: string; reviewerUserId: string; counselApprovedOn: string; material: boolean }): Promise<{ version: number; startedPaused: boolean }> {
   const [v] = await tx.select().from(courseVersions).where(eq(courseVersions.id, p.versionId)).for("update");
   if (!v) throw new ActionFailure("That version was not found.");
   if (v.status !== "draft") throw new ActionFailure("Only a draft can be published.");
@@ -305,12 +305,19 @@ export async function publishDraft(tx: Tx, p: { versionId: string; actorId: stri
     const base = await loadVersion(tx, course.slug, published.version);
     if (base && diffLoaded(base, draft).unchanged) throw new ActionFailure("Nothing has changed since the published version.");
   }
+  // The first time a course goes live nobody is assigned automatically until HR chooses who (a pilot or everyone): a paused rule.
+  const [earlier] = await tx.select({ id: courseVersions.id }).from(courseVersions).where(and(eq(courseVersions.courseId, v.courseId), sql`${courseVersions.status} in ('published', 'retired')`)).limit(1);
+  let startedPaused = false;
+  if (!earlier) {
+    const made = (await tx.execute(sql`insert into learn.assignment_rules (course_id, mode, team_ids) values (${v.courseId}, 'paused', '{}'::uuid[]) on conflict (course_id) do nothing returning course_id`)) as unknown as unknown[];
+    startedPaused = made.length > 0;
+  }
   await tx.update(courseVersions).set({ status: "retired", retiredAt: new Date() }).where(and(eq(courseVersions.courseId, v.courseId), eq(courseVersions.status, "published")));
   await tx
     .update(courseVersions)
     .set({ status: "published", publishedAt: new Date(), publishedBy: p.actorId, reviewedBy: p.reviewerUserId, counselApprovedOn: p.counselApprovedOn, material: p.material })
     .where(eq(courseVersions.id, p.versionId));
-  return { version: v.version };
+  return { version: v.version, startedPaused };
 }
 
 export async function userIdByEmail(tx: Tx, email: string): Promise<string | null> {

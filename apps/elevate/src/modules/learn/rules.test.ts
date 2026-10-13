@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, assignmentNeed, daysBetween, describeDue, isOverdue, isoWeekKey, reminderDue, trackFor } from "./rules";
+import { addDays, addonNeed, assignmentNeed, daysBetween, describeDue, isOverdue, isoWeekKey, reminderDue, trackFor } from "./rules";
 
 const TODAY = "2026-10-12";
 const base = { today: TODAY, startDate: null as string | null, openAssignment: false, latestCertificateEndsOn: null as string | null, assignedToPhiClient: false };
@@ -84,5 +84,20 @@ describe("reminders", () => {
     expect(describeDue("2026-10-11", TODAY)).toBe("1 day overdue");
     expect(describeDue("2026-10-12", TODAY)).toBe("due today");
     expect(describeDue("2026-10-13", TODAY)).toBe("due in 1 day");
+  });
+});
+
+describe("addonNeed", () => {
+  const base = { today: "2026-10-12", joinedOn: "2026-10-09", openAssignment: false, latestCertificateEndsOn: null };
+  it("is due 30 days after joining the client, on the full track", () => {
+    expect(addonNeed(base)).toEqual({ assign: true, reason: "new_hire", track: "full", dueOn: "2026-11-08" });
+  });
+  it("gives people who joined long ago 30 days from today", () => {
+    expect(addonNeed({ ...base, joinedOn: "2025-01-01" })).toMatchObject({ assign: true, reason: "manual", track: "full", dueOn: "2026-11-11" });
+  });
+  it("renews on the full track (never refresher) and waits while open or current", () => {
+    expect(addonNeed({ ...base, latestCertificateEndsOn: "2026-11-01" })).toMatchObject({ assign: true, reason: "renewal", track: "full", dueOn: "2026-11-01" });
+    expect(addonNeed({ ...base, latestCertificateEndsOn: "2027-06-01" })).toEqual({ assign: false });
+    expect(addonNeed({ ...base, openAssignment: true })).toEqual({ assign: false });
   });
 });

@@ -846,16 +846,25 @@ export async function viewBankRequest(input: unknown): Promise<ActionResult<{ ba
  * HIPAA training status of one person, for the "Assign a client" form: shown when the client handles patient information. It only
  * informs: assigning is never blocked by training. HR who may assign clients (people.manage_assignments).
  */
-export async function getTrainingReadiness(input: unknown): Promise<ActionResult<{ readiness: TrainingReadiness }>> {
+export async function getTrainingReadiness(input: unknown): Promise<ActionResult<{ readiness: TrainingReadiness; addon: { label: string; readiness: TrainingReadiness } | null }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "people.manage_assignments");
-    const parsed = z.object({ employeeId: z.string().uuid() }).safeParse(input);
+    const parsed = z.object({ employeeId: z.string().uuid(), clientId: z.string().uuid().optional() }).safeParse(input);
     if (!parsed.success) return fail("Check the request and try again.");
     const [person] = await db.select({ userId: employees.userId }).from(employees).where(and(eq(employees.id, parsed.data.employeeId), isNull(employees.archivedAt))).limit(1);
     if (!person) return fail("That person was not found.");
     // No account yet means no training can have been taken.
     const readiness: TrainingReadiness = person.userId ? await trainingReadiness(db, person.userId, "hipaa", todayInZone()) : { state: "none" };
-    return { ok: true, data: { readiness } };
+    // The chosen client's add-on course, when it has a live one (a reminder like the HIPAA line, never a block).
+    let addon: { label: string; readiness: TrainingReadiness } | null = null;
+    if (parsed.data.clientId) {
+      const found = (await db.execute(sql`
+        select c.slug, coalesce(c.label, c.title) as label from learn.courses c
+        where c.client_id = ${parsed.data.clientId} and c.kind = 'client_addon' and c.archived_at is null
+          and exists (select 1 from learn.course_versions v where v.course_id = c.id and v.status = 'published')`)) as unknown as { slug: string; label: string }[];
+      if (found[0]) addon = { label: found[0].label, readiness: person.userId ? await trainingReadiness(db, person.userId, found[0].slug, todayInZone()) : { state: "none" } };
+    }
+    return { ok: true, data: { readiness, addon } };
   });
 }
