@@ -8,6 +8,7 @@ import { listCorrectionQueue, listWorkingNow } from "@/modules/attendance/querie
 import { listExtraHoursQueue } from "@/modules/attendance/extra-hours-queries";
 import { getTeamReview } from "@/modules/attendance/hours-queries";
 import { credentialCounts } from "@/modules/credentials/queries";
+import { getTrainingCounts } from "@/modules/learn/queries";
 import { jobHealth } from "@/modules/health/service";
 import { listMyTasks } from "@/modules/onboarding/queries";
 import { timeDownlineEmployeeIds, todayInZone } from "@/modules/org/service";
@@ -51,7 +52,7 @@ export async function getAttention(lens: Lens): Promise<AttentionItem[]> {
   const items: AttentionItem[] = [];
   const add = (item: AttentionItem) => items.push(item);
 
-  const [working, review, changes, tasks, reviews, jobs, onboarding, expiring, certs] = await Promise.all([
+  const [working, review, changes, tasks, reviews, jobs, onboarding, expiring, certs, training] = await Promise.all([
     orFallback(async () => (await listWorkingNow()).rows, []),
     orFallback(async () => (await getTeamReview()).pending, 0),
     orFallback(() => countPendingChangeRequests(), 0),
@@ -61,6 +62,7 @@ export async function getAttention(lens: Lens): Promise<AttentionItem[]> {
     orgOnboardingCounts(user.id),
     documentCounts(user),
     orFallback(() => credentialCounts(), { expired: 0, expiring: 0 }),
+    orFallback(() => getTrainingCounts(), []),
   ]);
 
   const longOpen = working.filter((w) => w.longOpen).length;
@@ -80,6 +82,12 @@ export async function getAttention(lens: Lens): Promise<AttentionItem[]> {
 
   if (certs.expired > 0) add({ id: "certs-expired", severity: "warn", title: `${plural(certs.expired, "certificate has", "certificates have")} expired`, href: "/credentials?status=expired", lenses: ["admin", "hr"] });
   if (certs.expiring > 0) add({ id: "certs-soon", severity: "info", title: `${plural(certs.expiring, "certificate expires", "certificates expire")} in the next 30 days`, href: "/credentials?status=expiring", lenses: ["admin", "hr"] });
+
+  for (const t of training) {
+    const q = t.course === "hipaa" ? "" : `course=${t.course}&`;
+    if (t.overdue > 0) add({ id: `training-overdue-${t.course}`, severity: "warn", title: `${plural(t.overdue, "person has", "people have")} overdue ${t.label} training`, href: `/training?${q}state=overdue`, lenses: ["admin", "hr", "team_lead"] });
+    if (t.expiring > 0) add({ id: `training-soon-${t.course}`, severity: "info", title: `${plural(t.expiring, "certificate expires", "certificates expire")} in the next 30 days (${t.label})`, href: `/training?${q.replace(/&$/, "")}`, lenses: ["admin", "hr", "team_lead"] });
+  }
 
   const lateJobs = jobs.filter((j) => j.state === "late" || j.state === "failing").length;
   if (lateJobs > 0) add({ id: "jobs-late", severity: "urgent", title: `${plural(lateJobs, "background job is", "background jobs are")} late or failing`, detail: "Scheduled work such as the nightly hours rebuild may not have run.", href: "/attendance?tab=health", lenses: ["admin", "hr"] });

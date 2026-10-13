@@ -135,6 +135,41 @@ describe("automatic assignment rules (pilot limit)", () => {
   });
 });
 
+describe("dashboard training counts", () => {
+  it("counts overdue people and certificates ending soon for HR, and a lead sees only their own team", async () => {
+    const realToday = new Date().toISOString().slice(0, 10);
+    const hr = await makePerson({ roles: ["hr_admin"], first: "Hr" });
+    const lead = await makePerson({ roles: ["team_lead"], first: "Lead" });
+    const mine = await makePerson({ managerId: lead.employeeId });
+    const other = await makePerson();
+    const hipaa = (c: { course: string }) => c.course === "hipaa";
+
+    as(hr);
+    const before = (await queries.getTrainingCounts()).find(hipaa)!;
+    as(lead);
+    const leadBefore = (await queries.getTrainingCounts()).find(hipaa)!;
+
+    // two overdue people (one under the lead) and one certificate ending in 10 days (under the lead)
+    await db.execute(sql`insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${mine.id}, ${courseId}, ${versionId}, 'full', 'manual', ${plus(realToday, -5)})`);
+    await db.execute(sql`insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${other.id}, ${courseId}, ${versionId}, 'full', 'manual', ${plus(realToday, -5)})`);
+    const ending = await makePerson({ managerId: lead.employeeId });
+    await withCertificate(ending, plus(realToday, 10));
+
+    as(hr);
+    const after = (await queries.getTrainingCounts()).find(hipaa)!;
+    expect(after.overdue - before.overdue).toBe(2);
+    expect(after.expiring - before.expiring).toBe(1);
+    as(lead);
+    const leadAfter = (await queries.getTrainingCounts()).find(hipaa)!;
+    expect(leadAfter.overdue - leadBefore.overdue).toBe(1);
+    expect(leadAfter.expiring - leadBefore.expiring).toBe(1);
+
+    // someone with no status permission gets nothing at all
+    as(await makePerson());
+    expect(await queries.getTrainingCounts()).toEqual([]);
+  });
+});
+
 describe("the onboarding check 'HIPAA training is passed'", () => {
   it("is satisfied only by a current, unrevoked HIPAA certificate", async () => {
     const { satisfiedTasks } = await import("@/modules/onboarding/service");

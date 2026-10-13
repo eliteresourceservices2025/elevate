@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { pageInfo, type PageInfo } from "@/lib/pagination";
 import { downlineEmployeeIds, todayInZone } from "@/modules/org/service";
-import { courseInfo } from "./constants";
+import { LEARN_COURSES, courseInfo } from "./constants";
 import { uuidArray } from "./jobs";
 import { describeDue } from "./rules";
 import { trainingFilterSchema } from "./validators";
@@ -150,4 +150,40 @@ export async function getAutoAssign(courseSlug: string): Promise<{ rule: AutoAss
     rule: rule[0] ? { mode: rule[0].mode, teamIds: rule[0].team_ids, updatedAt: rule[0].updated_at, configured: true } : { mode: "all", teamIds: [], updatedAt: null, configured: false },
     teams,
   };
+}
+
+export type TrainingCountsByCourse = { course: string; label: string; overdue: number; expiring: number }[];
+
+/**
+ * Counts for the dashboard's needs-attention list: people with overdue training, and certificates ending in the next 30 days that
+ * have no renewal yet. HR sees everyone, a lead their downline; nobody else gets anything. Counts only, never names.
+ */
+export async function getTrainingCounts(): Promise<TrainingCountsByCourse> {
+  const user = await requireUser();
+  const scope = scopeFor(user, "learn.view_status");
+  if (scope !== "all" && scope !== "team") return [];
+  const team = scope === "team" ? await downlineEmployeeIds(db, user.id) : null;
+  if (team && team.length === 0) return [];
+  const today = todayInZone();
+  const later = new Date(`${today}T00:00:00Z`);
+  later.setUTCDate(later.getUTCDate() + 30);
+  const limit = later.toISOString().slice(0, 10);
+  const people = team ? sql`and u.id in (select e.user_id from core.employees e where e.id = any(${uuidArray(team)}::uuid[]) and e.user_id is not null)` : sql``;
+
+  const out: TrainingCountsByCourse = [];
+  for (const c of LEARN_COURSES) {
+    const rows = (await db.execute(sql`
+      select
+        (select count(distinct a.user_id)::int from learn.assignments a join learn.courses co on co.id = a.course_id join core.users u on u.id = a.user_id
+          where co.slug = ${c.slug} and a.status in ('assigned', 'in_progress') and a.due_on < ${today}::date and u.archived_at is null ${people}) as overdue,
+        (select count(*)::int from (
+           select distinct on (cc.user_id) cc.user_id, cc.ends_on
+           from learn.certificates cc join learn.assignments a on a.id = cc.assignment_id join learn.courses co on co.id = a.course_id join core.users u on u.id = cc.user_id
+           where co.slug = ${c.slug} and u.archived_at is null ${people}
+             and not exists (select 1 from learn.certificate_revocations r where r.certificate_id = cc.id)
+           order by cc.user_id, cc.ends_on desc) latest
+         where latest.ends_on between ${today}::date and ${limit}::date) as expiring`)) as unknown as { overdue: number; expiring: number }[];
+    out.push({ course: c.slug, label: c.label, overdue: rows[0]?.overdue ?? 0, expiring: rows[0]?.expiring ?? 0 });
+  }
+  return out;
 }
