@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { parseMarkdown, type Block, type Inline } from "@/lib/markdown";
+import { parseRichMarkdown, type Inline, type RichBlock } from "@/lib/markdown";
 
 function renderInline(nodes: Inline[]): ReactNode {
   return nodes.map((n, i) => {
@@ -31,7 +31,7 @@ function renderInline(nodes: Inline[]): ReactNode {
   });
 }
 
-function renderBlock(b: Block, i: number): ReactNode {
+function renderBlock(b: RichBlock, i: number): ReactNode {
   switch (b.type) {
     case "heading": {
       const Tag = `h${b.level}` as "h2" | "h3" | "h4";
@@ -42,6 +42,14 @@ function renderBlock(b: Block, i: number): ReactNode {
         </Tag>
       );
     }
+    case "image":
+      return (
+        <figure key={i} className="my-2">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a private file served by our own route */}
+          <img src={`/api/content/files/${b.fileId}`} alt={b.alt} loading="lazy" className="max-h-[32rem] max-w-full rounded-lg border" />
+          {b.alt ? <figcaption className="mt-1 text-xs text-muted-foreground">{b.alt}</figcaption> : null}
+        </figure>
+      );
     case "paragraph":
       return <p key={i}>{renderInline(b.children)}</p>;
     case "quote":
@@ -65,5 +73,5 @@ function renderBlock(b: Block, i: number): ReactNode {
 
 /** Renders announcement and policy text. Safe by construction: see src/lib/markdown.ts. */
 export function Markdown({ source }: { source: string }) {
-  return <div className="space-y-3 text-sm leading-relaxed">{parseMarkdown(source).map(renderBlock)}</div>;
+  return <div className="space-y-3 text-sm leading-relaxed">{parseRichMarkdown(source).map(renderBlock)}</div>;
 }

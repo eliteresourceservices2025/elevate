@@ -29,6 +29,7 @@ export default async function EditAnnouncementPage({ params }: PageProps<"/annou
           attachmentDocumentId: a.attachmentDocumentId,
           audience: a.audience === "teams" ? "teams" : "all",
           textLocked: data.textLocked,
+          files: data.files,
         }}
       />
     </div>

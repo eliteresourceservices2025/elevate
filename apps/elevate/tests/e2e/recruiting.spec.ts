@@ -1,3 +1,4 @@
+import { deflateSync } from "node:zlib";
 import { expect, test } from "@playwright/test";
 import { createEmployeeAccount, createHrAccount, signInEnrollingMfa, waitForHydration } from "./helpers";
 
@@ -171,7 +172,6 @@ test("the Google Calendar card is for HR and recruiters only; connecting is refu
 });
 
 function wideBanner(): Buffer {
-  // A plain 1000 x 300 PNG: wide enough for the banner, made by the browser into the final JPEG
   const { deflateSync } = require("node:zlib") as typeof import("node:zlib");
   const crcTable = Array.from({ length: 256 }, (_, n) => {
     let c = n;

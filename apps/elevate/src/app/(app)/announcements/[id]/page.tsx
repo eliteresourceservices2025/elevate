@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pin } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { ContentFileList } from "@/modules/announcements/components/content-file-list";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { orNotFound } from "@/lib/or-not-found";
@@ -40,6 +41,7 @@ export default async function AnnouncementPage({ params }: PageProps<"/announcem
 
       <article className="rounded-xl border bg-card p-5">
         <Markdown source={a.body} />
+        <ContentFileList files={a.files} />
         {a.attachment ? (
           <div className="mt-4 flex items-center gap-2 border-t pt-3 text-sm">
             <span className="font-medium">Attachment:</span> {a.attachment.title}

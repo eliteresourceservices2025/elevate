@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { MarkdownField } from "@/components/markdown-field";
 import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import { createAnnouncement, updateAnnouncement } from "../actions";
+import type { ContentFileView } from "../content-files";
+import { ContentFilesEditor } from "./content-files-editor";
 
 type Option = { id: string; name?: string; title?: string };
 
@@ -33,6 +35,7 @@ export function AnnouncementForm({
     attachmentDocumentId: string | null;
     audience: "all" | "teams";
     textLocked: boolean;
+    files: ContentFileView[];
   };
 }) {
   const router = useRouter();
@@ -45,8 +48,9 @@ export function AnnouncementForm({
   const [requiresAck, setRequiresAck] = useState(edit?.requiresAck ?? false);
   const [dueOn, setDueOn] = useState(edit?.dueOn ?? "");
   const [attachment, setAttachment] = useState(edit?.attachmentDocumentId ?? "");
+  const [files, setFiles] = useState<ContentFileView[]>(edit?.files ?? []);
 
-  useWarnWhenEdited({ title, body, audience, teamIds, pinned, requiresAck, dueOn, attachment });
+  useWarnWhenEdited({ title, body, audience, teamIds, pinned, requiresAck, dueOn, attachment, files: files.map((f) => f.id) });
   const locked = edit?.textLocked ?? false;
   const toggleTeam = (id: string) => setTeamIds((ids) => (ids.includes(id) ? ids.filter((t) => t !== id) : [...ids, id]));
 
@@ -54,12 +58,12 @@ export function AnnouncementForm({
     e.preventDefault();
     startTransition(async () => {
       if (edit) {
-        const result = await updateAnnouncement({ announcementId: edit.announcementId, title, body, pinned, dueOn, attachmentDocumentId: attachment });
+        const result = await updateAnnouncement({ announcementId: edit.announcementId, title, body, pinned, dueOn, attachmentDocumentId: attachment, attachmentIds: files.map((f) => f.id) });
         if (!result.ok) return void toast.error(result.error);
         toast.success("Announcement updated.");
         router.push(`/announcements/${edit.announcementId}`);
       } else {
-        const result = await createAnnouncement({ title, body, audience, teamIds, pinned, requiresAck, dueOn, attachmentDocumentId: attachment });
+        const result = await createAnnouncement({ title, body, audience, teamIds, pinned, requiresAck, dueOn, attachmentDocumentId: attachment, attachmentIds: files.map((f) => f.id) });
         if (!result.ok) return void toast.error(result.error);
         toast.success("Announcement posted.");
         router.push(`/announcements/${result.data.id}`);
@@ -80,6 +84,7 @@ export function AnnouncementForm({
       {locked ? <p className="rounded-lg border bg-muted/50 p-3 text-sm">People have already acknowledged this, so the title and text are locked. You can still change the due date, pinning and attachment.</p> : null}
       <TextField id="an-title" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required disabled={locked} />
       <MarkdownField id="an-body" label="Message" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={10} required disabled={locked} />
+      <ContentFilesEditor files={files} onFilesChange={setFiles} body={body} onBodyChange={setBody} disabled={locked} />
 
       {!edit ? (
         <fieldset className="space-y-3">

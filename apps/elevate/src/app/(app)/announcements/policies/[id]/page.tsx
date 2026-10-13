@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Markdown } from "@/components/markdown";
+import { ContentFileList } from "@/modules/announcements/components/content-file-list";
 import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
@@ -51,6 +52,7 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
           ) : null}
           <article className="rounded-xl border bg-card p-5">
             <Markdown source={p.current.body} />
+            <ContentFileList files={p.current.files} />
           </article>
 
           {p.current.requiresAck ? (
@@ -81,13 +83,13 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
             <DraftEditor
               policyId={p.id}
               nextVersion={p.draft.version}
-              initial={{ body: p.draft.body, changeNote: p.draft.changeNote, requiresAck: p.draft.requiresAck, dueOn: p.draft.dueOn }}
+              initial={{ body: p.draft.body, changeNote: p.draft.changeNote, requiresAck: p.draft.requiresAck, dueOn: p.draft.dueOn, files: p.draft.files }}
               hasPublished={p.current !== null}
               canArchive={p.current === null && p.history.length === 0 && p.kind === "general"}
               today={today}
             />
           ) : p.current ? (
-            <StartDraftButton policyId={p.id} body={p.current.body} requiresAck={p.current.requiresAck} />
+            <StartDraftButton policyId={p.id} body={p.current.body} requiresAck={p.current.requiresAck} fileIds={p.current.files.map((f) => f.id)} />
           ) : null}
         </section>
       ) : null}

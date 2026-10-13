@@ -2,6 +2,7 @@ import "server-only";
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
 import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runExtraHoursReminders, runHrApprovalSummary, runLeadApprovalReminders, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts, runWeeklyExtraHoursNotice } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
+import { purgeOrphanContentFiles } from "@/modules/announcements/content-files";
 import { processMirrorQueue, purgeJibbleData, runJibbleComparison, runJibbleRepair, runJibbleUnmatchedReport, syncJibblePeople } from "@/modules/jibble/jobs";
 import { runCredentialReminders } from "@/modules/credentials/jobs";
 import { runAnniversaryReminders } from "@/modules/people/anniversary-jobs";
@@ -44,7 +45,14 @@ export const anniversaryReminders = inngest.createFunction(
 /** Daily at 2:00 AM: remove uploads that were started and never finished. */
 export const documentPendingCleanup = inngest.createFunction(
   { id: "document-pending-cleanup", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 0 2 * * *` } },
-  async ({ step }) => step.run("cleanup", () => track("document-pending-cleanup", () => cleanupPendingUploads())),
+  async ({ step }) =>
+    step.run("cleanup", () =>
+      track("document-pending-cleanup", async () => {
+        const uploads = await cleanupPendingUploads();
+        const content = await purgeOrphanContentFiles();
+        return { removed: uploads.removed + content.removed };
+      }),
+    ),
 );
 
 /** Daily at 1:30 AM: acknowledgment reminders (3 days before, the due day, weekly while overdue). */

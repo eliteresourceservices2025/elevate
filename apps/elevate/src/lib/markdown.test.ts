@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInline, parseMarkdown, safeHref } from "./markdown";
+import { parseRichMarkdown, referencedFileIds, parseInline, parseMarkdown, safeHref } from "./markdown";
 
 describe("safeHref", () => {
   it("allows https, http, mailto and in-app paths", () => {
@@ -65,5 +65,26 @@ describe("parseMarkdown", () => {
     const blocks = parseMarkdown("a".repeat(50_000));
     const first = blocks[0];
     expect(first.type === "paragraph" && first.children[0].type === "text" && first.children[0].text.length).toBe(10_000);
+  });
+});
+
+describe("stored pictures", () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  it("a line of its own pointing at a stored file becomes a picture", () => {
+    const blocks = parseRichMarkdown(`Hello\n\n![The team at work](file:${id})\n\nBye`);
+    expect(blocks.map((b) => b.type)).toEqual(["paragraph", "image", "paragraph"]);
+    expect(blocks[1]).toEqual({ type: "image", fileId: id, alt: "The team at work" });
+  });
+  it("never shows an outside address or a malformed id as a picture", () => {
+    for (const line of ["![x](https://example.com/a.png)", "![x](file:not-an-id)", "![x](javascript:alert(1))", `text ![x](file:${id}) inside a sentence`]) {
+      expect(parseRichMarkdown(line).some((b) => b.type === "image")).toBe(false);
+    }
+  });
+  it("is off for ordinary text (offers and other letters)", () => {
+    expect(parseMarkdown(`![x](file:${id})`).some((b) => (b as { type: string }).type === "image")).toBe(false);
+  });
+  it("lists the stored pictures a text points at", () => {
+    expect(referencedFileIds(`![a](file:${id})\n\n![b](file:${id})\n\n![c](file:22222222-2222-4222-8222-222222222222)`)).toEqual([id, "22222222-2222-4222-8222-222222222222"]);
+    expect(referencedFileIds("no pictures here")).toEqual([]);
   });
 });

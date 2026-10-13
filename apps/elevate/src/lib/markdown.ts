@@ -1,6 +1,7 @@
 // A deliberately small Markdown parser for announcements and policies. It produces a tree of plain
 // data that React renders as elements, so there is no HTML string anywhere to inject into:
-// "<script>" is just text, images are not supported, and only safe link targets become links.
+// "<script>" is just text, and only safe link targets become links. Pictures are NOT arbitrary images: a line of its own that reads
+// ![description](file:<id>) shows one of the picture files stored with the announcement or policy (never an outside address).
 
 export type Inline =
   | { type: "text"; text: string }
@@ -14,6 +15,23 @@ export type Block =
   | { type: "paragraph"; children: Inline[] }
   | { type: "list"; ordered: boolean; items: Inline[][] }
   | { type: "quote"; children: Inline[] };
+
+/** A picture block, only produced by parseRichMarkdown (announcements and policies). Offers and other text never get one. */
+export type ImageBlock = { type: "image"; fileId: string; alt: string };
+export type RichBlock = Block | ImageBlock;
+
+const FILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const IMAGE_LINE = /^!\[([^\]\n]{0,200})\]\(file:([0-9a-fA-F-]{36})\)$/;
+
+/** The ids of every stored picture the text points at (so the editor can keep exactly those). */
+export function referencedFileIds(src: string): string[] {
+  const ids: string[] = [];
+  for (const raw of src.replace(/\r\n?/g, "\n").split("\n")) {
+    const m = IMAGE_LINE.exec(raw.trim());
+    if (m && FILE_ID.test(m[2])) ids.push(m[2].toLowerCase());
+  }
+  return [...new Set(ids)];
+}
 
 export const MARKDOWN_MAX_LENGTH = 10_000;
 
@@ -110,8 +128,17 @@ export function parseInline(src: string, depth = 0): Inline[] {
 
 /** Headings (#, ##, ###), bullet and numbered lists, quotes and paragraphs. Blank lines separate blocks. */
 export function parseMarkdown(src: string): Block[] {
+  return parse(src, false) as Block[];
+}
+
+/** The same, plus stored pictures: a line of its own, ![description](file:<id>). */
+export function parseRichMarkdown(src: string): RichBlock[] {
+  return parse(src, true);
+}
+
+function parse(src: string, images: boolean): RichBlock[] {
   const lines = src.slice(0, MARKDOWN_MAX_LENGTH).replace(/\r\n?/g, "\n").split("\n");
-  const blocks: Block[] = [];
+  const blocks: RichBlock[] = [];
   let para: string[] = [];
   let list: { ordered: boolean; items: string[] } | null = null;
 
@@ -129,6 +156,13 @@ export function parseMarkdown(src: string): Block[] {
     if (line.trim() === "") {
       flushPara();
       flushList();
+      continue;
+    }
+    const image = images ? IMAGE_LINE.exec(line.trim()) : null;
+    if (image && FILE_ID.test(image[2])) {
+      flushPara();
+      flushList();
+      blocks.push({ type: "image", fileId: image[2].toLowerCase(), alt: image[1].trim() });
       continue;
     }
     const heading = /^(#{1,3})\s+(.+)$/.exec(line);

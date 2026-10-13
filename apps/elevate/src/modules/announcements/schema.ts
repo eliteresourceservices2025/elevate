@@ -120,6 +120,40 @@ export const policyVersions = docs
   )
   .enableRLS();
 
+/**
+ * Pictures and files that belong to an announcement or to one version of a policy. A file is uploaded first (owner set, no parent:
+ * "pending"), then bound when the item is saved; pending files nobody saved are removed after a day. The files of a PUBLISHED policy
+ * version cannot change (database trigger), like the version itself. Several rows may share one stored file (a new draft starts with
+ * the earlier version's files): the stored file is removed only when no row uses it.
+ */
+export const contentFiles = docs
+  .table(
+    "content_files",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      ownerId: uuid("owner_id").notNull(),
+      announcementId: uuid("announcement_id").references(() => announcements.id),
+      policyVersionId: uuid("policy_version_id").references(() => policyVersions.id),
+      /** image = a picture shown in the text; file = a PDF or Word document to download. */
+      kind: text("kind").notNull(),
+      fileName: text("file_name").notNull(),
+      mimeType: text("mime_type").notNull(),
+      sizeBytes: integer("size_bytes").notNull(),
+      sha256: text("sha256").notNull(),
+      storagePath: text("storage_path").notNull(),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      index("content_files_announcement_idx").on(t.announcementId),
+      index("content_files_version_idx").on(t.policyVersionId),
+      index("content_files_pending_idx").on(t.ownerId, t.createdAt),
+      index("content_files_path_idx").on(t.storagePath),
+      check("content_files_kind_chk", sql`${t.kind} in ('image','file')`),
+      check("content_files_one_parent_chk", sql`${t.announcementId} is null or ${t.policyVersionId} is null`),
+    ],
+  )
+  .enableRLS();
+
 /** Insert-only (database trigger). Exactly one of announcement_id / policy_version_id is set. */
 export const acknowledgments = docs
   .table(

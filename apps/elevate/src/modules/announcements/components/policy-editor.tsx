@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { MarkdownField } from "@/components/markdown-field";
 import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import { archivePolicy, createPolicy, discardDraft, publishDraft, saveDraft } from "../actions";
+import type { ContentFileView } from "../content-files";
+import { ContentFilesEditor } from "./content-files-editor";
 
 const MARKDOWN_HINT = "Formatting: **bold**, *italic*, # heading, - bullet list, 1. numbered list, [link text](https://example.com).";
 
@@ -30,7 +32,8 @@ export function NewPolicyForm({ today }: { today: string }) {
   const [body, setBody] = useState("");
   const [requiresAck, setRequiresAck] = useState(true);
   const [dueOn, setDueOn] = useState("");
-  useWarnWhenEdited({ title, body, requiresAck, dueOn });
+  const [files, setFiles] = useState<ContentFileView[]>([]);
+  useWarnWhenEdited({ title, body, requiresAck, dueOn, files: files.map((f) => f.id) });
 
   return (
     <form
@@ -38,7 +41,7 @@ export function NewPolicyForm({ today }: { today: string }) {
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {
-          const result = await createPolicy({ title, body, requiresAck, dueOn });
+          const result = await createPolicy({ title, body, requiresAck, dueOn, attachmentIds: files.map((f) => f.id) });
           if (!result.ok) return void toast.error(result.error);
           toast.success("Policy created as a draft.");
           router.push(`/announcements/policies/${result.data.id}`);
@@ -47,6 +50,7 @@ export function NewPolicyForm({ today }: { today: string }) {
     >
       <TextField id="np-title" label="Policy title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required />
       <MarkdownField id="np-body" label="Text" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={8} required />
+      <ContentFilesEditor files={files} onFilesChange={setFiles} body={body} onBodyChange={setBody} />
       <AckFields {...{ requiresAck, setRequiresAck, dueOn, setDueOn, today }} idPrefix="np" />
       <Button type="submit" disabled={pending}>Create draft</Button>
     </form>
@@ -64,7 +68,7 @@ export function DraftEditor({
 }: {
   policyId: string;
   nextVersion: number;
-  initial: { body: string; changeNote: string | null; requiresAck: boolean; dueOn: string | null };
+  initial: { body: string; changeNote: string | null; requiresAck: boolean; dueOn: string | null; files: ContentFileView[] };
   hasPublished: boolean;
   /** A never-published policy that is not the privacy notice or monitoring policy can be removed. */
   canArchive: boolean;
@@ -76,7 +80,8 @@ export function DraftEditor({
   const [changeNote, setChangeNote] = useState(initial.changeNote ?? "");
   const [requiresAck, setRequiresAck] = useState(initial.requiresAck);
   const [dueOn, setDueOn] = useState(initial.dueOn ?? "");
-  const { markSaved } = useWarnWhenEdited({ body, changeNote, requiresAck, dueOn });
+  const [files, setFiles] = useState<ContentFileView[]>(initial.files);
+  const { markSaved } = useWarnWhenEdited({ body, changeNote, requiresAck, dueOn, files: files.map((f) => f.id) });
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string) =>
     startTransition(async () => {
@@ -86,12 +91,13 @@ export function DraftEditor({
       markSaved();
       router.refresh();
     });
-  const save = () => saveDraft({ policyId, body, changeNote, requiresAck, dueOn });
+  const save = () => saveDraft({ policyId, body, changeNote, requiresAck, dueOn, attachmentIds: files.map((f) => f.id) });
 
   return (
     <form className="space-y-4 rounded-xl border bg-card p-4" onSubmit={(e) => { e.preventDefault(); run(save, "Draft saved."); }}>
       <h3 className="font-semibold">Draft of version {nextVersion}</h3>
       <MarkdownField id="pd-body" label="Text" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={14} required />
+      <ContentFilesEditor files={files} onFilesChange={setFiles} body={body} onBodyChange={setBody} />
       {hasPublished ? <TextField id="pd-note" label="What changed (shown to readers)" value={changeNote} onChange={(e) => setChangeNote(e.target.value)} maxLength={500} /> : null}
       <AckFields {...{ requiresAck, setRequiresAck, dueOn, setDueOn, today }} idPrefix="pd" />
       <div className="flex flex-wrap gap-2">
@@ -138,7 +144,7 @@ export function DraftEditor({
 }
 
 /** Starts a new draft from the current published text. */
-export function StartDraftButton({ policyId, body, requiresAck }: { policyId: string; body: string; requiresAck: boolean }) {
+export function StartDraftButton({ policyId, body, requiresAck, fileIds }: { policyId: string; body: string; requiresAck: boolean; fileIds: string[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   return (
@@ -148,7 +154,7 @@ export function StartDraftButton({ policyId, body, requiresAck }: { policyId: st
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          const result = await saveDraft({ policyId, body, changeNote: "", requiresAck, dueOn: "" });
+          const result = await saveDraft({ policyId, body, changeNote: "", requiresAck, dueOn: "", attachmentIds: fileIds });
           if (!result.ok) return void toast.error(result.error);
           router.refresh();
         })

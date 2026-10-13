@@ -9,6 +9,7 @@ import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { dueState, type DueState } from "./due";
 import { acknowledgments, announcementRecipients, announcementTeams, announcements, policies, policyVersions } from "./schema";
+import { listAnnouncementFiles, listVersionFiles, type ContentFileView } from "./content-files";
 import { ackStatus, pendingAcknowledgments, pendingLink, type StatusRow } from "./service";
 
 // Every query starts with requireUser() and authorize(). Pages wrap them in orNotFound().
@@ -100,6 +101,8 @@ export type AnnouncementDetail = {
   audience: "all" | "teams";
   teamNames: string[];
   attachment: { id: string; title: string } | null;
+  /** Pictures (shown in the text) and documents (downloads) attached to this post. */
+  files: ContentFileView[];
   needsMyAck: boolean;
   acknowledgedAt: Date | null;
   canManage: boolean;
@@ -143,6 +146,7 @@ export async function getAnnouncement(id: string): Promise<AnnouncementDetail | 
     audience: a.audience === "teams" ? "teams" : "all",
     teamNames,
     attachment: attachment ?? null,
+    files: await listAnnouncementFiles(a.id),
     needsMyAck: a.requiresAck && Boolean(addressed) && !ack,
     acknowledgedAt: ack?.at ?? null,
     canManage: isHr,
@@ -226,6 +230,7 @@ export type PolicyVersionRow = {
   publishedAt: Date | null;
   /** HR only. */
   acknowledgedCount: number | null;
+  files: ContentFileView[];
 };
 
 export type PolicyDetail = {
@@ -261,6 +266,11 @@ export async function getPolicy(id: string): Promise<PolicyDetail | null> {
   const countOf = new Map(counts.map((c) => [c.versionId, c.n]));
 
   const all = await db.select().from(policyVersions).where(eq(policyVersions.policyId, id)).orderBy(desc(policyVersions.version));
+  const filesOf = new Map<string, ContentFileView[]>();
+  for (const v of all) {
+    // A person only gets the files of the version they can read; HR gets every version's.
+    if (v.status === "published" || isHr) filesOf.set(v.id, await listVersionFiles(v.id));
+  }
   const toRow = (v: (typeof all)[number]): PolicyVersionRow => ({
     id: v.id,
     version: v.version,
@@ -271,6 +281,7 @@ export async function getPolicy(id: string): Promise<PolicyDetail | null> {
     dueOn: v.dueOn,
     publishedAt: v.publishedAt,
     acknowledgedCount: isHr ? (countOf.get(v.id) ?? 0) : null,
+    files: filesOf.get(v.id) ?? [],
   });
 
   const published = all.filter((v) => v.status === "published").map(toRow);
@@ -334,5 +345,5 @@ export async function getAnnouncementForEdit(id: string) {
   if (!a) return null;
   const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(acknowledgments).where(eq(acknowledgments.announcementId, id));
   const options = await getComposeOptions();
-  return { announcement: a, textLocked: n > 0, documents: options.documents };
+  return { announcement: a, textLocked: n > 0, documents: options.documents, files: await listAnnouncementFiles(id) };
 }

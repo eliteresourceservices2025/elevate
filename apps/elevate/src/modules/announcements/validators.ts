@@ -8,6 +8,9 @@ const optionalDate = z.preprocess(blankToUndefined, isoDate.optional());
 const title = z.string().trim().min(3, "Enter a title of at least 3 characters").max(120, "Use 120 characters or fewer");
 const body = z.string().trim().min(1, "Write the message").max(MARKDOWN_MAX_LENGTH, `Use ${MARKDOWN_MAX_LENGTH.toLocaleString("en-US")} characters or fewer`);
 
+/** Ids of the pictures and files shown with the item (uploaded first, bound when saved). */
+const attachmentIds = z.array(uuid).max(12, "At most 12 pictures and files").default([]);
+
 const dueRule = (v: { requiresAck: boolean; dueOn?: string }) => !v.dueOn || v.requiresAck;
 const DUE_MESSAGE = "A due date only applies when acknowledgment is required";
 
@@ -21,6 +24,7 @@ export const announcementSchema = z
     requiresAck: z.boolean().default(false),
     dueOn: optionalDate,
     attachmentDocumentId: z.preprocess(blankToUndefined, uuid.optional()),
+    attachmentIds,
   })
   .refine(dueRule, { message: DUE_MESSAGE, path: ["dueOn"] })
   .refine((v) => v.audience === "all" || v.teamIds.length > 0, { message: "Choose at least one team", path: ["teamIds"] });
@@ -33,6 +37,7 @@ export const updateAnnouncementSchema = z.object({
   pinned: z.boolean().default(false),
   dueOn: optionalDate,
   attachmentDocumentId: z.preprocess(blankToUndefined, uuid.optional()),
+  attachmentIds,
 });
 
 export const announcementIdSchema = z.object({ announcementId: uuid });
@@ -41,7 +46,7 @@ export const announcementIdSchema = z.object({ announcementId: uuid });
 export const subjectSchema = z.object({ kind: z.enum(["announcement", "policy_version"]), id: uuid });
 export const acknowledgeSchema = subjectSchema;
 
-export const createPolicySchema = z.object({ title, body, requiresAck: z.boolean().default(true), dueOn: optionalDate });
+export const createPolicySchema = z.object({ title, body, requiresAck: z.boolean().default(true), dueOn: optionalDate, attachmentIds });
 
 export const saveDraftSchema = z
   .object({
@@ -50,6 +55,7 @@ export const saveDraftSchema = z
     changeNote: z.preprocess(blankToUndefined, z.string().trim().max(500, "Use 500 characters or fewer").optional()),
     requiresAck: z.boolean().default(true),
     dueOn: optionalDate,
+    attachmentIds,
   })
   .refine(dueRule, { message: DUE_MESSAGE, path: ["dueOn"] });
 

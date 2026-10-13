@@ -17,6 +17,7 @@ import { todayInZone } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { PLACEHOLDER_MARK } from "./constants";
+import { deleteUnusedPaths, listAnnouncementFiles, removeVersionFiles, syncContentFiles } from "./content-files";
 import { announcementRecipients, announcementTeams, announcements, acknowledgments, policies, policyVersions } from "./schema";
 import { ackStatus, activeUserIds, audienceEmployees, pendingAcknowledgments, queueAckEmails, remindPending } from "./service";
 import {
@@ -84,6 +85,7 @@ export async function createAnnouncement(input: unknown): Promise<ActionResult<{
         })
         .returning({ id: announcements.id });
       if (teamIds.length) await tx.insert(announcementTeams).values(teamIds.map((teamId) => ({ announcementId: row.id, teamId })));
+      await syncContentFiles(tx, actor, { announcementId: row.id }, v.attachmentIds, v.body);
 
       // Freeze who this was addressed to. The poster is not asked to acknowledge their own post.
       const audience = (await audienceEmployees(tx, v.audience === "teams" ? teamIds : null)).filter((p) => p.userId !== actor.id);
@@ -128,6 +130,11 @@ export async function updateAnnouncement(input: unknown): Promise<ActionResult> 
       const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(acknowledgments).where(eq(acknowledgments.announcementId, current.id));
       if (n > 0) return fail("People have already acknowledged this, so the text cannot change. Post a new announcement instead.");
     }
+    // Once people have acknowledged, what they were shown cannot change: the same goes for its pictures and files.
+    const currentFiles = (await listAnnouncementFiles(current.id)).map((f) => f.id).sort();
+    const newFiles = [...new Set(v.attachmentIds)].sort();
+    const [{ acked }] = await db.select({ acked: sql<number>`count(*)::int` }).from(acknowledgments).where(eq(acknowledgments.announcementId, current.id));
+    if (acked > 0 && JSON.stringify(currentFiles) !== JSON.stringify(newFiles)) return fail("People have already acknowledged this, so its pictures and files cannot change. Post a new announcement instead.");
     if (v.dueOn && !current.requiresAck) return fail("A due date only applies when acknowledgment is required.");
     if (v.dueOn && v.dueOn !== current.dueOn && v.dueOn < todayInZone()) return fail("The due date has already passed.");
     if (v.attachmentDocumentId !== (current.attachmentDocumentId ?? undefined)) {
@@ -135,11 +142,12 @@ export async function updateAnnouncement(input: unknown): Promise<ActionResult> 
       if (problem) return fail(problem);
     }
 
-    await db.transaction(async (tx) => {
+    const removedPaths = await db.transaction(async (tx) => {
       await tx
         .update(announcements)
         .set({ title: v.title, body: v.body, pinned: v.pinned, dueOn: v.dueOn ?? null, attachmentDocumentId: v.attachmentDocumentId ?? null, updatedAt: new Date() })
         .where(eq(announcements.id, current.id));
+      const synced = await syncContentFiles(tx, actor, { announcementId: current.id }, v.attachmentIds, v.body);
       await writeAudit(
         {
           actor,
@@ -151,7 +159,9 @@ export async function updateAnnouncement(input: unknown): Promise<ActionResult> 
         },
         tx,
       );
+      return synced.removedPaths;
     });
+    await deleteUnusedPaths(removedPaths);
     refresh(`/announcements/${current.id}`);
     return { ok: true, data: undefined };
   });
@@ -342,7 +352,8 @@ export async function createPolicy(input: unknown): Promise<ActionResult<{ id: s
       try {
         const id = await db.transaction(async (tx) => {
           const [p] = await tx.insert(policies).values({ slug, title: v.title, kind: "general" }).returning({ id: policies.id });
-          await tx.insert(policyVersions).values({ policyId: p.id, version: 1, body: v.body, status: "draft", requiresAck: v.requiresAck, dueOn: v.requiresAck ? (v.dueOn ?? null) : null });
+          const [version] = await tx.insert(policyVersions).values({ policyId: p.id, version: 1, body: v.body, status: "draft", requiresAck: v.requiresAck, dueOn: v.requiresAck ? (v.dueOn ?? null) : null }).returning({ id: policyVersions.id });
+          await syncContentFiles(tx, actor, { policyVersionId: version.id, policyId: p.id }, v.attachmentIds, v.body);
           await writeAudit({ actor, action: "policy.create", targetType: "policy", targetId: p.id, metadata: { slug } }, tx);
           return p.id;
         });
@@ -367,23 +378,29 @@ export async function saveDraft(input: unknown): Promise<ActionResult> {
     const v = parsed.data;
     if (v.dueOn && v.dueOn < todayInZone()) return fail("The due date has already passed.");
 
-    await db.transaction(async (tx) => {
+    const removed = await db.transaction(async (tx) => {
       const [policy] = await tx.select({ id: policies.id, archivedAt: policies.archivedAt }).from(policies).where(eq(policies.id, v.policyId)).limit(1);
       if (!policy || policy.archivedAt) throw new ActionFailure("That policy was not found.");
 
       const [draft] = await tx.select({ id: policyVersions.id }).from(policyVersions).where(and(eq(policyVersions.policyId, v.policyId), eq(policyVersions.status, "draft"))).limit(1);
       const values = { body: v.body, changeNote: v.changeNote ?? null, requiresAck: v.requiresAck, dueOn: v.requiresAck ? (v.dueOn ?? null) : null, updatedAt: new Date() };
+      let draftId: string;
       if (draft) {
         await tx.update(policyVersions).set(values).where(eq(policyVersions.id, draft.id));
+        draftId = draft.id;
       } else {
         const [{ next }] = await tx
           .select({ next: sql<number>`coalesce(max(${policyVersions.version}), 0)::int + 1` })
           .from(policyVersions)
           .where(eq(policyVersions.policyId, v.policyId));
-        await tx.insert(policyVersions).values({ policyId: v.policyId, version: next, status: "draft", ...values });
+        const [created] = await tx.insert(policyVersions).values({ policyId: v.policyId, version: next, status: "draft", ...values }).returning({ id: policyVersions.id });
+        draftId = created.id;
       }
+      const synced = await syncContentFiles(tx, actor, { policyVersionId: draftId, policyId: v.policyId }, v.attachmentIds, v.body);
       await writeAudit({ actor, action: "policy.draft_saved", targetType: "policy", targetId: v.policyId }, tx);
+      return synced.removedPaths;
     });
+    await deleteUnusedPaths(removed);
     refresh(`/announcements/policies/${v.policyId}`);
     return { ok: true, data: undefined };
   });
@@ -398,13 +415,17 @@ export async function discardDraft(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return fail(BAD);
     const { policyId } = parsed.data;
 
-    await db.transaction(async (tx) => {
+    const freed = await db.transaction(async (tx) => {
       const [published] = await tx.select({ id: policyVersions.id }).from(policyVersions).where(and(eq(policyVersions.policyId, policyId), eq(policyVersions.status, "published"))).limit(1);
       if (!published) throw new ActionFailure("A policy needs a first version. Edit the draft instead.");
+      const [draftRow] = await tx.select({ id: policyVersions.id }).from(policyVersions).where(and(eq(policyVersions.policyId, policyId), eq(policyVersions.status, "draft"))).limit(1);
+      const paths = draftRow ? await removeVersionFiles(tx, draftRow.id) : [];
       const gone = await tx.delete(policyVersions).where(and(eq(policyVersions.policyId, policyId), eq(policyVersions.status, "draft"))).returning({ id: policyVersions.id });
       if (gone.length === 0) throw new ActionFailure("There is no draft to discard.");
       await writeAudit({ actor, action: "policy.draft_discarded", targetType: "policy", targetId: policyId }, tx);
+      return paths;
     });
+    await deleteUnusedPaths(freed);
     refresh(`/announcements/policies/${policyId}`);
     return { ok: true, data: undefined };
   });
