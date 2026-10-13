@@ -39,6 +39,8 @@ export type PermissionRule = {
   requiresFlag?: "safevoice_handler";
   /** Flag holders get this scope; roles are ignored when set. */
   flagScope?: Scope;
+  /** Per-person flags that grant a scope IN ADDITION to the roles (the Privacy Officer: HR and Super Admin keep their role access). */
+  alsoFlag?: { privacy_officer?: Scope };
 };
 
 export function definePermissions<T extends Record<string, PermissionRule>>(rules: T): T {

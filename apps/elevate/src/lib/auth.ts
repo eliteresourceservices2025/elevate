@@ -30,5 +30,5 @@ export const requireUser = cache(async (): Promise<AuthUser> => {
     redirect("/login");
   }
 
-  return { id, email, roles: user.roles, isSafevoiceHandler: user.isSafevoiceHandler };
+  return { id, email, roles: user.roles, isSafevoiceHandler: user.isSafevoiceHandler, isPrivacyOfficer: user.isPrivacyOfficer };
 });

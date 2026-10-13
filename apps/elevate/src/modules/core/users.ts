@@ -12,6 +12,7 @@ export type CoreUser = {
   email: string;
   archivedAt: Date | null;
   isSafevoiceHandler: boolean;
+  isPrivacyOfficer: boolean;
   roles: RoleSlug[];
 };
 
@@ -107,6 +108,7 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
       email: row.email,
       archivedAt: row.archivedAt,
       isSafevoiceHandler: row.isSafevoiceHandler,
+      isPrivacyOfficer: row.isPrivacyOfficer,
       roles: roleRows.map((r) => r.slug).filter(isRoleSlug),
     };
   });
@@ -125,6 +127,7 @@ async function loadCoreUser(id: string): Promise<CoreUser | null> {
     email: row.email,
     archivedAt: row.archivedAt,
     isSafevoiceHandler: row.isSafevoiceHandler,
+    isPrivacyOfficer: row.isPrivacyOfficer,
     roles: roleRows.map((r) => r.slug).filter(isRoleSlug),
   };
 }

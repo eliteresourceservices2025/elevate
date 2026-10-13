@@ -133,6 +133,9 @@ const EXPECTED: Record<string, string> = {
   "learn.grant_retry": "A A - - - -",
   "support.create": "O O O O O O",
   "support.manage": "A A - - - -",
+  "incidents.report": "O O O O O O",
+  "incidents.handle": "A A - - - -", // plus the Privacy Officer flag
+  "incidents.designate": "A A - - - -",
   "recruiting.manage_careers_page": "A A - A - -",
   "imports.manage": "A A - - - -",
   "analytics.export": "A A - - - -",
@@ -233,6 +236,22 @@ describe("Safe Voice handlers", () => {
     const handler = { id: "h", roles: ["employee"] as RoleSlug[], isSafevoiceHandler: true };
     expect(can(handler, "settings.manage_roles")).toBe(false);
     expect(can(handler, "people.view_profile", { ownerUserId: "x" })).toBe(false);
+  });
+});
+
+describe("Privacy Officer flag", () => {
+  it("adds incident handling to any role and widens nothing else", () => {
+    const officer = { id: "p", roles: ["employee"] as RoleSlug[], isPrivacyOfficer: true };
+    expect(can(officer, "incidents.handle")).toBe(true);
+    expect(can({ id: "p", roles: ["employee"] as RoleSlug[], isPrivacyOfficer: false }, "incidents.handle")).toBe(false);
+    expect(can(officer, "incidents.designate")).toBe(false);
+    expect(can(officer, "settings.manage_roles")).toBe(false);
+    expect(can(officer, "people.view_profile", { ownerUserId: "x" })).toBe(false);
+    expect(can(officer, "safevoice.handle")).toBe(false);
+  });
+
+  it("a Safe Voice handler flag does not open incidents", () => {
+    expect(can({ id: "h", roles: ["employee"], isSafevoiceHandler: true }, "incidents.handle")).toBe(false);
   });
 });
 

@@ -26,6 +26,8 @@ export const POLICIES = {
   signPublic: { requests: 120, window: "10 m" },
   /** Contact support: a few requests an hour per person. */
   support: { requests: 5, window: "1 h" },
+  /** Privacy incident reports and replies: a few an hour per person (a real incident is rare; this stops a flood). */
+  incident: { requests: 10, window: "1 h" },
   /** Opening ELEVATE Learn (the sign-in handoff), per person. */
   learnLaunch: { requests: 20, window: "10 m" },
   /** The header search box (it asks as people type, so the allowance is generous). */

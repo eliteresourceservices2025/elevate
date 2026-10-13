@@ -12,6 +12,8 @@ export const users = core
       email: text("email").notNull(),
       // Safe Voice handlers are named individually; a role never grants case access.
       isSafevoiceHandler: boolean("is_safevoice_handler").notNull().default(false),
+      // The Privacy Officer reads and handles privacy incident reports together with HR; named individually by Super Admin or HR.
+      isPrivacyOfficer: boolean("is_privacy_officer").notNull().default(false),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
       archivedAt: timestamp("archived_at", { withTimezone: true }),

@@ -6,6 +6,7 @@ import { attendancePermissions } from "@/modules/attendance/permissions";
 import { dashboardPermissions } from "@/modules/dashboard/permissions";
 import { documentsPermissions } from "@/modules/documents/permissions";
 import { importsPermissions } from "@/modules/imports/permissions";
+import { incidentsPermissions } from "@/modules/incidents/permissions";
 import { healthPermissions } from "@/modules/health/permissions";
 import { jibblePermissions } from "@/modules/jibble/permissions";
 import { notificationsPermissions } from "@/modules/notifications/permissions";
@@ -48,6 +49,7 @@ export const PERMISSIONS = {
   ...assetsPermissions,
   ...credentialsPermissions,
   ...supportPermissions,
+  ...incidentsPermissions,
   ...analyticsPermissions,
   ...dashboardPermissions,
   ...settingsPermissions,
@@ -59,6 +61,8 @@ export type AuthzUser = {
   id: string;
   roles: readonly RoleSlug[];
   isSafevoiceHandler?: boolean;
+  /** Named individually (privacy incident inbox); a role never grants it. */
+  isPrivacyOfficer?: boolean;
 };
 
 /**
@@ -100,6 +104,7 @@ function grantedScopes(user: AuthzUser, rule: PermissionRule): Scope[] {
     const scope = rule.roles[role];
     if (scope) scopes.push(scope);
   }
+  if (user.isPrivacyOfficer && rule.alsoFlag?.privacy_officer) scopes.push(rule.alsoFlag.privacy_officer);
   return scopes.sort((a, b) => rank(b) - rank(a));
 }
 
