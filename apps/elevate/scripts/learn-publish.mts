@@ -1,5 +1,6 @@
 // Loads the HIPAA course (apps/learn/src/content) into the learn schema.
-//   pnpm learn:publish                                         saves it as a DRAFT version (safe to repeat)
+//   pnpm learn:publish                                         saves the HIPAA course as a DRAFT version (safe to repeat)
+//   pnpm learn:publish --course cybersecurity                  the same for another course (hipaa or cybersecurity)
 //   pnpm learn:publish --publish --reviewer you@ers.example --counsel-date 2026-11-01
 //                                                              makes it live; needs who reviewed it and when counsel approved
 // Publishing freezes the version. Run it against production only after counsel's review (docs/learn/06-testing-and-review.md).
@@ -35,6 +36,7 @@ try {
     counselApprovedOn: value("counsel-date"),
     actorUserId: reviewerUserId,
     material: flag("material"),
+    courseSlug: value("course"),
   });
   console.log(`${result.status === "published" ? "Published" : "Saved as a draft"}: version ${result.version} (${result.modules} modules, ${result.questions} questions)${result.created ? "" : ", no change"}.`);
 } finally {

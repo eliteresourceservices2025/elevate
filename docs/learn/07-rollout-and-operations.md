@@ -4,7 +4,7 @@
 
 ### Release 1: the learner and the record (core)
 
-**Built so far:** the `learn` schema (migration 0054), the sign-in handoff, **the 8 modules and the 85-question bank (authored in `apps/learn/src/content/hipaa`)**, the publish step (`pnpm learn:publish`, draft first; publishing needs a reviewer and counsel's date), assigning (`pnpm learn:assign` until the HR page and the nightly job exist), the course overview, the module player (server-credited time, activity check), the exam runner, results and review, the attestation and an on-screen printable certificate, and the public check page. **Still to build for release 1:** the PDF certificate with its email copy, the `learn-assign`, `learn-remind`, `learn-sync` and `learn-purge` jobs, the HR Training page, and the status view for leads.
+**Built so far:** the `learn` schema (migration 0054), the sign-in handoff, **the 7 HIPAA modules and the 83-question bank, plus the separate Cybersecurity basics course (2 modules, 22 questions) (authored in `apps/learn/src/content/hipaa`)**, the publish step (`pnpm learn:publish`, draft first; publishing needs a reviewer and counsel's date), assigning (`pnpm learn:assign` until the HR page and the nightly job exist), the course overview, the module player (server-credited time, activity check), the exam runner, results and review, the attestation and an on-screen printable certificate, and the public check page. **Still to build for release 1:** the PDF certificate with its email copy, the `learn-assign`, `learn-remind`, `learn-sync` and `learn-purge` jobs, the HR Training page, and the status view for leads.
 - `learn` schema, roles and triggers (migration), `apps/learn` shell, handoff, sessions.
 - Core course written in code (8 modules, bank of at least 50), tracks Full and Essentials, pacing, exam engine, attestation,
   certificate and check page, My HIPAA record.
@@ -75,7 +75,7 @@ budget). Video, if added, is the only item that may need storage or bandwidth be
 | 3 | Whether training time is paid or counted anywhere (we only record it) | Before release 1 |
 | 4 | Which clients handle patient information (`handles_phi`) so tracks resolve correctly | Before the first assignments |
 | 5 | Certificate issuer name and title | Before release 1 |
-| 6 | Exam time limit (30 min), wait after failure (1 hour) and pass mark (85%) confirmed by counsel/HR | Release 1 pilot |
+| 6 | Exam time limit (20 min), wait after failure (1 hour), 3 tries and pass mark (80%, matching the existing course) confirmed by counsel/HR | Release 1 pilot |
 | 7 | Motion graphics: who produces them and where they are hosted | Release 3 |
 | 8 | Incident handling timelines per client BAA (notice windows) | Release 2 |
 | 9 | Whether overdue training should ever affect client assignment (default: warning only) | Release 2 |

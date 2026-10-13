@@ -1,13 +1,13 @@
 import { q, type CourseModule, type QuestionSeed } from "../schema";
 
-// Module 7: privacy and security incidents. How to report is described in plain terms (lead and HR, plus the client's own steps);
+// Module 6: privacy and security incidents. How to report is described in plain terms (lead and HR, plus the client's own steps);
 // the in-ELEVATE incident form is linked here when it is built (release 2).
 
-export const m7: CourseModule = {
+export const m6: CourseModule = {
   key: "incidents",
   title: "Privacy and security incidents",
   summary: "What counts as an incident, why speed matters, and exactly what to do and not do when something goes wrong.",
-  estimatedMinutes: 8,
+  estimatedMinutes: 9,
   tracks: ["full", "essentials", "refresher"],
   keyPoints: [
     "An incident is anything that may have exposed patient information or weakened its protection.",
@@ -33,6 +33,26 @@ export const m7: CourseModule = {
           ],
         },
         { type: "callout", tone: "info", text: "You do not have to be sure it is serious. If you wonder whether it is an incident, report it." },
+      ],
+    },
+    {
+      id: "common-causes",
+      title: "What usually goes wrong",
+      blocks: [
+        { type: "paragraph", text: "Most incidents are ordinary mistakes, not attacks. These come up again and again:" },
+        {
+          type: "list",
+          items: [
+            "Patient information sent or faxed to the wrong person",
+            "A laptop, phone or drive lost or stolen",
+            "Records opened without a work reason",
+            "A shared or borrowed login",
+            "Paper or old devices thrown away without being destroyed",
+            "A phishing message, virus or other attack",
+            "Missing training or missing agreements with vendors",
+          ],
+        },
+        { type: "callout", tone: "tip", title: "Why encryption comes up", text: "If a lost device was properly encrypted, the law may not require patients to be notified. That is the client's call, never yours. Report every loss, encrypted or not." },
       ],
     },
     {
@@ -114,7 +134,7 @@ export const m7: CourseModule = {
   ],
 };
 
-export const q7: QuestionSeed[] = [
+export const q6: QuestionSeed[] = [
   q("incidents", "What is an incident", "multiple", "Which of these should be reported as a possible privacy or security incident? Select all that apply.", ["An email with patient information sent to the wrong recipient", "A lost laptop used for work", "A password you accidentally shared", "A reminder to take a break"], [0, 1, 2], "Misdirected PHI, lost devices and shared passwords are incidents. A break reminder is not."),
   q("incidents", "Speed", "single", "You just realized you sent a file with patient names to the wrong person. When should you report it?", ["Immediately", "At the end of the week", "Only if the person replies", "After you have checked with a friend"], [0], "Speed matters. Report immediately so the client can act within its deadlines."),
   q("incidents", "Who to tell", "single", "Who should you tell first about a possible incident?", ["Your team lead and HR, following your client's instructions", "The patient directly", "Your coworkers in a group chat", "Nobody until you are sure"], [0], "Report through the proper channel. Do not tell the patient or wait for certainty."),
@@ -124,5 +144,7 @@ export const q7: QuestionSeed[] = [
   q("incidents", "Report details", "single", "What should you include when you write an incident report?", ["What happened, when and where, with no patient names or details", "The full patient record", "Your guess about whose fault it was", "Only that something went wrong"], [0], "Give facts about the event. Keep patient details out of the report itself."),
   q("incidents", "No retaliation", "true_false", "True or false: HIPAA prohibits an organization from retaliating against someone for filing a complaint about a possible violation.", ["True", "False"], [0], "The Privacy Rule bars intimidating or retaliatory acts against people who file complaints or take part in investigations. ERS also does not punish good-faith internal reports."),
   q("incidents", "Preserve", "single", "You suspect a phishing email caused a problem. What should you do with the email?", ["Keep it and report it", "Delete it immediately", "Forward it to everyone", "Print it and throw it away"], [0], "Do not delete evidence. The message helps responders understand what happened."),
+  q("incidents", "Common causes", "multiple", "Which of these are common causes of privacy or security incidents? Select all that apply.", ["Information sent to the wrong person", "A lost or stolen laptop", "Records opened without a work reason", "Taking a regular break"], [0, 1, 2], "Misdirected information, lost devices and unauthorized access are among the most common causes. A break is not an incident."),
+  q("incidents", "Encryption", "single", "A work laptop is stolen from a car. It has full-disk encryption. What do you do?", ["Report it immediately; the client decides whether notification is needed", "Say nothing, because it was encrypted", "Decide yourself that no report is needed", "Wait a week to see if it is found"], [0], "Encryption can mean notification is not required, but that decision belongs to the client and ERS. Every loss is reported."),
   q("incidents", "Scenario", "scenario", "You find a printout with patient names left on a shared printer at a co-working space. What do you do?", ["Keep it secure, report it to your lead and HR, and follow instructions", "Throw it in the bin", "Leave it where it is", "Take a photo and post it to ask whose it is"], [0], "Secure the document, then report it. Throwing it away or posting a photo spreads the exposure."),
 ];

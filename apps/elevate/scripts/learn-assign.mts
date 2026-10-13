@@ -1,5 +1,5 @@
 // Gives a person the published HIPAA course (until the HR Training page and the nightly assignment job exist).
-//   pnpm learn:assign --email person@ers.example --track full
+//   pnpm learn:assign --email person@ers.example --track full [--course cybersecurity]
 //   Tracks: full (healthcare-client VAs and anyone handling client data), essentials (internal staff), refresher.
 import { config } from "dotenv";
 import postgres from "postgres";
@@ -25,7 +25,7 @@ const sql = postgres(url, { prepare: false, onnotice: () => {} });
 try {
   const [u] = await sql`select id from core.users where lower(email) = ${email.toLowerCase()} and archived_at is null`;
   if (!u) throw new Error(`No active ELEVATE account for ${email}`);
-  const r = await assignCourse(sql, { userId: u.id as string, track: track as "full" | "essentials" | "refresher", reason: "manual" });
+  const r = await assignCourse(sql, { userId: u.id as string, track: track as "full" | "essentials" | "refresher", reason: "manual", courseSlug: value("course") });
   console.log(r.created ? `Assigned (${track}), due ${r.dueOn}.` : `Already assigned, due ${r.dueOn}.`);
 } finally {
   await sql.end();

@@ -7,7 +7,7 @@ export const m1: CourseModule = {
   key: "foundations",
   title: "HIPAA foundations and your role at ERS",
   summary: "What HIPAA is, who it applies to, where ERS and you fit, and the one habit that keeps you safe: when unsure, stop and ask.",
-  estimatedMinutes: 10,
+  estimatedMinutes: 13,
   tracks: ["full", "essentials", "refresher"],
   keyPoints: [
     "HIPAA protects the privacy and security of people's health information.",
@@ -16,6 +16,7 @@ export const m1: CourseModule = {
     "Use or share only what your job and your client's rules allow.",
     "When you are not sure, stop, do not share, and ask your lead.",
     "ERS runs a privacy and security program, and training is one required part of it.",
+    "Every organization in the chain from the clinic to ERS is bound by the same agreement, and so are you.",
   ],
   screens: [
     {
@@ -24,7 +25,7 @@ export const m1: CourseModule = {
       blocks: [
         { type: "paragraph", text: "Many ERS clients are doctors' offices, clinics, billing companies and other healthcare organizations. When you work for them, you may see information about real patients: who they are, what is wrong with them, and what they owe." },
         { type: "paragraph", text: "That information belongs to the patient. A law called **HIPAA** says how it must be protected, and it applies to you as soon as you start work." },
-        { type: "callout", tone: "info", title: "Good news", text: "You do not need to be a lawyer. You need a few clear habits, and this course teaches them in about 90 minutes. Your progress is saved, so you can stop and come back." },
+        { type: "callout", tone: "info", title: "Good news", text: "You do not need to be a lawyer. You need a few clear habits, and this course teaches them in about 80 minutes. Your progress is saved, so you can stop and come back." },
       ],
     },
     {
@@ -58,6 +59,23 @@ export const m1: CourseModule = {
           ],
         },
         { type: "callout", tone: "tip", text: "Depending on the client, ERS is a business associate or a subcontractor. Either way, the same protections follow the information to you." },
+      ],
+    },
+    {
+      id: "chain-of-trust",
+      title: "The chain of trust",
+      blocks: [
+        { type: "paragraph", text: "A clinic cannot simply hand patient information to a vendor. The law builds a chain: every organization that handles the information signs an agreement promising to protect it, and must make the next organization in the chain promise the same." },
+        {
+          type: "steps",
+          items: [
+            { title: "The clinic or plan", text: "The covered entity that first holds the information." },
+            { title: "ERS", text: "A business associate, bound by its agreement with the client." },
+            { title: "Anyone ERS uses", text: "Subcontractors, tools and vendors, bound by the same promise." },
+            { title: "You", text: "A member of ERS's workforce, bound by ERS's rules." },
+          ],
+        },
+        { type: "callout", tone: "info", text: "The chain only holds if every link does. A rule your client gives you is not the client's own preference: it is the promise that came down the chain, and you are the last link." },
       ],
     },
     {
@@ -108,6 +126,25 @@ export const m1: CourseModule = {
       ],
     },
     {
+      id: "baa-asks",
+      title: "What the agreement asks of ERS",
+      blocks: [
+        { type: "paragraph", text: "A business associate agreement is specific. Among other things, it requires the business associate to:" },
+        {
+          type: "list",
+          items: [
+            "Use patient information only for the purposes the contract allows",
+            "Protect it with appropriate safeguards, including for electronic information",
+            "Report any use or disclosure the contract does not allow, including breaches",
+            "Make sure its own subcontractors agree to the same limits",
+            "Help the client respond to patients' requests to see or correct their records",
+            "Open its records to HHS when asked, and return or destroy the information when the contract ends",
+          ],
+        },
+        { type: "callout", tone: "tip", text: "Each item is something you do in a normal day: stay within the task, use approved tools, report problems, never keep copies." },
+      ],
+    },
+    {
       id: "program",
       title: "How ERS keeps this program running",
       blocks: [
@@ -127,14 +164,32 @@ export const m1: CourseModule = {
       ],
     },
     {
+      id: "timeline",
+      title: "How HIPAA grew up",
+      blocks: [
+        { type: "paragraph", text: "HIPAA did not arrive all at once. Knowing the steps explains why ERS, a business associate, is held to the rules directly:" },
+        {
+          type: "steps",
+          items: [
+            { title: "1996", text: "HIPAA becomes federal law." },
+            { title: "2003", text: "Organizations must comply with the Privacy Rule, which governs how information is used and shared." },
+            { title: "2009", text: "The HITECH Act makes business associates directly responsible for the Security Rule and strengthens enforcement." },
+            { title: "2013", text: "The Omnibus Rule folds HITECH into the HIPAA rules and adds detail on business associates and breach notification." },
+          ],
+        },
+        { type: "callout", tone: "info", text: "Since 2009, ERS answers to the government for its own compliance, not only to its clients." },
+      ],
+    },
+    {
       id: "consequences",
       title: "Why it matters to you",
       blocks: [
-        { type: "paragraph", text: "Mistakes happen, and ERS wants to hear about them quickly (more on that in Module 7). Deliberately misusing information is different." },
+        { type: "paragraph", text: "Mistakes happen, and ERS wants to hear about them quickly (more on that in Module 6). Deliberately misusing information is different." },
         {
           type: "list",
           items: [
-            "Organizations can face large civil penalties, and people who knowingly obtain or share patient information improperly can face criminal penalties.",
+            "Civil penalties are enforced by HHS's Office for Civil Rights and can fall on organizations, and in some cases on individuals.",
+            "Knowingly misusing patient information is a crime the Department of Justice prosecutes: up to 1 year in prison, 5 with false pretenses, 10 if for gain or harm.",
             "ERS has sanctions for breaking its privacy and security rules, up to ending your engagement.",
             "Clients can end their contract with ERS, which affects every teammate.",
           ],

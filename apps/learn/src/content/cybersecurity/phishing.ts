@@ -1,13 +1,14 @@
 import { q, type CourseModule, type QuestionSeed } from "../schema";
 
-// Module 6: phishing and social engineering. Invented addresses use the reserved .example name only.
+// Cybersecurity course, module 1: phishing and social engineering. Moved out of the HIPAA course (which is HIPAA only).
+// Invented addresses use the reserved .example name only.
 
-export const m6: CourseModule = {
+export const phishingModule: CourseModule = {
   key: "phishing",
   title: "Phishing and social engineering",
   summary: "How attackers trick people, the signs to look for, and what to do when something feels off.",
   estimatedMinutes: 11,
-  tracks: ["full", "essentials", "refresher"],
+  tracks: ["full"],
   keyPoints: [
     "Attackers target people, not only computers.",
     "Urgency, fear and authority are the usual tricks.",
@@ -136,7 +137,7 @@ export const m6: CourseModule = {
   ],
 };
 
-export const q6: QuestionSeed[] = [
+export const phishingQuestions: QuestionSeed[] = [
   q("phishing", "Types", "single", "An attacker sends a text message with a link that pretends to be a delivery notice. This is called:", ["Smishing", "Vishing", "Tailgating", "Backup"], [0], "Smishing is phishing by SMS or text message."),
   q("phishing", "Types", "single", "A caller says \"I am from IT; read me the code on your phone so we can fix your account.\" This is:", ["Vishing and social engineering", "A normal security check", "Required by HIPAA", "A system update"], [0], "Voice phishing uses a made-up story to get codes or passwords. IT would never need your code."),
   q("phishing", "Signs", "multiple", "Which of these are warning signs of a phishing email? Select all that apply.", ["A threat that your account closes in 10 minutes", "A link whose real address does not match the text", "A request for your password", "A message from a known colleague about a meeting you expected"], [0, 1, 2], "Urgency, mismatched links and requests for credentials are classic signs."),

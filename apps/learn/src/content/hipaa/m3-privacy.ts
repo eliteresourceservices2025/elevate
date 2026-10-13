@@ -6,7 +6,7 @@ export const m3: CourseModule = {
   key: "privacy",
   title: "The Privacy Rule and minimum necessary",
   summary: "When patient information may be used or shared, how to keep to the minimum needed, and the ERS 5-point send check.",
-  estimatedMinutes: 13,
+  estimatedMinutes: 15,
   tracks: ["full", "essentials", "refresher"],
   keyPoints: [
     "Using, disclosing and requesting information are three different actions.",
@@ -16,6 +16,7 @@ export const m3: CourseModule = {
     "Verify who is asking before you share anything.",
     "Anything beyond the permitted purposes needs the patient's written authorization, and the client decides that.",
     "HIPAA is the minimum: a stricter state law or client rule can apply as well.",
+    "Reasonable safeguards cover exposure that cannot be avoided; police, courts and agencies go through the client, never through you.",
   ],
   screens: [
     {
@@ -73,6 +74,24 @@ export const m3: CourseModule = {
       ],
     },
     {
+      id: "authorities",
+      title: "When police, a court or an agency asks",
+      blocks: [
+        { type: "paragraph", text: "The law lets, and sometimes requires, a covered entity to share information without the patient's authorization in certain situations: when the law requires it, for public health, to report abuse or neglect, for oversight, in court proceedings, and in some law enforcement matters." },
+        { type: "paragraph", text: "Those decisions are the client's, made with its own legal checks. A subpoena or court order, a named agency and a lawful request are things the client verifies. A phone call is not proof of any of them." },
+        {
+          type: "scenario",
+          title: "A caller says he is a detective",
+          prompt: "A man phones the clinic line, says he is a detective investigating a case, and asks for a patient's home address \"urgently\". He gives a badge number.",
+          choices: [
+            { text: "Give the address. Police have the right to it.", feedback: "You cannot verify him, and whether the clinic may share it is the client's decision.", best: false },
+            { text: "Share nothing, take his contact details, and pass the request to your client contact straight away.", feedback: "Correct. The client verifies and decides. You route.", best: true },
+            { text: "Confirm only whether the person is a patient.", feedback: "Confirming that someone is a patient is itself a disclosure.", best: false },
+          ],
+        },
+      ],
+    },
+    {
       id: "minimum-necessary",
       title: "Minimum necessary",
       blocks: [
@@ -90,6 +109,31 @@ export const m3: CourseModule = {
       blocks: [
         { type: "paragraph", text: "There are a few exceptions, for example sharing for a patient's treatment between providers, giving the patient their own information, or disclosures the law requires." },
         { type: "callout", tone: "tip", text: "These exceptions are for your client to apply, not for you to decide. If you think one applies, ask your lead or client contact. Do not rely on your own reading." },
+      ],
+    },
+    {
+      id: "incidental",
+      title: "Incidental disclosures: when it cannot be perfect",
+      blocks: [
+        { type: "paragraph", text: "The Privacy Rule does not demand that every possible exposure be eliminated. Some exposure comes with normal work: a name on a sign-in sheet, a conversation that someone nearby might hear, a screen that a visitor glances at. These are **incidental** and are allowed, but only if **reasonable safeguards** are in place and the information was limited to the minimum." },
+        {
+          type: "list",
+          items: [
+            "Keep the reason for a visit off any sheet others can read.",
+            "Lower your voice, move away from others, or use a headset.",
+            "Angle or lock your screen so passers-by cannot read it.",
+            "If you could say it without a name, say it without a name.",
+          ],
+        },
+        {
+          type: "check",
+          question: "An incidental disclosure is acceptable when:",
+          options: [
+            { text: "Reasonable safeguards were in place and only the minimum information was involved", correct: true, feedback: "Right. Safeguards and minimum necessary are what make it incidental." },
+            { text: "Nobody complained", correct: false, feedback: "Complaints are not the test. Safeguards and minimum necessary are." },
+            { text: "The person overhearing was a coworker", correct: false, feedback: "Who overhears is not the test either." },
+          ],
+        },
       ],
     },
     {
@@ -207,5 +251,8 @@ export const q3: QuestionSeed[] = [
   q("privacy", "Patient rights", "single", "A patient calls and asks for a copy of their medical records. What should you do?", ["Do not send anything yourself; take the request the way your client instructs and pass it to the client contact", "Email the records right away", "Read the records to them over the phone", "Tell them they are not allowed to have them"], [0], "Patients have a right of access, and the client handles it with its own checks and deadlines. Your part is to pass the request on correctly."),
   q("privacy", "Patient rights", "multiple", "Which of these are rights patients have over their information? Select all that apply.", ["To see or get a copy of their records", "To ask for a correction", "To get a list of certain disclosures", "To choose which ERS team member opens their file"], [0, 1, 2], "Access, amendment and an accounting of disclosures are patient rights. Patients do not choose who works on a file."),
   q("privacy", "State laws", "single", "A state law gives patients more privacy protection than HIPAA for a certain kind of record. What does that mean for your work?", ["The stricter protection can apply as well, so follow your client's instructions and ask when a request looks unusual", "HIPAA always overrides it, so you can ignore it", "Only the state law matters and your client's rules do not", "It only applies to paper records"], [0], "HIPAA is a federal floor. A state law that gives greater privacy protection is generally not overridden by HIPAA, so the stricter rule applies."),
+  q("privacy", "Incidental disclosures", "single", "A clinic uses a sign-in sheet in the waiting room. What is the best practice to keep it within the rules?", ["Ask for names only, and do not write the reason for the visit where others can see it", "Ask for the diagnosis so staff can prepare", "Leave the sheet open to everyone for the whole day", "Stop signing people in"], [0], "Sign-in sheets are an accepted incidental exposure, provided reasonable safeguards are used and only the minimum is asked."),
+  q("privacy", "Incidental disclosures", "single", "You must discuss a patient's case with a colleague and others can hear in an open office. What is the best response?", ["Move somewhere private, or avoid using the patient's name", "Speak louder so the colleague hears", "Shout across the room to save time", "Post it in a group chat instead"], [0], "Reasonable safeguards include lowering your voice, moving, and leaving out names so a passer-by learns nothing."),
+  q("privacy", "Authorities", "single", "A caller says he is from the police and demands a patient's address immediately. What do you do?", ["Share nothing and route the request to your client contact", "Give it, since police have authority", "Confirm only that the person is a patient", "Ask him to email a photo of his badge to you"], [0], "The client decides whether and how to disclose, and verifies the requester. A phone call is not proof, and even confirming someone is a patient is a disclosure."),
   q("privacy", "Mindset", "scenario", "A friend who is a nurse messages you: \"My neighbor went to your client's clinic. Can you check if her results are in?\" What do you do?", ["Decline, do not look, and carry on with your assigned tasks", "Look quickly and give a vague answer", "Look and tell her only that results are in", "Ask the neighbor's name and check later"], [0], "Looking for a personal reason is a violation and disclosing even a vague answer is a disclosure."),
 ];

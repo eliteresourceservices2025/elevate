@@ -4,27 +4,33 @@
 
 | Track | Who | Modules | Exam |
 | --- | --- | --- | --- |
-| **Full** | People assigned to a client flagged "handles patient information" and anyone whose job touches client data | All 8 core modules + any client add-ons | 25 questions |
-| **Essentials** | Internal staff with no client data (finance, HR, recruiting, leadership) | Modules 1, 2, 3, 6 (phishing) and 7: foundations, PHI, privacy, phishing, incidents | 15 questions |
-| **Refresher** | Anyone renewing within 60 days before or after expiry | Changed modules plus a "what you should already know" recap | 15 questions |
+| **Full** | People assigned to a client flagged "handles patient information" and anyone whose job touches client data | All 7 modules + any client add-ons | 15 questions |
+| **Essentials** | Internal staff with no client data (finance, HR, recruiting, leadership) | Modules 1, 2, 3 and 6: foundations, PHI, privacy, incidents | 15 questions |
+| **Refresher** | Anyone renewing within 60 days before or after expiry | The same four modules (a changed-modules recap comes with release 3) | 15 questions |
 
-Pass mark for every track: **85%**. The track is resolved by ELEVATE from the person's client assignments (a new
-`core.clients.handles_phi` setting HR maintains); a person can be moved by hand with a reason.
+Pass mark for every track: **80%**, with 15 questions, to match the organization's existing HIPAA course. The track is resolved
+by ELEVATE from the person's client assignments (a new `core.clients.handles_phi` setting HR maintains); a person can be moved
+by hand with a reason.
 
-## Core curriculum (8 modules, about 90 minutes)
+**This course is about HIPAA only.** General cybersecurity habits (phishing and social engineering, passwords and sign-in codes,
+updates, home network, public Wi-Fi) are a separate course for the organization, "Cybersecurity basics for the ERS team"
+(`apps/learn/src/content/cybersecurity`, 2 modules, its own 15-question exam at 80%). HIPAA's own requirement that a workforce
+is trained on malicious software and password management is covered in Module 4 in HIPAA terms, with a pointer to that course.
 
-Original text, drafted from HHS/OCR public guidance, then reviewed. The sample's list is a starting point, not a script.
+## Core curriculum (7 modules, about 80 minutes; version 2)
+
+Original text, drafted from HHS/OCR public guidance and the regulations (every claim is traced in `08-source-check.md`), with the
+topic coverage compared against the organization's HIPAA course. Nothing is copied from another course.
 
 | # | Module | Learning goals (plain language) | Min. time |
 | --- | --- | --- | --- |
-| 1 | HIPAA foundations and ERS's role | Who the parties are (covered entity, business associate, subcontractor, workforce); where ERS and a VA sit; why "I can see it" is not "I may use it"; how ERS runs its program | 10 |
-| 2 | PHI, ePHI and identifiers | What counts, the 18 identifier families, context, screenshots and paper, de-identification limits | 10 |
-| 3 | Privacy Rule and minimum necessary | Use vs disclosure vs request, treatment/payment/operations, written authorization, minimum necessary, patient rights, state laws as a floor, the ERS 5-point send check (who, what, why, where, how) | 13 |
-| 4 | Security Rule and safeguards | Administrative, physical, technical safeguards; access control, audit controls, transmission security; passwords and MFA | 12 |
-| 5 | Remote work and device security | Home workspace, screen privacy, shared devices, networks, approved systems, lost devices | 14 |
-| 6 | Phishing and social engineering | Spotting and reporting, vishing, MFA fatigue, safe handling of attachments and links | 11 |
-| 7 | Privacy and security incidents | What an incident is, speed matters, how to report in ELEVATE, no cover-ups, breach basics, sanctions awareness | 8 |
-| 8 | Scenario lab | Mixed, realistic situations that combine modules; certification readiness | 10 |
+| 1 | HIPAA foundations and ERS's role | What HIPAA is and how it grew; who is who (covered entity, business associate, subcontractor, workforce); the chain of trust and what the business associate agreement asks; where ERS and a VA sit; how ERS runs its program; why "I can see it" is not "I may use it"; who enforces and what happens | 13 |
+| 2 | PHI, ePHI and identifiers | What counts, the 18 identifier families, context, screenshots, paper and spoken PHI, de-identification limits (including file names and photo details) | 10 |
+| 3 | Privacy Rule and minimum necessary | Use vs disclosure vs request, treatment/payment/operations, written authorization, when police, courts or agencies ask, minimum necessary, incidental disclosures, patient rights, state laws as a floor, the ERS 5-point send check | 15 |
+| 4 | The Security Rule | Confidentiality, integrity and availability; administrative, physical and technical safeguards; required vs addressable; unique logins, passwords and multi-factor sign-in, access that ends with the work, audit logs, transmission, backups; what HIPAA trains the workforce on; the proposed update | 13 |
+| 5 | Protecting patient information where you work | Workstation use and security, approved systems only, saving/printing/photographing, devices and media (disposal and reuse), lost devices, working away from your usual space | 9 |
+| 6 | Privacy and security incidents | What an incident is and what usually goes wrong, breach and the presumption, why speed matters, what to do and not do, encryption, no retaliation | 9 |
+| 7 | Scenario lab | Mixed, realistic situations that combine the modules; readiness check | 10 |
 
 Minimum time per module is **60% of the estimate** (rounded), enforced on the server; the player shows the estimate, not the
 minimum.
@@ -54,13 +60,13 @@ minimum.
 
 | Rule | Value (adjustable by HR in settings, with audit) |
 | --- | --- |
-| Questions | 25 (Full), 15 (Essentials, Refresher), stratified by topic |
-| Pass mark | 85% |
-| Time limit | 30 minutes (Full), 20 minutes (short) |
-| Tries | 3, then HR grants more (reason required; counted in `retry_grants`) |
+| Questions | 15 on every track, spread across the track's modules, unseen questions first |
+| Pass mark | 80% (matches the organization's existing course) |
+| Time limit | 20 minutes |
+| Tries | 3, then HR grants more (reason required; counted in `retry_grants`). The existing course allows unlimited tries; ours caps at 3 so a person must go back to the lessons between tries |
 | Wait after a failed try | 1 hour, and the missed topics' modules must be reopened |
 | Question types | Single answer, multiple answers (all or nothing), true/false, scenario best-answer |
-| Bank size | 85 built (10 per module, 11 for Module 1 and 14 for Module 3; the Essentials pool is 55), each tagged by topic and module, each with a rationale. A lint test (`apps/learn/src/content/hipaa/content.test.ts`) checks every question |
+| Bank size | 83 built across the 7 modules (the Essentials pool is 51), each tagged by topic and module, each with a rationale. A lint test (`apps/learn/src/content/content.test.ts`) checks every question of every course |
 | Accommodation | HR can grant extra time (a retry grant of type "time") |
 
 Question quality rules (also checked by an automated content lint): one correct idea, plausible distractors, no "all of the

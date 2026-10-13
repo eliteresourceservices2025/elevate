@@ -33,35 +33,35 @@ test("a person reads a module, finishes it when the time is reached, and starts 
   await page.waitForURL(`${LEARN}/**`, slow);
   await expect(page.getByRole("heading", { name: /Hello, Mina/ })).toBeVisible(slow);
 
-  // The course page: eight modules, only the first open.
+  // The course page: seven modules, only the first open.
   await page.getByRole("link", { name: "Start" }).click();
   await expect(page.getByRole("heading", { name: /HIPAA Privacy, Security and Awareness/ })).toBeVisible(slow);
-  await expect(page.getByText("0 of 8 modules done")).toBeVisible();
+  await expect(page.getByText("0 of 7 modules done")).toBeVisible();
   await expect(page.getByText("Locked").first()).toBeVisible();
   await page.getByRole("link", { name: "Start" }).first().click();
 
   // The player: screen by screen, up to the last, where finishing is blocked until the time is reached.
   await expect(page.getByRole("heading", { name: "HIPAA foundations and your role at ERS" })).toBeVisible(slow);
-  await expect(page.getByText("Screen 1 of 10")).toBeVisible();
+  await expect(page.getByText("Screen 1 of 13")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Why this training matters" })).toBeVisible();
-  for (let i = 0; i < 9; i++) await page.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(page.getByText("Screen 10 of 10")).toBeVisible();
+  for (let i = 0; i < 12; i++) await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByText("Screen 13 of 13")).toBeVisible();
   await expect(page.getByText("Key points")).toBeVisible();
   const finish = page.getByRole("button", { name: "Finish this module" });
   await expect(finish).toBeDisabled();
-  await expect(page.getByText(/Reading time: 0:00 of 6:00 needed/)).toBeVisible();
+  await expect(page.getByText(/Reading time: 0:00 of 7:48 needed/)).toBeVisible();
 
   // The server saw every screen. Reaching the reading time (added directly: the real minimum is minutes long) opens the button.
   await expect
     .poll(async () => (await sql`select count(*)::int as n from learn.module_screens where assignment_id = ${assignmentId}`)[0].n, { timeout: 15_000 })
-    .toBe(10);
-  await sql`insert into learn.module_time (assignment_id, user_id, module_key, day, seconds) values (${assignmentId}, ${userId}, 'foundations', current_date, 360)`;
+    .toBe(13);
+  await sql`insert into learn.module_time (assignment_id, user_id, module_key, day, seconds) values (${assignmentId}, ${userId}, 'foundations', current_date, 468)`;
   await page.reload();
   await expect(page.getByText("You have spent enough time on this module.")).toBeVisible(slow);
   await page.getByRole("button", { name: "Finish this module" }).click();
   await page.waitForURL(new RegExp(`/course/${assignmentId}$`), slow);
-  await expect(page.getByText("1 of 8 modules done")).toBeVisible(slow);
-  await expect(page.getByText(/Finish all 8 modules to unlock the exam/)).toBeVisible();
+  await expect(page.getByText("1 of 7 modules done")).toBeVisible(slow);
+  await expect(page.getByText(/Finish all 7 modules to unlock the exam/)).toBeVisible();
 
   // Finish the rest as the database would record it, then the exam opens.
   await sql`
@@ -69,10 +69,10 @@ test("a person reads a module, finishes it when the time is reached, and starts 
     select ${assignmentId}, ${userId}, module_key from learn.version_modules
     where version_id = (select version_id from learn.assignments where id = ${assignmentId}) and module_key <> 'foundations'`;
   await page.reload();
-  await expect(page.getByText("8 of 8 modules done")).toBeVisible(slow);
+  await expect(page.getByText("7 of 7 modules done")).toBeVisible(slow);
   await page.getByRole("button", { name: "Start the exam" }).click();
   await page.waitForURL(/\/exam\//, slow);
-  await expect(page.getByText("Question 1 of 25")).toBeVisible(slow);
+  await expect(page.getByText("Question 1 of 15")).toBeVisible(slow);
   await expect(page.getByRole("timer")).toBeVisible();
   const choices = page.getByRole("group", { name: "Answer choices" }).getByRole("radio");
   await choices.first().check();

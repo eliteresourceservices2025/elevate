@@ -14,7 +14,7 @@ roles or append-only behavior.
 | End-to-end | `apps/elevate/tests/e2e/learn.spec.ts` and `apps/learn/tests/e2e` | New hire to certificate in the browser; fail and retry; lead sees status only; HR retry grant; verify page; incident form |
 | Security | Both | Answer key never appears in any response; no HTML in rendered content; CSP; cookie flags; Origin check; rate limits; log scan for names and answers |
 | Accessibility | e2e | axe on every learner page, keyboard path through a module and an exam |
-| Content lint | `pnpm --filter learn content:lint` | Every question has a rationale, topic and module tag; no duplicates; bank coverage per module; reading level; forbidden patterns (real-looking identifiers, URLs, phone numbers) |
+| Content lint | `apps/learn/src/content/content.test.ts` (runs for every course in the registry) | Every question has a rationale, topic and module tag; no duplicates; bank coverage per module; reading level; forbidden patterns (real-looking identifiers, URLs, phone numbers) |
 | Load | one-off script | 100 learners starting and submitting an exam within a minute; handoff burst at the Manila shift change |
 
 ## Specific cases that must exist

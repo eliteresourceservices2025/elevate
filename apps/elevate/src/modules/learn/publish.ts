@@ -1,5 +1,6 @@
 import type postgres from "postgres";
-import { HIPAA_COURSE_SLUG, MIN_TIME_SHARE, hipaaCourse, hipaaExamConfig, hipaaQuestions } from "../../../../learn/src/content/hipaa";
+import { COURSES, MIN_TIME_SHARE } from "../../../../learn/src/content";
+import { HIPAA_COURSE_SLUG } from "../../../../learn/src/content/hipaa";
 import { courseContentSchema, questionSeedSchema, type CourseContent, type QuestionSeed } from "../../../../learn/src/content/schema";
 
 // Loading the course into the learn schema. The course is authored in code (apps/learn/src/content); the database copy is what the
@@ -21,7 +22,9 @@ export type PublishOptions = {
   actorUserId?: string;
   /** Marks a version whose changes people already trained must relearn. */
   material?: boolean;
-  /** Tests may load a smaller course; the HIPAA course is the default. */
+  /** Which course to load: a slug from the registry in apps/learn/src/content (default: hipaa). */
+  courseSlug?: string;
+  /** Tests may load a smaller course of their own. */
   course?: { slug: string; content: CourseContent; questions: QuestionSeed[]; examConfig: unknown };
 };
 
@@ -43,7 +46,9 @@ export function checkCourse(content: CourseContent, questions: QuestionSeed[]): 
 }
 
 export async function loadCourse(sql: Sql, options: PublishOptions = {}): Promise<PublishResult> {
-  const course = options.course ?? { slug: HIPAA_COURSE_SLUG, content: hipaaCourse, questions: hipaaQuestions, examConfig: hipaaExamConfig };
+  const known = Object.hasOwn(COURSES, options.courseSlug ?? HIPAA_COURSE_SLUG) ? COURSES[options.courseSlug ?? HIPAA_COURSE_SLUG] : undefined;
+  if (!options.course && !known) throw new Error(`Unknown course: ${options.courseSlug}. Known: ${Object.keys(COURSES).join(", ")}`);
+  const course = options.course ?? { slug: known!.slug, content: known!.content, questions: known!.questions, examConfig: known!.examConfig };
   checkCourse(course.content, course.questions);
   if (options.publish) {
     if (!options.reviewerUserId) throw new Error("Publishing needs the reviewer (who read the content).");

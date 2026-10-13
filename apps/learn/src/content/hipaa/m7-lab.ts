@@ -1,8 +1,8 @@
 import { q, type CourseModule, type QuestionSeed } from "../schema";
 
-// Module 8: the scenario lab. Mixed situations that combine the earlier modules. All people and details are invented.
+// Module 7: the scenario lab. Mixed situations that combine the earlier modules. All people and details are invented.
 
-export const m8: CourseModule = {
+export const m7: CourseModule = {
   key: "lab",
   title: "Scenario lab and readiness check",
   summary: "Realistic situations that mix everything you learned, then a short checklist before the exam.",
@@ -128,7 +128,7 @@ export const m8: CourseModule = {
             "I can tell what counts as PHI, including screenshots and spoken information.",
             "I use only the minimum information and the approved channels.",
             "I keep my login, screen and devices private and locked.",
-            "I can spot a phishing message and know what to do if I click.",
+            "I use my own login, keep it private, and never share a password or code.",
             "I know to report any possible incident immediately to my lead and HR.",
           ],
         },
@@ -137,7 +137,7 @@ export const m8: CourseModule = {
   ],
 };
 
-export const q8: QuestionSeed[] = [
+export const q7: QuestionSeed[] = [
   q("lab", "Scenario", "scenario", "A coworker from a different client team asks you to send them your clinic's appointment list \"just for formatting ideas\". What do you do?", ["Decline and suggest a sample with no patient information", "Send it, because they also work at ERS", "Send it with last names removed", "Send it by personal email so it is not logged"], [0], "Being at the same company is not a need to know. First names and appointments can still identify patients."),
   q("lab", "Scenario", "scenario", "Before sending a billing summary, you notice the email program autofilled a similar address you do not recognize. What do you do?", ["Check the address against the client's contact list and correct it first", "Send it and fix it if anyone complains", "Send it to both addresses", "Send it without the attachment and add it later"], [0], "Misdirected email is a common cause of incidents. Verify the destination before sending."),
   q("lab", "Scenario", "scenario", "A friend comes into your workspace while a patient list is on your screen. What is the best response?", ["Lock the screen or move before they see it", "Keep working and angle the monitor slightly", "Ask them to look away", "Cover the screen with a book"], [0], "The safe action is to prevent exposure by locking the screen or moving to a private space."),

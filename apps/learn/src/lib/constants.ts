@@ -2,11 +2,11 @@
  * The training rules that are fixed by decision (docs/learn/04-course-and-exam.md). HR can change the adjustable ones later
  * through audited settings; these are the launch defaults.
  */
-export const EXAM_PASS_PERCENT = 85;
+export const EXAM_PASS_PERCENT = 80;
 export const EXAM_MAX_TRIES = 3;
-export const EXAM_QUESTIONS_FULL = 25;
+export const EXAM_QUESTIONS_FULL = 15;
 export const EXAM_QUESTIONS_SHORT = 15;
-export const EXAM_MINUTES_FULL = 30;
+export const EXAM_MINUTES_FULL = 20;
 export const EXAM_MINUTES_SHORT = 20;
 export const EXAM_WAIT_MINUTES_AFTER_FAIL = 60;
 
