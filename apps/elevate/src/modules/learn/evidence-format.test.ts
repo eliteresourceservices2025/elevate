@@ -50,9 +50,7 @@ describe("the evidence files", () => {
     expect(csv).toContain("Trained (certificate valid)");
     expect(csv).toContain("No certificate");
     // the columns and the people rows carry no scores or addresses (the closing note says scores are left out)
-    expect(csv.split("
-").slice(0, 3).join("
-")).not.toMatch(/score|attempt|address/i);
+    expect(csv.split("\r\n").slice(0, 3).join(" | ")).not.toMatch(/score|attempt|address/i);
   });
   it("makes a PDF, and moves to another page for a long list", async () => {
     const small = await PDFDocument.load(await evidencePdf(report(3)));
