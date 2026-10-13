@@ -96,7 +96,7 @@ export function AssignClientForm({
   const [fetched, setFetched] = useState<{ key: string; value: { state: string; validUntil?: string; dueOn?: string; overdue?: boolean; endedOn?: string } } | null>(null);
   const chosen = clients.find((c) => c.id === clientId);
   const handlesPhi = Boolean(chosen?.handlesPhi);
-  const key = ;
+  const key = `${employeeId}:${clientId}`;
   const readiness = handlesPhi && fetched?.key === key ? fetched.value : null;
 
   // When the chosen client works with patient information, show where the person stands on HIPAA training. Warns only.
