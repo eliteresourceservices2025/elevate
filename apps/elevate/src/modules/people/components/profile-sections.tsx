@@ -224,7 +224,7 @@ export function ClientsSection({
   today,
 }: {
   profile: Profile;
-  clients: { id: string; name: string; isActive: boolean }[];
+  clients: { id: string; name: string; isActive: boolean; handlesPhi?: boolean }[];
   today: string;
 }) {
   const { assignments, access, employee } = profile;

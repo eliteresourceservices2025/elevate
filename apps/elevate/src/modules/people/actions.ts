@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { fieldCrypto } from "@/lib/crypto";
@@ -13,7 +14,8 @@ import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-act
 import { writeAudit } from "@/modules/audit/write";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { positions } from "@/modules/org/schema";
-import { activeDirectReports, reportName } from "@/modules/org/service";
+import { trainingReadiness, type TrainingReadiness } from "@/modules/learn/certificate-status";
+import { activeDirectReports, reportName, todayInZone } from "@/modules/org/service";
 import { createEmployeeRecord } from "./create";
 import { viewBankChangeRequest } from "./queries";
 import { SENSITIVE_LABELS } from "./constants";
@@ -837,5 +839,23 @@ export async function viewBankRequest(input: unknown): Promise<ActionResult<{ ba
     // viewBankChangeRequest authorizes "people.approve_change" and writes the audit row.
     const values = await viewBankChangeRequest(parsed.data.requestId);
     return values ? { ok: true, data: values } : fail("That request is not waiting for review.");
+  });
+}
+
+/**
+ * HIPAA training status of one person, for the "Assign a client" form: shown when the client handles patient information. It only
+ * informs: assigning is never blocked by training. HR who may assign clients (people.manage_assignments).
+ */
+export async function getTrainingReadiness(input: unknown): Promise<ActionResult<{ readiness: TrainingReadiness }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "people.manage_assignments");
+    const parsed = z.object({ employeeId: z.string().uuid() }).safeParse(input);
+    if (!parsed.success) return fail("Check the request and try again.");
+    const [person] = await db.select({ userId: employees.userId }).from(employees).where(and(eq(employees.id, parsed.data.employeeId), isNull(employees.archivedAt))).limit(1);
+    if (!person) return fail("That person was not found.");
+    // No account yet means no training can have been taken.
+    const readiness: TrainingReadiness = person.userId ? await trainingReadiness(db, person.userId, "hipaa", todayInZone()) : { state: "none" };
+    return { ok: true, data: { readiness } };
   });
 }

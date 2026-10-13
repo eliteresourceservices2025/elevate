@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import {
   archiveEmployee,
   assignClient,
+  getTrainingReadiness,
   cancelChangeRequest,
   endAssignment,
   setCustomFieldValues,
@@ -87,11 +88,29 @@ export function AssignClientForm({
   today,
 }: {
   employeeId: string;
-  clients: { id: string; name: string; isActive: boolean }[];
+  clients: { id: string; name: string; isActive: boolean; handlesPhi?: boolean }[];
   today: string;
 }) {
   const { run, pending } = useRun();
   const [clientId, setClientId] = useState("");
+  const [readiness, setReadiness] = useState<{ state: string; validUntil?: string; dueOn?: string; overdue?: boolean; endedOn?: string } | null>(null);
+  const chosen = clients.find((c) => c.id === clientId);
+  const handlesPhi = Boolean(chosen?.handlesPhi);
+
+  // When the chosen client works with patient information, show where the person stands on HIPAA training. Warns only.
+  useEffect(() => {
+    let cancelled = false;
+    setReadiness(null);
+    if (!handlesPhi) return;
+    getTrainingReadiness({ employeeId })
+      .then((r) => {
+        if (!cancelled && r.ok) setReadiness(r.data.readiness);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [handlesPhi, employeeId, clientId]);
   const [startDate, setStartDate] = useState(today);
   const [hours, setHours] = useState("");
   const open = clients.filter((c) => c.isActive);
@@ -120,6 +139,18 @@ export function AssignClientForm({
       <Button type="submit" disabled={pending || !clientId}>
         Assign
       </Button>
+      {handlesPhi && readiness ? (
+        <p role="status" className={`text-sm sm:col-span-4 ${readiness.state === "passed" ? "text-muted-foreground" : "rounded-lg border border-amber-500/40 bg-amber-500/10 p-2"}`}>
+          {readiness.state === "passed"
+            ? `HIPAA training: passed, valid until ${readiness.validUntil}.`
+            : readiness.state === "open"
+              ? `HIPAA training: ${readiness.overdue ? "overdue since" : "not yet passed, due"} ${readiness.dueOn}. `
+              : readiness.state === "expired"
+                ? `HIPAA training: the certificate ended on ${readiness.endedOn}. `
+                : "HIPAA training: nothing on record yet. "}
+          {readiness.state !== "passed" ? "This client works with patient information. You can still assign; this is a reminder only." : null}
+        </p>
+      ) : null}
     </form>
   );
 }

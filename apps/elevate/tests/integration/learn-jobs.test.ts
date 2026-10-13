@@ -135,6 +135,34 @@ describe("automatic assignment rules (pilot limit)", () => {
   });
 });
 
+describe("training readiness for client assignment", () => {
+  it("tells passed, open, overdue, expired and none apart", async () => {
+    const { trainingReadiness } = await import("@/modules/learn/certificate-status");
+    const day = "2026-10-12";
+    const none = await makePerson();
+    expect(await trainingReadiness(db, none.id, "hipaa", day)).toEqual({ state: "none" });
+
+    const passed = await makePerson();
+    await withCertificate(passed, plus(day, 100));
+    expect(await trainingReadiness(db, passed.id, "hipaa", day)).toEqual({ state: "passed", validUntil: plus(day, 100) });
+
+    const expired = await makePerson();
+    await withCertificate(expired, plus(day, -10));
+    expect(await trainingReadiness(db, expired.id, "hipaa", day)).toEqual({ state: "expired", endedOn: plus(day, -10) });
+
+    const open = await makePerson();
+    await db.execute(sql`insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${open.id}, ${courseId}, ${versionId}, 'full', 'manual', ${plus(day, 5)})`);
+    expect(await trainingReadiness(db, open.id, "hipaa", day)).toEqual({ state: "open", dueOn: plus(day, 5), overdue: false });
+    expect(await trainingReadiness(db, open.id, "hipaa", plus(day, 6))).toEqual({ state: "open", dueOn: plus(day, 5), overdue: true });
+
+    // a revoked certificate counts as nothing
+    const revoked = await makePerson();
+    const { certificateId } = await withCertificate(revoked, plus(day, 100));
+    await db.execute(sql`insert into learn.certificate_revocations (certificate_id, revoked_by, reason) values (${certificateId}, ${revoked.id}, 'Test of revocation')`);
+    expect(await trainingReadiness(db, revoked.id, "hipaa", day)).toEqual({ state: "none" });
+  });
+});
+
 describe("dashboard training counts", () => {
   it("counts overdue people and certificates ending soon for HR, and a lead sees only their own team", async () => {
     const realToday = new Date().toISOString().slice(0, 10);

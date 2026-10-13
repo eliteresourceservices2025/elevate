@@ -16,7 +16,7 @@
 ### Release 2: management and governance
 - Studio (block editor, versions, preview, publish checklist), client add-ons, `core.clients.handles_phi`.
 - Incident report form and inbox (`ops.privacy_incidents`), Privacy Officer flag and designation. **Built** (migration 0057; HR or Super Admin names the officer; one email to HR and officers with no details; see CLAUDE.md, "Privacy incident reports").
-- Onboarding checklist task kind `hipaa_training` (**built**, migration 0062), client-assignment readiness, client audit evidence report; My data export (**built**).
+- Onboarding checklist task kind `hipaa_training` (**built**, migration 0062), client-assignment readiness (**built**, a warning only), the dashboard training counts (**built**), client audit evidence report; My data export (**built**).
 
 ### Release 3: reinforcement
 - Refresher track and exam, update modules, micro-drills, weak-topic statistics and question analytics, quick-reference cards,

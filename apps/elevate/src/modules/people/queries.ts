@@ -157,7 +157,7 @@ export async function listDirectory(rawQuery: unknown) {
 export async function listClientsForFilter() {
   const user = await requireUser();
   await authorize(user, "people.manage_assignments");
-  return db.select({ id: clients.id, name: clients.name, isActive: clients.isActive }).from(clients).where(isNull(clients.archivedAt)).orderBy(clients.name);
+  return db.select({ id: clients.id, name: clients.name, isActive: clients.isActive, handlesPhi: clients.handlesPhi }).from(clients).where(isNull(clients.archivedAt)).orderBy(clients.name);
 }
 
 /** How the signed-in person is called (preferred name, else legal name), for the badge in the header. Null when they have no people record. */
