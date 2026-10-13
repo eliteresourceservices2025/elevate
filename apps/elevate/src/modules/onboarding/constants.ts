@@ -7,7 +7,7 @@ export type Owner = (typeof OWNERS)[number];
 export const OWNER_LABELS: Record<Owner, string> = { hr: "HR", lead: "Their lead", person: "The person" };
 
 /** What lets ELEVATE decide a task is done by itself. "manual" tasks are ticked by whoever owns them. */
-export const CHECKS = ["manual", "document", "required_documents", "policy", "account", "signature", "exit_interview", "access", "assets_returned"] as const;
+export const CHECKS = ["manual", "document", "required_documents", "policy", "account", "signature", "exit_interview", "access", "assets_returned", "hipaa_training"] as const;
 export type Check = (typeof CHECKS)[number];
 export const CHECK_LABELS: Record<Check, string> = {
   manual: "Ticked by hand",
@@ -19,6 +19,7 @@ export const CHECK_LABELS: Record<Check, string> = {
   exit_interview: "The exit interview is submitted",
   access: "Their access is removed",
   assets_returned: "All their equipment is returned",
+  hipaa_training: "HIPAA training is passed (current certificate)",
 };
 
 export const KINDS = ["onboarding", "offboarding"] as const;
@@ -55,6 +56,7 @@ export const DEFAULT_ONBOARDING_ITEMS: ItemDef[] = [
   { title: "Upload your required documents", details: "Government ID and any clearance HR asks for. Please do not upload client or patient records.", owner: "person", dueOffsetDays: 3, required: true, check: "required_documents", href: "/people/me?tab=documents" },
   { title: "Create your ELEVATE account and set up your sign-in code", owner: "person", dueOffsetDays: 0, required: true, check: "account" },
   { title: "Equipment is ready and issued", details: "Computer, headset and any software access.", owner: "hr", dueOffsetDays: -1, required: true, check: "manual" },
+  { title: "Complete your HIPAA training", details: "Opens ELEVATE Learn from My training. Ticked by ELEVATE when you pass. Never put patient information anywhere in training.", owner: "person", dueOffsetDays: 30, required: false, check: "hipaa_training", href: "/learn" },
   { title: "Meet your lead and your team", owner: "lead", dueOffsetDays: 3, required: true, check: "manual" },
   { title: "Welcome meeting", owner: "lead", dueOffsetDays: 0, required: false, check: "manual" },
 ];

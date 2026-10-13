@@ -135,6 +135,33 @@ describe("automatic assignment rules (pilot limit)", () => {
   });
 });
 
+describe("the onboarding check 'HIPAA training is passed'", () => {
+  it("is satisfied only by a current, unrevoked HIPAA certificate", async () => {
+    const { satisfiedTasks } = await import("@/modules/onboarding/service");
+    const task = (id: string) => ({ id, status: "todo", check: "hipaa_training", documentTypeId: null, policyId: null, policyKind: null, envelopeId: null }) as never;
+    const ctxFor = (p: Person) => ({ employeeId: p.employeeId, userId: p.id, today: TODAY });
+
+    const none = await makePerson();
+    expect((await satisfiedTasks(db, [task("t1")], ctxFor(none))).size).toBe(0);
+
+    const current = await makePerson();
+    await withCertificate(current, plus(TODAY, 200));
+    expect((await satisfiedTasks(db, [task("t2")], ctxFor(current))).size).toBe(1);
+
+    const ended = await makePerson();
+    await withCertificate(ended, plus(TODAY, -1));
+    expect((await satisfiedTasks(db, [task("t3")], ctxFor(ended))).size).toBe(0);
+
+    const revoked = await makePerson();
+    const { certificateId } = await withCertificate(revoked, plus(TODAY, 200));
+    await db.execute(sql`insert into learn.certificate_revocations (certificate_id, revoked_by, reason) values (${certificateId}, ${revoked.id}, 'Test of revocation')`);
+    expect((await satisfiedTasks(db, [task("t4")], ctxFor(revoked))).size).toBe(0);
+
+    // an account-less person is never satisfied
+    expect((await satisfiedTasks(db, [task("t5")], { employeeId: none.employeeId, userId: null, today: TODAY })).size).toBe(0);
+  });
+});
+
 describe("the Cybersecurity basics course", () => {
   it("puts everyone on its one track once published, apart from HIPAA", async () => {
     const p = await makePerson({ start: plus(TODAY, -3) });

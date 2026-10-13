@@ -435,6 +435,13 @@
       "when": 1791916997863,
       "tag": "0061_training_reminder_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1791918808835,
+      "tag": "0062_checklist_hipaa_training",
+      "breakpoints": true
     }
   ]
 }

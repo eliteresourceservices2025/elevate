@@ -13,6 +13,7 @@ import { hrUserIds, notify } from "@/modules/notifications/service";
 import { employees } from "@/modules/people/schema";
 import { changeEmployeeStatus, endClientAssignments } from "@/modules/people/status";
 import { activeAssignmentCount } from "@/modules/assets/service";
+import { hasCurrentCertificate } from "@/modules/learn/certificate-status";
 import { esignEnvelopes } from "@/modules/signing/schema";
 import { cancelWaitingLeave } from "@/modules/timeoff/separation";
 import { disableLogin } from "./accounts";
@@ -112,6 +113,8 @@ async function isSatisfied(tx: Pick<typeof db, "select" | "execute">, t: TaskRow
       return Boolean(ctx.accessRemoved);
     case "assets_returned":
       return (await activeAssignmentCount(tx, ctx.employeeId)) === 0;
+    case "hipaa_training":
+      return ctx.userId !== null && (await hasCurrentCertificate(tx, ctx.userId, "hipaa", ctx.today));
     case "exit_interview": {
       if (!ctx.offboardingCaseId) return false;
       const [row] = await tx.select({ id: exitInterviews.id }).from(exitInterviews).where(eq(exitInterviews.offboardingCaseId, ctx.offboardingCaseId));
