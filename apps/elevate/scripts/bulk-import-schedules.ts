@@ -1,11 +1,12 @@
 #!/usr/bin/env npx tsx
 // Safe, additions-only import. Run without --apply to preview. Never commit the input files.
-import { readFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
 import { DEFAULT_TIMEZONE } from "../src/lib/time";
-import { assertPrivateInputPaths, assertProductionTarget, digest, mappingSchema, parseArgs, parseTimesheet, planRows } from "./schedule-import-core";
+import { assertPrivateInputPaths, assertProductionTarget, digest, historicalSchema, mappingSchema, parseArgs, parseTimesheet, planRows } from "./schedule-import-core";
 import { reconcile } from "./schedule-import-service";
+import { reconcileHistorical } from "./schedule-import-historical";
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
@@ -14,10 +15,20 @@ async function main() {
     EXPECTED_DB_HOST: process.env.EXPECTED_DB_HOST, EXPECTED_DB_NAME: process.env.EXPECTED_DB_NAME,
     EXPECTED_DB_PROJECT_REF: process.env.EXPECTED_DB_PROJECT_REF,
   });
-  assertPrivateInputPaths([opts.csv, opts.mapping], path.resolve(import.meta.dirname, "../../.."));
+  const root = path.resolve(import.meta.dirname, "../../..");
+  assertPrivateInputPaths([opts.csv, opts.mapping], root);
+  if (opts.report) {
+    // Refuse to overwrite a prior private HR review, and never put the review inside source control.
+    assertPrivateInputPaths([path.dirname(path.resolve(opts.report))], root);
+    if (existsSync(opts.report)) throw new Error("A private review report already exists.");
+  }
   const input = readFileSync(opts.csv, "utf8");
   const observations = parseTimesheet(input);
-  const mapping = mappingSchema.parse(JSON.parse(readFileSync(opts.mapping, "utf8")));
+  const mapping = opts.historical
+    ? historicalSchema.parse(JSON.parse(readFileSync(opts.mapping, "utf8")))
+    : mappingSchema.parse(JSON.parse(readFileSync(opts.mapping, "utf8")));
+  if (opts.historical && observations.some((row) => row.date < "2026-10-01" || row.date > "2026-10-31"))
+    throw new Error("Historical observations must be in the reviewed October period.");
   const entries = planRows(observations, mapping);
   const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 1, connect_timeout: 5, ssl: { rejectUnauthorized: true } });
   try {
@@ -30,10 +41,21 @@ async function main() {
     const from = new Date(`${todayPhoenix}T00:00:00Z`);
     from.setUTCDate(from.getUTCDate() - 7);
     const earliestAllowed = from.toISOString().slice(0, 10);
-    const result = await reconcile(sql, { entries }, opts.actor, earliestAllowed, target, digest(input), opts.approvedDigest);
-    console.log(opts.apply ? "Applied reviewed additions." : "Read-only preview; nothing was written.");
-    console.log(`Target project: ${target.projectRef}. Database: ${identity.database}. Proposed assignments: ${result.assignments}. Proposed schedules: ${result.schedules}. Unchanged: ${result.unchanged}.`);
-    console.log(`Plan digest: ${result.digest}`);
+    if (opts.historical) {
+      const historicalMapping = historicalSchema.parse({ ...mapping, entries });
+      const report = await reconcileHistorical(sql, historicalMapping, opts.actor, target, digest(input), opts.approvedDigest);
+      const file = openSync(opts.report!, "wx", 0o600);
+      try { writeFileSync(file, JSON.stringify(report, null, 2), "utf8"); } finally { closeSync(file); }
+      console.log(opts.apply ? "Historical changes applied; downstream reconciliation still required." : "Read-only historical preview; nothing was written.");
+      console.log(`Target project: ${target.projectRef}. Database: ${identity.database}. Proposed assignments: ${report.totals.assignments}. Proposed schedules: ${report.totals.schedules}. Unchanged: ${report.totals.unchanged}.`);
+      console.log(`Dependent days: ${report.totals.attendanceDays}. Clock events: ${report.totals.clockEvents}. Approvals: ${report.totals.approvals}. Review the private report and follow-up before approving changes.`);
+      console.log(`Plan digest: ${report.digest}`);
+    } else {
+      const result = await reconcile(sql, { entries }, opts.actor, earliestAllowed, target, digest(input), opts.approvedDigest);
+      console.log(opts.apply ? "Applied reviewed additions." : "Read-only preview; nothing was written.");
+      console.log(`Target project: ${target.projectRef}. Database: ${identity.database}. Proposed assignments: ${result.assignments}. Proposed schedules: ${result.schedules}. Unchanged: ${result.unchanged}.`);
+      console.log(`Plan digest: ${result.digest}`);
+    }
   } finally {
     await sql.end();
   }
@@ -41,6 +63,6 @@ async function main() {
 
 main().catch(() => {
   // Don't print exceptions: SQL, file and validation errors can include personal data or connection strings.
-  console.error("Import stopped. Check the input, mapping, target, actor and existing dated records; no partial batch was applied.");
+  console.error("Import stopped. Check the private input, mapping, target, actor and dated records. If this failed after apply, verify production state before retrying.");
   process.exitCode = 1;
 });

@@ -28,6 +28,21 @@ export const mappingSchema = z.object({
 });
 export type Mapping = z.infer<typeof mappingSchema>;
 
+const historicalAssignment = z.object({
+  id: z.uuid(), clientId: z.uuid(), startDate: date, endDate: date.nullable(), hoursPerWeek: z.number().nullable(),
+});
+const historicalSchedule = z.object({
+  id: z.uuid(), effectiveFrom: date, effectiveTo: date.nullable(), startTime: time, endTime: time,
+  zone, weekdays: z.array(z.number().int().min(1).max(7)), breakMinutes: z.number().int(),
+});
+export const historicalSchema = mappingSchema.extend({
+  period: z.object({ from: z.literal("2026-10-01"), to: z.literal("2026-10-31") }),
+  decisions: z.array(z.object({ employeeId: z.uuid(), expectedAssignment: historicalAssignment.nullable(),
+    expectedSchedule: historicalSchedule.nullable(), acknowledgeAttendanceReview: z.literal(true),
+    acknowledgeApprovalAndExportReview: z.literal(true) })).min(1).max(200),
+});
+export type HistoricalMapping = z.infer<typeof historicalSchema>;
+
 // RFC 4180 fields, including doubled quotes and line breaks in quoted fields.
 function records(text: string): { fields: string[]; line: number }[] {
   const result: { fields: string[]; line: number }[] = [];
@@ -179,7 +194,7 @@ export function assertPrivateInputPaths(paths: string[], repositoryRoot: string)
 }
 
 export function parseArgs(args: string[]) {
-  const allowed = new Set(["--csv", "--mapping", "--as", "--apply", "--digest"]);
+  const allowed = new Set(["--csv", "--mapping", "--as", "--apply", "--digest", "--historical", "--report"]);
   const options = new Map<string, string>();
   for (let i = 0; i < args.length; i += 2) {
     const flag = args[i];
@@ -194,5 +209,8 @@ export function parseArgs(args: string[]) {
   const approvedDigest = options.get("--digest");
   if (apply && !/^[a-f0-9]{64}$/.test(approvedDigest ?? "")) throw new Error("Apply requires the reviewed --digest.");
   if (!apply && approvedDigest) throw new Error("A digest is only used with apply.");
-  return { csv, mapping, actor, apply, approvedDigest };
+  const historical = options.get("--historical") === "october-2026";
+  if (options.has("--historical") && !historical) throw new Error("Use --historical october-2026.");
+  if (historical !== options.has("--report")) throw new Error("Historical mode requires a private --report path; regular mode cannot write one.");
+  return { csv, mapping, actor, apply, approvedDigest, historical, report: options.get("--report") };
 }

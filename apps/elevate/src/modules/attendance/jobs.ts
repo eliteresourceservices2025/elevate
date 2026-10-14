@@ -12,7 +12,7 @@ import { EXTRA_THRESHOLD_MINUTES, addDays, earlyLeaveMinutes, extraMinutes, hasS
 import { loadSchedules, loadSchedulesFor } from "./schedule-service";
 import { approvedExtra, effectiveEndMs, grantedByDate } from "./extra-hours";
 import { approvedWindows } from "./extra-hours-service";
-import { holidaysInRange } from "@/modules/timeoff/request-service";
+import { historicalHolidayDatesFor } from "@/modules/timeoff/service";
 import { approvalKey, attendanceRows, dayState, latestApprovals } from "./hours-service";
 import { mondayOf } from "./pay-periods";
 import { EVIDENCE_KEEP_DAYS, SELFIE_KEEP_DAYS, loadEventsBetween, notifyOverbreak, onFullDayLeave, prefsFor, rulesFor } from "./service";
@@ -27,27 +27,33 @@ export type RebuildRun = { people: number; days: number };
  * A scheduled day that has ended with no clocking, no approved leave and no holiday is "absent". The day gets a row with no
  * sessions so the lead sees it; when something changes later (a correction, approved leave) the flag is taken off again.
  */
-async function flagAbsences(now: Date, daysBack: number, onlyEmployeeId?: string): Promise<number> {
-  const earliestMs = now.getTime() - (daysBack + 2) * DAY_MS;
+async function flagAbsences(now: Date, from: string, to: string, onlyEmployeeId?: string, normalDaysBack?: number): Promise<number> {
+  // Include existing absence rows, even if the schedule that produced them was removed or shortened.
   const ids = (await db.execute(sql`
-    select distinct s.employee_id from time.schedules s join core.employees e on e.id = s.employee_id
-    where e.archived_at is null and e.status <> 'separated' and s.effective_from <= ((${now.toISOString()}::timestamptz at time zone 'UTC')::date + 1)
-      and (s.effective_to is null or s.effective_to >= ((${new Date(earliestMs).toISOString()}::timestamptz at time zone 'UTC')::date - 1))
-      ${onlyEmployeeId ? sql`and s.employee_id = ${onlyEmployeeId}` : sql``}`)) as unknown as { employee_id: string }[];
+    select distinct candidates.employee_id from (
+      select s.employee_id from time.schedules s where s.effective_from <= (${to}::date + 1)
+        and (s.effective_to is null or s.effective_to >= (${from}::date - 1))
+      union
+      select d.employee_id from time.attendance_days d where d.date between ${from}::date and ${to}::date
+        and 'absent' = any(d.flags)
+    ) candidates join core.employees e on e.id = candidates.employee_id
+    where e.archived_at is null and e.status <> 'separated'
+      ${onlyEmployeeId ? sql`and candidates.employee_id = ${onlyEmployeeId}` : sql``}`)) as unknown as { employee_id: string }[];
   const byPerson = await loadSchedulesFor(db, ids.map((r) => r.employee_id));
   let written = 0;
 
-  for (const [employeeId, schedules] of byPerson) {
+  for (const { employee_id: employeeId } of ids) {
+    const schedules = byPerson.get(employeeId) ?? [];
     const prefs = await prefsFor(db, employeeId);
+    const holidays = await historicalHolidayDatesFor(db, employeeId, from, to);
     const today = formatInZone(now, prefs.zone, "yyyy-MM-dd");
-    const earliest = formatInZone(now.getTime() - daysBack * DAY_MS, prefs.zone, "yyyy-MM-dd");
-    const holidays = new Set((await holidaysInRange(db, employeeId, addDays(earliest, -1), addDays(today, 1))).map((h) => h.date));
-    for (let date = earliest; date < today; date = addDays(date, 1)) {
+    const first = normalDaysBack === undefined ? from : formatInZone(now.getTime() - normalDaysBack * DAY_MS, prefs.zone, "yyyy-MM-dd");
+    const last = to < today ? to : addDays(today, -1);
+    for (let date = first; date <= last; date = addDays(date, 1)) {
       const shift = shiftOn(schedules, prefs.zone, date);
-      if (!shift) continue;
       const [worked] = (await db.execute(sql`select 1 as ok from time.attendance_days where employee_id = ${employeeId} and date = ${date}::date and sessions > 0`)) as unknown as { ok: number }[];
-      const [leave] = (await db.execute(sql`select 1 as ok from time.leave_requests where employee_id = ${employeeId} and status = 'approved' and start_date <= ${date}::date and end_date >= ${date}::date limit 1`)) as unknown as { ok: number }[];
-      const absent = !worked && !leave && !holidays.has(date) && shift.endMs <= now.getTime();
+      const leave = shift && !worked ? (await db.execute(sql`select 1 as ok from time.leave_requests where employee_id = ${employeeId} and status = 'approved' and start_date <= ${date}::date and end_date >= ${date}::date limit 1`)) as unknown as { ok: number }[] : [];
+      const absent = shift && !worked && leave.length === 0 && !holidays.has(date) && shift.endMs <= now.getTime();
       if (absent) {
         await db.execute(sql`
           insert into time.attendance_days (employee_id, date, sessions, scheduled_minutes, flags) values (${employeeId}, ${date}::date, 0, ${shift.scheduledMinutes}, array['absent'])
@@ -55,7 +61,14 @@ async function flagAbsences(now: Date, daysBack: number, onlyEmployeeId?: string
             flags = case when 'absent' = any(time.attendance_days.flags) then time.attendance_days.flags else array_append(time.attendance_days.flags, 'absent') end`);
         written += 1;
       } else {
-        await db.execute(sql`update time.attendance_days set flags = array_remove(flags, 'absent') where employee_id = ${employeeId} and date = ${date}::date`);
+        // A row created solely to record absence has no event-derived data to retain.
+        await db.execute(sql`delete from time.attendance_days where employee_id = ${employeeId} and date = ${date}::date
+          and sessions = 0 and 'absent' = any(flags) and flags <@ array['absent']::text[]
+          and not exists (select 1 from time.clock_events ev where ev.employee_id = ${employeeId}
+            and (ev.occurred_at at time zone ${prefs.zone})::date = ${date}::date)`);
+        await db.execute(sql`update time.attendance_days set flags = array_remove(flags, 'absent'),
+          scheduled_minutes = case when ${shift?.scheduledMinutes ?? null}::int is null then null else scheduled_minutes end
+          where employee_id = ${employeeId} and date = ${date}::date and 'absent' = any(flags)`);
       }
     }
   }
@@ -70,25 +83,55 @@ async function flagAbsences(now: Date, daysBack: number, onlyEmployeeId?: string
  */
 export async function rebuildAttendanceDays(now = new Date(), daysBack = 3, onlyEmployeeId?: string): Promise<RebuildRun> {
   const fromMs = now.getTime() - (daysBack + 2) * DAY_MS;
-  // One person (before their hours are approved) or everyone with events in the window.
+  const earliest = new Date(now.getTime() - (daysBack + 1) * DAY_MS).toISOString().slice(0, 10);
+  const latest = new Date(now.getTime() + DAY_MS).toISOString().slice(0, 10);
+  // The normal nightly job searches event owners; the explicit maintenance path supplies one owner.
   const people = onlyEmployeeId
     ? [{ employee_id: onlyEmployeeId }]
     : ((await db.execute(sql`select distinct employee_id from time.clock_events where occurred_at >= to_timestamp(${fromMs / 1000})`)) as unknown as { employee_id: string }[]);
+  return rebuildRange(people, earliest, latest, fromMs - DAY_MS, now.getTime(), now, daysBack, onlyEmployeeId);
+}
+
+/**
+ * Explicit maintenance after an approved October 2026 import: rebuild one person's inclusive date range (up to 31 days).
+ * Run separately after the import commits; this uses the ordinary global database, never a caller's import transaction.
+ */
+export async function rebuildHistoricalAttendanceDays(employeeId: string, from: string, to: string, now = new Date()): Promise<RebuildRun> {
+  const valid = /^2026-10-(0[1-9]|[12]\d|3[01])$/;
+  const fromMs = Date.parse(`${from}T00:00:00Z`);
+  const toMs = Date.parse(`${to}T00:00:00Z`);
+  if (!(/^[\da-f-]{36}$/i.test(employeeId) && employeeId.split("-").map((part) => part.length).join() === "8,4,4,4,12") || !valid.test(from) || !valid.test(to) || fromMs > toMs || (toMs - fromMs) / DAY_MS >= 31)
+    throw new Error("Choose one person and up to 31 ordered days in October 2026.");
+  const prefs = await prefsFor(db, employeeId);
+  if (to >= formatInZone(now, prefs.zone, "yyyy-MM-dd")) throw new Error("Historical attendance must end before today.");
+  // An open session at the lower edge cannot be replayed from a bounded read. Do not guess its hours.
+  const eventFromMs = fromMs - 2 * DAY_MS;
+  const [boundary] = (await db.execute(sql`
+    select type from time.clock_events where employee_id = ${employeeId}
+      and occurred_at < to_timestamp(${eventFromMs / 1000})
+    order by occurred_at desc, created_at desc limit 1`)) as unknown as { type: string }[];
+  if (boundary && boundary.type !== "clock_out") throw new Error("A clock session crosses the reconciliation boundary. Review it before rebuilding.");
+  // Two days of zone margin before and after, so overnight sessions remain inside the bounded event read.
+  return rebuildRange([{ employee_id: employeeId }], from, to, eventFromMs, toMs + 3 * DAY_MS, now);
+}
+
+async function rebuildRange(people: { employee_id: string }[], from: string, to: string, eventFromMs: number, eventToMs: number, now: Date, normalDaysBack?: number, onlyEmployeeId?: string): Promise<RebuildRun> {
   let written = 0;
 
   for (const { employee_id: employeeId } of people) {
     const prefs = await prefsFor(db, employeeId);
     const rules = await rulesFor(db, employeeId);
-    const today = formatInZone(now, prefs.zone, "yyyy-MM-dd");
-    const earliest = formatInZone(now.getTime() - daysBack * DAY_MS, prefs.zone, "yyyy-MM-dd");
-    const events = await loadEventsBetween(db, employeeId, fromMs - DAY_MS, now.getTime());
+    const earliest = normalDaysBack === undefined ? from : formatInZone(now.getTime() - normalDaysBack * DAY_MS, prefs.zone, "yyyy-MM-dd");
+    const today = normalDaysBack === undefined ? to : formatInZone(now, prefs.zone, "yyyy-MM-dd");
+    // A two-day margin pairs overnight sessions at either edge without reading unrelated attendance history.
+    const events = await loadEventsBetween(db, employeeId, eventFromMs, eventToMs);
     const days = buildDays(events, prefs.zone).filter((d) => d.date >= earliest && d.date <= today);
     const schedules = await loadSchedules(db, employeeId);
-    const holidays = new Set((await holidaysInRange(db, employeeId, addDays(earliest, -1), addDays(today, 1))).map((h) => h.date));
-    const granted = grantedByDate(await approvedWindows(db, employeeId, fromMs - DAY_MS, now.getTime() + DAY_MS), prefs.zone);
+    const holidays = await historicalHolidayDatesFor(db, employeeId, earliest, today);
+    const granted = grantedByDate(await approvedWindows(db, employeeId, eventFromMs, eventToMs + DAY_MS), prefs.zone);
 
     for (const d of days) {
-      const end = d.lastOut ?? now.getTime();
+      const end = d.lastOut ?? (normalDaysBack === undefined ? eventToMs : now.getTime());
       const flagRows = (await db.execute(sql`
         select
           bool_or(outside_allowed_range) as outside,
@@ -162,7 +205,11 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3, only
       written += 1;
     }
   }
-  written += await flagAbsences(now, daysBack, onlyEmployeeId);
+  if (normalDaysBack === undefined) {
+    written += await flagAbsences(now, from, to, people[0].employee_id);
+  } else {
+    written += await flagAbsences(now, from, to, onlyEmployeeId, normalDaysBack);
+  }
   return { people: people.length, days: written };
 }
 

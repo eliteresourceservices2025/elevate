@@ -4,7 +4,7 @@ import { platform } from "node:os";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { assertPrivateInputPaths, assertProductionTarget, digest, mappingSchema, parseArgs, parseTimesheet, planRows } from "../scripts/schedule-import-core";
+import { assertPrivateInputPaths, assertProductionTarget, digest, historicalSchema, mappingSchema, parseArgs, parseTimesheet, planRows } from "../scripts/schedule-import-core";
 
 const sheet = (body: string) => `10/12/26,Monday,,,,,,,,\n,Name,Client,Schedule,In,Lunch,Back,Out,Total Hours\n${body}`;
 const entry = (name = "Example Person", client = "Invented Clinic") => ({
@@ -55,6 +55,21 @@ describe("schedule import input and guards", () => {
     expect(() => planRows([{ ...rows[0], schedule: "unknown" }], mapped)).toThrow();
     expect(() => mappingSchema.parse({ entries: [{ ...entry(), shift: { ...entry().shift, zone: "Mars/Base" } }] })).toThrow();
     expect(() => planRows(rows, { entries: [{ ...mapped.entries[0], clientName: "Different client" }] })).toThrow();
+  });
+
+  it("requires a separately acknowledged October historical mode and reviewed decisions", () => {
+    const args = ["--csv", "private.csv", "--mapping", "private.json", "--as", "hr@example.com"];
+    expect(() => parseArgs([...args, "--historical", "october-2026"])).toThrow();
+    expect(() => parseArgs([...args, "--report", "private-report.json"])).toThrow();
+    expect(parseArgs([...args, "--historical", "october-2026", "--report", "private-report.json"]).historical).toBe(true);
+    expect(() => parseArgs([...args, "--historical", "october-2026", "--report", "private-report.json", "--apply", "confirm"])).toThrow();
+    const input = { entries: [entry()], period: { from: "2026-10-01", to: "2026-10-31" },
+      decisions: [{ employeeId: entry().employeeId, expectedAssignment: null, expectedSchedule: null,
+        acknowledgeAttendanceReview: true, acknowledgeApprovalAndExportReview: true }] };
+    expect(historicalSchema.safeParse(input).success).toBe(true);
+    expect(historicalSchema.safeParse({ ...input, period: { from: "2026-09-30", to: "2026-10-31" } }).success).toBe(false);
+    expect(historicalSchema.safeParse({ ...input, period: { from: "2026-10-12", to: "2026-10-31" } }).success).toBe(false);
+    expect(historicalSchema.safeParse({ ...input, decisions: [{ ...input.decisions[0], acknowledgeAttendanceReview: false }] }).success).toBe(false);
   });
 
   it("refuses real input paths within the repository, including symlinks", () => {
