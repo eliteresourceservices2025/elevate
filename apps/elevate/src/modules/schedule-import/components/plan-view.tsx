@@ -19,7 +19,7 @@ type Tab = "update" | "unchanged" | "decisions" | "gone";
 type Edit = { breakMinutes: string; hoursPerWeek: string };
 
 const ASSIGNMENT: Record<PlanRow["assignment"], string> = { add: "Add the client", keep: "Keep the client", change_client: "End the old client, add this one" };
-const SCHEDULE: Record<PlanRow["schedule"], string> = { add: "Add the schedule", same: "Same schedule", change: "Replace the schedule" };
+const SCHEDULE: Record<PlanRow["schedule"], string> = { add: "Add the schedule", same: "Same schedule", change: "Replace the schedule", shared: "Schedule set with the other client row", unset: "Schedule not set: set it on Schedules" };
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -36,7 +36,8 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
   const [ending, setEnding] = useState<Set<string>>(new Set());
   const [endDate, setEndDate] = useState(today());
   const [ackBackdated, setAckBackdated] = useState(false);
-  const [choice, setChoice] = useState<Record<string, string>>({});
+  // The closest record is pre-selected where there is a clear one; a person still presses the button.
+  const [choice, setChoice] = useState<Record<string, string>>(() => Object.fromEntries(plan.decisions.flatMap((d) => (d.suggestion ? [[d.key, d.suggestion.id]] : []))));
 
   const rows = plan.rows.filter((r) => (tab === "update" ? r.status === "update" : tab === "unchanged" ? r.status === "unchanged" : false));
   const pagedRows = usePaged(rows, tab);
@@ -235,6 +236,7 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
                   <TableCell>
                     {targets && d.kind !== "other" ? (
                       <div className="flex flex-wrap items-center gap-2">
+                        {d.suggestion ? <span className="w-full text-xs text-muted-foreground">Closest match, selected for you: {d.suggestion.label}. Check it, then confirm.</span> : null}
                         <NativeSelect aria-label={`Choose the ${d.kind} for ${d.kind === "person" ? d.sheetName : d.sheetClient}`} value={choice[d.key] ?? ""} onChange={(e) => setChoice((c) => ({ ...c, [d.key]: e.target.value }))} className="max-w-64">
                           <option value="">Choose a {d.kind}</option>
                           {(d.kind === "person" ? targets.people : targets.clients).map((t) => (
@@ -324,7 +326,10 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
                   {r.personName}
                   {r.sheetName !== r.personName ? <span className="block text-xs text-muted-foreground">sheet: {r.sheetName}</span> : null}
                 </TableCell>
-                <TableCell>{r.clientName}</TableCell>
+                <TableCell>
+                  {r.clientName}
+                  {r.siblingClientNames.length > 0 ? <span className="block text-xs text-muted-foreground">Also: {r.siblingClientNames.join(", ")}</span> : null}
+                </TableCell>
                 <TableCell>
                   {r.startTime}–{r.endTime}
                   <span className="block text-xs text-muted-foreground">

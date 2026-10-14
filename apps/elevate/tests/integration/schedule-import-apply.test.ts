@@ -176,4 +176,28 @@ describe("applying a schedule import", () => {
     expect(far.limitedFrom).toBe(plus(TODAY, -35));
     expect(far.rebuilt + far.failed).toBe(1);
   });
+
+  it("gives a person on two clients both assignments with their total hours and ONE schedule, and keeps an existing one", async () => {
+    const a = await actor();
+    const p = await person();
+    const first = await client();
+    const second = await client();
+    const day = plus(TODAY, -3);
+    // already on the first client with other hours: kept, hours corrected, nothing ended
+    await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date, hours_per_week) values (${p.id}, ${first.id}, ${plus(day, -20)}, 20)`);
+    const { batchId } = await stage(a, [obs(p.sheet, first.name, "8:00 am - 12:00 pm AZ", day), obs(p.sheet, second.name, "1:00 pm to 5:00 pm AZ", day)]);
+    const preview = (await apply.previewForBatch(batchId))!;
+    const mine = preview.plan.rows.filter((r) => r.personId === p.id);
+    expect(mine).toHaveLength(2);
+    expect(mine.every((r) => r.hoursPerWeek === 40 && r.breakMinutes === 60)).toBe(true);
+
+    const result = await apply.applyBatch(a, { batchId, digest: preview.digest, accepted: mine.map((r) => ({ key: r.key })), endAssignmentIds: [], endDate: null, acknowledgeBackdated: false });
+    expect(result).toMatchObject({ assignmentsAdded: 1, assignmentsEnded: 0, hoursUpdated: 1, schedulesAdded: 1, rowsSkipped: [] });
+
+    const open = await rows<{ client_id: string; hours_per_week: string }>(sql`select client_id, hours_per_week::text from core.client_assignments where employee_id = ${p.id} and end_date is null order by client_id`);
+    expect(open).toHaveLength(2);
+    expect(open.every((o) => o.hours_per_week === "40.0")).toBe(true);
+    const sch = await rows<{ start_time: string; end_time: string; break_minutes: number }>(sql`select start_time, end_time, break_minutes from time.schedules where employee_id = ${p.id}`);
+    expect(sch).toEqual([{ start_time: "08:00", end_time: "17:00", break_minutes: 60 }]);
+  });
 });

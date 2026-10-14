@@ -26,6 +26,7 @@ Settings > Import schedules and clients (`/settings/import-schedules`, `/[id]`; 
 
 ## Phase 3 (built): remembered matches, saved layouts, review list
 - **Resolve on screen:** in "Needs a person", a row that failed on a person or a client (`Decision.kind` `person` or `client`) has a list of active people or clients to choose from and "Match and remember" (`rememberScheduleImportMatch`). The match is stored in `ops.schedule_import_aliases` (migration 0069, RLS on) keyed by the **normalized spelling** (name words sorted; client name without case or punctuation), one row per spelling, pointing at exactly one person or client (check constraint). The plan prefers a remembered match to guessing from the name and ignores one whose target is no longer active. Rows that are `other` (a schedule that cannot be read, a person on two clients) cannot be resolved by choosing: fix the sheet or the records.
+- **Closest match:** where no person or client matched, the closest active record is pre-selected in the dropdown when one is clearly nearest (`closest()` in `parse.ts`: same letters ignoring case and punctuation, one name containing the other such as In-House and Inhouse Medical, or the share of shared letter pairs; nothing is suggested when two are about equally close). A person still confirms it.
 - **Forget:** "Remembered matches" on the uploads page lists them with a Forget button (`forgetScheduleImportMatch`). Audit: `scheduleimport.alias_save` / `alias_remove` with the kind only.
 - **Saved layouts:** for a plain table, the column choices are stored in `ops.schedule_import_layouts` by a hash of the normalized header row; the next upload of the same header finds them and says so.
 - **Review list:** "Download the lists to review (CSV)" exports "Needs a person" and "On a client but not on the sheet" (cells protected against spreadsheet formulas).
@@ -34,8 +35,16 @@ Settings > Import schedules and clients (`/settings/import-schedules`, `/[id]`; 
 ## Decisions made with the owner
 HR and Super Admin only; it must also be able to **end old ones**; the sheet layout may vary; hours per week come from the attendance sheet and go into the client assignment's existing field; menu placement under Settings; backdating allowed with the impact shown first; ending is proposed only for people on clients that appear on the sheet.
 
+## People on more than one client (built)
+- A person listed under several clients gets one row per client, each with its own assignment (start date = that client's first day on the sheet). Hours per week on each client is the person's TOTAL across their clients (the sum of each segment's paid hours), as the owner decided.
+- ELEVATE keeps one open schedule per person, so the segments are combined into one shift when they are on the same days and zone, one after another, with gaps of at most 4 hours (`combineSegments`, `MAX_GAP_MINUTES`): earliest start to latest end, and the unpaid break is the gaps plus each segment's own suggested break. One row (the client with the earliest start) carries the schedule; the others show "Schedule set with the other client row" (`shared`).
+- When segments overlap, run on different days, or are in different zones, the assignments are still proposed but the schedule is NOT set (`unset`, reason in the row's notes): set it on Schedules. ELEVATE's schedule model has one shift per date range, so day-by-client shifts cannot be stored yet.
+- If one of the person's clients still needs a match, the rest are shown and the schedule is held until it is matched.
+- There is no "main" client: the zone comes from the sheet's segments.
+- Apply: the person's other rows in the same sheet are not treated as "old" assignments to end (`siblingClientIds`); unrelated open assignments are ended only on a row that adds a client, as before.
+
 ## Not built
-Several clients for one person on the same sheet cannot be resolved on screen yet (it needs a choice of which is current), and the in-app version does not read pay or hours.
+Day-by-client schedules (one shift per client on different days), and the in-app version does not read pay or hours.
 
 ## Related, outside the app
 `apps/elevate/scripts/schedule-import-*.ts` and `rebuild-historical-october.mts` are the guarded command-line importer used for the October 2026 backfill (runbook 5b7a and 5b7b). They share the same reading and matching ideas; the in-app version replaces them for future sheets.

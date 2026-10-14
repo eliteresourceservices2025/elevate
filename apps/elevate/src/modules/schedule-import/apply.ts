@@ -51,7 +51,7 @@ export type ApplyResult = {
 /** A fingerprint of everything the reviewer was shown: if ELEVATE changed since, the apply is refused and the preview reloaded. */
 export function planDigest(plan: Plan): string {
   const shown = {
-    rows: plan.rows.map((r) => [r.key, r.personId, r.clientId, r.assignment, r.schedule, r.status, r.hoursNote, r.startTime, r.endTime, r.zone, r.weekdays, r.breakMinutes, r.hoursPerWeek, r.firstDay, r.current, r.impact]),
+    rows: plan.rows.map((r) => [r.key, r.personId, r.clientId, r.assignment, r.schedule, r.siblingClientIds, r.status, r.hoursNote, r.startTime, r.endTime, r.zone, r.weekdays, r.breakMinutes, r.hoursPerWeek, r.firstDay, r.current, r.impact]),
     decisions: plan.decisions.map((d) => [d.key, d.reasons]),
     gone: plan.notOnSheet.map((n) => [n.assignmentId, n.assignmentStart]),
   };
@@ -130,7 +130,7 @@ export async function applyBatch(actor: Actor, input: ApplyInput): Promise<Apply
 
           const open = await sp.select().from(clientAssignments).where(and(eq(clientAssignments.employeeId, row.personId), isNull(clientAssignments.endDate))).for("update");
           const sameClient = open.find((a) => a.clientId === row.clientId) ?? null;
-          const others = open.filter((a) => a.clientId !== row.clientId);
+          const others = open.filter((a) => a.clientId !== row.clientId && !row.siblingClientIds.includes(a.clientId));
           const dayBefore = addDays(row.firstDay, -1);
 
           // Assignments
@@ -163,7 +163,7 @@ export async function applyBatch(actor: Actor, input: ApplyInput): Promise<Apply
           }
 
           // Schedule
-          if (row.schedule !== "same") {
+          if (row.schedule === "add" || row.schedule === "change") {
             const existing = await loadSchedules(sp, row.personId);
             const later = existing.find((s) => s.effectiveFrom >= row.firstDay);
             if (later) throw new RowConflict("The person already has a schedule starting on or after that date.");
