@@ -24,10 +24,14 @@ export const scheduleImportBatches = ops
       createdBy: uuid("created_by").references(() => users.id),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       discardedAt: timestamp("discarded_at", { withTimezone: true }),
+      appliedAt: timestamp("applied_at", { withTimezone: true }),
+      appliedBy: uuid("applied_by").references(() => users.id),
+      /** Counts of what the apply did (never names). */
+      result: jsonb("result").$type<Record<string, number>>(),
     },
     (t) => [
       index("schedule_import_batches_created_idx").on(t.createdAt),
-      check("schedule_import_batches_status_chk", sql`${t.status} in ('preview','discarded')`),
+      check("schedule_import_batches_status_chk", sql`${t.status} in ('preview','discarded','applied')`),
       check("schedule_import_batches_layout_chk", sql`${t.layout} in ('day_blocks','table')`),
     ],
   )

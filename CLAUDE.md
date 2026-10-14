@@ -195,7 +195,8 @@ Settings > Import schedules and clients: upload the team's attendance sheet (CSV
 
 - HR and Super Admin only; it sets assignments and schedules, never worked hours (the sheet's totals are ignored).
 - Anything it cannot match with certainty goes to a person with the reason; nothing is guessed, and people missing from the sheet are never ended automatically.
-- Rows are one encrypted payload, wiped on discard and after 14 days; audit entries hold counts only. Phase 1 is read-only.
+- Rows are one encrypted payload, wiped on discard, on apply and after 14 days; audit entries hold counts only.
+- Apply re-checks everything under a lock and refuses a stale preview; a row that no longer fits is skipped with the reason; ending is only for assignments HR ticked; backdating needs the shown impact acknowledged.
 
 ### Privacy incident reports — `docs/modules/incidents.md`
 Staff privacy incident reports and their handling.

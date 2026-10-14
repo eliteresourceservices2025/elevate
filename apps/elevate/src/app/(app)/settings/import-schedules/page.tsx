@@ -18,7 +18,7 @@ export default async function ImportSchedulesPage() {
         <h1 className="mt-1 text-2xl font-bold">Import schedules and clients</h1>
         <p className="mt-1 max-w-3xl text-muted-foreground">
           Upload the attendance sheet and see who works for which client, on which shift and in which time zone, compared with what ELEVATE holds. This step only
-          previews. Hours are never read from the sheet.
+          shows a preview, and you choose what to apply. Hours are never read from the sheet.
         </p>
       </div>
       <SheetUploader />
@@ -39,7 +39,7 @@ export default async function ImportSchedulesPage() {
                 )}
                 <span className="flex items-center gap-2 text-sm text-muted-foreground">
                   {b.pairCount} people and clients, {b.createdAt.toISOString().slice(0, 10)}
-                  <Badge variant="outline">{b.status === "preview" ? "Preview" : "Discarded"}</Badge>
+                  <Badge variant={b.status === "applied" ? "secondary" : "outline"}>{b.status === "preview" ? "Preview" : b.status === "applied" ? "Applied" : "Discarded"}</Badge>
                 </span>
               </li>
             ))}

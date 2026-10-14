@@ -45,11 +45,15 @@ export type PlanRow = {
   backdated: boolean;
   /** Things a person should look at before accepting this row. */
   attention: string[];
+  /** For a backdated row: what already exists from the start date on. Null when the row is not backdated. */
+  impact: Impact | null;
   current: { clientName: string | null; assignmentStart: string | null; assignmentHours: number | null; shift: string | null; scheduleFrom: string | null };
 };
 
 export type Decision = { key: string; sheetName: string; sheetClient: string; reasons: string[] };
-export type NotOnSheet = { personName: string; clientName: string; assignmentStart: string };
+export type NotOnSheet = { assignmentId: string; employeeId: string; personName: string; clientName: string; assignmentStart: string };
+/** How many dated records a backdated change would touch (counts only). Filled in by the service, which can read them. */
+export type Impact = { attendanceDays: number; clockEvents: number; approvals: number; leaveRequests: number; extraHoursRequests: number };
 export type Plan = {
   rows: PlanRow[];
   decisions: Decision[];
@@ -139,7 +143,7 @@ export function buildPlan(observations: Observation[], live: LiveData, options: 
       key, sheetName, sheetClient, personId: person.id, personName: [person.first, person.last].filter(Boolean).join(" "), workEmail: person.workEmail,
       clientId: client.id, clientName: client.name, scheduleText: text, startTime: parsed.startTime, endTime: parsed.endTime, zone: parsed.zone,
       weekdays: parsed.weekdays, weekdayLabel: dayNames(parsed.weekdays), breakMinutes, hoursPerWeek: hours, firstDay, lastDay, daysSeen: obs.length,
-      assignment, schedule, status, hoursNote, backdated: firstDay < addDays(options.today, -7), attention,
+      assignment, schedule, status, hoursNote, backdated: firstDay < addDays(options.today, -7), attention, impact: null,
       current: {
         clientName: open[0] ? (clientName.get(open[0].clientId) ?? null) : null,
         assignmentStart: open[0]?.startDate ?? null,
@@ -155,7 +159,7 @@ export function buildPlan(observations: Observation[], live: LiveData, options: 
   const personName = new Map(live.employees.map((e) => [e.id, [e.first, e.last].filter(Boolean).join(" ")]));
   const notOnSheet: NotOnSheet[] = live.assignments
     .filter((a) => a.endDate === null && sheetClients.has(a.clientId) && !usedPeople.has(a.employeeId) && people.some((p) => p.id === a.employeeId))
-    .map((a) => ({ personName: personName.get(a.employeeId) ?? "", clientName: clientName.get(a.clientId) ?? "", assignmentStart: a.startDate }))
+    .map((a) => ({ assignmentId: a.id, employeeId: a.employeeId, personName: personName.get(a.employeeId) ?? "", clientName: clientName.get(a.clientId) ?? "", assignmentStart: a.startDate }))
     .sort((x, y) => x.clientName.localeCompare(y.clientName) || x.personName.localeCompare(y.personName));
 
   rows.sort((a, b) => a.clientName.localeCompare(b.clientName) || a.personName.localeCompare(b.personName));

@@ -18,6 +18,8 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/modules/audit/write", () => ({ writeAudit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/server", () => ({ after: vi.fn() }));
+vi.mock("@/lib/rate-limit", () => ({ allowRequest: vi.fn(async () => true) }));
 
 const actions = await import("@/modules/schedule-import/actions");
 const queries = await import("@/modules/schedule-import/queries");
@@ -52,6 +54,22 @@ describe("schedule import, every role", () => {
       });
     }
   }
+
+  for (const role of ROLE_SLUGS) {
+    const allowed = ALLOWED.includes(role);
+    it(`${role}: ${allowed ? "may" : "is refused"} applying an import`, async () => {
+      as(role);
+      const r = await actions.applyScheduleImport({ batchId: ID, digest: "a".repeat(64), accepted: [{ key: "k" }], endAssignmentIds: [], endDate: null, acknowledgeBackdated: false });
+      if (allowed) expect(r.ok === false && r.error).not.toBe(NO_ACCESS);
+      else expect(r).toEqual({ ok: false, error: NO_ACCESS });
+    });
+  }
+
+  it("refuses a malformed apply request before reaching the database", async () => {
+    as("hr_admin");
+    expect((await actions.applyScheduleImport({ batchId: "nope", digest: "x", accepted: [] })).ok).toBe(false);
+    expect((await actions.applyScheduleImport({ batchId: ID, digest: "a".repeat(64), accepted: [{ key: "k", breakMinutes: 999 }] })).ok).toBe(false);
+  });
 
   it("refuses a malformed id before reaching the database", async () => {
     as("hr_admin");

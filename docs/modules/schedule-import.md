@@ -1,6 +1,6 @@
 # Schedule and client import from an attendance sheet
 
-> Notes for `src/modules/schedule-import/`. Read before changing it. Phase 1 (preview only) is built; apply, ending old assignments and aliases are phases 2 and 3.
+> Notes for `src/modules/schedule-import/`. Read before changing it. Phases 1 (preview) and 2 (apply, ending old assignments) are built; remembered aliases and polish are phase 3.
 
 ## What it is
 Settings > Import schedules and clients (`/settings/import-schedules`, `/[id]`; permission `scheduleimport.manage`: HR and Super Admin only). HR uploads the attendance sheet the team already keeps (CSV or XLSX, 2 MB) and sees what ELEVATE would change: client assignment, schedule, time zone and hours per week for each person. **It never reads worked hours**: ELEVATE is the only source of hours (CLAUDE.md rule 9), and the sheet's own "Total Hours" column is ignored because HR's formulas produce negative and impossible totals.
@@ -14,11 +14,20 @@ Settings > Import schedules and clients (`/settings/import-schedules`, `/[id]`; 
 - **Privacy:** the observations are one encrypted payload (`ops.schedule_import_batches`, context `schedule_import:<id>`, RLS on), wiped when discarded and after 14 days by the daily import purge. Audit entries hold counts only (`scheduleimport.stage`, `scheduleimport.discard`). The upload screen warns against client or patient information.
 - Tests: `schedule-import.test.ts` (pure), `tests/authz/schedule-import-actions.test.ts`, `tests/integration/schedule-import-preview.test.ts`.
 
+## Phase 2 (built): apply
+- **What HR does** on the preview: tick the rows to apply (rows with no note start ticked; rows with a note start unticked), adjust the assumed break and the estimated hours per row, tick the people to end (with a last day), and confirm backdated changes. `applyScheduleImport` (`scheduleimport.manage`, rate limit `upload`) then calls `applyBatch` (`apply.ts`).
+- **Refused when stale:** the preview carries a digest of everything shown (rows, current records, impact counts, people not on the sheet). If ELEVATE changed since, the apply is refused and the preview must be reloaded.
+- **What it writes**, per person in its own savepoint under the clock lock: a new assignment (start = the first day on the sheet; hours = the estimate or HR's value) with employment history; for a client change the old open assignment ends the day before and history records it; for the same client only the hours are filled or corrected; a schedule is added and the previous one closed the day before; an in-app notice tells the person their schedule was set. Audit entries (`assignment.create`, `assignment.end`, `assignment.update`, `schedule.assign`, `scheduleimport.apply`) carry ids and counts, never names.
+- **A row that no longer fits is skipped, not forced** (the person left, the client is inactive, a later-dated schedule or an overlapping assignment exists, the old assignment started on or after the new date) and listed with the reason; the rest go ahead. A skipped row is rolled back whole.
+- **Ending**: only assignments HR ticked in "On a client but not on the sheet", on the chosen last day (not in the future, not before the start). Nothing is ended automatically.
+- **Backdated** (more than 7 days back): allowed for HR and Super Admin only after the screen shows the counts of attendance days, approved hours records, leave and extra-hours requests that already exist from that date and HR ticks an acknowledgment. Clock events are never touched.
+- **Rebuild:** after the response (`after()`), `rebuildAfterApply` recomputes attendance days for the people changed from their clock events (never the sheet) for up to the last 35 days; older dates need the maintenance command in runbook 5b7b. Days already approved that now differ show "changed after approval" and must be approved again; exports already made are not rewritten.
+- Migration 0068 adds `applied_at`, `applied_by`, `result` and the status `applied`. The payload is wiped when applied. Tests: `tests/integration/schedule-import-apply.test.ts`, `tests/authz/schedule-import-actions.test.ts`.
+
 ## Decisions made with the owner
 HR and Super Admin only; it must also be able to **end old ones**; the sheet layout may vary; hours per week come from the attendance sheet and go into the client assignment's existing field; menu placement under Settings; backdating allowed with the impact shown first; ending is proposed only for people on clients that appear on the sheet.
 
-## Phases to come
-2. **Apply**: add and change assignments and schedules (closing the old one the day before), end the ticked ones, history and audit, the backdated impact review, and a bounded automatic attendance rebuild.
+## Phase to come
 3. **Polish**: remembered aliases (confirmed name and client matches), saved column layouts, an export of the decision list, a Playwright test.
 
 ## Related, outside the app

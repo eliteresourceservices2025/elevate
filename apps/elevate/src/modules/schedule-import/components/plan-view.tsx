@@ -1,32 +1,55 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { discardScheduleImport } from "../actions";
+import { applyScheduleImport, discardScheduleImport, type ApplyOutcome } from "../actions";
 import type { Plan, PlanRow } from "../plan";
 
 type Tab = "update" | "unchanged" | "decisions" | "gone";
+type Edit = { breakMinutes: string; hoursPerWeek: string };
 
-const ASSIGNMENT: Record<PlanRow["assignment"], string> = { add: "Add the client", keep: "Keep the client", change_client: "Change client" };
-const SCHEDULE: Record<PlanRow["schedule"], string> = { add: "Add the schedule", same: "Same schedule", change: "Change the schedule" };
+const ASSIGNMENT: Record<PlanRow["assignment"], string> = { add: "Add the client", keep: "Keep the client", change_client: "End the old client, add this one" };
+const SCHEDULE: Record<PlanRow["schedule"], string> = { add: "Add the schedule", same: "Same schedule", change: "Replace the schedule" };
 
-/** The read-only preview of an attendance sheet: what each person would get, and what needs a person's decision. */
-export function PlanView({ batchId, plan }: { batchId: string; plan: Plan }) {
+const today = () => new Date().toISOString().slice(0, 10);
+
+/** The preview of an attendance sheet and the apply step: choose rows, adjust the assumed break and the estimated hours, tick who to end. */
+export function PlanView({ batchId, plan, digest }: { batchId: string; plan: Plan; digest: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(plan.totals.update > 0 ? "update" : plan.totals.needsDecision > 0 ? "decisions" : "unchanged");
   const [pending, setPending] = useState(false);
+  const [outcome, setOutcome] = useState<ApplyOutcome | null>(null);
+
+  // Rows that change something start ticked unless they need a look first (an attention note).
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(plan.rows.filter((r) => r.status === "update" && r.attention.length === 0).map((r) => r.key)));
+  const [edits, setEdits] = useState<Record<string, Edit>>({});
+  const [ending, setEnding] = useState<Set<string>>(new Set());
+  const [endDate, setEndDate] = useState(today());
+  const [ackBackdated, setAckBackdated] = useState(false);
 
   const rows = plan.rows.filter((r) => (tab === "update" ? r.status === "update" : tab === "unchanged" ? r.status === "unchanged" : false));
-  // One pager per list (hooks cannot be conditional); the current tab decides which one is shown.
   const pagedRows = usePaged(rows, tab);
   const pagedDecisions = usePaged(plan.decisions, tab);
   const pagedGone = usePaged(plan.notOnSheet, tab);
   const paged = tab === "decisions" ? pagedDecisions : tab === "gone" ? pagedGone : pagedRows;
+
+  const chosen = useMemo(() => plan.rows.filter((r) => picked.has(r.key)), [plan.rows, picked]);
+  const backdatedChosen = chosen.filter((r) => r.backdated);
+  const impact = backdatedChosen.reduce(
+    (t, r) => ({
+      attendanceDays: t.attendanceDays + (r.impact?.attendanceDays ?? 0),
+      approvals: t.approvals + (r.impact?.approvals ?? 0),
+      leaveRequests: t.leaveRequests + (r.impact?.leaveRequests ?? 0),
+      extraHoursRequests: t.extraHoursRequests + (r.impact?.extraHoursRequests ?? 0),
+    }),
+    { attendanceDays: 0, approvals: 0, leaveRequests: 0, extraHoursRequests: 0 },
+  );
 
   const tabs: { id: Tab; label: string; n: number }[] = [
     { id: "update", label: "Would change", n: plan.totals.update },
@@ -34,6 +57,22 @@ export function PlanView({ batchId, plan }: { batchId: string; plan: Plan }) {
     { id: "decisions", label: "Needs a person", n: plan.totals.needsDecision },
     { id: "gone", label: "On a client but not on the sheet", n: plan.totals.notOnSheet },
   ];
+
+  const toggle = (key: string) =>
+    setPicked((p) => {
+      const n = new Set(p);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  const toggleEnd = (id: string) =>
+    setEnding((p) => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const edit = (key: string, patch: Partial<Edit>) => setEdits((e) => ({ ...e, [key]: { ...(e[key] ?? { breakMinutes: "", hoursPerWeek: "" }), ...patch } }));
 
   async function discard() {
     if (!window.confirm("Discard this upload? Its rows are deleted.")) return;
@@ -50,11 +89,80 @@ export function PlanView({ batchId, plan }: { batchId: string; plan: Plan }) {
     }
   }
 
+  async function apply() {
+    const bad = chosen.find((r) => {
+      const e = edits[r.key];
+      return (e?.breakMinutes !== undefined && e.breakMinutes !== "" && !(Number.isInteger(Number(e.breakMinutes)) && Number(e.breakMinutes) >= 0 && Number(e.breakMinutes) <= 240)) ||
+        (e?.hoursPerWeek !== undefined && e.hoursPerWeek !== "" && !(Number(e.hoursPerWeek) > 0 && Number(e.hoursPerWeek) <= 80));
+    });
+    if (bad) return void toast.error(`Check the break and hours for ${bad.personName}.`);
+    const summary = `${chosen.length} ${chosen.length === 1 ? "person" : "people"} will get the shown client and schedule${ending.size ? `, and ${ending.size} assignment${ending.size === 1 ? "" : "s"} will end on ${endDate}` : ""}. Continue?`;
+    if (!window.confirm(summary)) return;
+    setPending(true);
+    try {
+      const r = await applyScheduleImport({
+        batchId,
+        digest,
+        accepted: chosen.map((row) => {
+          const e = edits[row.key];
+          return {
+            key: row.key,
+            ...(e?.breakMinutes ? { breakMinutes: Number(e.breakMinutes) } : {}),
+            ...(e?.hoursPerWeek ? { hoursPerWeek: Number(e.hoursPerWeek) } : {}),
+          };
+        }),
+        endAssignmentIds: [...ending],
+        endDate: ending.size ? endDate : null,
+        acknowledgeBackdated: ackBackdated,
+      });
+      if (!r.ok) return void toast.error(r.error);
+      setOutcome(r.data);
+      toast.success("Applied.");
+    } catch {
+      toast.error("No connection. Try again.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (outcome) {
+    return (
+      <div className="space-y-4">
+        <div role="status" className="rounded-xl border border-green-600/40 bg-green-600/10 p-4 text-sm">
+          <p className="font-medium">The import was applied.</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>{outcome.assignmentsAdded} client assignments added</li>
+            <li>{outcome.schedulesAdded} schedules set (the previous one closed the day before)</li>
+            <li>{outcome.hoursUpdated} hours per week filled in or corrected</li>
+            <li>{outcome.assignmentsEnded + outcome.endedByTick} assignments ended</li>
+            <li>{outcome.skipped.length} skipped</li>
+          </ul>
+          <p className="mt-2 text-muted-foreground">Attendance days for these people are being recalculated from their clock events. Days already approved that now differ will show &ldquo;changed after approval&rdquo; and need approving again.</p>
+        </div>
+        {outcome.skipped.length > 0 ? (
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold">Skipped: fix these on the person&apos;s profile</h2>
+            <ul className="divide-y rounded-xl border bg-card text-sm">
+              {outcome.skipped.map((s) => (
+                <li key={s.key} className="p-3">
+                  <span className="font-medium">{s.sheetName}</span> ({s.sheetClient}): {s.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        <Button onClick={() => router.push("/settings/import-schedules")}>Back to uploads</Button>
+      </div>
+    );
+  }
+
+  const canApply = chosen.length > 0 || ending.size > 0;
+
   return (
     <div className="space-y-5">
       <p role="note" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-        This is a <strong>preview</strong>. Nothing has been changed in ELEVATE. Unpaid breaks are <strong>assumed</strong> from the shift length and hours per week
-        are <strong>estimated</strong> from the schedule: the sheet does not say. Worked hours are never read from the sheet.
+        Review before applying. Unpaid breaks are <strong>assumed</strong> from the shift length and hours per week are <strong>estimated</strong> from the schedule: the sheet does
+        not say, so change them where you know better. Worked hours are never read from the sheet and clock events are never changed.
       </p>
 
       <ul className="flex flex-wrap gap-2 text-sm" aria-label="Show">
@@ -66,12 +174,6 @@ export function PlanView({ batchId, plan }: { batchId: string; plan: Plan }) {
           </li>
         ))}
       </ul>
-      {plan.totals.backdated > 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {plan.totals.backdated} {plan.totals.backdated === 1 ? "person starts" : "people start"} more than 7 days back. The ordinary screens refuse that; applying it will need
-          the impact review (a later phase).
-        </p>
-      ) : null}
 
       {tab === "decisions" ? (
         plan.decisions.length === 0 ? (
@@ -100,19 +202,32 @@ export function PlanView({ batchId, plan }: { batchId: string; plan: Plan }) {
         plan.notOnSheet.length === 0 ? (
           <p className="rounded-xl border p-6 text-sm text-muted-foreground">Everyone currently on these clients is on the sheet.</p>
         ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Currently assigned to a client that is on the sheet, but not on the sheet. They may have left or moved. Nothing is ended automatically.</p>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Currently assigned to a client that is on the sheet, but not on the sheet. They may have left or moved. Tick the ones to end. Nothing is ended unless you tick it.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <label htmlFor="end-date" className="font-medium">
+                Last day
+              </label>
+              <Input id="end-date" type="date" max={today()} value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 w-40" />
+              <span className="text-muted-foreground">{ending.size} ticked</span>
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>End</TableHead>
                   <TableHead>Person</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Assigned since</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pagedGone.rows.map((g, i) => (
-                  <TableRow key={`${g.personName}-${g.clientName}-${i}`}>
+                {pagedGone.rows.map((g) => (
+                  <TableRow key={g.assignmentId}>
+                    <TableCell>
+                      <input type="checkbox" aria-label={`End ${g.personName}'s assignment to ${g.clientName}`} className="size-4 accent-primary" checked={ending.has(g.assignmentId)} onChange={() => toggleEnd(g.assignmentId)} />
+                    </TableCell>
                     <TableCell className="font-medium">{g.personName}</TableCell>
                     <TableCell>{g.clientName}</TableCell>
                     <TableCell>{g.assignmentStart}</TableCell>
@@ -128,6 +243,7 @@ export function PlanView({ batchId, plan }: { batchId: string; plan: Plan }) {
         <Table>
           <TableHeader>
             <TableRow>
+              {tab === "update" ? <TableHead>Apply</TableHead> : null}
               <TableHead>Person</TableHead>
               <TableHead>Client</TableHead>
               <TableHead>Proposed shift</TableHead>
@@ -141,6 +257,11 @@ export function PlanView({ batchId, plan }: { batchId: string; plan: Plan }) {
           <TableBody>
             {pagedRows.rows.map((r) => (
               <TableRow key={r.key}>
+                {tab === "update" ? (
+                  <TableCell>
+                    <input type="checkbox" aria-label={`Apply ${r.personName}`} className="size-4 accent-primary" checked={picked.has(r.key)} onChange={() => toggle(r.key)} />
+                  </TableCell>
+                ) : null}
                 <TableCell className="font-medium">
                   {r.personName}
                   {r.sheetName !== r.personName ? <span className="block text-xs text-muted-foreground">sheet: {r.sheetName}</span> : null}
@@ -152,8 +273,20 @@ export function PlanView({ batchId, plan }: { batchId: string; plan: Plan }) {
                     {r.zone}, {r.weekdayLabel}
                   </span>
                 </TableCell>
-                <TableCell>{r.breakMinutes} min</TableCell>
-                <TableCell>{r.hoursPerWeek}</TableCell>
+                <TableCell>
+                  {tab === "update" ? (
+                    <Input aria-label={`Unpaid break in minutes for ${r.personName}`} inputMode="numeric" className="h-8 w-20" placeholder={String(r.breakMinutes)} value={edits[r.key]?.breakMinutes ?? ""} onChange={(e) => edit(r.key, { breakMinutes: e.target.value })} />
+                  ) : (
+                    `${r.breakMinutes} min`
+                  )}
+                </TableCell>
+                <TableCell>
+                  {tab === "update" ? (
+                    <Input aria-label={`Hours per week for ${r.personName}`} inputMode="decimal" className="h-8 w-20" placeholder={String(r.hoursPerWeek)} value={edits[r.key]?.hoursPerWeek ?? ""} onChange={(e) => edit(r.key, { hoursPerWeek: e.target.value })} />
+                  ) : (
+                    r.hoursPerWeek
+                  )}
+                </TableCell>
                 <TableCell>
                   {r.firstDay}
                   {r.backdated ? <Badge variant="outline" className="ml-1">backdated</Badge> : null}
@@ -179,11 +312,30 @@ export function PlanView({ batchId, plan }: { batchId: string; plan: Plan }) {
       )}
       <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="rows" />
 
+      {backdatedChosen.length > 0 ? (
+        <section aria-label="Backdated changes" className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          <h2 className="font-semibold">{backdatedChosen.length} chosen {backdatedChosen.length === 1 ? "change starts" : "changes start"} more than 7 days back</h2>
+          <p>
+            From those dates there are already {impact.attendanceDays} attendance days, {impact.approvals} approved hours records, {impact.leaveRequests} leave requests and{" "}
+            {impact.extraHoursRequests} extra-hours requests. Attendance days will be recalculated from clock events with the new schedule, so late, absent and extra-hours flags
+            may change. A day that was already approved and now differs is marked &ldquo;changed after approval&rdquo; and must be approved again. Exports already made are not
+            rewritten.
+          </p>
+          <label htmlFor="ack-backdated" className="flex items-start gap-2">
+            <input id="ack-backdated" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={ackBackdated} onChange={(e) => setAckBackdated(e.target.checked)} />
+            <span>I have reviewed this and want to apply the backdated changes.</span>
+          </label>
+        </section>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-3 border-t pt-4">
+        <Button onClick={apply} disabled={pending || !canApply || (backdatedChosen.length > 0 && !ackBackdated)}>
+          Apply {chosen.length} {chosen.length === 1 ? "change" : "changes"}
+          {ending.size > 0 ? ` and end ${ending.size}` : ""}
+        </Button>
         <Button variant="outline" onClick={discard} disabled={pending}>
           Discard this upload
         </Button>
-        <span className="text-xs text-muted-foreground">Applying the changes comes in the next phase.</span>
       </div>
     </div>
   );

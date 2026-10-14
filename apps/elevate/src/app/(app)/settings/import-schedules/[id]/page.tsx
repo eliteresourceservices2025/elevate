@@ -12,7 +12,7 @@ export default async function ScheduleImportPreviewPage({ params }: PageProps<"/
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const data = await orNotFound(getScheduleImportPlan(id));
   if (!data) notFound();
-  const { batch, plan } = data;
+  const { batch, plan, digest } = data;
   return (
     <div className="w-full space-y-6">
       <div>
@@ -24,7 +24,7 @@ export default async function ScheduleImportPreviewPage({ params }: PageProps<"/
           {batch.observations} clocked-in days read, {plan.totals.pairs} people and clients on the sheet: {plan.totals.ready} matched, {plan.totals.needsDecision} need a person.
         </p>
       </div>
-      <PlanView batchId={batch.id} plan={plan} />
+      <PlanView batchId={batch.id} plan={plan} digest={digest} />
     </div>
   );
 }

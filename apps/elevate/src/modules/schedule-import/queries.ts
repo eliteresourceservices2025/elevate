@@ -3,7 +3,7 @@ import { desc } from "drizzle-orm";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { planForBatch } from "./service";
+import { previewForBatch } from "./apply";
 import { scheduleImportBatches } from "./schema";
 
 async function gate() {
@@ -31,5 +31,5 @@ export async function listScheduleImports() {
 /** The preview for one upload: read-only, compared with what ELEVATE holds right now. Null when it was discarded or expired. */
 export async function getScheduleImportPlan(id: string) {
   await gate();
-  return planForBatch(id);
+  return previewForBatch(id);
 }
