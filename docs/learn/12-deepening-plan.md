@@ -1,6 +1,6 @@
 # 12 Deepening the HIPAA and Cybersecurity courses (gap map and module plan)
 
-**Status:** Batch 0 (this gap map) and Batch 1 (new lesson blocks) are done. Writing starts at Batch 2, for review between batches.
+**Status:** Batches 0 to 3 are done: the gap map, the new lesson blocks, and the HIPAA course rewritten as ten modules (about 125 minutes, a bank of about 200 questions, exam of 20). Batch 4 (Cybersecurity) and Batch 5 (source check and counsel review) are next.
 
 ## Decisions made with the owner
 
@@ -90,8 +90,8 @@ HHS 405(d) Health Industry Cybersecurity Practices.
 | --- | --- | --- | --- |
 | 0 | This gap map | This file | **Done** |
 | 1 | Five new blocks: schema, player, studio editors and previews, export, lint, tests | Platform ready | **Done** (see below) |
-| 2 | HIPAA modules 1-5 with questions | Draft for review | Next |
-| 3 | HIPAA modules 6-9, the four labs, bank to about 200, exam to 20 | Full draft | |
+| 2 | HIPAA modules 1-5 with questions | Draft for review | **Done** |
+| 3 | HIPAA modules 6-10 (security, incidents, enforcement, two labs), bank to about 200, exam to 20 | Full draft | **Done** |
 | 4 | Cybersecurity expansion and the two new modules | Full draft | |
 | 5 | Source check re-run against live HHS and eCFR pages, review packet update, counsel review | Counsel-ready | |
 

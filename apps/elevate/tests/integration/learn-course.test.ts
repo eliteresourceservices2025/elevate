@@ -70,11 +70,11 @@ describe("loading and publishing the HIPAA course", () => {
   it("saves it as a draft first, and repeating changes nothing", async () => {
     const first = await loadCourse(admin, { newVersion: true });
     expect(first.status).toBe("draft");
-    expect(first.modules).toBe(7);
+    expect(first.modules).toBe(10);
     expect(first.questions).toBe(hipaaQuestions.length);
     const [{ n: modules }] = await admin`select count(*)::int as n from learn.version_modules where version_id = ${first.versionId}`;
     const [{ n: questions }] = await admin`select count(*)::int as n from learn.questions where version_id = ${first.versionId}`;
-    expect(modules).toBe(7);
+    expect(modules).toBe(10);
     expect(questions).toBe(hipaaQuestions.length);
 
     const again = await loadCourse(admin);
@@ -182,8 +182,8 @@ describe("a learner going through the course", () => {
 
     // The overview: 7 modules, only the first open, the exam locked.
     const overview = await getOverview(app, p.id, assignmentId);
-    expect(overview!.modules.map((m) => m.locked)).toEqual([false, true, true, true, true, true, true]);
-    expect(overview!.exam).toMatchObject({ questions: 15, minutes: null, passPercent: 80, triesAllowed: 3 });
+    expect(overview!.modules.map((m) => m.locked)).toEqual([false, true, true, true, true, true, true, true, true, true]);
+    expect(overview!.exam).toMatchObject({ questions: 20, minutes: null, passPercent: 80, triesAllowed: 3 });
     expect(await getModuleView(app, p.id, assignmentId, "phi")).toBeNull(); // locked
 
     // Out of order and unknown things are refused.
@@ -225,18 +225,18 @@ describe("a learner going through the course", () => {
     const after = await getOverview(app, p.id, assignmentId);
     expect(after!.allModulesDone).toBe(true);
 
-    // The exam: 15 questions, spread across the modules, with no answer key in anything the page receives.
+    // The exam: 20 questions, spread across the modules, with no answer key in anything the page receives.
     const start = await call(cookie, "startExam", { assignmentId });
     expect(start.status).toBe(200);
     const attemptId = start.body.attemptId as string;
     const view = await getAttemptView(app, p.id, attemptId);
-    expect(view!.items).toHaveLength(15);
+    expect(view!.items).toHaveLength(20);
     expect(view!.status).toBe("in_progress");
     const payload = JSON.stringify(view);
     expect(payload).not.toMatch(/correct_ids|correctIds|rationale/);
     for (const it of view!.items) expect(it.options.length).toBeGreaterThanOrEqual(2);
 
-    // Answer using the key (read as the owner): 14 right and one wrong is 93%, which passes (80% needed).
+    // Answer using the key (read as the owner): 19 right and one wrong is 95%, which passes (80% needed).
     const key = new Map<string, string[]>();
     for (const r of await admin`select id, correct_ids from learn.questions where version_id = ${published.versionId}`) key.set(r.id as string, r.correct_ids as string[]);
     for (const [n, it] of view!.items.entries()) {
@@ -250,11 +250,11 @@ describe("a learner going through the course", () => {
     expect(resumed!.items.every((i) => i.selected.length > 0)).toBe(true);
 
     const graded = await call(cookie, "submit", { attemptId });
-    expect(graded.body).toMatchObject({ ok: true, passed: true, correct: 14, total: 15, scorePercent: 93.33 });
+    expect(graded.body).toMatchObject({ ok: true, passed: true, correct: 19, total: 20, scorePercent: 95 });
     // The review of a passed exam carries the reasons.
     const reviewed = await getAttemptView(app, p.id, attemptId);
     expect(reviewed!.result?.passed).toBe(true);
-    expect(reviewed!.review).toHaveLength(15);
+    expect(reviewed!.review).toHaveLength(20);
     expect(reviewed!.review.some((r) => r.rationale)).toBe(true);
     expect(reviewed!.review.filter((r) => !r.isCorrect)).toHaveLength(1);
     // Answers cannot change after the submission.
@@ -328,7 +328,7 @@ describe("a learner going through the course", () => {
 
     const attemptId = (await call(cookie, "startExam", { assignmentId })).body.attemptId as string;
     const view = await getAttemptView(app, p.id, attemptId);
-    expect(view!.items).toHaveLength(15);
+    expect(view!.items).toHaveLength(20);
     const keyed = await admin`select id, module_key from learn.questions where id = any(${view!.items.map((i) => i.questionId)})`;
     for (const k of keyed) expect(required.map((m) => m.key)).toContain(k.module_key);
 
@@ -337,7 +337,7 @@ describe("a learner going through the course", () => {
     expect(graded.body).toMatchObject({ ok: true, passed: false, correct: 0 });
     const result = await getAttemptView(app, p.id, attemptId);
     expect(result!.result?.passed).toBe(false);
-    expect(result!.review.length).toBe(15);
+    expect(result!.review.length).toBe(20);
     for (const r of result!.review) {
       expect(r.correctIds).toBeNull();
       expect(r.rationale).toBeNull();

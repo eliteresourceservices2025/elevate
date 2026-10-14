@@ -106,22 +106,27 @@ for (const course of Object.values(COURSES)) {
 describe("the HIPAA course specifically", () => {
   const { content, questions, examConfig } = COURSES.hipaa;
 
-  it("has 7 modules of about 80 minutes, in order", () => {
-    expect(content.modules.map((m) => m.key)).toEqual(["foundations", "phi", "privacy", "security", "workplace", "incidents", "lab"]);
-    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(79);
+  it("has 10 modules of about 125 minutes, in order", () => {
+    expect(content.modules.map((m) => m.key)).toEqual(["foundations", "phi", "privacy", "rights", "associates", "security", "incidents", "enforcement", "lab_public", "lab_records"]);
+    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(125);
   });
 
   it("puts the right modules in each track", () => {
     const inTrack = (t: "full" | "essentials" | "refresher") => content.modules.filter((m) => m.tracks.includes(t)).map((m) => m.key);
-    expect(inTrack("full")).toHaveLength(7);
-    expect(inTrack("essentials")).toEqual(["foundations", "phi", "privacy", "incidents"]);
+    expect(inTrack("full")).toHaveLength(10);
+    expect(inTrack("essentials")).toEqual(["foundations", "phi", "privacy", "associates", "incidents", "lab_public"]);
     expect(inTrack("refresher")).toEqual(["foundations", "phi", "privacy", "incidents"]);
   });
 
-  it("matches the organization's existing course: 15 questions and 80% to pass, on every track", () => {
+  it("asks 20 questions and 80% to pass on every track, from a bank of about 200", () => {
     const config = examConfig as { passPercent: number; tracks: Record<string, { questions: number }> };
     expect(config.passPercent).toBe(80);
-    for (const t of Object.values(config.tracks)) expect(t.questions).toBe(15);
-    expect(questions.length).toBeGreaterThanOrEqual(80);
+    for (const t of Object.values(config.tracks)) expect(t.questions).toBe(20);
+    expect(questions.length).toBeGreaterThanOrEqual(190);
+  });
+
+  it("uses the richer blocks the deeper course was built for", () => {
+    const types = new Set(content.modules.flatMap((m) => m.screens.flatMap((s) => s.blocks.map((b) => b.type))));
+    for (const t of ["table", "layers", "timeline", "glossary", "case"]) expect(types.has(t as never), t).toBe(true);
   });
 });

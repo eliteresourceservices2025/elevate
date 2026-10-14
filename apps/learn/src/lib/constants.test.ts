@@ -14,8 +14,8 @@ describe("decided training rules", () => {
   it("keeps the values agreed with the owner", () => {
     expect(EXAM_PASS_PERCENT).toBe(80);
     expect(EXAM_MAX_TRIES).toBe(3);
-    expect(EXAM_QUESTIONS_FULL).toBe(15);
-    expect(EXAM_QUESTIONS_SHORT).toBe(15);
+    expect(EXAM_QUESTIONS_FULL).toBe(20);
+    expect(EXAM_QUESTIONS_SHORT).toBe(20);
     expect(NEW_HIRE_DUE_DAYS).toBe(30);
     expect(RENEWAL_MONTHS).toBe(12);
   });
