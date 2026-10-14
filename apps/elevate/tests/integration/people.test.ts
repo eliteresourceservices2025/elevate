@@ -324,34 +324,98 @@ describe("directory, clients and assignments", () => {
     expect((await queries.listDirectory({ q: "Directoria", archived: "1" })).rows).toHaveLength(1);
   });
 
-  it("corrects and clears current assignment hours with a history and audit trail", async () => {
-    const id = await createPerson("edithours");
+  it("corrects current and ended assignments without renaming clients and records complete changes", async () => {
+    const id = await createPerson("editassignment");
     as(hr);
-    expect((await actions.createClient({ name: "Hours Client (fake)", timeZone: "America/Phoenix" })).ok).toBe(true);
-    const [client] = await rows<{ id: string }>(sql`select id from core.clients where name = 'Hours Client (fake)'`);
-    expect((await actions.assignClient({ employeeId: id, clientId: client.id, startDate: "2026-09-01" })).ok).toBe(true);
+    expect((await actions.createClient({ name: "Original Client (fake)", timeZone: "America/Phoenix" })).ok).toBe(true);
+    expect((await actions.createClient({ name: "Destination Client (fake)", timeZone: "America/Phoenix" })).ok).toBe(true);
+    const [original] = await rows<{ id: string }>(sql`select id from core.clients where name = 'Original Client (fake)'`);
+    const [destination] = await rows<{ id: string }>(sql`select id from core.clients where name = 'Destination Client (fake)'`);
+    expect((await actions.assignClient({ employeeId: id, clientId: original.id, startDate: "2026-09-01" })).ok).toBe(true);
     const [assignment] = await rows<{ id: string }>(sql`select id from core.client_assignments where employee_id = ${id}`);
-    const input = { assignmentId: assignment.id };
+    const input = { assignmentId: assignment.id, clientId: original.id, startDate: "2026-09-01", endDate: null, hoursPerWeek: null };
     const stored = () => rows<{ hours_per_week: string | null; client_id: string; start_date: string; end_date: string | null }>(sql`select hours_per_week, client_id, start_date, end_date from core.client_assignments where id = ${assignment.id}`);
 
-    expect((await actions.updateAssignmentHours({ ...input, hoursPerWeek: "20.5" })).ok).toBe(true);
-    expect(await stored()).toMatchObject([{ hours_per_week: "20.5", client_id: client.id, end_date: null }]);
-    expect(await actions.updateAssignmentHours({ ...input, hoursPerWeek: 20.5 })).toMatchObject({ ok: false, error: "No changes to save." });
-    expect((await actions.updateAssignmentHours({ ...input, hoursPerWeek: "32" })).ok).toBe(true);
-    expect((await actions.updateAssignmentHours({ ...input, hoursPerWeek: "" })).ok).toBe(true);
-    expect(await stored()).toMatchObject([{ hours_per_week: null, client_id: client.id, end_date: null }]);
-    const history = await rows<{ before: { assignmentId: string; hoursPerWeek: number | null }; after: { assignmentId: string; hoursPerWeek: number | null } }>(sql`select before, after from core.employment_history where employee_id = ${id} and summary like 'Client assignment hours changed%' order by created_at`);
-    expect(history).toHaveLength(3);
-    expect(history.map((h) => [h.before.hoursPerWeek, h.after.hoursPerWeek])).toEqual([[null, 20.5], [20.5, 32], [32, null]]);
-    expect(history.every((h) => h.before.assignmentId === assignment.id && h.after.assignmentId === assignment.id)).toBe(true);
-    expect(await rows(sql`select 1 from ops.audit_log where action = 'assignment.update_hours' and target_id = ${id}`)).toHaveLength(3);
+    expect((await actions.updateAssignment({ ...input, clientId: destination.id, startDate: "2026-09-02", hoursPerWeek: "20.5" })).ok).toBe(true);
+    expect(await stored()).toMatchObject([{ hours_per_week: "20.5", client_id: destination.id, start_date: "2026-09-02", end_date: null }]);
+    expect(await rows(sql`select 1 from core.clients where id = ${original.id} and name = 'Original Client (fake)'`)).toHaveLength(1);
+    const current = { ...input, clientId: destination.id, startDate: "2026-09-02", hoursPerWeek: 20.5 };
+    expect(await actions.updateAssignment(current)).toMatchObject({ ok: false, error: "No changes to save." });
+    expect((await actions.updateAssignment({ ...current, endDate: "2026-10-01", hoursPerWeek: "32" })).ok).toBe(true);
+    expect((await actions.updateAssignment({ ...current, endDate: "2026-10-02", hoursPerWeek: "" })).ok).toBe(true);
+    expect(await stored()).toMatchObject([{ hours_per_week: null, client_id: destination.id, end_date: "2026-10-02" }]);
+    expect((await actions.updateAssignment({ ...current, hoursPerWeek: "" })).ok).toBe(true); // reopen ended row
+    expect(await stored()).toMatchObject([{ hours_per_week: null, end_date: null }]);
+    expect(await actions.updateAssignment({ ...current, assignmentId: randomUUID() })).toMatchObject({ ok: false, error: "That assignment was not found." });
+    const history = await rows<{ before: { assignmentId: string; clientId: string; startDate: string; endDate: string | null; hoursPerWeek: number | null }; after: { assignmentId: string; clientId: string; startDate: string; endDate: string | null; hoursPerWeek: number | null } }>(sql`select before, after from core.employment_history where employee_id = ${id} and summary = 'Client assignment corrected' order by created_at`);
+    expect(history).toHaveLength(4);
+    expect(history[0].before).toMatchObject(input);
+    expect(history[0].after).toMatchObject({ assignmentId: assignment.id, clientId: destination.id, startDate: "2026-09-02", hoursPerWeek: 20.5 });
+    expect(history[3].before.endDate).toBe("2026-10-02");
+    expect(history[3].after.endDate).toBeNull();
+    const audit = await rows<{ before: typeof history[0]["before"]; after: typeof history[0]["after"] }>(sql`select before, after from ops.audit_log where action = 'assignment.update' and target_id = ${id}`);
+    expect(audit).toHaveLength(4);
+    expect(audit[0].before.assignmentId).toBe(assignment.id);
+    expect(audit[0].after.clientId).toBe(destination.id);
+  });
 
-    expect((await actions.endAssignment({ assignmentId: assignment.id, endDate: "2026-10-01" })).ok).toBe(true);
-    expect(await actions.updateAssignmentHours({ ...input, hoursPerWeek: 20 })).toMatchObject({ ok: false, error: "That assignment has already ended." });
-    expect(await actions.updateAssignmentHours({ assignmentId: randomUUID(), hoursPerWeek: 20 })).toMatchObject({ ok: false, error: "That assignment was not found." });
-    expect((await stored())[0]).toMatchObject({ hours_per_week: null, client_id: client.id, end_date: "2026-10-01" });
-    expect(await rows(sql`select 1 from core.employment_history where employee_id = ${id} and summary like 'Client assignment hours changed%'`)).toHaveLength(3);
-    expect(await rows(sql`select 1 from ops.audit_log where action = 'assignment.update_hours' and target_id = ${id}`)).toHaveLength(3);
+  it("refuses inactive targets and inclusive overlaps, including concurrent creates", async () => {
+    const id = await createPerson("overlapassignment");
+    as(hr);
+    const name = `Overlap Client ${id}`;
+    await actions.createClient({ name, timeZone: "America/Phoenix" });
+    const [client] = await rows<{ id: string }>(sql`select id from core.clients where name = ${name}`);
+    const create = (startDate: string) => actions.assignClient({ employeeId: id, clientId: client.id, startDate });
+    const results = await Promise.all([create("2026-09-01"), create("2026-09-02")]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok)).toHaveLength(1);
+    const [first] = await rows<{ id: string }>(sql`select id from core.client_assignments where employee_id = ${id}`);
+    expect((await actions.endAssignment({ assignmentId: first.id, endDate: "2026-09-30" })).ok).toBe(true);
+    expect(await create("2026-09-30")).toMatchObject({ ok: false, error: expect.stringContaining("overlapping") });
+    expect((await create("2026-10-01")).ok).toBe(true);
+    const [second] = await rows<{ id: string }>(sql`select id from core.client_assignments where employee_id = ${id} and end_date is null`);
+    const edit = { assignmentId: second.id, clientId: client.id, startDate: "2026-09-30", endDate: null, hoursPerWeek: null };
+    expect(await actions.updateAssignment(edit)).toMatchObject({ ok: false, error: expect.stringContaining("overlapping") });
+    expect(await actions.updateAssignment({ ...edit, assignmentId: first.id, startDate: "2026-09-01", endDate: "2026-10-01" })).toMatchObject({ ok: false, error: expect.stringContaining("overlapping") });
+    expect(await actions.updateAssignment({ ...edit, assignmentId: first.id, startDate: "2026-09-01" })).toMatchObject({ ok: false, error: expect.stringContaining("overlapping") }); // reopening an old row
+    await db.execute(sql`update core.clients set is_active = false where id = ${client.id}`);
+    const other = await createPerson("inactiveassignment");
+    as(hr);
+    await actions.createClient({ name: `Other Client ${id}`, timeZone: "America/Phoenix" });
+    const [otherClient] = await rows<{ id: string }>(sql`select id from core.clients where name = ${`Other Client ${id}`}`);
+    await actions.assignClient({ employeeId: other, clientId: otherClient.id, startDate: "2026-09-01" });
+    const [otherAssignment] = await rows<{ id: string }>(sql`select id from core.client_assignments where employee_id = ${other}`);
+    expect(await actions.updateAssignment({ ...edit, assignmentId: otherAssignment.id })).toMatchObject({ ok: false, error: "That client is inactive." });
+    expect(await actions.updateAssignment({ ...edit, assignmentId: otherAssignment.id, clientId: randomUUID() })).toMatchObject({ ok: false, error: "That client was not found." });
+    expect((await actions.updateAssignment({ ...edit, startDate: "2026-10-01", hoursPerWeek: "10" })).ok).toBe(true); // unchanged inactive client
+    await db.execute(sql`update core.clients set archived_at = now() where id = ${client.id}`);
+    expect((await actions.updateAssignment({ ...edit, startDate: "2026-10-01", hoursPerWeek: "11" })).ok).toBe(true); // same archived client is still correctable
+    expect(await actions.updateAssignment({ ...edit, assignmentId: otherAssignment.id })).toMatchObject({ ok: false, error: "That client was not found." });
+    await actions.createClient({ name: `Third Client ${id}`, timeZone: "America/Phoenix" });
+    const [third] = await rows<{ id: string }>(sql`select id from core.clients where name = ${`Third Client ${id}`}`);
+    expect((await actions.updateAssignment({ ...edit, assignmentId: otherAssignment.id, clientId: third.id })).ok).toBe(true); // different clients can overlap
+    expect(await rows(sql`select 1 from core.clients where id = ${otherClient.id} and archived_at is null`)).toHaveLength(1);
+  });
+
+  it("serializes concurrent edits to the same person's dated assignments", async () => {
+    const id = await createPerson("concurrenteditassignment");
+    as(hr);
+    const name = `Concurrent Client ${id}`;
+    await actions.createClient({ name, timeZone: "America/Phoenix" });
+    const [client] = await rows<{ id: string }>(sql`select id from core.clients where name = ${name}`);
+    await actions.assignClient({ employeeId: id, clientId: client.id, startDate: "2026-09-01" });
+    const [first] = await rows<{ id: string }>(sql`select id from core.client_assignments where employee_id = ${id}`);
+    await actions.endAssignment({ assignmentId: first.id, endDate: "2026-09-10" });
+    await actions.assignClient({ employeeId: id, clientId: client.id, startDate: "2026-10-01" });
+    const [second] = await rows<{ id: string }>(sql`select id from core.client_assignments where employee_id = ${id} and end_date is null`);
+    const results = await Promise.all([
+      actions.updateAssignment({ assignmentId: first.id, clientId: client.id, startDate: "2026-09-01", endDate: "2026-09-25", hoursPerWeek: null }),
+      actions.updateAssignment({ assignmentId: second.id, clientId: client.id, startDate: "2026-09-20", endDate: null, hoursPerWeek: null }),
+    ]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok)).toHaveLength(1);
+    const assignments = await rows<{ start_date: string; end_date: string | null }>(sql`select start_date, end_date from core.client_assignments where employee_id = ${id} order by start_date`);
+    expect(assignments[0].end_date! < assignments[1].start_date).toBe(true);
   });
 
   it("ends an assignment once and keeps the history", async () => {

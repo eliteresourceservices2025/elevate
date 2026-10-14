@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,7 +16,7 @@ import {
   cancelChangeRequest,
   endAssignment,
   setCustomFieldValues,
-  updateAssignmentHours,
+  updateAssignment,
 } from "../actions";
 import { CHANGE_CATEGORY_LABELS, type ChangeCategory, type CustomFieldType } from "../constants";
 
@@ -172,25 +174,70 @@ export function AssignClientForm({
   );
 }
 
-export function EditAssignmentHours({ assignmentId, hoursPerWeek }: { assignmentId: string; hoursPerWeek: string | null }) {
-  const { run, pending } = useRun();
+export function EditAssignment({
+  assignment,
+  clients,
+}: {
+  assignment: { id: string; clientId: string; startDate: string; endDate: string | null; hoursPerWeek: string | null; clientName: string };
+  clients: { id: string; name: string; isActive: boolean }[];
+}) {
   const [editing, setEditing] = useState(false);
-  const [hours, setHours] = useState(hoursPerWeek ?? "");
-
-  if (!editing) return <Button variant="ghost" size="xs" onClick={() => { setHours(hoursPerWeek ?? ""); setEditing(true); }}>Edit hours</Button>;
   return (
-    <form
-      className="flex flex-wrap items-center gap-1"
-      onSubmit={(e) => {
+    <>
+      <Button variant="ghost" size="xs" onClick={() => setEditing(true)}>Edit assignment</Button>
+      <Dialog open={editing} onOpenChange={setEditing}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit assignment</DialogTitle>
+            <DialogDescription>Correct the assigned client, dates or hours for this person.</DialogDescription>
+          </DialogHeader>
+          {editing ? <EditAssignmentForm assignment={assignment} clients={clients} onClose={() => setEditing(false)} /> : null}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function EditAssignmentForm({
+  assignment,
+  clients,
+  onClose,
+}: {
+  assignment: { id: string; clientId: string; startDate: string; endDate: string | null; hoursPerWeek: string | null; clientName: string };
+  clients: { id: string; name: string; isActive: boolean }[];
+  onClose: () => void;
+}) {
+  const { run, pending } = useRun();
+  const [clientId, setClientId] = useState(assignment.clientId);
+  const [startDate, setStartDate] = useState(assignment.startDate);
+  const [endDate, setEndDate] = useState(assignment.endDate ?? "");
+  const [hours, setHours] = useState(assignment.hoursPerWeek ?? "");
+  const consequential = clientId !== assignment.clientId || startDate !== assignment.startDate || endDate !== (assignment.endDate ?? "");
+  const save = () => run(() => updateAssignment({ assignmentId: assignment.id, clientId, startDate, endDate, hoursPerWeek: hours }), "Assignment corrected. Review affected records and request a historical analytics rebuild if needed.", onClose);
+
+  return (
+    <div className="space-y-3 text-left">
+      <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => {
         e.preventDefault();
-        run(() => updateAssignmentHours({ assignmentId, hoursPerWeek: hours }), "Hours updated.", () => setEditing(false));
-      }}
-    >
-      <Label htmlFor={`hours-${assignmentId}`} className="sr-only">Hours per week</Label>
-      <Input id={`hours-${assignmentId}`} type="number" min={0.1} max={80} step={0.1} value={hours} onChange={(e) => setHours(e.target.value)} className="h-8 w-24" />
-      <Button type="submit" size="xs" disabled={pending}>Save</Button>
-      <Button type="button" variant="ghost" size="xs" disabled={pending} onClick={() => setEditing(false)}>Cancel</Button>
-    </form>
+        if (consequential && !window.confirm("Correct this assignment? Historical evidence, eligibility and reports can change. Review extra-hours and training records. Earlier exports, approvals, training due dates and certificates are not rewritten. Older analytics may need an operator rebuild.")) return;
+        save();
+      }}>
+        <SelectField id={`client-${assignment.id}`} label="Assigned client" value={clientId} onChange={(e) => setClientId(e.target.value)} required>
+          {clients.filter((c) => c.isActive || c.id === assignment.clientId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {!clients.some((c) => c.id === assignment.clientId) ? <option value={assignment.clientId}>{assignment.clientName} (inactive)</option> : null}
+        </SelectField>
+        <TextField id={`start-${assignment.id}`} label="Start date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+        <TextField id={`finish-${assignment.id}`} label="End date (optional)" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        <TextField id={`hours-${assignment.id}`} label="Hours per week" type="number" min={0.1} max={80} step={0.1} value={hours} onChange={(e) => setHours(e.target.value)} />
+        <div className="flex gap-2 sm:col-span-2">
+          <Button type="submit" size="xs" disabled={pending}>Save</Button>
+          <Button type="button" variant="ghost" size="xs" disabled={pending} onClick={onClose}>Cancel</Button>
+        </div>
+      </form>
+      <p className="text-sm text-muted-foreground">
+        Changing the assigned client affects only this assignment. To fix a typo for everyone, <Link href="/people/clients" className="text-primary underline-offset-4 hover:underline">rename a client for everyone</Link> in the client catalog; that also changes names shown in historical views.
+      </p>
+    </div>
   );
 }
 

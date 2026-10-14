@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { authorize, can } from "@/lib/authz";
@@ -57,7 +57,7 @@ import {
   myProfileSchema,
   revealSensitiveSchema,
   reviewChangeSchema,
-  updateAssignmentHoursSchema,
+  updateAssignmentSchema,
   updateClientSchema,
   updateEmployeeSchema,
   updateSensitiveSchema,
@@ -668,6 +668,17 @@ export async function updateClient(input: unknown): Promise<ActionResult> {
   });
 }
 
+async function assignmentOverlaps(tx: Tx, employeeId: string, clientId: string, startDate: string, endDate: string | null, exceptId?: string) {
+  const [overlap] = await tx.select({ id: clientAssignments.id }).from(clientAssignments).where(and(
+    eq(clientAssignments.employeeId, employeeId),
+    eq(clientAssignments.clientId, clientId),
+    exceptId ? ne(clientAssignments.id, exceptId) : undefined,
+    sql`(${clientAssignments.endDate} is null or ${clientAssignments.endDate} >= ${startDate})`,
+    endDate ? sql`${clientAssignments.startDate} <= ${endDate}` : undefined,
+  )).limit(1);
+  return Boolean(overlap);
+}
+
 export async function assignClient(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
 
@@ -679,10 +690,12 @@ export async function assignClient(input: unknown): Promise<ActionResult> {
 
     try {
       const result = await db.transaction(async (tx) => {
+        const [person] = await tx.select({ id: employees.id }).from(employees).where(and(eq(employees.id, v.employeeId), isNull(employees.archivedAt))).for("update");
+        if (!person) return fail("That person was not found.");
         const [client] = await tx.select({ name: clients.name, isActive: clients.isActive }).from(clients).where(and(eq(clients.id, v.clientId), isNull(clients.archivedAt))).limit(1);
-        const [person] = await tx.select({ id: employees.id }).from(employees).where(and(eq(employees.id, v.employeeId), isNull(employees.archivedAt))).limit(1);
-        if (!client || !person) return fail("That person or client was not found.");
+        if (!client) return fail("That client was not found.");
         if (!client.isActive) return fail("That client is inactive.");
+        if (await assignmentOverlaps(tx, v.employeeId, v.clientId, v.startDate, null)) return fail("That person already has an overlapping assignment to this client.");
 
         const [a] = await tx
           .insert(clientAssignments)
@@ -708,47 +721,55 @@ export async function assignClient(input: unknown): Promise<ActionResult> {
   });
 }
 
-export async function updateAssignmentHours(input: unknown): Promise<ActionResult> {
+export async function updateAssignment(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
 
   return runAction(async () => {
     await authorize(actor, "people.manage_assignments");
-    const parsed = updateAssignmentHoursSchema.safeParse(input);
+    const parsed = updateAssignmentSchema.safeParse(input);
     if (!parsed.success) return fail(firstIssue(parsed.error));
-    const { assignmentId, hoursPerWeek } = parsed.data;
+    const { assignmentId, clientId, startDate, endDate, hoursPerWeek } = parsed.data;
 
-    const result = await db.transaction(async (tx) => {
-      const [assignment] = await tx.select().from(clientAssignments).where(eq(clientAssignments.id, assignmentId)).for("update");
-      if (!assignment) return fail("That assignment was not found.");
-      if (assignment.endDate) return fail("That assignment has already ended.");
-      const beforeHours = assignment.hoursPerWeek === null ? null : Number(assignment.hoursPerWeek);
-      if (beforeHours === hoursPerWeek) return fail("No changes to save.");
+    try {
+      const result = await db.transaction(async (tx) => {
+        const [existing] = await tx.select({ employeeId: clientAssignments.employeeId }).from(clientAssignments).where(eq(clientAssignments.id, assignmentId)).limit(1);
+        if (!existing) return fail("That assignment was not found.");
+        // One lock per person serializes concurrent creates and edits before checking dated overlaps.
+        const [person] = await tx.select({ id: employees.id }).from(employees).where(eq(employees.id, existing.employeeId)).for("update");
+        if (!person) return fail("That person was not found.");
+        const [assignment] = await tx.select().from(clientAssignments).where(eq(clientAssignments.id, assignmentId)).for("update");
+        if (!assignment) return fail("That assignment was not found.");
+        const before = { assignmentId, clientId: assignment.clientId, startDate: assignment.startDate, endDate: assignment.endDate, hoursPerWeek: assignment.hoursPerWeek === null ? null : Number(assignment.hoursPerWeek) };
+        const after = { assignmentId, clientId, startDate, endDate, hoursPerWeek };
+        if (Object.keys(after).every((key) => before[key as keyof typeof before] === after[key as keyof typeof after])) return fail("No changes to save.");
 
-      await tx.update(clientAssignments).set({ hoursPerWeek: hoursPerWeek?.toString() ?? null, updatedAt: new Date() }).where(eq(clientAssignments.id, assignmentId));
-      await recordHistory(tx, {
-        employeeId: assignment.employeeId,
-        eventType: "profile_changed",
-        summary: `Client assignment hours changed from ${beforeHours ?? "not set"} to ${hoursPerWeek ?? "not set"} h/week`,
-        before: { assignmentId, hoursPerWeek: beforeHours },
-        after: { assignmentId, hoursPerWeek },
-        changedBy: actor.id,
-        effectiveDate: todayInZone(),
+        const [client] = await tx.select({ isActive: clients.isActive, archivedAt: clients.archivedAt }).from(clients).where(eq(clients.id, clientId)).limit(1);
+        if (!client || (clientId !== assignment.clientId && client.archivedAt)) return fail("That client was not found.");
+        if (clientId !== assignment.clientId && !client.isActive) return fail("That client is inactive.");
+        if (await assignmentOverlaps(tx, assignment.employeeId, clientId, startDate, endDate, assignmentId)) return fail("That person already has an overlapping assignment to this client.");
+
+        await tx.update(clientAssignments).set({ clientId, startDate, endDate, hoursPerWeek: hoursPerWeek?.toString() ?? null, updatedAt: new Date() }).where(eq(clientAssignments.id, assignmentId));
+        await recordHistory(tx, {
+          employeeId: assignment.employeeId,
+          eventType: "profile_changed",
+          summary: "Client assignment corrected",
+          before,
+          after,
+          changedBy: actor.id,
+          effectiveDate: todayInZone(),
+        });
+        await writeAudit({ actor, action: "assignment.update", targetType: "employee", targetId: assignment.employeeId, before, after }, tx);
+        return { ok: true, data: assignment.employeeId } as const;
       });
-      await writeAudit({
-        actor,
-        action: "assignment.update_hours",
-        targetType: "employee",
-        targetId: assignment.employeeId,
-        before: { assignmentId, hoursPerWeek: beforeHours },
-        after: { assignmentId, hoursPerWeek },
-      }, tx);
-      return { ok: true, data: assignment.employeeId } as const;
-    });
-    if (result.ok) {
-      revalidateEmployee(result.data);
-      return { ok: true, data: undefined };
+      if (result.ok) {
+        revalidateEmployee(result.data);
+        return { ok: true, data: undefined };
+      }
+      return result;
+    } catch (error) {
+      if (isUniqueViolation(error)) return fail("That person already has an open assignment to this client.");
+      throw error;
     }
-    return result;
   });
 }
 
@@ -761,6 +782,9 @@ export async function endAssignment(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return fail(firstIssue(parsed.error));
 
     const result = await db.transaction(async (tx) => {
+      const [existing] = await tx.select({ employeeId: clientAssignments.employeeId }).from(clientAssignments).where(eq(clientAssignments.id, parsed.data.assignmentId)).limit(1);
+      if (!existing) return fail("That assignment was not found.");
+      await tx.select({ id: employees.id }).from(employees).where(eq(employees.id, existing.employeeId)).for("update");
       const [a] = await tx.select().from(clientAssignments).where(eq(clientAssignments.id, parsed.data.assignmentId)).for("update");
       if (!a) return fail("That assignment was not found.");
       if (a.endDate) return fail("That assignment has already ended.");

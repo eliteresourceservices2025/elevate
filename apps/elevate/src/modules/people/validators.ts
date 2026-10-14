@@ -196,7 +196,13 @@ export const assignmentSchema = z.object({
   hoursPerWeek: assignmentHours.optional(),
 });
 
-export const updateAssignmentHoursSchema = z.object({ assignmentId: uuid, hoursPerWeek: assignmentHours });
+export const updateAssignmentSchema = z.object({
+  assignmentId: uuid,
+  clientId: uuid,
+  startDate: isoDate,
+  endDate: z.union([isoDate, z.literal("")]).nullable().transform((v) => v || null),
+  hoursPerWeek: assignmentHours,
+}).refine((v) => !v.endDate || v.startDate <= v.endDate, { path: ["endDate"], message: "The end date cannot be before the start date." });
 export const endAssignmentSchema = z.object({ assignmentId: uuid, endDate: isoDate });
 
 // --- Custom fields ------------------------------------------------------------

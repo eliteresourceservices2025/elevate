@@ -7,7 +7,7 @@ import {
   customFieldDefSchema,
   directoryQuerySchema,
   emergencyContactsChangeSchema,
-  updateAssignmentHoursSchema,
+  updateAssignmentSchema,
   updateSensitiveSchema,
 } from "./validators";
 
@@ -115,18 +115,21 @@ describe("assignmentSchema", () => {
   });
 });
 
-describe("updateAssignmentHoursSchema", () => {
-  const input = { assignmentId: ID };
-  it("requires an explicit hours value and accepts one decimal place or clearing it", () => {
-    expect(updateAssignmentHoursSchema.safeParse(input).success).toBe(false);
-    expect(updateAssignmentHoursSchema.parse({ ...input, hoursPerWeek: "20.5" }).hoursPerWeek).toBe(20.5);
-    expect(updateAssignmentHoursSchema.parse({ ...input, hoursPerWeek: "" }).hoursPerWeek).toBeNull();
-    expect(updateAssignmentHoursSchema.parse({ ...input, hoursPerWeek: null }).hoursPerWeek).toBeNull();
+describe("updateAssignmentSchema", () => {
+  const input = { assignmentId: ID, clientId: OTHER, startDate: "2026-09-01", endDate: "", hoursPerWeek: "" };
+  it("requires every field and accepts current, ended and future assignments", () => {
+    expect(updateAssignmentSchema.safeParse({ assignmentId: ID }).success).toBe(false);
+    expect(updateAssignmentSchema.parse(input)).toMatchObject({ endDate: null, hoursPerWeek: null });
+    expect(updateAssignmentSchema.parse({ ...input, startDate: "2027-09-01", endDate: "2027-09-01", hoursPerWeek: "20.5" })).toMatchObject({ endDate: "2027-09-01", hoursPerWeek: 20.5 });
+    expect(updateAssignmentSchema.parse({ ...input, endDate: null, hoursPerWeek: null }).hoursPerWeek).toBeNull();
   });
 
-  it("rejects invalid or out-of-range hours and silent rounding", () => {
+  it("rejects unreal dates, reversed ranges and invalid hours", () => {
+    expect(updateAssignmentSchema.safeParse({ ...input, startDate: "2026-02-30" }).success).toBe(false);
+    expect(updateAssignmentSchema.safeParse({ ...input, endDate: "2026-02-30" }).success).toBe(false);
+    expect(updateAssignmentSchema.safeParse({ ...input, endDate: "2026-08-31" }).success).toBe(false);
     for (const hoursPerWeek of ["bad", "20.25", 0, -1, 81]) {
-      expect(updateAssignmentHoursSchema.safeParse({ ...input, hoursPerWeek }).success).toBe(false);
+      expect(updateAssignmentSchema.safeParse({ ...input, hoursPerWeek }).success).toBe(false);
     }
   });
 });
