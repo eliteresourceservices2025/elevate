@@ -140,6 +140,7 @@ const EXPECTED: Record<string, string> = {
   "incidents.designate": "A A - - - -",
   "recruiting.manage_careers_page": "A A - A - -",
   "imports.manage": "A A - - - -",
+  "scheduleimport.manage": "A A - - - -",
   "analytics.export": "A A - - - -",
   "settings.manage_roles": "A - - - - -",
   "settings.set_safevoice_handler": "A - - - - -",

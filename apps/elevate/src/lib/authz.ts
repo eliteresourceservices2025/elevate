@@ -6,6 +6,7 @@ import { attendancePermissions } from "@/modules/attendance/permissions";
 import { dashboardPermissions } from "@/modules/dashboard/permissions";
 import { documentsPermissions } from "@/modules/documents/permissions";
 import { importsPermissions } from "@/modules/imports/permissions";
+import { scheduleImportPermissions } from "@/modules/schedule-import/permissions";
 import { incidentsPermissions } from "@/modules/incidents/permissions";
 import { healthPermissions } from "@/modules/health/permissions";
 import { jibblePermissions } from "@/modules/jibble/permissions";
@@ -39,6 +40,7 @@ export const PERMISSIONS = {
   ...jibblePermissions,
   ...healthPermissions,
   ...importsPermissions,
+  ...scheduleImportPermissions,
   ...recruitingPermissions,
   ...offersPermissions,
   ...signingPermissions,

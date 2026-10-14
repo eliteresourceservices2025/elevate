@@ -77,7 +77,10 @@ export function parseTimesheet(text: string): Observation[] {
     if (fields.every((v) => !v)) continue;
     if (fields.length > 15) throw new Error(`Too many columns at row ${line}.`);
     const [rawDate, name, client, schedule] = fields;
-    if (rawDate) {
+    // HR's sheet starts each header row with the weekday ("Thursday,Name,Client,..."), so a header is recognised first.
+    const weekdayWord = /^[A-Za-z]{3,12}$/.test(rawDate ?? ""); // also tolerates a misspelling such as "Wenesday"
+    const isHeader = name === "Name" && client === "Client" && (!rawDate || weekdayWord);
+    if (rawDate && !isHeader) {
       if (!/^\d{2}\/\d{2}\/\d{2}$/.test(rawDate)) throw new Error(`Invalid date at row ${line}.`);
       if (client || schedule) throw new Error(`Unexpected date-section contents at row ${line}.`);
       const [mm, dd, yy] = rawDate.split("/");
@@ -87,7 +90,7 @@ export function parseTimesheet(text: string): Observation[] {
       hasHeader = false;
       continue;
     }
-    if (name === "Name" && client === "Client") {
+    if (isHeader) {
       if (!currentDate || schedule !== "Schedule") throw new Error(`Unexpected header at row ${line}.`);
       hasHeader = true;
       continue;
@@ -97,13 +100,19 @@ export function parseTimesheet(text: string): Observation[] {
       continue;
     }
     if (!currentDate || !hasHeader) throw new Error(`Missing date or section header at row ${line}.`);
-    const total = fields[8]?.trim();
     if (schedule?.toLowerCase() === "training") continue;
-    if (!total || !/^(?:\d{1,2}:\d{2}|\d{1,2}(?:\.\d{1,2})?)$/.test(total)) throw new Error(`Invalid total hours at row ${line}.`);
-    const hours = total.includes(":") ? Number(total.split(":")[0]) + Number(total.split(":")[1]) / 60 : Number(total);
-    if (hours > 24 || (total.includes(":") && Number(total.split(":")[1]) > 59)) throw new Error(`Invalid total hours at row ${line}.`);
-    if (hours === 0) continue;
-    if (hours < 0) throw new Error(`Invalid total hours at row ${line}.`);
+    // A day counts as observed when the person has a clock-in time on the sheet. The sheet's own "Total Hours" column is NOT trusted:
+    // HR's formulas produce negative and impossible totals when a lunch or return time is missing, and it is never a source of hours
+    // here. Only when there is no clock-in is the total looked at (a positive, well-formed total still counts; zero or negative
+    // means an absence or an unfilled row; anything that is not a number is an error).
+    const clockedIn = /^\d{1,2}:\d{2}\s*[ap]m$/i.test((fields[4] ?? "").trim());
+    if (!clockedIn) {
+      const total = fields[8]?.trim();
+      if (!total || !/^-?(?:\d{1,2}:\d{2}|\d{1,3}(?:\.\d{1,2})?)$/.test(total)) throw new Error(`Invalid total hours at row ${line}.`);
+      const hours = total.includes(":") ? Number(total.split(":")[0]) + Number(total.split(":")[1]) / 60 : Number(total);
+      if (total.includes(":") && Number(total.split(":")[1]) > 59) throw new Error(`Invalid total hours at row ${line}.`);
+      if (hours <= 0 || hours > 24) continue;
+    }
     if (!client || !schedule) throw new Error(`Missing client or schedule at row ${line}.`);
     observations.push({ date: currentDate, name, client, schedule, row: line });
     if (observations.length > 2000) throw new Error("The file exceeds 2,000 observations.");
@@ -134,6 +143,12 @@ function checkScheduleLabel(entry: Mapping["entries"][number]) {
   if (match[4]) throw new Error("Explicit weekday notation requires manual review.");
 }
 
+/** The same client name apart from case, accents, punctuation and spacing. */
+export function sameClientName(a: string, b: string): boolean {
+  const norm = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return norm(a) === norm(b) && norm(a) !== "";
+}
+
 export function planRows(observations: Observation[], mapping: Mapping) {
   const byPair = new Map<string, Observation[]>();
   for (const row of observations) {
@@ -143,7 +158,10 @@ export function planRows(observations: Observation[], mapping: Mapping) {
   const seen = new Set<string>(), employees = new Set<string>();
   const planned: Mapping["entries"] = [];
   for (const entry of mapping.entries) {
-    if (entry.clientName !== entry.client) throw new Error("The reviewed client name differs from the sheet.");
+    // The sheet and ELEVATE may spell a client slightly differently ("Acme Health, LLC" and "Acme Health LLC"): the same name apart
+    // from case, accents and punctuation is accepted; anything else is a different client and needs a new review.
+    if (entry.clientName !== entry.client && sameClientName(entry.clientName, entry.client) === false)
+      throw new Error("The reviewed client name differs from the sheet.");
     const key = JSON.stringify([entry.name, entry.client]);
     if (seen.has(key) || employees.has(entry.employeeId)) throw new Error("Duplicate mapping or more than one client for a schedule.");
     seen.add(key); employees.add(entry.employeeId);

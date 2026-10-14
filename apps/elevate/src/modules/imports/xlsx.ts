@@ -37,6 +37,20 @@ function cellText(v: unknown): string {
   return String(v).trim();
 }
 
+/** The first sheet as rows of cells, with the same size checks (for sheets that are not a plain table). */
+export async function parseXlsxRecords(bytes: Uint8Array): Promise<{ records: string[][] } | { error: string }> {
+  if (bytes.length > MAX_CSV_BYTES) return { error: "The file is larger than 2 MB." };
+  const zip = zipSummary(bytes);
+  if (!zip) return { error: "That is not a valid .xlsx file." };
+  if (zip.unpacked > MAX_UNPACKED_BYTES || zip.entries > 200) return { error: "That spreadsheet is too large to read." };
+  try {
+    const data = (await readSheet(Buffer.from(bytes))) as unknown[][];
+    return { records: data.map((row) => row.map(cellText)) };
+  } catch {
+    return { error: "The spreadsheet could not be read. Save it again as .xlsx or .csv." };
+  }
+}
+
 export async function parseXlsx(bytes: Uint8Array): Promise<ParsedCsv> {
   if (bytes.length > MAX_CSV_BYTES) return { error: "The file is larger than 2 MB." };
   const zip = zipSummary(bytes);

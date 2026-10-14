@@ -470,6 +470,20 @@
       "when": 1791924514813,
       "tag": "0066_learn_addon_certificate_prefix",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1791979439074,
+      "tag": "0067_schedule_import_batches",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1791980055369,
+      "tag": "0068_schedule_import_apply",
+      "breakpoints": true
     }
   ]
 }

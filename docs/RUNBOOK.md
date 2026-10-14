@@ -135,6 +135,35 @@ For HR, Super Admin and whoever looks after ELEVATE. Plain steps, no code. Nothi
 - **Required post-apply reconciliation:** keep a private person/date checklist from the apply report and the actual changed interval, starting at the earliest changed effective date through yesterday in each person's time zone. A developer runs `rebuildHistoricalAttendanceDays(employeeId, from, to)` from `src/modules/attendance/jobs.ts` for each affected person, in bounded October windows (at most 31 days, never today or later), separately *after* the import commits; record each success or failure in the private checklist and stop on a failed window. The rebuild uses clock events, not sheet hours, and fixes absence-only rows and historical holidays. If the changed interval extends beyond October or the operation is delayed past October, arrange a separately reviewed bounded maintenance path for those later dates; do not assume the nightly three-day rebuild covers them. Compare before/after day flags and scheduled/extra minutes, and identify each changed prior approval for a fresh approval (append-only). Prior exports, notifications and evidence are never rewritten: HR must assess and if necessary reissue an export. After attendance has been checked, a developer calls `rebuildRange(from, to)` in `src/modules/analytics/build.ts` for affected dates through yesterday (in small bounded ranges), recording results; do not call it during the import transaction. Verify `/schedules`, People assignments, attendance, approvals and analytics before marking the private checklist complete. A successful import by itself is **not** a completed production update.
 - Tests use invented fixtures and the disposable local integration database only. The real sheet must never be used in tests, staged on a dev database or checked in. If the first run went to local Supabase, treat the real names there as a privacy incident to investigate under the team's data-handling procedure; don't silently delete them.
 
+### 5b7b. The short way: draft the mapping instead of typing it
+
+Writing the mapping by hand (employee and client UUIDs, snapshots) is what made the import slow. These two commands do it from HR's sheet and a read-only export of ELEVATE's people. Nothing here connects to a database or sends data anywhere; every file is private, outside the repository, and an existing file is never overwritten.
+
+1. **Export from production (read-only).** In the Supabase SQL editor of the production project run the query in this section's "Export query" below, use *Copy cell*, and save it as a private file outside the repo (for example `Downloads\prod-export-PRIVATE.json`).
+2. **Draft.** From `apps/elevate`: `pnpm schedule-import:draft --csv <sheet> --export <prod-export.json> --out-dir <new empty private folder>`. It reads HR's sheet (the weekday word in header rows and a misspelled one are fine; the sheet's "Total Hours" column is ignored because HR's formulas give negative and impossible totals; a day counts when the person has a clock-in time), matches names to active ELEVATE people and clients, and writes four files: `mapping-draft.json`, `sheet-included.csv`, `review-for-hr.csv` and `manual-entry.csv`.
+3. **HR reviews `review-for-hr.csv`** (matched person, client, shift, time zone, working days, ASSUMED unpaid break, start date). Fix a wrong match by removing that row's entry from the draft and entering the person by hand. People the draft could not match with certainty are in `manual-entry.csv` with the reason (a changed schedule, a weekday pattern such as T-F, a second client, an existing different schedule): enter those in People and Schedules.
+4. **Finalize** only after HR's review: `pnpm schedule-import:draft --finalize <mapping-draft.json> --out <new file> --hr-reviewed`. The draft has HR's two acknowledgments switched OFF, so the importer refuses it until this step.
+5. **Preview, then apply** with the guarded importer exactly as in 5b7a, using `sheet-included.csv` and the finalized mapping with `--historical october-2026 --report <new private file>`; apply needs the reviewed `--digest`.
+6. **Rebuild** after the apply: `pnpm rebuild:historical-october --mapping <final mapping>` previews, then add `--run`. It rebuilds each person's attendance from clock events and then the analytics range.
+
+**Export query** (read-only; start dates on the sheet become the assignment and schedule start):
+
+```sql
+select jsonb_build_object(
+  'employees', (select coalesce(jsonb_agg(jsonb_build_object('id', e.id, 'workEmail', e.work_email, 'first', e.legal_first_name,
+      'middle', e.legal_middle_name, 'last', e.legal_last_name, 'preferred', e.preferred_name, 'status', e.status)), '[]')
+      from core.employees e where e.archived_at is null),
+  'clients', (select coalesce(jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name)), '[]')
+      from core.clients c where c.archived_at is null and c.is_active),
+  'assignments', (select coalesce(jsonb_agg(jsonb_build_object('id', a.id, 'employeeId', a.employee_id, 'clientId', a.client_id,
+      'startDate', a.start_date, 'endDate', a.end_date, 'hoursPerWeek', a.hours_per_week::float)), '[]')
+      from core.client_assignments a),
+  'schedules', (select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'employeeId', s.employee_id, 'effectiveFrom', s.effective_from,
+      'effectiveTo', s.effective_to, 'startTime', s.start_time, 'endTime', s.end_time, 'zone', s.zone, 'weekdays', s.weekdays,
+      'breakMinutes', s.break_minutes)), '[]') from time.schedules s)
+) as export;
+```
+
 ## 5b8. Pulling documents from TalentHR (API)
 
 1. Import the people CSV first (Settings, Import from TalentHR) so people exist in ELEVATE. The pull only handles people whose work email matches.
