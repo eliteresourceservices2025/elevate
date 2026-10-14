@@ -22,6 +22,8 @@
     "dev:mfa": "tsx scripts/dev-mfa.mts",
     "db:bootstrap": "tsx scripts/bootstrap-super-admins.mts",
     "learn:publish": "tsx scripts/learn-publish.mts",
+    "rebuild:historical-october": "tsx --conditions react-server scripts/rebuild-historical-october.mts",
+    "schedule-import:draft": "tsx scripts/schedule-import-draft.ts",
     "learn:assign": "tsx scripts/learn-assign.mts",
     "learn:export": "tsx scripts/learn-export-content.mts",
     "format": "prettier --write .",
