@@ -311,10 +311,11 @@ async function main() {
     });
 
     if (!matchedEmp && info.middleName) {
+      const middleName = info.middleName;
       matchedEmp = allEmployees.find(e =>
         e.legal_first_name.toLowerCase() === info.firstName.toLowerCase() &&
         e.legal_last_name.toLowerCase() === info.lastName.toLowerCase() &&
-        e.legal_middle_name?.toLowerCase() === info.middleName.toLowerCase()
+        e.legal_middle_name?.toLowerCase() === middleName.toLowerCase()
       );
     }
 
