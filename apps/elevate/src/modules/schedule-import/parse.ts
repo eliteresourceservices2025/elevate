@@ -104,3 +104,6 @@ export function suggestedBreak(startTime: string, endTime: string): number {
 export function hoursPerWeek(startTime: string, endTime: string, breakMinutes: number, days: number): number {
   return Math.round(((shiftMinutes(startTime, endTime) - breakMinutes) / 60) * days * 10) / 10;
 }
+
+/** The key under which a sheet's spelling of a person is remembered. */
+export const personKey = (sheetName: string) => tokenKey(nameTokens(sheetName));

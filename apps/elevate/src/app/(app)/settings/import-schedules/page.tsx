@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
+import { RememberedMatches } from "@/modules/schedule-import/components/remembered-matches";
 import { SheetUploader } from "@/modules/schedule-import/components/sheet-uploader";
-import { listScheduleImports } from "@/modules/schedule-import/queries";
+import { listAliases, listScheduleImports } from "@/modules/schedule-import/queries";
 
 export const metadata: Metadata = { title: "Import schedules and clients" };
 
 export default async function ImportSchedulesPage() {
   const batches = await orNotFound(listScheduleImports());
+  const aliases = await orNotFound(listAliases());
   return (
     <div className="w-full space-y-6">
       <div>
@@ -46,6 +48,7 @@ export default async function ImportSchedulesPage() {
           </ul>
         )}
       </section>
+      <RememberedMatches aliases={aliases} />
     </div>
   );
 }

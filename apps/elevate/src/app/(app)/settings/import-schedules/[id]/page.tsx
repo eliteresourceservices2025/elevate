@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { orNotFound } from "@/lib/or-not-found";
 import { PlanView } from "@/modules/schedule-import/components/plan-view";
-import { getScheduleImportPlan } from "@/modules/schedule-import/queries";
+import { getScheduleImportPlan, listAliasTargets } from "@/modules/schedule-import/queries";
 
 export const metadata: Metadata = { title: "Schedule import preview" };
 
@@ -13,6 +13,8 @@ export default async function ScheduleImportPreviewPage({ params }: PageProps<"/
   const data = await orNotFound(getScheduleImportPlan(id));
   if (!data) notFound();
   const { batch, plan, digest } = data;
+  // The choices are only needed (and only loaded) when something on the sheet can be resolved by picking a record.
+  const targets = plan.decisions.some((d) => d.kind !== "other") ? await orNotFound(listAliasTargets()) : null;
   return (
     <div className="w-full space-y-6">
       <div>
@@ -24,7 +26,7 @@ export default async function ScheduleImportPreviewPage({ params }: PageProps<"/
           {batch.observations} clocked-in days read, {plan.totals.pairs} people and clients on the sheet: {plan.totals.ready} matched, {plan.totals.needsDecision} need a person.
         </p>
       </div>
-      <PlanView batchId={batch.id} plan={plan} digest={digest} />
+      <PlanView key={digest} batchId={batch.id} plan={plan} digest={digest} targets={targets} />
     </div>
   );
 }

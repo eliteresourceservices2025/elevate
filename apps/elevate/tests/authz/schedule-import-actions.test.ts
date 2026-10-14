@@ -65,6 +65,30 @@ describe("schedule import, every role", () => {
     });
   }
 
+  for (const role of ROLE_SLUGS) {
+    const allowed = ALLOWED.includes(role);
+    it(`${role}: ${allowed ? "may" : "is refused"} remembering and forgetting a match`, async () => {
+      as(role);
+      const remember = await actions.rememberScheduleImportMatch({ kind: "person", sheetValue: "Someone", targetId: ID });
+      const forget = await actions.forgetScheduleImportMatch({ aliasId: ID });
+      if (allowed) {
+        expect(remember.ok === false && remember.error).not.toBe(NO_ACCESS);
+        expect(forget.ok === false && forget.error).not.toBe(NO_ACCESS);
+      } else {
+        expect(remember).toEqual({ ok: false, error: NO_ACCESS });
+        expect(forget).toEqual({ ok: false, error: NO_ACCESS });
+      }
+    });
+    it(`${role}: ${allowed ? "may" : "cannot"} list remembered matches and choices`, async () => {
+      as(role);
+      for (const call of [() => queries.listAliases(), () => queries.listAliasTargets()]) {
+        const out = await call().catch((e: unknown) => e);
+        if (allowed) expect(out).not.toMatchObject({ name: "ForbiddenError" });
+        else expect(out).toMatchObject({ name: "ForbiddenError" });
+      }
+    });
+  }
+
   it("refuses a malformed apply request before reaching the database", async () => {
     as("hr_admin");
     expect((await actions.applyScheduleImport({ batchId: "nope", digest: "x", accepted: [] })).ok).toBe(false);

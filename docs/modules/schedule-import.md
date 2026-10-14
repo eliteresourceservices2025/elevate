@@ -1,6 +1,6 @@
 # Schedule and client import from an attendance sheet
 
-> Notes for `src/modules/schedule-import/`. Read before changing it. Phases 1 (preview) and 2 (apply, ending old assignments) are built; remembered aliases and polish are phase 3.
+> Notes for `src/modules/schedule-import/`. Read before changing it. All three phases are built: preview, apply (ending old assignments), and remembered matches, saved layouts and the review list.
 
 ## What it is
 Settings > Import schedules and clients (`/settings/import-schedules`, `/[id]`; permission `scheduleimport.manage`: HR and Super Admin only). HR uploads the attendance sheet the team already keeps (CSV or XLSX, 2 MB) and sees what ELEVATE would change: client assignment, schedule, time zone and hours per week for each person. **It never reads worked hours**: ELEVATE is the only source of hours (CLAUDE.md rule 9), and the sheet's own "Total Hours" column is ignored because HR's formulas produce negative and impossible totals.
@@ -24,11 +24,18 @@ Settings > Import schedules and clients (`/settings/import-schedules`, `/[id]`; 
 - **Rebuild:** after the response (`after()`), `rebuildAfterApply` recomputes attendance days for the people changed from their clock events (never the sheet) for up to the last 35 days; older dates need the maintenance command in runbook 5b7b. Days already approved that now differ show "changed after approval" and must be approved again; exports already made are not rewritten.
 - Migration 0068 adds `applied_at`, `applied_by`, `result` and the status `applied`. The payload is wiped when applied. Tests: `tests/integration/schedule-import-apply.test.ts`, `tests/authz/schedule-import-actions.test.ts`.
 
+## Phase 3 (built): remembered matches, saved layouts, review list
+- **Resolve on screen:** in "Needs a person", a row that failed on a person or a client (`Decision.kind` `person` or `client`) has a list of active people or clients to choose from and "Match and remember" (`rememberScheduleImportMatch`). The match is stored in `ops.schedule_import_aliases` (migration 0069, RLS on) keyed by the **normalized spelling** (name words sorted; client name without case or punctuation), one row per spelling, pointing at exactly one person or client (check constraint). The plan prefers a remembered match to guessing from the name and ignores one whose target is no longer active. Rows that are `other` (a schedule that cannot be read, a person on two clients) cannot be resolved by choosing: fix the sheet or the records.
+- **Forget:** "Remembered matches" on the uploads page lists them with a Forget button (`forgetScheduleImportMatch`). Audit: `scheduleimport.alias_save` / `alias_remove` with the kind only.
+- **Saved layouts:** for a plain table, the column choices are stored in `ops.schedule_import_layouts` by a hash of the normalized header row; the next upload of the same header finds them and says so.
+- **Review list:** "Download the lists to review (CSV)" exports "Needs a person" and "On a client but not on the sheet" (cells protected against spreadsheet formulas).
+- Tests: `schedule-import-aliases.test.ts` (real database), the plan tests, the per-role authz tests, and `tests/e2e/schedule-import.spec.ts` (Playwright: upload, preview, apply, and an ordinary employee gets 404).
+
 ## Decisions made with the owner
 HR and Super Admin only; it must also be able to **end old ones**; the sheet layout may vary; hours per week come from the attendance sheet and go into the client assignment's existing field; menu placement under Settings; backdating allowed with the impact shown first; ending is proposed only for people on clients that appear on the sheet.
 
-## Phase to come
-3. **Polish**: remembered aliases (confirmed name and client matches), saved column layouts, an export of the decision list, a Playwright test.
+## Not built
+Several clients for one person on the same sheet cannot be resolved on screen yet (it needs a choice of which is current), and the in-app version does not read pay or hours.
 
 ## Related, outside the app
 `apps/elevate/scripts/schedule-import-*.ts` and `rebuild-historical-october.mts` are the guarded command-line importer used for the October 2026 backfill (runbook 5b7a and 5b7b). They share the same reading and matching ideas; the in-app version replaces them for future sheets.
