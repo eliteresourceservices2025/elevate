@@ -1,4 +1,4 @@
-import { clientKey, dayNames, employeeKeys, hoursPerWeek, nameTokens, parseScheduleText, suggestedBreak, tokenKey } from "./parse";
+import { clientKey, dayNames, employeeKeys, hoursPerWeek, parseScheduleText, personKey, suggestedBreak } from "./parse";
 import type { Observation } from "./reader";
 
 // Compares an attendance sheet with what ELEVATE already holds and says what each person would get: a new assignment and schedule, a
@@ -9,7 +9,9 @@ export type LivePerson = { id: string; workEmail: string; first: string; middle:
 export type LiveClient = { id: string; name: string };
 export type LiveAssignment = { id: string; employeeId: string; clientId: string; startDate: string; endDate: string | null; hoursPerWeek: number | null };
 export type LiveSchedule = { id: string; employeeId: string; effectiveFrom: string; effectiveTo: string | null; startTime: string; endTime: string; zone: string; weekdays: number[]; breakMinutes: number };
-export type LiveData = { employees: LivePerson[]; clients: LiveClient[]; assignments: LiveAssignment[]; schedules: LiveSchedule[] };
+/** Matches HR confirmed earlier: normalized sheet spelling to the real person or client id. */
+export type LiveAliases = { persons: Record<string, string>; clients: Record<string, string> };
+export type LiveData = { employees: LivePerson[]; clients: LiveClient[]; assignments: LiveAssignment[]; schedules: LiveSchedule[]; aliases?: LiveAliases };
 
 export type AssignmentAction = "add" | "keep" | "change_client";
 export type ScheduleAction = "add" | "same" | "change";
@@ -50,7 +52,9 @@ export type PlanRow = {
   current: { clientName: string | null; assignmentStart: string | null; assignmentHours: number | null; shift: string | null; scheduleFrom: string | null };
 };
 
-export type Decision = { key: string; sheetName: string; sheetClient: string; reasons: string[] };
+/** `person` and `client` can be resolved on screen by choosing the real record (and remembering it); `other` needs the sheet or the records fixed. */
+export type DecisionKind = "person" | "client" | "other";
+export type Decision = { key: string; sheetName: string; sheetClient: string; reasons: string[]; kind: DecisionKind };
 export type NotOnSheet = { assignmentId: string; employeeId: string; personName: string; clientName: string; assignmentStart: string };
 /** How many dated records a backdated change would touch (counts only). Filled in by the service, which can read them. */
 export type Impact = { attendanceDays: number; clockEvents: number; approvals: number; leaveRequests: number; extraHoursRequests: number };
@@ -88,9 +92,9 @@ export function buildPlan(observations: Observation[], live: LiveData, options: 
   const usedPeople = new Set<string>();
   for (const [key, obs] of [...pairs.entries()].sort()) {
     const [sheetName, sheetClient] = JSON.parse(key) as [string, string];
-    const decide = (...reasons: string[]) => void decisions.push({ key, sheetName, sheetClient, reasons });
+    const decide = (kind: DecisionKind, ...reasons: string[]) => void decisions.push({ key, sheetName, sheetClient, reasons, kind });
 
-    if ((clientsOfName.get(sheetName)?.size ?? 0) > 1) { decide("Listed under more than one client on the sheet: choose which is current."); continue; }
+    if ((clientsOfName.get(sheetName)?.size ?? 0) > 1) { decide("other", "Listed under more than one client on the sheet: choose which is current."); continue; }
 
     // The schedule text in use: the latest one on the sheet. Earlier texts are shown so a person can see the change.
     const byText = new Map<string, { n: number; first: string; last: string }>();
@@ -108,17 +112,21 @@ export function buildPlan(observations: Observation[], live: LiveData, options: 
     if (texts.length > 1) attention.push(`The schedule changed on the sheet. Using the latest, "${text}" (from ${texts[0][1].first}). Earlier: ${texts.slice(1).map(([t, v]) => `"${t}" until ${v.last}`).join("; ")}.`);
 
     const parsed = parseScheduleText(text);
-    if ("error" in parsed) { decide(parsed.error); continue; }
+    if ("error" in parsed) { decide("other", parsed.error); continue; }
     if (parsed.pattern) attention.push(`Working days read as ${dayNames(parsed.weekdays)} from "${parsed.pattern}". Confirm.`);
 
-    const matches = [...new Map((byName.get(tokenKey(nameTokens(sheetName))) ?? []).map((m) => [m.id, m])).values()];
-    if (matches.length === 0) { decide("No active person in ELEVATE has this name."); continue; }
-    if (matches.length > 1) { decide("More than one person in ELEVATE has this name."); continue; }
+    // A match HR confirmed before wins over guessing from the name; the name lookup is only used when there is none.
+    const remembered = live.aliases?.persons[personKey(sheetName)];
+    const rememberedPerson = remembered ? people.find((p) => p.id === remembered) : undefined;
+    const matches = rememberedPerson ? [rememberedPerson] : [...new Map((byName.get(personKey(sheetName)) ?? []).map((m) => [m.id, m])).values()];
+    if (matches.length === 0) { decide("person", "No active person in ELEVATE has this name."); continue; }
+    if (matches.length > 1) { decide("person", "More than one person in ELEVATE has this name."); continue; }
     const person = matches[0];
-    if (usedPeople.has(person.id)) { decide("The same person matched two different names on the sheet."); continue; }
+    if (usedPeople.has(person.id)) { decide("other", "The same person matched two different names on the sheet."); continue; }
 
-    const clients = byClient.get(clientKey(sheetClient)) ?? [];
-    if (clients.length !== 1) { decide(clients.length === 0 ? "The client is not in ELEVATE under this name." : "More than one client in ELEVATE has this name."); continue; }
+    const rememberedClient = live.aliases?.clients[clientKey(sheetClient)];
+    const clients = rememberedClient && live.clients.some((c) => c.id === rememberedClient) ? live.clients.filter((c) => c.id === rememberedClient) : (byClient.get(clientKey(sheetClient)) ?? []);
+    if (clients.length !== 1) { decide("client", clients.length === 0 ? "The client is not in ELEVATE under this name." : "More than one client in ELEVATE has this name."); continue; }
     const client = clients[0];
 
     const dates = obs.map((o) => o.date ?? options.today).sort();

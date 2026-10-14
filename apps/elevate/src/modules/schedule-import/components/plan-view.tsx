@@ -6,10 +6,14 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { toCsv } from "@/lib/csv";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { applyScheduleImport, discardScheduleImport, type ApplyOutcome } from "../actions";
-import type { Plan, PlanRow } from "../plan";
+import { applyScheduleImport, discardScheduleImport, rememberScheduleImportMatch, type ApplyOutcome } from "../actions";
+import type { Decision, Plan, PlanRow } from "../plan";
+
+export type Targets = { people: { id: string; label: string }[]; clients: { id: string; label: string }[] };
 
 type Tab = "update" | "unchanged" | "decisions" | "gone";
 type Edit = { breakMinutes: string; hoursPerWeek: string };
@@ -20,7 +24,7 @@ const SCHEDULE: Record<PlanRow["schedule"], string> = { add: "Add the schedule",
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** The preview of an attendance sheet and the apply step: choose rows, adjust the assumed break and the estimated hours, tick who to end. */
-export function PlanView({ batchId, plan, digest }: { batchId: string; plan: Plan; digest: string }) {
+export function PlanView({ batchId, plan, digest, targets }: { batchId: string; plan: Plan; digest: string; targets: Targets | null }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(plan.totals.update > 0 ? "update" : plan.totals.needsDecision > 0 ? "decisions" : "unchanged");
   const [pending, setPending] = useState(false);
@@ -32,6 +36,7 @@ export function PlanView({ batchId, plan, digest }: { batchId: string; plan: Pla
   const [ending, setEnding] = useState<Set<string>>(new Set());
   const [endDate, setEndDate] = useState(today());
   const [ackBackdated, setAckBackdated] = useState(false);
+  const [choice, setChoice] = useState<Record<string, string>>({});
 
   const rows = plan.rows.filter((r) => (tab === "update" ? r.status === "update" : tab === "unchanged" ? r.status === "unchanged" : false));
   const pagedRows = usePaged(rows, tab);
@@ -87,6 +92,39 @@ export function PlanView({ batchId, plan, digest }: { batchId: string; plan: Pla
     } finally {
       setPending(false);
     }
+  }
+
+  async function remember(d: Decision) {
+    const targetId = choice[d.key];
+    if (!targetId || d.kind === "other") return;
+    setPending(true);
+    try {
+      const r = await rememberScheduleImportMatch({ kind: d.kind, sheetValue: d.kind === "person" ? d.sheetName : d.sheetClient, targetId });
+      if (!r.ok) return void toast.error(r.error);
+      toast.success("Matched and remembered for next time.");
+      router.refresh();
+    } catch {
+      toast.error("No connection. Try again.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  /** The "needs a person" and "not on the sheet" lists as a CSV, so they can be worked through or sent to whoever knows. */
+  function exportList() {
+    const csv = toCsv(
+      ["List", "On the sheet", "Client", "Detail"],
+      [
+        ...plan.decisions.map((d) => ["Needs a person", d.sheetName, d.sheetClient, d.reasons.join(" ")]),
+        ...plan.notOnSheet.map((g) => ["On a client but not on the sheet", g.personName, g.clientName, `Assigned since ${g.assignmentStart}`]),
+      ],
+    );
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "schedule-import-to-review.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function apply() {
@@ -185,6 +223,7 @@ export function PlanView({ batchId, plan, digest }: { batchId: string; plan: Pla
                 <TableHead>On the sheet</TableHead>
                 <TableHead>Client on the sheet</TableHead>
                 <TableHead>Why a person has to decide</TableHead>
+                <TableHead>Choose the right record</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -193,6 +232,25 @@ export function PlanView({ batchId, plan, digest }: { batchId: string; plan: Pla
                   <TableCell className="font-medium">{d.sheetName}</TableCell>
                   <TableCell>{d.sheetClient}</TableCell>
                   <TableCell>{d.reasons.join(" ")}</TableCell>
+                  <TableCell>
+                    {targets && d.kind !== "other" ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <NativeSelect aria-label={`Choose the ${d.kind} for ${d.kind === "person" ? d.sheetName : d.sheetClient}`} value={choice[d.key] ?? ""} onChange={(e) => setChoice((c) => ({ ...c, [d.key]: e.target.value }))} className="max-w-64">
+                          <option value="">Choose a {d.kind}</option>
+                          {(d.kind === "person" ? targets.people : targets.clients).map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </NativeSelect>
+                        <Button size="sm" variant="outline" disabled={!choice[d.key] || pending} onClick={() => remember(d)}>
+                          Match and remember
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Fix on the sheet or in People, then upload again.</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -336,6 +394,11 @@ export function PlanView({ batchId, plan, digest }: { batchId: string; plan: Pla
         <Button variant="outline" onClick={discard} disabled={pending}>
           Discard this upload
         </Button>
+        {plan.decisions.length + plan.notOnSheet.length > 0 ? (
+          <Button variant="outline" onClick={exportList} disabled={pending}>
+            Download the lists to review (CSV)
+          </Button>
+        ) : null}
       </div>
     </div>
   );

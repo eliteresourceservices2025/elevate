@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hoursPerWeek, nameTokens, parseScheduleText, parseWeekdays, suggestedBreak } from "./parse";
+import { clientKey, hoursPerWeek, nameTokens, parseScheduleText, parseWeekdays, personKey, suggestedBreak } from "./parse";
 import { buildPlan, type LiveData } from "./plan";
 import { detectLayout, guessTableColumns, readDayBlocks, readTable } from "./reader";
 
@@ -129,5 +129,38 @@ describe("planning", () => {
     expect(p.decisions.map((d) => d.reasons[0])).toEqual(
       expect.arrayContaining([expect.stringMatching(/No active person/), expect.stringMatching(/client is not in ELEVATE/), expect.stringMatching(/not a shift/)]),
     );
+  });
+});
+
+describe("remembered matches", () => {
+  const obs = [
+    { date: "2026-10-05", name: "Jo Anne Reyes-Cruz", client: "Acme H.C.", schedule: "8:00 am - 5:00 pm AZ", row: 1 },
+    { date: "2026-10-05", name: "Zed Unknown", client: "Beta Care", schedule: "8:00 am - 5:00 pm AZ", row: 2 },
+  ];
+  it("lists unmatched people and clients as resolvable decisions, other problems as not", () => {
+    const p = buildPlan(obs, live, { today: "2026-10-14" });
+    const byName = Object.fromEntries(p.decisions.map((d) => [d.sheetName, d.kind]));
+    expect(byName["Zed Unknown"]).toBe("person");
+    const unclear = buildPlan([{ date: "2026-10-05", name: "Maria Santos Reyes", client: "Acme H.C.", schedule: "8:00 am - 5:00 pm AZ", row: 1 }], live, { today: "2026-10-14" });
+    expect(unclear.decisions[0].kind).toBe("client");
+    const odd = buildPlan([{ date: "2026-10-05", name: "Maria Santos Reyes", client: "Beta Care", schedule: "whenever", row: 1 }], live, { today: "2026-10-14" });
+    expect(odd.decisions[0].kind).toBe("other");
+  });
+
+  it("uses a remembered person and client match instead of guessing, and ignores a stale one", () => {
+    const withAliases: LiveData = {
+      ...live,
+      aliases: { persons: { [personKey("Jo Anne Reyes-Cruz")]: id(1) }, clients: { [clientKey("Acme H.C.")]: id(101) } },
+    };
+    const p = buildPlan([obs[0]], withAliases, { today: "2026-10-14" });
+    expect(p.decisions).toHaveLength(0);
+    expect(p.rows[0]).toMatchObject({ personId: id(1), clientId: id(101) });
+    const stale: LiveData = { ...live, aliases: { persons: { [personKey("Jo Anne Reyes-Cruz")]: id(999) }, clients: {} } };
+    expect(buildPlan([obs[0]], stale, { today: "2026-10-14" }).decisions[0].kind).toBe("person");
+  });
+
+  it("keys a spelling the same way however it is written", () => {
+    expect(personKey("Reyes, Maria Santos")).toBe(personKey("Maria  Santos Reyes"));
+    expect(clientKey("Acme Health, LLC")).toBe(clientKey("ACME HEALTH LLC"));
   });
 });

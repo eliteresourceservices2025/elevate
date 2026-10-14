@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 
 type Columns = { name: number | null; client: number | null; schedule: number | null; date: number | null; clockIn: number | null };
-type TableStep = { headers: string[]; columns: Columns; rows: number };
+type TableStep = { headers: string[]; columns: Columns; rows: number; remembered: boolean };
 
 const FIELDS: { key: keyof Columns; label: string; required: boolean }[] = [
   { key: "name", label: "Person's name", required: true },
@@ -59,6 +59,7 @@ export function SheetUploader() {
     setTable({
       headers: body.headers as string[],
       rows: body.rows as number,
+      remembered: body.remembered === true,
       columns: { name: guess.name ?? null, client: guess.client ?? null, schedule: guess.schedule ?? null, date: guess.date ?? null, clockIn: guess.clockIn ?? null },
     });
   }
@@ -99,7 +100,8 @@ export function SheetUploader() {
       ) : (
         <div className="space-y-4">
           <p className="text-sm">
-            This sheet is a plain table ({table.rows} rows, {table.headers.length} columns). Say which column is which.
+            This sheet is a plain table ({table.rows} rows, {table.headers.length} columns).{" "}
+            {table.remembered ? "The columns were filled in from the last time you uploaded this layout. Check them." : "Say which column is which. It is remembered for the next upload."}
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             {FIELDS.map((f) => (

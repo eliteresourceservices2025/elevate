@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { allowRequest } from "@/lib/rate-limit";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { applyBatch, rebuildAfterApply, type SkippedRow } from "./apply";
-import { discardBatch } from "./service";
+import { discardBatch, removeAlias, saveAlias } from "./service";
 
 const uuid = z.string().uuid("That import was not found.");
 const discardSchema = z.object({ batchId: uuid });
@@ -86,5 +86,37 @@ export async function applyScheduleImport(input: unknown): Promise<ActionResult<
         skipped: result.rowsSkipped,
       },
     };
+  });
+}
+
+const aliasSchema = z.object({
+  kind: z.enum(["person", "client"]),
+  sheetValue: z.string().trim().min(1).max(200),
+  targetId: uuid,
+});
+
+/** Chooses the real person or client for a sheet's spelling and remembers it for later sheets. */
+export async function rememberScheduleImportMatch(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "scheduleimport.manage");
+    const parsed = aliasSchema.safeParse(input);
+    if (!parsed.success) return fail("Choose a person or client from the list.");
+    await saveAlias(actor, parsed.data);
+    revalidatePath("/settings/import-schedules");
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Forgets a remembered match; the next sheet is matched by name again. */
+export async function forgetScheduleImportMatch(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "scheduleimport.manage");
+    const parsed = z.object({ aliasId: uuid }).safeParse(input);
+    if (!parsed.success) return fail("That remembered match was not found.");
+    await removeAlias(actor, parsed.data.aliasId);
+    revalidatePath("/settings/import-schedules");
+    return { ok: true, data: undefined };
   });
 }

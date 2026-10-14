@@ -9,7 +9,7 @@ import { ActionFailure } from "@/lib/run-action";
 import { MAX_CSV_BYTES, parseCsvRecords } from "@/modules/imports/csv";
 import { parseXlsxRecords } from "@/modules/imports/xlsx";
 import { detectLayout, guessTableColumns, readDayBlocks, readTable, type ReadResult, type TableColumns } from "@/modules/schedule-import/reader";
-import { stageSheet } from "@/modules/schedule-import/service";
+import { findLayout, saveLayout, stageSheet } from "@/modules/schedule-import/service";
 
 // HR uploads the attendance sheet (CSV or Excel). A sheet in the day-block layout is read straight away; a plain table first returns its
 // headers so HR can say which column is which. Either way the rows are only staged for a PREVIEW: nothing is changed in ELEVATE.
@@ -56,6 +56,7 @@ export async function POST(request: Request) {
   const layout = detectLayout(records);
   let result: ReadResult;
   let columns: TableColumns | null = null;
+  let headersForLayout: string[] = [];
 
   if (layout === "day_blocks") {
     result = readDayBlocks(records);
@@ -64,7 +65,8 @@ export async function POST(request: Request) {
     const rawColumns = form.get("columns");
     if (rawColumns === null) {
       // Step one for a plain table: say which columns the sheet has and our guess for each
-      return json({ ok: true, layout, headers, guess: guessTableColumns(headers), rows: Math.max(records.length - 1, 0) });
+      const remembered = await findLayout(headers);
+      return json({ ok: true, layout, headers, guess: remembered ?? guessTableColumns(headers), remembered: remembered !== null, rows: Math.max(records.length - 1, 0) });
     }
     let parsedJson: unknown;
     try {
@@ -78,6 +80,7 @@ export async function POST(request: Request) {
     }
     columns = picked.data;
     result = readTable(records, columns);
+    headersForLayout = headers;
   }
 
   if (result.observations.length === 0) {
@@ -92,6 +95,8 @@ export async function POST(request: Request) {
       observations: result.observations,
       sha256: createHash("sha256").update(bytes).digest("hex"),
     });
+    // The same table next month needs no column choices.
+    if (columns) await saveLayout(actor, headersForLayout, columns);
     revalidatePath("/settings/import-schedules");
     return json({ ok: true, batchId: staged.batchId, observations: staged.observations, pairs: staged.pairs, skipped: result.skipped, problems: result.problems.length });
   } catch (error) {
