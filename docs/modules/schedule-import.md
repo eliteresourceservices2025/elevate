@@ -35,8 +35,16 @@ Settings > Import schedules and clients (`/settings/import-schedules`, `/[id]`; 
 ## Decisions made with the owner
 HR and Super Admin only; it must also be able to **end old ones**; the sheet layout may vary; hours per week come from the attendance sheet and go into the client assignment's existing field; menu placement under Settings; backdating allowed with the impact shown first; ending is proposed only for people on clients that appear on the sheet.
 
+## People on more than one client (built)
+- A person listed under several clients gets one row per client, each with its own assignment (start date = that client's first day on the sheet). Hours per week on each client is the person's TOTAL across their clients (the sum of each segment's paid hours), as the owner decided.
+- ELEVATE keeps one open schedule per person, so the segments are combined into one shift when they are on the same days and zone, one after another, with gaps of at most 4 hours (`combineSegments`, `MAX_GAP_MINUTES`): earliest start to latest end, and the unpaid break is the gaps plus each segment's own suggested break. One row (the client with the earliest start) carries the schedule; the others show "Schedule set with the other client row" (`shared`).
+- When segments overlap, run on different days, or are in different zones, the assignments are still proposed but the schedule is NOT set (`unset`, reason in the row's notes): set it on Schedules. ELEVATE's schedule model has one shift per date range, so day-by-client shifts cannot be stored yet.
+- If one of the person's clients still needs a match, the rest are shown and the schedule is held until it is matched.
+- There is no "main" client: the zone comes from the sheet's segments.
+- Apply: the person's other rows in the same sheet are not treated as "old" assignments to end (`siblingClientIds`); unrelated open assignments are ended only on a row that adds a client, as before.
+
 ## Not built
-Several clients for one person on the same sheet cannot be resolved on screen yet (it needs a choice of which is current), and the in-app version does not read pay or hours.
+Day-by-client schedules (one shift per client on different days), and the in-app version does not read pay or hours.
 
 ## Related, outside the app
 `apps/elevate/scripts/schedule-import-*.ts` and `rebuild-historical-october.mts` are the guarded command-line importer used for the October 2026 backfill (runbook 5b7a and 5b7b). They share the same reading and matching ideas; the in-app version replaces them for future sheets.

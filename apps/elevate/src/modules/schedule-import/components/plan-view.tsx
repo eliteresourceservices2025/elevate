@@ -19,7 +19,7 @@ type Tab = "update" | "unchanged" | "decisions" | "gone";
 type Edit = { breakMinutes: string; hoursPerWeek: string };
 
 const ASSIGNMENT: Record<PlanRow["assignment"], string> = { add: "Add the client", keep: "Keep the client", change_client: "End the old client, add this one" };
-const SCHEDULE: Record<PlanRow["schedule"], string> = { add: "Add the schedule", same: "Same schedule", change: "Replace the schedule" };
+const SCHEDULE: Record<PlanRow["schedule"], string> = { add: "Add the schedule", same: "Same schedule", change: "Replace the schedule", shared: "Schedule set with the other client row", unset: "Schedule not set: set it on Schedules" };
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -326,7 +326,10 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
                   {r.personName}
                   {r.sheetName !== r.personName ? <span className="block text-xs text-muted-foreground">sheet: {r.sheetName}</span> : null}
                 </TableCell>
-                <TableCell>{r.clientName}</TableCell>
+                <TableCell>
+                  {r.clientName}
+                  {r.siblingClientNames.length > 0 ? <span className="block text-xs text-muted-foreground">Also: {r.siblingClientNames.join(", ")}</span> : null}
+                </TableCell>
                 <TableCell>
                   {r.startTime}–{r.endTime}
                   <span className="block text-xs text-muted-foreground">

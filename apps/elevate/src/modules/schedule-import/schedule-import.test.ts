@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clientKey, closest, hoursPerWeek, nameTokens, parseScheduleText, parseWeekdays, personKey, similarity, suggestedBreak } from "./parse";
-import { buildPlan, type LiveData } from "./plan";
+import { buildPlan, combineSegments, type LiveData } from "./plan";
 import { detectLayout, guessTableColumns, readDayBlocks, readTable } from "./reader";
 
 // Invented people and clients only.
@@ -203,5 +203,57 @@ describe("closest match", () => {
     expect(byName["Maria Santos Reyes"].kind).toBe("client");
     expect(byName["Maria Santos Reyes"].suggestion).toEqual({ id: id(103), label: "Inhouse Medical" });
     expect(byName["Maribell Reyes"].suggestion?.id).toBe(id(8));
+  });
+});
+
+describe("a person on more than one client", () => {
+  const obs = (client: string, schedule: string, row: number, date = "2026-10-05") => ({ date, name: "Maria Santos Reyes", client, schedule, row });
+  const plan = (o: ReturnType<typeof obs>[], l: LiveData = live) => buildPlan(o, l, { today: "2026-10-14" });
+
+  it("combines back-to-back segments into one shift, with the gap as the break and the person's total on each client", () => {
+    const p = plan([obs("Acme Health, LLC", "8:00 am - 12:00 pm AZ", 1), obs("Beta Care", "1:00 pm to 5:00 pm AZ", 2)]);
+    expect(p.decisions).toEqual([]);
+    expect(p.rows).toHaveLength(2);
+    for (const r of p.rows) {
+      expect(r).toMatchObject({ startTime: "08:00", endTime: "17:00", breakMinutes: 60, hoursPerWeek: 40, personId: id(1) });
+      expect(r.siblingClientIds).toHaveLength(1);
+    }
+    expect(p.rows.map((r) => r.schedule).sort()).toEqual(["add", "shared"]);
+    expect(p.rows.every((r) => r.assignment === "add")).toBe(true);
+  });
+
+  it("proposes the assignments but leaves the schedule alone when the segments overlap, are on different days or zones", () => {
+    const overlap = plan([obs("Acme Health, LLC", "8:00 am - 1:00 pm AZ", 1), obs("Beta Care", "12:00 pm - 5:00 pm AZ", 2)]);
+    expect(overlap.rows.map((r) => r.schedule)).toEqual(["unset", "unset"]);
+    expect(overlap.rows[0].attention.join(" ")).toMatch(/overlap/);
+    const days = plan([obs("Acme Health, LLC", "8:00 am - 12:00 pm AZ M-W", 1), obs("Beta Care", "8:00 am - 12:00 pm AZ T-F", 2)]);
+    expect(days.rows.map((r) => r.schedule)).toEqual(["unset", "unset"]);
+    expect(days.rows[0].hoursPerWeek).toBe(days.rows[1].hoursPerWeek);
+    expect(days.rows.every((r) => r.assignment === "add")).toBe(true);
+    const zones = plan([obs("Acme Health, LLC", "8:00 am - 12:00 pm AZ", 1), obs("Beta Care", "1:00 pm - 5:00 pm ET", 2)]);
+    expect(zones.rows.map((r) => r.schedule)).toEqual(["unset", "unset"]);
+  });
+
+  it("does not set the schedule while one of the person's clients still needs a match", () => {
+    const p = plan([obs("Acme Health, LLC", "8:00 am - 12:00 pm AZ", 1), obs("Inhouse Medicals", "1:00 pm - 5:00 pm AZ", 2)]);
+    expect(p.decisions.map((d) => d.kind)).toEqual(["client"]);
+    expect(p.rows).toHaveLength(1);
+    expect(p.rows[0].schedule).toBe("unset");
+    expect(p.rows[0].attention.join(" ")).toMatch(/still needs a match/);
+  });
+
+  it("keeps an existing assignment and adds the other client without ending it", () => {
+    const l: LiveData = { ...live, assignments: [...live.assignments, { id: id(210), employeeId: id(1), clientId: id(101), startDate: "2026-09-01", endDate: null, hoursPerWeek: 20 }] };
+    const p = plan([obs("Acme Health, LLC", "8:00 am - 12:00 pm AZ", 1), obs("Beta Care", "1:00 pm - 5:00 pm AZ", 2)], l);
+    const byClient = Object.fromEntries(p.rows.map((r) => [r.clientName, r]));
+    expect(byClient["Acme Health LLC"].assignment).toBe("keep");
+    expect(byClient["Acme Health LLC"].hoursNote).toBe("differs");
+    expect(byClient["Beta Care"].assignment).toBe("add");
+  });
+
+  it("combines segments only within a four-hour gap", () => {
+    const seg = (startTime: string, endTime: string) => ({ parsed: { startTime, endTime, zone: "America/Phoenix", weekdays: [1, 2, 3, 4, 5], pattern: null }, breakMinutes: 0 });
+    expect(combineSegments([seg("08:00", "12:00"), seg("13:00", "17:00")])).toMatchObject({ startTime: "08:00", endTime: "17:00", breakMinutes: 60 });
+    expect(combineSegments([seg("06:00", "09:00"), seg("14:00", "17:00")])).toHaveProperty("error");
   });
 });

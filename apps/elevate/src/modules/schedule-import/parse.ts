@@ -89,7 +89,7 @@ export function parseScheduleText(text: string): ParsedSchedule {
   }
 }
 
-const minutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3));
+export const minutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3));
 /** The shift's length in minutes (a shift ending at or before it starts ends the next day). */
 export function shiftMinutes(startTime: string, endTime: string): number {
   const d = minutes(endTime) - minutes(startTime);
