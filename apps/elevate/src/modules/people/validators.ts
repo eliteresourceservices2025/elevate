@@ -183,16 +183,20 @@ export const clientSchema = z.object({
 });
 export const updateClientSchema = clientSchema.extend({ clientId: uuid });
 
+const assignmentHours = z.preprocess(
+  (v) => (v === "" || v === null ? null : typeof v === "string" ? Number(v) : v),
+  z.number().gt(0, "Hours must be more than 0").max(80, "80 hours at most")
+    .refine((v) => Number.isInteger(v * 10), "Use no more than one decimal place").nullable(),
+);
+
 export const assignmentSchema = z.object({
   employeeId: uuid,
   clientId: uuid,
   startDate: isoDate,
-  hoursPerWeek: z.preprocess(
-    (v) => (v === "" || v === null ? undefined : typeof v === "string" ? Number(v) : v),
-    z.number().gt(0, "Hours must be more than 0").max(80, "80 hours at most").optional(),
-  ),
+  hoursPerWeek: assignmentHours.optional(),
 });
 
+export const updateAssignmentHoursSchema = z.object({ assignmentId: uuid, hoursPerWeek: assignmentHours });
 export const endAssignmentSchema = z.object({ assignmentId: uuid, endDate: isoDate });
 
 // --- Custom fields ------------------------------------------------------------

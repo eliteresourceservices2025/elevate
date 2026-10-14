@@ -57,6 +57,7 @@ import {
   myProfileSchema,
   revealSensitiveSchema,
   reviewChangeSchema,
+  updateAssignmentHoursSchema,
   updateClientSchema,
   updateEmployeeSchema,
   updateSensitiveSchema,
@@ -685,7 +686,7 @@ export async function assignClient(input: unknown): Promise<ActionResult> {
 
         const [a] = await tx
           .insert(clientAssignments)
-          .values({ employeeId: v.employeeId, clientId: v.clientId, startDate: v.startDate, hoursPerWeek: v.hoursPerWeek?.toString(), createdBy: actor.id })
+          .values({ employeeId: v.employeeId, clientId: v.clientId, startDate: v.startDate, hoursPerWeek: v.hoursPerWeek?.toString() ?? null, createdBy: actor.id })
           .returning({ id: clientAssignments.id });
         await recordHistory(tx, {
           employeeId: v.employeeId,
@@ -704,6 +705,50 @@ export async function assignClient(input: unknown): Promise<ActionResult> {
       if (isUniqueViolation(error)) return fail("That person is already assigned to this client.");
       throw error;
     }
+  });
+}
+
+export async function updateAssignmentHours(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "people.manage_assignments");
+    const parsed = updateAssignmentHoursSchema.safeParse(input);
+    if (!parsed.success) return fail(firstIssue(parsed.error));
+    const { assignmentId, hoursPerWeek } = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      const [assignment] = await tx.select().from(clientAssignments).where(eq(clientAssignments.id, assignmentId)).for("update");
+      if (!assignment) return fail("That assignment was not found.");
+      if (assignment.endDate) return fail("That assignment has already ended.");
+      const beforeHours = assignment.hoursPerWeek === null ? null : Number(assignment.hoursPerWeek);
+      if (beforeHours === hoursPerWeek) return fail("No changes to save.");
+
+      await tx.update(clientAssignments).set({ hoursPerWeek: hoursPerWeek?.toString() ?? null, updatedAt: new Date() }).where(eq(clientAssignments.id, assignmentId));
+      await recordHistory(tx, {
+        employeeId: assignment.employeeId,
+        eventType: "profile_changed",
+        summary: `Client assignment hours changed from ${beforeHours ?? "not set"} to ${hoursPerWeek ?? "not set"} h/week`,
+        before: { assignmentId, hoursPerWeek: beforeHours },
+        after: { assignmentId, hoursPerWeek },
+        changedBy: actor.id,
+        effectiveDate: todayInZone(),
+      });
+      await writeAudit({
+        actor,
+        action: "assignment.update_hours",
+        targetType: "employee",
+        targetId: assignment.employeeId,
+        before: { assignmentId, hoursPerWeek: beforeHours },
+        after: { assignmentId, hoursPerWeek },
+      }, tx);
+      return { ok: true, data: assignment.employeeId } as const;
+    });
+    if (result.ok) {
+      revalidateEmployee(result.data);
+      return { ok: true, data: undefined };
+    }
+    return result;
   });
 }
 

@@ -7,6 +7,7 @@ import {
   customFieldDefSchema,
   directoryQuerySchema,
   emergencyContactsChangeSchema,
+  updateAssignmentHoursSchema,
   updateSensitiveSchema,
 } from "./validators";
 
@@ -110,6 +111,23 @@ describe("assignmentSchema", () => {
     expect(assignmentSchema.parse({ employeeId: ID, clientId: OTHER, startDate: "2026-09-01", hoursPerWeek: "20" }).hoursPerWeek).toBe(20);
     expect(assignmentSchema.safeParse({ employeeId: ID, clientId: OTHER, startDate: "2026-09-01", hoursPerWeek: 81 }).success).toBe(false);
     expect(assignmentSchema.safeParse({ employeeId: ID, clientId: OTHER, startDate: "2026-09-01", hoursPerWeek: 0 }).success).toBe(false);
+    expect(assignmentSchema.safeParse({ employeeId: ID, clientId: OTHER, startDate: "2026-09-01", hoursPerWeek: "20.25" }).success).toBe(false);
+  });
+});
+
+describe("updateAssignmentHoursSchema", () => {
+  const input = { assignmentId: ID };
+  it("requires an explicit hours value and accepts one decimal place or clearing it", () => {
+    expect(updateAssignmentHoursSchema.safeParse(input).success).toBe(false);
+    expect(updateAssignmentHoursSchema.parse({ ...input, hoursPerWeek: "20.5" }).hoursPerWeek).toBe(20.5);
+    expect(updateAssignmentHoursSchema.parse({ ...input, hoursPerWeek: "" }).hoursPerWeek).toBeNull();
+    expect(updateAssignmentHoursSchema.parse({ ...input, hoursPerWeek: null }).hoursPerWeek).toBeNull();
+  });
+
+  it("rejects invalid or out-of-range hours and silent rounding", () => {
+    for (const hoursPerWeek of ["bad", "20.25", 0, -1, 81]) {
+      expect(updateAssignmentHoursSchema.safeParse({ ...input, hoursPerWeek }).success).toBe(false);
+    }
   });
 });
 

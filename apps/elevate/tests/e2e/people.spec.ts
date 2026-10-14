@@ -85,4 +85,9 @@ test("HR finds where to add a client, adds one, and assigns it to a person", asy
   await page.getByLabel("Client", { exact: true }).selectOption({ label: `E2E Client ${stamp}` });
   await page.getByRole("button", { name: "Assign", exact: true }).click();
   await expect(page.getByText(`E2E Client ${stamp}`).first()).toBeVisible(slow);
+  await page.getByRole("button", { name: "Edit hours" }).click();
+  await page.getByRole("row").filter({ hasText: `E2E Client ${stamp}` }).getByRole("spinbutton", { name: "Hours per week" }).fill("20.5");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("row", { name: /E2E Client.*20\.5/ })).toBeVisible(slow);
+  await expect(page.getByRole("button", { name: "End", exact: true })).toBeVisible();
 });

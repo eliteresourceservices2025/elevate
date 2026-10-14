@@ -324,6 +324,36 @@ describe("directory, clients and assignments", () => {
     expect((await queries.listDirectory({ q: "Directoria", archived: "1" })).rows).toHaveLength(1);
   });
 
+  it("corrects and clears current assignment hours with a history and audit trail", async () => {
+    const id = await createPerson("edithours");
+    as(hr);
+    expect((await actions.createClient({ name: "Hours Client (fake)", timeZone: "America/Phoenix" })).ok).toBe(true);
+    const [client] = await rows<{ id: string }>(sql`select id from core.clients where name = 'Hours Client (fake)'`);
+    expect((await actions.assignClient({ employeeId: id, clientId: client.id, startDate: "2026-09-01" })).ok).toBe(true);
+    const [assignment] = await rows<{ id: string }>(sql`select id from core.client_assignments where employee_id = ${id}`);
+    const input = { assignmentId: assignment.id };
+    const stored = () => rows<{ hours_per_week: string | null; client_id: string; start_date: string; end_date: string | null }>(sql`select hours_per_week, client_id, start_date, end_date from core.client_assignments where id = ${assignment.id}`);
+
+    expect((await actions.updateAssignmentHours({ ...input, hoursPerWeek: "20.5" })).ok).toBe(true);
+    expect(await stored()).toMatchObject([{ hours_per_week: "20.5", client_id: client.id, end_date: null }]);
+    expect(await actions.updateAssignmentHours({ ...input, hoursPerWeek: 20.5 })).toMatchObject({ ok: false, error: "No changes to save." });
+    expect((await actions.updateAssignmentHours({ ...input, hoursPerWeek: "32" })).ok).toBe(true);
+    expect((await actions.updateAssignmentHours({ ...input, hoursPerWeek: "" })).ok).toBe(true);
+    expect(await stored()).toMatchObject([{ hours_per_week: null, client_id: client.id, end_date: null }]);
+    const history = await rows<{ before: { assignmentId: string; hoursPerWeek: number | null }; after: { assignmentId: string; hoursPerWeek: number | null } }>(sql`select before, after from core.employment_history where employee_id = ${id} and summary like 'Client assignment hours changed%' order by created_at`);
+    expect(history).toHaveLength(3);
+    expect(history.map((h) => [h.before.hoursPerWeek, h.after.hoursPerWeek])).toEqual([[null, 20.5], [20.5, 32], [32, null]]);
+    expect(history.every((h) => h.before.assignmentId === assignment.id && h.after.assignmentId === assignment.id)).toBe(true);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'assignment.update_hours' and target_id = ${id}`)).toHaveLength(3);
+
+    expect((await actions.endAssignment({ assignmentId: assignment.id, endDate: "2026-10-01" })).ok).toBe(true);
+    expect(await actions.updateAssignmentHours({ ...input, hoursPerWeek: 20 })).toMatchObject({ ok: false, error: "That assignment has already ended." });
+    expect(await actions.updateAssignmentHours({ assignmentId: randomUUID(), hoursPerWeek: 20 })).toMatchObject({ ok: false, error: "That assignment was not found." });
+    expect((await stored())[0]).toMatchObject({ hours_per_week: null, client_id: client.id, end_date: "2026-10-01" });
+    expect(await rows(sql`select 1 from core.employment_history where employee_id = ${id} and summary like 'Client assignment hours changed%'`)).toHaveLength(3);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'assignment.update_hours' and target_id = ${id}`)).toHaveLength(3);
+  });
+
   it("ends an assignment once and keeps the history", async () => {
     const id = await createPerson("endasg");
     as(hr);

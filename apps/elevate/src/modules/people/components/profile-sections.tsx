@@ -8,7 +8,7 @@ import Link from "next/link";
 import { legalName } from "../format";
 import type { getProfile } from "../queries";
 import { RevealField } from "./reveal-field";
-import { AssignClientForm, CustomFieldsForm, EndAssignmentButton } from "./hr-panels";
+import { AssignClientForm, CustomFieldsForm, EditAssignmentHours, EndAssignmentButton } from "./hr-panels";
 import { SensitiveForm } from "./sensitive-form";
 import { ReportingForm } from "@/modules/org/components/reporting-form";
 import type { PickerOption } from "@/components/person-picker";
@@ -257,7 +257,12 @@ export function ClientsSection({
               <TableCell>{a.endDate ? formatDateOnly(a.endDate) : <Badge>Current</Badge>}</TableCell>
               <TableCell>{a.hoursPerWeek ?? "—"}</TableCell>
               {access.canManageAssignments ? (
-                <TableCell className="text-right">{a.endDate ? null : <EndAssignmentButton assignmentId={a.id} today={today} />}</TableCell>
+                <TableCell className="text-right">{a.endDate ? null : (
+                  <div className="flex flex-wrap items-center justify-end gap-1">
+                    <EditAssignmentHours assignmentId={a.id} hoursPerWeek={a.hoursPerWeek} />
+                    <EndAssignmentButton assignmentId={a.id} today={today} />
+                  </div>
+                )}</TableCell>
               ) : null}
             </TableRow>
           ))}

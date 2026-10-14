@@ -14,6 +14,7 @@ import {
   cancelChangeRequest,
   endAssignment,
   setCustomFieldValues,
+  updateAssignmentHours,
 } from "../actions";
 import { CHANGE_CATEGORY_LABELS, type ChangeCategory, type CustomFieldType } from "../constants";
 
@@ -167,6 +168,28 @@ export function AssignClientForm({
           {addon.readiness.state !== "passed" ? "A reminder only." : null}
         </p>
       ) : null}
+    </form>
+  );
+}
+
+export function EditAssignmentHours({ assignmentId, hoursPerWeek }: { assignmentId: string; hoursPerWeek: string | null }) {
+  const { run, pending } = useRun();
+  const [editing, setEditing] = useState(false);
+  const [hours, setHours] = useState(hoursPerWeek ?? "");
+
+  if (!editing) return <Button variant="ghost" size="xs" onClick={() => { setHours(hoursPerWeek ?? ""); setEditing(true); }}>Edit hours</Button>;
+  return (
+    <form
+      className="flex flex-wrap items-center gap-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => updateAssignmentHours({ assignmentId, hoursPerWeek: hours }), "Hours updated.", () => setEditing(false));
+      }}
+    >
+      <Label htmlFor={`hours-${assignmentId}`} className="sr-only">Hours per week</Label>
+      <Input id={`hours-${assignmentId}`} type="number" min={0.1} max={80} step={0.1} value={hours} onChange={(e) => setHours(e.target.value)} className="h-8 w-24" />
+      <Button type="submit" size="xs" disabled={pending}>Save</Button>
+      <Button type="button" variant="ghost" size="xs" disabled={pending} onClick={() => setEditing(false)}>Cancel</Button>
     </form>
   );
 }
