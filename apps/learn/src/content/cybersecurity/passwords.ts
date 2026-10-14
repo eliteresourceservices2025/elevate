@@ -4,7 +4,7 @@ export const passwordsModule: CourseModule = {
   key: "passwords",
   title: "Passwords and signing in safely",
   summary: "Strong passphrases, password managers, the second sign-in step, and what to do when a prompt or a code is not yours.",
-  estimatedMinutes: 9,
+  estimatedMinutes: 12,
   tracks: ["full"],
   keyPoints: [
     "A long passphrase beats a short complicated password.",
@@ -12,6 +12,7 @@ export const passwordsModule: CourseModule = {
     "Turn on a second sign-in step wherever it is offered. An app or a security key is stronger than a text message.",
     "Never share a password or a code. No real support person asks for either.",
     "If a prompt or code is not yours, deny it and report it.",
+    "A sign-in approval you did not start means someone has your password: do not approve it, and report it.",
   ],
   screens: [
     {
@@ -107,6 +108,48 @@ export const passwordsModule: CourseModule = {
       ],
     },
     {
+      id: "mfa-fatigue-case",
+      title: "Worked case: the approval that would not stop",
+      blocks: [
+        {
+          type: "case",
+          title: "Twelve prompts in ten minutes",
+          scenario: "A VA's phone keeps showing \"Approve sign-in?\" notifications. She did not start any of them. After the twelfth one, she gets a text: \"This is the IT desk. Approve the next request so we can stop the alerts and secure your account.\" She is tired and wants the buzzing to stop.",
+          question: "What should she do, and what does this tell her?",
+          answer: "She should deny the requests, not reply, and report it to her lead right away. Someone already has her password and is trying to wear her down so that she approves one. A real IT desk would never ask her to approve a request she did not start. She should also change her password through the official route.",
+        },
+      ],
+    },
+    {
+      id: "passkeys",
+      title: "Passkeys and security keys",
+      blocks: [
+        { type: "paragraph", text: "Some services offer **passkeys** or physical **security keys**. They replace or strengthen the password with a cryptographic proof that stays on your device or key. They are hard to phish because there is no password to type into a fake page." },
+        {
+          type: "compare",
+          left: { title: "Stronger", items: ["A passkey or security key", "An authenticator app code", "Number-matching prompts"] },
+          right: { title: "Weaker", items: ["A text message code", "A simple \"approve\" tap", "No second step at all"] },
+        },
+        { type: "callout", tone: "tip", text: "Use the strongest option your client or ERS offers, and set up a second method in case you lose your device." },
+      ],
+    },
+    {
+      id: "shared-accounts",
+      title: "Shared accounts, and why they are refused",
+      blocks: [
+        { type: "paragraph", text: "Sometimes a team shares one login \"to keep it simple\". It breaks the most basic control: nobody can tell who did what. If something goes wrong, nobody can be sure who was responsible, and nobody can close one person's access when they leave." },
+        {
+          type: "list",
+          items: [
+            "Each person gets their own account, even for a shared mailbox or tool.",
+            "If a tool has only one login, ask your lead how access should be set up.",
+            "Never accept a password in a chat, a note or a spreadsheet.",
+            "Never hand a code to a teammate who asks for it.",
+          ],
+        },
+      ],
+    },
+    {
       id: "scenario-it-call",
       title: "Try it: the helpful caller",
       blocks: [
@@ -136,4 +179,11 @@ export const passwordsQuestions: QuestionSeed[] = [
   q("passwords", "Prompts", "single", "You receive a sign-in approval prompt on your phone that you did not start. What should you do?", ["Deny it and report it to your lead right away", "Approve it to make the prompts stop", "Ignore it and keep working", "Approve it, then change your password tomorrow"], [0], "An unexpected prompt may mean someone has your password. Deny it and report it."),
   q("passwords", "Codes", "single", "A person from \"IT\" calls and asks you to read out a code just sent to your phone. What do you do?", ["Refuse, hang up, and report the call", "Read it, since they know your name", "Read half of it", "Ask them to email you first"], [0], "Real IT staff never need your codes or passwords. This is a social engineering attempt."),
   q("passwords", "Leak", "single", "You typed your password on a page you now think was fake. What is the best first step?", ["Change it through the official site or app and tell your lead", "Wait and see if anything happens", "Close the browser and forget it", "Change it through the link on the page"], [0], "Change it by the official route, never through the suspicious page, and report it."),
+  q("passwords", "Unrequested prompts", "single", "Your phone shows several sign-in approval requests you did not start. What should you do?", ["Deny them and report it to your lead", "Approve one so they stop", "Reply to the message asking why", "Turn off the phone and say nothing"], [0], "Prompts you did not start mean someone has your password. Deny, and report."),
+  q("passwords", "Unrequested prompts", "true_false", "True or false: A real IT desk may ask you to approve a sign-in request that you did not start in order to stop alerts.", ["True", "False"], [1], "A real IT desk would never ask you to approve a request you did not start."),
+  q("passwords", "Passkeys", "single", "Why are passkeys and security keys harder to phish than passwords?", ["There is no password to type into a fake page, and the proof stays on the device or key", "They are longer", "They change every minute", "They are shared with IT"], [0], "A passkey is bound to the real site and to your device, so a fake page cannot collect it."),
+  q("passwords", "Second step", "single", "Which second sign-in option is generally strongest?", ["A passkey or a security key", "A text message code", "A simple tap to approve", "No second step"], [0], "Passkeys and security keys resist phishing better than texts or taps."),
+  q("passwords", "Shared accounts", "single", "A tool has only one login, and your team wants to share it. What is the best response?", ["Ask your lead how to give each person their own access", "Share the password in a team chat", "Put it on a sticky note", "Use it only at night"], [0], "Each person needs their own access so actions can be traced and access can end when work ends."),
+  q("passwords", "Shared accounts", "multiple", "Which problems come from a shared login? Select all that apply.", ["Nobody can tell who did what", "One person's access cannot be closed on its own", "A leaked password affects everyone who shares it", "It makes the login stronger"], [0, 1, 2], "A shared login removes accountability and makes access hard to control."),
+  q("passwords", "Codes", "single", "A caller says they are from IT and asks you to read out the code that just arrived on your phone. What do you do?", ["Refuse, end the call, and report it", "Read it quickly so they can fix the issue", "Read only the first three digits", "Text it to them instead"], [0], "A code is a password. No legitimate caller needs you to read it out."),
 ];

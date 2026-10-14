@@ -120,11 +120,11 @@ describe("the separate cybersecurity course", () => {
   it("loads as its own course with its own modules, and is assigned apart from the HIPAA course", async () => {
     const r = await loadCourse(admin, { courseSlug: "cybersecurity", newVersion: true });
     expect(r.status).toBe("draft");
-    expect(r.modules).toBe(8);
+    expect(r.modules).toBe(10);
     const [{ slug }] = await admin`select c.slug from learn.courses c where c.id = ${r.courseId}`;
     expect(slug).toBe("cybersecurity");
     const keys = await admin`select module_key from learn.version_modules where version_id = ${r.versionId} order by position`;
-    expect(keys.map((k) => k.module_key)).toEqual(["why", "passwords", "phishing", "malware", "browsing", "devices", "physical", "response"]);
+    expect(keys.map((k) => k.module_key)).toEqual(["why", "passwords", "phishing", "malware", "browsing", "ai_tools", "devices", "physical", "response", "security_hipaa"]);
 
     await expect(loadCourse(admin, { courseSlug: "nope" })).rejects.toThrow(/Unknown course/);
     const done = await loadCourse(admin, { courseSlug: "cybersecurity", publish: true, reviewerUserId: reviewer.id, counselApprovedOn: "2026-11-01" });

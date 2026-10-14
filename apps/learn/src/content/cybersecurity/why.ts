@@ -6,13 +6,14 @@ export const whyModule: CourseModule = {
   key: "why",
   title: "Why security is everyone's job",
   summary: "What attackers want, why ordinary people are the target, and the four habits that stop most attacks.",
-  estimatedMinutes: 6,
+  estimatedMinutes: 9,
   tracks: ["full"],
   keyPoints: [
     "Attackers go after people because it is easier than breaking in by force.",
     "Four habits stop most attacks: spot phishing, use strong passwords, turn on a second sign-in step, install updates.",
     "Mistakes are normal. Hiding them is what makes them expensive.",
     "Insiders are a risk too, mostly by accident. Report anything that looks wrong.",
+    "Healthcare organizations are targeted because patient information and disrupted care are valuable to attackers.",
   ],
   screens: [
     {
@@ -93,6 +94,36 @@ export const whyModule: CourseModule = {
       ],
     },
     {
+      id: "why-healthcare",
+      title: "Why healthcare is a target",
+      blocks: [
+        { type: "paragraph", text: "Attackers know that a clinic cannot simply close for a week. Patients need appointments, prescriptions and records, so pressure to pay or to act quickly is high. Patient files also hold names, dates of birth, insurance numbers and addresses, which are useful for fraud and last a long time." },
+        {
+          type: "layers",
+          title: "What makes healthcare attractive",
+          items: [
+            { label: "Urgency", text: "Care cannot wait, so downtime is costly and people feel pressure." },
+            { label: "Rich records", text: "One file can hold identity, insurance and medical details." },
+            { label: "Many connections", text: "Clinics, labs, billers and vendors all exchange information." },
+            { label: "Busy people", text: "Staff handle many messages and calls, and click fast." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "small-slip",
+      title: "Worked case: a small slip, a large week",
+      blocks: [
+        {
+          type: "case",
+          title: "How one message disrupted a clinic",
+          scenario: "A scheduler at a small clinic received an email that looked like a notice from the billing software. She entered her login on the page it linked to. Two days later the clinic's computers showed a message demanding payment, appointment screens were blank, and staff had to call patients to reschedule.",
+          question: "Where could the chain have been broken, and by whom?",
+          answer: "At several points. The scheduler could have noticed that the link did not go to the real site, or that a login was being requested out of the blue. A second sign-in step would have stopped the stolen password from being enough. A report within minutes of clicking would have let the clinic change the password and watch for damage. Most of those steps are simple habits, which is why this course is about everyone, not only about IT.",
+        },
+      ],
+    },
+    {
       id: "no-blame",
       title: "Speed matters, blame does not",
       blocks: [
@@ -123,4 +154,9 @@ export const whyQuestions: QuestionSeed[] = [
   q("why", "Insiders", "single", "You notice a coworker copying a large number of files they do not seem to need. What is the best action?", ["Report it to your lead without accusing anyone", "Confront them in public", "Ignore it", "Copy the files yourself to compare"], [0], "Reporting is not accusing. The lead can look at it properly."),
   q("why", "Reporting", "true_false", "True or false: If nothing seems to have happened after a mistake, you do not need to report it.", ["True", "False"], [1], "Attacks are often silent at first. Report anyway."),
   q("why", "Reporting", "single", "You realize you shared a password with someone who claimed to be from IT. What should you do first?", ["Tell your lead and change the password through the official way", "Wait and see", "Delete your browser history", "Tell no one in case you get in trouble"], [0], "Fast, honest reporting limits the damage."),
+  q("why", "Healthcare", "single", "Why are healthcare organizations attractive targets for attackers?", ["Care cannot wait, so pressure is high, and records hold valuable personal information", "Their buildings are large", "They have no computers", "They never use email"], [0], "Urgency and rich, lasting records make healthcare a common target."),
+  q("why", "Healthcare", "multiple", "Which of these make a clinic's information valuable to attackers? Select all that apply.", ["It combines identity and insurance details", "It stays useful for a long time", "Downtime puts pressure on the clinic to act fast", "It is always stored on paper only"], [0, 1, 2], "Identity plus insurance details last long, and downtime creates pressure to pay or comply."),
+  q("why", "Chain of events", "single", "A person enters a work password on a page reached from an unexpected email. Which later habit could still limit the damage?", ["A second sign-in step, and reporting the click immediately", "Waiting to see if anything happens", "Deleting the email and saying nothing", "Changing nothing"], [0], "A second step can stop a stolen password being enough, and fast reporting lets the organization respond."),
+  q("why", "Everyone", "single", "Why is security described as everyone's job and not only IT's?", ["Most attacks begin with an ordinary person's click, call or reply", "IT staff are not available", "Only large companies have IT", "Security is only about hardware"], [0], "Attackers go after people, so people are part of the defense."),
+  q("why", "Pressure", "single", "A message says an account will close in one hour unless you click. What is the most useful thing to know?", ["Urgency is a common tool of attackers, so slow down and verify another way", "Urgent messages are always legitimate", "You must click to be safe", "Clicking later is not possible"], [0], "Artificial urgency is meant to stop you thinking. Verify through an official route."),
 ];

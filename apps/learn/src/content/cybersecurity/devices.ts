@@ -4,7 +4,7 @@ export const devicesModule: CourseModule = {
   key: "devices",
   title: "Devices, networks and working remotely",
   summary: "Locking and protecting your devices, securing your home network, using public Wi-Fi and video calls safely, and what to do when a device goes missing.",
-  estimatedMinutes: 11,
+  estimatedMinutes: 14,
   tracks: ["full"],
   keyPoints: [
     "Lock your screen, use a screen lock code, and encrypt your devices.",
@@ -12,6 +12,7 @@ export const devicesModule: CourseModule = {
     "Do not do work on public Wi-Fi unless your client gives you a secure connection for it.",
     "Use only approved devices for work, and keep them to yourself.",
     "A lost or stolen device is an emergency: tell your lead immediately.",
+    "A work setup has a place, a device, a network and a sign-in, and each needs to be safe, even at home.",
   ],
   screens: [
     {
@@ -118,6 +119,51 @@ export const devicesModule: CourseModule = {
       ],
     },
     {
+      id: "va-setup",
+      title: "Your remote setup, step by step",
+      blocks: [
+        { type: "paragraph", text: "Working from home means you are the one responsible for the room, the device and the network. A simple routine keeps all four in order:" },
+        {
+          type: "steps",
+          items: [
+            { title: "Place", text: "A space where screens and calls are not seen or heard by others." },
+            { title: "Device", text: "An approved, updated, locked and encrypted device that you alone use for work." },
+            { title: "Network", text: "A home network with a strong password and updated router, or an approved secure connection." },
+            { title: "Sign-in", text: "Your own login, with the second step on, signed out when you finish." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "shared-home",
+      title: "Worked case: the shared family computer",
+      blocks: [
+        {
+          type: "case",
+          title: "My laptop is broken, but the family laptop works",
+          scenario: "Your work laptop stops starting an hour before a client deadline. Your sister's laptop is on the kitchen table and works. She says you can use it, and the client's system is only a login away.",
+          question: "What should you do, and why not use the family laptop?",
+          answer: "Tell your lead at once and ask for an approved fix: a spare device, an extension, or someone to take over the work. A family computer has other people's accounts and apps, is not managed or encrypted for work, and may keep copies of what you open. A login is not the only exposure: browser history, downloads, and cached files remain behind.",
+        },
+      ],
+    },
+    {
+      id: "byod",
+      title: "Your own phone and the work",
+      blocks: [
+        { type: "paragraph", text: "Many people use their own phone for sign-in codes or work chat. That can be fine, if ERS or the client approves it, and the phone is itself protected." },
+        {
+          type: "list",
+          items: [
+            "Use a screen lock, and keep the phone updated.",
+            "Use only approved apps for client communication.",
+            "Do not take screenshots or photos of client information.",
+            "Report a lost or replaced phone immediately, because it may hold sign-in codes.",
+          ],
+        },
+      ],
+    },
+    {
       id: "lost-device",
       title: "A device goes missing",
       blocks: [
@@ -147,4 +193,11 @@ export const devicesQuestions: QuestionSeed[] = [
   q("devices", "Personal devices", "single", "A family member offers their shared computer when your work laptop breaks. What should you do?", ["Do not use it and ask your lead for an approved option", "Use it and log out afterward", "Use it only for non-urgent tasks", "Use it in a private browser window"], [0], "Only approved devices should be used for client work. A shared family computer is not approved."),
   q("devices", "Lost device", "single", "You notice your work laptop is missing after a trip. What is the right action?", ["Tell your lead immediately", "Wait a few days in case it turns up", "Buy a new one and say nothing", "Post on social media asking for help"], [0], "Immediate reporting lets the right people lock or wipe it and limits harm."),
   q("devices", "Lost device", "multiple", "After a device is lost, which of these should be done? Select all that apply.", ["Tell your lead immediately", "Change passwords for accounts signed in on it", "Follow instructions to lock or wipe it", "Wait to see if it is returned"], [0, 1, 2], "Fast reporting, changing passwords and a remote lock or wipe limit the harm. Waiting only adds exposure."),
+  q("devices", "Setup", "multiple", "Which parts of a safe remote setup should you check? Select all that apply.", ["The place where you work", "The device and its updates", "The network", "The color of the walls"], [0, 1, 2], "Place, device, network and sign-in are the checks. Wall color is not."),
+  q("devices", "Shared computers", "single", "Your work laptop fails before a deadline. A relative's laptop is available. What should you do?", ["Tell your lead and ask for an approved solution", "Use the relative's laptop, since it has internet", "Email the files to yourself and use it", "Use it in a private browser window"], [0], "A shared device is not managed or encrypted for work and may keep copies. Ask for an approved fix."),
+  q("devices", "Shared computers", "true_false", "True or false: A private browsing window makes it safe to use someone else's computer for client work.", ["True", "False"], [1], "Private windows hide history but do not make the device safe or approved, and files can still be saved."),
+  q("devices", "Phones", "single", "Which is a good habit for a personal phone that receives work sign-in codes?", ["Use a screen lock and report it at once if it is lost", "Share the phone with the family", "Turn off updates", "Store passwords in the notes app"], [0], "A phone that receives sign-in codes is part of your security and must be protected."),
+  q("devices", "Phones", "single", "May you take a photo of a client's screen on your personal phone to help remember a step?", ["No, because that creates an unapproved copy of client information", "Yes, if it is a small photo", "Yes, if you delete it later", "Yes, if it has no names"], [0], "Photos create copies outside approved systems."),
+  q("devices", "Network", "single", "Your home router has never been updated and still uses its default password. What should you do?", ["Change the password and update it, or ask for help", "Leave it, since it works", "Move to a neighbor's Wi-Fi", "Turn off the firewall"], [0], "Default passwords and old software leave a home network open."),
+  q("devices", "Place", "single", "Which is the best place to take a client call at home?", ["A room with a door, away from others", "The kitchen with the family nearby", "The balcony", "The living room with the television on"], [0], "Choose a private space where the call cannot be overheard."),
 ];

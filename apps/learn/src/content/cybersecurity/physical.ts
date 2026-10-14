@@ -4,7 +4,7 @@ export const physicalModule: CourseModule = {
   key: "physical",
   title: "Handling information and physical security",
   summary: "Knowing what is sensitive, sharing only what is needed, protecting paper and screens, and the in-person tricks attackers use.",
-  estimatedMinutes: 7,
+  estimatedMinutes: 9,
   tracks: ["full"],
   keyPoints: [
     "Know what you are handling, and treat client and personal information as sensitive by default.",
@@ -12,6 +12,7 @@ export const physicalModule: CourseModule = {
     "Paper, screens and conversations leak too. Keep them out of sight and earshot.",
     "Do not hold a door for someone you do not know, and do not leave anything unattended.",
     "Dispose of information properly, and ask when you are not sure how.",
+    "Information is not secure just because it is on paper or in a bin: keep it only as long as needed and destroy it properly.",
   ],
   screens: [
     {
@@ -94,6 +95,35 @@ export const physicalModule: CourseModule = {
       ],
     },
     {
+      id: "retention",
+      title: "Keep only what you need, for as long as you need it",
+      blocks: [
+        { type: "paragraph", text: "Every copy of information is a risk, on screen or on paper. The safest information is the information you no longer hold. Follow your client's instructions on how long something may be kept and where." },
+        {
+          type: "steps",
+          items: [
+            { title: "Do the task", text: "Work in the client's system where you can." },
+            { title: "Do not copy", text: "No extra files, notes or printouts unless told to." },
+            { title: "Clear up", text: "Remove downloads and working copies as instructed." },
+            { title: "Destroy properly", text: "Shred or use the approved method, not the bin." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "case-home-printer",
+      title: "Worked case: the home printer",
+      blocks: [
+        {
+          type: "case",
+          title: "Three pages, one tired evening",
+          scenario: "You need to read a client's three-page billing summary carefully, and the screen is tiring. You print it on your home printer, read it, and leave it in a drawer to \"deal with in the morning\". In the morning a visitor is staying and the drawer is open.",
+          question: "What went wrong, and what should happen to the pages?",
+          answer: "Printing created an extra copy outside the client's system, which the client probably did not allow and cannot control, and it was left where others could reach it. The pages should be secured now, and the print reported to your lead so the client can decide what to do. Next time, ask whether printing is permitted and how paper must be destroyed. Throwing it in the bin is not destruction.",
+        },
+      ],
+    },
+    {
       id: "check",
       title: "Quick check",
       blocks: [
@@ -124,4 +154,9 @@ export const physicalQuestions: QuestionSeed[] = [
   q("physical", "Disposal", "single", "A work laptop is being retired. What should happen to it?", ["It is cleared the approved way by ERS or the client", "You give it to a relative", "You sell it online after deleting files", "You keep it as is"], [0], "Devices keep what was on them. Clearing is done the approved way, not by individuals."),
   q("physical", "Photos", "true_false", "True or false: It is fine to photograph a work document with your personal phone to save time.", ["True", "False"], [1], "A photo on a personal phone is an unapproved copy outside the systems that protect the information."),
   q("physical", "Clean desk", "single", "Which habit best protects information at your desk?", ["Locking away notes and printouts, and locking your screen when you leave", "Leaving notes in plain view for convenience", "Writing passwords under the keyboard", "Leaving your screen open all day"], [0], "A clean, locked workspace stops casual and opportunistic exposure."),
+  q("physical", "Retention", "single", "Why should you avoid keeping extra copies of client information?", ["Every copy is another place it can leak, and the client cannot control it", "Copies take up space on the desk", "Copies cost money", "Clients dislike paper"], [0], "Extra copies multiply risk and sit outside the client's control."),
+  q("physical", "Printing", "single", "May you print a client's document at home to read it?", ["Only if the client allows it and tells you how to destroy the pages", "Yes, if you keep it in a drawer", "Yes, if you throw it in the bin afterward", "Yes, if it is short"], [0], "Printing creates a copy outside the approved system and needs permission and a destruction method."),
+  q("physical", "Destruction", "single", "Which is an acceptable way to dispose of printed client information?", ["Shredding it or using the method the client approved", "Throwing it in the household bin", "Tearing it once", "Leaving it for the cleaner"], [0], "Only proper destruction protects the information from being reassembled."),
+  q("physical", "Destruction", "true_false", "True or false: Deleting a file from your desktop and emptying the recycle bin permanently destroys it in every case.", ["True", "False"], [1], "Deleted files can remain on a device or in backups, so media must be cleared the approved way."),
+  q("physical", "Clean desk", "multiple", "Which of these belong to a clean-desk habit? Select all that apply.", ["Putting papers away when you leave", "Locking your screen", "Keeping passwords off sticky notes", "Leaving a list of patient names beside the keyboard"], [0, 1, 2], "A clean desk limits what anyone passing can see or take."),
 ];

@@ -7,7 +7,7 @@ export const phishingModule: CourseModule = {
   key: "phishing",
   title: "Phishing and social engineering",
   summary: "How attackers trick people, the signs to look for, and what to do when something feels off.",
-  estimatedMinutes: 13,
+  estimatedMinutes: 17,
   tracks: ["full"],
   keyPoints: [
     "Attackers target people, not only computers.",
@@ -17,6 +17,7 @@ export const phishingModule: CourseModule = {
     "If you clicked or answered, report it immediately. Speed limits the damage.",
     "Requests to move money or change payment details are checked by phone on a number you already know.",
     "Unexpected calls from \"tech support\" are scams. Hang up and never give remote access.",
+    "Healthcare lures often pose as a payer, a patient, a clinic or a supplier, so verify through a route you already know.",
   ],
   screens: [
     {
@@ -154,6 +155,67 @@ export const phishingModule: CourseModule = {
       ],
     },
     {
+      id: "healthcare-lures",
+      title: "Lures that fit healthcare work",
+      blocks: [
+        { type: "paragraph", text: "Attackers tailor messages to the work you do. In healthcare they often pose as the people you expect to hear from:" },
+        {
+          type: "table",
+          caption: "Common healthcare lures",
+          columns: ["The message says it is from", "What it asks", "What to do"],
+          rows: [
+            ["A payer or insurer", "Log in to see a held or denied claim", "Go to the payer's site yourself, never through the link"],
+            ["A patient", "Open an attached form or record request", "Do not open it; route it as the client instructs"],
+            ["A clinic's manager", "Urgent change to bank details or a payment", "Call back on a number you already have"],
+            ["A supplier or vendor", "An invoice or a shared document link", "Check with the vendor through a known contact"],
+            ["IT or the EHR vendor", "Reset your password or install a tool", "Report it, and use the official support route"],
+          ],
+        },
+      ],
+    },
+    {
+      id: "case-payer",
+      title: "Worked case: the held claim",
+      blocks: [
+        {
+          type: "case",
+          title: "A payer portal that is not the payer",
+          scenario: "You manage claims for a clinic. An email arrives: \"Action required: 14 claims on hold. Sign in to the Provider Portal to release payment today.\" The logo looks right and the sender's name matches an insurer you work with. The button leads to a login page.",
+          question: "How do you check it, and what do you do if you already entered your password?",
+          answer: "Do not use the button. Open the insurer's portal by typing its address or using the bookmark you already have, and look for the same notice there. If it is not there, report the email to your lead. If you already entered a password, change it the official way at once, tell your lead and HR immediately, and say which account it was, because the clinic's claims and payment details may be at risk.",
+        },
+      ],
+    },
+    {
+      id: "case-bec",
+      title: "Worked case: the changed bank details",
+      blocks: [
+        {
+          type: "case",
+          title: "A familiar voice in an email",
+          scenario: "A message arrives from what looks like a clinic owner's email: \"Please update the account for our supplier payments before Friday. New details attached. I am in a meeting and cannot take calls.\" The writing is right and the request is polite.",
+          question: "What makes this suspicious, and what is the safe step?",
+          answer: "A change to payment details, urgency, an unusual channel and the sender being unavailable are all classic signs of fraud called business email compromise. The safe step is to verify through a different route: call the owner on a number you already have, not one in the message, and follow the client's process for changing payment details. Do not change anything until it is confirmed.",
+        },
+      ],
+    },
+    {
+      id: "voice",
+      title: "Voice phishing: the helpful caller",
+      blocks: [
+        { type: "paragraph", text: "Calls can be just as convincing as email. A caller may sound friendly, use real names and know a little about your work. Common stories are a payer representative who \"needs to verify\" your portal login, or an IT person who \"needs to install a tool\" to fix a problem." },
+        {
+          type: "steps",
+          items: [
+            { title: "Do not give anything", text: "No passwords, codes or patient details on an incoming call." },
+            { title: "Do not install anything", text: "No remote-access tools at a caller's request." },
+            { title: "Hang up", text: "You may end any call that feels wrong." },
+            { title: "Call back", text: "Use a number you already trust, and tell your lead." },
+          ],
+        },
+      ],
+    },
+    {
       id: "scenario-ceo",
       title: "Try it: the urgent request",
       blocks: [
@@ -186,4 +248,11 @@ export const phishingQuestions: QuestionSeed[] = [
   q("phishing", "Tech support", "single", "A pop-up says your computer is infected and tells you to call a number and allow remote access. What do you do?", ["Close it, do not call, and report it to your lead", "Call and follow the instructions", "Allow remote access to be safe", "Give them your password to check"], [0], "Unexpected tech support messages are scams. Never give remote access or passwords to someone who contacted you."),
   q("phishing", "QR codes", "single", "You find a QR code on a poster that promises a prize and asks you to sign in. What is the safest approach?", ["Do not scan it, or treat the destination like any untrusted link", "Scan it and sign in with your work password", "Scan it and share it with colleagues", "Scan it with a work phone only"], [0], "A QR code is just a link. Never enter work passwords on a page you reached from one."),
   q("phishing", "Calls", "single", "A caller claims to be from a government office and demands payment now or you face penalties. What is the right response?", ["Hang up and contact the organization through an official number you find yourself", "Pay to avoid the penalties", "Give your bank details to confirm", "Read back your patient list"], [0], "Pressure and payment demands are signs of fraud. Verify independently."),
+  q("phishing", "Healthcare lures", "single", "An email says claims are on hold and asks you to sign in to a payer portal through a button. What is the safest first step?", ["Open the payer's portal yourself using a bookmark or an address you know", "Click the button, since the logo looks right", "Forward it to a friend to check", "Reply asking if it is real"], [0], "Go to the site yourself through a route you trust, never through the message."),
+  q("phishing", "Healthcare lures", "single", "A patient emails an attached 'records request form' you were not expecting. What should you do?", ["Not open it, and route it the way the client instructs", "Open it to see what it is", "Forward it to the whole team", "Print it"], [0], "Attachments from unexpected senders can carry malware, and records requests are handled by the client."),
+  q("phishing", "Business email compromise", "single", "A message from what looks like a clinic owner asks you to change a supplier's bank details urgently and says they cannot take calls. What is the safe step?", ["Verify by calling a number you already have and follow the client's process", "Make the change quickly to meet the deadline", "Reply to confirm the new details", "Ask the sender to send a scan of the new bank letter"], [0], "Payment changes with urgency and no call are classic fraud. Verify through another route."),
+  q("phishing", "Business email compromise", "multiple", "Which of these are signs of business email compromise? Select all that apply.", ["A request to change payment details", "Strong urgency", "The sender says they cannot be reached by phone", "A message with a friendly greeting only"], [0, 1, 2], "A payment change, pressure and avoiding a call are common signs."),
+  q("phishing", "Voice phishing", "single", "A caller says he is from IT and asks you to install a remote tool to fix a problem. What is the best response?", ["Decline, hang up and report it to your lead", "Install it quickly", "Install it on your personal device", "Give him your password so he can do it"], [0], "Remote-access tools give full control. Legitimate IT will use approved routes."),
+  q("phishing", "Voice phishing", "true_false", "True or false: It is rude to hang up on a caller who is asking for a password, so you should stay on the line.", ["True", "False"], [1], "You may end any call that feels wrong, and a legitimate caller will understand."),
+  q("phishing", "Clicked", "single", "You entered your password on a page you now think was fake. What is the most important next step?", ["Change the password the official way and report it immediately", "Close the browser and hope for the best", "Wait to see if anything happens", "Clear your history only"], [0], "The password is exposed. Change it and report it right away so the account can be watched."),
 ];

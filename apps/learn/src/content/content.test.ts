@@ -130,3 +130,19 @@ describe("the HIPAA course specifically", () => {
     for (const t of ["table", "layers", "timeline", "glossary", "case"]) expect(types.has(t as never), t).toBe(true);
   });
 });
+
+describe("the Cybersecurity course specifically", () => {
+  const { content, questions, examConfig } = COURSES.cybersecurity;
+
+  it("has 10 modules in teaching order, with the AI and HIPAA-connection modules added in version 2", () => {
+    expect(content.modules.map((m) => m.key)).toEqual(["why", "passwords", "phishing", "malware", "browsing", "ai_tools", "devices", "physical", "response", "security_hipaa"]);
+    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(112);
+  });
+
+  it("keeps its own exam: 15 questions at 80%, from a bank of at least 100", () => {
+    const config = examConfig as { passPercent: number; tracks: Record<string, { questions: number }> };
+    expect(config.passPercent).toBe(80);
+    for (const t of Object.values(config.tracks)) expect(t.questions).toBe(15);
+    expect(questions.length).toBeGreaterThanOrEqual(100);
+  });
+});
