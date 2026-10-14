@@ -55,6 +55,7 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "saveShiftNote", call: () => actions.saveShiftNote({ sessionId: ID, body: "Finished the inbox." }), allowed: EVERYONE },
   { name: "fileCorrectionForOthers", call: () => actions.fileCorrectionForOthers(claim), allowed: TEAM_OR_HR },
   { name: "assignSchedule", call: () => scheduleActions.assignSchedule({ employeeIds: [ID], effectiveFrom: "2026-10-01", startTime: "09:00", endTime: "17:00", weekdays: [1, 2, 3, 4, 5], breakMinutes: 60 }), allowed: HR },
+  { name: "correctSchedule", call: () => scheduleActions.correctSchedule({ employeeId: ID, startTime: "08:00", endTime: "17:00", weekdays: [1, 2, 3, 4, 5], breakMinutes: 60, reason: "Two clients, one shift" }), allowed: HR },
   { name: "endSchedule", call: () => scheduleActions.endSchedule({ employeeId: ID, endDate: "2026-10-01" }), allowed: HR },
   { name: "requestExtraEvidenceUpload", call: () => extraActions.requestExtraEvidenceUpload({ mime: "image/png", size: 1000 }), allowed: EVERYONE },
   { name: "requestExtraHours", call: () => extraActions.requestExtraHours({ clientId: ID, windowStart: "2026-10-01T10:00:00Z", windowEnd: "2026-10-01T12:00:00Z", contactName: "Dana", reason: "Client needs it", evidenceIds: [ID] }), allowed: EVERYONE },

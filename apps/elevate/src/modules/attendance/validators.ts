@@ -89,6 +89,17 @@ export const assignScheduleSchema = z.object({
   zone: z.preprocess(blankToUndefined, z.string().refine(isValidTimeZone, "Choose a valid time zone").optional()),
 });
 export const endScheduleSchema = z.object({ employeeId: uuid, endDate: ymd });
+/** HR fixes a recent schedule in place (a mistake), with a reason. Dates are not changed here. */
+export const correctScheduleSchema = z.object({
+  employeeId: uuid,
+  startTime: hhmm,
+  endTime: hhmm,
+  weekdays: z.array(z.number().int().min(1).max(7)).min(1, "Choose at least one working day").max(7).transform((d) => [...new Set(d)].sort((a, b) => a - b)),
+  breakMinutes: z.preprocess(toNumber, z.number().int().min(0, "Zero or more").max(240, "240 at most")).default(0),
+  /** Empty keeps each schedule's own zone. */
+  zone: z.preprocess(blankToUndefined, z.string().refine(isValidTimeZone, "Choose a valid time zone").optional()),
+  reason: z.string().trim().min(5, "Say why in a few words").max(300, "Use 300 characters or fewer"),
+});
 
 const instant = z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a real date and time");
 const text = (min: number, max: number, minMessage: string) => z.string().trim().min(min, minMessage).max(max, `Use ${max} characters or fewer`);

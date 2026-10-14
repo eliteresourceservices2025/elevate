@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { formatDateOnly } from "@/lib/time";
-import { endSchedule, assignSchedule } from "../schedule-actions";
+import { endSchedule, assignSchedule, correctSchedule } from "../schedule-actions";
 import { WEEKDAYS } from "../schedule";
 import type { ScheduleListRow } from "../queries";
 
@@ -30,6 +30,24 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [breakMinutes, setBreakMinutes] = useState("60");
   const [zone, setZone] = useState("");
+  // Correcting a recent schedule in place (a mistake), with a reason.
+  const [fix, setFix] = useState<ScheduleListRow | null>(null);
+  const [fixStart, setFixStart] = useState("09:00");
+  const [fixEnd, setFixEnd] = useState("17:00");
+  const [fixBreak, setFixBreak] = useState("60");
+  const [fixDays, setFixDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [fixZone, setFixZone] = useState("");
+  const [fixReason, setFixReason] = useState("");
+  const openFix = (r: ScheduleListRow) => {
+    if (!r.correctable) return;
+    setFix(r);
+    setFixStart(r.correctable.startTime);
+    setFixEnd(r.correctable.endTime);
+    setFixBreak(String(r.correctable.breakMinutes));
+    setFixDays(r.correctable.weekdays);
+    setFixZone("");
+    setFixReason("");
+  };
 
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -114,6 +132,53 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
         </div>
       </form>
 
+      {fix ? (
+        <form
+          className="space-y-4 rounded-xl border border-amber-500/50 bg-card p-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(
+              () => correctSchedule({ employeeId: fix.employeeId, startTime: fixStart, endTime: fixEnd, weekdays: fixDays, breakMinutes: fixBreak, zone: fixZone, reason: fixReason }),
+              "Schedule corrected.",
+              () => setFix(null),
+            );
+          }}
+        >
+          <div>
+            <h2 className="text-lg font-semibold">Correct the recent schedule for {fix.name}</h2>
+            <p className="text-sm text-muted-foreground">
+              For a mistake only. This rewrites the {fix.correctable && fix.correctable.count > 1 ? `${fix.correctable.count} schedule entries` : "schedule entry"} that started in the last 7 days, keeping their dates; entries that end up identical and touch are joined into one. It is recorded with your reason. Older schedules are never rewritten: set a new one from a date instead.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <TextField id="fx-start" label="Shift starts" type="time" value={fixStart} onChange={(e) => setFixStart(e.target.value)} required />
+            <TextField id="fx-end" label="Shift ends" type="time" value={fixEnd} onChange={(e) => setFixEnd(e.target.value)} required />
+            <TextField id="fx-break" label="Unpaid break (minutes)" type="number" min="0" max="240" value={fixBreak} onChange={(e) => setFixBreak(e.target.value)} />
+            <TextField id="fx-zone" label="Time zone" list="sc-zones" value={fixZone} onChange={(e) => setFixZone(e.target.value)} placeholder="Keep each entry's zone" />
+          </div>
+          <fieldset className="space-y-1.5">
+            <legend className="text-sm font-medium">Working days</legend>
+            <div className="flex flex-wrap gap-3">
+              {WEEKDAYS.map((w) => (
+                <label key={w.n} htmlFor={`fx-day-${w.n}`} className="flex items-center gap-1.5 text-sm">
+                  <input id={`fx-day-${w.n}`} type="checkbox" className="size-4 accent-primary" checked={fixDays.includes(w.n)} onChange={(e) => setFixDays((d) => (e.target.checked ? [...d, w.n] : d.filter((x) => x !== w.n)))} />
+                  {w.short}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <TextField id="fx-reason" label="Why is this being corrected?" value={fixReason} onChange={(e) => setFixReason(e.target.value)} required maxLength={300} hint="For example: two clients, one shift. No client or patient details." />
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" disabled={pending || fixDays.length === 0 || fixReason.trim().length < 5}>
+              Correct schedule
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setFix(null)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : null}
+
       <section aria-label="Schedules" className="space-y-2">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h2 className="text-lg font-semibold">
@@ -176,7 +241,12 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
                     ) : null}
                   </TableCell>
                   <TableCell>{r.current?.manila ?? "-"}</TableCell>
-                  <TableCell>
+                  <TableCell className="space-x-1 whitespace-nowrap">
+                    {r.correctable ? (
+                      <Button size="sm" variant="outline" disabled={pending} onClick={() => openFix(r)}>
+                        Correct
+                      </Button>
+                    ) : null}
                     {r.current ? (
                       <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => endSchedule({ employeeId: r.employeeId, endDate: today }), "Schedule ended.")}>
                         End today
