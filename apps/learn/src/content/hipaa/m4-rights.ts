@@ -90,7 +90,7 @@ export const m4: CourseModule = {
         {
           type: "compare",
           left: { title: "In the set", items: ["Medical records", "Billing records and claims", "Enrollment and payment records for a health plan", "Records used to make decisions about the patient"] },
-          right: { title: "Generally not in the set", items: ["Psychotherapy notes", "Information compiled for use in a legal proceeding", "Information that is not about the patient"] },
+          right: { title: "Not open to the right of access", items: ["Psychotherapy notes", "Information compiled for use in a legal proceeding", "A few other narrow exclusions the client applies"] },
         },
       ],
     },

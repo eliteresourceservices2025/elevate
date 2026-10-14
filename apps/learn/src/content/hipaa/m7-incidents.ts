@@ -61,11 +61,11 @@ export const m7: CourseModule = {
       id: "breach-definition",
       title: "Incident and breach",
       blocks: [
-        { type: "paragraph", text: "A **breach** is an **impermissible use or disclosure** of PHI that compromises its privacy or security. Not every incident is a breach, and that decision is not yours to make." },
+        { type: "paragraph", text: "A **breach** is an impermissible **acquisition, access, use or disclosure** of PHI that compromises its privacy or security. Not every incident is a breach, and that decision is not yours to make." },
         {
           type: "compare",
           left: { title: "Incident", items: ["Anything that may have exposed or weakened protection", "Reported by anyone, the same day", "Often turns out to be low risk"] },
-          right: { title: "Breach", items: ["An impermissible use or disclosure that compromises PHI", "Decided by the client and ERS after an assessment", "Triggers notification duties"] },
+          right: { title: "Breach", items: ["An impermissible acquisition, access, use or disclosure that compromises PHI", "Decided by the client and ERS after an assessment", "Triggers notification duties"] },
         },
         { type: "callout", tone: "tip", text: "Your job is to report quickly and truthfully. Theirs is to assess and decide." },
       ],
@@ -233,7 +233,7 @@ export const m7: CourseModule = {
           type: "glossary",
           terms: [
             { term: "Incident", meaning: "Anything that may have exposed, changed or blocked access to information, or broken a rule." },
-            { term: "Breach", meaning: "An impermissible use or disclosure of PHI that compromises its privacy or security." },
+            { term: "Breach", meaning: "An impermissible acquisition, access, use or disclosure of PHI that compromises its privacy or security." },
             { term: "Unsecured PHI", meaning: "PHI that has not been made unusable, unreadable or indecipherable to unauthorized people." },
             { term: "Risk assessment", meaning: "The documented review of four factors used to decide whether PHI was compromised." },
             { term: "Discovery", meaning: "The first day a breach is known, or would have been known with reasonable care." },

@@ -41,7 +41,11 @@ beyond HIPAA), **Counsel** (a legal judgment the course should not make alone).
 | R10 | 45 CFR 164.504(e) (business associate contract provisions) | https://www.ecfr.gov/current/title-45/part-164/section-164.504 |
 | R11 | 45 CFR 164.512 (disclosures that do not need authorization) | https://www.ecfr.gov/current/title-45/part-164/section-164.512 |
 
-## Claim by claim
+## Claim by claim (seven-module text of the earlier version)
+
+> The tables from here to "Version history" check the earlier seven-module text. The deepened ten-module course
+> (docs/learn/12-deepening-plan.md) is checked in the next section, **"Deepened course: claim by claim"**, which also records
+> every correction that check produced. Where a claim is unchanged the earlier verdict stands.
 
 ### Module 1: foundations
 
@@ -140,6 +144,156 @@ beyond HIPAA), **Counsel** (a legal judgment the course should not make alone).
 
 The scenarios restate Modules 1 to 6; they contain no additional factual claims. Names and details are invented.
 
+## Deepened course: claim by claim (checked 14 October 2026)
+
+**How this was checked.** Each statement below was compared with the regulation text (the current eCFR, read through the Legal
+Information Institute's mirror of 45 CFR) and with HHS's own pages (read in a browser, because HHS refuses automated page
+fetches). The text was read, not recalled. Where a statement is ERS policy rather than law, it is marked.
+
+**Extra sources used for the deepened course**
+
+| Ref | Source | Address |
+| --- | --- | --- |
+| R12 | 45 CFR 164.524 (access: 30 days, one 30-day extension, cost-based fee, form and format, third-party direction, exclusions, reviewable and unreviewable denials) | https://www.law.cornell.edu/cfr/text/45/164.524 |
+| R13 | 45 CFR 164.526 (amendment: 60 days, one 30-day extension, four grounds to deny, statement of disagreement) | https://www.law.cornell.edu/cfr/text/45/164.526 |
+| R14 | 45 CFR 164.528 (accounting: six years, 60 days plus 30, first request in 12 months free, excluded disclosures) | https://www.law.cornell.edu/cfr/text/45/164.528 |
+| R15 | 45 CFR 164.522 (restrictions, paid-in-full exception, confidential communications) | https://www.law.cornell.edu/cfr/text/45/164.522 |
+| R16 | 45 CFR 164.508 (authorization elements and statements; psychotherapy notes; marketing; sale of PHI) | https://www.law.cornell.edu/cfr/text/45/164.508 |
+| R17 | 45 CFR 164.520 (notice of privacy practices: first service, posting, website) | https://www.law.cornell.edu/cfr/text/45/164.520 |
+| R18 | 45 CFR 164.502 (permitted and required disclosures, minimum necessary exceptions, personal representatives) | https://www.law.cornell.edu/cfr/text/45/164.502 |
+| R19 | 45 CFR 164.512 (the twelve public-interest and benefit headings) | https://www.law.cornell.edu/cfr/text/45/164.512 |
+| R20 | 45 CFR 164.404, 164.406, 164.408, 164.410 (notification to individuals, media, HHS and by a business associate) | https://www.law.cornell.edu/cfr/text/45/164.404 |
+| R21 | 45 CFR 160.404 (the four civil penalty tiers; amounts adjusted annually) and 160.306 (complaints within 180 days) | https://www.law.cornell.edu/cfr/text/45/160.404 |
+| R22 | 45 CFR 164.308, 164.310, 164.312 (required and addressable labels) | https://www.law.cornell.edu/cfr/text/45/164.308 |
+| S10 | HHS, Fact Sheet: Ransomware and HIPAA | https://www.hhs.gov/hipaa/for-professionals/security/guidance/cybersecurity/ransomware-fact-sheet/index.html |
+| S11 | HHS, Use of Online Tracking Technologies by HIPAA Covered Entities and Business Associates (with the note on the 20 June 2024 court order) | https://www.hhs.gov/hipaa/for-professionals/privacy/guidance/hipaa-online-tracking/index.html |
+
+### Module 2 additions (PHI, the 18 identifiers)
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| The 18 identifiers, in two tables of nine, are the list in 164.514(b)(2)(i); the list covers the person and relatives, employers and household members | R8 | Confirmed (**Refined**: the relatives, employers and household members sentence was added) |
+| Two de-identification methods: Safe Harbor (remove the 18, no actual knowledge) and Expert Determination (very small risk, documented) | R8 | Confirmed |
+| Not PHI: employment records held as employer, education records (FERPA), decedents of more than 50 years, de-identified information | R1 (160.103); R8 | Confirmed |
+
+### Module 3 additions (the Privacy Rule)
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| Treatment, payment and operations are permitted without asking each time; incidental uses are permitted | R18 (a)(1) | Confirmed |
+| The disclosures the law lists without authorization: required by law, public health, abuse and neglect, oversight, judicial proceedings, law enforcement, decedents, organ donation, research, serious threat, government functions, workers' compensation | R19 | Confirmed (the lesson names seven and says "a defined list") |
+| A valid authorization has: description, who discloses, who receives, purpose, expiration, signature and date; plus statements on revocation, conditioning and redisclosure | R16 (c)(1), (c)(2) | Confirmed |
+| Psychotherapy notes need a specific authorization with limited exceptions | R16 (a)(2) | Confirmed |
+| Marketing needs authorization, except face-to-face and nominal gifts; selling PHI needs authorization | R16 (a)(3), (a)(4) | Confirmed |
+| Minimum necessary does not apply to treatment disclosures to providers, to the individual, under an authorization, to HHS, or when required by law | R18 (b) | Confirmed |
+| Organizations must verify identity and authority of an unknown requester | R8 (164.514(h)) | Confirmed |
+| Family and friends may be told relevant information if the patient agrees or does not object | 164.510(b) (read in this check) | Confirmed (the lesson leaves the decision to the client) |
+
+### Module 4: patients' rights
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| A clinic gives the notice at first service, posts it prominently, and posts it on its website | R17 (c)(2), (c)(3) | Confirmed |
+| Access: respond within 30 days, one 30-day extension with a written reason | R12 | Confirmed |
+| Fee limited to copying labor, supplies, postage and an agreed summary | R12 | Confirmed |
+| An electronic copy in the form requested if readily producible; the copy can be directed to a named third party in a signed written request | R12 | Confirmed |
+| Psychotherapy notes and information compiled for legal proceedings are not open to access; some denials can be reviewed | R12 | Confirmed (**Refined**: the "designated record set" comparison was reworded to "not open to the right of access") |
+| Amendment: 60 days, one 30-day extension; four denial grounds; statement of disagreement | R13 | Confirmed |
+| Accounting: six years; 60 days plus 30; first request in 12 months free; treatment, payment and operations, to the person and authorized disclosures are left out | R14 | Confirmed |
+| A clinic need not agree to a restriction, except a request not to tell the health plan about a service paid in full out of pocket | R15 (a)(1)(ii), (vi) | Confirmed |
+| Providers must accommodate reasonable confidential-communication requests and cannot require a reason | R15 (b) | Confirmed |
+| A personal representative is treated as the individual, with exceptions for minors' own consent and for abuse or endangerment | R18 (g) | Confirmed |
+| A complaint to HHS must be filed within 180 days of when the person knew, unless waived for good cause; a clinic must not retaliate or make people waive rights | R21 (160.306); R9 (g), (h) | Confirmed |
+| What a VA does: take down the request and route it the same day; no promises | ERS procedure | ERS policy |
+
+### Module 5: business associates
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| A business associate does a function for a covered entity involving PHI (billing, claims, analysis, legal, accounting, consulting, and others); a subcontractor is one a business associate delegates to | R1 | Confirmed |
+| The agreement must: set permitted uses, forbid other use, require safeguards and Subpart C compliance, report breaches, bind subcontractors, support access, amendment and accounting, open books to HHS, return or destroy at the end, and allow termination for a material violation | R10 (164.504(e)(2)) | Confirmed |
+| Business associates and subcontractors answer directly for the Security Rule and certain Privacy Rule parts since 2009 | S3; Module 1 verdict | Confirmed |
+| A business associate must tell the covered entity of a breach without unreasonable delay and within 60 days | R20 (164.410) | Confirmed |
+
+### Module 6: the Security Rule
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| Protects the confidentiality, integrity and availability of ePHI; three families of safeguards | S3; R22 | Confirmed |
+| A risk analysis, risk management, sanction policy and activity review are required | R22 (a)(1) | Confirmed |
+| A data backup plan, disaster recovery plan and emergency-mode plan are required; testing and criticality analysis are addressable | R22 (a)(7) | Confirmed |
+| Unique user identification and emergency access are required; automatic logoff and encryption are addressable | R22 (164.312(a)(2)) | Confirmed |
+| Disposal and media re-use are required; accountability and backup storage are addressable | R22 (164.310(d)(2)) | Confirmed |
+| "Addressable" means implement it, or document why and use an equal alternative | S3; R22 | Confirmed |
+| Security awareness training covers reminders, protection from malicious software, log-in monitoring and password management | R22 (a)(5) | Confirmed (all four are addressable) |
+| Ransomware is a security incident; the contingency plan and incident procedures apply | S10 | Confirmed |
+| The stricter Security Rule is a proposal; the current rule remains in effect | S7, S9; checked again on 14 October 2026 through secondary reports that the agenda still lists final action as long-term (July 2027) | Confirmed (**Refined**: the lesson now says it was announced in December 2024 and published in January 2025). **Re-check at publication** |
+| Remote work, approved systems, copies, devices, lost devices | R3 (workstation use and security, device and media controls); ERS policy | Confirmed; ERS policy where the lesson gives a rule |
+
+### Module 7: incidents and breaches
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| A breach is an impermissible acquisition, access, use or disclosure that compromises security or privacy | R5 | Confirmed (**Refined**: "acquisition, access" added to the definition) |
+| It is presumed unless a documented assessment shows a low probability of compromise; four factors | R5; S10 | Confirmed |
+| Three exceptions: good-faith unintentional access; inadvertent disclosure between authorized people; good-faith belief the recipient could not retain it | R5 | Confirmed |
+| Unsecured PHI is not made unusable, unreadable or indecipherable (encryption, destruction) | R5; S4 | Confirmed |
+| Notice to individuals within 60 days of discovery, first-class mail or agreed email, substitute notice, plain-language content | R20 (164.404) | Confirmed |
+| More than 500 residents of a state: media notice within 60 days; 500 or more: HHS at the same time as the individual notice; fewer than 500: log, report within 60 days after year end | R20 (164.406, 164.408) | Confirmed |
+| Discovery is the first day known, or knowable with reasonable diligence, by the workforce other than the person who committed it | R6; R20 | Confirmed |
+| Ransomware that encrypts ePHI is a breach unless a low probability of compromise is shown | S10 questions 6 and 7 | Confirmed |
+| No retaliation for complaints | R9 (g) | Confirmed |
+
+### Module 8: enforcement
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| Four civil tiers: did not know; reasonable cause; willful neglect corrected within 30 days; willful neglect not corrected. Amounts are adjusted every year, so the course gives none | R21 (160.404); S2 | Confirmed |
+| Criminal: 1 year; 5 years with false pretenses; 10 years for commercial advantage, personal gain or malicious harm; DOJ prosecutes | S2 (checked again 14 October 2026) | Confirmed |
+| No penalty if not willful neglect and corrected within 30 days (the lesson says correction moves a violation toward a lower tier) | S2 | Confirmed (**Counsel**: the lesson states it more generally) |
+| State attorneys general can bring civil actions under HIPAA | HITECH Act section 13410(e) | Confirmed (statute, not re-fetched in this check) |
+| The three case studies | Invented, modelled on the kinds of facts OCR's public resolution agreements describe; no organization or amount is named | Generic |
+| 42 CFR Part 2, GINA, FERPA and state laws exist beside HIPAA | ONC guide chapter 7, Table 6; R1 for FERPA | Confirmed (**Counsel** open item 4 below) |
+
+### Modules 9 and 10 (labs)
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| Billing, claims management and collection activities are "payment"; a collection agency is a business associate | 164.501 (payment definition, read in this check); R1 | Confirmed |
+| Confirming that someone is a patient is a disclosure | R18; 164.510(a) (a patient may restrict the facility directory; read in this check) | Confirmed |
+| A patient's photo, story or named review used to promote needs written authorization; a reply to a review must not confirm patient status | R16 (a)(3); HHS | Confirmed (**Counsel**: confirm the reply guidance fits the clients' practice) |
+| Tracking scripts on appointment or login pages can send visit information to a vendor that then needs an agreement | S11 (the vacated part concerns unauthenticated public pages only) | Confirmed. The labs speak only of booking and login pages |
+| Faxes, exports, screen sharing and transcription tools are subject to minimum necessary, approved channels and agreements | R10; Module 6 | Confirmed; ERS policy where the lab gives a rule |
+
+### Cybersecurity course, version 2 additions
+
+The course makes no legal claims except where a screen says so. The statements that touch regulation:
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| HHS treats ransomware that encrypts ePHI as a presumed breach | S10 | Confirmed |
+| HIPAA requires workforce training, including protection from malicious software, log-in monitoring and password management | R9 (b); R22 (a)(5) | Confirmed |
+| A breach is treated as discovered when anyone in the workforce knows, or would have known with reasonable care | R6; R20 | Confirmed |
+| Backups the attack cannot reach allow recovery; a data backup plan is required | S10; R22 (a)(7) | Confirmed |
+| Passkeys and security keys resist phishing; a code from a caller is a password | NIST and CISA guidance (see 09-cybersecurity-sources.md) | General practice |
+| AI tools: information typed in goes to the company; a vendor handling PHI needs an agreement | R10; ERS policy | Confirmed; ERS policy for "approved tool" |
+
+### Corrections made by this check
+
+1. Module 2: added that the 18-identifier list also covers relatives, employers and household members.
+2. Module 4: the access exclusions were reworded from "not in the designated record set" to "not open to the right of access".
+3. Module 6: the Security Rule proposal is now dated as announced in December 2024 and published in January 2025.
+4. Module 7: the breach definition now includes "acquisition, access".
+5. Everything else was confirmed as written.
+
+### What this check could not do
+
+- HHS's own pages refuse automated fetches, so they were read in a browser; the regulation text was read through a mirror of the
+  current eCFR. Neither is a substitute for counsel reading the current eCFR before publishing.
+- The Security Rule proposal's status on 14 October 2026 was confirmed through secondary reports of the Federal Register and
+  the regulatory agenda. **Re-check it on the day of publishing.**
+- The case studies are generic by decision; they cannot be checked against a named resolution agreement.
+
 ## Version history of the course
 
 **Version 1 → 2 (this packet):**
@@ -191,6 +345,12 @@ addressable; S8 proposes making it required), and state-law specifics for two st
    action date of 07/00/2027), Modules 4 and 5 need a new version.
 7. **Penalty amounts** (civil) are deliberately not in the course. The criminal prison terms are.
 8. **Review date and reviewer** are recorded when the version is published (`reviewed_by`, `counsel_approved_on`).
+9. **Marketing and website guidance** (Modules 3 and 9): the "own appointment reminder is fine" and "reply to a review without
+   confirming" lines are practice guidance; confirm they match the clients' own policies.
+10. **Ransomware as a presumed breach** (Module 7 and the Cybersecurity course) follows HHS's fact sheet; confirm the wording.
+11. **Case studies** (Module 8) are generic; confirm counsel is comfortable with them as written.
+12. **Where work may be done from** (Module 5): the lesson says the client's agreement and payer rules decide; confirm how this
+    applies to a Philippine workforce under each client's contract.
 
 ## How to keep this current
 

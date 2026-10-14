@@ -278,7 +278,7 @@ HIPAA lists **eighteen identifiers**. If health information carries any of them,
 
 ### 2.5 What identifies a person (2 of 2)
 
-The other nine, which people forget most often:
+The other nine, which people forget most often. The list applies to the identifiers of the person and also to those of their relatives, employers and household members:
 
 **Identifiers 10 to 18**
 
@@ -699,10 +699,10 @@ The **designated record set** is the group of records the clinic uses to make de
 - Enrollment and payment records for a health plan
 - Records used to make decisions about the patient
 
-**Generally not in the set**
+**Not open to the right of access**
 - Psychotherapy notes
 - Information compiled for use in a legal proceeding
-- Information that is not about the patient
+- A few other narrow exclusions the client applies
 
 ### 4.6 The right to ask for a correction
 
@@ -1139,7 +1139,7 @@ Systems keep **audit logs**: who opened which record and when. The rule requires
 
 ### 6.18 The Security Rule is being updated
 
-In December 2024 HHS proposed a stricter Security Rule. Among other things, it would make multi-factor authentication and encryption of electronic patient information required (with limited exceptions), remove the "addressable" category, and require written incident response plans that are tested.
+HHS announced a proposal for a stricter Security Rule in December 2024, and it was published for comment in January 2025. Among other things, it would make multi-factor authentication and encryption of electronic patient information required (with limited exceptions), remove the "addressable" category, and require written incident response plans that are tested.
 
 It is a **proposal**. The current rule stays in effect until HHS finishes its work. ERS and its clients already use many of these practices, so your daily habits do not change.
 
@@ -1224,7 +1224,7 @@ Most incidents are ordinary mistakes, not attacks. These come up again and again
 
 ### 7.3 Incident and breach
 
-A **breach** is an **impermissible use or disclosure** of PHI that compromises its privacy or security. Not every incident is a breach, and that decision is not yours to make.
+A **breach** is an impermissible **acquisition, access, use or disclosure** of PHI that compromises its privacy or security. Not every incident is a breach, and that decision is not yours to make.
 
 **Incident**
 - Anything that may have exposed or weakened protection
@@ -1232,7 +1232,7 @@ A **breach** is an **impermissible use or disclosure** of PHI that compromises i
 - Often turns out to be low risk
 
 **Breach**
-- An impermissible use or disclosure that compromises PHI
+- An impermissible acquisition, access, use or disclosure that compromises PHI
 - Decided by the client and ERS after an assessment
 - Triggers notification duties
 
@@ -1372,7 +1372,7 @@ You email a schedule with patient names to a clinic contact. A minute later you 
 
 **Terms**
 - **Incident**: Anything that may have exposed, changed or blocked access to information, or broken a rule.
-- **Breach**: An impermissible use or disclosure of PHI that compromises its privacy or security.
+- **Breach**: An impermissible acquisition, access, use or disclosure of PHI that compromises its privacy or security.
 - **Unsecured PHI**: PHI that has not been made unusable, unreadable or indecipherable to unauthorized people.
 - **Risk assessment**: The documented review of four factors used to decide whether PHI was compromised.
 - **Discovery**: The first day a breach is known, or would have been known with reasonable care.

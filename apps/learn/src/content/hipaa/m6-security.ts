@@ -274,7 +274,7 @@ export const m6: CourseModule = {
       id: "rule-changing",
       title: "The Security Rule is being updated",
       blocks: [
-        { type: "paragraph", text: "In December 2024 HHS proposed a stricter Security Rule. Among other things, it would make multi-factor authentication and encryption of electronic patient information required (with limited exceptions), remove the \"addressable\" category, and require written incident response plans that are tested." },
+        { type: "paragraph", text: "HHS announced a proposal for a stricter Security Rule in December 2024, and it was published for comment in January 2025. Among other things, it would make multi-factor authentication and encryption of electronic patient information required (with limited exceptions), remove the \"addressable\" category, and require written incident response plans that are tested." },
         { type: "paragraph", text: "It is a **proposal**. The current rule stays in effect until HHS finishes its work. ERS and its clients already use many of these practices, so your daily habits do not change." },
         { type: "callout", tone: "tip", text: "ERS updates this course when the rules change. Always follow the version in front of you and your client's instructions." },
       ],

@@ -88,7 +88,7 @@ export const m2: CourseModule = {
       id: "identifiers-2",
       title: "What identifies a person (2 of 2)",
       blocks: [
-        { type: "paragraph", text: "The other nine, which people forget most often:" },
+        { type: "paragraph", text: "The other nine, which people forget most often. The list applies to the identifiers of the person and also to those of their relatives, employers and household members:" },
         {
           type: "table",
           caption: "Identifiers 10 to 18",
