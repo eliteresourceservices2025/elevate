@@ -21,3 +21,7 @@
 - **Header** (`ClockStatus.shiftEndMs`, `extraWindows`): 5 minutes after the shift end with no approved window, a "Your shift has ended" prompt (ask for extra hours, clock out, or dismiss); 5 minutes before an approved window ends, a reminder. Neither clocks anyone out.
 - **Jobs:** `runExtraHoursReminders` (hourly, once per request: a request still waiting when its window starts within 2 hours goes to the lead again and to HR; a client's request waits on the VA and the filer); `runWeeklyExtraHoursNotice` (Monday 8:00 Manila, in-app to HR: last week's approved extra hours per client, by when each window started).
 - **Extra hours page** (everyone): your requests and the form; leads and HR also see the review queue and the "file for the client" form.
+
+## Correcting a recent schedule
+- HR and Super Admin (`schedules.manage`) can fix a mistake in place with `correctSchedule` (Schedules page, "Correct"): every entry that started in the last 7 days or later takes the corrected shift and keeps its own dates; neighbouring entries that now read the same and touch are joined into one. Older schedules are never rewritten (assign a new one from a date). A reason is required; the audit entry `schedule.correct` holds before/after and the reason; the person is notified and the last days of attendance are rebuilt from the clock events.
+- This exists because a person on two clients in one day needs ONE shift (earliest start to latest end, the gap as the break), and adding the second part as a later schedule replaces the first.

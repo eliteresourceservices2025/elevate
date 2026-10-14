@@ -404,6 +404,8 @@ export type ScheduleListRow = {
   current: { days: string; client: string; manila: string; effectiveFrom: string; breakMinutes: number } | null;
   /** A schedule that starts later, when one is already set. */
   upcoming: { effectiveFrom: string; days: string; client: string } | null;
+  /** Recent schedules HR may correct in place (started in the last 7 days or later), with the newest one's shift to prefill. */
+  correctable: { count: number; startTime: string; endTime: string; weekdays: number[]; breakMinutes: number; zone: string } | null;
 };
 
 /** Everyone active with their current schedule (or none). HR only. */
@@ -426,6 +428,11 @@ export async function listSchedules(): Promise<{ rows: ScheduleListRow[]; withou
       team: p.team,
       zone: now?.zone ?? later?.zone ?? null,
       current: now ? { ...pickDescription(now, today), effectiveFrom: now.effectiveFrom, breakMinutes: now.breakMinutes } : null,
+      correctable: (() => {
+        const recent = list.filter((s) => s.effectiveFrom >= addDays(today, -7));
+        const last = recent[recent.length - 1];
+        return last ? { count: recent.length, startTime: last.startTime, endTime: last.endTime, weekdays: [...last.weekdays], breakMinutes: last.breakMinutes, zone: last.zone } : null;
+      })(),
       upcoming: later ? { effectiveFrom: later.effectiveFrom, days: describeSchedule(later, later.effectiveFrom).days, client: describeSchedule(later, later.effectiveFrom).client } : null,
     };
   });
@@ -499,6 +506,7 @@ export async function listTeamSchedules(): Promise<{ rows: ScheduleListRow[] }> 
         team: p.team,
         zone: now?.zone ?? later?.zone ?? null,
         current: now ? { ...pickDescription(now, today), effectiveFrom: now.effectiveFrom, breakMinutes: now.breakMinutes } : null,
+        correctable: null,
         upcoming: later ? { effectiveFrom: later.effectiveFrom, days: describeSchedule(later, later.effectiveFrom).days, client: describeSchedule(later, later.effectiveFrom).client } : null,
       };
     }),
