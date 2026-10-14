@@ -22,7 +22,6 @@ import { randomUUID } from "node:crypto";
 
 const CSV_PATH = "C:/Users/lorie/Downloads/Attendance Sheet - October Timesheet.csv";
 const DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
-const COMPANY_TIMEZONE = "America/Phoenix";
 
 const sql = postgres(DATABASE_URL, { prepare: false, max: 5 });
 
@@ -118,9 +117,9 @@ function parseCsv(content: string): CsvRow[] {
       // Collect unique employees from CSV
       if (!CSV_EMPLOYEES.has(cols[1])) {
         const nameParts = cols[1].trim().split(/\s+/);
-        let firstName = nameParts[0];
+        const firstName = nameParts[0];
         let middleName = null;
-        let lastName = nameParts[nameParts.length - 1];
+        const lastName = nameParts[nameParts.length - 1];
         if (nameParts.length > 2) {
           middleName = nameParts.slice(1, -1).join(" ");
         }
@@ -146,7 +145,7 @@ function parseScheduleString(schedule: string): ParsedSchedule | null {
   const startStr = parts[0].trim();
   const rest = parts[1].trim();
 
-  const timeZoneMatch = rest.match(/^(.+?)\s+([A-Z]{2,3})(?:\s+([MTWRFSU\-]+))?$/i);
+  const timeZoneMatch = rest.match(/^([0-9]{1,2}:[0-9]{2}\s*(?:am|pm))\s+([A-Z]{2,3})(?:\s+([MTWRFSU\-]+))?$/i);
   if (!timeZoneMatch) {
     console.warn(`  Could not parse time/timezone from: "${rest}"`);
     return null;
@@ -298,7 +297,7 @@ async function main() {
 
   // Find max existing employee number
   const existingNumbers = allEmployees
-    .map(e => (e as any).employee_number?.match(/ERS-(\d+)/)?.[1])
+    .map(e => e.employee_number?.match(/ERS-(\d+)/)?.[1])
     .filter((n): n is string => n !== undefined)
     .map(n => parseInt(n, 10));
   let nextEmployeeNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
@@ -410,7 +409,7 @@ async function main() {
   let updatedAssignments = 0;
   let createdSchedules = 0;
 
-  for (const [key, assignment] of assignments) {
+  for (const [, assignment] of assignments) {
     const { employeeId, clientId, schedule: sched, startDate } = assignment;
 
     const emp = allEmployees.find(e => e.id === employeeId);
