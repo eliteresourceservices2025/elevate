@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientKey, hoursPerWeek, nameTokens, parseScheduleText, parseWeekdays, personKey, suggestedBreak } from "./parse";
+import { clientKey, closest, hoursPerWeek, nameTokens, parseScheduleText, parseWeekdays, personKey, similarity, suggestedBreak } from "./parse";
 import { buildPlan, type LiveData } from "./plan";
 import { detectLayout, guessTableColumns, readDayBlocks, readTable } from "./reader";
 
@@ -162,5 +162,46 @@ describe("remembered matches", () => {
   it("keys a spelling the same way however it is written", () => {
     expect(personKey("Reyes, Maria Santos")).toBe(personKey("Maria  Santos Reyes"));
     expect(clientKey("Acme Health, LLC")).toBe(clientKey("ACME HEALTH LLC"));
+  });
+});
+
+describe("closest match", () => {
+  const clients = [
+    { id: "a", label: "Inhouse Medical" },
+    { id: "b", label: "Golden Years Primary Care" },
+    { id: "c", label: "Alturos Labs" },
+    { id: "d", label: "Zora Group" },
+  ];
+  it("suggests Inhouse Medical for In-House, and a clear spelling variant", () => {
+    expect(closest("In-House", clients)?.id).toBe("a");
+    expect(closest("Golden Years Primary Care, LLC", clients)?.id).toBe("b");
+    expect(closest("Alturos Lab", clients)?.id).toBe("c");
+  });
+  it("suggests nothing when nothing is alike or two are about as close", () => {
+    expect(closest("Davlei", clients)).toBeNull();
+    expect(closest("Health", [{ id: "x", label: "Nourish Health" }, { id: "y", label: "Elite Health" }])).toBeNull();
+  });
+  it("scores identical names 1 and unrelated names low", () => {
+    expect(similarity("Zora Group", "ZORA  group")).toBe(1);
+    expect(similarity("Zora Group", "Alturos Labs")).toBeLessThan(0.3);
+  });
+  it("pre-selects the closest client on a decision and the closest person for a near spelling", () => {
+    const l: LiveData = {
+      ...live,
+      employees: [...live.employees, { id: id(8), workEmail: "maribel@example.com", first: "Maribel", middle: null, last: "Reyes", preferred: null, status: "active" }],
+      clients: [...live.clients, { id: id(103), name: "Inhouse Medical" }],
+    };
+    const p = buildPlan(
+      [
+        { date: "2026-10-05", name: "Maria Santos Reyes", client: "In-House", schedule: "8:00 am - 5:00 pm AZ", row: 1 },
+        { date: "2026-10-05", name: "Maribell Reyes", client: "Beta Care", schedule: "8:00 am - 5:00 pm AZ", row: 2 },
+      ],
+      l,
+      { today: "2026-10-14" },
+    );
+    const byName = Object.fromEntries(p.decisions.map((d) => [d.sheetName, d]));
+    expect(byName["Maria Santos Reyes"].kind).toBe("client");
+    expect(byName["Maria Santos Reyes"].suggestion).toEqual({ id: id(103), label: "Inhouse Medical" });
+    expect(byName["Maribell Reyes"].suggestion?.id).toBe(id(8));
   });
 });

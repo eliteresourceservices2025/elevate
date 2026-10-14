@@ -36,7 +36,8 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
   const [ending, setEnding] = useState<Set<string>>(new Set());
   const [endDate, setEndDate] = useState(today());
   const [ackBackdated, setAckBackdated] = useState(false);
-  const [choice, setChoice] = useState<Record<string, string>>({});
+  // The closest record is pre-selected where there is a clear one; a person still presses the button.
+  const [choice, setChoice] = useState<Record<string, string>>(() => Object.fromEntries(plan.decisions.flatMap((d) => (d.suggestion ? [[d.key, d.suggestion.id]] : []))));
 
   const rows = plan.rows.filter((r) => (tab === "update" ? r.status === "update" : tab === "unchanged" ? r.status === "unchanged" : false));
   const pagedRows = usePaged(rows, tab);
@@ -235,6 +236,7 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
                   <TableCell>
                     {targets && d.kind !== "other" ? (
                       <div className="flex flex-wrap items-center gap-2">
+                        {d.suggestion ? <span className="w-full text-xs text-muted-foreground">Closest match, selected for you: {d.suggestion.label}. Check it, then confirm.</span> : null}
                         <NativeSelect aria-label={`Choose the ${d.kind} for ${d.kind === "person" ? d.sheetName : d.sheetClient}`} value={choice[d.key] ?? ""} onChange={(e) => setChoice((c) => ({ ...c, [d.key]: e.target.value }))} className="max-w-64">
                           <option value="">Choose a {d.kind}</option>
                           {(d.kind === "person" ? targets.people : targets.clients).map((t) => (

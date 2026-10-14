@@ -1,4 +1,4 @@
-import { clientKey, dayNames, employeeKeys, hoursPerWeek, parseScheduleText, personKey, suggestedBreak } from "./parse";
+import { clientKey, closest, dayNames, employeeKeys, hoursPerWeek, parseScheduleText, personKey, suggestedBreak } from "./parse";
 import type { Observation } from "./reader";
 
 // Compares an attendance sheet with what ELEVATE already holds and says what each person would get: a new assignment and schedule, a
@@ -54,7 +54,9 @@ export type PlanRow = {
 
 /** `person` and `client` can be resolved on screen by choosing the real record (and remembering it); `other` needs the sheet or the records fixed. */
 export type DecisionKind = "person" | "client" | "other";
-export type Decision = { key: string; sheetName: string; sheetClient: string; reasons: string[]; kind: DecisionKind };
+/** The closest active person or client, offered as the pre-selected choice (a person still confirms it). */
+export type Suggestion = { id: string; label: string };
+export type Decision = { key: string; sheetName: string; sheetClient: string; reasons: string[]; kind: DecisionKind; suggestion: Suggestion | null };
 export type NotOnSheet = { assignmentId: string; employeeId: string; personName: string; clientName: string; assignmentStart: string };
 /** How many dated records a backdated change would touch (counts only). Filled in by the service, which can read them. */
 export type Impact = { attendanceDays: number; clockEvents: number; approvals: number; leaveRequests: number; extraHoursRequests: number };
@@ -92,7 +94,7 @@ export function buildPlan(observations: Observation[], live: LiveData, options: 
   const usedPeople = new Set<string>();
   for (const [key, obs] of [...pairs.entries()].sort()) {
     const [sheetName, sheetClient] = JSON.parse(key) as [string, string];
-    const decide = (kind: DecisionKind, ...reasons: string[]) => void decisions.push({ key, sheetName, sheetClient, reasons, kind });
+    const decide = (kind: DecisionKind, ...reasons: string[]) => void decisions.push({ key, sheetName, sheetClient, reasons, kind, suggestion: null });
 
     if ((clientsOfName.get(sheetName)?.size ?? 0) > 1) { decide("other", "Listed under more than one client on the sheet: choose which is current."); continue; }
 
@@ -119,14 +121,22 @@ export function buildPlan(observations: Observation[], live: LiveData, options: 
     const remembered = live.aliases?.persons[personKey(sheetName)];
     const rememberedPerson = remembered ? people.find((p) => p.id === remembered) : undefined;
     const matches = rememberedPerson ? [rememberedPerson] : [...new Map((byName.get(personKey(sheetName)) ?? []).map((m) => [m.id, m])).values()];
-    if (matches.length === 0) { decide("person", "No active person in ELEVATE has this name."); continue; }
+    if (matches.length === 0) {
+      decide("person", "No active person in ELEVATE has this name.");
+      decisions[decisions.length - 1].suggestion = closest(sheetName, people.map((p) => ({ id: p.id, label: [p.first, p.middle, p.last].filter(Boolean).join(" ") })));
+      continue;
+    }
     if (matches.length > 1) { decide("person", "More than one person in ELEVATE has this name."); continue; }
     const person = matches[0];
     if (usedPeople.has(person.id)) { decide("other", "The same person matched two different names on the sheet."); continue; }
 
     const rememberedClient = live.aliases?.clients[clientKey(sheetClient)];
     const clients = rememberedClient && live.clients.some((c) => c.id === rememberedClient) ? live.clients.filter((c) => c.id === rememberedClient) : (byClient.get(clientKey(sheetClient)) ?? []);
-    if (clients.length !== 1) { decide("client", clients.length === 0 ? "The client is not in ELEVATE under this name." : "More than one client in ELEVATE has this name."); continue; }
+    if (clients.length !== 1) {
+      decide("client", clients.length === 0 ? "The client is not in ELEVATE under this name." : "More than one client in ELEVATE has this name.");
+      if (clients.length === 0) decisions[decisions.length - 1].suggestion = closest(sheetClient, live.clients.map((c) => ({ id: c.id, label: c.name })));
+      continue;
+    }
     const client = clients[0];
 
     const dates = obs.map((o) => o.date ?? options.today).sort();
