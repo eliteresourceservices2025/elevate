@@ -62,6 +62,7 @@
 
 /* Light theme. Main color #6c1aba (the ERS website purple), gold as the accent. Text is a neutral deep ink, not violet. */
 :root {
+  color-scheme: light;
   --background: #faf8ff;
   --foreground: #231a33;
   --card: #ffffff;
@@ -98,6 +99,7 @@
 
 /* Dark theme: a neutral near-black with a hint of violet, lighter purple for actions, gold kept as the accent. */
 .dark {
+  color-scheme: dark;
   --background: #14101c;
   --foreground: #f1ecf8;
   --card: #1d1728;

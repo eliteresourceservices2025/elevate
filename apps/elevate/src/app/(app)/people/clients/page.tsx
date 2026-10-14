@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { clientTimeZones } from "@/lib/client-time-zones";
 import { orNotFound } from "@/lib/or-not-found";
 import { ClientRow, NewClientForm } from "@/modules/people/components/admin-forms";
 import { listClients } from "@/modules/people/queries";
@@ -8,6 +9,7 @@ export const metadata: Metadata = { title: "Clients" };
 
 export default async function ClientsPage() {
   const clients = await orNotFound(listClients());
+  const timeZones = clientTimeZones(Intl.supportedValuesOf("timeZone"), clients.map((client) => client.timeZone));
 
   return (
     <div className="w-full space-y-6">
@@ -21,12 +23,12 @@ export default async function ClientsPage() {
           information.
         </p>
       </div>
-      <NewClientForm />
+      <NewClientForm timeZones={timeZones} />
       <ul className="divide-y rounded-xl border bg-card px-4">
         {clients.length === 0 ? <li className="py-3 text-sm text-muted-foreground">No clients yet.</li> : null}
         {clients.map((c) => (
           <li key={c.id} className="py-3">
-            <ClientRow client={{ id: c.id, name: c.name, timeZone: c.timeZone, holidayCalendar: c.holidayCalendar === "PH" ? "PH" : "US", isActive: c.isActive, handlesPhi: c.handlesPhi }} />
+            <ClientRow client={{ id: c.id, name: c.name, timeZone: c.timeZone, holidayCalendar: c.holidayCalendar === "PH" ? "PH" : "US", isActive: c.isActive, handlesPhi: c.handlesPhi }} timeZones={timeZones} />
           </li>
         ))}
       </ul>

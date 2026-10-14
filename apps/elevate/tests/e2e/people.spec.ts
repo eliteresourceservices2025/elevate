@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createHrAccount, signInEnrollingMfa } from "./helpers";
+import { createHrAccount, signInEnrollingMfa, waitForHydration } from "./helpers";
 
 // Needs the local Supabase (`supabase start`) with migrations applied (`pnpm db:migrate`).
 // Creates a throwaway HR account and one fake person; both stay in the local database.
@@ -49,9 +49,29 @@ test("HR finds where to add a client, adds one, and assigns it to a person", asy
   await page.goto("/people");
   await page.getByRole("link", { name: "Clients", exact: true }).click();
   await page.waitForURL("**/people/clients", slow);
+  await waitForHydration(page, "#nc-name");
+  await page.getByRole("button", { name: "Dark", exact: true }).click();
+  await expect.poll(() => page.locator("html").evaluate((el) => getComputedStyle(el).colorScheme)).toBe("dark");
+  await page.getByRole("combobox", { name: "Holidays" }).selectOption("PH");
+  await page.getByRole("button", { name: "Light", exact: true }).click();
+  await expect.poll(() => page.locator("html").evaluate((el) => getComputedStyle(el).colorScheme)).toBe("light");
+  await page.getByRole("combobox", { name: "Holidays" }).selectOption("US");
   await page.getByLabel("Client name").fill(`E2E Client ${stamp}`);
+  await page.getByRole("button", { name: "Time zone" }).click();
+  await expect(page.getByRole("option", { name: "Asia/Manila" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Search time zones" }).fill("Europe/London");
+  await page.getByRole("option", { name: "Europe/London" }).click();
+  await expect(page.getByRole("button", { name: "Time zone" })).toContainText("Europe/London");
   await page.getByRole("button", { name: /Add client/ }).click();
-  await expect(page.getByText(`E2E Client ${stamp}`).first()).toBeVisible(slow);
+  const clientRow = page.getByRole("listitem").filter({ hasText: `E2E Client ${stamp}` });
+  await expect(clientRow).toContainText("Europe/London", slow);
+  await clientRow.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Time zone" }).last().click();
+  await page.getByRole("combobox", { name: "Search time zones" }).fill("Asia/Tokyo");
+  await page.getByRole("combobox", { name: "Search time zones" }).press("ArrowDown");
+  await page.getByRole("combobox", { name: "Search time zones" }).press("Enter");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(clientRow).toContainText("Asia/Tokyo", slow);
 
   // A person, then assign the new client from their profile (which also links back to Clients)
   await page.goto("/people/new");

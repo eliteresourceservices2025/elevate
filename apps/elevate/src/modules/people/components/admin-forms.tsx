@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
+import { TimeZonePicker } from "@/components/time-zone-picker";
 import { Button } from "@/components/ui/button";
 import { archiveCustomFieldDef, createClient, createCustomFieldDef, updateClient } from "../actions";
 import { CUSTOM_FIELD_TYPES, CUSTOM_FIELD_VISIBILITY } from "../constants";
@@ -25,28 +26,7 @@ function useRun() {
   return { run, pending };
 }
 
-const COMMON_ZONES = [
-  "America/Phoenix",
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Anchorage",
-  "Pacific/Honolulu",
-  "Asia/Manila",
-];
-
-function ZoneList() {
-  return (
-    <datalist id="zone-options">
-      {COMMON_ZONES.map((z) => (
-        <option key={z} value={z} />
-      ))}
-    </datalist>
-  );
-}
-
-export function NewClientForm() {
+export function NewClientForm({ timeZones }: { timeZones: readonly string[] }) {
   const { run, pending } = useRun();
   const [name, setName] = useState("");
   const [timeZone, setTimeZone] = useState("America/New_York");
@@ -54,21 +34,21 @@ export function NewClientForm() {
   const [handlesPhi, setHandlesPhi] = useState(true);
   return (
     <form
-      className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-4 sm:items-end"
+      className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3"
       onSubmit={(e) => {
         e.preventDefault();
         run(() => createClient({ name, timeZone, holidayCalendar, isActive: true, handlesPhi }), "Client added.", () => setName(""));
       }}
     >
-      <ZoneList />
       <TextField id="nc-name" label="Client name" value={name} onChange={(e) => setName(e.target.value)} required />
-      <TextField id="nc-zone" label="Time zone" list="zone-options" value={timeZone} onChange={(e) => setTimeZone(e.target.value)} hint="Names only. Never enter patient information." />
+      <TimeZonePicker id="nc-zone" value={timeZone} onChange={setTimeZone} options={timeZones} />
       <SelectField id="nc-cal" label="Holidays" value={holidayCalendar} onChange={(e) => setHolidayCalendar(e.target.value as "PH" | "US")}>
         <option value="US">US holidays</option>
         <option value="PH">Philippine holidays</option>
       </SelectField>
+      <p className="text-xs text-muted-foreground sm:col-span-3">Names only. Never enter patient information.</p>
       <PhiToggle id="nc-phi" checked={handlesPhi} onChange={setHandlesPhi} />
-      <Button type="submit" disabled={pending || !name.trim()}>
+      <Button type="submit" disabled={pending || !name.trim()} className="sm:justify-self-start">
         Add client
       </Button>
     </form>
@@ -88,7 +68,7 @@ function PhiToggle({ id, checked, onChange }: { id: string; checked: boolean; on
   );
 }
 
-export function ClientRow({ client }: { client: { id: string; name: string; timeZone: string; holidayCalendar: "PH" | "US"; isActive: boolean; handlesPhi: boolean } }) {
+export function ClientRow({ client, timeZones }: { client: { id: string; name: string; timeZone: string; holidayCalendar: "PH" | "US"; isActive: boolean; handlesPhi: boolean }; timeZones: readonly string[] }) {
   const { run, pending } = useRun();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(client.name);
@@ -122,15 +102,14 @@ export function ClientRow({ client }: { client: { id: string; name: string; time
 
   return (
     <form
-      className="grid gap-3 sm:grid-cols-4 sm:items-end"
+      className="grid gap-3 sm:grid-cols-3"
       onSubmit={(e) => {
         e.preventDefault();
         run(() => updateClient({ clientId: client.id, name, timeZone, holidayCalendar, isActive: client.isActive, handlesPhi }), "Client updated.", () => setEditing(false));
       }}
     >
-      <ZoneList />
       <TextField id={`ec-name-${client.id}`} label="Client name" value={name} onChange={(e) => setName(e.target.value)} required />
-      <TextField id={`ec-zone-${client.id}`} label="Time zone" list="zone-options" value={timeZone} onChange={(e) => setTimeZone(e.target.value)} />
+      <TimeZonePicker id={`ec-zone-${client.id}`} value={timeZone} onChange={setTimeZone} options={timeZones} />
       <SelectField id={`ec-cal-${client.id}`} label="Holidays" value={holidayCalendar} onChange={(e) => setHolidayCalendar(e.target.value as "PH" | "US")}>
         <option value="US">US holidays</option>
         <option value="PH">Philippine holidays</option>
