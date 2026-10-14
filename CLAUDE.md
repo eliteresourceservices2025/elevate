@@ -190,6 +190,13 @@ The Learn app, course content and studio, assignment jobs, client add-ons, certi
 - Content is validated JSON, never HTML; published versions are frozen; the certificate PDF file is duplicated in both apps and a test fails if they differ.
 - Training never blocks work (overdue warns only); evidence and status views show completion only, never scores to leads or clients.
 
+### Schedule and client import from an attendance sheet — `docs/modules/schedule-import.md`
+Settings > Import schedules and clients: upload the team's attendance sheet (CSV or XLSX), preview what would change.
+
+- HR and Super Admin only; it sets assignments and schedules, never worked hours (the sheet's totals are ignored).
+- Anything it cannot match with certainty goes to a person with the reason; nothing is guessed, and people missing from the sheet are never ended automatically.
+- Rows are one encrypted payload, wiped on discard and after 14 days; audit entries hold counts only. Phase 1 is read-only.
+
 ### Privacy incident reports — `docs/modules/incidents.md`
 Staff privacy incident reports and their handling.
 

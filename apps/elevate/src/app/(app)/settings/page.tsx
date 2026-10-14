@@ -58,6 +58,13 @@ const SECTIONS = [
     description: "Move people from a TalentHR export: preview, commit and reconcile.",
   },
   {
+    href: "/settings/import-schedules",
+    action: "scheduleimport.manage",
+    icon: FileUp,
+    title: "Import schedules and clients",
+    description: "Read the attendance sheet and compare who works for which client and shift with ELEVATE (preview).",
+  },
+  {
     href: "/settings/go-live",
     action: "imports.manage",
     icon: ListChecks,

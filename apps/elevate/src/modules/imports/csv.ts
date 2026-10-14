@@ -41,6 +41,17 @@ function readRecords(text: string): string[][] {
   return rows;
 }
 
+/** The file as rows of cells, with no header handling (for sheets that are not a plain table). */
+export function parseCsvRecords(input: string): { records: string[][] } | { error: string } {
+  const text = input.replace(/^﻿/, "");
+  if (text.length > MAX_CSV_BYTES) return { error: "The file is larger than 2 MB." };
+  try {
+    return { records: readRecords(text).map((r) => r.map((v) => v.trim())) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "The file could not be read." };
+  }
+}
+
 /** Headers plus one record per non-empty line, keyed by header. Values are trimmed. A header may appear only once. */
 export function parseCsv(input: string): ParsedCsv {
   const text = input.replace(/^﻿/, "");
