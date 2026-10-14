@@ -39,7 +39,7 @@ for (const course of Object.values(COURSES)) {
         const ids = m.screens.map((s) => s.id);
         expect(new Set(ids).size, `${m.key} screen ids`).toBe(ids.length);
         expect(m.screens.length, `${m.key} screens`).toBeGreaterThanOrEqual(5);
-        const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => b.type === "scenario" || b.type === "check");
+        const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => b.type === "scenario" || b.type === "check" || b.type === "case");
         expect(interactive.length, `${m.key} interactive blocks`).toBeGreaterThanOrEqual(1);
       }
     });

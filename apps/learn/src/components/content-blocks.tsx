@@ -41,6 +41,34 @@ function Scenario({ block }: { block: Extract<Block, { type: "scenario" }> }) {
   );
 }
 
+function CaseStudy({ block }: { block: Extract<Block, { type: "case" }> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="block casestudy" aria-label={block.title}>
+      <h3>{block.title}</h3>
+      <p>
+        <strong>Scenario. </strong>
+        <Inline text={block.scenario} />
+      </p>
+      <p>
+        <strong>Question. </strong>
+        <Inline text={block.question} />
+      </p>
+      <button type="button" className="secondary" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        {open ? "Hide the answer" : "Show the answer"}
+      </button>
+      <div role="status" aria-live="polite">
+        {open ? (
+          <p className="feedback good">
+            <strong>Answer. </strong>
+            <Inline text={block.answer} />
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function Check({ block }: { block: Extract<Block, { type: "check" }> }) {
   const [picked, setPicked] = useState<number[]>([]);
   const [shown, setShown] = useState(false);
@@ -147,6 +175,88 @@ export function ContentBlocks({ blocks }: { blocks: Block[] }) {
             );
           case "scenario":
             return <Scenario key={i} block={block} />;
+          case "case":
+            return <CaseStudy key={i} block={block} />;
+          case "table":
+            return (
+              <div key={i} className="block tablewrap">
+                <table className="datatable">
+                  {block.caption ? <caption>{block.caption}</caption> : null}
+                  <thead>
+                    <tr>
+                      {block.columns.map((c, j) => (
+                        <th key={j} scope="col">
+                          {c}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row, r) => (
+                      <tr key={r}>
+                        {row.map((cell, c) => (c === 0 ? (
+                          <th key={c} scope="row">
+                            <Inline text={cell} />
+                          </th>
+                        ) : (
+                          <td key={c}>
+                            <Inline text={cell} />
+                          </td>
+                        )))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          case "layers":
+            return (
+              <section key={i} className="block layers" aria-label={block.title ?? "Layers"}>
+                {block.title ? <h3>{block.title}</h3> : null}
+                <ul>
+                  {block.items.map((item, j) => (
+                    <li key={j}>
+                      <strong>{item.label}</strong>
+                      <span>
+                        <Inline text={item.text} />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          case "timeline":
+            return (
+              <section key={i} className="block timeline" aria-label={block.title ?? "Timeline"}>
+                {block.title ? <h3>{block.title}</h3> : null}
+                <ol>
+                  {block.items.map((item, j) => (
+                    <li key={j}>
+                      <strong>{item.when}</strong>
+                      <span>
+                        <Inline text={item.text} />
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            );
+          case "glossary":
+            return (
+              <section key={i} className="block glossary" aria-label="Terms in this module">
+                <h3>Terms in this module</h3>
+                <dl>
+                  {block.terms.map((t, j) => (
+                    <Fragment key={j}>
+                      <dt>{t.term}</dt>
+                      <dd>
+                        <Inline text={t.meaning} />
+                      </dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              </section>
+            );
           case "check":
             return <Check key={i} block={block} />;
         }

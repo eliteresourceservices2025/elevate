@@ -40,7 +40,7 @@ export function lintCourse(content: CourseContent, questions: QuestionSeed[], ex
     const ids = m.screens.map((s) => s.id);
     if (new Set(ids).size !== ids.length) out.push({ level: "error", where: m.title, message: "Two screens in this module have the same id." });
     if (m.screens.length < 5) out.push({ level: "warning", where: m.title, message: `Only ${m.screens.length} screens (the shipped courses have at least 5).` });
-    const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => b.type === "scenario" || b.type === "check");
+    const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => b.type === "scenario" || b.type === "check" || b.type === "case");
     if (interactive.length === 0) out.push({ level: "warning", where: m.title, message: "No knowledge check or scenario: people have nothing to do in this module." });
     textRules(m.title, allText(m), out);
   }

@@ -55,6 +55,52 @@ export function BlockView({ block }: { block: Block }) {
           </ul>
         </div>
       );
+    case "table":
+      return (
+        <div className="overflow-x-auto text-sm">
+          {block.caption ? <p className="font-medium">{block.caption}</p> : null}
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>{block.columns.map((c, i) => <th key={i} className="border bg-secondary/40 p-1.5 text-left">{c}</th>)}</tr>
+            </thead>
+            <tbody>
+              {block.rows.map((r, i) => (
+                <tr key={i}>{r.map((cell, j) => <td key={j} className="border p-1.5 align-top">{cell}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    case "layers":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Layers{block.title ? ": " + block.title : ""}</strong>
+          <ul className="list-disc pl-5">{block.items.map((it, i) => <li key={i}><strong>{it.label}:</strong> {it.text}</li>)}</ul>
+        </div>
+      );
+    case "timeline":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Timeline{block.title ? ": " + block.title : ""}</strong>
+          <ol className="list-decimal pl-5">{block.items.map((it, i) => <li key={i}><strong>{it.when}:</strong> {it.text}</li>)}</ol>
+        </div>
+      );
+    case "glossary":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Terms</strong>
+          <ul className="list-disc pl-5">{block.terms.map((t, i) => <li key={i}><strong>{t.term}:</strong> {t.meaning}</li>)}</ul>
+        </div>
+      );
+    case "case":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Case: {block.title}</strong>
+          <p>{block.scenario}</p>
+          <p><em>{block.question}</em></p>
+          <p className="text-muted-foreground">Answer: {block.answer}</p>
+        </div>
+      );
     case "check":
       return (
         <div className="space-y-1 text-sm">

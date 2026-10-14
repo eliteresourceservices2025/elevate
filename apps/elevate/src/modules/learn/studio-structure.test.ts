@@ -28,7 +28,7 @@ describe("scaffolds", () => {
   });
 
   it("builds every block type and every question type to a valid shape", () => {
-    for (const type of ["paragraph", "list", "callout", "compare", "steps", "scenario", "check"] as const) {
+    for (const type of ["paragraph", "list", "callout", "compare", "steps", "scenario", "check", "table", "layers", "timeline", "glossary", "case"] as const) {
       const s = newScreen("Try", []);
       s.blocks = [newBlock(type)];
       const content = structuredClone(course.content);

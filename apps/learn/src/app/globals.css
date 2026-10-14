@@ -91,6 +91,22 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .compare h3 { margin: 0 0 0.25rem; font-size: 1rem; }
 .steps { padding-left: 1.25rem; }
 .steps li { margin: 0.4rem 0; }
+.tablewrap { overflow-x: auto; }
+.datatable { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); }
+.datatable caption { text-align: left; font-weight: 600; padding: 0.5rem 0.75rem; }
+.datatable th, .datatable td { text-align: left; vertical-align: top; padding: 0.5rem 0.75rem; border-top: 1px solid var(--border); }
+.datatable thead th { background: var(--secondary); color: var(--secondary-foreground); border-top: 0; }
+.layers ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.layers li { border: 1px solid var(--border); border-left: 6px solid var(--primary); border-radius: var(--radius); background: var(--card); padding: 0.6rem 0.9rem; display: grid; gap: 0.15rem; }
+.layers h3, .timeline h3, .glossary h3, .casestudy h3 { margin: 0 0 0.35rem; font-size: 1rem; color: var(--primary); }
+.timeline ol { list-style: none; margin: 0; padding: 0 0 0 1rem; border-left: 3px solid var(--primary); display: grid; gap: 0.6rem; }
+.timeline li { position: relative; display: grid; gap: 0.1rem; }
+.timeline li::before { content: ""; position: absolute; left: -1.5rem; top: 0.35rem; width: 0.7rem; height: 0.7rem; border-radius: 999px; background: var(--primary); }
+.glossary { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; }
+.glossary dl { margin: 0; display: grid; gap: 0.5rem; }
+.glossary dt { font-weight: 600; }
+.glossary dd { margin: 0; }
+.casestudy { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; }
 .scenario, .check { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; }
 .scenario h3, .check h3 { margin: 0 0 0.25rem; font-size: 1rem; color: var(--primary); }
 .choices { display: grid; gap: 0.5rem; margin: 0.75rem 0; }

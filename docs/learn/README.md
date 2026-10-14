@@ -26,6 +26,7 @@ Postgres database and is read by ELEVATE for reports, reminders and certificates
 | [10-production-deployment.md](10-production-deployment.md) | Step by step: migrations, Learn project, Inngest sync, publishing both courses, first trial, roll-out |
 | [samples/](samples/) | Sample certificate PDFs for each course (invented name and dates) |
 | [09-cybersecurity-sources.md](09-cybersecurity-sources.md) | The separate Cybersecurity basics course: its sources (CISA, FTC and three training lists) and what each topic maps to |
+| [12-deepening-plan.md](12-deepening-plan.md) | The plan to deepen both courses: owner decisions, gap map against the topics a comprehensive course covers, target modules, exam and bank, delivery batches |
 | [08-source-check.md](08-source-check.md) | **Review packet:** every factual claim in the course with its HHS or regulation source, what was corrected, coverage against the paid course, open items for counsel |
 
 ## One-page summary

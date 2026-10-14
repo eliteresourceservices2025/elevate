@@ -24,6 +24,23 @@ export const blockSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("steps"), items: z.array(z.object({ title: short, text: short })).min(2).max(7) }),
   z.object({ type: z.literal("scenario"), title: short, prompt: text, choices: z.array(choiceSchema).min(2).max(4) }),
+  // A grid of facts, for example what a business associate agreement must contain. Every row has one cell per column.
+  z
+    .object({
+      type: z.literal("table"),
+      caption: short.optional(),
+      columns: z.array(z.string().trim().min(1).max(60)).min(2).max(4),
+      rows: z.array(z.array(short).min(2).max(4)).min(1).max(10),
+    })
+    .refine((b) => b.rows.every((r) => r.length === b.columns.length), { message: "Every table row needs one cell for each column." }),
+  // Stacked bands, for example the safeguards that sit on top of one another.
+  z.object({ type: z.literal("layers"), title: short.optional(), items: z.array(z.object({ label: z.string().trim().min(1).max(60), text: short })).min(2).max(6) }),
+  // A sequence with a label for each moment, for example the days after a breach is found.
+  z.object({ type: z.literal("timeline"), title: short.optional(), items: z.array(z.object({ when: z.string().trim().min(1).max(60), text: short })).min(2).max(8) }),
+  // Terms introduced in the module, kept together so they can be looked up again.
+  z.object({ type: z.literal("glossary"), terms: z.array(z.object({ term: z.string().trim().min(1).max(60), meaning: z.string().trim().min(1).max(260) })).min(2).max(10) }),
+  // A worked case: read it, think, then reveal the answer. Not graded.
+  z.object({ type: z.literal("case"), title: short, scenario: text, question: short, answer: text }),
   z.object({
     type: z.literal("check"),
     question: short,
