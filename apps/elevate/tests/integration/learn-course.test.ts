@@ -68,7 +68,7 @@ let reviewer: { id: string; email: string };
 
 describe("loading and publishing the HIPAA course", () => {
   it("saves it as a draft first, and repeating changes nothing", async () => {
-    const first = await loadCourse(admin);
+    const first = await loadCourse(admin, { newVersion: true });
     expect(first.status).toBe("draft");
     expect(first.modules).toBe(7);
     expect(first.questions).toBe(hipaaQuestions.length);
@@ -118,7 +118,7 @@ describe("loading and publishing the HIPAA course", () => {
 
 describe("the separate cybersecurity course", () => {
   it("loads as its own course with its own modules, and is assigned apart from the HIPAA course", async () => {
-    const r = await loadCourse(admin, { courseSlug: "cybersecurity" });
+    const r = await loadCourse(admin, { courseSlug: "cybersecurity", newVersion: true });
     expect(r.status).toBe("draft");
     expect(r.modules).toBe(8);
     const [{ slug }] = await admin`select c.slug from learn.courses c where c.id = ${r.courseId}`;
@@ -157,7 +157,7 @@ describe("the separate cybersecurity course", () => {
     expect(fixed.created).toBe(true);
     expect(fixed.version).toBe(before.version + 1);
     expect(fixed.status).toBe("published");
-    const rows = await admin`select version, status, counsel_approved_on::text as counsel from learn.course_versions where course_id = ${fixed.courseId} order by version`;
+    const rows = await admin`select version, status, counsel_approved_on::text as counsel from learn.course_versions where course_id = ${fixed.courseId} and version >= ${before.version} order by version`;
     expect(rows.map((r) => [r.version, r.status])).toEqual([[before.version, "retired"], [fixed.version, "published"]]);
     expect(rows.at(-1)!.counsel).toBe("2026-10-13");
   });

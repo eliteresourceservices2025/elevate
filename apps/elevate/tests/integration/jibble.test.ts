@@ -569,7 +569,7 @@ async function queuedRows(label: string, steps: string[], opts: { teamId?: strin
     ids.push(e.id);
   }
   for (let i = 0; i < steps.length; i++) {
-    await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, created_at) values (${p.employeeId}, ${ids.at(i)}, ${steps.at(i)}, now() - (${steps.length - i} * interval '1 second'))`);
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, created_at, next_attempt_at) values (${p.employeeId}, ${ids.at(i)}, ${steps.at(i)}, now() - (${steps.length - i} * interval '1 second'), now() - interval '1 minute')`);
   }
   return p;
 }

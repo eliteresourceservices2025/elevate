@@ -38,9 +38,23 @@ export async function balanceNow(executor: Executor, employeeId: string, leaveTy
 }
 
 /**
- * Holiday calendars that apply to a person: the Philippines always, plus the calendar of every client they
- * are currently assigned to.
+ * Holiday dates applicable during a historical range. Assignment start/end dates are inclusive;
+ * PH always applies, while a client's calendar applies only on dates served for that client.
+ * Unlike the current-calendar selector, an archived client still counts for its past assignment.
  */
+export async function historicalHolidayDatesFor(executor: Executor, employeeId: string, start: string, end: string): Promise<Set<string>> {
+  const rows = (await executor.execute(sql`
+    select distinct h.date::text as date from time.holidays h
+    where h.archived_at is null and h.date between ${start}::date and ${end}::date
+      and (h.calendar = 'PH' or exists (
+        select 1 from core.client_assignments a join core.clients c on c.id = a.client_id
+        where a.employee_id = ${employeeId} and c.holiday_calendar = h.calendar
+          and a.start_date <= h.date and (a.end_date is null or a.end_date >= h.date)
+      ))`)) as unknown as { date: string }[];
+  return new Set(rows.map((row) => row.date));
+}
+
+/** The Philippines plus each currently assigned client's holiday calendar, for the normal calendar view. */
 export async function holidayCalendarsFor(executor: Executor, employeeId: string): Promise<("PH" | "US")[]> {
   const rows = (await executor.execute(sql`
     select distinct c.holiday_calendar

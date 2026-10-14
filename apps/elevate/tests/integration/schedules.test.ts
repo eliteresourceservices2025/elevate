@@ -302,6 +302,76 @@ describe("nightly flags against a schedule", () => {
   });
 });
 
+describe("bounded historical attendance reconciliation", () => {
+  const now = new Date("2026-10-14T18:00:00Z");
+  const from = "2026-10-05";
+  const to = "2026-10-07";
+
+  it("uses event-derived hours and the clients assigned on each historical holiday", async () => {
+    const p = await person("HistHoliday");
+    const [client] = await rows<{ id: string }>(sql`insert into core.clients (name, holiday_calendar) values (${uniq("History clinic ")}, 'US') returning id`);
+    await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date, end_date)
+      values (${p.employeeId}, ${client.id}, '2026-10-05', '2026-10-06')`);
+    await db.execute(sql`insert into time.schedules (employee_id, effective_from, effective_to, start_time, end_time, weekdays, break_minutes, zone)
+      values (${p.employeeId}, '2026-10-05', '2026-10-07', '09:00', '17:00', array[1,2,3,4,5]::smallint[], 60, ${PHX})`);
+    const h1 = uniq("Historical US holiday ");
+    const h2 = uniq("After assignment ");
+    await db.execute(sql`insert into time.holidays (calendar, date, name, kind) values ('US', '2026-10-06', ${h1}, 'other'), ('US', '2026-10-07', ${h2}, 'other')`);
+    await event(p.employeeId, "clock_in", at("2026-10-06", "09:00"));
+    await event(p.employeeId, "clock_out", at("2026-10-06", "13:00"));
+    try {
+      expect(await jobs.rebuildHistoricalAttendanceDays(p.employeeId, from, to, now)).toMatchObject({ people: 1 });
+      expect(await dayRow(p.employeeId, from)).toMatchObject({ flags: ["absent"], sessions: 0 });
+      expect(await dayRow(p.employeeId, "2026-10-06")).toMatchObject({ sessions: 1, worked_minutes: 240, extra_minutes: 240 });
+      expect((await dayRow(p.employeeId, "2026-10-06")).flags).toContain("holiday_work");
+      expect((await dayRow(p.employeeId, to)).flags).toContain("absent"); // client's assignment had ended
+      await jobs.rebuildHistoricalAttendanceDays(p.employeeId, from, to, now);
+      expect((await dayRow(p.employeeId, "2026-10-06")).flags.filter((f) => f === "holiday_work")).toHaveLength(1);
+      await db.execute(sql`update core.client_assignments set end_date = '2026-10-05' where employee_id = ${p.employeeId}`);
+      await jobs.rebuildHistoricalAttendanceDays(p.employeeId, from, to, now);
+      const changed = await dayRow(p.employeeId, "2026-10-06");
+      expect(changed).toMatchObject({ sessions: 1, worked_minutes: 240, extra_minutes: 0 });
+      expect(changed.flags).not.toContain("holiday_work");
+    } finally {
+      await db.execute(sql`delete from time.holidays where name in (${h1}, ${h2})`);
+    }
+  });
+
+  it("removes absence-only rows when the shift no longer applies, without touching unrelated dates", async () => {
+    const p = await person("HistStale");
+    await db.execute(sql`insert into time.schedules (employee_id, effective_from, effective_to, start_time, end_time, weekdays, break_minutes, zone)
+      values (${p.employeeId}, '2026-10-05', '2026-10-07', '09:00', '17:00', array[1,2,3,4,5]::smallint[], 60, ${PHX})`);
+    await jobs.rebuildHistoricalAttendanceDays(p.employeeId, from, to, now);
+    expect((await dayRow(p.employeeId, to)).flags).toContain("absent");
+    await db.execute(sql`update time.schedules set effective_to = '2026-10-06' where employee_id = ${p.employeeId}`);
+    await jobs.rebuildHistoricalAttendanceDays(p.employeeId, from, to, now);
+    expect(await dayRow(p.employeeId, to)).toBeUndefined();
+    expect((await dayRow(p.employeeId, from)).flags).toContain("absent");
+    const other = await person("HistIsolated");
+    await db.execute(sql`insert into time.schedules (employee_id, effective_from, effective_to, start_time, end_time, weekdays, break_minutes, zone)
+      values (${other.employeeId}, '2026-10-05', '2026-10-07', '09:00', '17:00', array[1,2,3,4,5]::smallint[], 60, ${PHX})`);
+    await jobs.rebuildHistoricalAttendanceDays(p.employeeId, from, to, now);
+    expect(await dayRow(other.employeeId, from)).toBeUndefined();
+  });
+
+  it("fails closed when a clock session crosses the bounded event-read boundary", async () => {
+    const p = await person("HistBoundary");
+    await event(p.employeeId, "clock_in", at("2026-10-02", "09:00"));
+    await expect(jobs.rebuildHistoricalAttendanceDays(p.employeeId, from, to, now)).rejects.toThrow("crosses the reconciliation boundary");
+    expect(await dayRow(p.employeeId, from)).toBeUndefined();
+  });
+
+  it("refuses other months, future days, reversed dates, and malformed identifiers", async () => {
+    const p = await person("HistBounds");
+    for (const [id, start, end] of [
+      [p.employeeId, "2026-09-30", "2026-10-01"],
+      [p.employeeId, "2026-10-03", "2026-10-02"],
+      [p.employeeId, "2026-10-01", "2026-10-14"],
+      ["not-an-id", from, to],
+    ]) await expect(jobs.rebuildHistoricalAttendanceDays(id, start, end, now)).rejects.toThrow();
+  });
+});
+
 describe("a session left open past the shift", () => {
   const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16);
 

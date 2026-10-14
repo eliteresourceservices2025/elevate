@@ -317,19 +317,27 @@ describe("cancelling", () => {
 });
 
 describe("what approved extra hours do to the day", () => {
-  const yesterday = () => formatInZone(Date.now() - DAY, PHX, "yyyy-MM-dd");
+  const workedDate = async () => {
+    const candidates = Array.from({ length: 7 }, (_, i) => formatInZone(Date.now() - (i + 1) * DAY, PHX, "yyyy-MM-dd"));
+    const holidays = await rows<{ date: string }>(sql`select date::text as date from time.holidays
+      where archived_at is null and calendar in ('PH', 'US') and date between ${candidates[6]}::date and ${candidates[0]}::date`);
+    const blocked = new Set(holidays.map((h) => h.date));
+    const date = candidates.find((candidate) => !blocked.has(candidate));
+    if (!date) throw new Error("No non-holiday day in the last seven Phoenix days.");
+    return date;
+  };
   const at = (date: string, time: string) => fromZonedTime(`${date}T${time}:00`, PHX).toISOString();
   async function worked(label: string, approvedMinutes: number | null) {
     const clientId = await newClient();
     const p = await person(label, { clientId });
-    const Y = yesterday();
+    const Y = await workedDate();
     await db.execute(sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone) values (${p.employeeId}, current_date - 10, '09:00', '17:00', array[1,2,3,4,5,6,7]::smallint[], 60, ${PHX})`);
     await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', ${at(Y, "09:00")}), (${p.employeeId}, 'clock_out', ${at(Y, "19:00")})`); // 10h worked, 7h scheduled: 3h extra
     if (approvedMinutes !== null) {
       await db.execute(sql`insert into time.extra_hours_requests (employee_id, client_id, source, status, window_start, window_end, minutes, contact_name, reason, filed_by, decided_at)
         values (${p.employeeId}, ${clientId}, 'va', 'approved', ${at(Y, "17:00")}, ${at(Y, "17:00").replace(/.*/, () => new Date(Date.parse(at(Y, "17:00")) + approvedMinutes * MIN).toISOString())}, ${approvedMinutes}, 'Dana', 'Client work', ${p.user.id}, now())`);
     }
-    await jobs.rebuildAttendanceDays();
+    await jobs.rebuildAttendanceDays(new Date(), 7, p.employeeId);
     return { p, Y };
   }
   const day = async (employeeId: string, Y: string) => (await rows<{ extra_minutes: number; approved_extra_minutes: number; flags: string[] }>(sql`select extra_minutes, approved_extra_minutes, flags from time.attendance_days where employee_id = ${employeeId} and date = ${Y}::date`))[0];
