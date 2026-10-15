@@ -8,11 +8,13 @@ export type ExamConfig = { passPercent: number; maxTries: number; waitMinutesAft
 
 export type AssignmentSummary = { id: string; title: string; track: string; status: string; dueOn: string };
 
+/** The home list. A cancelled assignment (a retired version nobody finished) is history and shows only in My training record. */
 export async function listAssignments(sql: Sql, userId: string): Promise<AssignmentSummary[]> {
   return withUser(sql, userId, async (tx) => {
     const rows = await tx`
       select a.id, c.title, a.track, a.status, a.due_on::text as due_on
       from learn.assignments a join learn.courses c on c.id = a.course_id
+      where a.status <> 'cancelled'
       order by a.assigned_at desc`;
     return rows.map((r) => ({ id: r.id as string, title: r.title as string, track: r.track as string, status: r.status as string, dueOn: r.due_on as string }));
   });
