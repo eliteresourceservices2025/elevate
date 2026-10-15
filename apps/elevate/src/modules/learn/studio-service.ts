@@ -256,22 +256,26 @@ export async function editDraft(tx: Tx, p: { versionId: string; stamp: number; a
   return stamp;
 }
 
-export type QuestionPatch = { topic: string; stem: string; options: { id: string; text: string }[]; correctIds: string[]; rationale: string };
+/** `type` and `moduleKey` are optional: left out, the question keeps its own. Changing them keeps the question's place in the version history. */
+export type QuestionPatch = { topic: string; stem: string; options: { id: string; text: string }[]; correctIds: string[]; rationale: string; type?: QuestionSeed["type"]; moduleKey?: string };
 
-/** Changes one exam question of a draft (its wording, options, key and reason; the type and module stay). Returns the new stamp. */
+/** Changes one exam question of a draft: wording, options, key, reason, and optionally its type and module. Returns the new stamp. */
 export async function editQuestion(tx: Tx, p: { versionId: string; questionId: string; stamp: number; actorId: string; patch: QuestionPatch }): Promise<number> {
   const v = await lockDraft(tx, p.versionId, p.stamp);
   const all = await tx.select().from(questions).where(eq(questions.versionId, p.versionId));
   const target = all.find((q) => q.id === p.questionId);
   if (!target) throw new ActionFailure("That question was not found in this draft.");
+  const content = courseContentSchema.parse(v.content);
+  const moduleKey = p.patch.moduleKey ?? target.moduleKey;
+  const type = p.patch.type ?? (target.type as QuestionSeed["type"]);
+  if (!content.modules.some((m) => m.key === moduleKey)) throw new ActionFailure("That module is not in this draft.");
   const seeds: QuestionSeed[] = all.map((q) =>
     q.id === p.questionId
-      ? { moduleKey: q.moduleKey, topic: p.patch.topic, type: q.type as QuestionSeed["type"], stem: p.patch.stem, options: p.patch.options as QuestionSeed["options"], correctIds: p.patch.correctIds, rationale: p.patch.rationale }
+      ? { moduleKey, topic: p.patch.topic, type, stem: p.patch.stem, options: p.patch.options as QuestionSeed["options"], correctIds: p.patch.correctIds, rationale: p.patch.rationale }
       : { moduleKey: q.moduleKey, topic: q.topic, type: q.type as QuestionSeed["type"], stem: q.stem, options: q.options as QuestionSeed["options"], correctIds: q.correctIds, rationale: q.rationale },
   );
-  const content = courseContentSchema.parse(v.content);
   failIfErrors(lintCourse(content, seeds, v.examConfig as ExamConfigLike));
-  await tx.update(questions).set({ topic: p.patch.topic, stem: p.patch.stem, options: p.patch.options, correctIds: p.patch.correctIds, rationale: p.patch.rationale }).where(and(eq(questions.id, p.questionId), eq(questions.versionId, p.versionId)));
+  await tx.update(questions).set({ moduleKey, type, topic: p.patch.topic, stem: p.patch.stem, options: p.patch.options, correctIds: p.patch.correctIds, rationale: p.patch.rationale }).where(and(eq(questions.id, p.questionId), eq(questions.versionId, p.versionId)));
   const stamp = v.editStamp + 1;
   await tx.update(courseVersions).set({ updatedBy: p.actorId, updatedAt: new Date(), editStamp: stamp }).where(eq(courseVersions.id, p.versionId));
   return stamp;
@@ -329,26 +333,29 @@ export async function userIdByEmail(tx: Tx, email: string): Promise<string | nul
  * Creates a client's add-on course and its first draft (one module, three screens, five placeholder questions). One add-on per
  * client for now. The course is studio-managed from the start (it has no code files). Nothing is assigned until it is published.
  */
-export async function createClientAddon(tx: Tx, p: { clientId: string; actorId: string }): Promise<{ slug: string; versionId: string; version: number; clientName: string }> {
+export async function createClientAddon(tx: Tx, p: { clientId: string; actorId: string; topic?: string; acknowledgmentOnly?: boolean }): Promise<{ slug: string; versionId: string; version: number; clientName: string }> {
   const [client] = (await tx.execute(sql`select id::text as id, name from core.clients where id = ${p.clientId} and archived_at is null for update`)) as unknown as { id: string; name: string }[];
   if (!client) throw new ActionFailure("That client was not found.");
+  // A client may have several add-ons. From the second one on, a short topic tells them apart.
   const existing = (await tx.execute(sql`select 1 from learn.courses where client_id = ${p.clientId} and kind = 'client_addon' and archived_at is null`)) as unknown as unknown[];
-  if (existing.length > 0) throw new ActionFailure("This client already has an add-on course.");
+  const topic = p.topic?.trim() || undefined;
+  if (existing.length > 0 && !topic) throw new ActionFailure("This client already has an add-on course. Give this one a short topic to tell them apart.");
 
   const taken = ((await tx.execute(sql`select slug from learn.courses`)) as unknown as { slug: string }[]).map((r) => r.slug);
   const slug = addonSlugFor(client.name, taken);
-  const draft = newAddonCourse(client.name, textIsAllowed);
+  const draft = newAddonCourse(client.name, textIsAllowed, topic, p.acknowledgmentOnly === true);
   failIfErrors(lintCourse(draft.content, draft.questions, draft.examConfig));
 
   const [course] = await tx
     .insert(courses)
-    .values({ slug, title: draft.title, kind: "client_addon", clientId: p.clientId, label: draft.label, noun: draft.noun, fixedTrack: "full", studioManaged: true })
+    .values({ slug, title: draft.title, kind: "client_addon", clientId: p.clientId, label: draft.label, noun: draft.noun, fixedTrack: "full", studioManaged: true, requiresExam: p.acknowledgmentOnly !== true })
     .returning({ id: courses.id });
   const [created] = await tx
     .insert(courseVersions)
     .values({ courseId: course.id, version: 1, status: "draft", content: draft.content, examConfig: draft.examConfig, material: false, createdBy: p.actorId, changeNote: "New client add-on", updatedBy: p.actorId, updatedAt: new Date() })
     .returning({ id: courseVersions.id, version: courseVersions.version });
   await writeModules(tx, created.id, draft.content);
-  await tx.insert(questions).values(draft.questions.map((q) => ({ versionId: created.id, moduleKey: q.moduleKey, topic: q.topic, type: q.type, stem: q.stem, options: q.options, correctIds: q.correctIds, rationale: q.rationale })));
+  if (draft.questions.length > 0)
+    await tx.insert(questions).values(draft.questions.map((q) => ({ versionId: created.id, moduleKey: q.moduleKey, topic: q.topic, type: q.type, stem: q.stem, options: q.options, correctIds: q.correctIds, rationale: q.rationale })));
   return { slug, versionId: created.id, version: created.version, clientName: client.name };
 }

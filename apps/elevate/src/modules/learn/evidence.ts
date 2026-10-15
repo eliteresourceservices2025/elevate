@@ -19,12 +19,13 @@ export async function buildClientEvidence(tx: Pick<typeof db, "execute">, client
       and e.archived_at is null
     order by e.legal_last_name, e.legal_first_name`)) as unknown as { id: string; user_id: string | null; legal_first_name: string; legal_last_name: string; position: string | null; start_date: string }[];
 
-  // The client's own add-on course, when it has a live version: one more column in the report.
+  // The client's own add-on courses that have a live version: more columns in the report (a client may have several).
   const addonRow = (await tx.execute(sql`
     select c.slug, coalesce(c.label, c.title) as label from learn.courses c
     where c.client_id = ${clientId} and c.kind = 'client_addon' and c.archived_at is null
-      and exists (select 1 from learn.course_versions v where v.course_id = c.id and v.status = 'published')`)) as unknown as { slug: string; label: string }[];
-  const addonSlug = addonRow[0]?.slug ?? null;
+      and exists (select 1 from learn.course_versions v where v.course_id = c.id and v.status = 'published')
+    order by lower(coalesce(c.label, c.title)), c.slug`)) as unknown as { slug: string; label: string }[];
+  const addonSlugs = addonRow.map((a) => a.slug);
 
   const certs = new Map<string, CertFact[]>();
   const userIds = people.map((p) => p.user_id).filter((u): u is string => Boolean(u));
@@ -36,7 +37,7 @@ export async function buildClientEvidence(tx: Pick<typeof db, "execute">, client
       from learn.certificates c
       join learn.assignments a on a.id = c.assignment_id
       join learn.courses co on co.id = a.course_id
-      where c.user_id = any(${literal}::uuid[]) and (co.slug in ('hipaa', 'cybersecurity') or co.slug = ${addonSlug ?? ''})`)) as unknown as { user_id: string; slug: string; reference: string; issued_on: string; ends_on: string; revoked: boolean }[];
+      where c.user_id = any(${literal}::uuid[]) and (co.slug in ('hipaa', 'cybersecurity') or co.slug = any(${`{${addonSlugs.join(",")}}`}::text[]))`)) as unknown as { user_id: string; slug: string; reference: string; issued_on: string; ends_on: string; revoked: boolean }[];
     for (const r of rows) {
       const key = `${r.user_id}:${r.slug}`;
       certs.set(key, [...(certs.get(key) ?? []), { reference: r.reference, issuedOn: r.issued_on, endsOn: r.ends_on, revoked: r.revoked }]);
@@ -47,14 +48,14 @@ export async function buildClientEvidence(tx: Pick<typeof db, "execute">, client
     clientName: client[0].name,
     asOf,
     generatedAt: new Date().toISOString(),
-    addon: addonRow[0] ? { label: addonRow[0].label } : null,
+    addons: addonRow.map((a) => ({ label: a.label })),
     rows: people.map((p) => ({
       name: `${p.legal_first_name} ${p.legal_last_name}`.trim(),
       position: p.position,
       assignedSince: p.start_date,
       hipaa: statusOn(p.user_id ? (certs.get(`${p.user_id}:hipaa`) ?? []) : [], asOf),
       cybersecurity: statusOn(p.user_id ? (certs.get(`${p.user_id}:cybersecurity`) ?? []) : [], asOf),
-      addon: addonSlug ? statusOn(p.user_id ? (certs.get(`${p.user_id}:${addonSlug}`) ?? []) : [], asOf) : null,
+      addons: addonSlugs.map((slug) => statusOn(p.user_id ? (certs.get(`${p.user_id}:${slug}`) ?? []) : [], asOf)),
     })),
   };
 }

@@ -79,10 +79,13 @@ export function NewDraftForm({ course, fromVersion }: { course: string; fromVers
   );
 }
 
-export function NewAddonForm({ clients }: { clients: { id: string; name: string }[] }) {
+export function NewAddonForm({ clients }: { clients: { id: string; name: string; existing: number }[] }) {
   const { run, pending, router } = useSave();
   const [clientId, setClientId] = useState("");
-  if (clients.length === 0) return <p className="text-sm text-muted-foreground">Every active client already has an add-on course.</p>;
+  const [topic, setTopic] = useState("");
+  const [ackOnly, setAckOnly] = useState(false);
+  const existing = clients.find((c) => c.id === clientId)?.existing ?? 0;
+  if (clients.length === 0) return <p className="text-sm text-muted-foreground">There are no active clients yet.</p>;
   return (
     <form
       className="flex flex-wrap items-end gap-2"
@@ -90,7 +93,7 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string 
         e.preventDefault();
         run(
           async () => {
-            const r = await createStudioAddon({ clientId });
+            const r = await createStudioAddon({ clientId, ...(existing > 0 ? { topic } : {}), ...(ackOnly ? { acknowledgmentOnly: true } : {}) });
             if (r.ok) router.push(`/course-studio/${r.data.slug}/${r.data.version}`);
             return r;
           },
@@ -105,12 +108,24 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string 
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+                {c.existing > 0 ? ` (${c.existing} add-on${c.existing === 1 ? "" : "s"} already)` : ""}
               </option>
             ))}
           </NativeSelect>
         </Field>
       </div>
-      <Button type="submit" size="sm" disabled={pending || !clientId}>
+      {existing > 0 ? (
+        <div className="min-w-60">
+          <Field id="addon-topic" label="Topic" hint="A few words to tell this add-on apart from the client's other ones, for example Billing policy.">
+            <Input id="addon-topic" value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={40} required />
+          </Field>
+        </div>
+      ) : null}
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" className="size-4 accent-primary" checked={ackOnly} onChange={(e) => setAckOnly(e.target.checked)} />
+        Acknowledgment only (no exam: reading it and accepting the statement finishes it)
+      </label>
+      <Button type="submit" size="sm" disabled={pending || !clientId || (existing > 0 && topic.trim().length < 2)}>
         Create the add-on
       </Button>
     </form>
@@ -573,15 +588,32 @@ export function ScreenEditor({ versionId, stamp, moduleKey, screen, index, count
 
 // ---- Exam questions -----------------------------------------------------------------------------------------------------------
 
-export function QuestionEditor({ versionId, stamp, question, number }: { versionId: string; stamp: number; question: QuestionSeed & { id: string }; number: number }) {
+const TYPE_LABELS: Record<string, string> = { single: "One correct answer", multiple: "Select all that apply", true_false: "True or false", scenario: "Scenario (one correct answer)" };
+const NEXT_ID = ["a", "b", "c", "d", "e", "f"];
+
+export function QuestionEditor({ versionId, stamp, question, number, modules }: { versionId: string; stamp: number; question: QuestionSeed & { id: string }; number: number; modules: { key: string; title: string }[] }) {
   const { run, pending } = useSave();
   const [topic, setTopic] = useState(question.topic);
   const [stem, setStem] = useState(question.stem);
   const [options, setOptions] = useState(question.options);
   const [correct, setCorrect] = useState<string[]>(question.correctIds);
   const [why, setWhy] = useState(question.rationale);
-  const { markSaved } = useWarnWhenEdited({ topic, stem, options, correct, why });
-  const single = question.type !== "multiple";
+  const [type, setType] = useState<string>(question.type);
+  const [moduleKey, setModuleKey] = useState(question.moduleKey);
+  const { markSaved } = useWarnWhenEdited({ topic, stem, options, correct, why, type, moduleKey });
+  const single = type !== "multiple";
+  const changeType = (next: string) => {
+    setType(next);
+    if (next === "true_false") {
+      setOptions([
+        { id: "a", text: "True" },
+        { id: "b", text: "False" },
+      ]);
+      setCorrect(["a"]);
+    } else if (next !== "multiple") {
+      setCorrect((cur) => cur.slice(0, 1));
+    }
+  };
   return (
     <details className="rounded-xl border bg-card p-4">
       <summary className="cursor-pointer text-sm font-medium">
@@ -591,12 +623,30 @@ export function QuestionEditor({ versionId, stamp, question, number }: { version
         className="mt-3 space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          run(() => saveStudioQuestion({ versionId, stamp, questionId: question.id, topic, stem, options, correctIds: correct, rationale: why }), "Saved.", markSaved);
+          run(() => saveStudioQuestion({ versionId, stamp, questionId: question.id, topic, stem, options, correctIds: correct, rationale: why, type, moduleKey }), "Saved.", markSaved);
         }}
       >
-        <p className="text-xs text-muted-foreground">
-          Type: {question.type.replace("_", "/")}. The answer key is visible to editors only.
-        </p>
+        <p className="text-xs text-muted-foreground">The answer key is visible to editors only. Changing the type or the module keeps the question&apos;s history.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field id={`q-${question.id}-type`} label="Type">
+            <NativeSelect id={`q-${question.id}-type`} value={type} onChange={(e) => changeType(e.target.value)}>
+              {Object.entries(TYPE_LABELS).map(([k, label]) => (
+                <option key={k} value={k}>
+                  {label}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field id={`q-${question.id}-module`} label="Module">
+            <NativeSelect id={`q-${question.id}-module`} value={moduleKey} onChange={(e) => setModuleKey(e.target.value)}>
+              {modules.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.title}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        </div>
         <Field id={`q-${question.id}-stem`} label="Question">
           <Textarea id={`q-${question.id}-stem`} rows={2} value={stem} onChange={(e) => setStem(e.target.value)} maxLength={600} />
         </Field>
@@ -617,6 +667,25 @@ export function QuestionEditor({ versionId, stamp, question, number }: { version
             <Input aria-label={`Option ${o.id.toUpperCase()}`} value={o.text} onChange={(e) => setOptions((cur) => cur.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} maxLength={260} disabled={question.type === "true_false"} />
           </div>
         ))}
+        {type !== "true_false" ? (
+          <div className="flex gap-2">
+            <Button type="button" size="sm" variant="outline" disabled={options.length >= 6} onClick={() => setOptions((cur) => [...cur, { id: NEXT_ID[cur.length], text: "" }])}>
+              Add an option
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={options.length <= 3}
+              onClick={() => {
+                setOptions((cur) => cur.slice(0, -1));
+                setCorrect((cur) => cur.filter((id) => id !== options[options.length - 1]?.id));
+              }}
+            >
+              Remove the last option
+            </Button>
+          </div>
+        ) : null}
         <Field id={`q-${question.id}-why`} label="Why the answer is right (shown only after a pass)">
           <Textarea id={`q-${question.id}-why`} rows={2} value={why} onChange={(e) => setWhy(e.target.value)} maxLength={700} />
         </Field>

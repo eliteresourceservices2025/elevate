@@ -573,8 +573,19 @@ export const RECAPS: Recap[] = [
   },
 ];
 
-export function findRecap(course: string, moduleKey: string): Recap | null {
-  return RECAPS.find((r) => r.course === course && r.module === moduleKey) ?? null;
+/**
+ * The first published version number whose lessons each course's recaps were written for. A person still on an older version (a
+ * retired one they started) would hear words that do not match their lessons, so they get no recap. The recaps were written
+ * against the deepened courses: HIPAA version 2 onward, Cybersecurity basics version 2 onward.
+ */
+export const RECAP_FROM_VERSION: Record<Recap["course"], number> = { hipaa: 2, cybersecurity: 2 };
+
+/** The recap for a module. When the person's version number is known and older than the recaps were written for, there is none. */
+export function findRecap(course: string, moduleKey: string, version?: number | null): Recap | null {
+  const found = RECAPS.find((r) => r.course === course && r.module === moduleKey) ?? null;
+  if (!found) return null;
+  if (typeof version === "number" && version < RECAP_FROM_VERSION[found.course]) return null;
+  return found;
 }
 
 /** The file served from the app's own origin (the content security policy allows media from `self` only). */

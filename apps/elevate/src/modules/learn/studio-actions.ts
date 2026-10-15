@@ -6,7 +6,8 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
-import { addModuleSchema, addQuestionSchema, addScreenSchema, courseMetaSchema, createAddonSchema, createDraftSchema, discardDraftSchema, examRulesSchema, moduleMetaSchema, moduleRefSchema, moveModuleSchema, moveScreenSchema, publishDraftSchema, questionEditSchema, removeQuestionSchema, screenRefSchema, screenSchemaInput } from "./studio-validators";
+import { addModuleSchema, addQuestionSchema, addScreenSchema, courseMetaSchema, createAddonSchema, createDraftSchema, discardDraftSchema, examRulesSchema, moduleMetaSchema, moduleRefSchema, moveModuleSchema, moveScreenSchema, publishDraftSchema, questionEditSchema, removeQuestionSchema, screenRefSchema, screenSchemaInput, commentSchema, resolveCommentSchema } from "./studio-validators";
+import { addComment, resolveComment } from "./studio-comments";
 import { newModule, newQuestion, newScreen } from "./studio-scaffold";
 import { createClientAddon, createDraft, discardDraft, editContent, editDraft, editQuestion, publishDraft, userIdByEmail, type DraftState } from "./studio-service";
 
@@ -50,7 +51,7 @@ export async function createStudioAddon(input: unknown): Promise<ActionResult<{ 
     const parsed = createAddonSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
     const made = await db.transaction(async (tx) => {
-      const r = await createClientAddon(tx, { clientId: parsed.data.clientId, actorId: actor.id });
+      const r = await createClientAddon(tx, { clientId: parsed.data.clientId, actorId: actor.id, topic: parsed.data.topic, acknowledgmentOnly: parsed.data.acknowledgmentOnly });
       // The course address and ids only: never the lesson text.
       await writeAudit({ actor, action: "learn.studio_addon_create", targetType: "learn_course_version", targetId: r.versionId, metadata: { course: r.slug, clientId: parsed.data.clientId } }, tx);
       return r;
@@ -155,9 +156,9 @@ export async function saveStudioQuestion(input: unknown): Promise<ActionResult<{
         questionId: v.questionId,
         stamp: v.stamp,
         actorId: actor.id,
-        patch: { topic: v.topic, stem: v.stem, options: v.options, correctIds: v.correctIds, rationale: v.rationale },
+        patch: { topic: v.topic, stem: v.stem, options: v.options, correctIds: v.correctIds, rationale: v.rationale, type: v.type, moduleKey: v.moduleKey },
       });
-      await writeAudit({ actor, action: "learn.studio_edit", targetType: "learn_course_version", targetId: v.versionId, metadata: { part: "question", question: v.questionId } }, tx);
+      await writeAudit({ actor, action: "learn.studio_edit", targetType: "learn_course_version", targetId: v.versionId, metadata: { part: "question", question: v.questionId, ...(v.type || v.moduleKey ? { retyped: true } : {}) } }, tx);
       return s;
     });
     touched();
@@ -375,5 +376,38 @@ export async function saveStudioExamRules(input: unknown): Promise<ActionResult<
       };
       return s;
     });
+  });
+}
+
+/** An editor's note on a draft (the whole course or one module). Never carries into audit entries or notices as text. */
+export async function addStudioComment(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const parsed = commentSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const v = parsed.data;
+    const made = await db.transaction(async (tx) => {
+      const r = await addComment(tx, { versionId: v.versionId, authorId: actor.id, target: v.target, body: v.body });
+      await writeAudit({ actor, action: "learn.studio_comment", targetType: "learn_course_version", targetId: v.versionId, metadata: { comment: r.id, target: v.target } }, tx);
+      return r;
+    });
+    touched(made.slug);
+    return { ok: true, data: { id: made.id } };
+  });
+}
+
+export async function resolveStudioComment(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const parsed = resolveCommentSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    await db.transaction(async (tx) => {
+      const r = await resolveComment(tx, { commentId: parsed.data.commentId, actorId: actor.id });
+      await writeAudit({ actor, action: "learn.studio_comment_resolve", targetType: "learn_course_version", targetId: r.versionId, metadata: { comment: parsed.data.commentId } }, tx);
+    });
+    touched();
+    return { ok: true, data: undefined };
   });
 }

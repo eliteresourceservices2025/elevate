@@ -38,3 +38,13 @@ export function moduleStats(rows: readonly ModuleRow[]): ModuleStat[] {
     };
   });
 }
+
+export type PracticeRow = { quarter: string; people: number; correct: number };
+export type PracticeStat = { quarter: string; people: number; correctPercent: number } | { quarter: string; hidden: true };
+
+/** Quarterly practice: how many people answered and what share chose the better answer; fewer than five people are hidden. Newest first. */
+export function practiceStats(rows: readonly PracticeRow[]): PracticeStat[] {
+  return [...rows]
+    .sort((a, b) => b.quarter.localeCompare(a.quarter))
+    .map((r) => (r.people >= LEARN_MIN_GROUP ? { quarter: r.quarter, people: r.people, correctPercent: pct(r.correct, r.people) } : { quarter: r.quarter, hidden: true as const }));
+}

@@ -56,11 +56,16 @@ describe("client add-on from the studio", () => {
     expect((await listLearnCourses(db)).find((c) => c.slug === made.slug)).toMatchObject({ kind: "client_addon", clientId });
   });
 
-  it("allows one add-on per client and refuses an archived or unknown client", async () => {
+  it("allows several add-ons per client (a topic tells them apart) and refuses an archived or unknown client", async () => {
     const editor = await makeUser("addon-editor");
     const clientId = await makeClient(uniq("One Only "));
-    await tx((t) => svc.createClientAddon(t, { clientId, actorId: editor }));
-    await expect(tx((t) => svc.createClientAddon(t, { clientId, actorId: editor }))).rejects.toThrow(/already has an add-on/);
+    const first = await tx((t) => svc.createClientAddon(t, { clientId, actorId: editor }));
+    // a client may have several add-ons, but from the second one a topic is needed to tell them apart
+    await expect(tx((t) => svc.createClientAddon(t, { clientId, actorId: editor }))).rejects.toThrow(/topic/);
+    const second = await tx((t) => svc.createClientAddon(t, { clientId, actorId: editor, topic: "Billing policy" }));
+    expect(second.slug).not.toBe(first.slug);
+    const [secondCourse] = await rows<{ label: string; title: string }>(sql`select label, title from learn.courses where slug = ${second.slug}`);
+    expect(secondCourse.label).toContain("Billing policy");
     await expect(tx((t) => svc.createClientAddon(t, { clientId: randomUUID(), actorId: editor }))).rejects.toThrow(/not found/);
     const gone = await makeClient(uniq("Gone "));
     await db.execute(sql`update core.clients set archived_at = now() where id = ${gone}`);

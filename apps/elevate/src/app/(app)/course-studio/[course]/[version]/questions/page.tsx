@@ -40,7 +40,7 @@ export default async function StudioQuestionsPage({ params }: PageProps<"/course
             {list.map((q) => {
               const n = loaded.questions.indexOf(q) + 1;
               return draft ? (
-                <QuestionEditor key={`${q.id}-${loaded.version.editStamp}`} versionId={loaded.version.id} stamp={loaded.version.editStamp} question={q} number={n} />
+                <QuestionEditor key={`${q.id}-${loaded.version.editStamp}`} versionId={loaded.version.id} stamp={loaded.version.editStamp} question={q} number={n} modules={loaded.content.modules.map((m) => ({ key: m.key, title: m.title }))} />
               ) : (
                 <div key={q.id} className="rounded-xl border bg-card p-4 text-sm">
                   <p className="font-medium">

@@ -24,3 +24,15 @@ describe("course statistics", () => {
     expect(onlyTime).toMatchObject({ avgMinutes: 7, missPercent: null, hidden: false });
   });
 });
+
+describe("quarterly practice statistics", () => {
+  it("shows a quarter only with five or more people, newest first", async () => {
+    const { practiceStats } = await import("./studio-stats");
+    const out = practiceStats([
+      { quarter: "2026-Q3", people: 4, correct: 4 },
+      { quarter: "2026-Q4", people: 8, correct: 6 },
+    ]);
+    expect(out[0]).toEqual({ quarter: "2026-Q4", people: 8, correctPercent: 75 });
+    expect(out[1]).toEqual({ quarter: "2026-Q3", hidden: true });
+  });
+});

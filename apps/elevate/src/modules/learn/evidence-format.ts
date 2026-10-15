@@ -36,27 +36,27 @@ export type EvidenceRow = {
   assignedSince: string;
   hipaa: CourseStatus;
   cybersecurity: CourseStatus;
-  /** The client's own add-on course, when it has a live one (see `EvidenceReport.addon`). */
-  addon?: CourseStatus | null;
+  /** The status in each of the client's add-on courses, in the same order as `EvidenceReport.addons`. */
+  addons?: CourseStatus[];
 };
 
 export type EvidenceReport = {
   clientName: string;
   asOf: string;
   generatedAt: string;
-  /** The client's add-on course (its short name), or null when the client has none. Adds a column to the CSV and PDF. */
-  addon?: { label: string } | null;
+  /** The client's live add-on courses (short names), none when it has none. Each adds three CSV columns; the PDF shows one column. */
+  addons?: { label: string }[];
   rows: EvidenceRow[];
 };
 
-export function summarize(report: EvidenceReport): { people: number; hipaaValid: number; hipaaNot: number; cyberValid: number; addonValid: number | null } {
+export function summarize(report: EvidenceReport): { people: number; hipaaValid: number; hipaaNot: number; cyberValid: number; addons: { label: string; valid: number }[] } {
   const hipaaValid = report.rows.filter((r) => r.hipaa.status === "valid").length;
   return {
     people: report.rows.length,
     hipaaValid,
     hipaaNot: report.rows.length - hipaaValid,
     cyberValid: report.rows.filter((r) => r.cybersecurity.status === "valid").length,
-    addonValid: report.addon ? report.rows.filter((r) => r.addon?.status === "valid").length : null,
+    addons: (report.addons ?? []).map((a, i) => ({ label: a.label, valid: report.rows.filter((r) => r.addons?.[i]?.status === "valid").length })),
   };
 }
 
@@ -79,7 +79,7 @@ export function evidenceCsv(report: EvidenceReport): string {
     "Cybersecurity status",
     "Cybersecurity certificate",
     "Cybersecurity valid until",
-    ...(report.addon ? [`${report.addon.label} status`, `${report.addon.label} certificate`, `${report.addon.label} valid until`] : []),
+    ...(report.addons ?? []).flatMap((a) => [`${a.label} status`, `${a.label} certificate`, `${a.label} valid until`]),
   ];
   const rows = report.rows.map((r) => [
     report.clientName,
@@ -94,7 +94,10 @@ export function evidenceCsv(report: EvidenceReport): string {
     STATUS_WORDS[r.cybersecurity.status],
     r.cybersecurity.reference,
     r.cybersecurity.validUntil,
-    ...(report.addon ? [STATUS_WORDS[(r.addon ?? NONE).status], (r.addon ?? NONE).reference, (r.addon ?? NONE).validUntil] : []),
+    ...(report.addons ?? []).flatMap((_, i) => {
+      const s = r.addons?.[i] ?? NONE;
+      return [STATUS_WORDS[s.status], s.reference, s.validUntil];
+    }),
   ]);
   rows.push([], [NOTE]);
   return toCsv(header, rows);
@@ -128,7 +131,8 @@ export async function evidencePdf(report: EvidenceReport): Promise<Uint8Array> {
   const W = 595;
   const H = 842;
   const M = 40;
-  const withAddon = Boolean(report.addon);
+  const nAddons = report.addons?.length ?? 0;
+  const withAddon = nAddons > 0;
   const cols = withAddon
     ? [
         { label: "Name", x: M, w: 118 },
@@ -136,7 +140,7 @@ export async function evidencePdf(report: EvidenceReport): Promise<Uint8Array> {
         { label: "HIPAA status", x: M + 184, w: 104 },
         { label: "Certificate", x: M + 288, w: 92 },
         { label: "Valid until", x: M + 380, w: 62 },
-        { label: fitText(bold, report.addon?.label ?? "Add-on", 8.5, 70), x: M + 442, w: 73 },
+        { label: nAddons === 1 ? fitText(bold, report.addons![0].label, 8.5, 70) : "Add-ons", x: M + 442, w: 73 },
       ]
     : [
         { label: "Name", x: M, w: 150 },
@@ -166,7 +170,7 @@ export async function evidencePdf(report: EvidenceReport): Promise<Uint8Array> {
     y -= 13;
   };
   header();
-  page.drawText(`${s.people} ${s.people === 1 ? "person" : "people"} assigned. HIPAA training valid: ${s.hipaaValid}. Not valid: ${s.hipaaNot}.${s.addonValid !== null ? ` ${report.addon?.label}: ${s.addonValid} valid.` : ""}`, { x: M, y, size: 10.5, font: bold, color: ink });
+  page.drawText(`${s.people} ${s.people === 1 ? "person" : "people"} assigned. HIPAA training valid: ${s.hipaaValid}. Not valid: ${s.hipaaNot}.${s.addons.length > 0 ? ` ${s.addons.map((a) => `${a.label}: ${a.valid} valid`).join(", ")}.` : ""}`, { x: M, y, size: 10.5, font: bold, color: ink });
   y -= 24;
   tableHead();
 
@@ -176,7 +180,7 @@ export async function evidencePdf(report: EvidenceReport): Promise<Uint8Array> {
       y = H - M;
       tableHead();
     }
-    const cells = [r.name, r.assignedSince, withAddon ? SHORT[r.hipaa.status] : STATUS_WORDS[r.hipaa.status], r.hipaa.reference ?? "", r.hipaa.validUntil ?? "", ...(withAddon ? [SHORT[(r.addon ?? NONE).status]] : [])];
+    const cells = [r.name, r.assignedSince, withAddon ? SHORT[r.hipaa.status] : STATUS_WORDS[r.hipaa.status], r.hipaa.reference ?? "", r.hipaa.validUntil ?? "", ...(withAddon ? [nAddons === 1 ? SHORT[(r.addons?.[0] ?? NONE).status] : `${(r.addons ?? []).filter((a) => a.status === "valid").length} of ${nAddons} valid`] : [])];
     cells.forEach((text, i) => page.drawText(fitText(sans, text, 9, cols[i].w - 6), { x: cols[i].x, y, size: 9, font: sans, color: r.hipaa.status === "valid" || i < 2 ? ink : rgb(0.6, 0.1, 0.1) }));
     y -= 15;
   }

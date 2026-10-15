@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { diffLoaded, lintLoaded, listStudioCourses, loadVersion, type LoadedVersion, type StudioCourse } from "./studio-service";
 import type { CourseDiff } from "./studio-diff";
 import type { LintIssue } from "./studio-lint";
-import { moduleStats, questionStats, type ModuleStat, type QuestionStat } from "./studio-stats";
+import { moduleStats, practiceStats, questionStats, type ModuleStat, type PracticeStat, type QuestionStat } from "./studio-stats";
 
 // What the studio pages read. The exam answer key is included (editors need it), which is why every query authorizes
 // `learn.manage_content` first: it never reaches the Learn app or anyone without that permission.
@@ -42,18 +42,20 @@ export async function getStudioDiff(slug: string, from: number, to: number): Pro
 }
 
 /** Active clients that do not have an add-on course yet (for "New client add-on"). */
-export async function listAddonClients(): Promise<{ id: string; name: string }[]> {
+/** Active clients, each with how many live add-ons it already has (a client may have several; from the second a topic is needed). */
+export async function listAddonClients(): Promise<{ id: string; name: string; existing: number }[]> {
   const user = await requireUser();
   await authorize(user, "learn.manage_content");
   const rows = (await db.execute(sql`
-    select cl.id::text as id, cl.name from core.clients cl
+    select cl.id::text as id, cl.name,
+           (select count(*)::int from learn.courses c where c.client_id = cl.id and c.kind = 'client_addon' and c.archived_at is null) as existing
+    from core.clients cl
     where cl.archived_at is null and cl.is_active
-      and not exists (select 1 from learn.courses c where c.client_id = cl.id and c.kind = 'client_addon' and c.archived_at is null)
-    order by cl.name`)) as unknown as { id: string; name: string }[];
+    order by cl.name`)) as unknown as { id: string; name: string; existing: number }[];
   return rows;
 }
 
-export type CourseStats = { courseTitle: string; version: number; questions: QuestionStat[]; modules: ModuleStat[]; attempts: number } | null;
+export type CourseStats = { courseTitle: string; version: number; questions: QuestionStat[]; modules: ModuleStat[]; attempts: number; practice: PracticeStat[] } | null;
 
 /**
  * Course-improvement statistics for one version: per question and per module, from submitted exam attempts and module time. Counts
@@ -96,11 +98,34 @@ export async function getCourseStats(slug: string, version: number): Promise<Cou
 
   const titles = new Map(loaded.content.modules.map((m) => [m.key, m.title]));
   const [{ n: attempts }] = (await db.execute(sql`select count(*)::int as n from learn.exam_attempts x join learn.assignments a on a.id = x.assignment_id where a.version_id = ${versionId} and x.status = 'submitted'`)) as unknown as { n: number }[];
+  const prows = (await db.execute(sql`
+    select quarter, count(*)::int as people, count(*) filter (where correct)::int as correct
+    from learn.drill_results where course_slug = ${slug} group by quarter`)) as unknown as { quarter: string; people: number; correct: number }[];
   return {
+    practice: practiceStats(prows),
     courseTitle: loaded.content.title ?? slug,
     version,
     attempts,
     questions: questionStats(qrows.map((r) => ({ id: r.id, moduleKey: r.module_key, topic: r.topic, stem: r.stem, people: r.people, shown: r.shown, missed: r.missed }))),
     modules: moduleStats(mrows.map((r) => ({ key: r.module_key, title: titles.get(r.module_key) ?? r.module_key, people: r.people, avgMinutes: r.avg_minutes, answered: r.answered, missed: r.missed, peopleAnswered: r.people_answered }))),
   };
+}
+
+export type StudioComment = { id: string; target: string; body: string; author: string; mine: boolean; createdAt: string; resolved: boolean };
+
+/** The editors' comments on one version, open ones first, then resolved. Needs `learn.manage_content`. */
+export async function getStudioComments(slug: string, version: number): Promise<StudioComment[]> {
+  const user = await requireUser();
+  await authorize(user, "learn.manage_content");
+  if (!Number.isInteger(version) || version < 1) return [];
+  const list = (await db.execute(sql`
+    select c.id::text as id, c.target, c.body, c.author_id::text as author_id, c.created_at, c.resolved_at is not null as resolved,
+           coalesce(nullif(btrim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), u.email) as author
+    from learn.studio_comments c
+    join learn.course_versions v on v.id = c.version_id join learn.courses co on co.id = v.course_id
+    join core.users u on u.id = c.author_id
+    left join core.employees e on e.user_id = u.id and e.archived_at is null
+    where co.slug = ${slug} and v.version = ${version}
+    order by (c.resolved_at is not null), c.created_at`)) as unknown as { id: string; target: string; body: string; author_id: string; created_at: Date | string; resolved: boolean; author: string }[];
+  return list.map((c) => ({ id: c.id, target: c.target, body: c.body, author: c.author, mine: c.author_id === user.id, createdAt: new Date(c.created_at).toISOString(), resolved: c.resolved }));
 }
