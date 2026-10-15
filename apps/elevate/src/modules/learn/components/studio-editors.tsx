@@ -10,7 +10,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import type { Block, CourseContent, CourseModule, QuestionSeed } from "../../../../../learn/src/content/schema";
-import { createStudioAddon, createStudioDraft, discardStudioDraft, publishStudioDraft, saveStudioCourseMeta, saveStudioModuleMeta, saveStudioQuestion, saveStudioScreen } from "../studio-actions";
+import { createStudioAddon, createStudioDraft, discardStudioDraft, publishStudioDraft, removeStudioAddon, saveStudioCourseMeta, saveStudioModuleMeta, saveStudioQuestion, saveStudioScreen } from "../studio-actions";
 import { newBlock } from "../studio-scaffold";
 import { RemoveQuestionButton, ScreenControls } from "./studio-structure";
 
@@ -54,7 +54,7 @@ export function NewDraftForm({ course, fromVersion }: { course: string; fromVers
   const [note, setNote] = useState("");
   return (
     <form
-      className="flex flex-wrap items-end gap-2"
+      className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         run(
@@ -67,12 +67,12 @@ export function NewDraftForm({ course, fromVersion }: { course: string; fromVers
         );
       }}
     >
-      <div className="min-w-72 flex-1">
+      <div>
         <Field id={`note-${fromVersion ?? "latest"}`} label={fromVersion ? `New draft from version ${fromVersion}: what is it for?` : "New draft from the latest version: what is it for?"}>
           <Input id={`note-${fromVersion ?? "latest"}`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} required placeholder="For example: update the incident deadlines after counsel's review" />
         </Field>
       </div>
-      <Button type="submit" size="sm" disabled={pending || note.trim().length < 3}>
+      <Button type="submit" disabled={pending || note.trim().length < 3}>
         Start a draft
       </Button>
     </form>
@@ -88,7 +88,7 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string;
   if (clients.length === 0) return <p className="text-sm text-muted-foreground">There are no active clients yet.</p>;
   return (
     <form
-      className="flex flex-wrap items-end gap-2"
+      className="space-y-5"
       onSubmit={(e) => {
         e.preventDefault();
         run(
@@ -101,8 +101,8 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string;
         );
       }}
     >
-      <div className="min-w-72 flex-1">
-        <Field id="addon-client" label="Client" hint="A short course for the people assigned to this client. Nothing is assigned until you publish it.">
+      <div className="grid gap-5 md:grid-cols-2">
+        <Field id="addon-client" label="Client">
           <NativeSelect id="addon-client" value={clientId} onChange={(e) => setClientId(e.target.value)} required>
             <option value="">Choose a client</option>
             {clients.map((c) => (
@@ -113,21 +113,24 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string;
             ))}
           </NativeSelect>
         </Field>
-      </div>
-      {existing > 0 ? (
-        <div className="min-w-60">
+        {existing > 0 ? (
           <Field id="addon-topic" label="Topic" hint="A few words to tell this add-on apart from the client's other ones, for example Billing policy.">
             <Input id="addon-topic" value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={40} required />
           </Field>
-        </div>
-      ) : null}
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" className="size-4 accent-primary" checked={ackOnly} onChange={(e) => setAckOnly(e.target.checked)} />
-        Acknowledgment only (no exam: reading it and accepting the statement finishes it)
+        ) : null}
+      </div>
+      <label className="flex items-start gap-3 text-sm">
+        <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={ackOnly} onChange={(e) => setAckOnly(e.target.checked)} />
+        <span>
+          <span className="font-medium">Acknowledgment only</span>
+          <span className="block text-muted-foreground">No exam: reading every module and accepting the statement finishes it.</span>
+        </span>
       </label>
-      <Button type="submit" size="sm" disabled={pending || !clientId || (existing > 0 && topic.trim().length < 2)}>
-        Create the add-on
-      </Button>
+      <div>
+        <Button type="submit" disabled={pending || !clientId || (existing > 0 && topic.trim().length < 2)}>
+          {pending ? "Creating..." : "Create the add-on"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -145,7 +148,7 @@ export function DiscardDraftButton({ versionId, stamp, course }: { versionId: st
         run(
           async () => {
             const r = await discardStudioDraft({ versionId, stamp });
-            if (r.ok) router.push(`/course-studio/${course}`);
+            if (r.ok) router.push(r.data.courseGone ? "/course-studio" : `/course-studio/${course}`);
             return r;
           },
           "Draft discarded.",
@@ -697,5 +700,31 @@ export function QuestionEditor({ versionId, stamp, question, number, modules }: 
         </div>
       </form>
     </details>
+  );
+}
+
+/** Removes a client add-on that never went live. Only offered for those: a live add-on is part of the training record. */
+export function RemoveAddonButton({ course, title, redirectTo }: { course: string; title: string; redirectTo?: string }) {
+  const { run, pending, router } = useSave();
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={pending}
+      onClick={() => {
+        if (!window.confirm(`Remove the add-on "${title}"? Its draft is deleted and cannot be brought back.`)) return;
+        run(
+          async () => {
+            const r = await removeStudioAddon({ course });
+            if (r.ok && redirectTo) router.push(redirectTo);
+            return r;
+          },
+          "Add-on removed.",
+        );
+      }}
+    >
+      Remove this add-on
+    </Button>
   );
 }

@@ -20,7 +20,7 @@ export default async function StudioModulePage({ params }: PageProps<"/course-st
   const stamp = loaded.version.editStamp;
 
   return (
-    <div className="w-full max-w-4xl space-y-6">
+    <div className="w-full max-w-6xl space-y-6">
       <p className="text-sm">
         <Link href={`/course-studio/${course}/${version}`} className="text-primary underline-offset-4 hover:underline">
           Back to version {version}

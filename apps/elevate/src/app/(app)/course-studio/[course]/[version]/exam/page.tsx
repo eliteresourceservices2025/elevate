@@ -34,7 +34,7 @@ export default async function StudioExamPreviewPage({
   const titles = new Map(loaded.content.modules.map((m) => [m.key, m.title]));
 
   return (
-    <div className="w-full max-w-4xl space-y-6">
+    <div className="w-full max-w-6xl space-y-6">
       <p className="text-sm">
         <Link href={base} className="text-primary underline-offset-4 hover:underline">
           Back to version {version}

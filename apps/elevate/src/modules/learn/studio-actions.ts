@@ -8,8 +8,9 @@ import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-act
 import { writeAudit } from "@/modules/audit/write";
 import { addModuleSchema, addQuestionSchema, addScreenSchema, courseMetaSchema, createAddonSchema, createDraftSchema, discardDraftSchema, examRulesSchema, moduleMetaSchema, moduleRefSchema, moveModuleSchema, moveScreenSchema, publishDraftSchema, questionEditSchema, removeQuestionSchema, screenRefSchema, screenSchemaInput, commentSchema, resolveCommentSchema } from "./studio-validators";
 import { addComment, resolveComment } from "./studio-comments";
+import { removeAddonSchema } from "./studio-validators";
 import { newModule, newQuestion, newScreen } from "./studio-scaffold";
-import { createClientAddon, createDraft, discardDraft, editContent, editDraft, editQuestion, publishDraft, userIdByEmail, type DraftState } from "./studio-service";
+import { createClientAddon, createDraft, discardDraft, editContent, editDraft, editQuestion, publishDraft, removeAddon, userIdByEmail, type DraftState } from "./studio-service";
 
 // The course studio's write actions. Each one: sign-in, permission `learn.manage_content`, validation, then the service (which
 // refuses a save on a stale draft or one that would leave the course invalid). Audit entries carry course, version, module or
@@ -166,18 +167,19 @@ export async function saveStudioQuestion(input: unknown): Promise<ActionResult<{
   });
 }
 
-export async function discardStudioDraft(input: unknown): Promise<ActionResult> {
+export async function discardStudioDraft(input: unknown): Promise<ActionResult<{ courseGone: boolean }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "learn.manage_content");
     const parsed = discardDraftSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
-    await db.transaction(async (tx) => {
-      await discardDraft(tx, { versionId: parsed.data.versionId, stamp: parsed.data.stamp });
-      await writeAudit({ actor, action: "learn.studio_discard", targetType: "learn_course_version", targetId: parsed.data.versionId }, tx);
+    const out = await db.transaction(async (tx) => {
+      const r = await discardDraft(tx, { versionId: parsed.data.versionId, stamp: parsed.data.stamp });
+      await writeAudit({ actor, action: "learn.studio_discard", targetType: "learn_course_version", targetId: parsed.data.versionId, metadata: { courseGone: r.courseGone } }, tx);
+      return r;
     });
     touched();
-    return { ok: true, data: undefined };
+    return { ok: true, data: { courseGone: out.courseGone } };
   });
 }
 
@@ -406,6 +408,22 @@ export async function resolveStudioComment(input: unknown): Promise<ActionResult
     await db.transaction(async (tx) => {
       const r = await resolveComment(tx, { commentId: parsed.data.commentId, actorId: actor.id });
       await writeAudit({ actor, action: "learn.studio_comment_resolve", targetType: "learn_course_version", targetId: r.versionId, metadata: { comment: parsed.data.commentId } }, tx);
+    });
+    touched();
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Removes a client add-on that never went live (its draft is deleted and the course closed). Ids and the address only in the audit. */
+export async function removeStudioAddon(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.manage_content");
+    const parsed = removeAddonSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    await db.transaction(async (tx) => {
+      const r = await removeAddon(tx, { slug: parsed.data.course });
+      await writeAudit({ actor, action: "learn.studio_addon_remove", targetType: "learn_course", targetId: r.courseId, metadata: { course: parsed.data.course, clientId: r.clientId } }, tx);
     });
     touched();
     return { ok: true, data: undefined };

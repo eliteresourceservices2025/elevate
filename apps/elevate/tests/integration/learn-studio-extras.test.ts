@@ -98,9 +98,8 @@ describe("comments between editors", () => {
 
     await tx((t) => comments.resolveComment(t, { commentId: a.id, actorId: other }));
     await expect(tx((t) => comments.resolveComment(t, { commentId: a.id, actorId: other }))).rejects.toThrow(/already/i);
-    // the text cannot be changed and nothing is deleted
+    // the text cannot be changed; a comment is only ever deleted with its draft (see the discard test below)
     await expect(db.execute(sql`update learn.studio_comments set body = 'something else' where id = ${b.id}`)).rejects.toThrow();
-    await expect(db.execute(sql`delete from learn.studio_comments where id = ${b.id}`)).rejects.toThrow();
 
     // read as HR: open first, resolved after; refused to anyone without the permission
     const hr = await makeUser("hr");
@@ -113,5 +112,35 @@ describe("comments between editors", () => {
     ]);
     current.user = { id: d.editor, email: "e@example.com", roles: ["employee"] };
     await expect(studio.getStudioComments(d.slug, d.version)).rejects.toThrow();
+  });
+});
+
+describe("discarding and removing a client add-on", () => {
+  it("discarding the only draft of a new add-on (comments included) closes the add-on so it does not stay in the list", async () => {
+    const d = await draft();
+    await tx((t) => comments.addComment(t, { versionId: d.versionId, authorId: d.editor, target: "course", body: "A note that goes with the draft." }));
+    const out = await tx((t) => svc.discardDraft(t, { versionId: d.versionId, stamp: d.stamp }));
+    expect(out.courseGone).toBe(true);
+    expect((await rows(sql`select 1 from learn.course_versions where id = ${d.versionId}`)).length).toBe(0);
+    expect((await rows(sql`select 1 from learn.studio_comments where version_id = ${d.versionId}`)).length).toBe(0);
+    const [course] = await rows<{ archived_at: string | null }>(sql`select archived_at::text as archived_at from learn.courses where slug = ${d.slug}`);
+    expect(course.archived_at).not.toBeNull();
+    const listed = await tx((t) => svc.listStudioCourses(t));
+    expect(listed.some((c) => c.slug === d.slug)).toBe(false);
+  });
+
+  it("removes an add-on that never went live, and refuses one that was published", async () => {
+    const never = await draft();
+    await tx((t) => comments.addComment(t, { versionId: never.versionId, authorId: never.editor, target: "course", body: "Working note on an add-on nobody needs." }));
+    await tx((t) => svc.removeAddon(t, { slug: never.slug }));
+    expect((await rows(sql`select 1 from learn.course_versions where course_id = (select id from learn.courses where slug = ${never.slug})`)).length).toBe(0);
+    await expect(tx((t) => svc.removeAddon(t, { slug: never.slug }))).rejects.toThrow(/not found/i);
+
+    const live = await draft();
+    const publisher = await makeUser("pub");
+    const reviewer = await makeUser("rev");
+    await tx((t) => svc.publishDraft(t, { versionId: live.versionId, actorId: publisher, reviewerUserId: reviewer, counselApprovedOn: "2026-10-12", material: false }));
+    await expect(tx((t) => svc.removeAddon(t, { slug: live.slug }))).rejects.toThrow(/published/i);
+    await expect(tx((t) => svc.removeAddon(t, { slug: "hipaa" }))).rejects.toThrow();
   });
 });

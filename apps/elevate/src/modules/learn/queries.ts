@@ -8,6 +8,7 @@ import { downlineEmployeeIds, todayInZone } from "@/modules/org/service";
 import { listLearnCourses, pickCourse } from "./course-catalog";
 import type { LearnCourseInfo } from "./constants";
 import { uuidArray } from "./jobs";
+import type { InstructionFacts } from "./instructions";
 import { describeDue } from "./rules";
 import { trainingFilterSchema } from "./validators";
 
@@ -201,4 +202,40 @@ export async function listEvidenceClients(): Promise<{ id: string; name: string;
   await authorize(user, "learn.export_evidence");
   const rows = (await db.execute(sql`select id, name, handles_phi from core.clients where archived_at is null and is_active order by name`)) as unknown as { id: string; name: string; handles_phi: boolean }[];
   return rows.map((r) => ({ id: r.id, name: r.name, handlesPhi: r.handles_phi }));
+}
+
+/**
+ * The facts behind the "instructions for learners" message of one course: how long it takes, the exam rules and how long a
+ * certificate lasts, read from the live version. Null when the course has no live version yet. Needs `learn.view_status`.
+ */
+export async function getInstructionFacts(courseSlug: string): Promise<InstructionFacts | null> {
+  const user = await requireUser();
+  const scope = scopeFor(user, "learn.view_status");
+  if (scope !== "all" && scope !== "team") throw new ForbiddenError("learn.view_status");
+  const courses = await listLearnCourses(db);
+  const info = pickCourse(courses, courseSlug);
+  const [row] = (await db.execute(sql`
+    select v.exam_config, c.requires_exam, cl.name as client_name,
+      (select max(t.total) from (select sum(m.estimated_minutes) as total from learn.version_modules m, unnest(m.tracks) tr where m.version_id = v.id group by tr) t)::int as minutes
+    from learn.course_versions v
+    join learn.courses c on c.id = v.course_id
+    left join core.clients cl on cl.id = c.client_id
+    where c.slug = ${info.slug} and v.status = 'published' limit 1`)) as unknown as {
+    exam_config: { passPercent?: number; maxTries?: number; waitMinutesAfterFail?: number; renewalMonths?: number; tracks?: Record<string, { questions?: number }> };
+    requires_exam: boolean;
+    client_name: string | null;
+    minutes: number | null;
+  }[];
+  if (!row) return null;
+  const questions = Math.max(0, ...Object.values(row.exam_config.tracks ?? {}).map((t) => t.questions ?? 0));
+  return {
+    slug: info.slug,
+    kind: info.kind,
+    label: info.label,
+    noun: info.noun,
+    clientName: row.client_name,
+    minutes: row.minutes,
+    exam: row.requires_exam && questions > 0 ? { questions, passPercent: row.exam_config.passPercent ?? 85, maxTries: row.exam_config.maxTries ?? 3, waitMinutes: row.exam_config.waitMinutesAfterFail ?? 60 } : null,
+    renewalMonths: row.exam_config.renewalMonths ?? null,
+  };
 }
