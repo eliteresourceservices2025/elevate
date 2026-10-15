@@ -96,6 +96,11 @@ export default async function StudioVersionPage({ params }: PageProps<"/course-s
           <Link href={`${base}/questions`} className="text-primary underline-offset-4 hover:underline">
             Open the exam question bank
           </Link>
+        
+          {" · "}
+          <Link href={`${base}/stats`} className="text-primary underline-offset-4 hover:underline">
+            See how learners do (statistics)
+          </Link>
         </p>
       </section>
 
