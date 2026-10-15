@@ -12,6 +12,7 @@ Elite Resource Services ("ERS", "we") runs ELEVATE, the internal system we use t
 - **Sensitive details:** government ID numbers (TIN, SSS, PhilHealth, Pag-IBIG), bank or payout details and your pay rate. These are stored encrypted and can be seen only by the HR and administrator roles that need them for payroll and compliance, and by you.
 - **Working time:** clock-in, break and clock-out records, the network address you clocked in from, requests to correct your time, and notes you add at the end of a shift. Our separate Monitoring policy explains the work screenshots we capture with Jibble and the optional location setting.
 - **Performance and development:** goals, early-engagement and periodic reviews, ratings and feedback.
+- **Training records:** the courses assigned to you in ELEVATE Learn (for example HIPAA and cybersecurity), your answers in the exams, your results and the certificates you earn.
 - **Engagement and exit records:** onboarding and offboarding checklists, agreements you sign in ELEVATE, exit interview answers and certificates of engagement.
 - **Job applications:** if you apply through our careers page, the details and resume you send and our hiring team's notes and scores.
 - **Security records:** a log of important actions (for example sign-ins and who opened a sensitive record), used to protect everyone's data.
@@ -22,6 +23,7 @@ We do not store client or patient information in ELEVATE. Please never upload it
 
 - **To manage your engagement with ERS:** onboarding, scheduling, time records, time off, equipment, reviews, agreements and ending the engagement. Basis: our contract with you and our legitimate interest in running the business.
 - **To pay and report correctly:** hours records used for payment, and records we are required to keep for tax, social contributions and other laws. Basis: contract and legal obligation.
+- **To train and show training was done:** assigning courses, grading exams and issuing certificates, so ERS and its clients can show that required training (for example HIPAA) was completed. Basis: our contract with you, legal obligation and legitimate interest. Your leads and clients see whether you completed a course, never your scores.
 - **To protect people, clients and systems:** security logs, sign-in checks and the monitoring described in our Monitoring policy. Basis: legitimate interest and, where the law requires it, your consent.
 - **To hire:** to assess applications and make offers. Basis: your request to be considered and our legitimate interest.
 
@@ -42,6 +44,7 @@ These providers process data for us under their own security and data-protection
 ## How long we keep it
 
 - **People records:** while you work with ERS and for **five years after the engagement ends**. After that they are kept for **one more year in a restricted archive** that only HR can open, then deleted or anonymized unless the law needs us to keep them longer.
+- **Training results and certificates:** **five years** after you complete the course, then **one more year in a restricted archive** that only HR can open, then deleted or anonymized unless the law needs us to keep them longer. Your answers to individual exam questions are removed after **12 months**; your score and pass or fail result stay.
 - **Time records and approved hours:** the engagement and **three years** after it ends.
 - **Tax and payment records:** for the period the law requires.
 - **Applications:** **12 months** after a rejection and **6 months** after a withdrawal, then anonymized. If you are hired, your application becomes part of your people record.

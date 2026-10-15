@@ -85,7 +85,9 @@ the **status view** (`learn.v_status`: assigned, in progress, passed, due, overd
 
 ## Privacy and retention
 
-- **Retention:** results, attestations and certificates are kept **6 years** (HIPAA documentation period). Per-question
+- **Retention:** results, attestations and certificates are kept **6 years** (HIPAA documentation period); the privacy
+  notice states this as 5 years, then 1 year in a restricted HR-only archive (the archive stage is not built: nothing
+  moves or hides them at year 5 yet). Per-question
   answers are removed after **12 months** by `learn-purge`; the score and pass/fail remain. Counsel confirms both periods
   before launch; they are configuration, not code.
 - **Minimal data:** Learn stores a user id and takes name and work email from the views at display time; it copies neither into
