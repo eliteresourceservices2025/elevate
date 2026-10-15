@@ -9,7 +9,7 @@ import { renderCertificatePdf } from "./certificate-pdf";
 import { HIPAA_SLUG } from "./constants";
 import { findLearnCourse, listLearnCourses } from "./course-catalog";
 import { learnBaseUrl } from "./token";
-import { addonNeed, assignmentNeed, describeDue, isOverdue, isoWeekKey, reminderDue, type ReminderKind } from "./rules";
+import { addDays, addonNeed, assignmentNeed, changedModuleKeys, describeDue, isOverdue, isoWeekKey, reminderDue, UPDATE_DUE_DAYS, updateQuestionCount, type ReminderKind } from "./rules";
 
 // The nightly work of ELEVATE Learn on ELEVATE's side (docs/learn/02-architecture.md). Learn itself runs no scheduled work.
 // Everything here uses ELEVATE's owner connection and goes through the `learn` schema tables; the Learn app never sees any of it.
@@ -26,7 +26,7 @@ const rows = async <T = Row>(q: ReturnType<typeof sql>): Promise<T[]> => (await 
 
 // ---- Assigning ------------------------------------------------------------------------------------------------------------------
 
-export type AssignRun = { skipped: boolean; mode?: "all" | "teams" | "paused"; assigned: number; renewals: number; cancelled: number; expired: number };
+export type AssignRun = { skipped: boolean; mode?: "all" | "teams" | "paused"; assigned: number; renewals: number; cancelled: number; expired: number; updates?: number; updatesSkipped?: number };
 
 /**
  * Daily: makes sure everyone who should be trained has an open assignment on the right track, closes assignments of people who left,
@@ -65,7 +65,10 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
   const expired = await rows<{ id: string }>(sql`
     update learn.assignments a set status = 'expired', closed_at = now()
     where a.course_id = ${version.course_id} and a.status = 'passed'
-      and exists (select 1 from learn.certificates c where c.assignment_id = a.id and c.ends_on < ${today}::date)
+      and (exists (select 1 from learn.certificates c where c.assignment_id = a.id and c.ends_on < ${today}::date)
+        -- an update module has no certificate of its own: it closes when the person has no valid certificate left in the course
+        or (a.reason = 'update' and not exists (select 1 from learn.certificates c2 where c2.user_id = a.user_id and c2.ends_on >= ${today}::date
+              and exists (select 1 from learn.assignments a2 where a2.id = c2.assignment_id and a2.course_id = a.course_id))))
       ${onUsers(sql`a.user_id`, scope)}
     returning a.id`);
 
@@ -115,10 +118,101 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
     }
   }
 
+  const upd = await runUpdateAssignments({ today, courseId: version.course_id, courseSlug: info.slug, versionId: version.version_id, noun: info.noun, scope, mode, pilotTeams });
+
   if (assigned || cancelled.length || expired.length) {
     await writeAudit({ actor: null, action: "learn.assign_run", metadata: { course: info.slug, mode, assigned, renewals, cancelled: cancelled.length, expired: expired.length } });
   }
-  return { skipped: false, mode, assigned, renewals, cancelled: cancelled.length, expired: expired.length };
+  return { skipped: false, mode, assigned, renewals, cancelled: cancelled.length, expired: expired.length, updates: upd.assigned, updatesSkipped: upd.skipped };
+}
+
+// ---- Update modules --------------------------------------------------------------------------------------------------------------
+
+/** A Postgres text[] literal of module keys (only plain keys survive). */
+const pgTextArray = (keys: string[]): string => `{${keys.filter((k) => /^[a-z0-9_]+$/.test(k)).join(",")}}`;
+
+export type UpdateRun = { assigned: number; skipped: number };
+
+/**
+ * After a version marked "material" is published: people whose valid certificate is on an older version get a short update
+ * assignment (reason "update") covering only the modules that changed, due in 30 days, ending with a few questions from them.
+ * Their certificate keeps its own dates; finishing the update records their acceptance and issues nothing. People with an open
+ * assignment are left alone (they finish the version they started and the next renewal brings them up to date). A change that
+ * touches no module in someone's track, or only modules with no question, assigns nothing and is counted as skipped.
+ */
+async function runUpdateAssignments(opts: { today: string; courseId: string; courseSlug: string; versionId: string; noun: string; scope?: Scope; mode: "all" | "teams" | "paused"; pilotTeams: Set<string> }): Promise<UpdateRun> {
+  const { today, courseId, versionId } = opts;
+  if (opts.mode === "paused") return { assigned: 0, skipped: 0 };
+  const [current] = await rows<{ version: number; content: { modules?: { key: string }[] } }>(sql`select version, content from learn.course_versions where id = ${versionId}`);
+  if (!current) return { assigned: 0, skipped: 0 };
+  const due = await rows<{ user_id: string; team_id: string | null; track: string; from_version_id: string }>(sql`
+    select u.id as user_id, e.team_id::text as team_id, cert.track, cert.version_id::text as from_version_id
+    from core.employees e join core.users u on u.id = e.user_id
+    cross join lateral (
+      select c.track, c.version_id from learn.certificates c join learn.assignments a on a.id = c.assignment_id
+      where c.user_id = u.id and a.course_id = ${courseId} and c.ends_on >= ${today}::date
+        and not exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id)
+      order by c.issued_on desc, c.ends_on desc limit 1
+    ) cert
+    join learn.course_versions fv on fv.id = cert.version_id
+    where e.archived_at is null and u.archived_at is null and e.status in ('onboarding', 'active', 'probation', 'on_leave')
+      and fv.version < ${current.version}
+      and exists (select 1 from learn.course_versions m where m.course_id = ${courseId} and m.material and m.version > fv.version and m.version <= ${current.version})
+      and not exists (select 1 from learn.assignments o where o.user_id = u.id and o.course_id = ${courseId} and (o.status in ('assigned', 'in_progress') or (o.reason = 'update' and o.version_id = ${versionId} and o.status <> 'cancelled')))
+      ${onUsers(sql`u.id`, opts.scope)}`);
+  if (due.length === 0) return { assigned: 0, skipped: 0 };
+
+  const contentOf = new Map<string, { key: string }[]>();
+  const modulesOf = async (id: string) => {
+    if (!contentOf.has(id)) {
+      const [r] = await rows<{ content: { modules?: { key: string }[] } }>(sql`select content from learn.course_versions where id = ${id}`);
+      contentOf.set(id, r?.content?.modules ?? []);
+    }
+    return contentOf.get(id)!;
+  };
+  const trackKeys = new Map<string, Set<string>>();
+  const keysFor = async (track: string) => {
+    if (!trackKeys.has(track)) {
+      const r = await rows<{ module_key: string }>(sql`select module_key from learn.version_modules where version_id = ${versionId} and ${track} = any(tracks)`);
+      trackKeys.set(track, new Set(r.map((x) => x.module_key)));
+    }
+    return trackKeys.get(track)!;
+  };
+
+  let assigned = 0;
+  let skipped = 0;
+  const newModules = current.content.modules ?? [];
+  for (const p of due) {
+    if (opts.mode === "teams" && !(p.team_id && opts.pilotTeams.has(p.team_id))) continue;
+    const changed = changedModuleKeys(await modulesOf(p.from_version_id), newModules, await keysFor(p.track));
+    if (changed.length === 0) { skipped += 1; continue; }
+    const [{ n }] = await rows<{ n: number }>(sql`select count(*)::int as n from learn.questions where version_id = ${versionId} and module_key = any(${pgTextArray(changed)}::text[])`);
+    const count = updateQuestionCount(n);
+    if (count === 0) { skipped += 1; continue; }
+    const dueOn = addDays(today, UPDATE_DUE_DAYS);
+    const made = await db.transaction(async (tx) => {
+      const inserted = (await tx.execute(sql`
+        insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on)
+        select ${p.user_id}, ${courseId}, ${versionId}, ${p.track}, 'update', ${dueOn}::date
+        where not exists (select 1 from learn.assignments a where a.user_id = ${p.user_id} and a.course_id = ${courseId} and a.status in ('assigned', 'in_progress'))
+        returning id`)) as unknown as { id: string }[];
+      if (inserted.length === 0) return false;
+      await tx.execute(sql`
+        insert into learn.update_scopes (assignment_id, from_version_id, module_keys, question_count)
+        values (${inserted[0].id}, ${p.from_version_id}, ${pgTextArray(changed)}::text[], ${count})`);
+      await notify(tx, {
+        userId: p.user_id,
+        kind: "learn.update_assigned",
+        title: `A short update to your ${opts.noun} is ready`,
+        body: `Some lessons changed. It takes a few minutes; please finish it by ${dueOn}. Your certificate stays valid.`,
+        link: "/learn",
+      });
+      return true;
+    });
+    if (made) assigned += 1;
+  }
+  if (assigned || skipped) await writeAudit({ actor: null, action: "learn.update_run", metadata: { course: opts.courseSlug, assigned, skipped } });
+  return { assigned, skipped };
 }
 
 // ---- Reminders ------------------------------------------------------------------------------------------------------------------

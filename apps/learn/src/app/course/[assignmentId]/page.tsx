@@ -22,7 +22,8 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
       <p className="muted">
         <Link href="/">My training</Link>
       </p>
-      <h1>{assignment.courseTitle}</h1>
+      <h1>{assignment.isUpdate ? `${assignment.courseTitle}: update` : assignment.courseTitle}</h1>
+      {assignment.isUpdate ? <p>Some lessons changed since you were certified. Read the ones below, then answer a few questions. Your certificate stays valid.</p> : null}
       <p className="muted">
         {doneCount} of {modules.length} modules done · due {assignment.dueOn}
       </p>
@@ -49,7 +50,7 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
       </ol>
 
       <section className="card" aria-labelledby="exam-h">
-        <h2 id="exam-h">Final exam</h2>
+        <h2 id="exam-h">{assignment.isUpdate ? "Update questions" : "Final exam"}</h2>
         <p>
           {exam.questions} questions · {exam.minutes ? `${exam.minutes} minutes` : "no time limit"} · {exam.passPercent}% to pass · {exam.triesAllowed} tries
         </p>
@@ -64,7 +65,17 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
               ))}
           </ul>
         ) : null}
-        {certificate ? (
+        {assignment.isUpdate && finished ? (
+          assignment.accepted ? (
+            <p className="feedback good">You are up to date. Nothing more to do.</p>
+          ) : (
+            <p>
+              <Link className="button" href={`/certificate/${assignment.id}`}>
+                Accept the update
+              </Link>
+            </p>
+          )
+        ) : certificate ? (
           <p>
             <Link className="button" href={`/certificate/${assignment.id}`}>
               View my certificate

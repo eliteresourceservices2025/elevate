@@ -131,7 +131,8 @@ const ACTIONS: Record<string, { schema: z.ZodType; run: (ctx: Ctx, input: never)
     run: async (ctx, input: { assignmentId: string; statementVersion: string; typedName: string }) => {
       const [c] = await ctx.sql`
         select * from learn.accept_and_certify(${ctx.userId}::uuid, ${input.assignmentId}::uuid, ${input.statementVersion}, ${input.typedName}, ${ctx.address}, ${ctx.authMethods}::text[])`;
-      return { body: { ok: true, reference: c.reference as string } };
+      // An update module returns no certificate (the person keeps the one they hold).
+      return { body: { ok: true, reference: (c?.reference as string | undefined) ?? null } };
     },
   },
 };

@@ -8,11 +8,13 @@ export type ExamConfig = { passPercent: number; maxTries: number; waitMinutesAft
 
 export type AssignmentSummary = { id: string; title: string; track: string; status: string; dueOn: string };
 
+/** The home list. A cancelled assignment (a retired version nobody finished) is history and shows only in My training record. */
 export async function listAssignments(sql: Sql, userId: string): Promise<AssignmentSummary[]> {
   return withUser(sql, userId, async (tx) => {
     const rows = await tx`
       select a.id, c.title, a.track, a.status, a.due_on::text as due_on
       from learn.assignments a join learn.courses c on c.id = a.course_id
+      where a.status <> 'cancelled'
       order by a.assigned_at desc`;
     return rows.map((r) => ({ id: r.id as string, title: r.title as string, track: r.track as string, status: r.status as string, dueOn: r.due_on as string }));
   });
@@ -34,7 +36,7 @@ export type ModuleState = {
 export type AttemptSummary = { id: string; attemptNo: number; status: string; submittedAt: string | null; scorePercent: number | null; passed: boolean | null };
 
 export type Overview = {
-  assignment: { id: string; courseTitle: string; track: string; status: string; dueOn: string };
+  assignment: { id: string; courseTitle: string; track: string; status: string; dueOn: string; isUpdate: boolean; accepted: boolean };
   modules: ModuleState[];
   allModulesDone: boolean;
   exam: { questions: number; minutes: number | null; passPercent: number; triesAllowed: number; attempts: AttemptSummary[]; openAttemptId: string | null; waitUntil: string | null; waitMinutes: number };
@@ -46,7 +48,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
   if (!/^[0-9a-f-]{36}$/i.test(assignmentId)) return null;
   return withUser(sql, userId, async (tx) => {
     const [a] = await tx`
-      select a.id, a.track, a.status, a.due_on::text as due_on, a.version_id, c.title as course_title, v.exam_config, v.content
+      select a.id, a.track, a.status, a.reason, a.due_on::text as due_on, a.version_id, c.title as course_title, v.exam_config, v.content
       from learn.assignments a join learn.courses c on c.id = a.course_id join learn.course_versions v on v.id = a.version_id
       where a.id = ${assignmentId}`;
     if (!a) return null;
@@ -57,7 +59,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
       select m.module_key, m.title, m.position, m.estimated_minutes, m.min_seconds, m.screen_count,
              exists (select 1 from learn.module_completions c where c.assignment_id = ${assignmentId} and c.module_key = m.module_key) as completed,
              coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = ${assignmentId} and t.module_key = m.module_key), 0)::int as seconds
-      from learn.track_modules(${a.version_id as string}::uuid, ${a.track as string}) m
+      from learn.assignment_modules(${assignmentId}::uuid) m
       order by m.position`;
     let earlierDone = true;
     const modules: ModuleState[] = mods.map((m) => {
@@ -92,6 +94,11 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
     const lastFail = attempts.filter((x) => x.status === "submitted" && x.passed !== true).at(-1);
     const waitUntil = lastFail?.submittedAt ? new Date(Date.parse(lastFail.submittedAt) + (config.waitMinutesAfterFail ?? 60) * 60_000) : null;
     const trackConfig = config.tracks[a.track as string] ?? { questions: 0 };
+    // An update module asks only what its changed modules can supply, up to the count set when it was assigned.
+    const [scope] = await tx`
+      select least(s.question_count, (select count(*) from learn.questions q where q.version_id = ${a.version_id as string}::uuid and q.module_key = any(s.module_keys)))::int as questions
+      from learn.update_scopes s where s.assignment_id = ${assignmentId}`;
+    const [acc] = await tx`select exists (select 1 from learn.attestations where assignment_id = ${assignmentId}) as accepted`;
 
     const [cert] = await tx`
       select c.reference, c.holder_name, c.issued_on::text as issued_on, c.ends_on::text as ends_on,
@@ -99,11 +106,11 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
       from learn.certificates c where c.assignment_id = ${assignmentId}`;
 
     return {
-      assignment: { id: a.id as string, courseTitle: a.course_title as string, track: a.track as string, status: a.status as string, dueOn: a.due_on as string },
+      assignment: { id: a.id as string, courseTitle: a.course_title as string, track: a.track as string, status: a.status as string, dueOn: a.due_on as string, isUpdate: a.reason === "update", accepted: acc.accepted as boolean },
       modules,
       allModulesDone: modules.length > 0 && modules.every((m) => m.completed),
       exam: {
-        questions: trackConfig.questions,
+        questions: scope ? (scope.questions as number) : trackConfig.questions,
         minutes: trackConfig.minutes ?? null,
         passPercent: config.passPercent,
         triesAllowed: config.maxTries + (grants.tries as number),

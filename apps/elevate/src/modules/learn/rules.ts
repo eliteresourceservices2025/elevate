@@ -88,3 +88,23 @@ export const describeDue = (dueOn: string, today: string): string => {
   if (d === 0) return "due today";
   return `due in ${d} day${d === 1 ? "" : "s"}`;
 };
+
+// ---- Update modules (a material change reaches people already certified) -----------------------------------------------------------
+
+/** An update module is due this many days after it is assigned, and ends with at most this many questions. */
+export const UPDATE_DUE_DAYS = 30;
+export const UPDATE_QUESTIONS = 5;
+
+type ModuleLike = { key: string };
+
+/**
+ * The modules of the new version a certified person must go through again: the ones in their track whose content differs from the
+ * version they were certified on, plus any module that did not exist then. A module is compared as a whole (title, summary, screens).
+ */
+export function changedModuleKeys(oldModules: readonly ModuleLike[], newModules: readonly ModuleLike[], trackKeys: ReadonlySet<string>): string[] {
+  const before = new Map(oldModules.map((m) => [m.key, JSON.stringify(m)]));
+  return newModules.filter((m) => trackKeys.has(m.key) && before.get(m.key) !== JSON.stringify(m)).map((m) => m.key);
+}
+
+/** Questions for an update module: five, or fewer when the changed modules have fewer; none means it cannot be examined. */
+export const updateQuestionCount = (available: number): number => Math.min(UPDATE_QUESTIONS, Math.max(0, available));
