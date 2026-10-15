@@ -23,5 +23,7 @@ export const peoplePermissions = definePermissions({
   "people.manage_assignments": { roles: { super_admin: "all", hr_admin: "all" } },
   "people.manage_clients": { roles: { super_admin: "all", hr_admin: "all" } },
   "people.manage_custom_fields": { roles: { super_admin: "all", hr_admin: "all" } },
+  // The retention settings and the legal hold on a person's record (HR and Super Admin only).
+  "people.manage_retention": { roles: { super_admin: "all", hr_admin: "all" } },
   "people.view_history": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", employee: "own" } },
 });

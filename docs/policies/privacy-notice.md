@@ -41,7 +41,7 @@ These providers process data for us under their own security and data-protection
 
 ## How long we keep it
 
-- **People records:** while you work with ERS and for **five years after the engagement ends**, then deleted or anonymized unless the law needs us to keep them longer.
+- **People records:** while you work with ERS and for **five years after the engagement ends**. After that they are kept for **one more year in a restricted archive** that only HR can open, then deleted or anonymized unless the law needs us to keep them longer.
 - **Time records and approved hours:** the engagement and **three years** after it ends.
 - **Tax and payment records:** for the period the law requires.
 - **Applications:** **12 months** after a rejection and **6 months** after a withdrawal, then anonymized. If you are hired, your application becomes part of your people record.

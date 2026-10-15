@@ -9,6 +9,7 @@ import {
   jsonb,
   numeric,
   primaryKey,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -67,6 +68,11 @@ export const employees = core
 
       createdBy: uuid("created_by"),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
+      // Retention (people-retention-design.md). Set only by the retention job; a legal hold skips both stages.
+      retentionArchivedAt: timestamp("retention_archived_at", { withTimezone: true }),
+      anonymizedAt: timestamp("anonymized_at", { withTimezone: true }),
+      legalHoldAt: timestamp("legal_hold_at", { withTimezone: true }),
+      legalHoldReason: text("legal_hold_reason"),
       ...stamps,
     },
     (t) => [
@@ -82,6 +88,27 @@ export const employees = core
         "employees_civil_status_chk",
         sql`${t.civilStatus} is null or ${t.civilStatus} in ('single','married','widowed','separated','other')`,
       ),
+    ],
+  )
+  .enableRLS();
+
+/** One row. The retention job does nothing until HR turns it on (the periods are for counsel to confirm). */
+export const peopleRetentionSettings = core
+  .table(
+    "people_retention_settings",
+    {
+      id: smallint("id").primaryKey().default(1),
+      enabled: boolean("enabled").notNull().default(false),
+      /** Months after the end date until the record moves to the HR-only archive. */
+      archiveAfterMonths: smallint("archive_after_months").notNull().default(60),
+      /** Months after the end date until personal data is anonymized. */
+      anonymizeAfterMonths: smallint("anonymize_after_months").notNull().default(72),
+      updatedBy: uuid("updated_by").references(() => users.id),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      check("people_retention_settings_one_row", sql`${t.id} = 1`),
+      check("people_retention_settings_order_chk", sql`${t.anonymizeAfterMonths} > ${t.archiveAfterMonths}`),
     ],
   )
   .enableRLS();

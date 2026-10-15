@@ -261,3 +261,19 @@ export const myProfileSchema = z.object({
   firstName: requiredText("your first name"),
   lastName: requiredText("your last name"),
 });
+
+// ---- Retention (docs/modules/people-retention-design.md) ----------------------------------------------------------------
+
+export const peopleRetentionSchema = z
+  .object({
+    enabled: z.boolean(),
+    archiveAfterMonths: z.coerce.number().int().min(12).max(240),
+    anonymizeAfterMonths: z.coerce.number().int().min(13).max(240),
+  })
+  .refine((v) => v.anonymizeAfterMonths > v.archiveAfterMonths, { message: "Anonymizing must come after archiving." });
+
+export const legalHoldSchema = z.object({
+  employeeId: z.string().uuid(),
+  hold: z.boolean(),
+  reason: z.string().trim().max(300).optional(),
+});
