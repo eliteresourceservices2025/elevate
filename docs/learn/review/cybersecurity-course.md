@@ -13,7 +13,7 @@ Course code: `cybersecurity`. Generated for review from the course files; the au
 
 > I have completed ERS's cybersecurity basics training. I understand that I must keep my passwords and sign-in codes private, use only approved devices, software and networks for work, keep my devices updated, and report anything suspicious or any lost device to my team lead and HR right away.
 
-Version label: v1-draft
+Version label: v2
 
 ## Module 1: Why security is everyone's job
 

@@ -340,7 +340,7 @@ addressable; S8 proposes making it required), and state-law specifics for two st
 3. **Authorization examples** (marketing, sale of PHI, psychotherapy notes) are from the HHS summary; confirm against 45 CFR
    164.508.
 4. **Substance use treatment records (42 CFR Part 2)** are mentioned as an example of extra rules; confirm or remove.
-5. **Responsibility statement** (`v1-draft`) and the plain-words wording of sanctions.
+5. **Responsibility statement** (labelled `v2` since the deepened courses; the wording is unchanged from the draft) and the plain-words wording of sanctions.
 6. **The proposed Security Rule update.** The lesson states it as a proposal. If a final rule is published (S9 shows a final
    action date of 07/00/2027), Modules 4 and 5 need a new version.
 7. **Penalty amounts** (civil) are deliberately not in the course. The criminal prison terms are.
