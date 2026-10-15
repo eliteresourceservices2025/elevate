@@ -368,6 +368,96 @@ function BlockEditor({ block, onChange, idp }: { block: Block; onChange: (b: Blo
           ))}
         </div>
       );
+    case "table":
+      return (
+        <div className="space-y-2">
+          <Field id={`${idp}-cap`} label="Table caption (optional)">
+            <Input id={`${idp}-cap`} value={block.caption ?? ""} onChange={(e) => onChange({ ...block, caption: e.target.value || undefined })} maxLength={160} />
+          </Field>
+          <Field id={`${idp}-cols`} label="Column headings (one per line, 2 to 4)">
+            <Textarea
+              id={`${idp}-cols`}
+              rows={3}
+              value={block.columns.join("\n")}
+              onChange={(e) => {
+                const columns = lines(e.target.value);
+                // keep every row as wide as the headings so the table stays valid while editing
+                onChange({ ...block, columns, rows: block.rows.map((r) => Array.from({ length: Math.max(columns.length, 2) }, (_, i) => r[i] ?? "TO WRITE:")) });
+              }}
+            />
+          </Field>
+          <Field id={`${idp}-rows`} label="Rows (one per line, cells separated by | )">
+            <Textarea
+              id={`${idp}-rows`}
+              rows={Math.max(4, block.rows.length + 1)}
+              value={block.rows.map((r) => r.join(" | ")).join("\n")}
+              onChange={(e) => onChange({ ...block, rows: lines(e.target.value).map((l) => l.split("|").map((c) => c.trim())) })}
+            />
+          </Field>
+        </div>
+      );
+    case "layers":
+    case "timeline": {
+      const key = block.type === "layers" ? "label" : "when";
+      const items = block.items as Record<string, string>[];
+      return (
+        <div className="space-y-2">
+          <Field id={`${idp}-title`} label={block.type === "layers" ? "Layers title (optional)" : "Timeline title (optional)"}>
+            <Input id={`${idp}-title`} value={block.title ?? ""} onChange={(e) => onChange({ ...block, title: e.target.value || undefined })} maxLength={160} />
+          </Field>
+          <Field id={`${idp}-items`} label={`Items, one per line as "${key === "label" ? "Layer name" : "When"} | text"`}>
+            <Textarea
+              id={`${idp}-items`}
+              rows={Math.max(4, items.length + 1)}
+              value={items.map((it) => `${it[key]} | ${it.text}`).join("\n")}
+              onChange={(e) => {
+                const next = lines(e.target.value).map((l) => {
+                  const [head, ...rest] = l.split("|");
+                  return { [key]: head.trim(), text: rest.join("|").trim() };
+                });
+                onChange({ ...block, items: next } as Block);
+              }}
+            />
+          </Field>
+        </div>
+      );
+    }
+    case "glossary":
+      return (
+        <Field id={idp} label={'Terms, one per line as "Term | meaning"'}>
+          <Textarea
+            id={idp}
+            rows={Math.max(4, block.terms.length + 1)}
+            value={block.terms.map((t) => `${t.term} | ${t.meaning}`).join("\n")}
+            onChange={(e) =>
+              onChange({
+                ...block,
+                terms: lines(e.target.value).map((l) => {
+                  const [head, ...rest] = l.split("|");
+                  return { term: head.trim(), meaning: rest.join("|").trim() };
+                }),
+              })
+            }
+          />
+        </Field>
+      );
+    case "case":
+      return (
+        <div className="space-y-2">
+          <Field id={`${idp}-t`} label="Case title">
+            <Input id={`${idp}-t`} value={block.title} onChange={(e) => onChange({ ...block, title: e.target.value })} maxLength={160} />
+          </Field>
+          <Field id={idp} label="The situation">
+            <Textarea id={idp} rows={4} value={block.scenario} onChange={(e) => onChange({ ...block, scenario: e.target.value })} maxLength={900} />
+          </Field>
+          <Field id={`${idp}-q`} label="The question">
+            <Input id={`${idp}-q`} value={block.question} onChange={(e) => onChange({ ...block, question: e.target.value })} maxLength={160} />
+          </Field>
+          <Field id={`${idp}-a`} label="The answer (shown when the person asks)">
+            <Textarea id={`${idp}-a`} rows={4} value={block.answer} onChange={(e) => onChange({ ...block, answer: e.target.value })} maxLength={900} />
+          </Field>
+        </div>
+      );
     case "check":
       return (
         <div className="space-y-2">
@@ -405,6 +495,11 @@ const BLOCK_TYPES: { value: Block["type"]; label: string }[] = [
   { value: "steps", label: "Steps" },
   { value: "scenario", label: "Scenario" },
   { value: "check", label: "Knowledge check" },
+  { value: "case", label: "Worked case (answer on request)" },
+  { value: "table", label: "Table" },
+  { value: "layers", label: "Layers" },
+  { value: "timeline", label: "Timeline" },
+  { value: "glossary", label: "Glossary" },
 ];
 
 export function ScreenEditor({ versionId, stamp, moduleKey, screen, index, count }: { versionId: string; stamp: number; moduleKey: string; screen: CourseModule["screens"][number]; index: number; count: number }) {

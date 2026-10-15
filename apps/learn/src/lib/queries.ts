@@ -120,6 +120,8 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
 
 export type ModuleView = {
   assignmentId: string;
+  /** The course's address (for example hipaa): the optional recap video is looked up by course and module. */
+  courseSlug: string;
   module: CourseModule;
   seenScreens: number[];
   seconds: number;
@@ -136,13 +138,14 @@ export async function getModuleView(sql: Sql, userId: string, assignmentId: stri
   if (index < 0 || overview.modules[index].locked) return null;
   const state = overview.modules[index];
   return withUser(sql, userId, async (tx) => {
-    const [a] = await tx`select v.content from learn.assignments a join learn.course_versions v on v.id = a.version_id where a.id = ${assignmentId}`;
+    const [a] = await tx`select v.content, c.slug from learn.assignments a join learn.course_versions v on v.id = a.version_id join learn.courses c on c.id = a.course_id where a.id = ${assignmentId}`;
     const found = (a.content as CourseContent).modules.find((m) => m.key === key);
     if (!found) return null;
     const seen = await tx`select screen_index from learn.module_screens where assignment_id = ${assignmentId} and module_key = ${key} order by screen_index`;
     const next = overview.modules[index + 1];
     return {
       assignmentId,
+      courseSlug: a.slug as string,
       module: found,
       seenScreens: seen.map((r) => r.screen_index as number),
       seconds: state.seconds,

@@ -54,6 +54,16 @@ export function newBlock(type: Block["type"]): Block {
           { text: `${PLACEHOLDER} a tempting wrong response`, feedback: `${PLACEHOLDER} why this is not right.`, best: false },
         ],
       };
+    case "table":
+      return { type, columns: ["Item", "What it means"], rows: [[`${PLACEHOLDER} first item`, `${PLACEHOLDER} meaning`]] };
+    case "layers":
+      return { type, items: [{ label: "Layer 1", text: `${PLACEHOLDER} what it is` }, { label: "Layer 2", text: `${PLACEHOLDER} what it is` }] };
+    case "timeline":
+      return { type, items: [{ when: "First", text: `${PLACEHOLDER} what happens` }, { when: "Then", text: `${PLACEHOLDER} what happens next` }] };
+    case "glossary":
+      return { type, terms: [{ term: "Term", meaning: `${PLACEHOLDER} what it means` }, { term: "Another term", meaning: `${PLACEHOLDER} what it means` }] };
+    case "case":
+      return { type, title: "A worked case", scenario: `${PLACEHOLDER} describe the situation.`, question: `${PLACEHOLDER} what should happen?`, answer: `${PLACEHOLDER} the answer and why.` };
     case "check":
       return {
         type,

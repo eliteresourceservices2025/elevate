@@ -1,22 +1,23 @@
 import { q, type CourseModule, type QuestionSeed } from "../schema";
 
-// Module 3: the Privacy Rule and minimum necessary. Invented examples only.
+// Module 3: the Privacy Rule: using and sharing PHI. Version 2 (deeper). Grounded in 45 CFR 164.502 (general rules and minimum
+// necessary), 164.506 (treatment, payment, operations), 164.508 (authorization, marketing, sale), 164.510 (agree or object),
+// 164.512 (public interest and benefit), 164.514(h) (verification). All people and details are invented. Counsel reviews this.
 
 export const m3: CourseModule = {
   key: "privacy",
-  title: "The Privacy Rule and minimum necessary",
-  summary: "When patient information may be used or shared, how to keep to the minimum needed, and the ERS 5-point send check.",
-  estimatedMinutes: 15,
+  title: "The Privacy Rule: using and sharing patient information",
+  summary: "When patient information may be used or shared, when a written authorization is needed, how the public-interest exceptions work, and how to share only the minimum.",
+  estimatedMinutes: 20,
   tracks: ["full", "essentials", "refresher"],
   keyPoints: [
-    "Using, disclosing and requesting information are three different actions.",
-    "Use only the minimum information needed for the task.",
-    "Access is by role: you see what your job needs, nothing more.",
-    "Before you send: Who, What, Why, Where, How.",
+    "Use means working with information inside the organization; disclosure means giving it to someone outside; both need a valid reason.",
+    "Treatment, payment and healthcare operations are permitted without asking the patient each time; most other purposes need a written authorization.",
+    "Marketing with patient information and selling it generally need the patient's written authorization.",
+    "The public-interest disclosures (police, courts, public health and others) are the client's decisions, never yours.",
+    "Minimum necessary means the least information that does the job.",
     "Verify who is asking before you share anything.",
-    "Anything beyond the permitted purposes needs the patient's written authorization, and the client decides that.",
-    "HIPAA is the minimum: a stricter state law or client rule can apply as well.",
-    "Reasonable safeguards cover exposure that cannot be avoided; police, courts and agencies go through the client, never through you.",
+    "Use the ERS 5-point send check: who, what, why, where, how.",
   ],
   screens: [
     {
@@ -33,14 +34,31 @@ export const m3: CourseModule = {
       blocks: [
         { type: "paragraph", text: "These three words mean different things, and the rules are different for each." },
         {
-          type: "list",
-          items: [
-            "**Use**: working with information inside your organization to do your task.",
-            "**Disclosure**: giving or showing information to someone outside, for example a vendor, a family member or another office.",
-            "**Request**: asking another organization for patient information.",
+          type: "table",
+          columns: ["Word", "What it is", "Example"],
+          rows: [
+            ["Use", "Working with information inside your organization to do your task", "Reading a claim to correct it"],
+            ["Disclosure", "Giving or showing information to someone outside the organization", "Sending an invoice to a collection agency"],
+            ["Request", "Asking another organization for patient information", "Asking a lab for a result"],
           ],
         },
         { type: "paragraph", text: "Each one needs a valid reason, and each one must be limited to what is needed." },
+      ],
+    },
+    {
+      id: "default",
+      title: "The starting point: only what the rule allows",
+      blocks: [
+        { type: "paragraph", text: "The Privacy Rule works like a locked door. Patient information may be used and disclosed only in the ways the rule lists. Everything else needs the patient's written permission." },
+        {
+          type: "layers",
+          title: "Three groups of reasons",
+          items: [
+            { label: "Always allowed", text: "To the patient, and to HHS when it investigates." },
+            { label: "Allowed without a form", text: "Treatment, payment, healthcare operations, and a short list of public-interest and legal reasons." },
+            { label: "Needs written authorization", text: "Almost everything else, including marketing and sale of the information." },
+          ],
+        },
       ],
     },
     {
@@ -48,12 +66,32 @@ export const m3: CourseModule = {
       title: "Treatment, payment and operations",
       blocks: [
         { type: "paragraph", text: "Covered entities may use and share information for **treatment**, **payment** and **healthcare operations** without asking the patient each time. Most of the work you do falls under these." },
-        { type: "paragraph", text: "That permission belongs to the covered entity and is passed to ERS only through the BAA. It does not make everything fair game. You work within your client's specific instructions." },
         {
-          type: "callout",
-          tone: "warning",
-          text: "Anything outside your task, such as marketing, a favor for a friend, research, or sharing with a family member, is a different question. Stop and ask.",
+          type: "table",
+          columns: ["Purpose", "What it covers", "Work you might do"],
+          rows: [
+            ["Treatment", "Providing, coordinating or managing a patient's care", "Scheduling a referral appointment"],
+            ["Payment", "Billing, claims, eligibility checks, collection", "Verifying insurance coverage"],
+            ["Operations", "Running the practice: quality review, training, audits", "Preparing records for an internal audit"],
+          ],
         },
+        { type: "callout", tone: "warning", text: "That permission belongs to the covered entity and reaches ERS only through the BAA. It does not make everything fair game: you work within your client's specific instructions." },
+      ],
+    },
+    {
+      id: "agree-or-object",
+      title: "When the patient gets a chance to agree or object",
+      blocks: [
+        { type: "paragraph", text: "A few disclosures are allowed if the patient is told and does not object. These are the covered entity's decisions, made with the patient, not by a VA on the phone." },
+        {
+          type: "list",
+          items: [
+            "Telling visitors a patient's location in a facility, when the patient has not objected",
+            "Sharing relevant information with a family member or friend involved in the patient's care or payment",
+            "Notifying family in a disaster to help with care or location",
+          ],
+        },
+        { type: "callout", tone: "tip", text: "If the patient is present and says no, the answer is no. If you do not know whether they agreed, you do not share: you take a message and pass it to the client." },
       ],
     },
     {
@@ -62,23 +100,66 @@ export const m3: CourseModule = {
       blocks: [
         { type: "paragraph", text: "For anything outside treatment, payment, healthcare operations and the other purposes the rule permits, the patient must give a **written authorization**: a signed form that says what may be shared, with whom, and why." },
         {
-          type: "list",
-          items: [
-            "Marketing messages that use patient information",
-            "Sharing information with an employer or an outside company for its own purposes",
-            "Most uses of psychotherapy notes",
-            "Selling patient information (generally not allowed without authorization)",
+          type: "table",
+          caption: "What a valid authorization contains",
+          columns: ["Element", "Why it is there"],
+          rows: [
+            ["A specific description of the information", "So everyone knows exactly what may be shared"],
+            ["Who may share it, and who may receive it", "So it goes only to the named people"],
+            ["The purpose", "So it is not used for something else"],
+            ["An expiration date or event", "So it does not last forever"],
+            ["Signature and date", "So it is the patient's own choice"],
+            ["The right to revoke, in writing", "So the patient can change their mind"],
           ],
         },
         { type: "callout", tone: "warning", text: "You will never decide this yourself. Your client keeps the authorizations and decides. If a request is outside your task, route it to your lead or client contact." },
       ],
     },
     {
+      id: "marketing",
+      title: "Marketing and selling patient information",
+      blocks: [
+        { type: "paragraph", text: "**Marketing** means communicating about a product or service to encourage people to buy or use it. When a communication uses patient information for marketing, the patient generally must sign an authorization first. **Selling** patient information, receiving payment for it, also needs the patient's authorization." },
+        {
+          type: "compare",
+          left: { title: "Usually fine", items: ["A reminder about the patient's own appointment", "A message about the clinic's own services as part of their care", "A face-to-face conversation about a product"], },
+          right: { title: "Needs authorization", items: ["Using a patient list to promote another company's product", "Taking money from a company to send its offer to patients", "Posting a patient's photo or story on a website or social media"] },
+        },
+        { type: "callout", tone: "warning", text: "If you build or maintain a client's website, newsletter or social pages, this applies to you directly. A patient's story, photo or review is not yours to post without the client confirming a signed authorization." },
+      ],
+    },
+    {
+      id: "psychotherapy-notes",
+      title: "Psychotherapy notes",
+      blocks: [
+        { type: "paragraph", text: "**Psychotherapy notes** are a counselor's own private notes about a counseling session, kept separate from the rest of the medical record. They get stronger protection: most uses and disclosures need a specific written authorization." },
+        { type: "callout", tone: "info", text: "This is different from the ordinary mental health information in a chart, such as medications, session times, test results and diagnoses. You will not usually see psychotherapy notes, and if you do, do not copy, quote or forward them. Ask your lead." },
+      ],
+    },
+    {
       id: "authorities",
       title: "When police, a court or an agency asks",
       blocks: [
-        { type: "paragraph", text: "The law lets, and sometimes requires, a covered entity to share information without the patient's authorization in certain situations: when the law requires it, for public health, to report abuse or neglect, for oversight, in court proceedings, and in some law enforcement matters." },
-        { type: "paragraph", text: "Those decisions are the client's, made with its own legal checks. A subpoena or court order, a named agency and a lawful request are things the client verifies. A phone call is not proof of any of them." },
+        { type: "paragraph", text: "The law lets, and sometimes requires, a covered entity to share information without the patient's authorization in a defined list of situations:" },
+        {
+          type: "list",
+          items: [
+            "When another law requires it",
+            "For public health activities, such as reporting certain diseases",
+            "To report abuse, neglect or domestic violence, in the situations the rule describes",
+            "For health oversight, such as an audit or license review",
+            "In court and administrative proceedings, with an order, subpoena or similar process",
+            "For certain law enforcement purposes, with limits",
+            "To avert a serious and imminent threat to health or safety",
+          ],
+        },
+        { type: "paragraph", text: "Those decisions are the client's, made with its own legal checks. A phone call is not proof of any of them." },
+      ],
+    },
+    {
+      id: "case-detective",
+      title: "Worked case: the detective on the phone",
+      blocks: [
         {
           type: "scenario",
           title: "A caller says he is a detective",
@@ -88,6 +169,13 @@ export const m3: CourseModule = {
             { text: "Share nothing, take his contact details, and pass the request to your client contact straight away.", feedback: "Correct. The client verifies and decides. You route.", best: true },
             { text: "Confirm only whether the person is a patient.", feedback: "Confirming that someone is a patient is itself a disclosure.", best: false },
           ],
+        },
+        {
+          type: "case",
+          title: "A second look: the subpoena in the mail",
+          scenario: "A letter arrives at the clinic from a law firm, with a document that looks like a subpoena asking for a patient's full chart. The office manager is out and the letter says it is due in three days.",
+          question: "Who handles this, and what do you do with it?",
+          answer: "The client's privacy contact or legal advisor handles it, because a subpoena alone may not be enough to release a chart without further steps. You do not copy, scan or send anything. Photograph nothing, note only that it arrived and when, and pass the original to your client contact the same day.",
         },
       ],
     },
@@ -107,7 +195,17 @@ export const m3: CourseModule = {
       id: "exceptions",
       title: "Where minimum necessary does not apply",
       blocks: [
-        { type: "paragraph", text: "There are a few exceptions, for example sharing for a patient's treatment between providers, giving the patient their own information, or disclosures the law requires." },
+        { type: "paragraph", text: "The standard does not apply in a few places, because limiting the information would defeat the purpose:" },
+        {
+          type: "list",
+          items: [
+            "Disclosures to a provider for the patient's treatment",
+            "Disclosures to the patient themselves",
+            "Disclosures made under the patient's own authorization",
+            "Disclosures to HHS for an investigation",
+            "Disclosures the law requires",
+          ],
+        },
         { type: "callout", tone: "tip", text: "These exceptions are for your client to apply, not for you to decide. If you think one applies, ask your lead or client contact. Do not rely on your own reading." },
       ],
     },
@@ -137,24 +235,6 @@ export const m3: CourseModule = {
       ],
     },
     {
-      id: "patient-rights",
-      title: "When a patient asks for something",
-      blocks: [
-        { type: "paragraph", text: "Patients have rights over their own information. The client handles them, and you may be the first person who hears the request." },
-        {
-          type: "list",
-          items: [
-            "See or get a copy of their records",
-            "Ask for a correction",
-            "Get a list of certain disclosures",
-            "Ask for limits on use or sharing, or for confidential communications",
-            "Receive the clinic's notice of privacy practices, and complain",
-          ],
-        },
-        { type: "paragraph", text: "**Your part:** do not answer or send anything yourself. Be kind, take down only the request, and pass it on the way your client instructs. The client has its own deadlines and checks." },
-      ],
-    },
-    {
       id: "state-laws",
       title: "HIPAA is the minimum, not the maximum",
       blocks: [
@@ -171,26 +251,10 @@ export const m3: CourseModule = {
       ],
     },
     {
-      id: "role-access",
-      title: "Role-based access",
-      blocks: [
-        { type: "paragraph", text: "What you can see should match your job. If you find you can see more than you need, do not explore it. Tell your lead so the access can be corrected." },
-        {
-          type: "check",
-          question: "You notice your login can open another team's patient files. What should you do?",
-          options: [
-            { text: "Do not open them, and tell your lead", correct: true, feedback: "Right. Extra access is a gap to be fixed, not a permission." },
-            { text: "Look around once to see how the system works", correct: false, feedback: "Exploring is itself a violation." },
-            { text: "Ignore it and tell nobody", correct: false, feedback: "Extra access should be reported so it can be removed." },
-          ],
-        },
-      ],
-    },
-    {
-      id: "identity",
+      id: "verify",
       title: "Know who you are talking to",
       blocks: [
-        { type: "paragraph", text: "Before you share anything, you must be sure the person is allowed to receive it. A friendly voice, an official-looking email or an urgent tone is not proof." },
+        { type: "paragraph", text: "Before you share anything, you must be sure the person is allowed to receive it. HIPAA requires organizations to verify the identity and authority of people requesting information when they are not already known. A friendly voice, an official-looking email or an urgent tone is not proof." },
         {
           type: "steps",
           items: [
@@ -234,25 +298,53 @@ export const m3: CourseModule = {
         },
       ],
     },
+    {
+      id: "terms",
+      title: "Terms from this module",
+      blocks: [
+        {
+          type: "glossary",
+          terms: [
+            { term: "Use", meaning: "Working with patient information inside an organization to do a task." },
+            { term: "Disclosure", meaning: "Giving or showing patient information to someone outside the organization." },
+            { term: "Authorization", meaning: "The patient's signed permission for a specific use or disclosure." },
+            { term: "Minimum necessary", meaning: "Using, sharing or requesting only the least information needed for the purpose." },
+            { term: "Incidental disclosure", meaning: "Exposure that comes with normal work despite reasonable safeguards, and is allowed." },
+            { term: "Verification", meaning: "Confirming a person's identity and authority before sharing information." },
+          ],
+        },
+      ],
+    },
   ],
 };
 
 export const q3: QuestionSeed[] = [
   q("privacy", "Use disclose request", "single", "Sending a patient's invoice to an outside collection agency is best described as:", ["A disclosure", "A use inside the organization", "A request", "A de-identification"], [0], "Giving information to someone outside the organization is a disclosure."),
   q("privacy", "Use disclose request", "single", "Asking another clinic to send you a patient's lab results is best described as:", ["A request", "A disclosure", "A use", "A breach"], [0], "Asking another organization for patient information is a request, and it also has to follow minimum necessary."),
+  q("privacy", "Use disclose request", "single", "A team member reads a claim inside the client's billing system to fix a coding error. This is best described as:", ["A use", "A disclosure", "A request", "A sale"], [0], "Working with information inside the organization to do a task is a use."),
+  q("privacy", "Starting point", "single", "Which statement best describes how the Privacy Rule treats patient information?", ["It may be used or disclosed only in the ways the rule allows, and otherwise needs the patient's written authorization", "It may be shared freely unless the patient objects", "It may be shared with anyone in healthcare", "It may be shared with anyone who asks politely"], [0], "The rule lists the permitted uses and disclosures, and requires written authorization for other uses."),
+  q("privacy", "TPO", "multiple", "Which of these are covered entities generally permitted to do with PHI without asking the patient each time? Select all that apply.", ["Use it for treatment", "Use it to get paid for care", "Use it for healthcare operations such as quality review", "Use it to promote another company's product"], [0, 1, 2], "Treatment, payment and healthcare operations are permitted. Promoting an unrelated product is marketing and needs authorization."),
+  q("privacy", "TPO", "single", "Verifying a patient's insurance coverage before an appointment is an example of:", ["Payment", "Marketing", "Research", "Fundraising"], [0], "Eligibility checks are part of payment activities."),
+  q("privacy", "TPO", "single", "Your client's instructions limit you to billing tasks. A coworker asks you to pull appointment notes 'for treatment' on a patient you do not handle. What do you do?", ["Check with your lead or the client, because your task does not include that", "Pull the notes, since treatment is permitted", "Pull the notes and mention it afterward", "Send them to your coworker's personal email"], [0], "The permission belongs to the covered entity and reaches you only through the client's instructions for your task."),
+  q("privacy", "Agree or object", "single", "A caller who says they are a patient's friend asks whether the patient is in the clinic today. What is the right approach?", ["Share nothing and follow the client's process for such requests", "Confirm it, because a friend is allowed to know", "Confirm it if the caller sounds worried", "Ask the caller to describe the patient and confirm if it matches"], [0], "Whether a visitor may be told is decided by the client and the patient's agreement. Without that, you share nothing."),
+  q("privacy", "Authorization", "multiple", "Which of these are required parts of a valid authorization? Select all that apply.", ["A description of the information to be shared", "The purpose of the disclosure", "An expiration date or event", "The patient's favorite doctor"], [0, 1, 2], "A valid authorization names the information, the parties, the purpose, an expiration and a signature and date."),
+  q("privacy", "Authorization", "true_false", "True or false: A patient can cancel an authorization they signed earlier by giving written notice.", ["True", "False"], [0], "A patient has the right to revoke an authorization in writing, and it then stops applying for future uses."),
+  q("privacy", "Authorization", "single", "A friend of a patient asks you to send the patient's appointment history to a personal email address. What is the best response?", ["Do not send it, and route the request to your client contact", "Send it, because the friend is trusted", "Send it if the friend says the patient agreed", "Send only half of it"], [0], "Without a confirmed authorization or another permitted basis, you do not disclose, and you route the request."),
+  q("privacy", "Marketing", "single", "A client asks you to add a patient's before-and-after photo and a thank-you note to its website. What do you need before you post it?", ["The client's confirmation that the patient signed an authorization", "Nothing, because the patient was happy", "Only the patient's first name removed", "The photo to be small"], [0], "Posting a patient's image or story is marketing or public disclosure and needs the patient's written authorization."),
+  q("privacy", "Marketing", "single", "Which situation generally needs a patient's authorization?", ["Using patient information to promote another company's product and being paid for it", "A reminder about the patient's own appointment", "A bill sent to the patient for care they received", "A check on whether insurance covers a visit"], [0], "Using patient information to promote a third party's products, especially for payment, needs authorization."),
+  q("privacy", "Marketing", "single", "A client's front-office wants a spreadsheet of all patients' email addresses sent to a bulk email service the client has never used. What do you do?", ["Stop and ask your lead, because the service may not be approved and the message may need authorization", "Send it, because email addresses are not sensitive", "Send only patients with long names", "Send it and mention it afterward"], [0], "A new vendor without an agreement and a marketing message may both be problems. Ask first."),
+  q("privacy", "Psychotherapy notes", "single", "Which statement about psychotherapy notes is correct?", ["Most uses and disclosures need a specific written authorization", "They are shared as freely as any other part of the chart", "They can be posted to a team group chat", "They are the same as a patient's list of medications"], [0], "Psychotherapy notes are kept separate and get stronger protection."),
+  q("privacy", "Authorities", "single", "A caller says he is from the police and asks you for a patient's address. What is the best response?", ["Take his details and route the request to the client without sharing anything", "Give the address if he sounds official", "Confirm the patient exists and share the address later", "Ask him to email you the request and send the address back"], [0], "Law enforcement requests are decided by the client, with verification. A phone call is not proof."),
+  q("privacy", "Authorities", "multiple", "Which of these are situations where the law may permit a covered entity to share PHI without authorization? Select all that apply.", ["Public health reporting", "A valid court order", "Reporting suspected abuse as the law requires", "A friend asking out of curiosity"], [0, 1, 2], "Public health, legal process and abuse reporting are in the list of public-interest disclosures. Curiosity is not."),
+  q("privacy", "Authorities", "single", "A letter arrives that appears to be a subpoena for a patient's chart. What is the right first step for a VA?", ["Pass it to the client's privacy contact the same day without copying or sending anything", "Scan and send the chart to the law firm", "Photograph it and post it to the team chat", "Throw it away"], [0], "Legal requests are handled by the client's privacy contact or counsel. The VA does not release records."),
   q("privacy", "Minimum necessary", "single", "A billing question needs the claim number and amount. What should you send?", ["Only the claim number and amount", "The full chart, so the other party has context", "The whole patient list", "A screenshot of the patient's record"], [0], "Minimum necessary means the smallest amount of information that answers the question."),
-  q("privacy", "Minimum necessary", "true_false", "True or false: It is fine to send a patient's full chart for a simple scheduling question as long as you use a secure method.", ["True", "False"], [1], "A secure method does not change minimum necessary. Only the information needed for the scheduling should be shared."),
-  q("privacy", "TPO", "single", "Which is the correct understanding of treatment, payment and operations for your work?", ["Your client may use information for these purposes and passes that permission to ERS through the agreement, within the client's instructions", "You may share any patient information with anyone for these purposes", "They apply only to doctors", "They allow you to use patient data for marketing"], [0], "The permission belongs to the covered entity and reaches ERS through the BAA, within the client's instructions."),
-  q("privacy", "Role access", "single", "Your login can open records that are not part of your task. What is the right action?", ["Do not open them and tell your lead so access can be corrected", "Open them once to learn the system", "Use them if a teammate asks", "Keep quiet so nobody removes your access"], [0], "Extra access is not permission. Report it so it can be fixed."),
-  q("privacy", "Verification", "single", "A caller says he is a patient's spouse and wants the appointment date. What is the right approach?", ["Follow your client's verification and sharing rules, and share nothing until the person is confirmed as allowed", "Share it, since spouses can usually know", "Share it if he sounds sure", "Ask him to prove it by reading the patient's address back"], [0], "Confirmed identity and permission come first. A confident voice is not proof."),
-  q("privacy", "Five-point check", "single", "In the ERS 5-point send check, which question asks whether you are using the approved system or address?", ["Where?", "Who?", "What?", "Why?"], [0], "\"Where?\" is about the destination: the approved system or address."),
-  q("privacy", "Five-point check", "multiple", "Which of these are part of the ERS 5-point send check? Select all that apply.", ["Who is the recipient", "What is the minimum information needed", "Why is it being sent", "How popular the patient is"], [0, 1, 2], "The five points are Who, What, Why, Where and How. Popularity is not part of it."),
-  q("privacy", "Authorization", "single", "A marketing company asks your client for a list of its patients so it can send them advertisements. What is generally needed first?", ["The patients' written authorization", "Nothing, because the list is only names", "A verbal okay from the receptionist", "A note from an ERS manager"], [0], "Using patient information for marketing generally requires the patient's written authorization. It is not a treatment, payment or operations purpose."),
-  q("privacy", "Patient rights", "single", "A patient calls and asks for a copy of their medical records. What should you do?", ["Do not send anything yourself; take the request the way your client instructs and pass it to the client contact", "Email the records right away", "Read the records to them over the phone", "Tell them they are not allowed to have them"], [0], "Patients have a right of access, and the client handles it with its own checks and deadlines. Your part is to pass the request on correctly."),
-  q("privacy", "Patient rights", "multiple", "Which of these are rights patients have over their information? Select all that apply.", ["To see or get a copy of their records", "To ask for a correction", "To get a list of certain disclosures", "To choose which ERS team member opens their file"], [0, 1, 2], "Access, amendment and an accounting of disclosures are patient rights. Patients do not choose who works on a file."),
-  q("privacy", "State laws", "single", "A state law gives patients more privacy protection than HIPAA for a certain kind of record. What does that mean for your work?", ["The stricter protection can apply as well, so follow your client's instructions and ask when a request looks unusual", "HIPAA always overrides it, so you can ignore it", "Only the state law matters and your client's rules do not", "It only applies to paper records"], [0], "HIPAA is a federal floor. A state law that gives greater privacy protection is generally not overridden by HIPAA, so the stricter rule applies."),
-  q("privacy", "Incidental disclosures", "single", "A clinic uses a sign-in sheet in the waiting room. What is the best practice to keep it within the rules?", ["Ask for names only, and do not write the reason for the visit where others can see it", "Ask for the diagnosis so staff can prepare", "Leave the sheet open to everyone for the whole day", "Stop signing people in"], [0], "Sign-in sheets are an accepted incidental exposure, provided reasonable safeguards are used and only the minimum is asked."),
-  q("privacy", "Incidental disclosures", "single", "You must discuss a patient's case with a colleague and others can hear in an open office. What is the best response?", ["Move somewhere private, or avoid using the patient's name", "Speak louder so the colleague hears", "Shout across the room to save time", "Post it in a group chat instead"], [0], "Reasonable safeguards include lowering your voice, moving, and leaving out names so a passer-by learns nothing."),
-  q("privacy", "Authorities", "single", "A caller says he is from the police and demands a patient's address immediately. What do you do?", ["Share nothing and route the request to your client contact", "Give it, since police have authority", "Confirm only that the person is a patient", "Ask him to email a photo of his badge to you"], [0], "The client decides whether and how to disclose, and verifies the requester. A phone call is not proof, and even confirming someone is a patient is a disclosure."),
-  q("privacy", "Mindset", "scenario", "A friend who is a nurse messages you: \"My neighbor went to your client's clinic. Can you check if her results are in?\" What do you do?", ["Decline, do not look, and carry on with your assigned tasks", "Look quickly and give a vague answer", "Look and tell her only that results are in", "Ask the neighbor's name and check later"], [0], "Looking for a personal reason is a violation and disclosing even a vague answer is a disclosure."),
+  q("privacy", "Minimum necessary", "true_false", "True or false: Minimum necessary means you should always send the whole record so nothing is missing.", ["True", "False"], [1], "The rule points the other way: use, share or request only what is needed."),
+  q("privacy", "Minimum necessary", "multiple", "Minimum necessary does not apply to which of these? Select all that apply.", ["Disclosures to the patient themselves", "Disclosures to a provider for the patient's treatment", "Disclosures the law requires", "A routine request to a vendor for patient information"], [0, 1, 2], "The standard does not apply to treatment disclosures, disclosures to the patient, authorized disclosures, HHS investigations and required disclosures. Routine vendor requests are covered."),
+  q("privacy", "Incidental", "single", "A name appears on a sign-in sheet at a front desk, with no reason for the visit. This is likely:", ["An incidental disclosure that is acceptable with reasonable safeguards", "A serious breach every time", "Marketing", "A sale of information"], [0], "Incidental exposure that follows reasonable safeguards and minimum necessary is allowed."),
+  q("privacy", "Incidental", "single", "Which is a reasonable safeguard against incidental disclosure on a phone call?", ["Moving away from others and lowering your voice", "Speaking louder so the patient hears", "Putting the call on speaker in a shared room", "Reading the details twice"], [0], "Reasonable safeguards limit what others can overhear."),
+  q("privacy", "State laws", "single", "A state law gives patients more privacy protection than HIPAA for a type of record. What applies?", ["The stricter protection can apply as well, so ask when unsure", "Only HIPAA applies in every case", "Neither applies", "Whichever is quicker to follow"], [0], "HIPAA is a federal floor. Stricter state laws can apply, and a VA asks rather than guesses."),
+  q("privacy", "Verification", "single", "A caller who says she is a patient's employer asks about the patient's sick leave diagnosis. What should you do?", ["Share nothing and route the request, since an employer is not a permitted recipient without authorization", "Give the diagnosis if she names the patient", "Give a summary without the diagnosis name", "Confirm the patient has been in"], [0], "An employer has no general right to patient information. Without authorization, you do not share, and you route the request."),
+  q("privacy", "Verification", "multiple", "Which of these are acceptable ways to confirm who is asking before sharing PHI? Select all that apply.", ["Using your client's verification steps", "Checking the person is on the approved list for that information", "Taking the caller's word because they know the patient's name", "Asking the caller to read back the number they dialed"], [0, 1], "Use the client's steps and the approved list. A caller knowing a name is not proof."),
+  q("privacy", "5-point check", "multiple", "Which of these are part of the ERS 5-point send check? Select all that apply.", ["Who is the recipient and are they authorized", "What is the minimum needed", "Where and how it will be sent", "How fast it can be sent"], [0, 1, 2], "The five points are who, what, why, where and how. Speed is not one of them."),
+  q("privacy", "Family", "single", "A caller says she is the patient's sister and asks what medication was prescribed. What is the right answer?", ["Kindly explain you cannot share and follow the client's process", "Give the name of the medication, since she is family", "Give only the dose", "Confirm the pharmacy name only"], [0], "Family is not automatic authorization. The client decides who may receive information."),
 ];

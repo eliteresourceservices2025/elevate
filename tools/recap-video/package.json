@@ -1,0 +1,17 @@
+{
+  "name": "recap-video",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Renders the optional recap videos for the ELEVATE Learn modules. Not part of the pnpm workspace: install here with npm.",
+  "scripts": {
+    "render": "node render.cjs",
+    "stills": "node stills.cjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.0",
+    "@remotion/renderer": "^4.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.0"
+  }
+}

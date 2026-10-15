@@ -7,6 +7,7 @@ import type { CourseModule } from "@/content/schema";
 import { HEARTBEAT_SECONDS, ACTIVITY_PROMPT_SECONDS } from "@/lib/constants";
 import { clock, post } from "./api-client";
 import { ContentBlocks } from "./content-blocks";
+import { RecapPanel, type RecapView } from "./recap-panel";
 
 /**
  * The module player: one screen at a time. The page tells the server which screens were opened and sends a heartbeat every 30
@@ -21,6 +22,8 @@ export function ModulePlayer(props: {
   minSeconds: number;
   completed: boolean;
   nextModule: { key: string; title: string } | null;
+  /** The optional recap video for this module, when one exists. */
+  recap?: RecapView | null;
 }) {
   const { assignmentId, module, minSeconds } = props;
   const router = useRouter();
@@ -116,6 +119,7 @@ export function ModulePlayer(props: {
         <Link href={`/course/${assignmentId}`}>Back to the course</Link>
       </p>
       <h1>{module.title}</h1>
+      {props.recap ? <RecapPanel recap={props.recap} title={module.title} /> : null}
 
       <div className="progress" role="progressbar" aria-label="Screens in this module" aria-valuemin={1} aria-valuemax={total} aria-valuenow={index + 1}>
         <div style={{ width: `${((index + 1) / total) * 100}%` }} />

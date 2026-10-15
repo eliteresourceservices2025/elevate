@@ -54,3 +54,21 @@ the FTC's web pages on the same topics.
 2. Which password manager, VPN and device-lock tools ERS and each client allow: the course says "use the one ERS or your client
    provides". Replace that with the real tools when they are chosen.
 3. The Privacy Officer or IT lead's read-through and the date, recorded when the course is published.
+
+## Version 2 additions (deepening plan, batch 4)
+
+Added modules and screens, with the sources they rest on. As with the rest of this course, no legal claims are made except where
+a screen says so; the ransomware and HIPAA-connection screens refer to HHS guidance and are re-checked in the source check.
+
+| Topic | Where | Basis |
+| --- | --- | --- |
+| Why healthcare is targeted; a small slip and a large week | why | OCR cybersecurity newsletters (2022 and 2024, already cited in 08-source-check.md); the ONC guide, chapter 4 (cybersecurity) |
+| Unrequested sign-in prompts, passkeys and security keys, shared accounts | passwords | CISA and NIST guidance already listed above; FTC consumer guidance |
+| Healthcare lures, business email compromise, voice phishing | phishing | OCR October 2024 newsletter (social engineering); FTC and CISA guidance on impersonation fraud |
+| Ransomware timeline; ransomware as a presumed breach | malware | HHS OCR fact sheet on ransomware and HIPAA; CISA ransomware guidance. **Counsel to confirm the presumed-breach wording** |
+| Email, text, fax, voicemail and shared inboxes | browsing | Client policy (ERS rule), with the Privacy Rule's reasonable safeguards (45 CFR 164.530(c)) as the legal background |
+| AI tools and your data (new module) | ai_tools | ERS policy; the HHS and ONC position that a vendor handling PHI needs an agreement; NIST guidance on AI risk. No legal claim beyond that |
+| Working remotely, shared family computers, personal phones | devices | HHS remote-use guidance for ePHI; ERS policy |
+| Retention, printing and destruction | physical | 45 CFR 164.310(d) (device and media controls) and HHS guidance on destruction of PHI |
+| The first hour; what a good report holds | response | ERS policy; 45 CFR 164.404 and 164.410 for the clock |
+| Security and HIPAA together (new module) | security_hipaa | 45 CFR 164.308 (training and awareness), 164.310, 164.312, 164.404 |

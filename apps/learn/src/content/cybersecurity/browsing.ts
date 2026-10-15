@@ -4,7 +4,7 @@ export const browsingModule: CourseModule = {
   key: "browsing",
   title: "Safe browsing, email and online privacy",
   summary: "Links, downloads, extensions, social media and AI tools: how to use the internet at work without handing attackers a way in.",
-  estimatedMinutes: 8,
+  estimatedMinutes: 11,
   tracks: ["full"],
   keyPoints: [
     "Check where a link really goes before you click. A padlock means the connection is private, not that the site is honest.",
@@ -12,6 +12,7 @@ export const browsingModule: CourseModule = {
     "Keep work and personal accounts apart, and keep work details off social media.",
     "Do not paste work, client or personal information into public AI tools.",
     "What you post online can be used to trick you or your colleagues.",
+    "Email, text and fax are common routes for patient information, so use only the channels your client approved.",
   ],
   screens: [
     {
@@ -92,6 +93,38 @@ export const browsingModule: CourseModule = {
       ],
     },
     {
+      id: "channels",
+      title: "Email, text, fax and voicemail",
+      blocks: [
+        { type: "paragraph", text: "Patient information often travels by the simplest route available. The channel you choose decides who can read it on the way. Follow the client's rules for each:" },
+        {
+          type: "table",
+          caption: "Common channels and the usual rule",
+          columns: ["Channel", "Main risk", "Habit"],
+          rows: [
+            ["Email", "Wrong recipient, forwarding, copies in many inboxes", "Approved system, check the address, minimum only"],
+            ["Text message", "Stored on phones, no control over who reads", "Only if the client allows it, and with no details"],
+            ["Fax", "Wrong number, paper left in the tray", "Confirm the number, use a cover sheet, check receipt"],
+            ["Voicemail", "Heard by others, no way to retract", "Callback number only, per the client's script"],
+            ["Shared inbox or folder", "Many people see everything", "Only the access your job needs"],
+          ],
+        },
+      ],
+    },
+    {
+      id: "case-attachment",
+      title: "Worked case: the unprotected attachment",
+      blocks: [
+        {
+          type: "case",
+          title: "A spreadsheet in a personal inbox",
+          scenario: "A billing contact at a client emails you a spreadsheet of patient balances and asks you to \"send back the updated version when done\". You notice it came from her personal email address, not the clinic's.",
+          question: "What is the concern, and how do you handle the reply?",
+          answer: "Patient information is now in a personal mailbox that the clinic does not control, and replying would put it there again. Do not reply with the file. Tell your lead and ask the client for the approved way to return it, such as the portal or the clinic's own system. The contact may also need to be told that the channel is not approved, in the way the client prefers.",
+        },
+      ],
+    },
+    {
       id: "scenario-quiz",
       title: "Try it: the friendly quiz",
       blocks: [
@@ -120,4 +153,10 @@ export const browsingQuestions: QuestionSeed[] = [
   q("browsing", "AI tools", "single", "Which is appropriate to paste into a public AI chatbot?", ["A general question with no work, client or personal details", "A client's contact list", "A password", "A screenshot of a work record"], [0], "Anything typed into a public tool is shared with a stranger. Only paste what you would be happy to publish."),
   q("browsing", "AI tools", "single", "You want to translate a paragraph that contains client details. What is the right choice?", ["Do not paste it into an online tool; ask your lead for an approved way", "Paste it into a free online translator", "Paste it into a public AI chatbot", "Email it to yourself and translate it later"], [0], "Pasting work or client information into a public tool discloses it to an unapproved party."),
   q("browsing", "Contacts", "single", "A stranger on a networking site asks detailed questions about your work systems. What do you do?", ["Do not answer, and tell your lead if it seems targeted", "Answer politely", "Share only what is not secret", "Send them a screenshot to be helpful"], [0], "Detailed questions about your work from a stranger are a common way to prepare an attack."),
+  q("browsing", "Channels", "single", "A client contact emails patient information from a personal email address and asks you to reply with the updated file. What is the best response?", ["Do not reply with the file, tell your lead, and ask for the approved way", "Reply, since they asked", "Reply with the names removed", "Forward it to your own email first"], [0], "A personal mailbox is outside the client's control. Use the approved channel."),
+  q("browsing", "Channels", "single", "A patient asks you to text her appointment details. What is the right approach?", ["Follow the client's messaging policy and the patient's recorded preferences", "Text from your personal phone", "Tell her HIPAA forbids texting", "Send everything including the diagnosis"], [0], "Allowed channels and content are set by the client's policy and the patient's recorded preferences."),
+  q("browsing", "Fax", "single", "Which habit reduces the risk of faxing patient information to the wrong place?", ["Confirming the number from a reliable source and checking receipt", "Sending to every number you think might be right", "Leaving it in the tray until later", "Faxing it twice"], [0], "A wrong number sends information to a stranger. Confirm the destination before sending."),
+  q("browsing", "Voicemail", "single", "What is the best content for a voicemail reminder?", ["A callback number and the clinic's name, as the client's script allows", "The reason for the visit", "The test result", "The patient's full date of birth"], [0], "Voicemail can be heard by others. Share as little as possible."),
+  q("browsing", "Shared inbox", "true_false", "True or false: A shared inbox that everyone on the team can open is a good place to keep patient lists.", ["True", "False"], [1], "Access should be limited to what each person's job needs."),
+  q("browsing", "Forwarding", "single", "You are about to forward a message thread that includes patient details to someone new. What should you check first?", ["That they are authorized and need it, and that the thread holds only the minimum", "That the subject is short", "That it is a weekday", "That it has an attachment"], [0], "A forward carries everything below it. Check the recipient and the content."),
 ];

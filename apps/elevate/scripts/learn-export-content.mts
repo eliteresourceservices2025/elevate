@@ -27,6 +27,16 @@ function block(b: Block): string {
       return b.items.map((s, i) => `${i + 1}. **${s.title}**: ${s.text}`).join("\n");
     case "scenario":
       return `**Scenario: ${b.title}**\n\n${b.prompt}\n\n${b.choices.map((c) => `- ${c.best ? "(best) " : ""}${c.text}  \n  _${c.feedback}_`).join("\n")}`;
+    case "case":
+      return `**Case: ${b.title}**\n\n${b.scenario}\n\n_Question:_ ${b.question}\n\n_Answer:_ ${b.answer}`;
+    case "table":
+      return [b.caption ? `**${b.caption}**` + '\n' : '', `| ${b.columns.join(' | ')} |`, `| ${b.columns.map(() => '---').join(' | ')} |`, ...b.rows.map((r) => `| ${r.join(' | ')} |`)].join('\n');
+    case "layers":
+      return [b.title ? `**${b.title}**` : '', ...b.items.map((i) => `- **${i.label}**: ${i.text}`)].filter(Boolean).join('\n');
+    case "timeline":
+      return [b.title ? `**${b.title}**` : '', ...b.items.map((i, n) => `${n + 1}. **${i.when}**: ${i.text}`)].filter(Boolean).join('\n');
+    case "glossary":
+      return ['**Terms**', ...b.terms.map((t) => `- **${t.term}**: ${t.meaning}`)].join('\n');
     case "check":
       return `**Check yourself:** ${b.question}${b.multiple ? " (select all that apply)" : ""}\n\n${b.options.map((o) => `- ${o.correct ? "(correct) " : ""}${o.text}  \n  _${o.feedback}_`).join("\n")}`;
   }

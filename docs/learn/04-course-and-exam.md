@@ -4,11 +4,11 @@
 
 | Track | Who | Modules | Exam |
 | --- | --- | --- | --- |
-| **Full** | People assigned to a client flagged "handles patient information" and anyone whose job touches client data | All 7 modules + any client add-ons | 15 questions |
-| **Essentials** | Internal staff with no client data (finance, HR, recruiting, leadership) | Modules 1, 2, 3 and 6: foundations, PHI, privacy, incidents | 15 questions |
-| **Refresher** | Anyone renewing within 60 days before or after expiry | The same four modules (a changed-modules recap comes with release 3) | 15 questions |
+| **Full** | People assigned to a client flagged "handles patient information" and anyone whose job touches client data | All 10 modules + any client add-ons | 20 questions |
+| **Essentials** | Internal staff with no client data (finance, HR, recruiting, leadership) | Foundations, PHI, privacy, business associates, incidents and the front-desk and marketing lab (about 60 minutes) | 20 questions |
+| **Refresher** | Anyone renewing within 60 days before or after expiry | Foundations, PHI, privacy, incidents (a changed-modules recap comes with release 3) | 20 questions |
 
-Pass mark for every track: **80%**, with 15 questions, to match the organization's existing HIPAA course. The track is resolved
+Pass mark for every track: **80%**, with 20 questions (raised from 15 for version 2, owner decision 2026-10-14). The track is resolved
 by ELEVATE from the person's client assignments (a new `core.clients.handles_phi` setting HR maintains); a person can be moved
 by hand with a reason.
 
@@ -17,7 +17,7 @@ updates, home network, public Wi-Fi) are a separate course for the organization,
 (`apps/learn/src/content/cybersecurity`, 8 modules, its own 15-question exam at 80%, sources in `09-cybersecurity-sources.md`). HIPAA's own requirement that a workforce
 is trained on malicious software and password management is covered in Module 4 in HIPAA terms, with a pointer to that course.
 
-## Core curriculum (7 modules, about 80 minutes; version 2)
+## Core curriculum (10 modules, about 125 minutes; version 2, deepened: see 12-deepening-plan.md)
 
 Original text, drafted from HHS/OCR public guidance and the regulations (every claim is traced in `08-source-check.md`), with the
 topic coverage compared against the organization's HIPAA course. Nothing is copied from another course.

@@ -41,7 +41,7 @@ people outside ERS, SCORM import/export, gamification and leaderboards.
 6. **Lesson style:** short screens, scenarios and per-module checks; motion graphics or narrated slides only for topics that need
    them.
 7. **Pacing:** modules in order, server-measured minimum time per module, an "are you still there?" prompt.
-8. **Exam:** server-graded, **15 questions** drawn from a larger bank, **80% to pass** (matching the organization's existing
+8. **Exam:** server-graded, **20 questions** (version 2; 15 in version 1) drawn from a larger bank, **80% to pass** (matching the organization's existing
    course), **no time limit**, 3 tries, review between tries, HR can grant more.
 8b. **HIPAA only:** the HIPAA course covers HIPAA. General cybersecurity basics (phishing, passwords, home network) are a
    separate course for the organization.
