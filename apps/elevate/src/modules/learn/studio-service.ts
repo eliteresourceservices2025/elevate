@@ -281,11 +281,45 @@ export async function editQuestion(tx: Tx, p: { versionId: string; questionId: s
   return stamp;
 }
 
-export async function discardDraft(tx: Tx, p: { versionId: string; stamp: number }): Promise<void> {
+/** Deletes a draft's content: its editor comments, questions and modules, then the version itself. */
+async function deleteDraftContent(tx: Tx, versionId: string): Promise<void> {
+  await tx.execute(sql`delete from learn.studio_comments where version_id = ${versionId}`);
+  await tx.delete(questions).where(eq(questions.versionId, versionId));
+  await tx.delete(versionModules).where(eq(versionModules.versionId, versionId));
+  await tx.delete(courseVersions).where(eq(courseVersions.id, versionId));
+}
+
+/**
+ * Discards a draft. When it was the only version of a client add-on (an add-on that never went live), the empty course is closed
+ * with it, so a discarded add-on does not stay in the list. Returns whether the course is gone.
+ */
+export async function discardDraft(tx: Tx, p: { versionId: string; stamp: number }): Promise<{ courseGone: boolean }> {
   const v = await lockDraft(tx, p.versionId, p.stamp);
-  await tx.delete(questions).where(eq(questions.versionId, v.id));
-  await tx.delete(versionModules).where(eq(versionModules.versionId, v.id));
-  await tx.delete(courseVersions).where(eq(courseVersions.id, v.id));
+  await deleteDraftContent(tx, v.id);
+  const [course] = await tx.select().from(courses).where(eq(courses.id, v.courseId)).limit(1);
+  const left = (await tx.execute(sql`select 1 from learn.course_versions where course_id = ${v.courseId}`)) as unknown as unknown[];
+  if (course?.kind === "client_addon" && left.length === 0) {
+    await tx.update(courses).set({ archivedAt: new Date() }).where(eq(courses.id, v.courseId));
+    return { courseGone: true };
+  }
+  return { courseGone: false };
+}
+
+/**
+ * Removes a client add-on that never went live (no published or retired version, and so nobody was ever assigned it): its draft is
+ * deleted and the course is closed (archived, never deleted). A live or retired add-on is a training record and stays.
+ */
+export async function removeAddon(tx: Tx, p: { slug: string }): Promise<{ courseId: string; clientId: string | null }> {
+  const [course] = await tx.select().from(courses).where(and(eq(courses.slug, p.slug), sql`${courses.archivedAt} is null`)).for("update").limit(1);
+  if (!course) throw new ActionFailure("That course was not found.");
+  if (course.kind !== "client_addon") throw new ActionFailure("Only a client add-on can be removed.");
+  const live = (await tx.execute(sql`select 1 from learn.course_versions where course_id = ${course.id} and status <> 'draft' limit 1`)) as unknown as unknown[];
+  const assigned = (await tx.execute(sql`select 1 from learn.assignments where course_id = ${course.id} limit 1`)) as unknown as unknown[];
+  if (live.length > 0 || assigned.length > 0) throw new ActionFailure("This add-on has been published, so it is part of the training record and cannot be removed.");
+  const drafts = (await tx.execute(sql`select id::text as id from learn.course_versions where course_id = ${course.id}`)) as unknown as { id: string }[];
+  for (const d of drafts) await deleteDraftContent(tx, d.id);
+  await tx.update(courses).set({ archivedAt: new Date() }).where(eq(courses.id, course.id));
+  return { courseId: course.id, clientId: course.clientId };
 }
 
 /**

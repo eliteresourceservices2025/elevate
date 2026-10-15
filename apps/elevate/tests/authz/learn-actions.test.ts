@@ -87,5 +87,11 @@ describe("HR's training actions and the status list, every role", () => {
       if (sees) expect(outcome).not.toMatchObject({ name: "ForbiddenError" });
       else expect(outcome).toMatchObject({ name: "ForbiddenError" });
     });
+    it(`${role}: ${sees ? "may read the learner instructions" : "cannot read the learner instructions"}`, async () => {
+      as(role);
+      const outcome = await queries.getInstructionFacts("hipaa").catch((e: unknown) => e);
+      if (sees) expect(outcome).not.toMatchObject({ name: "ForbiddenError" });
+      else expect(outcome).toMatchObject({ name: "ForbiddenError" });
+    });
   }
 });

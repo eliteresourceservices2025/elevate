@@ -99,3 +99,5 @@ export const commentSchema = z.object({
 });
 
 export const resolveCommentSchema = z.object({ commentId: uuid });
+
+export const removeAddonSchema = z.object({ course: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(80) });
