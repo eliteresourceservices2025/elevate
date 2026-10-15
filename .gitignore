@@ -16,6 +16,8 @@ coverage
 
 # Presentation files (not committed)
 docs/*.pptx
+# Generated review decks (lesson-only copies for HR; regenerate, do not commit)
+docs/**/*.pptx
 docs/*.mp4
 
 # Claude Code local settings (may hold the OmniRoute access key)
