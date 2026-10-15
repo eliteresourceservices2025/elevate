@@ -1,0 +1,7 @@
+node_modules
+recaps.json
+recaps.*.json
+stills
+audio
+samples
+package-lock.json

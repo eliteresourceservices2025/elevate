@@ -26,6 +26,7 @@
     "schedule-import:draft": "tsx scripts/schedule-import-draft.ts",
     "learn:assign": "tsx scripts/learn-assign.mts",
     "learn:export": "tsx scripts/learn-export-content.mts",
+    "learn:export-recaps": "tsx scripts/learn-export-recaps.mts",
     "format": "prettier --write .",
     "test:integration": "vitest run --config vitest.integration.config.mts"
   },

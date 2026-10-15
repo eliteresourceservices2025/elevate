@@ -1,0 +1,22 @@
+{
+ "hipaa-foundations": 80,
+ "hipaa-phi": 89,
+ "hipaa-privacy": 86,
+ "hipaa-rights": 89,
+ "hipaa-associates": 83,
+ "hipaa-security": 71,
+ "hipaa-incidents": 86,
+ "hipaa-enforcement": 87,
+ "hipaa-lab_public": 76,
+ "hipaa-lab_records": 87,
+ "cybersecurity-why": 79,
+ "cybersecurity-passwords": 74,
+ "cybersecurity-phishing": 79,
+ "cybersecurity-malware": 77,
+ "cybersecurity-browsing": 79,
+ "cybersecurity-ai_tools": 77,
+ "cybersecurity-devices": 78,
+ "cybersecurity-physical": 77,
+ "cybersecurity-response": 85,
+ "cybersecurity-security_hipaa": 79
+}
