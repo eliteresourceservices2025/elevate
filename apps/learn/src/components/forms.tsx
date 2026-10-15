@@ -119,3 +119,61 @@ export function PrintButton() {
     </button>
   );
 }
+
+/** One micro-drill: pick an answer, then see the better answer and why. Nothing here is graded or blocks anything. */
+export function DrillForm({
+  course,
+  options,
+  best,
+  explanation,
+  answered,
+}: {
+  course: string;
+  options: readonly { id: string; text: string }[];
+  best: string | null;
+  explanation: string | null;
+  answered: { choice: string; correct: boolean } | null;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [result, setResult] = useState<{ choice: string; correct: boolean; best: string; explanation: string } | null>(
+    answered && best && explanation ? { ...answered, best, explanation } : null,
+  );
+  const pick = async (choice: string) => {
+    setBusy(true);
+    setMessage(null);
+    const r = await post("drill", { course, choice });
+    setBusy(false);
+    if (r.ok && typeof r.best === "string" && typeof r.explanation === "string") {
+      setResult({ choice, correct: r.correct === true, best: r.best, explanation: r.explanation });
+      router.refresh();
+      return;
+    }
+    setMessage(r.error ?? "Please try again.");
+  };
+  return (
+    <div>
+      <ul className="plain">
+        {options.map((o) => (
+          <li key={o.id}>
+            <button type="button" className={result && o.id === result.best ? "" : "secondary"} onClick={() => void pick(o.id)} disabled={busy || result !== null}>
+              {o.text}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {result ? (
+        <p className={`feedback ${result.correct ? "good" : ""}`} role="status">
+          {result.correct ? "Good choice. " : "A better answer is highlighted. "}
+          {result.explanation}
+        </p>
+      ) : null}
+      {message ? (
+        <p className="feedback bad" role="alert">
+          {message}
+        </p>
+      ) : null}
+    </div>
+  );
+}

@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { diffLoaded, lintLoaded, listStudioCourses, loadVersion, type LoadedVersion, type StudioCourse } from "./studio-service";
 import type { CourseDiff } from "./studio-diff";
 import type { LintIssue } from "./studio-lint";
-import { moduleStats, questionStats, type ModuleStat, type QuestionStat } from "./studio-stats";
+import { moduleStats, practiceStats, questionStats, type ModuleStat, type PracticeStat, type QuestionStat } from "./studio-stats";
 
 // What the studio pages read. The exam answer key is included (editors need it), which is why every query authorizes
 // `learn.manage_content` first: it never reaches the Learn app or anyone without that permission.
@@ -53,7 +53,7 @@ export async function listAddonClients(): Promise<{ id: string; name: string }[]
   return rows;
 }
 
-export type CourseStats = { courseTitle: string; version: number; questions: QuestionStat[]; modules: ModuleStat[]; attempts: number } | null;
+export type CourseStats = { courseTitle: string; version: number; questions: QuestionStat[]; modules: ModuleStat[]; attempts: number; practice: PracticeStat[] } | null;
 
 /**
  * Course-improvement statistics for one version: per question and per module, from submitted exam attempts and module time. Counts
@@ -96,7 +96,11 @@ export async function getCourseStats(slug: string, version: number): Promise<Cou
 
   const titles = new Map(loaded.content.modules.map((m) => [m.key, m.title]));
   const [{ n: attempts }] = (await db.execute(sql`select count(*)::int as n from learn.exam_attempts x join learn.assignments a on a.id = x.assignment_id where a.version_id = ${versionId} and x.status = 'submitted'`)) as unknown as { n: number }[];
+  const prows = (await db.execute(sql`
+    select quarter, count(*)::int as people, count(*) filter (where correct)::int as correct
+    from learn.drill_results where course_slug = ${slug} group by quarter`)) as unknown as { quarter: string; people: number; correct: number }[];
   return {
+    practice: practiceStats(prows),
     courseTitle: loaded.content.title ?? slug,
     version,
     attempts,

@@ -68,6 +68,9 @@ export async function collectMyData(userId: string, email: string): Promise<MyDa
     left join learn.certificates c on c.assignment_id = a.id
     where a.user_id = ${userId}
     order by a.assigned_at desc limit 100`);
+  const practice = await query(sql`
+    select co.title, d.quarter, d.correct from learn.drill_results d join learn.courses co on co.slug = d.course_slug
+    where d.user_id = ${userId} order by d.quarter desc limit 100`);
   // Audit entries about this person's own record or made by them. Who else acted is not named.
   const activity = await query(sql`
     select occurred_at, action, (actor_user_id = ${userId}) as by_me
@@ -107,6 +110,7 @@ export async function collectMyData(userId: string, email: string): Promise<MyDa
     documents: documents.map((d) => ({ title: String(d.title), type: String(d.type), expiresOn: dateOnly(d.expires_on), verified: d.verified_at !== null, uploadedAt: iso(d.created_at)! })),
     acknowledgments: acknowledgments.map((a) => ({ title: String(a.title), kind: String(a.kind), version: a.version === null ? null : Number(a.version), at: iso(a.acknowledged_at)! })),
     training: training.map((t) => ({ course: String(t.title), version: Number(t.version), track: String(t.track), status: String(t.status), assignedOn: dateOnly(t.assigned_on)!, dueOn: dateOnly(t.due_on)!, passedOn: dateOnly(t.passed_on), minutesSpent: Math.round(Number(t.seconds) / 60), certificate: str(t.reference), validUntil: dateOnly(t.ends_on) })),
+    practice: practice.map((p) => ({ course: String(p.title), quarter: String(p.quarter), choseBetter: Boolean(p.correct) })),
     requests: requests.map((r) => ({ category: CHANGE_CATEGORY_LABELS[r.category as ChangeCategory] ?? String(r.category), status: String(r.status), createdAt: iso(r.created_at)! })),
     activity: activity.map((a) => ({ at: iso(a.occurred_at)!, action: String(a.action), by: a.by_me ? "You" : "HR or system" })),
   };
