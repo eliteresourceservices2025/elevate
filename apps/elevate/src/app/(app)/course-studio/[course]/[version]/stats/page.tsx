@@ -55,6 +55,20 @@ export default async function StudioStatsPage({ params }: { params: Promise<{ co
         </div>
       </section>
 
+      <section aria-labelledby="pr-h" className="space-y-2">
+        <h2 id="pr-h" className="text-lg font-semibold">
+          Quarterly practice (whole course)
+        </h2>
+        {stats.practice.length === 0 ? <p className="text-sm text-muted-foreground">No one has answered a practice scenario yet.</p> : null}
+        <ul className="space-y-1 text-sm">
+          {stats.practice.map((q) => (
+            <li key={q.quarter} className="rounded-xl border bg-card p-3">
+              <span className="font-medium">{q.quarter}</span>: {"hidden" in q ? "Not enough people yet" : `${q.people} people answered, ${q.correctPercent}% chose the better answer`}
+            </li>
+          ))}
+        </ul>
+      </section>
+
       <section aria-labelledby="qs-h" className="space-y-2">
         <h2 id="qs-h" className="text-lg font-semibold">
           Questions, most missed first

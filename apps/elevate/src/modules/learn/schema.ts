@@ -537,3 +537,29 @@ export const updateScopes = learn
     ],
   )
   .enableRLS();
+
+/**
+ * A person's answer to a quarterly micro-drill (Release 3). One per person, course and quarter; insert-only. A nudge, so nothing
+ * here gates anything: HR sees only counts and a share per quarter (groups of five or more), never a person. Migration 0073.
+ */
+export const drillResults = learn
+  .table(
+    "drill_results",
+    {
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      courseSlug: text("course_slug").notNull(),
+      quarter: text("quarter").notNull(),
+      drillKey: text("drill_key").notNull(),
+      choice: text("choice").notNull(),
+      correct: boolean("correct").notNull(),
+      answeredAt: stamp("answered_at"),
+    },
+    (t) => [
+      primaryKey({ columns: [t.userId, t.courseSlug, t.quarter] }),
+      check("drill_results_quarter_chk", sql`${t.quarter} ~ '^[0-9]{4}-Q[1-4]$'`),
+      check("drill_results_choice_chk", sql`${t.choice} in ('a','b','c')`),
+    ],
+  )
+  .enableRLS();

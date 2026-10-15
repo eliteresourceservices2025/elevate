@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { getSql, withUser } from "@/lib/db";
-import { listAssignments } from "@/lib/queries";
+import { getPractice, listAssignments } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,8 @@ export default async function Home() {
   const sql = getSql();
   const person = await withUser(sql, session.userId, async (tx) => (await tx`select display_name from learn.v_learners`)[0] as { display_name: string } | undefined);
   const assignments = await listAssignments(sql, session.userId);
+  const practice = await getPractice(sql, session.userId);
+  const practiceOpen = practice.filter((x) => !x.answered).length;
 
   return (
     <>
@@ -37,8 +39,21 @@ export default async function Home() {
           ))}
         </ul>
       )}
+      {practiceOpen > 0 ? (
+        <section className="card">
+          <strong>Quarterly practice</strong>
+          <p className="muted">A two-minute scenario is ready. It is not a test.</p>
+          <p>
+            <Link className="button" href="/practice">
+              Try it
+            </Link>
+          </p>
+        </section>
+      ) : null}
       <p>
         <Link href="/record">My training record</Link>
+        ·{" "}
+        <Link href="/cards">Quick-reference cards</Link>
       </p>
       <form method="post" action="/auth/signout">
         <button type="submit" className="secondary">

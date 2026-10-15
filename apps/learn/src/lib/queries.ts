@@ -1,4 +1,5 @@
 import type { CourseContent, CourseModule } from "../content/schema";
+import { drillFor, quarterOf, type Drill } from "../content/drills";
 import { withUser, type Sql } from "./db";
 
 // What the pages read. Every query runs as the signed-in person (row-level security keyed on learn.user_id), so even a mistake here
@@ -288,5 +289,57 @@ export async function getRecord(sql: Sql, userId: string): Promise<RecordEntry[]
       scorePercent: (r.score as number | null) ?? null,
       certificate: r.reference ? { reference: r.reference as string, issuedOn: r.issued_on as string, endsOn: r.ends_on as string, revoked: r.revoked as boolean } : null,
     }));
+  });
+}
+
+// ---- Quick-reference cards and quarterly practice (Release 3) --------------------------------------------------------------------
+
+export type CardModule = { key: string; title: string; keyPoints: string[] };
+export type CourseCards = { courseSlug: string; courseTitle: string; modules: CardModule[] };
+
+/** The key points of every module in the person's own track, per course they have (not cancelled), from the version they were assigned. */
+export async function getCards(sql: Sql, userId: string): Promise<CourseCards[]> {
+  return withUser(sql, userId, async (tx) => {
+    const rows = await tx`
+      select distinct on (a.course_id) a.course_id, c.slug, c.title, a.version_id, a.track, v.content
+      from learn.assignments a join learn.courses c on c.id = a.course_id join learn.course_versions v on v.id = a.version_id
+      where a.status <> 'cancelled' order by a.course_id, a.assigned_at desc`;
+    const out: CourseCards[] = [];
+    for (const r of rows) {
+      const keys = await tx`select module_key from learn.track_modules(${r.version_id as string}::uuid, ${r.track as string}) order by position`;
+      const content = r.content as CourseContent;
+      const modules = keys
+        .map((k) => content.modules.find((m) => m.key === (k.module_key as string)))
+        .filter((m): m is CourseContent["modules"][number] => Boolean(m))
+        .map((m) => ({ key: m.key, title: m.title, keyPoints: m.keyPoints }));
+      out.push({ courseSlug: r.slug as string, courseTitle: r.title as string, modules });
+    }
+    return out.sort((x, y) => x.courseTitle.localeCompare(y.courseTitle));
+  });
+}
+
+export type PracticeItem = {
+  courseSlug: string;
+  courseTitle: string;
+  quarter: string;
+  drill: Drill;
+  answered: { choice: string; correct: boolean } | null;
+};
+
+/** This quarter's drill for each course the person has (not cancelled), with their answer when they already gave one. */
+export async function getPractice(sql: Sql, userId: string, now: Date = new Date()): Promise<PracticeItem[]> {
+  const quarter = quarterOf(now);
+  return withUser(sql, userId, async (tx) => {
+    const courses = await tx`
+      select distinct c.slug, c.title from learn.assignments a join learn.courses c on c.id = a.course_id where a.status <> 'cancelled' order by c.title`;
+    const answers = await tx`select course_slug, choice, correct from learn.drill_results where quarter = ${quarter}`;
+    const items: PracticeItem[] = [];
+    for (const c of courses) {
+      const drill = drillFor(c.slug as string, quarter);
+      if (!drill) continue;
+      const mine = answers.find((a) => a.course_slug === c.slug);
+      items.push({ courseSlug: c.slug as string, courseTitle: c.title as string, quarter, drill, answered: mine ? { choice: mine.choice as string, correct: mine.correct as boolean } : null });
+    }
+    return items;
   });
 }

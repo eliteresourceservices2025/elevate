@@ -2,6 +2,7 @@ import { z } from "zod";
 import { withUser, type Sql } from "./db";
 import { resolveSession, type Deps } from "./handlers";
 import { sameSiteOrigin } from "./origin";
+import { drillFor, quarterOf } from "../content/drills";
 import { addressOf } from "./rate-limit";
 
 // The JSON endpoints behind the player and the exam. Every one is a POST from this site only, needs a Learn session, and calls one
@@ -65,6 +66,18 @@ function codeOf(error: unknown): { code: string; detail?: string } | null {
 }
 
 const ACTIONS: Record<string, { schema: z.ZodType; run: (ctx: Ctx, input: never) => Promise<Output> }> = {
+  /** A quarterly micro-drill answer. Correctness is worked out here from our own content; nothing about it blocks anything. */
+  drill: {
+    schema: z.object({ course: z.string().regex(/^[a-z0-9-]{1,60}$/), choice: z.enum(["a", "b", "c"]) }),
+    run: async (ctx, input: { course: string; choice: "a" | "b" | "c" }) => {
+      const quarter = quarterOf(new Date());
+      const drill = drillFor(input.course, quarter);
+      if (!drill) throw new ApiError("not_found");
+      const correct = input.choice === drill.best;
+      const [r] = await ctx.sql`select learn.record_drill(${ctx.userId}::uuid, ${input.course}, ${quarter}, ${drill.key}, ${input.choice}, ${correct}) as recorded`;
+      return { body: { ok: true, correct, best: drill.best, explanation: drill.explanation, recorded: r.recorded as boolean } };
+    },
+  },
   /** The person opened a screen of a module. */
   screen: {
     schema: z.object({ assignmentId: uuid, moduleKey, screen: z.number().int().min(0).max(80) }),
