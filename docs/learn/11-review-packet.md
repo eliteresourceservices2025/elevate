@@ -50,7 +50,7 @@ They contain the exam answer key: keep them within the privacy and legal team.
 
 **B. Wording that carries legal weight**
 
-7. The **responsibility statement** people accept after passing (it is still labelled `v1-draft`), including the plain-words
+7. The **responsibility statement** people accept after passing (labelled `v2` since the deepened courses; the wording is unchanged), including the plain-words
    sanctions sentence ("can lead to ERS sanctions, including the end of my engagement").
 8. The certificate line: "This is ERS training completion, not an official certification issued by any government body."
 9. Contractor wording. ERS engages 1099 contractors; the courses say "your engagement" and "team", never "employee" or

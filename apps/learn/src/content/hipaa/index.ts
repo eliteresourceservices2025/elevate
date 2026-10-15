@@ -19,7 +19,7 @@ export const HIPAA_COURSE_SLUG = "hipaa";
 export const hipaaCourse: CourseContent = {
   title: "HIPAA Privacy, Security and Awareness",
   attestation: {
-    version: "v1-draft",
+    version: "v2",
     text: "I have completed this HIPAA training for Elite Resource Services. I understand that I must protect patient information, use it only for my assigned work and only through approved systems, and report any possible privacy or security incident to my team lead and HR immediately. I understand that breaking these rules can lead to ERS sanctions, including the end of my engagement.",
   },
   modules: [m1, m2, m3, m4, m5, m6, m7, m8, m9, m10],

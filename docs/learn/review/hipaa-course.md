@@ -13,7 +13,7 @@ Course code: `hipaa`. Generated for review from the course files; the authoring 
 
 > I have completed this HIPAA training for Elite Resource Services. I understand that I must protect patient information, use it only for my assigned work and only through approved systems, and report any possible privacy or security incident to my team lead and HR immediately. I understand that breaking these rules can lead to ERS sanctions, including the end of my engagement.
 
-Version label: v1-draft
+Version label: v2
 
 ## Module 1: HIPAA foundations and your role at ERS
 
