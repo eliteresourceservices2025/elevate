@@ -12,6 +12,8 @@ import { getJibbleClient } from "./client";
 import { JibbleError } from "./http-client";
 import { processMirrorQueue, runJibbleRepair, syncJibblePeople, type PeopleSync } from "./jobs";
 import { jibbleLinkLog, jibblePeople, jibbleSettings } from "./schema";
+import { looksLikePersonId, resolveJibbleAccount } from "./match-rules";
+import type { JibblePerson } from "./http-client";
 import { pauseSchema, retrySchema, setPersonSchema } from "./validators";
 
 const NOT_SET_UP = "Jibble is not set up yet. Add the access token on the server first.";
@@ -65,7 +67,25 @@ export async function setJibblePerson(input: unknown): Promise<ActionResult> {
     await authorize(actor, "jibble.manage");
     const parsed = setPersonSchema.safeParse(input);
     if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? BAD);
-    const { employeeId, jibblePersonId } = parsed.data;
+    const { employeeId, jibblePersonId: typed } = parsed.data;
+    // What was typed is an email, a member code or an id. The server finds the Jibble account itself and stores the id it found.
+    let jibblePersonId: string | null = null;
+    if (typed !== null) {
+      let people: JibblePerson[] = [];
+      if (!looksLikePersonId(typed)) {
+        const client = getJibbleClient();
+        if (!client) return fail(NOT_SET_UP);
+        try {
+          people = await client.listPeople();
+        } catch (error) {
+          return fail(friendly(error));
+        }
+      }
+      const found = resolveJibbleAccount(typed, people);
+      if (found.kind === "none") return fail("No Jibble account has that email or member code. Check it exactly as it is in Jibble.");
+      if (found.kind === "many") return fail("More than one Jibble account has that. Paste the Jibble person id instead.");
+      jibblePersonId = found.kind === "id" ? found.id : found.person.id;
+    }
     await db.transaction(async (tx) => {
       const [person] = await tx.select({ id: employees.id }).from(employees).where(eq(employees.id, employeeId)).limit(1);
       if (!person) throw new ActionFailure("That person was not found.");

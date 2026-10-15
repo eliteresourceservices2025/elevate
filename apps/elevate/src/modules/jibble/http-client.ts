@@ -6,7 +6,8 @@
 
 import { describeFailure, isRetryable, parseDuration, pickBreak, type JibbleAction, type JibbleBreak, type JibbleState } from "./mirror-rules";
 
-export type JibblePerson = { id: string; email: string | null; fullName: string; status: string | null };
+/** `code` is the member code shown in Jibble's exports (for example "MB-1"); null when Jibble does not give one. */
+export type JibblePerson = { id: string; email: string | null; fullName: string; status: string | null; code?: string | null };
 export type JibbleDay = { personId: string; date: string; trackedMinutes: number };
 
 /** Extra facts for a break call: the length ELEVATE's break was set to (to pick the matching Jibble break), and the entry that started it. */
@@ -141,12 +142,35 @@ export class JibbleHttpClient implements JibbleClient {
     return (await response.json().catch(() => ({}))) as unknown;
   }
 
+  /** Whether Jibble accepted "code" in the people select. Starts true; set false for good if Jibble refuses it (the list then comes without codes). */
+  private codeSelectable = true;
+
   async listPeople(): Promise<JibblePerson[]> {
     const out: JibblePerson[] = [];
     for (let skip = 0; skip < 5000; skip += 200) {
-      const page = (await this.send("GET", `${this.config.workspaceUrl}/v1/People?$select=id,email,fullName,status&$top=200&$skip=${skip}&$orderby=fullName`)) as { value?: Json[] };
+      const fields = this.codeSelectable ? "id,email,fullName,status,code" : "id,email,fullName,status";
+      let page: { value?: Json[] };
+      try {
+        page = (await this.send("GET", `${this.config.workspaceUrl}/v1/People?$select=${fields}&$top=200&$skip=${skip}&$orderby=fullName`)) as { value?: Json[] };
+      } catch (error) {
+        // A refused select (400) means this Jibble does not expose the member code: carry on without it rather than losing the list.
+        if (this.codeSelectable && error instanceof JibbleError && error.status === 400) {
+          this.codeSelectable = false;
+          skip -= 200;
+          continue;
+        }
+        throw error;
+      }
       const rows = page.value ?? [];
-      for (const r of rows) out.push({ id: String(r.id), email: typeof r.email === "string" && r.email ? r.email : null, fullName: String(r.fullName ?? ""), status: typeof r.status === "string" ? r.status : null });
+      for (const r of rows) {
+        out.push({
+          id: String(r.id),
+          email: typeof r.email === "string" && r.email ? r.email : null,
+          fullName: String(r.fullName ?? ""),
+          status: typeof r.status === "string" ? r.status : null,
+          code: typeof r.code === "string" && r.code.trim() ? r.code.trim() : null,
+        });
+      }
       if (rows.length < 200) break;
     }
     return out;

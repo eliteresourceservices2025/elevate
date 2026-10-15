@@ -140,7 +140,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
         <h2 className="text-lg font-semibold">
           People <span className="text-sm font-normal text-muted-foreground">({overview.people.length - unmatched.length} matched, {unmatched.length} not matched)</span>
         </h2>
-        <p className="text-sm text-muted-foreground">Matched automatically by work email. If someone uses a different email in Jibble, paste their Jibble person id to match them by hand. People with no match are skipped.</p>
+        <p className="text-sm text-muted-foreground">Matched automatically by work email. If someone uses a different email in Jibble, type the email they use in Jibble or their Jibble member code (as in Jibble's exports) to match them by hand. People with no match are skipped.</p>
         <label htmlFor="jp-unmatched" className="flex items-center gap-1.5 text-sm">
           <input id="jp-unmatched" type="checkbox" className="size-4 accent-primary" checked={onlyUnmatched} onChange={(e) => setOnlyUnmatched(e.target.checked)} />
           Only people not matched
@@ -164,9 +164,9 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Label htmlFor={`jp-${p.employeeId}`} className="sr-only">
-                        Jibble person id for {p.name}
+                        Email in Jibble or member code for {p.name}
                       </Label>
-                      <Input id={`jp-${p.employeeId}`} className="h-8 w-64" placeholder="Jibble person id" value={manual[p.employeeId] ?? ""} onChange={(e) => setManual((m) => ({ ...m, [p.employeeId]: e.target.value }))} />
+                      <Input id={`jp-${p.employeeId}`} className="h-8 w-64" placeholder="Email in Jibble or member code" value={manual[p.employeeId] ?? ""} onChange={(e) => setManual((m) => ({ ...m, [p.employeeId]: e.target.value }))} />
                       <Button size="sm" variant="outline" disabled={pending || !(manual[p.employeeId] ?? "").trim()} onClick={() => run(() => setJibblePerson({ employeeId: p.employeeId, jibblePersonId: manual[p.employeeId] }), () => "Matched.")}>
                         Save
                       </Button>
