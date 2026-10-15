@@ -46,6 +46,9 @@ export const questionEditSchema = z.object({
   versionId: uuid,
   stamp,
   questionId: uuid,
+  /** Both optional: left out, the question keeps its own type and module. */
+  type: z.enum(["single", "multiple", "true_false", "scenario"]).optional(),
+  moduleKey: z.string().regex(/^[a-z0-9_]{1,40}$/).optional(),
   topic: z.string().trim().min(2).max(60),
   stem: z.string().trim().min(15, "At least 15 characters").max(600),
   options: z.array(z.object({ id: z.enum(["a", "b", "c", "d", "e", "f"]), text: z.string().trim().min(1, "Options cannot be empty").max(260) })).min(2).max(6),
@@ -88,3 +91,11 @@ export const examRulesSchema = z.object({
   renewalMonths: z.number().int().min(1).max(60),
   tracks: z.record(z.string().regex(/^[a-z]{1,20}$/), z.number().int().min(1).max(50)),
 });
+
+export const commentSchema = z.object({
+  versionId: uuid,
+  target: z.string().regex(/^(course|module:[a-z0-9_]{1,40})$/, "Choose what the comment is about"),
+  body: z.string().trim().min(3, "Write at least a few words").max(1000, "At most 1000 characters"),
+});
+
+export const resolveCommentSchema = z.object({ commentId: uuid });

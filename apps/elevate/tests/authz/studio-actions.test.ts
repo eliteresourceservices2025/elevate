@@ -46,6 +46,8 @@ const calls: { name: string; call: () => Promise<{ ok: boolean; error?: string }
   { name: "addStudioQuestion", call: () => actions.addStudioQuestion({ versionId: "11111111-1111-4111-8111-111111111111", stamp: 0, moduleKey: "foundations", type: "single" }) },
   { name: "removeStudioQuestion", call: () => actions.removeStudioQuestion({ versionId: "11111111-1111-4111-8111-111111111111", stamp: 0, questionId: "11111111-1111-4111-8111-111111111111" }) },
   { name: "saveStudioExamRules", call: () => actions.saveStudioExamRules({ versionId: "11111111-1111-4111-8111-111111111111", stamp: 0, passPercent: 80, maxTries: 3, waitMinutesAfterFail: 60, renewalMonths: 12, tracks: { full: 15 } }) },
+  { name: "addStudioComment", call: () => actions.addStudioComment({ versionId: ID, target: "course", body: "Please check the wording of module two." }) },
+  { name: "resolveStudioComment", call: () => actions.resolveStudioComment({ commentId: ID }) },
   { name: "discardStudioDraft", call: () => actions.discardStudioDraft({ versionId: ID, stamp: 0 }) },
   { name: "publishStudioDraft", call: () => actions.publishStudioDraft({ versionId: ID, reviewerEmail: "rev@example.com", counselApprovedOn: "2026-10-13", material: false }) },
 ];

@@ -6,9 +6,10 @@ import { orNotFound } from "@/lib/or-not-found";
 import { CourseMetaForm, DiscardDraftButton, PublishCard } from "@/modules/learn/components/studio-editors";
 import { AddModuleForm, ExamRulesForm, ModuleControls } from "@/modules/learn/components/studio-structure";
 import { LintList } from "@/modules/learn/components/studio-view";
+import { StudioComments } from "@/modules/learn/components/studio-comments";
 import { canPublish, publishChecklist } from "@/modules/learn/studio-checklist";
 import { learnBaseUrl } from "@/modules/learn/token";
-import { getStudioVersion } from "@/modules/learn/studio-queries";
+import { getStudioComments, getStudioVersion } from "@/modules/learn/studio-queries";
 
 export const metadata: Metadata = { title: "Course version" };
 
@@ -22,7 +23,8 @@ export default async function StudioVersionPage({ params }: PageProps<"/course-s
   const cfg = loaded.examConfig as { passPercent?: number; maxTries?: number; renewalMonths?: number; tracks?: Record<string, { questions: number }> };
   const base = `/course-studio/${course}/${v.version}`;
   const lastEditorIsViewer = Boolean(v.updatedBy && v.updatedBy === viewerId);
-  const checklist = publishChecklist({ issues: lint, unchangedVsLive, viewerIsLastEditor: lastEditorIsViewer });
+  const comments = await orNotFound(getStudioComments(course, v.version));
+  const checklist = publishChecklist({ issues: lint, unchangedVsLive, viewerIsLastEditor: lastEditorIsViewer, openComments: comments.filter((c) => !c.resolved).length });
   const ready = canPublish(checklist);
   const learnUrl = learnBaseUrl();
 
@@ -101,6 +103,10 @@ export default async function StudioVersionPage({ params }: PageProps<"/course-s
           <Link href={`${base}/stats`} className="text-primary underline-offset-4 hover:underline">
             See how learners do (statistics)
           </Link>
+          {" · "}
+          <Link href={`${base}/exam`} className="text-primary underline-offset-4 hover:underline">
+            Preview the exam
+          </Link>
         </p>
       </section>
 
@@ -109,6 +115,7 @@ export default async function StudioVersionPage({ params }: PageProps<"/course-s
           <AddModuleForm key={`am-${v.editStamp}`} versionId={v.id} stamp={v.editStamp} />
           <ExamRulesForm key={`er-${v.editStamp}`} versionId={v.id} stamp={v.editStamp} config={cfg} />
           <CourseMetaForm key={v.editStamp} versionId={v.id} stamp={v.editStamp} content={loaded.content} />
+          <StudioComments versionId={v.id} comments={comments} modules={loaded.content.modules.map((m) => ({ key: m.key, title: m.title }))} draft={draft} />
           <section aria-label="Publish checklist" className="space-y-2 rounded-xl border bg-card p-4">
             <h2 className="text-lg font-semibold">Before publishing</h2>
             <ul className="space-y-1 text-sm">
