@@ -17,7 +17,7 @@ export async function runDailyDigest(day: string): Promise<{ queued: number }> {
     left join ops.email_preferences p on p.user_id = n.user_id
     where n.read_at is null
       and u.archived_at is null
-      and coalesce(p.digest_opt_out, false) = false
+      and coalesce(p.digest_opt_out, true) = false
     group by n.user_id, n.kind`)) as unknown as { user_id: string; kind: string; n: number }[];
 
   const byUser = new Map<string, { kind: string; count: number }[]>();

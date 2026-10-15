@@ -491,6 +491,8 @@ describe("email queue", () => {
     const c = await person("mail-c");
     for (const p of [a, b, c]) await db.execute(sql`insert into ops.notifications (user_id, kind, title) values (${p.user.id}, 'announcement.posted', 'Secret title')`);
 
+    // The digest is opt-in: these three have ticked the box.
+    for (const p of [a, b, c]) await db.execute(sql`insert into ops.email_preferences (user_id, digest_opt_out) values (${p.user.id}, false) on conflict (user_id) do update set digest_opt_out = false`);
     await digest.runDailyDigest("2099-01-05");
     // c gets an acknowledgment to do, queued AFTER the digests, so the order must come from priority
     as(hr);
@@ -536,6 +538,9 @@ describe("email queue", () => {
     const left = await person("dig-left");
     await db.execute(sql`update core.users set archived_at = now() where id = ${left.user.id}`);
     for (const p of [reader, optOut, left]) await db.execute(sql`insert into ops.notifications (user_id, kind, title) values (${p.user.id}, 'document.expiring', 'x')`);
+    // The digest is opt-in: the reader ticks the box, the others have not (or say no).
+    as(reader.user);
+    expect((await notifActions.setDigestOptOut({ optOut: false })).ok).toBe(true);
     as(optOut.user);
     expect((await notifActions.setDigestOptOut({ optOut: true })).ok).toBe(true);
 

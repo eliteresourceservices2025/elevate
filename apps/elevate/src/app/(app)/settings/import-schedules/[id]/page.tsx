@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { orNotFound } from "@/lib/or-not-found";
+import { FinishedBatch } from "@/modules/schedule-import/components/import-outcome";
 import { PlanView } from "@/modules/schedule-import/components/plan-view";
-import { getScheduleImportPlan, listAliasTargets } from "@/modules/schedule-import/queries";
+import { getScheduleImportPlan, getScheduleImportStatus, listAliasTargets } from "@/modules/schedule-import/queries";
 
 export const metadata: Metadata = { title: "Schedule import preview" };
 
@@ -11,7 +12,22 @@ export default async function ScheduleImportPreviewPage({ params }: PageProps<"/
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const data = await orNotFound(getScheduleImportPlan(id));
-  if (!data) notFound();
+  if (!data) {
+    // Applied, discarded or expired: say so instead of "page not found" (this is also what the page shows right after an apply refreshes it).
+    const status = await orNotFound(getScheduleImportStatus(id));
+    if (!status) notFound();
+    return (
+      <div className="w-full space-y-6">
+        <div>
+          <Link href="/settings/import-schedules" className="text-sm text-primary underline-offset-2 hover:underline">
+            Import schedules and clients
+          </Link>
+          <h1 className="mt-1 text-2xl font-bold">Schedule import</h1>
+        </div>
+        <FinishedBatch batchId={id} status={status} />
+      </div>
+    );
+  }
   const { batch, plan, digest } = data;
   // The choices are only needed (and only loaded) when something on the sheet can be resolved by picking a record.
   const targets = plan.decisions.some((d) => d.kind !== "other") ? await orNotFound(listAliasTargets()) : null;

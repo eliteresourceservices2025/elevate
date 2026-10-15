@@ -49,6 +49,8 @@ async function makePerson(opts: { roles?: RoleSlug[]; first?: string; start?: st
   const [e] = await rows<{ id: string }>(sql`
     insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id, start_date, manager_id)
     values (${opts.first ?? "Pat"}, 'Tester', ${email}, ${opts.status ?? "active"}, ${opts.account === false ? null : id}, ${opts.start === undefined ? "2024-02-01" : opts.start}, ${opts.managerId ?? null}) returning id`);
+  // Training reminder emails are opt-in: test people have ticked the box unless a test says otherwise.
+  if (opts.account !== false) await db.execute(sql`insert into ops.email_preferences (user_id, training_reminder_opt_out) values (${id}, false)`);
   return { id, email, roles, employeeId: e.id };
 }
 
@@ -391,7 +393,7 @@ describe("reminders", () => {
 
   it("sends no reminder email to someone who turned them off, but still tells them in the app", async () => {
     const quiet = await makePerson();
-    await db.execute(sql`insert into ops.email_preferences (user_id, training_reminder_opt_out) values (${quiet.id}, true)`);
+    await db.execute(sql`update ops.email_preferences set training_reminder_opt_out = true where user_id = ${quiet.id}`);
     await db.execute(sql`insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${quiet.id}, ${courseId}, ${versionId}, 'full', 'manual', ${plus(TODAY, -2)})`);
     const run = await jobs.runLearnReminders(TODAY, { userIds: [quiet.id], hrUserIds: [] });
     expect(run.personNotices).toBe(1);

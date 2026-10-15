@@ -35,6 +35,13 @@ export async function getScheduleImportPlan(id: string) {
   return previewForBatch(id);
 }
 
+/** The state of one upload (preview, applied, discarded), or null when there is no such upload. */
+export async function getScheduleImportStatus(id: string): Promise<string | null> {
+  await gate();
+  const [b] = await db.select({ status: scheduleImportBatches.status }).from(scheduleImportBatches).where(eq(scheduleImportBatches.id, id));
+  return b?.status ?? null;
+}
+
 /** Active people and clients to choose from when a sheet's spelling needs a decision (HR and Super Admin only). */
 export async function listAliasTargets(): Promise<{ people: { id: string; label: string }[]; clients: { id: string; label: string }[] }> {
   await gate();

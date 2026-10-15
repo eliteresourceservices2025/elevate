@@ -69,9 +69,9 @@ export const emailPreferences = ops
       .primaryKey()
       .references(() => users.id),
     /** Opts out of the daily digest only. Emails about something you must acknowledge are required. */
-    digestOptOut: boolean("digest_opt_out").notNull().default(false),
+    digestOptOut: boolean("digest_opt_out").notNull().default(true),
     /** Opts out of training reminder emails (due soon, due today, weekly while overdue). In-app reminders always show. */
-    trainingReminderOptOut: boolean("training_reminder_opt_out").notNull().default(false),
+    trainingReminderOptOut: boolean("training_reminder_opt_out").notNull().default(true),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   })
   .enableRLS();

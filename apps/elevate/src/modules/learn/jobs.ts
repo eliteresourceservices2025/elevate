@@ -143,12 +143,12 @@ export async function runLearnReminders(today: string, scope?: Scope & { hrUserI
     where a.status in ('assigned', 'in_progress') and u.archived_at is null and (e.id is null or e.status <> 'separated')
       ${onUsers(sql`a.user_id`, scope)}`);
 
-  // People who turned training reminder emails off (the in-app reminders still show).
-  const emailOff = new Set<string>();
+  // Training reminder emails are opt-in: only people who ticked the box get them (the in-app reminders always show).
+  const emailOff = new Set<string>(open.map((o) => o.user_id));
   if (open.length) {
-    const off = await rows<{ user_id: string }>(sql`
-      select user_id from ops.email_preferences where training_reminder_opt_out and user_id = any(${uuidArray([...new Set(open.map((o) => o.user_id))])}::uuid[])`);
-    for (const o of off) emailOff.add(o.user_id);
+    const on = await rows<{ user_id: string }>(sql`
+      select user_id from ops.email_preferences where not training_reminder_opt_out and user_id = any(${uuidArray([...new Set(open.map((o) => o.user_id))])}::uuid[])`);
+    for (const o of on) emailOff.delete(o.user_id);
   }
   const remindByEmail = async (a: (typeof open)[number], key: string, subject: string, heading: string, line: string) => {
     if (emailOff.has(a.user_id)) return;

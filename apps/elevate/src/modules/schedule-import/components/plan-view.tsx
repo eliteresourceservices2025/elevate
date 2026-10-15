@@ -12,6 +12,7 @@ import { ClientPager, usePaged } from "@/components/client-pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { applyScheduleImport, discardScheduleImport, rememberScheduleImportMatch, type ApplyOutcome } from "../actions";
 import type { Decision, Plan, PlanRow } from "../plan";
+import { ImportOutcome, rememberOutcome } from "./import-outcome";
 
 export type Targets = { people: { id: string; label: string }[]; clients: { id: string; label: string }[] };
 
@@ -155,6 +156,7 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
         acknowledgeBackdated: ackBackdated,
       });
       if (!r.ok) return void toast.error(r.error);
+      rememberOutcome(batchId, r.data);
       setOutcome(r.data);
       toast.success("Applied.");
     } catch {
@@ -164,36 +166,7 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
     }
   }
 
-  if (outcome) {
-    return (
-      <div className="space-y-4">
-        <div role="status" className="rounded-xl border border-green-600/40 bg-green-600/10 p-4 text-sm">
-          <p className="font-medium">The import was applied.</p>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>{outcome.assignmentsAdded} client assignments added</li>
-            <li>{outcome.schedulesAdded} schedules set (the previous one closed the day before)</li>
-            <li>{outcome.hoursUpdated} hours per week filled in or corrected</li>
-            <li>{outcome.assignmentsEnded + outcome.endedByTick} assignments ended</li>
-            <li>{outcome.skipped.length} skipped</li>
-          </ul>
-          <p className="mt-2 text-muted-foreground">Attendance days for these people are being recalculated from their clock events. Days already approved that now differ will show &ldquo;changed after approval&rdquo; and need approving again.</p>
-        </div>
-        {outcome.skipped.length > 0 ? (
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold">Skipped: fix these on the person&apos;s profile</h2>
-            <ul className="divide-y rounded-xl border bg-card text-sm">
-              {outcome.skipped.map((s) => (
-                <li key={s.key} className="p-3">
-                  <span className="font-medium">{s.sheetName}</span> ({s.sheetClient}): {s.reason}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        <Button onClick={() => router.push("/settings/import-schedules")}>Back to uploads</Button>
-      </div>
-    );
-  }
+  if (outcome) return <ImportOutcome outcome={outcome} />;
 
   const canApply = chosen.length > 0 || ending.size > 0;
 

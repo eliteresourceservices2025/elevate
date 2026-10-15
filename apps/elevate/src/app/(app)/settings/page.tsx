@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Settings" };
 
 const SECTIONS = [
   {
-    href: "/dashboard?tour=1",
+    href: "/settings?tour=1",
     action: null,
     icon: Compass,
     title: "Quick tour",

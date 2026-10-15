@@ -30,7 +30,7 @@ export async function getMyDigestOptOut(): Promise<boolean> {
   const user = await requireUser();
   await authorize(user, "notifications.read", { ownerUserId: user.id });
   const [p] = await db.select({ o: emailPreferences.digestOptOut }).from(emailPreferences).where(eq(emailPreferences.userId, user.id)).limit(1);
-  return p?.o ?? false;
+  return p?.o ?? true;
 }
 
 /** Whether the signed-in person has opted out of training reminder emails. */
@@ -38,5 +38,5 @@ export async function getMyTrainingReminderOptOut(): Promise<boolean> {
   const user = await requireUser();
   await authorize(user, "notifications.read", { ownerUserId: user.id });
   const [p] = await db.select({ o: emailPreferences.trainingReminderOptOut }).from(emailPreferences).where(eq(emailPreferences.userId, user.id)).limit(1);
-  return p?.o ?? false;
+  return p?.o ?? true;
 }
