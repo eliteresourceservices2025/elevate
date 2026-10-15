@@ -460,6 +460,34 @@ describe("matching people to Jibble accounts", () => {
     }
   });
 
+  it("matches by the email used in Jibble or the member code, and refuses no match or a duplicate", async () => {
+    const byEmail = await person("CodeA", { mapped: false });
+    const byCode = await person("CodeB", { mapped: false });
+    const idA = randomUUID();
+    const idB = randomUUID();
+    const dupe1 = randomUUID();
+    const dupe2 = randomUUID();
+    fake.people = [
+      { id: idA, email: "codea.jibble@example.com", fullName: "Code A", status: "Active", code: "ZZ-100" },
+      { id: idB, email: null, fullName: "Code B", status: "Active", code: "ZZ-200" },
+      { id: dupe1, email: "same.jibble@example.com", fullName: "Same One", status: "Active", code: "ZZ-300" },
+      { id: dupe2, email: "same.jibble@example.com", fullName: "Same Two", status: "Active", code: "ZZ-301" },
+    ];
+    as(hr);
+    expect((await actions.setJibblePerson({ employeeId: byEmail.employeeId, jibblePersonId: "  CodeA.Jibble@Example.com " })).ok).toBe(true);
+    expect((await actions.setJibblePerson({ employeeId: byCode.employeeId, jibblePersonId: "zz-200" })).ok).toBe(true);
+    const saved = await rows<{ employee_id: string; jibble_person_id: string; matched_by: string }>(sql`select employee_id, jibble_person_id, matched_by from time.jibble_people where employee_id in (${byEmail.employeeId}, ${byCode.employeeId})`);
+    expect(saved.find((r) => r.employee_id === byEmail.employeeId)).toMatchObject({ jibble_person_id: idA, matched_by: "manual" });
+    expect(saved.find((r) => r.employee_id === byCode.employeeId)).toMatchObject({ jibble_person_id: idB, matched_by: "manual" });
+
+    const other = await person("CodeC", { mapped: false });
+    expect((await actions.setJibblePerson({ employeeId: other.employeeId, jibblePersonId: "nobody@example.com" })).ok).toBe(false);
+    expect(await actions.setJibblePerson({ employeeId: other.employeeId, jibblePersonId: "same.jibble@example.com" })).toEqual({ ok: false, error: "More than one Jibble account has that. Paste the Jibble person id instead." });
+    expect(await actions.setJibblePerson({ employeeId: other.employeeId, jibblePersonId: "ZZ-100" })).toEqual({ ok: false, error: "That Jibble account is already matched to someone else." });
+    expect(await rows(sql`select 1 from time.jibble_people where employee_id = ${other.employeeId}`)).toHaveLength(0);
+    fake.people = [];
+  });
+
   it("tests the connection and shows HR the overview", async () => {
     fake.people = [{ id: randomUUID(), email: "x@example.com", fullName: "X", status: "Active" }];
     as(hr);

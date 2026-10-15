@@ -33,6 +33,22 @@ describe("Jibble HTTP client", () => {
     expect(calls[0].headers.Authorization).toBe("Bearer pat-123");
   });
 
+  it("reads the member code of each person, and carries on without it when Jibble refuses the field", async () => {
+    const client = new JibbleHttpClient({ ...DEFAULT_URLS, accessToken: "pat-123" });
+    answer([{ json: { value: [{ id: "p1", email: null, fullName: "Invented One", status: "Active", code: " IO-1 " }, { id: "p2", fullName: "Invented Two" }] } }]);
+    const withCode = await client.listPeople();
+    expect(calls[0].url).toContain("$select=id,email,fullName,status,code");
+    expect(withCode[0]).toMatchObject({ id: "p1", code: "IO-1" });
+    expect(withCode[1]).toMatchObject({ id: "p2", code: null });
+
+    const refusing = new JibbleHttpClient({ ...DEFAULT_URLS, accessToken: "pat-123" });
+    answer([{ status: 400, json: { error: "no such property" } }, { json: { value: [{ id: "p3", email: "x@example.com", fullName: "Invented Three", status: "Active" }] } }]);
+    const without = await refusing.listPeople();
+    expect(calls).toHaveLength(2);
+    expect(calls[1].url).toContain("$select=id,email,fullName,status&");
+    expect(without).toEqual([{ id: "p3", email: "x@example.com", fullName: "Invented Three", status: "Active", code: null }]);
+  });
+
   it("sends a clock-in as a time entry for the person and a clock-out the same way", async () => {
     answer([{ json: { id: "entry-1" } }, { json: {} }]);
     expect(await token.clock("person-1", "In")).toEqual({ entryId: "entry-1" });
