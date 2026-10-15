@@ -511,3 +511,29 @@ export const assignmentRules = learn
     ],
   )
   .enableRLS();
+
+/**
+ * An update module: when a published version is marked "material", people already certified on an older version get a short
+ * assignment (reason "update") that covers only the modules whose content changed, ending with a few questions from them. This row
+ * says which modules and how many questions. Written once by the assignment job, never changed. Migration 0072.
+ */
+export const updateScopes = learn
+  .table(
+    "update_scopes",
+    {
+      assignmentId: uuid("assignment_id")
+        .primaryKey()
+        .references(() => assignments.id),
+      fromVersionId: uuid("from_version_id")
+        .notNull()
+        .references(() => courseVersions.id),
+      moduleKeys: text("module_keys").array().notNull(),
+      questionCount: smallint("question_count").notNull(),
+      createdAt: stamp("created_at"),
+    },
+    (t) => [
+      check("update_scopes_modules_chk", sql`cardinality(${t.moduleKeys}) >= 1`),
+      check("update_scopes_questions_chk", sql`${t.questionCount} between 1 and 20`),
+    ],
+  )
+  .enableRLS();

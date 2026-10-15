@@ -19,6 +19,8 @@
 - Onboarding checklist task kind `hipaa_training` (**built**, migration 0062), client-assignment readiness (**built**, a warning only), the dashboard training counts (**built**), client audit evidence report (**built**, CSV and PDF); My data export (**built**). The **course studio** is **built** (migrations 0063 and 0064): versions, diff, editing text and exam questions, adding and reordering modules, screens and questions, exam rules, a preview in Learn, a publish checklist and publishing with a second person. Client add-on courses are **built** too (migrations 0065 and 0066): a course per client, created in the studio, assigned to the people on that client, with its own certificate prefix and a column in the client evidence report. **Release 2 is complete.**
 
 ### Release 3: reinforcement
+**Built:** update modules (migration 0072; see `docs/modules/learn.md`, "Release 3"). Still to build: weak-topic recap, course-improvement statistics, quick-reference cards, micro-drills.
+
 - Refresher track and exam, update modules, micro-drills, weak-topic statistics and question analytics, quick-reference cards,
   motion graphics or narrated slides for the topics that need them.
 

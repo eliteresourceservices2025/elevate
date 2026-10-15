@@ -55,7 +55,7 @@ export default async function CertificatePage({ params }: { params: Promise<{ as
     );
   }
 
-  if (assignment.status !== "passed") redirect(`/course/${assignment.id}`);
+  if (assignment.status !== "passed" || (assignment.isUpdate && assignment.accepted)) redirect(`/course/${assignment.id}`);
 
   return (
     <>
@@ -63,7 +63,7 @@ export default async function CertificatePage({ params }: { params: Promise<{ as
         <Link href={`/course/${assignment.id}`}>Back to the course</Link>
       </p>
       <h1>One last step</h1>
-      <p>You passed. Read the statement and accept it to receive your certificate.</p>
+      <p>{assignment.isUpdate ? "You passed. Read the statement and accept it to finish the update. Your certificate stays as it is." : "You passed. Read the statement and accept it to receive your certificate."}</p>
       <AcceptForm assignmentId={assignment.id} statementVersion={attestation.version} statement={attestation.text} />
     </>
   );

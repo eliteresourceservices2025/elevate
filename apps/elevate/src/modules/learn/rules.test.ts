@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, addonNeed, assignmentNeed, daysBetween, describeDue, isOverdue, isoWeekKey, reminderDue, trackFor } from "./rules";
+import { addDays, addonNeed, assignmentNeed, changedModuleKeys, daysBetween, describeDue, isOverdue, isoWeekKey, reminderDue, trackFor, updateQuestionCount } from "./rules";
 
 const TODAY = "2026-10-12";
 const base = { today: TODAY, startDate: null as string | null, openAssignment: false, latestCertificateEndsOn: null as string | null, assignedToPhiClient: false };
@@ -99,5 +99,24 @@ describe("addonNeed", () => {
     expect(addonNeed({ ...base, latestCertificateEndsOn: "2026-11-01" })).toMatchObject({ assign: true, reason: "renewal", track: "full", dueOn: "2026-11-01" });
     expect(addonNeed({ ...base, latestCertificateEndsOn: "2027-06-01" })).toEqual({ assign: false });
     expect(addonNeed({ ...base, openAssignment: true })).toEqual({ assign: false });
+  });
+});
+
+describe("update modules", () => {
+  const mod = (key: string, text = "same") => ({ key, title: key, screens: [{ blocks: [{ type: "paragraph", text }] }] });
+
+  it("lists only the modules in the track whose content changed, or that are new", () => {
+    const before = [mod("a"), mod("b"), mod("c")];
+    const after = [mod("a"), mod("b", "reworded"), mod("c"), mod("d")];
+    expect(changedModuleKeys(before, after, new Set(["a", "b", "c", "d"]))).toEqual(["b", "d"]);
+    // a module outside the person's track is never part of their update
+    expect(changedModuleKeys(before, after, new Set(["a", "c", "d"]))).toEqual(["d"]);
+    expect(changedModuleKeys(before, before, new Set(["a", "b", "c"]))).toEqual([]);
+  });
+
+  it("asks five questions at most and none when the changed modules have none", () => {
+    expect(updateQuestionCount(40)).toBe(5);
+    expect(updateQuestionCount(3)).toBe(3);
+    expect(updateQuestionCount(0)).toBe(0);
   });
 });
