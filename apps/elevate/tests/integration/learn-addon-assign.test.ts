@@ -142,7 +142,22 @@ describe("add-on certificates and the evidence report", () => {
 
     const { buildClientEvidence } = await import("@/modules/learn/evidence");
     const report = await buildClientEvidence(db, a.clientId, plus(new Date().toISOString().slice(0, 10), 1));
-    expect(report?.addon?.label).toContain("requirements");
-    expect(report?.rows.find((r) => r.name.startsWith("Certified"))?.addon).toMatchObject({ status: "valid", reference: cert[0].reference });
+    expect(report?.addons?.[0]?.label).toContain("requirements");
+    expect(report?.rows.find((r) => r.name.startsWith("Certified"))?.addons?.[0]).toMatchObject({ status: "valid", reference: cert[0].reference });
+  });
+
+  it("lists every live add-on of a client as its own columns", async () => {
+    const a = await liveAddon();
+    const editor = await makeUser("ed2");
+    const publisher = await makeUser("pub2");
+    const reviewer = await makeUser("rev2");
+    const second = await tx((t) => svc.createClientAddon(t, { clientId: a.clientId, actorId: editor, topic: "Billing policy" }));
+    await tx((t) => svc.editDraft(t, { versionId: second.versionId, stamp: 0, actorId: editor, apply: (st) => ({ ...st, content: writeEverything(st.content), questions: writeEverything(st.questions) }) }));
+    await tx((t) => svc.publishDraft(t, { versionId: second.versionId, actorId: publisher, reviewerUserId: reviewer, counselApprovedOn: "2026-10-12", material: false }));
+
+    const { buildClientEvidence } = await import("@/modules/learn/evidence");
+    const report = await buildClientEvidence(db, a.clientId, TODAY);
+    expect(report?.addons).toHaveLength(2);
+    expect(report?.addons?.some((x) => x.label.includes("Billing policy"))).toBe(true);
   });
 });

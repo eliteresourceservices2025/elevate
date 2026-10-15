@@ -79,10 +79,12 @@ export function NewDraftForm({ course, fromVersion }: { course: string; fromVers
   );
 }
 
-export function NewAddonForm({ clients }: { clients: { id: string; name: string }[] }) {
+export function NewAddonForm({ clients }: { clients: { id: string; name: string; existing: number }[] }) {
   const { run, pending, router } = useSave();
   const [clientId, setClientId] = useState("");
-  if (clients.length === 0) return <p className="text-sm text-muted-foreground">Every active client already has an add-on course.</p>;
+  const [topic, setTopic] = useState("");
+  const existing = clients.find((c) => c.id === clientId)?.existing ?? 0;
+  if (clients.length === 0) return <p className="text-sm text-muted-foreground">There are no active clients yet.</p>;
   return (
     <form
       className="flex flex-wrap items-end gap-2"
@@ -90,7 +92,7 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string 
         e.preventDefault();
         run(
           async () => {
-            const r = await createStudioAddon({ clientId });
+            const r = await createStudioAddon(existing > 0 ? { clientId, topic } : { clientId });
             if (r.ok) router.push(`/course-studio/${r.data.slug}/${r.data.version}`);
             return r;
           },
@@ -105,12 +107,20 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string 
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+                {c.existing > 0 ? ` (${c.existing} add-on${c.existing === 1 ? "" : "s"} already)` : ""}
               </option>
             ))}
           </NativeSelect>
         </Field>
       </div>
-      <Button type="submit" size="sm" disabled={pending || !clientId}>
+      {existing > 0 ? (
+        <div className="min-w-60">
+          <Field id="addon-topic" label="Topic" hint="A few words to tell this add-on apart from the client's other ones, for example Billing policy.">
+            <Input id="addon-topic" value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={40} required />
+          </Field>
+        </div>
+      ) : null}
+      <Button type="submit" size="sm" disabled={pending || !clientId || (existing > 0 && topic.trim().length < 2)}>
         Create the add-on
       </Button>
     </form>

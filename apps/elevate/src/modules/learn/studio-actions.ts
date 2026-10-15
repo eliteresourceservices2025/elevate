@@ -51,7 +51,7 @@ export async function createStudioAddon(input: unknown): Promise<ActionResult<{ 
     const parsed = createAddonSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
     const made = await db.transaction(async (tx) => {
-      const r = await createClientAddon(tx, { clientId: parsed.data.clientId, actorId: actor.id });
+      const r = await createClientAddon(tx, { clientId: parsed.data.clientId, actorId: actor.id, topic: parsed.data.topic });
       // The course address and ids only: never the lesson text.
       await writeAudit({ actor, action: "learn.studio_addon_create", targetType: "learn_course_version", targetId: r.versionId, metadata: { course: r.slug, clientId: parsed.data.clientId } }, tx);
       return r;

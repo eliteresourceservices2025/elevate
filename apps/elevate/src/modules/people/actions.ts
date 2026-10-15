@@ -915,7 +915,7 @@ export async function viewBankRequest(input: unknown): Promise<ActionResult<{ ba
  * HIPAA training status of one person, for the "Assign a client" form: shown when the client handles patient information. It only
  * informs: assigning is never blocked by training. HR who may assign clients (people.manage_assignments).
  */
-export async function getTrainingReadiness(input: unknown): Promise<ActionResult<{ readiness: TrainingReadiness; addon: { label: string; readiness: TrainingReadiness } | null }>> {
+export async function getTrainingReadiness(input: unknown): Promise<ActionResult<{ readiness: TrainingReadiness; addons: { label: string; readiness: TrainingReadiness }[] }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "people.manage_assignments");
@@ -925,15 +925,16 @@ export async function getTrainingReadiness(input: unknown): Promise<ActionResult
     if (!person) return fail("That person was not found.");
     // No account yet means no training can have been taken.
     const readiness: TrainingReadiness = person.userId ? await trainingReadiness(db, person.userId, "hipaa", todayInZone()) : { state: "none" };
-    // The chosen client's add-on course, when it has a live one (a reminder like the HIPAA line, never a block).
-    let addon: { label: string; readiness: TrainingReadiness } | null = null;
+    // The chosen client's add-on courses that have a live version (a reminder like the HIPAA line, never a block).
+    const addons: { label: string; readiness: TrainingReadiness }[] = [];
     if (parsed.data.clientId) {
       const found = (await db.execute(sql`
         select c.slug, coalesce(c.label, c.title) as label from learn.courses c
         where c.client_id = ${parsed.data.clientId} and c.kind = 'client_addon' and c.archived_at is null
-          and exists (select 1 from learn.course_versions v where v.course_id = c.id and v.status = 'published')`)) as unknown as { slug: string; label: string }[];
-      if (found[0]) addon = { label: found[0].label, readiness: person.userId ? await trainingReadiness(db, person.userId, found[0].slug, todayInZone()) : { state: "none" } };
+          and exists (select 1 from learn.course_versions v where v.course_id = c.id and v.status = 'published')
+        order by lower(coalesce(c.label, c.title)), c.slug`)) as unknown as { slug: string; label: string }[];
+      for (const f of found) addons.push({ label: f.label, readiness: person.userId ? await trainingReadiness(db, person.userId, f.slug, todayInZone()) : { state: "none" } });
     }
-    return { ok: true, data: { readiness, addon } };
+    return { ok: true, data: { readiness, addons } };
   });
 }

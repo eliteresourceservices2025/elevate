@@ -41,7 +41,7 @@ const report = (n = 2): EvidenceReport => ({
 
 describe("the evidence files", () => {
   it("summarizes who is trained", () => {
-    expect(summarize(report(4))).toEqual({ people: 4, hipaaValid: 2, hipaaNot: 2, cyberValid: 0, addonValid: null });
+    expect(summarize(report(4))).toEqual({ people: 4, hipaaValid: 2, hipaaNot: 2, cyberValid: 0, addons: [] });
   });
   it("writes a CSV that cannot run as a formula and carries no scores", () => {
     const csv = evidenceCsv(report(2));
@@ -69,7 +69,7 @@ describe("a client add-on in the report", () => {
   const valid = { status: "valid" as const, reference: "ERSCL-2026-ABCDEF", issuedOn: "2026-03-01", validUntil: "2027-03-01" };
   const withAddon = (): EvidenceReport => {
     const r = report(3);
-    return { ...r, addon: { label: "Acme requirements" }, rows: r.rows.map((row, i) => ({ ...row, addon: i === 0 ? valid : none })) };
+    return { ...r, addons: [{ label: "Acme requirements" }], rows: r.rows.map((row, i) => ({ ...row, addons: [i === 0 ? valid : none] })) };
   };
 
   it("adds three CSV columns, and none when the client has no add-on", () => {
@@ -82,10 +82,24 @@ describe("a client add-on in the report", () => {
   });
 
   it("counts valid add-on certificates and draws a PDF with the extra column", async () => {
-    expect(summarize(withAddon()).addonValid).toBe(1);
-    expect(summarize(report(2)).addonValid).toBeNull();
+    expect(summarize(withAddon()).addons).toEqual([{ label: "Acme requirements", valid: 1 }]);
+    expect(summarize(report(2)).addons).toEqual([]);
     const bytes = await evidencePdf(withAddon());
     expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  it("carries several add-ons: three CSV columns each, and one summary column in the PDF", async () => {
+    const r = withAddon();
+    const two: EvidenceReport = {
+      ...r,
+      addons: [{ label: "Acme requirements" }, { label: "Billing policy" }],
+      rows: r.rows.map((row, i) => ({ ...row, addons: [row.addons![0], i === 1 ? valid : none] })),
+    };
+    const header = evidenceCsv(two).split("\n")[0];
+    expect(header).toContain("Billing policy status,Billing policy certificate,Billing policy valid until");
+    expect(summarize(two).addons.map((a) => a.valid)).toEqual([1, 1]);
+    const pdf = await PDFDocument.load(await evidencePdf(two));
+    expect(pdf.getPageCount()).toBeGreaterThanOrEqual(1);
   });
 
   it("still carries no scores or answers", () => {

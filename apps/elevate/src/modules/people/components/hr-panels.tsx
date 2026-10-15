@@ -97,12 +97,12 @@ export function AssignClientForm({
   const { run, pending } = useRun();
   const [clientId, setClientId] = useState("");
   type Ready = { state: string; validUntil?: string; dueOn?: string; overdue?: boolean; endedOn?: string };
-  const [fetched, setFetched] = useState<{ key: string; value: Ready; addon: { label: string; readiness: Ready } | null } | null>(null);
+  const [fetched, setFetched] = useState<{ key: string; value: Ready; addons: { label: string; readiness: Ready }[] } | null>(null);
   const chosen = clients.find((c) => c.id === clientId);
   const handlesPhi = Boolean(chosen?.handlesPhi);
   const key = `${employeeId}:${clientId}`;
   const readiness = handlesPhi && fetched?.key === key ? fetched.value : null;
-  const addon = clientId && fetched?.key === key ? fetched.addon : null;
+  const addons = clientId && fetched?.key === key ? fetched.addons : [];
 
   // Show where the person stands: HIPAA when the chosen client works with patient information, and the client's own add-on course
   // when it has one. Reminders only: assigning is never blocked.
@@ -111,7 +111,7 @@ export function AssignClientForm({
     let cancelled = false;
     getTrainingReadiness({ employeeId, clientId })
       .then((r) => {
-        if (!cancelled && r.ok) setFetched({ key, value: r.data.readiness, addon: r.data.addon });
+        if (!cancelled && r.ok) setFetched({ key, value: r.data.readiness, addons: r.data.addons });
       })
       .catch(() => {});
     return () => {
@@ -158,8 +158,8 @@ export function AssignClientForm({
           {readiness.state !== "passed" ? "This client works with patient information. You can still assign; this is a reminder only." : null}
         </p>
       ) : null}
-      {addon ? (
-        <p role="status" className={`text-sm sm:col-span-4 ${addon.readiness.state === "passed" ? "text-muted-foreground" : "rounded-lg border border-amber-500/40 bg-amber-500/10 p-2"}`}>
+      {addons.map((addon) => (
+        <p key={addon.label} role="status" className={`text-sm sm:col-span-4 ${addon.readiness.state === "passed" ? "text-muted-foreground" : "rounded-lg border border-amber-500/40 bg-amber-500/10 p-2"}`}>
           {addon.readiness.state === "passed"
             ? `${addon.label}: passed, valid until ${addon.readiness.validUntil}.`
             : addon.readiness.state === "open"
@@ -169,7 +169,7 @@ export function AssignClientForm({
                 : `${addon.label}: nothing on record yet. This course is assigned automatically once the person is on the client. `}
           {addon.readiness.state !== "passed" ? "A reminder only." : null}
         </p>
-      ) : null}
+      ))}
     </form>
   );
 }

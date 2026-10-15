@@ -42,14 +42,16 @@ export async function getStudioDiff(slug: string, from: number, to: number): Pro
 }
 
 /** Active clients that do not have an add-on course yet (for "New client add-on"). */
-export async function listAddonClients(): Promise<{ id: string; name: string }[]> {
+/** Active clients, each with how many live add-ons it already has (a client may have several; from the second a topic is needed). */
+export async function listAddonClients(): Promise<{ id: string; name: string; existing: number }[]> {
   const user = await requireUser();
   await authorize(user, "learn.manage_content");
   const rows = (await db.execute(sql`
-    select cl.id::text as id, cl.name from core.clients cl
+    select cl.id::text as id, cl.name,
+           (select count(*)::int from learn.courses c where c.client_id = cl.id and c.kind = 'client_addon' and c.archived_at is null) as existing
+    from core.clients cl
     where cl.archived_at is null and cl.is_active
-      and not exists (select 1 from learn.courses c where c.client_id = cl.id and c.kind = 'client_addon' and c.archived_at is null)
-    order by cl.name`)) as unknown as { id: string; name: string }[];
+    order by cl.name`)) as unknown as { id: string; name: string; existing: number }[];
   return rows;
 }
 

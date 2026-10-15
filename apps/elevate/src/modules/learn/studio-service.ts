@@ -333,15 +333,17 @@ export async function userIdByEmail(tx: Tx, email: string): Promise<string | nul
  * Creates a client's add-on course and its first draft (one module, three screens, five placeholder questions). One add-on per
  * client for now. The course is studio-managed from the start (it has no code files). Nothing is assigned until it is published.
  */
-export async function createClientAddon(tx: Tx, p: { clientId: string; actorId: string }): Promise<{ slug: string; versionId: string; version: number; clientName: string }> {
+export async function createClientAddon(tx: Tx, p: { clientId: string; actorId: string; topic?: string }): Promise<{ slug: string; versionId: string; version: number; clientName: string }> {
   const [client] = (await tx.execute(sql`select id::text as id, name from core.clients where id = ${p.clientId} and archived_at is null for update`)) as unknown as { id: string; name: string }[];
   if (!client) throw new ActionFailure("That client was not found.");
+  // A client may have several add-ons. From the second one on, a short topic tells them apart.
   const existing = (await tx.execute(sql`select 1 from learn.courses where client_id = ${p.clientId} and kind = 'client_addon' and archived_at is null`)) as unknown as unknown[];
-  if (existing.length > 0) throw new ActionFailure("This client already has an add-on course.");
+  const topic = p.topic?.trim() || undefined;
+  if (existing.length > 0 && !topic) throw new ActionFailure("This client already has an add-on course. Give this one a short topic to tell them apart.");
 
   const taken = ((await tx.execute(sql`select slug from learn.courses`)) as unknown as { slug: string }[]).map((r) => r.slug);
   const slug = addonSlugFor(client.name, taken);
-  const draft = newAddonCourse(client.name, textIsAllowed);
+  const draft = newAddonCourse(client.name, textIsAllowed, topic);
   failIfErrors(lintCourse(draft.content, draft.questions, draft.examConfig));
 
   const [course] = await tx
