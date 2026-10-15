@@ -2,7 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { COURSES } from "./index";
-import { INTRO_SECONDS, OUTRO_SECONDS, RECAPS, findRecap, recapFile, recapSeconds, recapTranscript, sceneLines } from "./recaps";
+import { INTRO_SECONDS, OUTRO_SECONDS, RECAPS, RECAP_FROM_VERSION, findRecap, recapFile, recapSeconds, recapTranscript, sceneLines } from "./recaps";
 import durations from "./recap-durations.json";
 
 // The optional recap videos: every module has one, it is the length promised (60 to 90 seconds), its words pass the same text
@@ -77,5 +77,16 @@ describe("recap videos", () => {
       expect(size, recapFile(r)).toBeGreaterThan(20_000);
       expect(size, recapFile(r)).toBeLessThan(4_000_000);
     }
+  });
+});
+
+describe("recaps and course versions", () => {
+  it("offers no recap to someone on a version older than the one the words were written for", () => {
+    expect(findRecap("hipaa", "foundations", RECAP_FROM_VERSION.hipaa - 1)).toBeNull();
+    expect(findRecap("hipaa", "foundations", RECAP_FROM_VERSION.hipaa)).not.toBeNull();
+    expect(findRecap("hipaa", "foundations", RECAP_FROM_VERSION.hipaa + 2)).not.toBeNull();
+    // an unknown version number (a caller that does not know it) keeps the recap, and a module with none still has none
+    expect(findRecap("cybersecurity", "why")).not.toBeNull();
+    expect(findRecap("hipaa", "no-such-module", 9)).toBeNull();
   });
 });

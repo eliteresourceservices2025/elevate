@@ -20,6 +20,13 @@ export default async function RecordPage() {
         <Link href="/">Back to my training</Link>
       </p>
       <h1>My training record</h1>
+      {entries.length > 0 ? (
+        <p className="no-print">
+          <a className="button secondary" href="/api/record/pdf" download>
+            Download my record (PDF)
+          </a>
+        </p>
+      ) : null}
       <p className="muted">
         Everything you have done in ELEVATE Learn. Only you, HR and the privacy team can see your scores; your lead sees only whether you have passed.
       </p>

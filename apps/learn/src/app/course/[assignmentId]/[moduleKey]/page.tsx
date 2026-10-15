@@ -12,7 +12,7 @@ export default async function ModulePage({ params }: { params: Promise<{ assignm
   const session = await requireSession();
   const view = await getModuleView(getSql(), session.userId, assignmentId, moduleKey);
   if (!view) notFound();
-  const found = findRecap(view.courseSlug, view.module.key);
+  const found = findRecap(view.courseSlug, view.module.key, view.version);
   const recap = found ? { file: recapFile(found), seconds: recapSeconds(found), transcript: recapTranscript(found) } : null;
   return (
     <ModulePlayer

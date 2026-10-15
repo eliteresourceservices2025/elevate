@@ -17,7 +17,7 @@ export default async function PreviewModulePage({ params }: { params: Promise<{ 
   if (!preview) notFound();
   const m = preview.content.modules.find((x) => x.key === moduleKey);
   if (!m) notFound();
-  const found = findRecap(course, m.key);
+  const found = findRecap(course, m.key, preview.version);
 
   return (
     <>
