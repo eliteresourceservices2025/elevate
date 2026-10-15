@@ -563,3 +563,35 @@ export const drillResults = learn
     ],
   )
   .enableRLS();
+
+/**
+ * Comments between editors on a draft (Release 3): a note about the whole course or one module, open until someone marks it done.
+ * Internal working notes, never shown to learners, never copied into audit entries or notices (ids only). The text is fixed once
+ * written; only "resolved" can be set, once. Migration 0074.
+ */
+export const studioComments = learn
+  .table(
+    "studio_comments",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      versionId: uuid("version_id")
+        .notNull()
+        .references(() => courseVersions.id),
+      authorId: uuid("author_id")
+        .notNull()
+        .references(() => users.id),
+      /** "course" or "module:<key>". */
+      target: text("target").notNull(),
+      body: text("body").notNull(),
+      createdAt: stamp("created_at"),
+      resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+      resolvedBy: uuid("resolved_by").references(() => users.id),
+    },
+    (t) => [
+      index("studio_comments_version_idx").on(t.versionId, t.createdAt),
+      check("studio_comments_target_chk", sql`${t.target} ~ '^(course|module:[a-z0-9_]{1,40})$'`),
+      check("studio_comments_body_chk", sql`char_length(${t.body}) between 3 and 1000`),
+      check("studio_comments_resolved_chk", sql`(${t.resolvedAt} is null) = (${t.resolvedBy} is null)`),
+    ],
+  )
+  .enableRLS();

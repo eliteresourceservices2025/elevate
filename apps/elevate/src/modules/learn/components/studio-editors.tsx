@@ -573,15 +573,32 @@ export function ScreenEditor({ versionId, stamp, moduleKey, screen, index, count
 
 // ---- Exam questions -----------------------------------------------------------------------------------------------------------
 
-export function QuestionEditor({ versionId, stamp, question, number }: { versionId: string; stamp: number; question: QuestionSeed & { id: string }; number: number }) {
+const TYPE_LABELS: Record<string, string> = { single: "One correct answer", multiple: "Select all that apply", true_false: "True or false", scenario: "Scenario (one correct answer)" };
+const NEXT_ID = ["a", "b", "c", "d", "e", "f"];
+
+export function QuestionEditor({ versionId, stamp, question, number, modules }: { versionId: string; stamp: number; question: QuestionSeed & { id: string }; number: number; modules: { key: string; title: string }[] }) {
   const { run, pending } = useSave();
   const [topic, setTopic] = useState(question.topic);
   const [stem, setStem] = useState(question.stem);
   const [options, setOptions] = useState(question.options);
   const [correct, setCorrect] = useState<string[]>(question.correctIds);
   const [why, setWhy] = useState(question.rationale);
-  const { markSaved } = useWarnWhenEdited({ topic, stem, options, correct, why });
-  const single = question.type !== "multiple";
+  const [type, setType] = useState<string>(question.type);
+  const [moduleKey, setModuleKey] = useState(question.moduleKey);
+  const { markSaved } = useWarnWhenEdited({ topic, stem, options, correct, why, type, moduleKey });
+  const single = type !== "multiple";
+  const changeType = (next: string) => {
+    setType(next);
+    if (next === "true_false") {
+      setOptions([
+        { id: "a", text: "True" },
+        { id: "b", text: "False" },
+      ]);
+      setCorrect(["a"]);
+    } else if (next !== "multiple") {
+      setCorrect((cur) => cur.slice(0, 1));
+    }
+  };
   return (
     <details className="rounded-xl border bg-card p-4">
       <summary className="cursor-pointer text-sm font-medium">
@@ -591,12 +608,30 @@ export function QuestionEditor({ versionId, stamp, question, number }: { version
         className="mt-3 space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          run(() => saveStudioQuestion({ versionId, stamp, questionId: question.id, topic, stem, options, correctIds: correct, rationale: why }), "Saved.", markSaved);
+          run(() => saveStudioQuestion({ versionId, stamp, questionId: question.id, topic, stem, options, correctIds: correct, rationale: why, type, moduleKey }), "Saved.", markSaved);
         }}
       >
-        <p className="text-xs text-muted-foreground">
-          Type: {question.type.replace("_", "/")}. The answer key is visible to editors only.
-        </p>
+        <p className="text-xs text-muted-foreground">The answer key is visible to editors only. Changing the type or the module keeps the question&apos;s history.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field id={`q-${question.id}-type`} label="Type">
+            <NativeSelect id={`q-${question.id}-type`} value={type} onChange={(e) => changeType(e.target.value)}>
+              {Object.entries(TYPE_LABELS).map(([k, label]) => (
+                <option key={k} value={k}>
+                  {label}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field id={`q-${question.id}-module`} label="Module">
+            <NativeSelect id={`q-${question.id}-module`} value={moduleKey} onChange={(e) => setModuleKey(e.target.value)}>
+              {modules.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.title}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        </div>
         <Field id={`q-${question.id}-stem`} label="Question">
           <Textarea id={`q-${question.id}-stem`} rows={2} value={stem} onChange={(e) => setStem(e.target.value)} maxLength={600} />
         </Field>
@@ -617,6 +652,25 @@ export function QuestionEditor({ versionId, stamp, question, number }: { version
             <Input aria-label={`Option ${o.id.toUpperCase()}`} value={o.text} onChange={(e) => setOptions((cur) => cur.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} maxLength={260} disabled={question.type === "true_false"} />
           </div>
         ))}
+        {type !== "true_false" ? (
+          <div className="flex gap-2">
+            <Button type="button" size="sm" variant="outline" disabled={options.length >= 6} onClick={() => setOptions((cur) => [...cur, { id: NEXT_ID[cur.length], text: "" }])}>
+              Add an option
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={options.length <= 3}
+              onClick={() => {
+                setOptions((cur) => cur.slice(0, -1));
+                setCorrect((cur) => cur.filter((id) => id !== options[options.length - 1]?.id));
+              }}
+            >
+              Remove the last option
+            </Button>
+          </div>
+        ) : null}
         <Field id={`q-${question.id}-why`} label="Why the answer is right (shown only after a pass)">
           <Textarea id={`q-${question.id}-why`} rows={2} value={why} onChange={(e) => setWhy(e.target.value)} maxLength={700} />
         </Field>

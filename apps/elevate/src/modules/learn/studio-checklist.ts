@@ -5,7 +5,7 @@ import { hasErrors, hasPlaceholders, type LintIssue } from "./studio-lint";
 
 export type ChecklistItem = { label: string; ok: boolean; required: boolean; detail?: string };
 
-export function publishChecklist(p: { issues: LintIssue[]; unchangedVsLive: boolean | null; viewerIsLastEditor: boolean }): ChecklistItem[] {
+export function publishChecklist(p: { issues: LintIssue[]; unchangedVsLive: boolean | null; viewerIsLastEditor: boolean; openComments?: number }): ChecklistItem[] {
   const errors = p.issues.filter((i) => i.level === "error");
   const thinModules = p.issues.filter((i) => i.level === "warning" && /exam questions for this module/.test(i.message));
   const pool = p.issues.filter((i) => i.level === "warning" && /so attempts differ/.test(i.message));
@@ -14,6 +14,7 @@ export function publishChecklist(p: { issues: LintIssue[]; unchangedVsLive: bool
     { label: "No unfinished text (TO WRITE:) is left", ok: !hasPlaceholders(p.issues), required: true },
     { label: "It differs from the live version", ok: p.unchangedVsLive !== true, required: true, detail: p.unchangedVsLive === true ? "Nothing has changed since the live version." : undefined },
     { label: "Someone other than you saved the last change", ok: !p.viewerIsLastEditor, required: true, detail: p.viewerIsLastEditor ? "You saved the last change, so another editor has to publish." : undefined },
+    { label: "No editor comments are still open", ok: (p.openComments ?? 0) === 0, required: false, detail: p.openComments ? `${p.openComments} open` : undefined },
     { label: "Every module has at least 8 exam questions", ok: thinModules.length === 0, required: false, detail: thinModules[0]?.where },
     { label: "Each track's exam can rotate through at least three times its length", ok: pool.length === 0, required: false, detail: pool[0] ? `${pool[0].where}: ${pool[0].message}` : undefined },
   ];

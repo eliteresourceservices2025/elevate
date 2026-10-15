@@ -256,22 +256,26 @@ export async function editDraft(tx: Tx, p: { versionId: string; stamp: number; a
   return stamp;
 }
 
-export type QuestionPatch = { topic: string; stem: string; options: { id: string; text: string }[]; correctIds: string[]; rationale: string };
+/** `type` and `moduleKey` are optional: left out, the question keeps its own. Changing them keeps the question's place in the version history. */
+export type QuestionPatch = { topic: string; stem: string; options: { id: string; text: string }[]; correctIds: string[]; rationale: string; type?: QuestionSeed["type"]; moduleKey?: string };
 
-/** Changes one exam question of a draft (its wording, options, key and reason; the type and module stay). Returns the new stamp. */
+/** Changes one exam question of a draft: wording, options, key, reason, and optionally its type and module. Returns the new stamp. */
 export async function editQuestion(tx: Tx, p: { versionId: string; questionId: string; stamp: number; actorId: string; patch: QuestionPatch }): Promise<number> {
   const v = await lockDraft(tx, p.versionId, p.stamp);
   const all = await tx.select().from(questions).where(eq(questions.versionId, p.versionId));
   const target = all.find((q) => q.id === p.questionId);
   if (!target) throw new ActionFailure("That question was not found in this draft.");
+  const content = courseContentSchema.parse(v.content);
+  const moduleKey = p.patch.moduleKey ?? target.moduleKey;
+  const type = p.patch.type ?? (target.type as QuestionSeed["type"]);
+  if (!content.modules.some((m) => m.key === moduleKey)) throw new ActionFailure("That module is not in this draft.");
   const seeds: QuestionSeed[] = all.map((q) =>
     q.id === p.questionId
-      ? { moduleKey: q.moduleKey, topic: p.patch.topic, type: q.type as QuestionSeed["type"], stem: p.patch.stem, options: p.patch.options as QuestionSeed["options"], correctIds: p.patch.correctIds, rationale: p.patch.rationale }
+      ? { moduleKey, topic: p.patch.topic, type, stem: p.patch.stem, options: p.patch.options as QuestionSeed["options"], correctIds: p.patch.correctIds, rationale: p.patch.rationale }
       : { moduleKey: q.moduleKey, topic: q.topic, type: q.type as QuestionSeed["type"], stem: q.stem, options: q.options as QuestionSeed["options"], correctIds: q.correctIds, rationale: q.rationale },
   );
-  const content = courseContentSchema.parse(v.content);
   failIfErrors(lintCourse(content, seeds, v.examConfig as ExamConfigLike));
-  await tx.update(questions).set({ topic: p.patch.topic, stem: p.patch.stem, options: p.patch.options, correctIds: p.patch.correctIds, rationale: p.patch.rationale }).where(and(eq(questions.id, p.questionId), eq(questions.versionId, p.versionId)));
+  await tx.update(questions).set({ moduleKey, type, topic: p.patch.topic, stem: p.patch.stem, options: p.patch.options, correctIds: p.patch.correctIds, rationale: p.patch.rationale }).where(and(eq(questions.id, p.questionId), eq(questions.versionId, p.versionId)));
   const stamp = v.editStamp + 1;
   await tx.update(courseVersions).set({ updatedBy: p.actorId, updatedAt: new Date(), editStamp: stamp }).where(eq(courseVersions.id, p.versionId));
   return stamp;

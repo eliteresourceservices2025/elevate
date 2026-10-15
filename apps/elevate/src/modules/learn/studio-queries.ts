@@ -108,3 +108,22 @@ export async function getCourseStats(slug: string, version: number): Promise<Cou
     modules: moduleStats(mrows.map((r) => ({ key: r.module_key, title: titles.get(r.module_key) ?? r.module_key, people: r.people, avgMinutes: r.avg_minutes, answered: r.answered, missed: r.missed, peopleAnswered: r.people_answered }))),
   };
 }
+
+export type StudioComment = { id: string; target: string; body: string; author: string; mine: boolean; createdAt: string; resolved: boolean };
+
+/** The editors' comments on one version, open ones first, then resolved. Needs `learn.manage_content`. */
+export async function getStudioComments(slug: string, version: number): Promise<StudioComment[]> {
+  const user = await requireUser();
+  await authorize(user, "learn.manage_content");
+  if (!Number.isInteger(version) || version < 1) return [];
+  const list = (await db.execute(sql`
+    select c.id::text as id, c.target, c.body, c.author_id::text as author_id, c.created_at, c.resolved_at is not null as resolved,
+           coalesce(nullif(btrim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), u.email) as author
+    from learn.studio_comments c
+    join learn.course_versions v on v.id = c.version_id join learn.courses co on co.id = v.course_id
+    join core.users u on u.id = c.author_id
+    left join core.employees e on e.user_id = u.id and e.archived_at is null
+    where co.slug = ${slug} and v.version = ${version}
+    order by (c.resolved_at is not null), c.created_at`)) as unknown as { id: string; target: string; body: string; author_id: string; created_at: Date | string; resolved: boolean; author: string }[];
+  return list.map((c) => ({ id: c.id, target: c.target, body: c.body, author: c.author, mine: c.author_id === user.id, createdAt: new Date(c.created_at).toISOString(), resolved: c.resolved }));
+}
