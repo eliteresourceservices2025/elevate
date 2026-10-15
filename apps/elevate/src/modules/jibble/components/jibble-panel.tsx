@@ -140,7 +140,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
         <h2 className="text-lg font-semibold">
           People <span className="text-sm font-normal text-muted-foreground">({overview.people.length - unmatched.length} matched, {unmatched.length} not matched)</span>
         </h2>
-        <p className="text-sm text-muted-foreground">Matched automatically by work email. If someone uses a different email in Jibble, type the email they use in Jibble or their Jibble member code (as in Jibble's exports) to match them by hand. People with no match are skipped.</p>
+        <p className="text-sm text-muted-foreground">Matched automatically by work email. If someone uses a different email in Jibble, type the email they use in Jibble or their Jibble member code (as in Jibble&apos;s exports) to match them by hand. People with no match are skipped.</p>
         <label htmlFor="jp-unmatched" className="flex items-center gap-1.5 text-sm">
           <input id="jp-unmatched" type="checkbox" className="size-4 accent-primary" checked={onlyUnmatched} onChange={(e) => setOnlyUnmatched(e.target.checked)} />
           Only people not matched
