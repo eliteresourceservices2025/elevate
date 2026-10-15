@@ -392,13 +392,16 @@ describe("cancelling", () => {
 });
 
 describe("reminders and escalation", () => {
-  /** A step start date that many working days ago (weekends skipped). */
+  // The job gets a fixed Wednesday, not the real date: it counts working days after the step start up to and including
+  // the run date, so on a weekend the run date adds nothing and "n working days ago" would be one day short.
+  const jobDay = "2026-09-30";
+  /** A step start date that many working days before the job's run date (weekends skipped). */
   const workingDaysAgo = (n: number) => {
-    let d = today;
+    let d = jobDay;
     let left = n;
     while (left > 0) {
       d = addDays(d, -1);
-      if (new Date(`${d}T00:00:00Z`).getUTCDay() % 6 !== 0) left -= 1;
+      if (isWorkingDay(d, new Set())) left -= 1;
     }
     return d;
   };
@@ -416,7 +419,7 @@ describe("reminders and escalation", () => {
     await backdate(lateId, workingDaysAgo(2));
     await backdate(staleId, workingDaysAgo(4));
 
-    const first = await jobs.runLeaveRequestReminders(today);
+    const first = await jobs.runLeaveRequestReminders(jobDay);
     expect(first.reminded).toBeGreaterThanOrEqual(1);
     expect(first.escalated).toBeGreaterThanOrEqual(1);
 
@@ -429,7 +432,7 @@ describe("reminders and escalation", () => {
     expect(await notes(lead.user.id, "timeoff.escalated")).toHaveLength(1);
     expect(await statusOf(freshId)).toBe("pending_lead"); // too new to do anything
 
-    const again = await jobs.runLeaveRequestReminders(today);
+    const again = await jobs.runLeaveRequestReminders(jobDay);
     expect(again.escalated).toBe(0);
     expect(await notes(lead.user.id, "timeoff.escalated")).toHaveLength(1);
     expect(await rows(sql`select 1 from time.leave_approvals where request_id = ${staleId} and decision = 'escalated'`)).toHaveLength(1);
@@ -444,12 +447,12 @@ describe("reminders and escalation", () => {
     await award(mia.employeeId, 1);
     const id = idOf(await request(mia.user)); // no lead: waits for HR
     await backdate(id, workingDaysAgo(5));
-    const run = await jobs.runLeaveRequestReminders(today);
+    const run = await jobs.runLeaveRequestReminders(jobDay);
     expect(run.escalated).toBe(0);
     const [row] = await rows<{ status: string; reminded_at: Date | null }>(sql`select status, reminded_at from time.leave_requests where id = ${id}`);
     expect(row.status).toBe("pending_hr");
     expect(row.reminded_at).not.toBeNull();
-    const again = await jobs.runLeaveRequestReminders(today);
+    const again = await jobs.runLeaveRequestReminders(jobDay);
     expect(again.reminded).toBe(0);
   });
 });
