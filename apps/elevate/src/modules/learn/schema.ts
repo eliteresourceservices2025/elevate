@@ -40,6 +40,8 @@ export const courses = learn
       label: text("label"),
       noun: text("noun"),
       fixedTrack: text("fixed_track"),
+      /** False for an acknowledgment-only add-on: reading every module and accepting the statement finishes it (no exam). */
+      requiresExam: boolean("requires_exam").notNull().default(true),
       createdAt: stamp("created_at"),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
     },

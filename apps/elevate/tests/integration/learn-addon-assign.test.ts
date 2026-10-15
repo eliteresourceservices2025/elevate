@@ -160,4 +160,29 @@ describe("add-on certificates and the evidence report", () => {
     expect(report?.addons).toHaveLength(2);
     expect(report?.addons?.some((x) => x.label.includes("Billing policy"))).toBe(true);
   });
+
+  it("an acknowledgment-only add-on has no exam: every module read and the statement accepted finishes it", async () => {
+    const editor = await makeUser("edk");
+    const publisher = await makeUser("pubk");
+    const reviewer = await makeUser("revk");
+    const [c] = await rows<{ id: string }>(sql`insert into core.clients (name) values (${uniq("Ack Client ")}) returning id`);
+    const made = await tx((t) => svc.createClientAddon(t, { clientId: c.id, actorId: editor, acknowledgmentOnly: true }));
+    expect((await rows(sql`select 1 from learn.questions where version_id = ${made.versionId}`)).length).toBe(0);
+    await tx((t) => svc.editDraft(t, { versionId: made.versionId, stamp: 0, actorId: editor, apply: (st) => ({ ...st, content: writeEverything(st.content), questions: writeEverything(st.questions) }) }));
+    await tx((t) => svc.publishDraft(t, { versionId: made.versionId, actorId: publisher, reviewerUserId: reviewer, counselApprovedOn: "2026-10-12", material: false }));
+    const [course] = await rows<{ id: string; requires_exam: boolean }>(sql`select id, requires_exam from learn.courses where slug = ${made.slug}`);
+    expect(course.requires_exam).toBe(false);
+
+    const p = await makePerson("Acker");
+    const [asg] = await rows<{ id: string }>(sql`
+      insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${p.id}, ${course.id}, ${made.versionId}, 'full', 'manual', '2026-12-01') returning id`);
+    // before reading anything it cannot be accepted
+    await expect(db.execute(sql`select * from learn.accept_and_certify(${p.id}, ${asg.id}, 'v1', 'Acker Addon', '203.0.113.9', array['password']::text[])`)).rejects.toThrow();
+    const mods = await rows<{ module_key: string }>(sql`select module_key from learn.version_modules where version_id = ${made.versionId}`);
+    for (const m of mods) await db.execute(sql`insert into learn.module_completions (assignment_id, user_id, module_key) values (${asg.id}, ${p.id}, ${m.module_key})`);
+    const cert = await rows<{ reference: string }>(sql`select * from learn.accept_and_certify(${p.id}, ${asg.id}, 'v1', 'Acker Addon', '203.0.113.9', array['password']::text[])`);
+    expect(cert[0].reference).toMatch(/^ERSCL-[0-9]{4}-[A-Z2-9]{6}$/);
+    const [done] = await rows<{ status: string }>(sql`select status from learn.assignments where id = ${asg.id}`);
+    expect(done.status).toBe("passed");
+  });
 });

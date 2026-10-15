@@ -134,7 +134,7 @@ export function addonSlugFor(clientName: string, taken: string[]): string {
  * (an add-on has one track, so a renewal repeats it). `safe` says whether a piece of text is allowed in course text; a client name
  * that would trip the text checks (for example a web address) is kept out of lessons and used only in titles.
  */
-export function newAddonCourse(clientName: string, safe: (text: string) => boolean, topic?: string) {
+export function newAddonCourse(clientName: string, safe: (text: string) => boolean, topic?: string, acknowledgmentOnly = false) {
   const name = clientName.trim().replace(/\s+/g, " ").slice(0, 70);
   // A client's second and later add-ons carry a short topic to tell them apart ("Acme: Billing policy").
   const subject = topic?.trim().replace(/\s+/g, " ").slice(0, 40) || null;
@@ -149,13 +149,15 @@ export function newAddonCourse(clientName: string, safe: (text: string) => boole
     modules: [first],
   };
   const questions: QuestionSeed[] = [];
-  for (let i = 0; i < ADDON_QUESTIONS; i += 1) questions.push(newQuestion({ moduleKey: first.key, type: "single", existingStems: questions.map((q) => q.stem) }));
+  // An acknowledgment-only add-on has no exam: nothing to write but the lessons and the statement.
+  const asked = acknowledgmentOnly ? 0 : ADDON_QUESTIONS;
+  for (let i = 0; i < asked; i += 1) questions.push(newQuestion({ moduleKey: first.key, type: "single", existingStems: questions.map((q) => q.stem) }));
   return {
     title: content.title,
     label: (subject ? `${name}: ${subject}` : `${name} requirements`).slice(0, 60),
     noun: (subject ? `${name} ${subject} training` : `${name} requirements training`).slice(0, 100),
     content,
     questions,
-    examConfig: { passPercent: 80, maxTries: 3, waitMinutesAfterFail: 60, renewalMonths: 12, tracks: { full: { questions: ADDON_QUESTIONS } } },
+    examConfig: { passPercent: 80, maxTries: 3, waitMinutesAfterFail: 60, renewalMonths: 12, tracks: { full: { questions: asked } } },
   };
 }

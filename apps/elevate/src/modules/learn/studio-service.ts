@@ -333,7 +333,7 @@ export async function userIdByEmail(tx: Tx, email: string): Promise<string | nul
  * Creates a client's add-on course and its first draft (one module, three screens, five placeholder questions). One add-on per
  * client for now. The course is studio-managed from the start (it has no code files). Nothing is assigned until it is published.
  */
-export async function createClientAddon(tx: Tx, p: { clientId: string; actorId: string; topic?: string }): Promise<{ slug: string; versionId: string; version: number; clientName: string }> {
+export async function createClientAddon(tx: Tx, p: { clientId: string; actorId: string; topic?: string; acknowledgmentOnly?: boolean }): Promise<{ slug: string; versionId: string; version: number; clientName: string }> {
   const [client] = (await tx.execute(sql`select id::text as id, name from core.clients where id = ${p.clientId} and archived_at is null for update`)) as unknown as { id: string; name: string }[];
   if (!client) throw new ActionFailure("That client was not found.");
   // A client may have several add-ons. From the second one on, a short topic tells them apart.
@@ -343,18 +343,19 @@ export async function createClientAddon(tx: Tx, p: { clientId: string; actorId: 
 
   const taken = ((await tx.execute(sql`select slug from learn.courses`)) as unknown as { slug: string }[]).map((r) => r.slug);
   const slug = addonSlugFor(client.name, taken);
-  const draft = newAddonCourse(client.name, textIsAllowed, topic);
+  const draft = newAddonCourse(client.name, textIsAllowed, topic, p.acknowledgmentOnly === true);
   failIfErrors(lintCourse(draft.content, draft.questions, draft.examConfig));
 
   const [course] = await tx
     .insert(courses)
-    .values({ slug, title: draft.title, kind: "client_addon", clientId: p.clientId, label: draft.label, noun: draft.noun, fixedTrack: "full", studioManaged: true })
+    .values({ slug, title: draft.title, kind: "client_addon", clientId: p.clientId, label: draft.label, noun: draft.noun, fixedTrack: "full", studioManaged: true, requiresExam: p.acknowledgmentOnly !== true })
     .returning({ id: courses.id });
   const [created] = await tx
     .insert(courseVersions)
     .values({ courseId: course.id, version: 1, status: "draft", content: draft.content, examConfig: draft.examConfig, material: false, createdBy: p.actorId, changeNote: "New client add-on", updatedBy: p.actorId, updatedAt: new Date() })
     .returning({ id: courseVersions.id, version: courseVersions.version });
   await writeModules(tx, created.id, draft.content);
-  await tx.insert(questions).values(draft.questions.map((q) => ({ versionId: created.id, moduleKey: q.moduleKey, topic: q.topic, type: q.type, stem: q.stem, options: q.options, correctIds: q.correctIds, rationale: q.rationale })));
+  if (draft.questions.length > 0)
+    await tx.insert(questions).values(draft.questions.map((q) => ({ versionId: created.id, moduleKey: q.moduleKey, topic: q.topic, type: q.type, stem: q.stem, options: q.options, correctIds: q.correctIds, rationale: q.rationale })));
   return { slug, versionId: created.id, version: created.version, clientName: client.name };
 }

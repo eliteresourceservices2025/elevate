@@ -49,6 +49,31 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
         ))}
       </ol>
 
+      {!overview.requiresExam ? (
+        <section className="card" aria-labelledby="ack-h">
+          <h2 id="ack-h">Acknowledgment</h2>
+          {certificate ? (
+            <p>
+              <Link className="button" href={`/certificate/${assignment.id}`}>
+                View my certificate
+              </Link>
+            </p>
+          ) : overview.allModulesDone ? (
+            <>
+              <p>There is no exam for this course. Read the statement and accept it to finish.</p>
+              <p>
+                <Link className="button" href={`/certificate/${assignment.id}`}>
+                  Accept and get my certificate
+                </Link>
+              </p>
+            </>
+          ) : (
+            <p className="muted">
+              Finish all {modules.length} modules to unlock the statement.{next ? <> Next: <Link href={`/course/${assignment.id}/${next.key}`}>{next.title}</Link>.</> : null}
+            </p>
+          )}
+        </section>
+      ) : (
       <section className="card" aria-labelledby="exam-h">
         <h2 id="exam-h">{assignment.isUpdate ? "Update questions" : "Final exam"}</h2>
         <p>
@@ -107,6 +132,7 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
           <StartExamButton assignmentId={assignment.id} label={exam.attempts.length ? "Try the exam again" : "Start the exam"} />
         )}
       </section>
+      )}
     </>
   );
 }

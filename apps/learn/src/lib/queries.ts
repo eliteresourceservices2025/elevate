@@ -43,13 +43,15 @@ export type Overview = {
   exam: { questions: number; minutes: number | null; passPercent: number; triesAllowed: number; attempts: AttemptSummary[]; openAttemptId: string | null; waitUntil: string | null; waitMinutes: number };
   certificate: { reference: string; holderName: string; issuedOn: string; endsOn: string; revoked: boolean } | null;
   attestation: { version: string; text: string };
+  /** False for an acknowledgment-only course: every module read and the statement accepted finishes it. */
+  requiresExam: boolean;
 };
 
 export async function getOverview(sql: Sql, userId: string, assignmentId: string): Promise<Overview | null> {
   if (!/^[0-9a-f-]{36}$/i.test(assignmentId)) return null;
   return withUser(sql, userId, async (tx) => {
     const [a] = await tx`
-      select a.id, a.track, a.status, a.reason, a.due_on::text as due_on, a.version_id, c.title as course_title, v.exam_config, v.content
+      select a.id, a.track, a.status, a.reason, a.due_on::text as due_on, a.version_id, c.title as course_title, c.requires_exam, v.exam_config, v.content
       from learn.assignments a join learn.courses c on c.id = a.course_id join learn.course_versions v on v.id = a.version_id
       where a.id = ${assignmentId}`;
     if (!a) return null;
@@ -122,6 +124,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
       },
       certificate: cert ? { reference: cert.reference as string, holderName: cert.holder_name as string, issuedOn: cert.issued_on as string, endsOn: cert.ends_on as string, revoked: cert.revoked as boolean } : null,
       attestation: content.attestation,
+      requiresExam: a.requires_exam as boolean,
     } satisfies Overview;
   });
 }

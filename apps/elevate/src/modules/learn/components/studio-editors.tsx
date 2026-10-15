@@ -83,6 +83,7 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string;
   const { run, pending, router } = useSave();
   const [clientId, setClientId] = useState("");
   const [topic, setTopic] = useState("");
+  const [ackOnly, setAckOnly] = useState(false);
   const existing = clients.find((c) => c.id === clientId)?.existing ?? 0;
   if (clients.length === 0) return <p className="text-sm text-muted-foreground">There are no active clients yet.</p>;
   return (
@@ -92,7 +93,7 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string;
         e.preventDefault();
         run(
           async () => {
-            const r = await createStudioAddon(existing > 0 ? { clientId, topic } : { clientId });
+            const r = await createStudioAddon({ clientId, ...(existing > 0 ? { topic } : {}), ...(ackOnly ? { acknowledgmentOnly: true } : {}) });
             if (r.ok) router.push(`/course-studio/${r.data.slug}/${r.data.version}`);
             return r;
           },
@@ -120,6 +121,10 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string;
           </Field>
         </div>
       ) : null}
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" className="size-4 accent-primary" checked={ackOnly} onChange={(e) => setAckOnly(e.target.checked)} />
+        Acknowledgment only (no exam: reading it and accepting the statement finishes it)
+      </label>
       <Button type="submit" size="sm" disabled={pending || !clientId || (existing > 0 && topic.trim().length < 2)}>
         Create the add-on
       </Button>

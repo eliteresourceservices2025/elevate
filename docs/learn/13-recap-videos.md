@@ -61,4 +61,6 @@ Output is 1280 x 720, 30 frames per second, H.264 with AAC audio, under 1 MB per
 ## Not built
 
 A recorded human voice (the pipeline accepts one), a video block inside lesson screens, a per-person "watched" record, or recaps
-for client add-on courses. Each would be a separate decision.
+for client add-on courses (those are written in the studio, so a video would need an in-studio storyboard and a hosted render step). Each would be a separate decision.
+
+Recaps are tied to a course version: `RECAP_FROM_VERSION` in `recaps.ts` is the first version number whose lessons a course's recaps were written for, and a person on an older version is offered none. Raise it when a lesson change makes a recap's words wrong for earlier versions.

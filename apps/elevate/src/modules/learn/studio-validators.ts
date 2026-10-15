@@ -12,7 +12,7 @@ export const createDraftSchema = z.object({
   note: z.string().trim().min(3, "Say what this draft is for").max(300),
 });
 
-export const createAddonSchema = z.object({ clientId: uuid, topic: z.string().trim().min(2, "At least 2 characters").max(40, "At most 40 characters").optional() });
+export const createAddonSchema = z.object({ clientId: uuid, topic: z.string().trim().min(2, "At least 2 characters").max(40, "At most 40 characters").optional(), acknowledgmentOnly: z.boolean().optional() });
 
 export const courseMetaSchema = z.object({
   versionId: uuid,
