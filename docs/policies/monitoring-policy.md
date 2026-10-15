@@ -38,7 +38,7 @@ Some of our clients are healthcare organizations. A screenshot may show their in
 
 ## How long it is kept
 
-- **Screenshots:** kept in Jibble for **90 days**, then deleted.
+- **Screenshots:** kept in Jibble for **2 months**, then deleted.
 - **Time clock records:** the engagement and three years after, as in the Privacy notice.
 - **Location (if you choose it):** kept with the clock event for the same period as the time record.
 

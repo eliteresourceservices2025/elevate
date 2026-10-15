@@ -60,6 +60,8 @@ export async function listDirectory(rawQuery: unknown) {
 
   const conditions: SQL[] = [];
   if (!(seesArchived && q.archived)) conditions.push(isNull(employees.archivedAt));
+  // Records in the retention archive are HR-only: leads and others never see them in the directory.
+  if (!seesArchived) conditions.push(isNull(employees.retentionArchivedAt));
   if (q.status) conditions.push(eq(employees.status, q.status));
   if (q.team) conditions.push(eq(employees.teamId, q.team));
   if (q.q) {
@@ -213,6 +215,8 @@ export async function getProfile(employeeId: string) {
   const employee = await loadEmployee(employeeId);
   if (!employee) await authorize({ ...user, roles: [] }, "people.view_profile"); // always forbidden
   const e = employee!;
+  // A record in the retention archive (five years after the engagement ended) opens for HR only.
+  if (e.retentionArchivedAt && !can(user, "people.edit_profile")) await authorize({ ...user, roles: [] }, "people.view_profile");
   // "Team" scope means: the viewer is somewhere above this person in the reporting chain.
   const resource = { ownerUserId: e.userId ?? undefined, managerChainUserIds: await managerChainUserIds(db, e.id) };
   await authorize(user, "people.view_profile", resource);

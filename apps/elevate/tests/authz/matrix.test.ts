@@ -86,6 +86,7 @@ const EXPECTED: Record<string, string> = {
   "recruiting.download_resume": "A A T A - -",
   "recruiting.connect_calendar": "O O - O - -", // your own Google Calendar only
   "recruiting.manage_retention": "A A - - - -",
+  "people.manage_retention": "A A - - - -",
   "offers.manage_templates": "A A - - - -",
   "offers.make": "A A - A - -",
   "offers.hire": "A A - - - -",

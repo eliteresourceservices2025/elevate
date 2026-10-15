@@ -72,6 +72,13 @@ const SECTIONS = [
     description: "What to check before everyone moves over from TalentHR.",
   },
   {
+    href: "/settings/people-retention",
+    action: "people.manage_retention",
+    icon: History,
+    title: "People records retention",
+    description: "How long records are kept after the engagement ends, the HR-only archive and anonymizing. Off until you switch it on.",
+  },
+  {
     href: "/settings/audit-log",
     action: "settings.view_audit",
     icon: History,

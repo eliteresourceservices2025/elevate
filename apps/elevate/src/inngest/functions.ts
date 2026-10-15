@@ -16,6 +16,7 @@ import { runDailyDigest } from "@/modules/notifications/digest";
 import { flushEmailQueue } from "@/modules/notifications/email-queue";
 import { todayInZone } from "@/modules/org/service";
 import { runRecruitingRetention, sendCandidateEmails } from "@/modules/recruiting/jobs";
+import { runPeopleRetention } from "@/modules/people/retention";
 import { runEsignReminders, runEsignSealSweep } from "@/modules/signing/jobs";
 import { runChecklistReminders, runChecklistSync, runSeparations } from "@/modules/onboarding/jobs";
 import { runImportPurge } from "@/modules/imports/jobs";
@@ -230,6 +231,12 @@ export const candidateEmailSender = inngest.createFunction(
 export const recruitingRetention = inngest.createFunction(
   { id: "recruiting-retention", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 30 3 * * *` } },
   async ({ step }) => step.run("purge", () => track("recruiting-retention", () => runRecruitingRetention())),
+);
+
+/** Daily at 3:35 AM Phoenix: move separated people's records to the HR-only archive or anonymize them (only when HR has switched it on). */
+export const peopleRetention = inngest.createFunction(
+  { id: "people-retention", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 35 3 * * *` } },
+  async ({ step }) => step.run("retain", () => track("people-retention", () => runPeopleRetention())),
 );
 
 /** Daily at 8:30 AM Manila: expire overdue documents and remind people whose turn it is to sign. */
