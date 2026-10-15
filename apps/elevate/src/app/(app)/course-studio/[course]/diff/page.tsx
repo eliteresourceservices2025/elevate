@@ -23,7 +23,7 @@ export default async function StudioDiffPage({ params, searchParams }: PageProps
   const list = (items: string[]) => (items.length ? <ul className="list-disc pl-5">{items.map((t, i) => <li key={i}>{t}</li>)}</ul> : null);
 
   return (
-    <div className="w-full max-w-4xl space-y-6">
+    <div className="w-full max-w-6xl space-y-6">
       <p className="text-sm">
         <Link href={`/course-studio/${course}`} className="text-primary underline-offset-4 hover:underline">
           Back to the versions

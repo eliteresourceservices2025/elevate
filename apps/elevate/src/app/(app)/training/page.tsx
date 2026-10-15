@@ -10,7 +10,9 @@ import { parsePaging } from "@/lib/pagination";
 import { TrainingRowActions } from "@/modules/learn/components/training-actions";
 import { AutoAssignCard } from "@/modules/learn/components/auto-assign-card";
 import { EvidenceCard } from "@/modules/learn/components/evidence-card";
-import { getAutoAssign, listEvidenceClients, listTrainingStatus } from "@/modules/learn/queries";
+import { LearnerInstructions } from "@/modules/learn/components/learner-instructions";
+import { buildLearnerInstructions } from "@/modules/learn/instructions";
+import { getAutoAssign, getInstructionFacts, listEvidenceClients, listTrainingStatus } from "@/modules/learn/queries";
 import { todayInZone } from "@/modules/org/service";
 
 export const metadata: Metadata = { title: "Training status" };
@@ -24,6 +26,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
   const paging = parsePaging({ page: one(params.page), size: one(params.size) });
   const { rows, counts, info, canSeeResults, canManage, course, courseLabel, courses, fixedTrack, published } = await orNotFound(listTrainingStatus(filters, paging));
   const auto = canManage ? await orNotFound(getAutoAssign(course)) : null;
+  const facts = await orNotFound(getInstructionFacts(course));
   const evidenceClients = canManage ? await orNotFound(listEvidenceClients()) : null;
   const withCourse = (extra: Record<string, string | undefined>) => {
     const q = new URLSearchParams();
@@ -43,11 +46,14 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
 
   return (
     <div className="w-full space-y-6">
-      <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
         <h1 className="text-2xl font-bold">Training status</h1>
         <p className="mt-1 max-w-3xl text-muted-foreground">
           {courseLabel} training for each person: passed, not yet, or overdue. {canSeeResults ? "As HR you also see tries and the latest score." : "Scores stay with the person and HR."}
         </p>
+        </div>
+        {facts ? <LearnerInstructions courseLabel={courseLabel} text={buildLearnerInstructions(facts)} /> : null}
       </div>
 
       <nav aria-label="Course" className="flex flex-wrap gap-2 text-sm">
