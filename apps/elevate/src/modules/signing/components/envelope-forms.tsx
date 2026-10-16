@@ -35,6 +35,8 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
   // Everyone, a team or a client: each person signs their own copy (their own document, signature and sealed file).
   const [copies, setCopies] = useState(false);
   const [sharedRole, setSharedRole] = useState("");
+  const [counterId, setCounterId] = useState("");
+  const [counterRole, setCounterRole] = useState("");
   const [groupKind, setGroupKind] = useState<"everyone" | "team" | "client">("everyone");
   const [groupId, setGroupId] = useState("");
   const [finding, setFinding] = useState(false);
@@ -61,6 +63,11 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
     if ((content.trim() || title.trim()) && !window.confirm("Replace what you have written with this ready-made document?")) return;
     setTitle(t.title);
     setContent(t.body);
+    setSharedRole(t.roles[0] ?? "");
+    if (t.countersignerRole) {
+      setCounterRole(t.countersignerRole);
+      setCopies(true);
+    }
     setPicked((list) => (list.length ? list.map((p, i) => ({ ...p, role: p.role || (t.roles[i] ?? "") })) : list));
   }
 
@@ -98,6 +105,7 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
       form.set("send", String(send));
       form.set("signers", JSON.stringify(batch.map((p, i) => ({ userId: p.userId, role: p.role || sharedRole, position: i + 1 }))));
       if (each) form.set("individual", "true");
+      if (each && counterId) form.set("countersigner", JSON.stringify({ userId: counterId, role: counterRole }));
       if (initialEachPage) form.set("initialEachPage", "true");
       if (source === "write") form.set("content", content);
       else if (source === "template") form.set("templateId", templateId);
@@ -265,8 +273,29 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
           </span>
         </label>
         {individual ? (
-          <div className="max-w-sm">
-            <TextField id="env-shared-role" label="Role shown on each document (optional)" value={sharedRole} onChange={(e) => setSharedRole(e.target.value)} maxLength={60} placeholder="Contractor" />
+          <div className="space-y-3">
+            <div className="max-w-sm">
+              <TextField id="env-shared-role" label="Role shown on each document (optional)" value={sharedRole} onChange={(e) => setSharedRole(e.target.value)} maxLength={60} placeholder="Contractor" />
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-56 flex-1">
+                <SelectField id="env-counter" label="Countersigned by the Company (optional, signs after each person)" value={counterId} onChange={(e) => setCounterId(e.target.value)}>
+                  <option value="">No countersigner</option>
+                  {people
+                    .filter((x) => !taken.has(x.userId) || x.userId === counterId)
+                    .map((x) => (
+                      <option key={x.userId} value={x.userId}>
+                        {x.name} ({x.email})
+                      </option>
+                    ))}
+                </SelectField>
+              </div>
+              {counterId ? (
+                <div className="w-64">
+                  <TextField id="env-counter-role" label="Their role on the document" value={counterRole} onChange={(e) => setCounterRole(e.target.value)} maxLength={60} placeholder="ERS representative" />
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
         {many ? (

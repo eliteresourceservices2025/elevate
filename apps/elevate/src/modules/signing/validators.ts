@@ -31,6 +31,9 @@ export const templateSchema = z.object({
   roles: z.array(text(60).min(1)).min(1, "Name at least one signee role").max(MAX_SIGNERS),
 });
 
+/** The Company's countersigner, added after each person on a per-person copy. */
+export const countersignerSchema = z.object({ userId: uuid, role: z.preprocess(blankToUndefined, text(60).optional()) });
+
 export const signeeGroupSchema = z
   .object({ kind: z.enum(["everyone", "team", "client"]), id: z.preprocess(blankToUndefined, uuid.optional()) })
   .refine((v) => v.kind === "everyone" || Boolean(v.id), { message: "Choose a team or a client", path: ["id"] });

@@ -22,3 +22,23 @@ describe("ready-made documents", () => {
     });
   }
 });
+
+describe("the contract documents", () => {
+  it("use only known fields, and the NDA asks HR for the Company address before it can be sent", async () => {
+    const { mergeProblem, unfilledPlaceholders } = await import("./merge");
+    for (const t of BUILTIN_TEMPLATES) expect(mergeProblem(t.body)).toBeNull();
+    const nda = BUILTIN_TEMPLATES.find((t) => t.id === "nda");
+    expect(nda?.countersignerRole).toBe("Head of People Operations");
+    expect(unfilledPlaceholders(nda?.body ?? "")).toEqual(["Company business address"]);
+    expect(nda?.body).toContain("{{contractor_name}}");
+    expect(nda?.body).toContain("{{contractor_address}}");
+    // Nothing else is left to fill in by hand, and no signature or date lines (the signature page covers them)
+    for (const t of BUILTIN_TEMPLATES) if (t.id !== "nda") expect(unfilledPlaceholders(t.body)).toEqual([]);
+    for (const t of BUILTIN_TEMPLATES) expect(t.body).not.toMatch(/_{5,}/);
+  });
+  it("renders the handbook as several pages", async () => {
+    const hb = BUILTIN_TEMPLATES.find((t) => t.id === "contractor-handbook");
+    const pdf = await renderComposedPdf(hb?.title ?? "", hb?.body ?? "");
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBeGreaterThan(4);
+  });
+});
