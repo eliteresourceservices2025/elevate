@@ -13,6 +13,7 @@ import type { SignerChoice, SigneeGroups, TemplateRow } from "../queries";
 import { useRouter } from "next/navigation";
 import { ComposeEditor } from "./compose-editor";
 import { BUILTIN_TEMPLATES } from "../builtin-templates";
+import { fieldsUsed } from "../merge";
 
 type Picked = { userId: string; role: string };
 
@@ -89,7 +90,7 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
     if (source === "upload" && !file) return void toast.error("Attach the PDF.");
     if (source === "upload" && file && file.size > MAX_PDF_BYTES) return void toast.error("The PDF must be 8 MB or smaller.");
     if (source === "template" && !templateId) return void toast.error("Choose a template.");
-    const post = async (batch: Picked[], each: boolean) => {
+    const post = async (batch: Picked[], each: boolean, check = false) => {
       const form = new FormData();
       form.set("title", title);
       form.set("order", order);
@@ -101,13 +102,20 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
       if (source === "write") form.set("content", content);
       else if (source === "template") form.set("templateId", templateId);
       else if (file) form.set("file", file);
-      const response = await fetch("/api/signing/envelopes", { method: "POST", body: form });
+      const response = await fetch(check ? "/api/signing/envelopes?check=1" : "/api/signing/envelopes", { method: "POST", body: form });
       return (await response.json().catch(() => null)) as { ok: boolean; error?: string; id?: string; count?: number } | null;
     };
     setSending(true);
     try {
       if (individual) {
         if (send && signers.length > 1 && !window.confirm(`Send this document to ${signers.length} people, each as their own copy?`)) return;
+        // Details filled in from people's records: check everyone first, so a missing address stops the send before anyone gets a copy.
+        if (source === "write" && fieldsUsed(content).length > 0) {
+          for (let i = 0; i < signers.length; i += MAX_SIGNERS) {
+            const checked = await post(signers.slice(i, i + MAX_SIGNERS), true, true);
+            if (!checked?.ok) return void toast.error(checked?.error ?? "Something went wrong. Please try again.");
+          }
+        }
         let done = 0;
         for (let i = 0; i < signers.length; i += MAX_SIGNERS) {
           const batch = signers.slice(i, i + MAX_SIGNERS);
