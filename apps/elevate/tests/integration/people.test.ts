@@ -448,7 +448,8 @@ describe("custom fields", () => {
     expect(await actions.setCustomFieldValues({ employeeId: id, values: { [shirt.id]: "XXL" } })).toMatchObject({ ok: false });
     expect((await actions.setCustomFieldValues({ employeeId: id, values: { [shirt.id]: "M", [note.id]: "Prefers mornings" } })).ok).toBe(true);
 
-    expect((await queries.getProfile(id)).customFields.map((f) => f.key).sort()).toEqual(["hr_note", "shirt_size"]);
+    // other test files (the imports) add their own imp_* fields to the same database, so look only at the two made here
+    expect((await queries.getProfile(id)).customFields.map((f) => f.key).filter((k) => !k.startsWith("imp_")).sort()).toEqual(["hr_note", "shirt_size"]);
     as(owner);
     const own = await queries.getProfile(id);
     expect(own.customFields.map((f) => f.key)).toEqual(["shirt_size"]);

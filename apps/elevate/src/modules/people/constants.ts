@@ -78,6 +78,8 @@ export const HISTORY_EVENTS = [
   "sensitive_changed",
   "archived",
   "restored",
+  "merged",
+  "account_linked",
 ] as const;
 export type HistoryEvent = (typeof HISTORY_EVENTS)[number];
 

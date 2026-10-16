@@ -16,6 +16,8 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const actions = await import("@/modules/people/actions");
 const queries = await import("@/modules/people/queries");
+const duplicateActions = await import("@/modules/people/duplicates-actions");
+const duplicateQueries = await import("@/modules/people/duplicates-queries");
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
@@ -32,6 +34,9 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "createEmployee", call: () => actions.createEmployee(person), allowed: HR },
   { name: "updateEmployee", call: () => actions.updateEmployee({ employeeId: ID, ...person }), allowed: HR },
   { name: "archiveEmployee", call: () => actions.archiveEmployee({ employeeId: ID }), allowed: HR },
+  { name: "mergeDuplicate", call: () => duplicateActions.mergeDuplicate({ keepId: ID, duplicateId: OTHER }), allowed: HR },
+  { name: "claimMyProfile", call: () => duplicateActions.claimMyProfile({ employeeId: ID }), allowed: HR },
+  { name: "relinkSignInAccount", call: () => duplicateActions.relinkSignInAccount({ userId: ID, employeeId: OTHER }), allowed: HR },
   { name: "updateSensitive", call: () => actions.updateSensitive({ employeeId: ID, values: { tin: "123456789" } }), allowed: HR },
   { name: "reviewChangeRequest", call: () => actions.reviewChangeRequest({ requestId: ID, decision: "approve" }), allowed: HR },
   { name: "createClient", call: () => actions.createClient({ name: "Acme (fake)", timeZone: "America/Phoenix" }), allowed: HR },
@@ -69,6 +74,8 @@ describe("people queries, every role", () => {
     { name: "listDirectory", call: () => queries.listDirectory({}), allowed: [...ROLE_SLUGS] },
     { name: "listChangeRequests", call: () => queries.listChangeRequests(), allowed: HR },
     { name: "viewBankChangeRequest", call: () => queries.viewBankChangeRequest(ID), allowed: HR },
+    { name: "listRecordsToClaim", call: () => duplicateQueries.listRecordsToClaim(), allowed: HR },
+    { name: "getDuplicateReport", call: () => duplicateQueries.getDuplicateReport(), allowed: HR },
     { name: "listClients", call: () => queries.listClients(), allowed: HR },
     { name: "listClientsForFilter", call: () => queries.listClientsForFilter(), allowed: HR },
     { name: "listCustomFieldDefs", call: () => queries.listCustomFieldDefs(), allowed: HR },

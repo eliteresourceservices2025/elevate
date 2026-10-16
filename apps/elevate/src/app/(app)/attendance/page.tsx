@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { can, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
+import { listRecordsToClaim } from "@/modules/people/duplicates-queries";
 import { formatDateOnly, formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { formatDuration, MINUTE } from "@/modules/attendance/clock";
@@ -225,7 +226,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
         ) : (
           <div className="space-y-3">
             <p className="text-muted-foreground">Your account is not linked to a people record yet, and the time clock needs one.</p>
-            {can(user, "people.create") ? <SetupProfileForm /> : <p className="text-sm">Ask HR to add you in People with your sign-in email, and the clock will appear.</p>}
+            {can(user, "people.create") ? <SetupProfileForm records={await orNotFound(listRecordsToClaim())} /> : <p className="text-sm">Ask HR to add you in People with your sign-in email, and the clock will appear.</p>}
           </div>
         )
       ) : null}

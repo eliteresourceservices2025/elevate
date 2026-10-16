@@ -82,8 +82,13 @@ export const createEmployeeSchema = employeeFieldsSchema
   .extend({
     teamId: z.preprocess(blankToUndefined, uuid.optional()),
     managerId: z.preprocess(blankToUndefined, uuid.optional()),
+    /** Ticked after the form said someone with the same name is already in the directory and this is truly a different person. */
+    confirmDifferentPerson: z.boolean().optional(),
   })
   .refine(separatedNeedsEndDate, endDateRule);
+
+export const mergeSchema = z.object({ keepId: uuid, duplicateId: uuid, adoptEmail: z.boolean().default(false) });
+export const relinkSchema = z.object({ userId: uuid, employeeId: uuid, replaceExisting: z.boolean().default(false) });
 
 export const updateEmployeeSchema = employeeFieldsSchema
   .extend({ employeeId: uuid })
@@ -260,7 +265,10 @@ export const dataRightsRequestSchema = z.object({
 export const myProfileSchema = z.object({
   firstName: requiredText("your first name"),
   lastName: requiredText("your last name"),
+  /** Ticked after looking through the existing records: your record may already be there under your old email or name. */
+  confirmNotListed: z.boolean().optional(),
 });
+export const claimSchema = z.object({ employeeId: uuid, replaceExisting: z.boolean().default(false) });
 
 // ---- Retention (docs/modules/people-retention-design.md) ----------------------------------------------------------------
 

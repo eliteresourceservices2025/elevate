@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import { toast } from "sonner";
 import { FormSection, SelectField, TextField } from "@/components/form-fields";
@@ -23,7 +24,7 @@ type Props = ({ mode: "create" } | { mode: "edit"; employeeId: string }) & {
   defaults?: Partial<EmployeeFieldsInput>;
 };
 
-type FormValues = EmployeeFieldsInput & { teamId?: string; managerId?: string };
+type FormValues = EmployeeFieldsInput & { teamId?: string; managerId?: string; confirmDifferentPerson?: boolean };
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace("_", " ");
 
@@ -41,11 +42,14 @@ export function EmployeeForm(props: Props) {
   });
   useUnsavedChanges(isDirty && !isSubmitting);
   const status = useWatch({ control, name: "status" });
+  // Shown after the server says someone with the same name exists
+  const [maybeDuplicate, setMaybeDuplicate] = useState(false);
 
   async function onSubmit(values: FormValues) {
     const result =
       props.mode === "create" ? await createEmployee(values) : await updateEmployee({ ...values, employeeId: props.employeeId });
     if (!result.ok) {
+      setMaybeDuplicate(result.error.startsWith("Possible duplicate"));
       toast.error(result.error);
       return;
     }
@@ -146,6 +150,12 @@ export function EmployeeForm(props: Props) {
       ) : null}
 
       <div className="flex gap-3">
+        {creating && maybeDuplicate ? (
+          <label htmlFor="confirmDifferentPerson" className="flex items-center gap-2 text-sm">
+            <input id="confirmDifferentPerson" type="checkbox" className="size-4 accent-primary" {...register("confirmDifferentPerson")} />
+            This is a different person with the same name
+          </label>
+        ) : null}
         <Button type="submit" disabled={isSubmitting}>
           {creating ? "Add person" : "Save changes"}
         </Button>
