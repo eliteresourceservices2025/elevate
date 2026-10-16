@@ -27,6 +27,7 @@ const as = (role: RoleSlug) => {
 const cases: { name: string; call: () => Promise<{ ok: boolean; error?: string }> }[] = [
   { name: "sendEnvelope", call: () => actions.sendEnvelope({ envelopeId: ID }) },
   { name: "voidEnvelope", call: () => actions.voidEnvelope({ envelopeId: ID, reason: "Wrong version" }) },
+  { name: "findSignees", call: () => actions.findSignees({ kind: "everyone" }) },
   { name: "remindSigners", call: () => actions.remindSigners({ envelopeId: ID }) },
   { name: "discardDraft", call: () => actions.discardDraft({ envelopeId: ID }) },
   { name: "archiveTemplate", call: () => actions.archiveTemplate({ templateId: ID }) },

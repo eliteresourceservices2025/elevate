@@ -1,9 +1,12 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { authorize, ForbiddenError, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/modules/core/schema";
+import { teams } from "@/modules/org/schema";
+import { todayInZone } from "@/modules/org/service";
+import { clientAssignments, clients, employees } from "@/modules/people/schema";
 import { verifyChain, type StoredEvent } from "./chain";
 import { envelopeReference, type EnvelopeStatus, type SignerStatus } from "./constants";
 import { esignEnvelopes, esignEvents, esignSigners, esignTemplates } from "./schema";
@@ -126,6 +129,62 @@ export async function listSignerChoices(): Promise<SignerChoice[]> {
   const all = await db.select({ id: users.id, email: users.email }).from(users).where(isNull(users.archivedAt));
   const names = await legalNames(db, all.map((u) => u.id));
   return all.map((u) => ({ userId: u.id, name: names.get(u.id) ?? u.email, email: u.email })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export type SigneeGroupKind = "everyone" | "team" | "client";
+export type SigneeGroups = { everyone: number; teams: { id: string; name: string; count: number }[]; clients: { id: string; name: string; count: number }[] };
+
+/** People who can be asked to sign: a current person (not left, not archived) with an active ELEVATE account. */
+const signable = () => and(isNull(employees.archivedAt), ne(employees.status, "separated"), sql`${employees.userId} is not null`, sql`not exists (select 1 from core.users u where u.id = ${employees.userId} and u.archived_at is not null)`);
+
+/** Who each group would add, for the group picker: everyone, each team, each client (current assignments), with counts. */
+export async function listSigneeGroups(): Promise<SigneeGroups> {
+  const user = await requireUser();
+  await authorize(user, "signing.manage");
+  const today = todayInZone();
+  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(employees).where(signable());
+  const teamRows = await db
+    .select({ id: teams.id, name: teams.name, count: sql<number>`count(${employees.id})::int` })
+    .from(teams)
+    .leftJoin(employees, and(eq(employees.teamId, teams.id), signable()))
+    .where(isNull(teams.archivedAt))
+    .groupBy(teams.id, teams.name)
+    .orderBy(asc(teams.name));
+  const clientRows = await db
+    .select({ id: clients.id, name: clients.name, count: sql<number>`count(distinct ${employees.id})::int` })
+    .from(clients)
+    .leftJoin(clientAssignments, and(eq(clientAssignments.clientId, clients.id), or(isNull(clientAssignments.endDate), gte(clientAssignments.endDate, today))))
+    .leftJoin(employees, and(eq(employees.id, clientAssignments.employeeId), signable()))
+    .where(isNull(clients.archivedAt))
+    .groupBy(clients.id, clients.name)
+    .orderBy(asc(clients.name));
+  return { everyone: n, teams: teamRows.filter((t) => t.count > 0), clients: clientRows.filter((c) => c.count > 0) };
+}
+
+/** The people in one group, to add as signees. Server-side, so the list is never taken from the browser. */
+export async function resolveSigneeGroup(kind: SigneeGroupKind, id: string | null): Promise<SignerChoice[]> {
+  const user = await requireUser();
+  await authorize(user, "signing.manage");
+  const today = todayInZone();
+  let rows: { userId: string | null; email: string }[];
+  if (kind === "everyone") {
+    rows = await db.select({ userId: employees.userId, email: employees.workEmail }).from(employees).where(signable());
+  } else if (kind === "team") {
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return [];
+    rows = await db.select({ userId: employees.userId, email: employees.workEmail }).from(employees).where(and(signable(), eq(employees.teamId, id)));
+  } else {
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return [];
+    rows = await db
+      .selectDistinct({ userId: employees.userId, email: employees.workEmail })
+      .from(employees)
+      .innerJoin(clientAssignments, eq(clientAssignments.employeeId, employees.id))
+      .where(and(signable(), eq(clientAssignments.clientId, id), or(isNull(clientAssignments.endDate), gte(clientAssignments.endDate, today))));
+  }
+  const ids = rows.flatMap((r) => (r.userId ? [r.userId] : []));
+  if (ids.length === 0) return [];
+  const accounts = await db.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, ids));
+  const names = await legalNames(db, ids);
+  return accounts.map((u) => ({ userId: u.id, name: names.get(u.id) ?? u.email, email: u.email })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Public: does a fingerprint belong to a sealed ELEVATE document? Says nothing else about it beyond when it was sealed and its reference. */
