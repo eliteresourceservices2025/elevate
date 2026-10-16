@@ -11,6 +11,7 @@ import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { DueBadge } from "@/modules/announcements/components/ack-display";
+import { FormDialog } from "@/components/form-dialog";
 import { NewPolicyForm } from "@/modules/announcements/components/policy-editor";
 import { listAnnouncements, listPolicies } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
@@ -49,6 +50,11 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
           <Link href="/announcements/new" className={buttonVariants()}>
             New announcement
           </Link>
+        ) : null}
+        {isHr && tab === "policies" ? (
+          <FormDialog label="Add a policy" title="Add a policy" description="It is saved as a draft. Nobody sees it until you publish it." size="xl">
+            <NewPolicyForm today={today} />
+          </FormDialog>
         ) : null}
       </div>
 
@@ -116,12 +122,6 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
             ))}
           </ul>
           {policyPage ? <PagerLinks info={policyPage.info} basePath="/announcements" query={{ tab: "policies" }} defaultSize={10} label="policies" /> : null}
-          {isHr ? (
-            <section className="space-y-3">
-              <h2 className="text-lg font-semibold">Add a policy</h2>
-              <NewPolicyForm today={today} />
-            </section>
-          ) : null}
         </div>
       ) : null}
 

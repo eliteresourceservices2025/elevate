@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { TextField } from "@/components/form-fields";
+import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,63 @@ import type { ScheduleListRow } from "../queries";
 
 const ZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "Asia/Manila", "Europe/London", "Australia/Sydney", "UTC"];
 
+type RunFn = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string, after?: () => void) => void;
+
+/** The shift form for the people ticked in the list (in a modal, so its fields start fresh each time it opens). */
+function SetScheduleForm({ picked, today, run, pending, onDone }: { picked: string[]; today: string; run: RunFn; pending: boolean; onDone: () => void }) {
+  const dialog = useFormDialog();
+  const [from, setFrom] = useState(today);
+  const [start, setStart] = useState("09:00");
+  const [end, setEnd] = useState("17:00");
+  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [breakMinutes, setBreakMinutes] = useState("60");
+  const [zone, setZone] = useState("");
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(
+          () => assignSchedule({ employeeIds: picked, effectiveFrom: from, startTime: start, endTime: end, weekdays: days, breakMinutes, zone }),
+          `Schedule set for ${picked.length} ${picked.length === 1 ? "person" : "people"}.`,
+          () => {
+            onDone();
+            dialog?.close(true);
+          },
+        );
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <TextField id="sc-from" label="Starts on" type="date" value={from} onChange={(e) => setFrom(e.target.value)} required />
+        <TextField id="sc-break" label="Unpaid break (minutes)" type="number" min="0" max="240" value={breakMinutes} onChange={(e) => setBreakMinutes(e.target.value)} hint="Taken out of the scheduled hours." />
+        <TextField id="sc-start" label="Shift starts" type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
+        <TextField id="sc-end" label="Shift ends" type="time" value={end} onChange={(e) => setEnd(e.target.value)} required hint="An end before the start means the shift ends the next day." />
+      </div>
+      <TextField id="sc-zone" label="Time zone" list="sc-zones" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Each person's client zone" />
+      <datalist id="sc-zones">
+        {ZONES.map((z) => (
+          <option key={z} value={z} />
+        ))}
+      </datalist>
+      <fieldset className="space-y-1.5">
+        <legend className="text-sm font-medium">Working days</legend>
+        <div className="flex flex-wrap gap-3">
+          {WEEKDAYS.map((w) => (
+            <label key={w.n} htmlFor={`sc-day-${w.n}`} className="flex items-center gap-1.5 text-sm">
+              <input id={`sc-day-${w.n}`} type="checkbox" className="size-4 accent-primary" checked={days.includes(w.n)} onChange={(e) => setDays((d) => (e.target.checked ? [...d, w.n] : d.filter((x) => x !== w.n)))} />
+              {w.short}
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">The other days are rest days.</p>
+      </fieldset>
+      <Button type="submit" disabled={pending || picked.length === 0 || days.length === 0}>
+        Set schedule for {picked.length} {picked.length === 1 ? "person" : "people"}
+      </Button>
+    </form>
+  );
+}
+
 /** HR: give people shifts (one at a time or many at once), and see who has none. Times are in the schedule's zone, shown in Manila too. */
 export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: ScheduleListRow[]; withoutSchedule: number; today: string }) {
   const router = useRouter();
@@ -24,12 +82,6 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
   const [onlyNone, setOnlyNone] = useState(false);
-  const [from, setFrom] = useState(today);
-  const [start, setStart] = useState("09:00");
-  const [end, setEnd] = useState("17:00");
-  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [breakMinutes, setBreakMinutes] = useState("60");
-  const [zone, setZone] = useState("");
   // Correcting a recent schedule in place (a mistake), with a reason.
   const [fix, setFix] = useState<ScheduleListRow | null>(null);
   const [fixStart, setFixStart] = useState("09:00");
@@ -79,59 +131,6 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
 
   return (
     <div className="space-y-6">
-      <form
-        className="space-y-4 rounded-xl border bg-card p-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          run(
-            () => assignSchedule({ employeeIds: [...picked], effectiveFrom: from, startTime: start, endTime: end, weekdays: days, breakMinutes, zone }),
-            `Schedule set for ${picked.size} ${picked.size === 1 ? "person" : "people"}.`,
-            () => setPicked(new Set()),
-          );
-        }}
-      >
-        <div>
-          <h2 className="text-lg font-semibold">Set a schedule</h2>
-          <p className="text-sm text-muted-foreground">
-            Pick people in the list below, then set the shift. Times are in the schedule&apos;s time zone (leave it empty to use each person&apos;s client zone), and everyone also sees them in Manila time. A schedule they already have ends the day before.
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <TextField id="sc-from" label="Starts on" type="date" value={from} onChange={(e) => setFrom(e.target.value)} required />
-          <TextField id="sc-start" label="Shift starts" type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
-          <TextField id="sc-end" label="Shift ends" type="time" value={end} onChange={(e) => setEnd(e.target.value)} required hint="An end before the start means the shift ends the next day." />
-          <TextField id="sc-break" label="Unpaid break (minutes)" type="number" min="0" max="240" value={breakMinutes} onChange={(e) => setBreakMinutes(e.target.value)} hint="Taken out of the scheduled hours." />
-        </div>
-        <TextField id="sc-zone" label="Time zone" list="sc-zones" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Each person's client zone" />
-        <datalist id="sc-zones">
-          {ZONES.map((z) => (
-            <option key={z} value={z} />
-          ))}
-        </datalist>
-        <fieldset className="space-y-1.5">
-          <legend className="text-sm font-medium">Working days</legend>
-          <div className="flex flex-wrap gap-3">
-            {WEEKDAYS.map((w) => (
-              <label key={w.n} htmlFor={`sc-day-${w.n}`} className="flex items-center gap-1.5 text-sm">
-                <input id={`sc-day-${w.n}`} type="checkbox" className="size-4 accent-primary" checked={days.includes(w.n)} onChange={(e) => setDays((d) => (e.target.checked ? [...d, w.n] : d.filter((x) => x !== w.n)))} />
-                {w.short}
-              </label>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">The other days are rest days.</p>
-        </fieldset>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={pending || picked.size === 0 || days.length === 0}>
-            Set schedule for {picked.size} {picked.size === 1 ? "person" : "people"}
-          </Button>
-          {picked.size > 0 ? (
-            <Button type="button" variant="ghost" onClick={() => setPicked(new Set())}>
-              Clear selection
-            </Button>
-          ) : null}
-        </div>
-      </form>
-
       {fix ? (
         <form
           className="space-y-4 rounded-xl border border-amber-500/50 bg-card p-4"
@@ -195,6 +194,16 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
               <input id="sc-none" type="checkbox" className="size-4 accent-primary" checked={onlyNone} onChange={(e) => setOnlyNone(e.target.checked)} />
               Only people with no schedule
             </label>
+            <FormDialog
+              label={picked.size > 0 ? `Set a schedule for ${picked.size} ${picked.size === 1 ? "person" : "people"}` : "Set a schedule"}
+              title="Set a schedule"
+              description="Times are in the schedule's time zone (leave it empty to use each person's client zone), and everyone also sees them in Manila time. A schedule they already have ends the day before."
+              size="xl"
+              disabled={picked.size === 0}
+              hint="Tick the people in the list first"
+            >
+              <SetScheduleForm picked={[...picked]} today={today} run={run} pending={pending} onDone={() => setPicked(new Set())} />
+            </FormDialog>
             <Button
               type="button"
               size="sm"

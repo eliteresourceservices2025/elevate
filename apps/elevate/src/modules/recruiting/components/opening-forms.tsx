@@ -5,6 +5,7 @@ import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useFormDialog } from "@/components/form-dialog";
 import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import { saveOpening, saveRetention, setOpeningStatus } from "../actions";
 import type { OpeningStatus } from "../constants";
@@ -111,6 +112,7 @@ export function OpeningStatusButtons({ id, status }: { id: string; status: Openi
 
 export function RetentionForm({ initial }: { initial: { enabled: boolean; rejectedMonths: number; withdrawnMonths: number } }) {
   const { run, pending } = useRun();
+  const dialog = useFormDialog();
   const [enabled, setEnabled] = useState(initial.enabled);
   const [rejected, setRejected] = useState(String(initial.rejectedMonths));
   const [withdrawn, setWithdrawn] = useState(String(initial.withdrawnMonths));
@@ -119,7 +121,7 @@ export function RetentionForm({ initial }: { initial: { enabled: boolean; reject
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => saveRetention({ enabled, rejectedMonths: Number(rejected), withdrawnMonths: Number(withdrawn) }), "Retention settings saved.");
+        run(() => saveRetention({ enabled, rejectedMonths: Number(rejected), withdrawnMonths: Number(withdrawn) }), "Retention settings saved.", () => dialog?.close(true));
       }}
     >
       <p className="text-sm text-muted-foreground">Removes the personal data of applicants who were not hired, once their last application closed longer ago than these periods. The periods need counsel&apos;s approval before you switch this on. Hired people are never touched.</p>

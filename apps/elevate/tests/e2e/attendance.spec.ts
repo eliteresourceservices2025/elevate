@@ -304,6 +304,7 @@ test("HR sets a schedule and the employee sees it in both time zones", async ({ 
   await waitForHydration(hrPage, "#sc-filter");
   await hrPage.getByLabel("Find a person or team").fill(`Shift${stamp}`);
   await hrPage.getByLabel(/^Select Sam/).check();
+  await (await hydrated(hrPage.getByRole("button", { name: "Set a schedule for 1 person" }))).click();
   await hrPage.getByLabel("Shift starts").fill("21:00");
   await hrPage.getByLabel("Shift ends").fill("05:00");
   await hrPage.getByLabel("Time zone").fill("Asia/Manila");
@@ -497,7 +498,7 @@ test("the Schedules menu item opens its own page and stays highlighted; the empl
   await signInEnrollingMfa(hrPage, await createHrAccount());
   await hrPage.getByRole("link", { name: "Schedules", exact: true }).click();
   await hrPage.waitForURL("**/schedules", slow);
-  await expect(hrPage.getByRole("heading", { name: "Set a schedule" })).toBeVisible(slow);
+  await expect(hrPage.getByRole("button", { name: "Set a schedule" })).toBeVisible(slow);
   await expect(hrPage.getByRole("link", { name: "Schedules", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(hrPage.getByRole("link", { name: "Attendance", exact: true })).not.toHaveAttribute("aria-current", "page");
 
@@ -507,7 +508,7 @@ test("the Schedules menu item opens its own page and stays highlighted; the empl
   await page.getByRole("link", { name: "Schedules", exact: true }).click();
   await page.waitForURL("**/schedules", slow);
   await expect(page.getByRole("region", { name: "My schedule" })).toContainText("no schedule yet", slow);
-  await expect(page.getByRole("heading", { name: "Set a schedule" })).toHaveCount(0); // only HR sets them
+  await expect(page.getByRole("button", { name: /Set a schedule/ })).toHaveCount(0); // only HR sets them
   await expect(page.getByText("Not built yet")).toHaveCount(0);
 });
 
@@ -576,7 +577,7 @@ test("long lists show one page at a time: Schedules pages through everyone and k
   // Selecting on page 2 survives going back
   await rows.first().getByRole("checkbox").check();
   await hrPage.getByRole("button", { name: "Previous", exact: true }).click();
-  await expect(hrPage.getByRole("button", { name: /Set schedule for 1 person/ })).toBeVisible();
+  await expect(hrPage.getByRole("button", { name: /Set a schedule for 1 person/ })).toBeVisible();
 });
 
 test("a lead marks a day as test only, it leaves the review list, and the mark can be taken off", async ({ browser }) => {

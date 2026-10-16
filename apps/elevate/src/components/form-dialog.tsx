@@ -33,6 +33,8 @@ export function FormDialog({
   size = "md",
   defaultOpen = false,
   icon,
+  disabled = false,
+  hint,
 }: {
   label: string;
   title: string;
@@ -42,6 +44,9 @@ export function FormDialog({
   size?: keyof typeof WIDTH;
   defaultOpen?: boolean;
   icon?: ReactNode;
+  /** The button is greyed out (it says why in `hint`, shown as its tooltip). */
+  disabled?: boolean;
+  hint?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const dirty = useRef(false);
@@ -59,7 +64,7 @@ export function FormDialog({
 
   return (
     <>
-      <Button type="button" variant={variant} onClick={() => setOpen(true)}>
+      <Button type="button" variant={variant} disabled={disabled} title={disabled ? hint : undefined} onClick={() => setOpen(true)}>
         {icon}
         {label}
       </Button>

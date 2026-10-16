@@ -11,6 +11,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { cancelOffboarding, completeOffboarding, completeOnboarding, issueCertificate, removeAccessNow, startOffboarding, startOnboarding, submitExitInterview } from "../actions";
+import { useFormDialog } from "@/components/form-dialog";
 import { PeoplePicker } from "./people-picker";
 import { LEAVING_LABELS, LEAVING_REASONS, type LeavingReason } from "../constants";
 
@@ -116,6 +117,7 @@ async function startEach(ids: string[], people: { id: string; name: string }[], 
 
 export function StartOnboardingForm({ people, today }: { people: { id: string; name: string; position: string | null; startDate: string | null }[]; today: string }) {
   const router = useRouter();
+  const dialog = useFormDialog();
   const [pending, startTransition] = useTransition();
   const [ids, setIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState(today);
@@ -124,7 +126,7 @@ export function StartOnboardingForm({ people, today }: { people: { id: string; n
   const withOwn = ids.filter((id) => people.find((p) => p.id === id)?.startDate).length;
   return (
     <form
-      className="max-w-2xl space-y-4 rounded-xl border bg-card p-4"
+      className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         setResults(null);
@@ -133,6 +135,7 @@ export function StartOnboardingForm({ people, today }: { people: { id: string; n
           if (out.length === 1 && out[0].ok && out[0].href) return void router.push(out[0].href);
           const started = out.filter((r) => r.ok).map((r) => r.id);
           setResults(out);
+          dialog?.markClean(); // the result stays on screen; closing no longer asks
           setIds((prev) => prev.filter((id) => !started.includes(id)));
           if (started.length) toast.success(started.length === 1 ? "Onboarding started." : `Onboarding started for ${started.length} people.`);
           else toast.error("Nothing was started.");
@@ -162,6 +165,7 @@ export function StartOnboardingForm({ people, today }: { people: { id: string; n
 
 export function StartOffboardingForm({ people, today }: { people: { id: string; name: string; position: string | null }[]; today: string }) {
   const router = useRouter();
+  const dialog = useFormDialog();
   const [pending, startTransition] = useTransition();
   const [ids, setIds] = useState<string[]>([]);
   const [lastWorkingDay, setLastWorkingDay] = useState(today);
@@ -170,7 +174,7 @@ export function StartOffboardingForm({ people, today }: { people: { id: string; 
   const [results, setResults] = useState<BatchResult[] | null>(null);
   return (
     <form
-      className="max-w-2xl space-y-4 rounded-xl border bg-card p-4"
+      className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         if (ids.length > 1 && !window.confirm(`Start offboarding for ${ids.length} people with the same last working day and reason?`)) return;
@@ -180,6 +184,7 @@ export function StartOffboardingForm({ people, today }: { people: { id: string; 
           if (out.length === 1 && out[0].ok && out[0].href) return void router.push(out[0].href);
           const started = out.filter((r) => r.ok).map((r) => r.id);
           setResults(out);
+          dialog?.markClean();
           setIds((prev) => prev.filter((id) => !started.includes(id)));
           if (started.length) toast.success(started.length === 1 ? "Offboarding started." : `Offboarding started for ${started.length} people.`);
           else toast.error("Nothing was started.");

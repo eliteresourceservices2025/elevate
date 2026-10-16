@@ -18,7 +18,9 @@ export default async function NewOffboardingPage() {
         <h1 className="mt-1 text-2xl font-bold">Start an offboarding</h1>
         <p className="mt-1 text-muted-foreground">Someone who still has active reports cannot be offboarded: reassign their reports first.</p>
       </div>
-      <StartOffboardingForm people={people} today={todayInZone()} />
+      <div className="max-w-2xl rounded-xl border bg-card p-4">
+        <StartOffboardingForm people={people} today={todayInZone()} />
+      </div>
     </div>
   );
 }
