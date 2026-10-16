@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MAX_COMPOSED_CHARS, normalizeTypography } from "../constants";
 import { htmlToMarkdown } from "../html-to-markdown";
-import { SIGNEE_FIELDS, previewFields } from "../merge";
+import { SIGNEE_FIELDS, previewFields, unfilledPlaceholders } from "../merge";
 
 type Edit = { value: string; start: number; end: number };
 
@@ -37,6 +37,7 @@ export function ComposeEditor({ value, onChange, title = "" }: { value: string; 
   const ref = useRef<HTMLTextAreaElement>(null);
   const [preview, setPreview] = useState(false);
   // Standard PDF fonts draw Latin-1 (plus common punctuation); anything else prints as "?".
+  const unfilled = unfilledPlaceholders(value);
   const nonLatin = /[^\u0000-ÿ]/.test(normalizeTypography(value));
 
   const run = (make: (v: string, s: number, e: number) => Edit) => {
@@ -134,6 +135,11 @@ export function ComposeEditor({ value, onChange, title = "" }: { value: string; 
       <p className="text-xs text-muted-foreground" aria-live="polite">
         {value.length.toLocaleString("en-US")} of {MAX_COMPOSED_CHARS.toLocaleString("en-US")} characters
       </p>
+      {unfilled.length > 0 ? (
+        <p role="alert" className="text-xs text-destructive">
+          Replace {unfilled.map((u) => `[[${u}]]`).join(", ")} with the real details before sending.
+        </p>
+      ) : null}
       {nonLatin ? (
         <p role="alert" className="text-xs text-destructive">
           Some characters (for example emoji or non-English letters) cannot be drawn in the PDF and will print as &ldquo;?&rdquo;.

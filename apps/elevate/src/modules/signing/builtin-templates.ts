@@ -2,6 +2,8 @@
 // into the editor, where HR can still change it before sending. Each becomes an ordinary envelope (PDF in the ELITE letterhead,
 // fingerprinted, signed and sealed). Text is Markdown: "#" lines are the numbered section headings, "**" is bold.
 
+import { CONTRACT_TEMPLATES } from "./builtin-contracts";
+
 export type BuiltinTemplate = {
   id: string;
   /** Name in the picker. */
@@ -11,10 +13,13 @@ export type BuiltinTemplate = {
   title: string;
   /** Who signs, in order (the role shown beside each person). */
   roles: string[];
+  /** When the Company also signs (after the person), the role shown beside the countersigner, e.g. "Head of People Operations". */
+  countersignerRole?: string;
   body: string;
 };
 
 export const BUILTIN_TEMPLATES: readonly BuiltinTemplate[] = [
+  ...CONTRACT_TEMPLATES,
   {
     id: "time-off-policy",
     name: "Personal Time Off (PTO) Policy",
