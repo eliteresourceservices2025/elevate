@@ -130,7 +130,7 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
                 </option>
               ))}
             </SelectField>
-            <ComposeEditor value={content} onChange={setContent} />
+            <ComposeEditor value={content} onChange={setContent} title={title} />
           </div>
         ) : source === "upload" ? (
           <div className="space-y-1.5">
