@@ -1,7 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { GENESIS_HASH, computeEventHash, sha256Hex, verifyChain, type ChainFields, type StoredEvent } from "./chain";
-import { allSigned, envelopeReference, initialedAllPages, isPdf, isTypedSignatureEncodable, isValidInitials, normalizeTypography, pngSize, reminderDue, signersToActivate, suggestInitials } from "./constants";
+import { allSigned, envelopeReference, initialedAllPages, isPdf, isTypedSignatureEncodable, isValidInitials, detailProblem, normalizeTypography, pngSize, reminderDue, signersToActivate, suggestInitials } from "./constants";
 import { readPdfInfo, sealPdf, type SealInput } from "./seal";
 
 async function samplePdf(pages = 2): Promise<Uint8Array> {
@@ -166,5 +166,18 @@ describe("initials on each page", () => {
     const stamped = await sealPdf({ original: base, title: "T", reference: "ES-1", originalSha256: "ab".repeat(32), createdBy: "hr", signers, events: [], sealedAt: new Date("2026-10-02T00:00:00Z") });
     expect((await PDFDocument.load(stamped)).getPageCount()).toBe((await PDFDocument.load(plain)).getPageCount());
     expect(stamped.length).toBeGreaterThan(plain.length);
+  });
+});
+
+describe("details typed in while signing", () => {
+  it("checks each detail, and the normal rules hold for the peso sign", () => {
+    expect(detailProblem("bank_name", "BDO")).toBeNull();
+    expect(detailProblem("bank_name", "")).toMatch(/needed/);
+    expect(detailProblem("account_number", "0012 3456-7890")).toBeNull();
+    expect(detailProblem("account_number", "abc123")).toMatch(/digits/);
+    expect(detailProblem("phone_number", "+63 917 123 4567")).toBeNull();
+    expect(detailProblem("phone_number", "call me")).toMatch(/digits/);
+    expect(detailProblem("account_name", "山田 太郎")).toMatch(/English/);
+    expect(normalizeTypography("Rate \u20b135,000")).toBe("Rate PHP 35,000");
   });
 });

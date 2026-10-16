@@ -8,7 +8,7 @@ import { parseMarkdown } from "@/lib/markdown";
 import { ActionFailure } from "@/lib/run-action";
 import { renderLetterheadPdf } from "./letterhead-pdf";
 import { MAX_COMPOSED_CHARS, MIN_COMPOSED_CHARS, normalizeTypography } from "./constants";
-import { SIGNEE_FIELDS, fillFields, missingFields } from "./merge";
+import { fieldLabel, fillFields, missingFields } from "./merge";
 
 /**
  * A document written inside ELEVATE (HR types or pastes it in the editor) becomes a PDF here. From then on it is an ordinary
@@ -67,7 +67,7 @@ export async function loadSigneeValues(userIds: string[]): Promise<Map<string, {
 }
 
 /** Checks that every person has a value for each field the text uses. Throws one message naming who is missing what (up to 8 people). */
-export function assertSigneeValues(markdown: string, people: Map<string, { name: string; values: Record<string, string> }>, userIds: string[]): void {
+export function assertSigneeValues(markdown: string, people: Map<string, { name: string; values: Record<string, string> }>, userIds: string[], typed: Record<string, string> = {}): void {
   const problems: string[] = [];
   for (const id of userIds) {
     const p = people.get(id);
@@ -75,8 +75,8 @@ export function assertSigneeValues(markdown: string, people: Map<string, { name:
       problems.push("someone without a people record");
       continue;
     }
-    const missing = missingFields(markdown, p.values);
-    if (missing.length) problems.push(`${p.name}: ${missing.map((k) => SIGNEE_FIELDS.find((f) => f.key === k)?.label ?? k).join(", ")}`);
+    const missing = missingFields(markdown, { ...p.values, ...typed });
+    if (missing.length) problems.push(`${p.name}: ${missing.map(fieldLabel).join(", ")}`);
   }
   if (problems.length) {
     const shown = problems.slice(0, 8).join("; ");
@@ -85,6 +85,6 @@ export function assertSigneeValues(markdown: string, people: Map<string, { name:
 }
 
 /** The PDF for one person: the text with their details filled in. */
-export async function renderForSignee(title: string, markdown: string, person: { values: Record<string, string> }): Promise<Uint8Array> {
-  return renderComposedPdf(title, fillFields(markdown, person.values));
+export async function renderForSignee(title: string, markdown: string, person: { values: Record<string, string> }, typed: Record<string, string> = {}): Promise<Uint8Array> {
+  return renderComposedPdf(title, fillFields(markdown, { ...person.values, ...typed }));
 }

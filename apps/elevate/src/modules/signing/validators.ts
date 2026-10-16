@@ -53,6 +53,8 @@ export const signSchema = z
     /** Documents that need initials on each page: the initials and every page number the signer initialed. */
     initials: z.preprocess(blankToUndefined, text(5).optional()),
     initialedPages: z.array(z.number().int().min(1).max(200)).max(200).optional(),
+    /** Details the signee types in while signing (bank details on the agreement): keys are checked on the server against a fixed list. */
+    details: z.record(z.string().max(40), z.string().max(120)).optional(),
   })
   .refine((v) => (v.kind === "typed" ? Boolean(v.typedText) : Boolean(v.pngBase64)), { message: "Add your signature", path: ["kind"] });
 

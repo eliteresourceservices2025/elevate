@@ -15,6 +15,8 @@ export type BuiltinTemplate = {
   roles: string[];
   /** When the Company also signs (after the person), the role shown beside the countersigner, e.g. "Head of People Operations". */
   countersignerRole?: string;
+  /** Details the person types in while signing (keys from SIGNEE_DETAIL_FIELDS), e.g. bank details. */
+  signeeDetails?: string[];
   body: string;
 };
 

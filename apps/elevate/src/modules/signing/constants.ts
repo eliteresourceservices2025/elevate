@@ -52,6 +52,31 @@ export function isTypedSignatureEncodable(text: string): boolean {
   return text.length > 0 && /^[\x20-\x7E -ÿ]+$/.test(text);
 }
 
+/** What a signee can be asked to type in while signing. A fixed list: the envelope stores only keys from it. */
+export const SIGNEE_DETAIL_FIELDS = [
+  { key: "bank_name", label: "Bank name", hint: "For example BDO, BPI, GCash", max: 80 },
+  { key: "account_number", label: "Account number", hint: "Digits, spaces or hyphens", max: 30 },
+  { key: "account_name", label: "Account name", hint: "The name on the account", max: 80 },
+  { key: "phone_number", label: "Phone number", hint: "With country code if outside the Philippines", max: 20 },
+] as const;
+export type SigneeDetailKey = (typeof SIGNEE_DETAIL_FIELDS)[number]["key"];
+export const isSigneeDetailKey = (k: string): k is SigneeDetailKey => SIGNEE_DETAIL_FIELDS.some((f) => f.key === k);
+export const detailLabel = (k: string) => SIGNEE_DETAIL_FIELDS.find((f) => f.key === k)?.label ?? k;
+
+/** Why a typed-in detail cannot be used, or null. Latin-1 only (the PDF font), no control characters. */
+export function detailProblem(key: SigneeDetailKey, raw: string): string | null {
+  const v = raw.trim();
+  const label = detailLabel(key);
+  if (!v) return `${label} is needed.`;
+  const max = SIGNEE_DETAIL_FIELDS.find((f) => f.key === key)?.max ?? 80;
+  if (v.length > max) return `${label} is too long.`;
+  if (!isTypedSignatureEncodable(v) || /[\u0000-\u001f]/.test(v)) return `${label}: use English-alphabet letters and numbers.`;
+  if (key === "account_number" && !/^[0-9][0-9 -]{3,29}$/.test(v)) return "Account number: use digits, spaces or hyphens only.";
+  if (key === "phone_number" && !/^\+?[0-9][0-9 ()-]{5,19}$/.test(v)) return "Phone number: use digits, spaces, brackets or hyphens only.";
+  if ((key === "bank_name" || key === "account_name") && v.length < 2) return `${label} is too short.`;
+  return null;
+}
+
 /**
  * Word and Google Docs use curly quotes, long dashes, bullets and ellipses that the standard PDF font cannot draw (they would print
  * as "?"). They become their plain equivalents before the document is rendered.
@@ -62,6 +87,7 @@ export function normalizeTypography(text: string): string {
     .replace(/[“”„″]/g, '"')
     .replace(/[–—−]/g, "-")
     .replace(/…/g, "...")
+    .replace(/₱/g, "PHP ")
     .replace(/[•●○▪‣]/g, "-")
     .replace(/[   ​﻿]/g, " ");
 }

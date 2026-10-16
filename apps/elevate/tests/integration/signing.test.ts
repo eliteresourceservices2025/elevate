@@ -542,3 +542,31 @@ describe("details filled in from people's records", () => {
     expect(pdf.length).toBeGreaterThan(500);
   });
 });
+
+describe("details typed in while signing", () => {
+  it("collects the contractor's details, keeps them encrypted, leaves the countersigner alone, and seals", async () => {
+    const { id } = await service.createEnvelope(
+      { id: hr.id, email: hr.email, roles: hr.roles },
+      { title: uniq("Agreement "), pdf: await samplePdf(2), fileName: "a.pdf", signers: [{ userId: ana.id, role: "Contractor", position: 1, fillsDetails: true }, { userId: ben.id, role: "ERS representative", position: 2 }], order: "sequential", expiryDays: 14, send: true, ip: null, signeeDetails: ["bank_name", "account_number", "account_name", "phone_number"] },
+    );
+    await open(ana, id);
+    expect(await signTyped(ana, id)).toEqual({ ok: false, error: expect.stringContaining("Bank name is needed") });
+    expect(await signTyped(ana, id, { details: { bank_name: "BDO", account_number: "abc", account_name: "Ana Reyes", phone_number: "+63 917 123 4567" } })).toEqual({ ok: false, error: expect.stringContaining("Account number") });
+    const details = { bank_name: "BDO", account_number: "0012 3456 7890", account_name: "Ana Reyes", phone_number: "+63 917 123 4567" };
+    expect((await signTyped(ana, id, { details })).ok).toBe(true);
+    const [row] = await rows<{ details_enc: string; fills_details: boolean }>(sql`select details_enc, fills_details from docs.esign_signers where envelope_id = ${id} and user_id = ${ana.id}`);
+    expect(row.fills_details).toBe(true);
+    expect(row.details_enc).toBeTruthy();
+    expect(row.details_enc).not.toContain("0012");
+    // The log records which details were collected, never their values
+    const events = await rows<{ detail: Record<string, unknown> }>(sql`select detail from docs.esign_events where envelope_id = ${id} and type = 'signed'`);
+    expect(JSON.stringify(events)).not.toContain("0012");
+    expect(JSON.stringify(events)).toContain("bank_name");
+
+    // The countersigner does not type any details
+    await open(ben, id);
+    expect((await signTyped(ben, id)).ok).toBe(true);
+    const [env] = await rows<{ status: string }>(sql`select status from docs.esign_envelopes where id = ${id}`);
+    expect(env.status).toBe("completed");
+  });
+});

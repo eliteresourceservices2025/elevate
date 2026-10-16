@@ -26,3 +26,14 @@ describe("merge fields", () => {
     expect(previewFields("Dear {{contractor_name}}")).toBe("Dear **[Full name]**");
   });
 });
+
+describe("fields typed in when sending", () => {
+  it("cleans and checks what HR typed, only for the fields the text uses", async () => {
+    const { cleanSendInputs } = await import("./merge");
+    const body = "Pay PHP {{monthly_rate}} {{payment_frequency}}. Duties: {{duties}}";
+    expect(cleanSendInputs(body, { monthly_rate: "35,000", payment_frequency: "monthly", duties: "Inbox\nand calendar", other: "ignored" })).toEqual({ values: { monthly_rate: "35,000", payment_frequency: "monthly", duties: "Inbox and calendar" } });
+    expect(cleanSendInputs(body, { monthly_rate: "35,000" })).toEqual({ error: "Fill in: Payment frequency, Description of duties." });
+    expect(cleanSendInputs(body, { monthly_rate: "1", payment_frequency: "yearly", duties: "x" })).toEqual({ error: "Choose a value for Payment frequency." });
+    expect(cleanSendInputs("No fields here", {})).toEqual({ values: {} });
+  });
+});

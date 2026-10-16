@@ -244,7 +244,115 @@ This Agreement shall be governed by the laws of the Republic of the Philippines.
 
 IN WITNESS WHEREOF, the Parties hereto have executed this Non-Disclosure Agreement as of the date of the last electronic signature recorded on the signature page of this document.`;
 
+// The Independent Contractor Agreement. HR types the pay terms, duties and schedule when sending ({{monthly_rate}} and the like); the
+// rest comes from the person's record. The Contractor Bank Information block is not in the text: the contractor types it in while
+// signing, it is kept encrypted, and it is printed under their signature on the signed copy.
+const ICA = `This Independent Contractor Agreement ("Agreement") is entered into on the date of the last electronic signature recorded on the signature page of this document, by and between:
+
+ELITE Resource Services ("Company"), and {{contractor_name}} ("Contractor"), with address at {{contractor_address}}.
+
+Together referred to as the "Parties."
+
+# 1. Engagement of Services
+
+The Company hereby engages the Contractor, and the Contractor agrees, to perform the services described in Exhibit A (Scope of Work) attached to this Agreement.
+
+# 2. Independent Contractor Relationship
+
+- The Contractor is engaged as an independent contractor and not as an employee of the Company.
+- Nothing in this Agreement shall be construed to create an employer–employee relationship, partnership, or joint venture.
+- The Contractor shall not be entitled to employee benefits, including but not limited to paid leave, 13th month pay, overtime pay, or government-mandated contributions.
+
+# 3. Term & Termination
+
+- This Agreement shall begin on {{start_date}} and shall continue until terminated by either party.
+- The Company may terminate immediately for cause, including but not limited to: breach of confidentiality, non-performance, repeated tardiness/absences, misconduct, or violation of this Agreement.
+
+# 4. Compensation
+
+- The Contractor shall be paid at the rate of PHP {{monthly_rate}}
+- Compensation shall be made on a {{payment_frequency}} basis, upon submission of an invoice or timesheet.
+- Payout dates fall on the 15th and the last day of the month. (28th, 30th, 31st)
+- No taxes will be withheld by the Company. The Contractor is solely responsible for paying all applicable taxes and government contributions.
+- **Compensation Conditions / No Work No Pay**
+- The parties acknowledge that although compensation may be expressed as a fixed monthly amount, such compensation is contingent upon the Contractor's availability to perform services and the existence of billable work from the Client.
+- As an Independent Contractor, compensation is earned only for services actually rendered. Accordingly, the principle of "No Work, No Pay" shall apply. Compensation is not guaranteed for periods during which no services are performed or no billable work is available.
+
+Deductions or reductions in compensation may apply in circumstances including, but not limited to:
+
+- Unapproved absences;
+- Personal leave or time off not covered by an approved paid arrangement;
+- Periods of non-performance or unavailability;
+- Client-declared holidays, office closures, or shutdowns for which the Client does not provide payment;
+- Temporary work suspensions or other non-billable periods; and
+- Any other period in which no work is performed and no corresponding client compensation is received.
+
+The stated monthly compensation represents the agreed compensation for services rendered during the applicable period and shall not be construed as a guaranteed payment regardless of attendance, availability, client requirements, workload, or client billing status.
+
+# 5. Work Hours & Attendance
+
+- Contractor is expected to work the agreed client schedule as set forth in Exhibit A.
+- Consistent attendance and punctuality are required.
+- Contractor must notify the Company and/or Client at least 2 hours prior to the start of shift if unable to report for work.
+- Repeated tardiness or unexcused absences may result in termination of this Agreement.
+
+Failure to report for scheduled work hours, unless otherwise approved, may result in compensation adjustments in accordance with Section 4 (Compensation Conditions / No Work, No Pay).
+
+# 6. Confidentiality & Non-Disclosure
+
+- The Contractor acknowledges that during the course of engagement, they may have access to confidential information belonging to the Company or its Clients, including but not limited to: business strategies, client lists, financial data, intellectual property, trade secrets, processes, and personal information ("Confidential Information").
+- The Contractor agrees to: maintain strict confidentiality of all Confidential Information; use Confidential Information only for the purposes of fulfilling their contractual duties; and not disclose, share, or transfer Confidential Information to any third party without prior written consent from the Company.
+- Confidentiality obligations will survive the termination of this Agreement.
+- Any breach of this confidentiality clause may result in immediate termination and possible legal action.
+
+# 7. Data Privacy & Protection
+
+- The Contractor acknowledges that in the course of performing services, they may have access to personal, sensitive, or confidential data belonging to the Company, its clients, or third parties.
+- The Contractor agrees to comply with the Philippines Data Privacy Act of 2012 (RA 10173) and all applicable data protection laws.
+- The Contractor shall: collect, process, use, and store personal data only as necessary for the fulfillment of their contractual duties; take reasonable measures to safeguard and protect data from unauthorized access, disclosure, alteration, or destruction; and immediately report to the Company any actual or suspected data breach or unauthorized disclosure of personal data.
+- The Contractor shall not, under any circumstances, use personal data obtained through this Agreement for personal gain, outside work, or any purpose not authorized by the Company or its Clients.
+- Data protection obligations shall survive termination of this Agreement.
+
+# 8. Tools & Equipment
+
+- Contractor shall provide their own tools, equipment, and internet connection necessary to perform the services.
+- If the Company or Client provides access to software, platforms, or accounts, such access must only be used for work-related purposes.
+
+# 9. Non-Solicitation
+
+During the term of this Agreement and for twelve (12) months thereafter, the Contractor shall not directly solicit or accept work from any Client of ELITE Resource Services introduced to them through this Agreement, unless otherwise approved in writing by the Company.
+
+# 10. Dispute Resolution
+
+- Any disputes arising under this Agreement shall first be resolved amicably between the Parties.
+- If unresolved, disputes shall be submitted to mediation.
+- As a last resort, disputes may be settled in the proper courts of {{courts_location}}, Philippines.
+
+# 11. Entire Agreement
+
+This Agreement contains the entire understanding between the Parties and supersedes all prior agreements or understandings, whether written or oral.
+
+IN WITNESS WHEREOF, the Parties hereto have executed this Independent Contractor Agreement as of the date of the last electronic signature recorded on the signature page of this document.
+
+# Exhibit A – Scope of Work
+
+- **Service Title:** {{role_title}}
+- **Description of Duties:** {{duties}}
+- **Work Schedule:** {{work_schedule}}
+- **Reporting Line:** {{reporting_line}}
+- **Monthly Compensation:** PHP {{monthly_rate}}`;
+
 export const CONTRACT_TEMPLATES: readonly BuiltinTemplate[] = [
+  {
+    id: "independent-contractor-agreement",
+    name: "Independent Contractor Agreement",
+    description: "The contractor agreement. HR types the pay terms, duties and schedule; the contractor adds bank details when signing; the Company countersigns.",
+    title: "Independent Contractor Agreement",
+    roles: ["Contractor"],
+    countersignerRole: "ERS representative",
+    signeeDetails: ["bank_name", "account_number", "account_name", "phone_number"],
+    body: ICA,
+  },
   {
     id: "contractor-handbook",
     name: "Independent Contractor Handbook",

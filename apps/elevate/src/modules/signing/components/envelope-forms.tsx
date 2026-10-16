@@ -13,7 +13,9 @@ import type { SignerChoice, SigneeGroups, TemplateRow } from "../queries";
 import { useRouter } from "next/navigation";
 import { ComposeEditor } from "./compose-editor";
 import { BUILTIN_TEMPLATES } from "../builtin-templates";
-import { fieldsUsed } from "../merge";
+import { SEND_FIELDS, fieldsUsed, sendFieldsUsed } from "../merge";
+
+import { Textarea } from "@/components/ui/textarea";
 
 type Picked = { userId: string; role: string };
 
@@ -35,6 +37,8 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
   // Everyone, a team or a client: each person signs their own copy (their own document, signature and sealed file).
   const [copies, setCopies] = useState(false);
   const [sharedRole, setSharedRole] = useState("");
+  const [signeeDetails, setSigneeDetails] = useState<string[]>([]);
+  const [inputs, setInputs] = useState<Record<string, string>>(() => Object.fromEntries(SEND_FIELDS.flatMap((f) => (f.initial ? [[f.key, f.initial]] : []))));
   const [counterId, setCounterId] = useState("");
   const [counterRole, setCounterRole] = useState("");
   const [groupKind, setGroupKind] = useState<"everyone" | "team" | "client">("everyone");
@@ -64,6 +68,7 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
     setTitle(t.title);
     setContent(t.body);
     setSharedRole(t.roles[0] ?? "");
+    setSigneeDetails(t.signeeDetails ?? []);
     if (t.countersignerRole) {
       setCounterRole(t.countersignerRole);
       setCopies(true);
@@ -105,6 +110,10 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
       form.set("send", String(send));
       form.set("signers", JSON.stringify(batch.map((p, i) => ({ userId: p.userId, role: p.role || sharedRole, position: i + 1 }))));
       if (each) form.set("individual", "true");
+      if (source === "write") {
+        form.set("inputs", JSON.stringify(inputs));
+        if (signeeDetails.length) form.set("signeeDetails", JSON.stringify(signeeDetails));
+      }
       if (each && counterId) form.set("countersigner", JSON.stringify({ userId: counterId, role: counterRole }));
       if (initialEachPage) form.set("initialEachPage", "true");
       if (source === "write") form.set("content", content);
@@ -194,6 +203,36 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
               ))}
             </SelectField>
             <ComposeEditor value={content} onChange={setContent} title={title} />
+            {sendFieldsUsed(content).length > 0 ? (
+              <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                <p className="text-sm font-medium">Fill in for this send</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {sendFieldsUsed(content).map((f) => (
+                    <div key={f.key} className={f.kind === "textarea" ? "space-y-1 sm:col-span-2" : "space-y-1"}>
+                      {f.kind === "textarea" ? (
+                        <>
+                          <Label htmlFor={`send-${f.key}`}>{f.label}</Label>
+                          <Textarea id={`send-${f.key}`} rows={4} maxLength={f.max} value={inputs[f.key] ?? ""} onChange={(e) => setInputs((v) => ({ ...v, [f.key]: e.target.value }))} />
+                        </>
+                      ) : f.kind === "choice" ? (
+                        <SelectField id={`send-${f.key}`} label={f.label} value={inputs[f.key] ?? ""} onChange={(e) => setInputs((v) => ({ ...v, [f.key]: e.target.value }))}>
+                          {(f.options ?? []).map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </SelectField>
+                      ) : (
+                        <TextField id={`send-${f.key}`} label={f.label} value={inputs[f.key] ?? ""} onChange={(e) => setInputs((v) => ({ ...v, [f.key]: e.target.value }))} maxLength={f.max} />
+                      )}
+                      {f.hint ? <p className="text-xs text-muted-foreground">{f.hint}</p> : null}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">These are the same on every copy in this send. A document with different terms per person is sent one person at a time.</p>
+              </div>
+            ) : null}
+            {signeeDetails.length > 0 ? <p className="text-xs text-muted-foreground">The person will also be asked to type in their {signeeDetails.length} details (bank information) when signing. Those are kept encrypted and printed on the signed copy.</p> : null}
           </div>
         ) : source === "upload" ? (
           <div className="space-y-1.5">

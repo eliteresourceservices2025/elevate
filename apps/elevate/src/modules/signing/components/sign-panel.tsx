@@ -8,7 +8,7 @@ import { TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { declineEnvelope, getDocumentLink, signEnvelope } from "../actions";
-import { CONSENT_TEXT, isValidInitials, suggestInitials } from "../constants";
+import { CONSENT_TEXT, SIGNEE_DETAIL_FIELDS, detailProblem, isSigneeDetailKey, isValidInitials, suggestInitials } from "../constants";
 import { InitialsStepper } from "./initials-stepper";
 import { SignaturePad } from "./signature-pad";
 
@@ -44,7 +44,7 @@ export function EnvelopeDocument({ envelopeId, title, openLabel, sealed = false,
 }
 
 /** What a signer does: open and read, agree, type or draw, sign. Or decline with a reason. */
-export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null }: { envelopeId: string; viewed: boolean; defaultName: string; initialPages?: number | null }) {
+export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null, detailKeys = [] }: { envelopeId: string; viewed: boolean; defaultName: string; initialPages?: number | null; detailKeys?: string[] }) {
   const { run, pending } = useRun();
   const [kind, setKind] = useState<"typed" | "drawn">("typed");
   const [typed, setTyped] = useState(defaultName);
@@ -54,10 +54,13 @@ export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null
   const [reason, setReason] = useState("");
   const [initials, setInitials] = useState(() => suggestInitials(defaultName));
   const [initialed, setInitialed] = useState<number[]>([]);
+  const fields = SIGNEE_DETAIL_FIELDS.filter((f) => detailKeys.includes(f.key));
+  const [details, setDetails] = useState<Record<string, string>>({});
+  const detailsOk = fields.every((f) => detailProblem(f.key, details[f.key] ?? "") === null);
   const needInitials = initialPages !== null;
   const initialsOk = !needInitials || (isValidInitials(initials) && initialed.length === initialPages);
 
-  const ready = viewed && initialsOk && consent && (kind === "typed" ? typed.trim().length > 1 : Boolean(png));
+  const ready = viewed && initialsOk && detailsOk && consent && (kind === "typed" ? typed.trim().length > 1 : Boolean(png));
 
   return (
     <div className="space-y-5">
@@ -76,10 +79,24 @@ export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null
         onSubmit={(e) => {
           e.preventDefault();
           if (!ready) return;
-          run(() => signEnvelope({ envelopeId, consent: true, kind, typedText: kind === "typed" ? typed : undefined, pngBase64: kind === "drawn" ? (png ?? undefined) : undefined, ...(needInitials ? { initials: initials.trim().toUpperCase(), initialedPages: initialed } : {}) }), "Signed. Thank you.");
+          run(() => signEnvelope({ envelopeId, consent: true, kind, typedText: kind === "typed" ? typed : undefined, pngBase64: kind === "drawn" ? (png ?? undefined) : undefined, ...(needInitials ? { initials: initials.trim().toUpperCase(), initialedPages: initialed } : {}), ...(fields.length ? { details: Object.fromEntries(fields.filter((f) => isSigneeDetailKey(f.key)).map((f) => [f.key, (details[f.key] ?? "").trim()])) } : {}) }), "Signed. Thank you.");
         }}
       >
-        <h3 className="font-semibold">2. Sign</h3>
+        {fields.length > 0 ? (
+          <div className="space-y-3">
+            <h3 className="font-semibold">2. Your details</h3>
+            <p className="text-sm text-muted-foreground">These are part of the agreement. They are kept encrypted and printed on the signed copy, which only you, HR and the Company can open.</p>
+            <div className="grid max-w-xl gap-3 sm:grid-cols-2">
+              {fields.map((f) => (
+                <div key={f.key} className="space-y-1">
+                  <TextField id={`detail-${f.key}`} label={f.label} value={details[f.key] ?? ""} onChange={(e) => setDetails((d) => ({ ...d, [f.key]: e.target.value }))} maxLength={f.max} autoComplete="off" />
+                  <p className="text-xs text-muted-foreground">{f.hint}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <h3 className="font-semibold">{fields.length > 0 ? "3. Sign" : "2. Sign"}</h3>
         <div role="tablist" aria-label="How to sign" className="flex gap-2">
           {(["typed", "drawn"] as const).map((k) => (
             <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={`rounded-lg border px-3 py-1.5 text-sm ${kind === k ? "border-primary bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-secondary/50"}`}>
@@ -104,7 +121,7 @@ export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null
         <Button type="submit" disabled={pending || !ready}>
           Sign document
         </Button>
-        {!viewed || !initialsOk ? <p className="text-xs text-muted-foreground">{needInitials ? "Initial every page above to enable signing." : "Read the document above to enable signing."}</p> : null}
+        {!viewed || !initialsOk || !detailsOk ? <p className="text-xs text-muted-foreground">{needInitials && !initialsOk ? "Initial every page above to enable signing." : !viewed ? "Read the document above to enable signing." : "Fill in your details above to enable signing."}</p> : null}
       </form>
 
       <div className="border-t pt-4">
