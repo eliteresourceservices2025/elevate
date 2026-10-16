@@ -720,3 +720,100 @@ describe("the emails of a per-person send", () => {
     ).rejects.toThrow(/changed after it was checked/);
   });
 });
+
+describe("test marks, archive and delete", () => {
+  let superAdmin: TestUser;
+  beforeAll(async () => {
+    superAdmin = await makeUser("sa", ["super_admin"], ["Sam", "Admin"]);
+  });
+
+  const completed = async (extra: { isTest?: boolean } = {}) => {
+    const { id } = await service.createEnvelope({ id: hr.id, email: hr.email, roles: hr.roles }, { title: uniq("Trial "), pdf: await samplePdf(1), fileName: "t.pdf", signers: [{ userId: ana.id }], order: "sequential", expiryDays: 14, send: true, ip: null, ...extra });
+    await open(ana, id);
+    await signTyped(ana, id);
+    return id;
+  };
+  const row = async (id: string) => (await rows<{ is_test: boolean; archived_at: Date | null; status: string }>(sql`select is_test, archived_at, status from docs.esign_envelopes where id = ${id}`))[0];
+
+  it("marks a document as a test (from the send form or afterwards), audited, and shows it as Test to the signee", async () => {
+    const id = await completed({ isTest: true });
+    expect((await row(id)).is_test).toBe(true);
+    const other = await completed();
+    expect((await row(other)).is_test).toBe(false);
+    as(hr);
+    expect((await actions.setEnvelopeTest({ envelopeId: other, isTest: true })).ok).toBe(true);
+    expect((await row(other)).is_test).toBe(true);
+    expect((await rows(sql`select 1 from ops.audit_log where action = 'signing.mark_test' and target_id = ${other}`)).length).toBe(1);
+    as(ana);
+    expect((await queries.listMySigning()).find((r) => r.envelopeId === other)?.isTest).toBe(true);
+    // not for people who are not HR
+    expect(await actions.setEnvelopeTest({ envelopeId: other, isTest: false })).toEqual({ ok: false, error: NO_ACCESS });
+  });
+
+  it("archives and restores, keeps it out of the lists, refuses while it waits for signatures, and never deletes", async () => {
+    const waiting = await send({ signers: [ana] });
+    as(hr);
+    expect(await actions.archiveEnvelope({ envelopeId: waiting, archived: true })).toEqual({ ok: false, error: expect.stringContaining("Void it first") });
+    const id = await completed();
+    as(hr);
+    expect((await queries.listEnvelopes("active")).some((e) => e.id === id)).toBe(true);
+    expect((await actions.archiveEnvelope({ envelopeId: id, archived: true })).ok).toBe(true);
+    expect((await row(id)).archived_at).not.toBeNull();
+    expect((await queries.listEnvelopes("active")).some((e) => e.id === id)).toBe(false);
+    expect((await queries.listEnvelopes("archived")).some((e) => e.id === id)).toBe(true);
+    as(ana);
+    expect((await queries.listMySigning()).some((r) => r.envelopeId === id)).toBe(true); // a real archived document stays in the signee's record
+    as(hr);
+    expect((await actions.archiveEnvelope({ envelopeId: id, archived: false })).ok).toBe(true);
+    expect((await queries.listEnvelopes("active")).some((e) => e.id === id)).toBe(true);
+    // the test filter only shows marked, unarchived ones
+    expect((await queries.listEnvelopes("test")).some((e) => e.id === id)).toBe(false);
+  });
+
+  it("hides an archived TEST document from the signee's list, and a test document never verifies as genuine", async () => {
+    const id = await completed({ isTest: true });
+    const [env] = await rows<{ sealed_sha256: string }>(sql`select sealed_sha256 from docs.esign_envelopes where id = ${id}`);
+    as(ana);
+    expect((await queries.listMySigning()).some((r) => r.envelopeId === id)).toBe(true); // shown, marked Test
+    expect(await queries.verifyFingerprint(env.sealed_sha256)).toEqual({ match: false });
+    as(hr);
+    await actions.archiveEnvelope({ envelopeId: id, archived: true });
+    as(ana);
+    expect((await queries.listMySigning()).some((r) => r.envelopeId === id)).toBe(false);
+  });
+
+  it("deletes a test document completely (Super Admin, with a reason) and keeps a record; refuses a real one", async () => {
+    const test = await completed({ isTest: true });
+    const real = await completed();
+    const [paths] = await rows<{ original_path: string; sealed_path: string }>(sql`select original_path, sealed_path from docs.esign_envelopes where id = ${test}`);
+    expect(fake.objects.has(fake.key("signed-docs", paths.sealed_path))).toBe(true);
+
+    as(hr);
+    expect(await actions.deleteTestEnvelope({ envelopeId: test, reason: "Testing only" })).toEqual({ ok: false, error: NO_ACCESS }); // HR cannot
+    as(superAdmin);
+    expect(await actions.deleteTestEnvelope({ envelopeId: real, reason: "Testing only" })).toEqual({ ok: false, error: expect.stringContaining("marked as a test") });
+    expect((await actions.deleteTestEnvelope({ envelopeId: test, reason: "x" })).ok).toBe(false); // a reason is needed
+    expect(await actions.deleteTestEnvelope({ envelopeId: test, reason: "Trial run of the handbook" })).toEqual({ ok: true, data: { filesRemoved: true } });
+
+    expect((await rows(sql`select 1 from docs.esign_envelopes where id = ${test}`)).length).toBe(0);
+    expect((await rows(sql`select 1 from docs.esign_signers where envelope_id = ${test}`)).length).toBe(0);
+    expect((await rows(sql`select 1 from docs.esign_events where envelope_id = ${test}`)).length).toBe(0);
+    expect(fake.objects.has(fake.key("signed-docs", paths.sealed_path))).toBe(false);
+    expect(fake.objects.has(fake.key("signed-docs", paths.original_path))).toBe(false);
+    const [a] = await rows<{ metadata: { reason: string }; before: { title: string } }>(sql`select metadata, before from ops.audit_log where action = 'signing.delete_test' and target_id = ${test}`);
+    expect(a.metadata.reason).toBe("Trial run of the handbook");
+    // the real one is untouched
+    expect((await row(real)).status).toBe("completed");
+  });
+
+  it("is enforced by the database: a real signed document cannot be deleted or have its log or signature changed, even directly", async () => {
+    const real = await completed();
+    await expect(db.execute(sql`delete from docs.esign_events where envelope_id = ${real}`)).rejects.toThrow();
+    await expect(db.execute(sql`delete from docs.esign_signers where envelope_id = ${real}`)).rejects.toThrow();
+    await expect(db.execute(sql`delete from docs.esign_envelopes where id = ${real}`)).rejects.toThrow();
+    const refused = { cause: { message: expect.stringContaining("a signature cannot change") } };
+    await expect(db.execute(sql`update docs.esign_signers set details_enc = 'x' where envelope_id = ${real}`)).rejects.toMatchObject(refused);
+    await expect(db.execute(sql`update docs.esign_signers set initials_text = 'ZZ' where envelope_id = ${real}`)).rejects.toMatchObject(refused);
+    await expect(db.execute(sql`update docs.esign_events set type = 'x' where envelope_id = ${real}`)).rejects.toThrow();
+  });
+});

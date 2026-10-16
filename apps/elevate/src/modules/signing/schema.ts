@@ -42,6 +42,11 @@ export const esignEnvelopes = docs
       signingOrder: text("signing_order").notNull().default("sequential"),
       /** Every signer must initial each page before signing (documents written in ELEVATE; ELEVATE users only). */
       initialEachPage: boolean("initial_each_page").notNull().default(false),
+      /** A document sent to try the flow out. Marked so it can be told apart, archived, and (Super Admin only) permanently deleted. */
+      isTest: boolean("is_test").notNull().default(false),
+      /** Hidden from the lists (HR tidy-up). Never deleted: a signed document is evidence. */
+      archivedAt: timestamp("archived_at", { withTimezone: true }),
+      archivedBy: uuid("archived_by").references(() => users.id),
       /** Details the signee types in while signing (keys from SIGNEE_DETAIL_FIELDS, e.g. bank details): kept encrypted, printed on the signed copy. */
       signeeDetails: text("signee_details").array().notNull().default(sql`'{}'::text[]`),
       /** The PDF as uploaded. Fixed once the envelope is sent. */

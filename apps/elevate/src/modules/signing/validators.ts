@@ -38,6 +38,10 @@ export const signeeGroupSchema = z
   .object({ kind: z.enum(["everyone", "team", "client"]), id: z.preprocess(blankToUndefined, uuid.optional()) })
   .refine((v) => v.kind === "everyone" || Boolean(v.id), { message: "Choose a team or a client", path: ["id"] });
 
+export const testMarkSchema = z.object({ envelopeId: uuid, isTest: z.boolean() });
+export const archiveSchema = z.object({ envelopeId: uuid, archived: z.boolean() });
+export const deleteTestSchema = z.object({ envelopeId: uuid, reason: text(300).min(3, "Give a short reason") });
+
 export const envelopeIdSchema = z.object({ envelopeId: uuid });
 export const templateIdSchema = z.object({ templateId: uuid });
 export const reasonSchema = z.object({ envelopeId: uuid, reason: text(500).min(3, "Give a short reason") });
