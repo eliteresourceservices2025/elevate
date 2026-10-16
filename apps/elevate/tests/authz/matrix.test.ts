@@ -106,6 +106,7 @@ const EXPECTED: Record<string, string> = {
   "onboarding.view_own_tasks": "- - - - - O",
   "reviews.view": "A A T - - O",
   "reviews.summary": "A A - - A -",
+  "reviews.waive": "A A T - - -",
   "reviews.manage_templates": "A A - - - -",
   "reviews.manage_cycles": "A A - - - -",
   "reviews.write_self": "O O O O O O",

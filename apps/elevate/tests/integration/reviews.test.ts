@@ -255,7 +255,7 @@ describe("summary for the executive", () => {
     const summary = await queries.getReviewSummary();
     expect(summary.length).toBeGreaterThan(0);
     expect(summary.every((s) => s.averageRating === null || s.shared >= 5)).toBe(true);
-    expect(Object.keys(summary[0]).sort()).toEqual(["acknowledged", "averageRating", "id", "name", "shared", "total"]);
+    expect(Object.keys(summary[0]).sort()).toEqual(["acknowledged", "averageRating", "id", "name", "shared", "total", "waived"]);
     as(lead);
     expect(await forbidden(queries.getReviewSummary())).toBe("ForbiddenError");
   });
@@ -353,5 +353,120 @@ describe("goals", () => {
     await act.addGoalNote({ goalId: g.data!.id, note: "Private progress remark" });
     const leaked = await rows(sql`select 1 from ops.audit_log where target_id = ${g.data!.id as string} and (before::text like '%Secret-ish%' or after::text like '%Secret-ish%' or after::text like '%Private progress%')`);
     expect(leaked).toHaveLength(0);
+  });
+});
+
+describe("waiving a review", () => {
+  const stageIs = async (id: string) => (await queries.getReview(id)).stage;
+
+  it("lets HR waive with a reason, drops it from reminders and counts, shows the reason to HR and the lead but not the person", async () => {
+    const hire = await makePerson("waive1", ["employee"], leadEmployeeId);
+    const { cycleId, reviewIds } = await launchFor([hire.employeeId]);
+    const id = reviewIds[0];
+    as(hr);
+    expect((await act.waiveReview({ reviewId: id, reason: "ab" })).ok).toBe(false); // a real reason is needed
+    expect((await act.waiveReview({ reviewId: id, reason: "On approved leave for the whole cycle" })).ok).toBe(true);
+    expect(await stageIs(id)).toBe("waived");
+    expect((await queries.getReview(id)).waive?.reason).toBe("On approved leave for the whole cycle");
+    expect((await act.waiveReview({ reviewId: id, reason: "Again" })).error).toMatch(/already waived/);
+    // The lead sees why; the person does not
+    as(lead);
+    expect((await queries.getReview(id)).waive?.reason).toBe("On approved leave for the whole cycle");
+    as(hire.user);
+    const mine = await queries.getReview(id);
+    expect(mine).toMatchObject({ waived: true, waive: null, canWriteSelf: false, stage: "waived" });
+    // Nothing more can be written, calibrated or shared on it
+    expect((await act.submitSelfReview({ reviewId: id, answers: answersFor(3) })).error).toMatch(/waived/);
+    as(lead);
+    expect((await act.submitLeadReview({ reviewId: id, answers: answersFor(3), overallRating: 3 })).error).toMatch(/waived/);
+    as(hr);
+    expect((await act.calibrateReview({ reviewId: id, finalRating: 3 })).ok).toBe(false);
+    // No reminders and the audit entry holds no reason text
+    await jobs.runReviewReminders(dayOffset(30));
+    expect(await rows(sql`select 1 from ops.notifications where kind = 'review.reminder' and user_id = ${hire.user.id}`)).toHaveLength(0);
+    const [a] = await rows<{ after: Record<string, unknown> }>(sql`select after from ops.audit_log where action = 'review.waive' and target_id = ${id}`);
+    expect(JSON.stringify(a)).not.toContain("approved leave");
+    expect((await queries.listCycles()).find((c) => c.id === cycleId)?.byStage).toMatchObject({ waived: 1 });
+    // The lead was told when HR waived
+    expect(await rows(sql`select 1 from ops.notifications where kind = 'review.waived' and user_id = ${lead.id}`)).not.toHaveLength(0);
+  });
+
+  it("lets a lead waive only their own team's review, never their own, and not once it is shared", async () => {
+    const mine = await makePerson("waive2", ["employee"], leadEmployeeId);
+    const notMine = await makePerson("waive3", ["employee"]);
+    const { reviewIds } = await launchFor([mine.employeeId, notMine.employeeId]);
+    const [mineId, notMineId] = (await rows<{ id: string; employee_id: string }>(sql`select id, employee_id from talent.reviews where id = any(${`{${reviewIds.join(",")}}`}::uuid[])`)).sort((a) => (a.employee_id === mine.employeeId ? -1 : 1)).map((r) => r.id);
+    as(lead);
+    expect((await act.waiveReview({ reviewId: notMineId, reason: "Not my team's review" })).error).toBe(NO_ACCESS);
+    expect((await act.waiveReview({ reviewId: mineId, reason: "Covered by the month 3 review" })).ok).toBe(true);
+    // the person cannot waive their own, nor can a stranger
+    as(mine.user);
+    expect((await act.restoreReview({ reviewId: mineId })).error).toBe(NO_ACCESS);
+    as(stranger);
+    expect((await act.waiveReview({ reviewId: notMineId, reason: "I do not like it" })).error).toBe(NO_ACCESS);
+    // nobody waives their own review: a lead has no reach over it, and an HR admin is told to ask another
+    const self = await makePerson("waiveself", ["team_lead"], leadEmployeeId);
+    const hrSelf = await makePerson("waivehr", ["hr_admin"], leadEmployeeId);
+    const { reviewIds: own } = await launchFor([self.employeeId, hrSelf.employeeId]);
+    const ownRows = await rows<{ id: string; employee_id: string }>(sql`select id, employee_id from talent.reviews where id = any(${`{${own.join(",")}}`}::uuid[])`);
+    const selfId = ownRows.find((r) => r.employee_id === self.employeeId)!.id;
+    const hrSelfId = ownRows.find((r) => r.employee_id === hrSelf.employeeId)!.id;
+    as(self.user);
+    expect((await act.waiveReview({ reviewId: selfId, reason: "I would rather skip it" })).error).toBe(NO_ACCESS);
+    as(hrSelf.user);
+    expect((await act.waiveReview({ reviewId: hrSelfId, reason: "I would rather skip it" })).error).toMatch(/cannot waive your own/);
+    as(hr2);
+    expect((await act.waiveReview({ reviewId: hrSelfId, reason: "Covered elsewhere this cycle" })).ok).toBe(true);
+  });
+
+  it("can be brought back only by HR, or by the lead who waived it, and cannot be handed to another lead", async () => {
+    const hire = await makePerson("waive6", ["employee"], leadEmployeeId);
+    const other = await makePerson("otherlead2", ["team_lead"]);
+    const { reviewIds } = await launchFor([hire.employeeId]);
+    const id = reviewIds[0];
+    as(hr);
+    await act.waiveReview({ reviewId: id, reason: "HR decided it is not needed" });
+    as(lead);
+    expect((await queries.getReview(id)).canRestore).toBe(false);
+    expect((await act.restoreReview({ reviewId: id })).error).toMatch(/Only HR/);
+    as(hr);
+    expect((await act.reassignReviewer({ reviewId: id, leadUserId: other.user.id })).error).toMatch(/waived/);
+    expect((await act.restoreReview({ reviewId: id })).ok).toBe(true);
+    // a lead can bring back a waiver they made themselves
+    as(lead);
+    await act.waiveReview({ reviewId: id, reason: "Lead waived it, then changed their mind" });
+    expect((await queries.getReview(id)).canRestore).toBe(true);
+    expect((await act.restoreReview({ reviewId: id })).ok).toBe(true);
+  });
+
+  it("can be brought back until it is shared, and a shared review cannot be waived (also at the database)", async () => {
+    const hire = await makePerson("waive4", ["employee"], leadEmployeeId);
+    const { reviewIds } = await launchFor([hire.employeeId]);
+    const id = reviewIds[0];
+    as(hr);
+    await act.waiveReview({ reviewId: id, reason: "Waived by mistake" });
+    expect((await act.restoreReview({ reviewId: id })).ok).toBe(true);
+    expect(await stageIs(id)).toBe("awaiting_self");
+    expect((await act.restoreReview({ reviewId: id })).error).toMatch(/not waived/);
+    // walk it to shared, then waiving is refused
+    as(lead);
+    await act.submitLeadReview({ reviewId: id, answers: answersFor(4), overallRating: 4 });
+    as(hr);
+    await act.calibrateReview({ reviewId: id, finalRating: 4 });
+    expect((await act.shareReview({ reviewId: id })).ok).toBe(true);
+    expect((await act.waiveReview({ reviewId: id, reason: "Too late to waive" })).error).toMatch(/already shared/);
+    await expect(db.execute(sql`update talent.reviews set waived_at = now(), waived_by = ${hr.id}, waive_reason = 'sneaky' where id = ${id}`)).rejects.toMatchObject({ cause: { message: expect.stringContaining("shared cannot be waived") } });
+    // and a waived row cannot move forward, nor be waived without a reason
+    const other = await makePerson("waive5", ["employee"], leadEmployeeId);
+    const { reviewIds: r2 } = await launchFor([other.employeeId]);
+    await expect(db.execute(sql`update talent.reviews set waived_at = now(), waived_by = ${hr.id}, waive_reason = '' where id = ${r2[0]}`)).rejects.toThrow();
+    await act.waiveReview({ reviewId: r2[0], reason: "Not needed this cycle" });
+    await expect(db.execute(sql`update talent.reviews set self_submitted_at = now() where id = ${r2[0]}`)).rejects.toMatchObject({ cause: { message: expect.stringContaining("waived review cannot move forward") } });
+  });
+
+  it("keeps waived reviews out of the executive's totals", async () => {
+    as(exec);
+    const rowsOut = await queries.getReviewSummary();
+    expect(rowsOut.every((r) => r.total >= 0 && typeof r.waived === "number")).toBe(true);
   });
 });

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { acknowledgeReview, calibrateReview, closeReviewCycle, reassignReviewer, shareCycleReviews, shareReview, submitLeadReview, submitSelfReview } from "../actions";
+import { acknowledgeReview, calibrateReview, closeReviewCycle, reassignReviewer, restoreReview, shareCycleReviews, shareReview, submitLeadReview, submitSelfReview, waiveReview } from "../actions";
 import { RATINGS, RATING_LABELS, type Answers, type Question } from "../constants";
 
 const sections = (qs: Question[]) => [...new Set(qs.map((q) => q.section))];
@@ -154,6 +154,51 @@ export function AcknowledgeForm({ reviewId }: { reviewId: string }) {
         I have read this review
       </Button>
     </form>
+  );
+}
+
+/** HR or the lead: this review is not needed this time. A written reason is required. */
+export function WaiveForm({ reviewId }: { reviewId: string }) {
+  const { run, pending } = useRun();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  if (!open) {
+    return (
+      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+        Waive this review
+      </Button>
+    );
+  }
+  return (
+    <form
+      className="max-w-xl space-y-2 rounded-xl border bg-card p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!window.confirm("Waive this review? It is taken out of reminders and counts. You can bring it back until the cycle closes.")) return;
+        run(() => waiveReview({ reviewId, reason }), "Review waived.");
+      }}
+    >
+      <Label htmlFor="waive-reason">Why is this review not needed? (required)</Label>
+      <Textarea id="waive-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={500} required />
+      <p className="text-xs text-muted-foreground">HR and the person&apos;s leads can read this. The person is not shown it.</p>
+      <div className="flex gap-2">
+        <Button type="submit" disabled={pending || reason.trim().length < 3}>
+          Waive review
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+export function RestoreButton({ reviewId }: { reviewId: string }) {
+  const { run, pending } = useRun();
+  return (
+    <Button type="button" variant="outline" disabled={pending} onClick={() => run(() => restoreReview({ reviewId }), "Review brought back.")}>
+      Bring this review back
+    </Button>
   );
 }
 
