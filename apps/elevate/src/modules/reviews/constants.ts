@@ -24,9 +24,10 @@ export const DEFAULT_EARLY_QUESTIONS: Omit<Question, "id">[] = [
 export const EARLY_MILESTONES = [3, 5] as const;
 export type Milestone = (typeof EARLY_MILESTONES)[number];
 
-export const STAGES = ["awaiting_self", "awaiting_lead", "awaiting_hr", "ready_to_share", "shared", "acknowledged"] as const;
+export const STAGES = ["waived", "awaiting_self", "awaiting_lead", "awaiting_hr", "ready_to_share", "shared", "acknowledged"] as const;
 export type Stage = (typeof STAGES)[number];
 export const STAGE_LABELS: Record<Stage, string> = {
+  waived: "Waived",
   awaiting_self: "Waiting for the self review",
   awaiting_lead: "Waiting for the lead's review",
   awaiting_hr: "Waiting for HR to calibrate",
@@ -35,13 +36,14 @@ export const STAGE_LABELS: Record<Stage, string> = {
   acknowledged: "Acknowledged",
 };
 
-export type ReviewState = { selfSubmittedAt: Date | null; leadSubmittedAt: Date | null; calibratedAt: Date | null; sharedAt: Date | null; acknowledgedAt: Date | null };
+export type ReviewState = { waivedAt?: Date | null; selfSubmittedAt: Date | null; leadSubmittedAt: Date | null; calibratedAt: Date | null; sharedAt: Date | null; acknowledgedAt: Date | null };
 
 /**
  * Where a review stands. The self review is optional: the lead's review is the next step as soon as it is written, whether or not
  * the person has written theirs (the lead only sees it after submitting their own, so waiting is never forced).
  */
 export function stageOf(r: ReviewState): Stage {
+  if (r.waivedAt) return "waived";
   if (r.acknowledgedAt) return "acknowledged";
   if (r.sharedAt) return "shared";
   if (r.calibratedAt) return "ready_to_share";
@@ -77,6 +79,9 @@ export function dueMilestones(startDate: string, today: string, already: readonl
     return due <= today && due >= addDays(today, -31) && !already.includes(m);
   });
 }
+
+/** Waiving needs a written reason of at least this many characters. */
+export const MIN_WAIVE_REASON = 3;
 
 export type Viewer = "person" | "lead" | "hr";
 

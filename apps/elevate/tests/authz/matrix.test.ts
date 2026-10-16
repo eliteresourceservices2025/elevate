@@ -92,6 +92,7 @@ const EXPECTED: Record<string, string> = {
   "offers.hire": "A A - - - -",
   "offers.view": "A A T A - -", // a lead's team scope = on that job's hiring team
   "signing.manage": "A A - - - -",
+  "signing.delete_test": "A - - - - -",
   "signing.view_own": "O O O O O O",
   "signing.sign": "O O O O O O",
   "onboarding.manage": "A A T - - -",
@@ -105,6 +106,7 @@ const EXPECTED: Record<string, string> = {
   "onboarding.view_own_tasks": "- - - - - O",
   "reviews.view": "A A T - - O",
   "reviews.summary": "A A - - A -",
+  "reviews.waive": "A A T - - -",
   "reviews.manage_templates": "A A - - - -",
   "reviews.manage_cycles": "A A - - - -",
   "reviews.write_self": "O O O O O O",

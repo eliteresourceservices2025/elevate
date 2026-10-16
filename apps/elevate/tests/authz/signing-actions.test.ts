@@ -29,6 +29,8 @@ const cases: { name: string; call: () => Promise<{ ok: boolean; error?: string }
   { name: "voidEnvelope", call: () => actions.voidEnvelope({ envelopeId: ID, reason: "Wrong version" }) },
   { name: "findSignees", call: () => actions.findSignees({ kind: "everyone" }) },
   { name: "remindSigners", call: () => actions.remindSigners({ envelopeId: ID }) },
+  { name: "setEnvelopeTest", call: () => actions.setEnvelopeTest({ envelopeId: ID, isTest: true }) },
+  { name: "archiveEnvelope", call: () => actions.archiveEnvelope({ envelopeId: ID, archived: true }) },
   { name: "discardDraft", call: () => actions.discardDraft({ envelopeId: ID }) },
   { name: "archiveTemplate", call: () => actions.archiveTemplate({ templateId: ID }) },
 ];
@@ -48,6 +50,19 @@ describe("Signing HR actions, every role", () => {
           else expect(result.error).toBe(NO_ACCESS);
         });
       }
+    });
+  }
+});
+
+describe("Signing: permanent delete of a test document, every role", () => {
+  for (const role of ROLE_SLUGS) {
+    const allowed = role === "super_admin";
+    it(`${role}: ${allowed ? "passes authorize()" : "is refused"}`, async () => {
+      as(role);
+      const result = (await actions.deleteTestEnvelope({ envelopeId: ID, reason: "Testing only" })) as { ok: boolean; error?: string };
+      expect(result.ok).toBe(false);
+      if (allowed) expect(result.error).not.toBe(NO_ACCESS);
+      else expect(result.error).toBe(NO_ACCESS);
     });
   }
 });

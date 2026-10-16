@@ -7,7 +7,7 @@ import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { archiveTemplate, discardDraft, findSignees, remindSigners, sendEnvelope, voidEnvelope } from "../actions";
+import { archiveEnvelope, archiveTemplate, deleteTestEnvelope, discardDraft, findSignees, remindSigners, sendEnvelope, setEnvelopeTest, voidEnvelope } from "../actions";
 import { DEFAULT_EXPIRY_DAYS, MAX_PDF_BYTES, MAX_SIGNERS } from "../constants";
 import type { SignerChoice, SigneeGroups, TemplateRow } from "../queries";
 import { useRouter } from "next/navigation";
@@ -35,6 +35,7 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
   const [add, setAdd] = useState("");
   const [sending, setSending] = useState(false);
   // Everyone, a team or a client: each person signs their own copy (their own document, signature and sealed file).
+  const [isTest, setIsTest] = useState(false);
   const [copies, setCopies] = useState(false);
   const [sharedRole, setSharedRole] = useState("");
   const [signeeDetails, setSigneeDetails] = useState<string[]>([]);
@@ -117,6 +118,7 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
       }
       if (each && counterId) form.set("countersigner", JSON.stringify({ userId: counterId, role: counterRole }));
       if (initialEachPage) form.set("initialEachPage", "true");
+      if (isTest) form.set("isTest", "true");
       if (source === "write") form.set("content", content);
       else if (source === "template") form.set("templateId", templateId);
       else if (file) form.set("file", file);
@@ -455,6 +457,14 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
         </span>
       </label>
 
+      <label htmlFor="env-test" className="flex items-start gap-2 text-sm">
+        <input id="env-test" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={isTest} onChange={(e) => setIsTest(e.target.checked)} />
+        <span>
+          This is a test
+          <span className="block text-xs text-muted-foreground">It is marked &ldquo;Test&rdquo; everywhere, so it can be archived later, and deleted by a Super Admin. Use it when you are trying the flow out.</span>
+        </span>
+      </label>
+
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={sending || picked.length === 0}>
           {progress ? `Sending ${progress.done} of ${progress.total}...` : individual && picked.length > 1 ? `Send to ${picked.length} people` : "Send for signature"}
@@ -530,8 +540,8 @@ export function ArchiveTemplateButton({ templateId }: { templateId: string }) {
 }
 
 /** HR controls on one envelope. */
-export function ManageButtons({ envelopeId, status, sealing }: { envelopeId: string; status: string; sealing: boolean }) {
-  const { run, pending } = useRun();
+export function ManageButtons({ envelopeId, title = "", status, sealing, isTest = false, archived = false, canDelete = false }: { envelopeId: string; title?: string; status: string; sealing: boolean; isTest?: boolean; archived?: boolean; canDelete?: boolean }) {
+  const { run, pending, router } = useRun();
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState("");
   return (
@@ -546,6 +556,32 @@ export function ManageButtons({ envelopeId, status, sealing }: { envelopeId: str
               Discard draft
             </Button>
           </>
+        ) : null}
+        <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => setEnvelopeTest({ envelopeId, isTest: !isTest }), isTest ? "Test mark removed." : "Marked as a test.")}>
+          {isTest ? "Remove test mark" : "Mark as test"}
+        </Button>
+        {status !== "out" ? (
+          <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => archiveEnvelope({ envelopeId, archived: !archived }), archived ? "Restored." : "Archived.")}>
+            {archived ? "Restore from archive" : "Archive"}
+          </Button>
+        ) : null}
+        {isTest && canDelete ? (
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={pending}
+            onClick={() => {
+              const why = window.prompt(`Delete "${title}" (${status}) permanently, with its signed copy and log? This cannot be undone. Check it really is a test. Why are you deleting it?`);
+              if (why === null) return;
+              run(
+                () => deleteTestEnvelope({ envelopeId, reason: why }),
+                (data) => (data?.filesRemoved === false ? "Deleted, but its files could not be removed from storage. Tell an administrator." : "Deleted."),
+                () => router.push("/signing?tab=all&view=test"),
+              );
+            }}
+          >
+            Delete permanently
+          </Button>
         ) : null}
         {status === "out" && !sealing ? (
           <>

@@ -2,7 +2,7 @@
 
 import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { authorize, type Resource } from "@/lib/authz";
+import { authorize, scopeFor, type Resource } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isUniqueViolation } from "@/lib/db-errors";
@@ -15,7 +15,7 @@ import { users } from "@/modules/core/schema";
 import { checkAnswers, suggestedOverall, type Question } from "./constants";
 import { openReviews, peopleForScope, requireOpenCycle, withIds } from "./service";
 import { reviewAcknowledgments, reviewCalibrations, reviewCycles, reviewResponses, reviewSettings, reviewTemplates, reviews } from "./schema";
-import { acknowledgeSchema, calibrateSchema, cycleIdSchema, earlySettingsSchema, launchCycleSchema, reassignSchema, reviewIdSchema, reviewTemplateSchema, submitReviewSchema, templateIdSchema } from "./validators";
+import { acknowledgeSchema, calibrateSchema, cycleIdSchema, earlySettingsSchema, launchCycleSchema, reassignSchema, reviewIdSchema, reviewTemplateSchema, submitReviewSchema, templateIdSchema, waiveSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
 const refresh = (...paths: string[]) => {
@@ -158,6 +158,7 @@ export async function reassignReviewer(input: unknown): Promise<ActionResult> {
     const loaded = await loadReview(parsed.data.reviewId);
     if (!loaded) return fail("That review was not found.");
     if (loaded.review.leadSubmittedAt) return fail("The lead's review is already in.");
+    if (loaded.review.waivedAt) return fail("This review was waived, so there is nothing for a lead to write.");
     if (parsed.data.leadUserId === loaded.employeeUserId) return fail("Nobody can review themselves.");
     const [u] = await db.select({ id: users.id }).from(users).where(and(eq(users.id, parsed.data.leadUserId), isNull(users.archivedAt)));
     if (!u) return fail("That person does not have an active account.");
@@ -167,6 +168,68 @@ export async function reassignReviewer(input: unknown): Promise<ActionResult> {
       await writeAudit({ actor, action: "review.reassign", targetType: "review", targetId: loaded.review.id, after: { leadUserId: u.id } }, tx);
     });
     refresh(`/reviews/${loaded.review.id}`);
+    return { ok: true, data: undefined };
+  });
+}
+
+// ---- Waiving a review -------------------------------------------------------------------------------------------------------
+
+/** Who may waive or restore this review: HR for anyone, a lead for someone in their team, never the person themselves. */
+async function waiveAccess(actor: Awaited<ReturnType<typeof requireUser>>, reviewId: string) {
+  const loaded = await loadReview(reviewId);
+  if (!loaded) throw new ActionFailure("That review was not found.");
+  await authorize(actor, "reviews.waive", loaded.resource);
+  if (loaded.employeeUserId === actor.id) throw new ActionFailure("You cannot waive your own review. Another HR admin or your lead can.");
+  return loaded;
+}
+
+/**
+ * A review that is not needed this time (for example someone on leave, or an early review already covered): HR, Super Admin or the
+ * person's lead waives it with a written reason. It drops out of reminders and counts. Only before it is shared with the person.
+ * The reason stays with the review for HR and the leads; audit entries hold no reason text.
+ */
+export async function waiveReview(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    const parsed = waiveSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const loaded = await waiveAccess(actor, parsed.data.reviewId);
+    await db.transaction(async (tx) => {
+      const [fresh] = await tx.select().from(reviews).where(eq(reviews.id, loaded.review.id)).for("update");
+      requireOpenCycle(loaded.cycle.status);
+      if (fresh.waivedAt) throw new ActionFailure("It is already waived.");
+      if (fresh.sharedAt) throw new ActionFailure("It was already shared with the person, so it cannot be waived.");
+      await tx.update(reviews).set({ waivedAt: new Date(), waivedBy: actor.id, waiveReason: parsed.data.reason }).where(eq(reviews.id, fresh.id));
+      await writeAudit({ actor, action: "review.waive", targetType: "review", targetId: fresh.id, after: { reasonLength: parsed.data.reason.length } }, tx); // never the reason
+      // Tell the other side: HR when a lead waived, the lead when HR did (no reason in the notice)
+      const hr = await hrUserIds();
+      const targets = new Set<string>([...hr, ...(fresh.leadUserId ? [fresh.leadUserId] : [])]);
+      targets.delete(actor.id);
+      if (loaded.employeeUserId) targets.delete(loaded.employeeUserId);
+      await notify(tx, [...targets].map((userId) => ({ userId, kind: "review.waived", title: "A review was waived", body: "Open it to see the reason.", link: `/reviews/${fresh.id}` })));
+    });
+    refresh(`/reviews/${parsed.data.reviewId}`);
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Brings a waived review back to where it was (it was never shared). Same people as waiving; the reason is cleared, the audit log keeps the history. */
+export async function restoreReview(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    const parsed = reviewIdSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const loaded = await waiveAccess(actor, parsed.data.reviewId);
+    await db.transaction(async (tx) => {
+      const [fresh] = await tx.select().from(reviews).where(eq(reviews.id, loaded.review.id)).for("update");
+      requireOpenCycle(loaded.cycle.status);
+      if (!fresh.waivedAt) throw new ActionFailure("It is not waived.");
+      // HR and Super Admin can bring any back; a lead only one they waived themselves (not HR's decision)
+      if (scopeFor(actor, "reviews.waive") !== "all" && fresh.waivedBy !== actor.id) throw new ActionFailure("Only HR can bring back a review that HR waived.");
+      await tx.update(reviews).set({ waivedAt: null, waivedBy: null, waiveReason: null }).where(eq(reviews.id, fresh.id));
+      await writeAudit({ actor, action: "review.restore", targetType: "review", targetId: fresh.id }, tx);
+    });
+    refresh(`/reviews/${parsed.data.reviewId}`);
     return { ok: true, data: undefined };
   });
 }
@@ -196,6 +259,7 @@ async function submit(actor: Awaited<ReturnType<typeof requireUser>>, role: "sel
       await db.transaction(async (tx) => {
         const [fresh] = await tx.select().from(reviews).where(eq(reviews.id, loaded.review.id)).for("update");
         requireOpenCycle(loaded.cycle.status);
+        if (fresh.waivedAt) throw new ActionFailure("This review was waived, so it is not needed.");
         if (role === "self" && fresh.selfSubmittedAt) throw new ActionFailure("You already submitted your self review.");
         if (role === "lead" && fresh.leadSubmittedAt) throw new ActionFailure("The lead's review is already in.");
         await tx.insert(reviewResponses).values({ reviewId: fresh.id, role, answers: v.answers, overallRating: overall ?? null, comments: v.comments ?? null, authorUserId: actor.id });
@@ -241,6 +305,7 @@ export async function calibrateReview(input: unknown): Promise<ActionResult> {
     if (loaded.employeeUserId === actor.id) return fail("Another HR admin has to calibrate your own review.");
     await db.transaction(async (tx) => {
       const [fresh] = await tx.select().from(reviews).where(eq(reviews.id, loaded.review.id)).for("update");
+      if (fresh.waivedAt) throw new ActionFailure("This review was waived, so it is not needed.");
       if (!fresh.leadSubmittedAt) throw new ActionFailure("The lead's review is not in yet.");
       if (fresh.sharedAt) throw new ActionFailure("It was already shared, so it cannot be changed.");
       const [lead] = await tx.select({ overall: reviewResponses.overallRating }).from(reviewResponses).where(and(eq(reviewResponses.reviewId, fresh.id), eq(reviewResponses.role, "lead")));
@@ -261,7 +326,7 @@ async function shareRows(actor: Awaited<ReturnType<typeof requireUser>>, ids: st
     if (!loaded || loaded.employeeUserId === actor.id) continue; // another HR admin shares your own
     const ok = await db.transaction(async (tx) => {
       const [fresh] = await tx.select().from(reviews).where(eq(reviews.id, id)).for("update");
-      if (!fresh.calibratedAt || fresh.sharedAt) return false;
+      if (!fresh.calibratedAt || fresh.sharedAt || fresh.waivedAt) return false;
       await tx.update(reviews).set({ sharedAt: new Date() }).where(eq(reviews.id, id));
       const out: { userId: string; kind: string; title: string; body: string; link: string }[] = [];
       if (loaded.employeeUserId) out.push({ userId: loaded.employeeUserId, kind: "review.shared", title: "Your review is ready to read", body: "Open it, read it and acknowledge it.", link: `/reviews/${id}` });

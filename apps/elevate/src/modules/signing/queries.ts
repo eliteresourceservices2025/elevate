@@ -12,31 +12,35 @@ import { envelopeReference, type EnvelopeStatus, type SignerStatus } from "./con
 import { esignEnvelopes, esignEvents, esignSigners, esignTemplates } from "./schema";
 import { legalNames } from "./service";
 
-export type MySigningRow = { envelopeId: string; title: string; reference: string; envelopeStatus: EnvelopeStatus; myStatus: SignerStatus; sentAt: Date | null; expiresAt: Date | null; signedAt: Date | null };
+export type MySigningRow = { isTest: boolean; envelopeId: string; title: string; reference: string; envelopeStatus: EnvelopeStatus; myStatus: SignerStatus; sentAt: Date | null; expiresAt: Date | null; signedAt: Date | null };
 
 /** The envelopes the signed-in person was asked to sign, waiting ones first. */
 export async function listMySigning(): Promise<MySigningRow[]> {
   const user = await requireUser();
   await authorize(user, "signing.view_own", { ownerUserId: user.id });
   const rows = await db
-    .select({ envelopeId: esignEnvelopes.id, title: esignEnvelopes.title, envelopeStatus: esignEnvelopes.status, myStatus: esignSigners.status, sentAt: esignEnvelopes.sentAt, expiresAt: esignEnvelopes.expiresAt, signedAt: esignSigners.signedAt, createdAt: esignEnvelopes.createdAt })
+    .select({ isTest: esignEnvelopes.isTest, envelopeId: esignEnvelopes.id, title: esignEnvelopes.title, envelopeStatus: esignEnvelopes.status, myStatus: esignSigners.status, sentAt: esignEnvelopes.sentAt, expiresAt: esignEnvelopes.expiresAt, signedAt: esignSigners.signedAt, createdAt: esignEnvelopes.createdAt })
     .from(esignSigners)
     .innerJoin(esignEnvelopes, eq(esignEnvelopes.id, esignSigners.envelopeId))
-    .where(and(eq(esignSigners.userId, user.id), sql`${esignEnvelopes.status} <> 'draft'`))
+    .where(and(eq(esignSigners.userId, user.id), sql`${esignEnvelopes.status} <> 'draft'`, sql`not (${esignEnvelopes.archivedAt} is not null and ${esignEnvelopes.isTest})`))
+    // an archived TEST document disappears from the signee's list; a real archived one stays (it is their record)
     .orderBy(desc(esignEnvelopes.createdAt));
   const rank = (r: { myStatus: string }) => (r.myStatus === "pending" ? 0 : r.myStatus === "waiting" ? 1 : 2);
   return rows
-    .map((r) => ({ envelopeId: r.envelopeId, title: r.title, reference: envelopeReference(r.envelopeId), envelopeStatus: r.envelopeStatus as EnvelopeStatus, myStatus: r.myStatus as SignerStatus, sentAt: r.sentAt, expiresAt: r.expiresAt, signedAt: r.signedAt }))
+    .map((r) => ({ isTest: r.isTest, envelopeId: r.envelopeId, title: r.title, reference: envelopeReference(r.envelopeId), envelopeStatus: r.envelopeStatus as EnvelopeStatus, myStatus: r.myStatus as SignerStatus, sentAt: r.sentAt, expiresAt: r.expiresAt, signedAt: r.signedAt }))
     .sort((a, b) => rank(a) - rank(b));
 }
 
-export type EnvelopeRow = { id: string; title: string; reference: string; status: EnvelopeStatus; createdAt: Date; expiresAt: Date | null; signed: number; total: number };
+export type EnvelopeRow = { isTest: boolean; archivedAt: Date | null; id: string; title: string; reference: string; status: EnvelopeStatus; createdAt: Date; expiresAt: Date | null; signed: number; total: number };
 
-/** Every envelope (HR and Super Admin). */
-export async function listEnvelopes(): Promise<EnvelopeRow[]> {
+export type EnvelopeFilter = "active" | "test" | "archived";
+
+/** Envelopes for HR and Super Admin: the active ones (not archived), only the tests, or the archived ones. */
+export async function listEnvelopes(filter: EnvelopeFilter = "active"): Promise<EnvelopeRow[]> {
   const user = await requireUser();
   await authorize(user, "signing.manage");
-  const envelopes = await db.select().from(esignEnvelopes).orderBy(desc(esignEnvelopes.createdAt)).limit(1000);
+  const where = filter === "archived" ? sql`${esignEnvelopes.archivedAt} is not null` : filter === "test" ? and(eq(esignEnvelopes.isTest, true), isNull(esignEnvelopes.archivedAt)) : isNull(esignEnvelopes.archivedAt);
+  const envelopes = await db.select().from(esignEnvelopes).where(where).orderBy(desc(esignEnvelopes.createdAt)).limit(1000);
   if (envelopes.length === 0) return [];
   const counts = await db
     .select({ envelopeId: esignSigners.envelopeId, total: sql<number>`count(*)::int`, signed: sql<number>`count(*) filter (where ${esignSigners.status} = 'signed')::int` })
@@ -44,7 +48,7 @@ export async function listEnvelopes(): Promise<EnvelopeRow[]> {
     .where(inArray(esignSigners.envelopeId, envelopes.map((e) => e.id)))
     .groupBy(esignSigners.envelopeId);
   const by = new Map(counts.map((c) => [c.envelopeId, c]));
-  return envelopes.map((e) => ({ id: e.id, title: e.title, reference: envelopeReference(e.id), status: e.status as EnvelopeStatus, createdAt: e.createdAt, expiresAt: e.expiresAt, signed: by.get(e.id)?.signed ?? 0, total: by.get(e.id)?.total ?? 0 }));
+  return envelopes.map((e) => ({ isTest: e.isTest, archivedAt: e.archivedAt, id: e.id, title: e.title, reference: envelopeReference(e.id), status: e.status as EnvelopeStatus, createdAt: e.createdAt, expiresAt: e.expiresAt, signed: by.get(e.id)?.signed ?? 0, total: by.get(e.id)?.total ?? 0 }));
 }
 
 export type SignerView = { id: string; userId: string | null; outside: boolean; name: string; email: string | null; role: string | null; position: number; status: SignerStatus; signedAt: Date | null; viewedAt: Date | null; isMe: boolean };
@@ -94,6 +98,8 @@ export async function getEnvelopeDetail(envelopeId: string) {
       pages: env.pageCount,
       initialEachPage: env.initialEachPage,
       signeeDetails: env.signeeDetails,
+      isTest: env.isTest,
+      archived: env.archivedAt !== null,
       /** The signed copy holds personal details: only the contractor who typed them, HR and Super Admin can open it. */
       canOpenSealed: manager || env.signeeDetails.length === 0 || Boolean(mine?.fillsDetails),
       createdBy: names.get(env.createdBy) ?? "ERS",
@@ -190,8 +196,8 @@ export async function resolveSigneeGroup(kind: SigneeGroupKind, id: string | nul
   return accounts.map((u) => ({ userId: u.id, name: names.get(u.id) ?? u.email, email: u.email })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Public: does a fingerprint belong to a sealed ELEVATE document? Says nothing else about it beyond when it was sealed and its reference. */
+/** Public: does a fingerprint belong to a sealed ELEVATE document? A document marked as a test never verifies as genuine. Says nothing else about it beyond when it was sealed and its reference. */
 export async function verifyFingerprint(sha256: string): Promise<{ match: false } | { match: true; reference: string; sealedAt: Date }> {
-  const [row] = await db.select({ id: esignEnvelopes.id, sealedAt: esignEnvelopes.sealedAt }).from(esignEnvelopes).where(and(eq(esignEnvelopes.sealedSha256, sha256), eq(esignEnvelopes.status, "completed")));
+  const [row] = await db.select({ id: esignEnvelopes.id, sealedAt: esignEnvelopes.sealedAt }).from(esignEnvelopes).where(and(eq(esignEnvelopes.sealedSha256, sha256), eq(esignEnvelopes.status, "completed"), eq(esignEnvelopes.isTest, false)));
   return row?.sealedAt ? { match: true, reference: envelopeReference(row.id), sealedAt: row.sealedAt } : { match: false };
 }

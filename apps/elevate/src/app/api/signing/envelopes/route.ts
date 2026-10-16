@@ -135,6 +135,7 @@ export async function POST(request: Request) {
     }
     const ip = await clientIp();
     const base = {
+      isTest: field("isTest") === "true",
       signeeDetails, title: v.title, fileName, templateId: v.templateId ?? null, order: counter ? ("sequential" as const) : v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" };
     if (each) {
       // Each person gets their own copy (their own envelope, signature and sealed file): used for "everyone", a team or a client.

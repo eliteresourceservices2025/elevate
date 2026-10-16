@@ -12,7 +12,7 @@ import { formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { SIGNER_STATUS_LABELS, STATUS_LABELS } from "@/modules/signing/constants";
 import { ArchiveTemplateButton, NewTemplateForm } from "@/modules/signing/components/envelope-forms";
-import { listEnvelopes, listMySigning, listTemplates } from "@/modules/signing/queries";
+import { listEnvelopes, listMySigning, listTemplates, type EnvelopeFilter } from "@/modules/signing/queries";
 
 export const metadata: Metadata = { title: "Signing" };
 
@@ -27,7 +27,9 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
   const paging = parsePaging({ page: sp.page, size: sp.size }, 10);
 
   const mine = tab === "mine" ? await orNotFound(listMySigning()) : null;
-  const all = tab === "all" ? await orNotFound(listEnvelopes()) : null;
+  const views: { key: EnvelopeFilter; label: string }[] = [{ key: "active", label: "Active" }, { key: "test", label: "Test documents" }, { key: "archived", label: "Archived" }];
+  const view = views.find((v) => v.key === sp.view)?.key ?? "active";
+  const all = tab === "all" ? await orNotFound(listEnvelopes(view)) : null;
   const templates = tab === "templates" ? await orNotFound(listTemplates()) : null;
   const minePage = mine ? paginate(mine, paging.page, paging.pageSize) : null;
   const allPage = all ? paginate(all, paging.page, paging.pageSize) : null;
@@ -90,6 +92,7 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
                         </TableCell>
                         <TableCell>
                           <Badge variant={r.myStatus === "pending" && r.envelopeStatus === "out" ? "default" : "secondary"}>{SIGNER_STATUS_LABELS[r.myStatus]}</Badge>
+                          {r.isTest ? <Badge variant="outline" className="ml-1">Test</Badge> : null}
                           {r.signedAt ? <span className="block text-xs text-muted-foreground">{formatInZone(r.signedAt, undefined, "MMM d, yyyy h:mm a")}</span> : null}
                         </TableCell>
                         <TableCell>
@@ -108,10 +111,20 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
         </section>
       ) : null}
 
+      {tab === "all" ? (
+        <nav aria-label="Which documents" className="flex flex-wrap gap-2 text-sm">
+          {views.map((v) => (
+            <Link key={v.key} href={`/signing?tab=all&view=${v.key}`} aria-current={v.key === view ? "page" : undefined} className={cn("rounded-full border px-3 py-1", v.key === view ? "border-primary bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:text-foreground")}>
+              {v.label}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+
       {allPage && all ? (
         <section aria-label="All documents" className="space-y-2">
           {all.length === 0 ? (
-            <p className="text-muted-foreground">No documents yet. Send one with &quot;Send a document&quot;.</p>
+            <p className="text-muted-foreground">{view === "active" ? "No documents yet. Send one with \"Send a document\"." : view === "test" ? "No documents are marked as tests." : "Nothing is archived."}</p>
           ) : (
             <>
               <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
@@ -136,6 +149,8 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
                         </TableCell>
                         <TableCell>
                           <Badge variant={STATUS_VARIANT[r.status]}>{STATUS_LABELS[r.status]}</Badge>
+                          {r.isTest ? <Badge variant="outline" className="ml-1">Test</Badge> : null}
+                          {r.archivedAt ? <Badge variant="outline" className="ml-1">Archived</Badge> : null}
                         </TableCell>
                         <TableCell className="text-right">
                           {r.signed} of {r.total}
@@ -147,7 +162,7 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
                   </TableBody>
                 </Table>
               </div>
-              <PagerLinks info={allPage.info} basePath="/signing" query={{ tab: "all" }} defaultSize={10} label="documents" />
+              <PagerLinks info={allPage.info} basePath="/signing" query={{ tab: "all", view }} defaultSize={10} label="documents" />
             </>
           )}
         </section>

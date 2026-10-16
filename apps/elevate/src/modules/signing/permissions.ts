@@ -6,6 +6,8 @@ const EVERYONE = { super_admin: "own", hr_admin: "own", team_lead: "own", recrui
 
 export const signingPermissions = definePermissions({
   "signing.manage": { roles: { super_admin: "all", hr_admin: "all" } },
+  /** Permanently delete a document that was marked as a test (file, log and all). Super Admin only. */
+  "signing.delete_test": { roles: { super_admin: "all" } },
   "signing.view_own": { roles: EVERYONE },
   "signing.sign": { roles: EVERYONE },
 });

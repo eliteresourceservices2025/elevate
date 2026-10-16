@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays, addMonths, checkAnswers, dueMilestones, milestoneDate, stageOf, suggestedOverall, visibility, type Question, type ReviewState } from "./constants";
-import { launchCycleSchema, reviewTemplateSchema, submitReviewSchema } from "./validators";
+import { launchCycleSchema, reviewTemplateSchema, submitReviewSchema, waiveSchema } from "./validators";
 
 const none: ReviewState = { selfSubmittedAt: null, leadSubmittedAt: null, calibratedAt: null, sharedAt: null, acknowledgedAt: null };
 const at = new Date("2026-01-01T00:00:00Z");
@@ -108,5 +108,21 @@ describe("validators", () => {
   it("only accepts ratings from 1 to 5", () => {
     expect(submitReviewSchema.safeParse({ reviewId: id, overallRating: 6 }).success).toBe(false);
     expect(submitReviewSchema.safeParse({ reviewId: id, overallRating: "" }).success).toBe(true);
+  });
+});
+
+describe("waived reviews", () => {
+  const base: ReviewState = { selfSubmittedAt: null, leadSubmittedAt: null, calibratedAt: null, sharedAt: null, acknowledgedAt: null };
+  it("a waived review is in the waived stage whatever else was done", () => {
+    expect(stageOf({ ...base, waivedAt: new Date() })).toBe("waived");
+    expect(stageOf({ ...base, selfSubmittedAt: new Date(), leadSubmittedAt: new Date(), waivedAt: new Date() })).toBe("waived");
+    expect(stageOf({ ...base, waivedAt: null })).toBe("awaiting_self");
+  });
+  it("needs a real reason", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    expect(waiveSchema.safeParse({ reviewId: id, reason: "  " }).success).toBe(false);
+    expect(waiveSchema.safeParse({ reviewId: id, reason: "ab" }).success).toBe(false);
+    expect(waiveSchema.safeParse({ reviewId: id, reason: "On leave all quarter" }).success).toBe(true);
+    expect(waiveSchema.safeParse({ reviewId: id, reason: "x".repeat(501) }).success).toBe(false);
   });
 });

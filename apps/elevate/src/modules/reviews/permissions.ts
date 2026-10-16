@@ -12,6 +12,8 @@ export const reviewsPermissions = definePermissions({
   "reviews.manage_cycles": { roles: { super_admin: "all", hr_admin: "all" } },
   "reviews.write_self": { roles: EVERYONE_OWN },
   "reviews.write_lead": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  /** Waive a review that is not needed this time (with a reason): HR for anyone, a lead for their team. Nobody waives their own. */
+  "reviews.waive": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   "reviews.calibrate": { roles: { super_admin: "all", hr_admin: "all" } },
   "reviews.share": { roles: { super_admin: "all", hr_admin: "all" } },
   "reviews.acknowledge": { roles: EVERYONE_OWN },

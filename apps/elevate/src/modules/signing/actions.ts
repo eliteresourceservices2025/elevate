@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -11,13 +11,13 @@ import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { MAX_SIGNATURE_PNG_BYTES, MAX_SIGNATURE_PNG_SIZE, isTypedSignatureEncodable, pngSize } from "./constants";
-import { esignEnvelopes, esignSigners, esignTemplates } from "./schema";
+import { esignEnvelopes, esignEvents, esignSigners, esignTemplates } from "./schema";
 import { currentSignInMethods } from "./session";
 import { issueExternalLinks } from "./external-mail";
 import { appendEvent, endEnvelope, legalNames, recordSignature, sealEnvelope, sendDraft, sendQueuedEmailNow, voidEnvelopeTx } from "./service";
 import { openSigningDocument } from "./document";
 import { resolveSigneeGroup, type SignerChoice } from "./queries";
-import { envelopeIdSchema, reasonSchema, signSchema, signeeGroupSchema, templateIdSchema } from "./validators";
+import { archiveSchema, deleteTestSchema, envelopeIdSchema, reasonSchema, signSchema, signeeGroupSchema, templateIdSchema, testMarkSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
 const refresh = (id?: string) => {
@@ -65,6 +65,79 @@ export async function findSignees(input: unknown): Promise<ActionResult<{ people
     if (!parsed.success) return fail(first(parsed.error));
     const people = await resolveSigneeGroup(parsed.data.kind, parsed.data.id ?? null);
     return { ok: true, data: { people } };
+  });
+}
+
+/** Marks a document as a test (or removes the mark), so it can be told apart, archived, and (Super Admin) deleted. Audited. */
+export async function setEnvelopeTest(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "signing.manage");
+    const parsed = testMarkSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { envelopeId, isTest } = parsed.data;
+    await db.transaction(async (tx) => {
+      const [env] = await tx.select({ isTest: esignEnvelopes.isTest }).from(esignEnvelopes).where(eq(esignEnvelopes.id, envelopeId)).for("update");
+      if (!env) throw new ActionFailure("That document was not found.");
+      if (env.isTest === isTest) return;
+      await tx.update(esignEnvelopes).set({ isTest }).where(eq(esignEnvelopes.id, envelopeId));
+      await writeAudit({ actor, action: isTest ? "signing.mark_test" : "signing.unmark_test", targetType: "esign_envelope", targetId: envelopeId, before: { isTest: env.isTest }, after: { isTest } }, tx);
+    });
+    refresh(envelopeId);
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Hides a document from the lists (or brings it back). Nothing is deleted. A document still waiting for signatures must be voided first. */
+export async function archiveEnvelope(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "signing.manage");
+    const parsed = archiveSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { envelopeId, archived } = parsed.data;
+    await db.transaction(async (tx) => {
+      const [env] = await tx.select({ status: esignEnvelopes.status, archivedAt: esignEnvelopes.archivedAt }).from(esignEnvelopes).where(eq(esignEnvelopes.id, envelopeId)).for("update");
+      if (!env) throw new ActionFailure("That document was not found.");
+      if (archived && env.status === "out") throw new ActionFailure("This document is still waiting for signatures. Void it first, then archive it.");
+      if (Boolean(env.archivedAt) === archived) return;
+      await tx.update(esignEnvelopes).set({ archivedAt: archived ? new Date() : null, archivedBy: archived ? actor.id : null }).where(eq(esignEnvelopes.id, envelopeId));
+      await writeAudit({ actor, action: archived ? "signing.archive" : "signing.unarchive", targetType: "esign_envelope", targetId: envelopeId }, tx);
+    });
+    refresh(envelopeId);
+    return { ok: true, data: undefined };
+  });
+}
+
+/**
+ * Permanently deletes a document that was marked as a test: its file, signed copy, signers and log. Super Admin only, with a reason.
+ * A real document can never be deleted (the database refuses). The audit log keeps who deleted what and why, never the content.
+ */
+export async function deleteTestEnvelope(input: unknown): Promise<ActionResult<{ filesRemoved: boolean }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "signing.delete_test");
+    const parsed = deleteTestSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { envelopeId, reason } = parsed.data;
+    const paths: string[] = [];
+    await db.transaction(async (tx) => {
+      const [env] = await tx.select().from(esignEnvelopes).where(eq(esignEnvelopes.id, envelopeId)).for("update");
+      if (!env) throw new ActionFailure("That document was not found.");
+      if (!env.isTest) throw new ActionFailure("Only a document marked as a test can be deleted. Archive it instead.");
+      const used = await tx.execute(sql`select 1 from talent.offers where envelope_id = ${envelopeId} union all select 1 from talent.checklist_tasks where envelope_id = ${envelopeId} limit 1`);
+      if ((used as unknown as unknown[]).length > 0) throw new ActionFailure("This document belongs to an offer or an onboarding task, so it cannot be deleted. Archive it instead.");
+      const signers = await tx.select({ id: esignSigners.id }).from(esignSigners).where(eq(esignSigners.envelopeId, envelopeId));
+      paths.push(env.originalPath, ...(env.sealedPath ? [env.sealedPath] : []));
+      await tx.delete(esignEvents).where(eq(esignEvents.envelopeId, envelopeId));
+      await tx.delete(esignSigners).where(eq(esignSigners.envelopeId, envelopeId));
+      await tx.delete(esignEnvelopes).where(eq(esignEnvelopes.id, envelopeId));
+      await writeAudit({ actor, action: "signing.delete_test", targetType: "esign_envelope", targetId: envelopeId, before: { title: env.title, status: env.status, signees: signers.length }, metadata: { reason } }, tx);
+    });
+    // The files go after the rows are gone; a failure leaves an orphan file, never a row pointing at nothing, and is reported.
+    const filesRemoved = await getDocumentStorage().remove(BUCKETS.signed, paths).then(() => true, () => false);
+    refresh();
+    return { ok: true, data: { filesRemoved } };
   });
 }
 

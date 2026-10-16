@@ -62,6 +62,8 @@ export const calibrateSchema = z.object({
 });
 
 export const acknowledgeSchema = z.object({ reviewId: uuid, comment: optionalText(2000) });
+export const waiveSchema = z.object({ reviewId: uuid, reason: z.string().trim().min(3, "Give a reason for waiving it").max(500) });
+
 export const reassignSchema = z.object({ reviewId: uuid, leadUserId: uuid });
 export const earlySettingsSchema = z.object({ enabled: z.boolean(), templateId: z.preprocess(blankToUndefined, uuid.optional()) });
 

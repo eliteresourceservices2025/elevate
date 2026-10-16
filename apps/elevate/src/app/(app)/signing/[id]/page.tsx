@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { formatInZone, SECONDARY_TIMEZONE } from "@/lib/time";
@@ -15,7 +16,7 @@ export const metadata: Metadata = { title: "Document" };
 const STATUS_VARIANT = { draft: "outline", out: "default", completed: "secondary", declined: "destructive", voided: "outline", expired: "outline" } as const;
 
 export default async function EnvelopePage({ params }: PageProps<"/signing/[id]">) {
-  await requireUser();
+  const user = await requireUser();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const d = await orNotFound(getEnvelopeDetail(id));
@@ -32,6 +33,8 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
         <h1 className="mt-2 flex flex-wrap items-center gap-3 text-2xl font-bold">
           {e.title}
           <Badge variant={STATUS_VARIANT[e.status]}>{STATUS_LABELS[e.status]}</Badge>
+          {e.isTest ? <Badge variant="outline">Test</Badge> : null}
+          {e.archived ? <Badge variant="outline">Archived</Badge> : null}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {e.reference} · {e.pages} {e.pages === 1 ? "page" : "pages"} · sent by {e.createdBy}
@@ -95,7 +98,7 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
             <div className="flex flex-wrap items-center gap-2">
               {e.status === "completed" ? <p className="text-sm text-muted-foreground">The signed copy is above.</p> : <EnvelopeDocument envelopeId={e.id} title="The original document" openLabel="View the original" />}
             </div>
-            <ManageButtons envelopeId={e.id} status={e.status} sealing={e.sealing} />
+            <ManageButtons envelopeId={e.id} title={e.title} status={e.status} sealing={e.sealing} isTest={e.isTest} archived={e.archived} canDelete={scopeFor(user, "signing.delete_test") !== null} />
             {e.originalSha256 ? <p className="break-all font-mono text-xs text-muted-foreground">Original SHA-256: {e.originalSha256}</p> : null}
           </section>
 

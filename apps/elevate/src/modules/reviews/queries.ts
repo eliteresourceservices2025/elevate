@@ -54,8 +54,8 @@ export async function listReviews(): Promise<ReviewRow[]> {
     .map((x) => {
       const stage = stageOf(x.r);
       const due = dueFor(stage, x.c);
-      const open = stage !== "shared" && stage !== "acknowledged" && stage !== "ready_to_share";
-      return { id: x.r.id, employeeId: x.r.employeeId, name: nameOf(x), cycleId: x.c.id, cycleName: x.c.name, milestone: x.r.milestone, stage, dueOn: due, overdue: open && due < t, mine: x.userId === user.id, toWrite: x.r.leadUserId === user.id && !x.r.leadSubmittedAt };
+      const open = stage !== "shared" && stage !== "acknowledged" && stage !== "ready_to_share" && stage !== "waived";
+      return { id: x.r.id, employeeId: x.r.employeeId, name: nameOf(x), cycleId: x.c.id, cycleName: x.c.name, milestone: x.r.milestone, stage, dueOn: due, overdue: open && due < t, mine: x.userId === user.id, toWrite: x.r.leadUserId === user.id && !x.r.leadSubmittedAt && !x.r.waivedAt };
     });
 }
 
@@ -89,7 +89,7 @@ export async function getCycle(cycleId: string) {
   const list: ReviewRow[] = rows.map((x) => {
     const stage = stageOf(x.r);
     const due = dueFor(stage, c);
-    return { id: x.r.id, employeeId: x.r.employeeId, name: nameOf(x), cycleId: c.id, cycleName: c.name, milestone: x.r.milestone, stage, dueOn: due, overdue: !["shared", "acknowledged", "ready_to_share"].includes(stage) && due < t, mine: x.userId === user.id, toWrite: false };
+    return { id: x.r.id, employeeId: x.r.employeeId, name: nameOf(x), cycleId: c.id, cycleName: c.name, milestone: x.r.milestone, stage, dueOn: due, overdue: !["shared", "acknowledged", "ready_to_share", "waived"].includes(stage) && due < t, mine: x.userId === user.id, toWrite: false };
   });
   return { cycle: { id: c.id, name: c.name, type: c.type, status: c.status, selfDueOn: c.selfDueOn, leadDueOn: c.leadDueOn, calibrateDueOn: c.calibrateDueOn }, reviews: list };
 }
@@ -112,6 +112,12 @@ export type ReviewDetail = {
   canShare: boolean;
   canAcknowledge: boolean;
   canReassign: boolean;
+  /** HR or the person's lead may waive it (not their own), before it is shared; and bring a waived one back. */
+  canWaive: boolean;
+  canRestore: boolean;
+  /** Why it was waived: shown to HR and the leads, never to the person. */
+  waive: { reason: string; at: Date; byName: string | null } | null;
+  waived: boolean;
   dues: { self: string; lead: string; calibrate: string };
   self: { answers: Answers; overallRating: number | null; comments: string | null; submittedAt: Date } | null;
   lead: { answers: Answers; overallRating: number | null; comments: string | null; submittedAt: Date } | null;
@@ -162,8 +168,20 @@ export async function getReview(reviewId: string): Promise<ReviewDetail> {
     lead = { ...lead, answers: stripped, overallRating: null };
   }
 
-  const canWriteLead = viewer !== "person" && !row.r.leadSubmittedAt && row.c.status === "open" && (viewScope === "all" ? true : isLead);
-  const canCalibrate = isHr && scopeFor(user, "reviews.calibrate") === "all" && Boolean(row.r.leadSubmittedAt) && !row.r.sharedAt;
+  const waived = Boolean(row.r.waivedAt);
+  const canWriteLead = viewer !== "person" && !waived && !row.r.leadSubmittedAt && row.c.status === "open" && (viewScope === "all" ? true : isLead);
+  const canCalibrate = isHr && !waived && scopeFor(user, "reviews.calibrate") === "all" && Boolean(row.r.leadSubmittedAt) && !row.r.sharedAt;
+  const waiveScope = scopeFor(user, "reviews.waive");
+  const mayWaive = !isPerson && row.c.status === "open" && (waiveScope === "all" || (waiveScope === "team" && isLead));
+  let waive: ReviewDetail["waive"] = null;
+  if (waived && viewer !== "person" && row.r.waiveReason && row.r.waivedAt) {
+    let byName: string | null = null;
+    if (row.r.waivedBy) {
+      const [w] = await db.select({ first: employees.legalFirstName, last: employees.legalLastName, email: users.email }).from(users).leftJoin(employees, eq(employees.userId, users.id)).where(eq(users.id, row.r.waivedBy));
+      byName = w ? (w.first && w.last ? `${w.first} ${w.last}` : w.email) : null;
+    }
+    waive = { reason: row.r.waiveReason, at: row.r.waivedAt, byName };
+  }
   let leadName: string | null = null;
   if (row.r.leadUserId) {
     const [l] = await db.select({ first: employees.legalFirstName, last: employees.legalLastName, email: users.email }).from(users).leftJoin(employees, eq(employees.userId, users.id)).where(eq(users.id, row.r.leadUserId));
@@ -186,12 +204,16 @@ export async function getReview(reviewId: string): Promise<ReviewDetail> {
     stage,
     viewer,
     isPerson,
-    canWriteSelf: isPerson && !row.r.selfSubmittedAt && row.c.status === "open",
+    canWriteSelf: isPerson && !waived && !row.r.selfSubmittedAt && row.c.status === "open",
     canWriteLead,
     canCalibrate,
     canShare: canCalibrate && Boolean(row.r.calibratedAt) && scopeFor(user, "reviews.share") === "all",
     canAcknowledge: isPerson && Boolean(row.r.sharedAt) && !row.r.acknowledgedAt,
-    canReassign,
+    canReassign: canReassign && !waived,
+    canWaive: mayWaive && !waived && !row.r.sharedAt,
+    canRestore: mayWaive && waived && (waiveScope === "all" || row.r.waivedBy === user.id),
+    waive,
+    waived,
     dues: { self: row.c.selfDueOn, lead: row.c.leadDueOn, calibrate: row.c.calibrateDueOn },
     self: pick("self", see.self),
     lead,
@@ -242,7 +264,8 @@ export async function getReviewSummary() {
     out.push({
       id: c.id,
       name: c.name,
-      total: rows.length,
+      total: rows.filter((r) => !r.waivedAt).length,
+      waived: rows.filter((r) => r.waivedAt).length,
       shared: shared.length,
       acknowledged: rows.filter((r) => r.acknowledgedAt).length,
       // An average of a handful of people points at individuals, so it is hidden below the minimum group size
