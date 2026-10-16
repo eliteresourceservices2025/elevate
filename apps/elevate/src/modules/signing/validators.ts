@@ -15,7 +15,7 @@ export const signerInputSchema = z.object({
 export const createEnvelopeSchema = z.object({
   title: text(160).min(3, "Give the document a title"),
   templateId: z.preprocess(blankToUndefined, uuid.optional()),
-  signers: z.array(signerInputSchema).min(1, "Add at least one signer").max(MAX_SIGNERS, `At most ${MAX_SIGNERS} signers`),
+  signers: z.array(signerInputSchema).min(1, "Add at least one signee").max(MAX_SIGNERS, `At most ${MAX_SIGNERS} signees`),
   order: z.enum(SIGNING_ORDERS).default("sequential"),
   expiryDays: z.coerce.number().int().min(1).max(MAX_EXPIRY_DAYS).default(14),
   send: z.boolean().default(true),
@@ -28,7 +28,7 @@ export const composedBodySchema = z.string().min(1, "Write the document").max(MA
 export const templateSchema = z.object({
   name: text(120).min(3, "Give the template a name"),
   description: z.preprocess(blankToUndefined, text(500).optional()),
-  roles: z.array(text(60).min(1)).min(1, "Name at least one signer role").max(MAX_SIGNERS),
+  roles: z.array(text(60).min(1)).min(1, "Name at least one signee role").max(MAX_SIGNERS),
 });
 
 export const envelopeIdSchema = z.object({ envelopeId: uuid });

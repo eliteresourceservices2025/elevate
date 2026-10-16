@@ -170,7 +170,7 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
         {picked.length < MAX_SIGNERS ? (
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-56 flex-1">
-              <SelectField id="env-add" label="Add a signer" value={add} onChange={(e) => setAdd(e.target.value)}>
+              <SelectField id="env-add" label="Add a signee" value={add} onChange={(e) => setAdd(e.target.value)}>
                 <option value="">Choose a person</option>
                 {people
                   .filter((x) => !taken.has(x.userId))
@@ -263,7 +263,7 @@ export function NewTemplateForm() {
       <h3 className="font-semibold">Save a template</h3>
       <div className="grid gap-3 sm:grid-cols-2">
         <TextField id="tpl-name" label="Template name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required />
-        <TextField id="tpl-roles" label="Signer roles, in order, separated by commas" value={roles} onChange={(e) => setRoles(e.target.value)} />
+        <TextField id="tpl-roles" label="Signee roles, in order, separated by commas" value={roles} onChange={(e) => setRoles(e.target.value)} />
       </div>
       <TextField id="tpl-desc" label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} />
       <div className="space-y-1.5">

@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   try {
     signers = JSON.parse(field("signers") ?? "[]");
   } catch {
-    return json({ ok: false, error: "Check the signers and try again." }, 400);
+    return json({ ok: false, error: "Check the signees and try again." }, 400);
   }
   const parsed = createEnvelopeSchema.safeParse({ title: field("title"), templateId: field("templateId"), signers, order: field("order"), expiryDays: field("expiryDays"), send: field("send") !== "false" });
   if (!parsed.success) return json({ ok: false, error: parsed.error.issues[0]?.message ?? "Check the form and try again." }, 400);

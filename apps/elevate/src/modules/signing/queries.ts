@@ -74,7 +74,7 @@ export async function getEnvelopeDetail(envelopeId: string) {
   let chainOk: boolean | null = null;
   if (manager) {
     const rows = await db.select().from(esignEvents).where(eq(esignEvents.envelopeId, envelopeId)).orderBy(asc(esignEvents.seq));
-    events = rows.map((e) => ({ seq: e.seq, type: e.type, at: e.at, actor: e.actorUserId ? (emails.get(e.actorUserId) ?? names.get(e.actorUserId) ?? null) : e.signerId ? `${signerName.get(e.signerId) ?? "Signer"} (outside signer)` : null, ip: e.ip }));
+    events = rows.map((e) => ({ seq: e.seq, type: e.type, at: e.at, actor: e.actorUserId ? (emails.get(e.actorUserId) ?? names.get(e.actorUserId) ?? null) : e.signerId ? `${signerName.get(e.signerId) ?? "Signee"} (outside signee)` : null, ip: e.ip }));
     const stored: StoredEvent[] = rows.map((e) => ({ envelopeId: e.envelopeId, seq: e.seq, type: e.type, actorUserId: e.actorUserId, signerId: e.signerId, at: e.at.toISOString(), ip: e.ip, detail: e.detail, prevHash: e.prevHash, hash: e.hash }));
     chainOk = verifyChain(stored).ok;
   }

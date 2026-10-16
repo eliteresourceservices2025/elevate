@@ -201,9 +201,9 @@ export async function declineEnvelope(input: unknown): Promise<ActionResult> {
       if (!env || !row || env.status !== "out") throw new ActionFailure("This document is no longer waiting for signatures.");
       if (row.status !== "pending") throw new ActionFailure(row.status === "signed" ? "You already signed this." : "It is not your turn yet.");
       await tx.update(esignSigners).set({ status: "declined", declineReason: reason }).where(eq(esignSigners.id, row.id));
-      await endEnvelope(tx, envelopeId, "declined", "A signer declined", row.id);
+      await endEnvelope(tx, envelopeId, "declined", "A signee declined", row.id);
       await appendEvent(tx, envelopeId, { type: "declined", actorUserId: actor.id, signerId: row.id, ip: ip === "unknown" ? null : ip, detail: { reason } });
-      await notify(tx, [...new Set([env.createdBy, ...hr])].map((userId) => ({ userId, kind: "signing.declined", title: "A signer declined to sign", body: "Open Signing to see the reason.", link: `/signing/${envelopeId}` })));
+      await notify(tx, [...new Set([env.createdBy, ...hr])].map((userId) => ({ userId, kind: "signing.declined", title: "A signee declined to sign", body: "Open Signing to see the reason.", link: `/signing/${envelopeId}` })));
       await writeAudit({ actor, action: "signing.decline", targetType: "esign_envelope", targetId: envelopeId, after: { reason } }, tx);
     });
     refresh(envelopeId);

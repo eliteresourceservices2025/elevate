@@ -106,7 +106,7 @@ export async function sendDraft(tx: Tx, actor: Actor, envelopeId: string, ip: st
   if (!env) throw new ActionFailure("That document was not found.");
   if (env.status !== "draft") throw new ActionFailure("It was already sent.");
   const signers = await tx.select().from(esignSigners).where(eq(esignSigners.envelopeId, envelopeId));
-  if (signers.length === 0) throw new ActionFailure("Add at least one signer first.");
+  if (signers.length === 0) throw new ActionFailure("Add at least one signee first.");
 
   const now = new Date();
   // A draft kept for a while gets a fresh window from the day it is sent.
@@ -134,16 +134,16 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
   } catch (error) {
     throw new ActionFailure(error instanceof Error && /pages/.test(error.message) ? error.message : "That PDF cannot be used. Password-protected or damaged files are refused.");
   }
-  if (input.signers.length === 0 || input.signers.length > MAX_SIGNERS) throw new ActionFailure(`Add between 1 and ${MAX_SIGNERS} signers.`);
-  if (input.signers.some((s) => Boolean(s.userId) === Boolean(s.external))) throw new ActionFailure("Each signer is either an ELEVATE user or an outside person with a name and email.");
+  if (input.signers.length === 0 || input.signers.length > MAX_SIGNERS) throw new ActionFailure(`Add between 1 and ${MAX_SIGNERS} signees.`);
+  if (input.signers.some((s) => Boolean(s.userId) === Boolean(s.external))) throw new ActionFailure("Each signee is either an ELEVATE user or an outside person with a name and email.");
   const ids = input.signers.flatMap((s) => (s.userId ? [s.userId] : []));
   const outside = input.signers.flatMap((s) => (s.external ? [s.external.email.trim().toLowerCase()] : []));
   if (input.initialEachPage && input.signers.some((s) => s.external)) throw new ActionFailure("Initials on each page are only available when everyone signing has an ELEVATE account.");
   if (new Set(ids).size !== ids.length || new Set(outside).size !== outside.length) throw new ActionFailure("Each person can only be added once.");
-  if (input.signers.some((s) => s.external && (s.external.name.trim().length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.external.email.trim())))) throw new ActionFailure("An outside signer needs a name and a valid email.");
+  if (input.signers.some((s) => s.external && (s.external.name.trim().length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.external.email.trim())))) throw new ActionFailure("An outside signee needs a name and a valid email.");
   if (ids.length) {
     const real = await db.select({ id: users.id }).from(users).where(and(inArray(users.id, ids), isNull(users.archivedAt)));
-    if (real.length !== ids.length) throw new ActionFailure("One of the signers does not have an active ELEVATE account.");
+    if (real.length !== ids.length) throw new ActionFailure("One of the signees does not have an active ELEVATE account.");
   }
 
   const sha = sha256Hex(input.pdf);

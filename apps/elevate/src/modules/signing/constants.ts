@@ -16,7 +16,7 @@ export const STATUS_LABELS: Record<EnvelopeStatus, string> = {
 
 export const SIGNER_STATUSES = ["waiting", "pending", "signed", "declined", "cancelled"] as const;
 export type SignerStatus = (typeof SIGNER_STATUSES)[number];
-export const SIGNER_STATUS_LABELS: Record<SignerStatus, string> = { waiting: "Waiting for earlier signers", pending: "Needs to sign", signed: "Signed", declined: "Declined", cancelled: "Cancelled" };
+export const SIGNER_STATUS_LABELS: Record<SignerStatus, string> = { waiting: "Waiting for earlier signees", pending: "Needs to sign", signed: "Signed", declined: "Declined", cancelled: "Cancelled" };
 
 export const SIGNING_ORDERS = ["sequential", "parallel"] as const;
 export type SigningOrder = (typeof SIGNING_ORDERS)[number];
