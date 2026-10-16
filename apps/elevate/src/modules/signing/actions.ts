@@ -167,8 +167,8 @@ export async function signEnvelope(input: unknown): Promise<ActionResult> {
     const methods = await currentSignInMethods();
     const names = await legalNames(db, [actor.id]);
     const outcome = await db.transaction(async (tx) => {
-      const result = await recordSignature(tx, { envelopeId: v.envelopeId, signerId: mine.id, kind: v.kind, typedText: v.typedText ?? null, png, ip: ip === "unknown" ? null : ip, methods, signedName: names.get(actor.id) ?? actor.email, actorUserId: actor.id });
-      await writeAudit({ actor, action: "signing.sign", targetType: "esign_envelope", targetId: v.envelopeId, after: { kind: v.kind } }, tx);
+      const result = await recordSignature(tx, { envelopeId: v.envelopeId, signerId: mine.id, kind: v.kind, typedText: v.typedText ?? null, png, ip: ip === "unknown" ? null : ip, methods, signedName: names.get(actor.id) ?? actor.email, actorUserId: actor.id, initials: v.initials ? { text: v.initials, pages: v.initialedPages ?? [] } : null });
+      await writeAudit({ actor, action: "signing.sign", targetType: "esign_envelope", targetId: v.envelopeId, after: { kind: v.kind, initialed: Boolean(v.initials) } }, tx);
       return result;
     });
     const ready = outcome.ready;

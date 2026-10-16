@@ -23,6 +23,8 @@ export type SealSigner = {
   typedText: string | null;
   png: Uint8Array | null;
   consentVersion: string;
+  /** Typed initials stamped at the foot of every original page, or null when the document did not ask for them. */
+  initials?: string | null;
 };
 
 export type SealEvent = { seq: number; type: string; at: Date; actor: string | null; ip: string | null };
@@ -107,6 +109,21 @@ export async function sealPdf(input: SealInput): Promise<Uint8Array> {
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const script = await doc.embedFont(StandardFonts.TimesRomanItalic);
 
+  // ---- Initials on every original page --------------------------------------------------------------------------------
+  // Stamped on the sealed copy only (the original file is never edited): one small slot per signer along the bottom edge.
+  const initialed = input.signers.filter((s) => s.initials);
+  if (initialed.length) {
+    const slot = 46;
+    for (const page of doc.getPages()) {
+      const { width } = page.getSize();
+      initialed.forEach((s, i) => {
+        const x = width - 36 - (i + 1) * slot;
+        page.drawText(latin(s.initials ?? "").slice(0, 5), { x, y: 14, size: 10, font: script, color: INK });
+        page.drawLine({ start: { x: x - 2, y: 11 }, end: { x: x + slot - 8, y: 11 }, thickness: 0.4, color: MUTED });
+      });
+    }
+  }
+
   // ---- Signature page -------------------------------------------------------------------------------------------------
   const sig = new Writer(doc, regular, bold, `${input.reference}`);
   sig.text("Signatures", { size: 20, bold: true, gap: 2 });
@@ -160,7 +177,8 @@ export async function sealPdf(input: SealInput): Promise<Uint8Array> {
     cert.text(s.email, { indent: 10, color: MUTED });
     cert.text(`Signed ${utc(s.signedAt)} | ${manila(s.signedAt)}`, { indent: 10 });
     cert.text(`IP address ${s.ip ?? "not recorded"} | Signed in with ${s.mfa ?? "MFA (method not recorded)"} | ${s.kind === "drawn" ? "Drew" : "Typed"} signature`, { indent: 10 });
-    cert.text(`Agreed to sign electronically (consent wording version ${s.consentVersion})`, { indent: 10, gap: 6 });
+    cert.text(`Agreed to sign electronically (consent wording version ${s.consentVersion})`, { indent: 10, gap: s.initials ? 0 : 6 });
+    if (s.initials) cert.text(`Initialed every page of the document as "${s.initials}"`, { indent: 10, gap: 6 });
   }
   cert.rule();
 

@@ -8,7 +8,8 @@ import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { MAX_PDF_BYTES } from "@/modules/signing/constants";
 import { esignTemplates } from "@/modules/signing/schema";
 import { createEnvelope } from "@/modules/signing/service";
-import { createEnvelopeSchema } from "@/modules/signing/validators";
+import { renderComposedPdf } from "@/modules/signing/compose";
+import { composedBodySchema, createEnvelopeSchema } from "@/modules/signing/validators";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -51,7 +52,14 @@ export async function POST(request: Request) {
   try {
     let pdf: Uint8Array | null = null;
     let fileName = "document.pdf";
-    if (v.templateId) {
+    const content = field("content");
+    if (content !== undefined && content.trim() !== "") {
+      // Written in the editor: rendered to a PDF here, then it is an ordinary envelope.
+      const body = composedBodySchema.safeParse(content);
+      if (!body.success) return json({ ok: false, error: body.error.issues[0]?.message ?? "Check the document and try again." }, 400);
+      pdf = await renderComposedPdf(v.title, body.data);
+      fileName = `${v.title.replace(/[^A-Za-z0-9 _-]+/g, "").trim().slice(0, 60) || "document"}.pdf`;
+    } else if (v.templateId) {
       const [t] = await db.select().from(esignTemplates).where(eq(esignTemplates.id, v.templateId));
       if (!t || t.archivedAt) return json({ ok: false, error: "That template was not found." }, 400);
       pdf = await getDocumentStorage().read(BUCKETS.signed, t.filePath);
@@ -64,7 +72,7 @@ export async function POST(request: Request) {
       fileName = upload.name || fileName;
     }
     const ip = await clientIp();
-    const { id } = await createEnvelope(actor, { title: v.title, pdf, fileName, templateId: v.templateId ?? null, signers: v.signers, order: v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip });
+    const { id } = await createEnvelope(actor, { title: v.title, pdf, fileName, templateId: v.templateId ?? null, signers: v.signers, order: v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" });
     revalidatePath("/signing");
     return json({ ok: true, id });
   } catch (error) {

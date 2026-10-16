@@ -72,6 +72,6 @@ function renderBlock(b: RichBlock, i: number): ReactNode {
 }
 
 /** Renders announcement and policy text. Safe by construction: see src/lib/markdown.ts. */
-export function Markdown({ source }: { source: string }) {
-  return <div className="space-y-3 text-sm leading-relaxed">{parseRichMarkdown(source).map(renderBlock)}</div>;
+export function Markdown({ source, maxLength }: { source: string; maxLength?: number }) {
+  return <div className="space-y-3 text-sm leading-relaxed">{parseRichMarkdown(source, maxLength).map(renderBlock)}</div>;
 }

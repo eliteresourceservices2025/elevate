@@ -55,7 +55,7 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
       {d.canSign && me ? (
         <section aria-label="Sign" className="space-y-3 rounded-xl border bg-card p-4">
           <h2 className="text-lg font-semibold">Your signature is needed</h2>
-          <SignPanel envelopeId={e.id} viewed={d.mine?.viewed ?? false} defaultName={me.name} />
+          <SignPanel envelopeId={e.id} viewed={d.mine?.viewed ?? false} defaultName={me.name} initialPages={e.initialEachPage ? e.pages : null} />
         </section>
       ) : d.mine?.status === "waiting" && e.status === "out" ? (
         <p className="rounded-lg border bg-muted/40 p-3 text-sm">Others sign before you. You will be notified when it is your turn.</p>

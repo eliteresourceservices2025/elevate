@@ -1,7 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { GENESIS_HASH, computeEventHash, sha256Hex, verifyChain, type ChainFields, type StoredEvent } from "./chain";
-import { allSigned, envelopeReference, isPdf, isTypedSignatureEncodable, pngSize, reminderDue, signersToActivate } from "./constants";
+import { allSigned, envelopeReference, initialedAllPages, isPdf, isTypedSignatureEncodable, isValidInitials, normalizeTypography, pngSize, reminderDue, signersToActivate, suggestInitials } from "./constants";
 import { readPdfInfo, sealPdf, type SealInput } from "./seal";
 
 async function samplePdf(pages = 2): Promise<Uint8Array> {
@@ -135,5 +135,36 @@ describe("sealing", () => {
   it("reads a PDF's page count and refuses junk", async () => {
     expect(await readPdfInfo(await samplePdf(3))).toEqual({ pages: 3 });
     await expect(readPdfInfo(new TextEncoder().encode("not a pdf at all, really"))).rejects.toThrow();
+  });
+});
+
+describe("initials on each page", () => {
+  it("accepts 2 to 5 letters and refuses digits, symbols and other alphabets", () => {
+    for (const ok of ["MS", "ms", "A.B.", "José"]) expect(isValidInitials(ok)).toBe(true);
+    for (const bad of ["", "M", "ABCDEF", "M5", "M$", "山田"]) expect(isValidInitials(bad)).toBe(false);
+  });
+  it("suggests initials from a name", () => {
+    expect(suggestInitials("Maria Santos")).toBe("MS");
+    expect(suggestInitials("Maria Cristina Dela Cruz")).toBe("MC");
+    expect(suggestInitials("Ana")).toBe("AN");
+  });
+  it("needs exactly every page, once", () => {
+    expect(initialedAllPages([1, 2, 3], 3)).toBe(true);
+    expect(initialedAllPages([3, 1, 2], 3)).toBe(true);
+    expect(initialedAllPages([1, 2], 3)).toBe(false);
+    expect(initialedAllPages([1, 1, 2], 3)).toBe(false);
+    expect(initialedAllPages([1, 2, 4], 3)).toBe(false);
+    expect(initialedAllPages([], 0)).toBe(true);
+  });
+  it("turns Word punctuation into what the PDF font can draw", () => {
+    expect(normalizeTypography("It\u2019s \u201cdone\u201d \u2014 really\u2026 \u2022 item\u00a0x")).toBe("It's \"done\" - really... - item x");
+  });
+  it("stamps initials on every original page without changing the page count", async () => {
+    const base = await samplePdf(3);
+    const signers = [{ name: "Ana Reyes", email: "ana@example.com", role: null, signedAt: new Date(), ip: null, mfa: null, kind: "typed" as const, typedText: "Ana Reyes", png: null, consentVersion: "2026-10", initials: "AR" }];
+    const plain = await sealPdf({ original: base, title: "T", reference: "ES-1", originalSha256: "ab".repeat(32), createdBy: "hr", signers: signers.map((s) => ({ ...s, initials: null })), events: [], sealedAt: new Date("2026-10-02T00:00:00Z") });
+    const stamped = await sealPdf({ original: base, title: "T", reference: "ES-1", originalSha256: "ab".repeat(32), createdBy: "hr", signers, events: [], sealedAt: new Date("2026-10-02T00:00:00Z") });
+    expect((await PDFDocument.load(stamped)).getPageCount()).toBe((await PDFDocument.load(plain)).getPageCount());
+    expect(stamped.length).toBeGreaterThan(plain.length);
   });
 });

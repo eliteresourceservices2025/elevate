@@ -127,17 +127,17 @@ export function parseInline(src: string, depth = 0): Inline[] {
 }
 
 /** Headings (#, ##, ###), bullet and numbered lists, quotes and paragraphs. Blank lines separate blocks. */
-export function parseMarkdown(src: string): Block[] {
-  return parse(src, false) as Block[];
+export function parseMarkdown(src: string, maxLength = MARKDOWN_MAX_LENGTH): Block[] {
+  return parse(src, false, maxLength) as Block[];
 }
 
 /** The same, plus stored pictures: a line of its own, ![description](file:<id>). */
-export function parseRichMarkdown(src: string): RichBlock[] {
-  return parse(src, true);
+export function parseRichMarkdown(src: string, maxLength = MARKDOWN_MAX_LENGTH): RichBlock[] {
+  return parse(src, true, maxLength);
 }
 
-function parse(src: string, images: boolean): RichBlock[] {
-  const lines = src.slice(0, MARKDOWN_MAX_LENGTH).replace(/\r\n?/g, "\n").split("\n");
+function parse(src: string, images: boolean, maxLength = MARKDOWN_MAX_LENGTH): RichBlock[] {
+  const lines = src.slice(0, maxLength).replace(/\r\n?/g, "\n").split("\n");
   const blocks: RichBlock[] = [];
   let para: string[] = [];
   let list: { ordered: boolean; items: string[] } | null = null;
