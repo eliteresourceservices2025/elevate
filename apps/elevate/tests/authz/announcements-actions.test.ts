@@ -33,6 +33,7 @@ const post = { title: "Holiday schedule", body: "Office closed on the 25th.", au
 const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: string }>; allowed: RoleSlug[] }[] = [
   { name: "createAnnouncement", call: () => actions.createAnnouncement(post), allowed: HR },
   { name: "updateAnnouncement", call: () => actions.updateAnnouncement({ announcementId: ID, title: "Holiday schedule", body: "Updated", pinned: false }), allowed: HR },
+  { name: "deleteAnnouncement", call: () => actions.deleteAnnouncement({ announcementId: ID }), allowed: HR },
   { name: "archiveAnnouncement", call: () => actions.archiveAnnouncement({ announcementId: ID }), allowed: HR },
   { name: "acknowledge (announcement)", call: () => actions.acknowledge({ kind: "announcement", id: ID }), allowed: EVERYONE },
   { name: "acknowledge (policy version)", call: () => actions.acknowledge({ kind: "policy_version", id: ID }), allowed: EVERYONE },

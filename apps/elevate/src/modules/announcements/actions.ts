@@ -18,7 +18,7 @@ import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { PLACEHOLDER_MARK } from "./constants";
 import { deleteUnusedPaths, listAnnouncementFiles, removeVersionFiles, syncContentFiles } from "./content-files";
-import { announcementRecipients, announcementTeams, announcements, acknowledgments, policies, policyVersions } from "./schema";
+import { announcementRecipients, announcementTeams, announcements, acknowledgments, contentFiles, policies, policyVersions } from "./schema";
 import { ackStatus, activeUserIds, audienceEmployees, pendingAcknowledgments, queueAckEmails, remindPending } from "./service";
 import {
   acknowledgeSchema,
@@ -182,8 +182,46 @@ export async function archiveAnnouncement(input: unknown): Promise<ActionResult>
         .where(and(eq(announcements.id, parsed.data.announcementId), isNull(announcements.archivedAt)))
         .returning({ id: announcements.id });
       if (archived.length === 0) throw new ActionFailure("That announcement was not found.");
+      await tx.execute(sql`delete from docs.popups where announcement_id = ${parsed.data.announcementId}::uuid`);
       await writeAudit({ actor, action: "announcement.archive", targetType: "announcement", targetId: parsed.data.announcementId }, tx);
     });
+    refresh();
+    return { ok: true, data: undefined };
+  });
+}
+
+/**
+ * Permanently removes an announcement posted by mistake. Allowed only while nobody has acknowledged it: an acknowledgment is a
+ * record that must be kept (the database refuses to change one), so an announcement people already acknowledged is archived instead.
+ * Takes its recipients, team choices, pictures and files, reminders and pop-up with it. The audit entry holds the id and counts, never the text.
+ */
+export async function deleteAnnouncement(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "announcements.delete");
+    const parsed = announcementIdSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD);
+    const id = parsed.data.announcementId;
+
+    const paths = await db.transaction(async (tx) => {
+      const [a] = await tx.select({ id: announcements.id }).from(announcements).where(eq(announcements.id, id)).limit(1).for("update");
+      if (!a) throw new ActionFailure("That announcement was not found.");
+      const [{ acked }] = await tx.select({ acked: sql<number>`count(*)::int` }).from(acknowledgments).where(eq(acknowledgments.announcementId, id));
+      if (acked > 0) throw new ActionFailure("People have already acknowledged this, and those records are kept. Archive it instead.");
+      const [{ recipients }] = await tx.select({ recipients: sql<number>`count(*)::int` }).from(announcementRecipients).where(eq(announcementRecipients.announcementId, id));
+      const files = await tx.select({ id: contentFiles.id, path: contentFiles.storagePath }).from(contentFiles).where(eq(contentFiles.announcementId, id));
+      await tx.execute(sql`delete from docs.popup_dismissals where announcement_id = ${id}::uuid`);
+      await tx.execute(sql`delete from docs.popups where announcement_id = ${id}::uuid`);
+      await tx.execute(sql`delete from docs.acknowledgment_reminders where announcement_id = ${id}::uuid`);
+      if (files.length) await tx.delete(contentFiles).where(inArray(contentFiles.id, files.map((f) => f.id)));
+      await tx.delete(announcementRecipients).where(eq(announcementRecipients.announcementId, id));
+      await tx.delete(announcementTeams).where(eq(announcementTeams.announcementId, id));
+      await tx.delete(announcements).where(eq(announcements.id, id));
+      await writeAudit({ actor, action: "announcement.delete", targetType: "announcement", targetId: id, metadata: { recipients, files: files.length } }, tx);
+      return files.map((f) => f.path);
+    });
+    await deleteUnusedPaths(paths);
     refresh();
     return { ok: true, data: undefined };
   });
@@ -449,10 +487,12 @@ export async function archivePolicy(input: unknown): Promise<ActionResult> {
       const [p] = await tx.select({ id: policies.id, kind: policies.kind }).from(policies).where(and(eq(policies.id, policyId), isNull(policies.archivedAt))).limit(1);
       if (!p) throw new ActionFailure("That policy was not found.");
       if (p.kind !== "general") throw new ActionFailure("The privacy notice and the monitoring policy cannot be removed. Edit their text instead.");
+      // A published policy can be archived too: it leaves the lists, the acknowledgment banner and the pop-up queue, while its versions and
+      // everyone's acknowledgments stay in the record (they are frozen, and the database keeps them).
       const [published] = await tx.select({ id: policyVersions.id }).from(policyVersions).where(and(eq(policyVersions.policyId, policyId), eq(policyVersions.status, "published"))).limit(1);
-      if (published) throw new ActionFailure("A published policy cannot be removed.");
       await tx.update(policies).set({ archivedAt: new Date() }).where(eq(policies.id, policyId));
-      await writeAudit({ actor, action: "policy.archive", targetType: "policy", targetId: policyId }, tx);
+      await tx.execute(sql`delete from docs.popups where policy_id = ${policyId}::uuid`);
+      await writeAudit({ actor, action: "policy.archive", targetType: "policy", targetId: policyId, metadata: { wasPublished: Boolean(published) } }, tx);
     });
     refresh();
     return { ok: true, data: undefined };

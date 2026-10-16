@@ -6,11 +6,13 @@ import { Markdown } from "@/components/markdown";
 import { ContentFileList } from "@/modules/announcements/components/content-file-list";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { can } from "@/lib/authz";
+import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { DownloadButton } from "@/modules/documents/components/document-list";
 import { AckedBadge, DueBadge, StatusTable } from "@/modules/announcements/components/ack-display";
-import { AcknowledgeButton, ArchiveAnnouncementButton, StatusActions } from "@/modules/announcements/components/ack-controls";
+import { AcknowledgeButton, ArchiveAnnouncementButton, DeleteAnnouncementButton, StatusActions } from "@/modules/announcements/components/ack-controls";
 import { PopupControl } from "@/modules/announcements/components/popup-admin";
 import { getPopupFor } from "@/modules/announcements/popup-queries";
 import { getAckStatus, getAnnouncement } from "@/modules/announcements/queries";
@@ -19,10 +21,12 @@ import { todayInZone } from "@/modules/org/service";
 export const metadata: Metadata = { title: "Announcement" };
 
 export default async function AnnouncementPage({ params }: PageProps<"/announcements/[id]">) {
+  const user = await requireUser();
   const { id } = await params;
   const a = await orNotFound(getAnnouncement(id));
   if (!a) notFound();
   const today = todayInZone();
+  const canDelete = can(user, "announcements.delete");
   const popup = a.canManage ? await orNotFound(getPopupFor("announcement", a.id)) : null;
   const status = a.canSeeStatus ? await orNotFound(getAckStatus({ kind: "announcement", id: a.id })) : null;
 
@@ -82,6 +86,8 @@ export default async function AnnouncementPage({ params }: PageProps<"/announcem
             Edit
           </Link>
           <ArchiveAnnouncementButton announcementId={a.id} title={a.title} />
+          {/* Only while nobody has acknowledged it: a recorded acknowledgment is kept, so those are archived, not deleted. */}
+          {canDelete && !status?.rows.some((r) => r.acknowledgedAt) ? <DeleteAnnouncementButton announcementId={a.id} title={a.title} /> : null}
         </div>
       ) : null}
 
