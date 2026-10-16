@@ -88,3 +88,15 @@ describe("stored pictures", () => {
     expect(referencedFileIds("no pictures here")).toEqual([]);
   });
 });
+
+describe("escaped characters", () => {
+  it("prints a backslash-escaped formatting character as itself", () => {
+    const [p] = parseMarkdown("a \\*not bold\\* and \\[not\\](a link) and \\\\") as { children: { type: string; text?: string }[] }[];
+    expect(p.children.every((c) => c.type === "text")).toBe(true);
+    expect(p.children.map((c) => c.text).join("")).toBe("a *not bold* and [not](a link) and \\");
+  });
+  it("leaves a backslash before other characters alone", () => {
+    const [p] = parseMarkdown("C:\\temp and 5\\3") as { children: { text?: string }[] }[];
+    expect(p.children.map((c) => c.text).join("")).toBe("C:\\temp and 5\\3");
+  });
+});

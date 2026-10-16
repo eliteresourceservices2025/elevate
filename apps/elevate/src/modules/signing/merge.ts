@@ -41,12 +41,14 @@ export function cleanSendInputs(body: string, raw: Record<string, unknown>): { v
   const values: Record<string, string> = {};
   const missing: string[] = [];
   for (const f of sendFieldsUsed(body)) {
-    const v = cleanValue(typeof raw[f.key] === "string" ? (raw[f.key] as string) : "");
-    if (!v) {
+    const typed = typeof raw[f.key] === "string" ? (raw[f.key] as string) : "";
+    if (!collapse(typed)) {
       missing.push(f.label);
       continue;
     }
-    if (v.length > f.max) return { error: `${f.label} is too long (${f.max} characters at most).` };
+    // The limit is on what was typed, not on the escaped text that is printed (an escape adds a backslash).
+    if (collapse(typed).length > f.max) return { error: `${f.label} is too long (${f.max} characters at most).` };
+    const v = cleanValue(typed, f.max);
     if (f.kind === "choice" && !(f.options ?? []).includes(v)) return { error: `Choose a value for ${f.label}.` };
     values[f.key] = v;
   }
@@ -76,15 +78,24 @@ export function unfilledPlaceholders(body: string): string[] {
   return [...new Set([...body.matchAll(/\[\[([^\]\n]{1,80})\]\]/g)].map((m) => m[1].trim()))];
 }
 
-/** A value made safe to print: no braces or control characters, no characters that format text, bounded. */
-export function cleanValue(raw: string): string {
+/**
+ * A value made safe to print. Control characters and braces go (so a value can never add a field), and the few characters that mean
+ * formatting in the text (* _ [ ] ` and the backslash) are escaped with a backslash, so they print as typed. Everything else, such as
+ * parentheses, # and quotes in a name, address or duties, is kept exactly: it is legal text.
+ */
+export function cleanValue(raw: string, max = 300): string {
+  return collapse(raw)
+    .slice(0, max)
+    .replace(/[\\`*_[\]]/g, "\\$&");
+}
+
+/** The text on one line, without control characters or braces: what is checked against a field's length limit. */
+export function collapse(raw: string): string {
   return raw
     .replace(/[\u0000-\u001f\u007f]+/g, " ")
     .replace(/[{}]/g, "")
-    .replace(/[*_[\]()`#>~|\\]/g, "")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 300);
+    .trim();
 }
 
 /** The fields the text uses that have no value in `values`. */
