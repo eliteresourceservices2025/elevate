@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { AckedBadge, DueBadge, StatusTable } from "@/modules/announcements/components/ack-display";
-import { AcknowledgeButton, StatusActions } from "@/modules/announcements/components/ack-controls";
+import { AcknowledgeButton, ArchivePolicyButton, StatusActions } from "@/modules/announcements/components/ack-controls";
 import { DraftEditor, StartDraftButton } from "@/modules/announcements/components/policy-editor";
 import { PopupControl } from "@/modules/announcements/components/popup-admin";
 import { getPopupFor } from "@/modules/announcements/popup-queries";
@@ -81,6 +81,12 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
             </section>
           ) : null}
         </>
+      ) : null}
+
+      {p.canManage && p.kind === "general" && p.current ? (
+        <div className="flex flex-wrap gap-2">
+          <ArchivePolicyButton policyId={p.id} title={p.title} />
+        </div>
       ) : null}
 
       {p.canManage ? (

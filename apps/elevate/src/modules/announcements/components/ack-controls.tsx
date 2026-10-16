@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { acknowledge, archiveAnnouncement, exportAcknowledgments, sendReminder } from "../actions";
+import { acknowledge, archiveAnnouncement, archivePolicy, deleteAnnouncement, exportAcknowledgments, sendReminder } from "../actions";
 
 function useRun() {
   const router = useRouter();
@@ -68,6 +68,44 @@ export function StatusActions({ subject, canRemind, canExport, pendingCount }: {
         </Button>
       ) : null}
     </div>
+  );
+}
+
+/** Permanently removes an announcement posted by mistake; only offered while nobody has acknowledged it (the server checks again). */
+export function DeleteAnnouncementButton({ announcementId, title }: { announcementId: string; title: string }) {
+  const { run, pending } = useRun();
+  const router = useRouter();
+  return (
+    <Button
+      type="button"
+      variant="destructive"
+      disabled={pending}
+      onClick={() =>
+        window.confirm(`Permanently delete "${title}"? Nobody has acknowledged it. This cannot be undone. Use Archive if you only want it out of sight.`) &&
+        run(() => deleteAnnouncement({ announcementId }), "Announcement deleted.", () => router.push("/announcements"))
+      }
+    >
+      Delete
+    </Button>
+  );
+}
+
+/** Archives a published policy: it leaves the lists and pop-ups; its versions and acknowledgments are kept. */
+export function ArchivePolicyButton({ policyId, title }: { policyId: string; title: string }) {
+  const { run, pending } = useRun();
+  const router = useRouter();
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={pending}
+      onClick={() =>
+        window.confirm(`Archive "${title}"? It disappears from the list, from acknowledgment reminders and from pop-ups for everyone. Its versions and the acknowledgments already recorded are kept.`) &&
+        run(() => archivePolicy({ policyId }), "Policy archived.", () => router.push("/announcements?tab=policies"))
+      }
+    >
+      Archive policy
+    </Button>
   );
 }
 

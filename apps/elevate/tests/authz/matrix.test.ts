@@ -40,6 +40,7 @@ const EXPECTED: Record<string, string> = {
   "announcements.acknowledge": "O O O O O O",
   "announcements.view_status": "A A T - - -",
   "announcements.remind": "A A - - - -",
+  "announcements.delete": "A A - - - -",
   "announcements.manage_popups": "A A - - - -",
   "announcements.export": "A A - - - -",
   "notifications.read": "O O O O O O",
