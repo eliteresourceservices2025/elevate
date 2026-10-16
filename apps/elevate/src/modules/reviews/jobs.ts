@@ -14,7 +14,7 @@ export async function runEarlyReviewScheduler(today: string) {
   return runEarlyReviews(today);
 }
 
-const WHO: Record<Stage, "person" | "lead" | "hr" | null> = { awaiting_self: "person", awaiting_lead: "lead", awaiting_hr: "hr", ready_to_share: "hr", shared: "person", acknowledged: null };
+const WHO: Record<Stage, "person" | "lead" | "hr" | null> = { waived: null, awaiting_self: "person", awaiting_lead: "lead", awaiting_hr: "hr", ready_to_share: "hr", shared: "person", acknowledged: null };
 
 /**
  * Daily: reminds whoever has the next step on a review whose due date is today or past, once a day per review. Self reviews are

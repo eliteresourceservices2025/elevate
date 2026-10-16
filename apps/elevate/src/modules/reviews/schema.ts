@@ -66,9 +66,14 @@ export const reviews = talent
       sharedAt: timestamp("shared_at", { withTimezone: true }),
       acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
       lastReminderOn: date("last_reminder_on", { mode: "string" }),
+      /** Set when HR or the person's lead waived this review (it is not needed this time). The reason is required, and kept with the review. */
+      waivedAt: timestamp("waived_at", { withTimezone: true }),
+      waivedBy: uuid("waived_by").references(() => users.id),
+      waiveReason: text("waive_reason"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [
+      check("reviews_waive_chk", sql`(${t.waivedAt} is null and ${t.waivedBy} is null and ${t.waiveReason} is null) or (${t.waivedAt} is not null and ${t.waivedBy} is not null and length(btrim(${t.waiveReason})) >= 3)`),
       uniqueIndex("reviews_cycle_employee_idx").on(t.cycleId, t.employeeId),
       uniqueIndex("reviews_milestone_idx").on(t.employeeId, t.milestone).where(sql`${t.milestone} is not null`),
       index("reviews_employee_idx").on(t.employeeId),
