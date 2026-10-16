@@ -62,6 +62,8 @@ export type NewEnvelope = {
   initialEachPage?: boolean;
   /** Details the signee types in while signing (keys from SIGNEE_DETAIL_FIELDS): only for ELEVATE users. */
   signeeDetails?: string[];
+  /** Mark it as a test document (can be archived, and deleted by a Super Admin). */
+  isTest?: boolean;
   /** The checked PDF (page count and fingerprint) when the caller already did it for the same file, so a send to many people does it once. */
   pdfInfo?: { pages: number; sha256: string };
   /** False when the caller sends the queued emails itself, once, after creating several envelopes. */
@@ -170,7 +172,7 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
       const now = new Date();
       const [env] = await tx
         .insert(esignEnvelopes)
-        .values({ title: input.title, templateId: input.templateId ?? null, createdBy: actor.id, signingOrder: input.order, originalPath: path, originalName: input.fileName.slice(0, 200), originalSha256: sha, pageCount: pages, initialEachPage: input.initialEachPage === true, signeeDetails: input.signeeDetails ?? [], expiresAt: new Date(now.getTime() + input.expiryDays * 86_400_000) })
+        .values({ title: input.title, templateId: input.templateId ?? null, createdBy: actor.id, signingOrder: input.order, originalPath: path, originalName: input.fileName.slice(0, 200), originalSha256: sha, pageCount: pages, initialEachPage: input.initialEachPage === true, signeeDetails: input.signeeDetails ?? [], isTest: input.isTest === true, expiresAt: new Date(now.getTime() + input.expiryDays * 86_400_000) })
         .returning({ id: esignEnvelopes.id });
       await tx.insert(esignSigners).values(
         input.signers.map((s, i) => ({
