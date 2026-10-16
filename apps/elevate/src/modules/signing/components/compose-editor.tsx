@@ -32,7 +32,7 @@ function applyPrefix(value: string, start: number, end: number, prefix: string, 
  * and paste from Word or Google Docs that keeps headings, bold and lists. The text is Markdown underneath (the same safe renderer
  * as announcements), so nothing in it can run or load anything.
  */
-export function ComposeEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function ComposeEditor({ value, onChange, title = "" }: { value: string; onChange: (value: string) => void; title?: string }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [preview, setPreview] = useState(false);
   // Standard PDF fonts draw Latin-1 (plus common punctuation); anything else prints as "?".
@@ -73,9 +73,25 @@ export function ComposeEditor({ value, onChange }: { value: string; onChange: (v
         </div>
       </div>
       {preview ? (
-        <article aria-label="Preview of the document" className="min-h-64 rounded-xl border bg-white p-6 text-neutral-900 shadow-sm">
-          {value.trim() ? <Markdown source={value} maxLength={MAX_COMPOSED_CHARS} /> : <p className="text-sm text-neutral-500">Nothing to preview yet.</p>}
-        </article>
+        <div className="space-y-2">
+          {/* The same design as the PDF: logo with room above it, centered bold title, the text, and the footer. Page breaks differ. */}
+          <article aria-label="Preview of the document" className="relative min-h-96 overflow-clip rounded-xl border bg-white px-8 pb-12 pt-10 text-neutral-900 shadow-sm sm:px-16">
+            {/* eslint-disable-next-line @next/next/no-img-element -- a fixed brand image in a preview */}
+            <img src="/elite-logo-icon.png" alt="" aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 w-3/5 -translate-x-1/2 -translate-y-1/2 opacity-[0.07]" />
+            <div className="relative">
+              <div className="flex flex-col items-center">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a fixed brand image in a preview */}
+                <img src="/elite-logo-icon.png" alt="ELITE Resource Services" className="h-20 w-auto" />
+                <h2 className="mt-4 text-center text-xl font-bold leading-tight">{title.trim() || "Document title"}</h2>
+              </div>
+              <div className="mt-6">
+                {value.trim() ? <Markdown source={value} maxLength={MAX_COMPOSED_CHARS} /> : <p className="text-sm text-neutral-500">Nothing to preview yet.</p>}
+              </div>
+              <p className="mt-10 border-t pt-2 text-[10px] font-bold tracking-wider text-neutral-600">ELITE RESOURCE SERVICES</p>
+            </div>
+          </article>
+          <p className="text-xs text-muted-foreground">This is how the document will look. Page breaks are placed when the PDF is made.</p>
+        </div>
       ) : (
         <>
           <div role="toolbar" aria-label="Formatting" className="flex flex-wrap gap-1">
