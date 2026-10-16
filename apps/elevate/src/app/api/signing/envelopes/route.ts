@@ -59,6 +59,22 @@ export async function POST(request: Request) {
     let fileName = "document.pdf";
     const content = field("content");
     const each = field("individual") === "true";
+    // The Company's countersigner (optional, per-person copies only): signs after each person, on every copy.
+    let counter: { userId: string; role: string | null } | null = null;
+    const counterRaw = field("countersigner");
+    if (counterRaw) {
+      let counterJson: unknown;
+      try {
+        counterJson = JSON.parse(counterRaw);
+      } catch {
+        return json({ ok: false, error: "Check the countersigner and try again." }, 400);
+      }
+      const c = countersignerSchema.safeParse(counterJson);
+      if (!c.success) return json({ ok: false, error: c.error.issues[0]?.message ?? "Check the countersigner and try again." }, 400);
+      if (v.signers.some((s) => s.userId === c.data.userId)) return json({ ok: false, error: "The countersigner cannot also be one of the people signing their own copy." }, 400);
+      counter = { userId: c.data.userId, role: c.data.role ?? null };
+    }
+    if (counter && !each) return json({ ok: false, error: "A countersigner is added when each person signs their own copy." }, 400);
     // Details filled in from each person's record: {{contractor_name}} and the like (documents written in ELEVATE only).
     let pdfFor: ((userId: string) => Promise<Uint8Array>) | null = null;
     if (content !== undefined && content.trim() !== "") {
@@ -104,22 +120,6 @@ export async function POST(request: Request) {
       fileName = upload.name || fileName;
     }
     if (checkOnly) return json({ ok: true, count: v.signers.length });
-    // The Company's countersigner (optional, per-person copies only): signs after each person, on every copy.
-    let counter: { userId: string; role: string | null } | null = null;
-    const counterRaw = field("countersigner");
-    if (counterRaw) {
-      let counterJson: unknown;
-      try {
-        counterJson = JSON.parse(counterRaw);
-      } catch {
-        return json({ ok: false, error: "Check the countersigner and try again." }, 400);
-      }
-      const c = countersignerSchema.safeParse(counterJson);
-      if (!c.success) return json({ ok: false, error: c.error.issues[0]?.message ?? "Check the countersigner and try again." }, 400);
-      if (v.signers.some((s) => s.userId === c.data.userId)) return json({ ok: false, error: "The countersigner cannot also be one of the people signing their own copy." }, 400);
-      counter = { userId: c.data.userId, role: c.data.role ?? null };
-    }
-    if (counter && !each) return json({ ok: false, error: "A countersigner is added when each person signs their own copy." }, 400);
     // Details the signee types in while signing (bank details on the agreement): a fixed list of keys, for the person, not the countersigner.
     let signeeDetails: string[] = [];
     const detailsRaw = field("signeeDetails");
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
     }
     const ip = await clientIp();
     const base = {
-      signeeDetails, title: v.title, fileName, templateId: v.templateId ?? null, order: v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" };
+      signeeDetails, title: v.title, fileName, templateId: v.templateId ?? null, order: counter ? ("sequential" as const) : v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" };
     if (each) {
       // Each person gets their own copy (their own envelope, signature and sealed file): used for "everyone", a team or a client.
       // The browser sends the people in batches of at most MAX_SIGNERS, so one request stays well inside the time limit.
@@ -146,6 +146,10 @@ export async function POST(request: Request) {
           first ??= id;
           done += 1;
         }
+      } catch (error) {
+        // Tell the browser how many copies this batch already created, so a retry does not send them twice.
+        if (!(error instanceof ActionFailure)) console.error("create envelope failed:", errorDetail(error));
+        return json({ ok: false, error: error instanceof ActionFailure ? error.message : "Something went wrong. Please try again.", count: done }, error instanceof ActionFailure ? 400 : 500);
       } finally {
         revalidatePath("/signing");
       }
