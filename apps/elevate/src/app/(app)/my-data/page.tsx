@@ -74,6 +74,8 @@ export default async function MyDataPage() {
         </FormDialog>
       </div>
 
+      {openRequest ? <p className="text-sm text-muted-foreground">You have a request waiting for HR. You can send another once it is handled.</p> : null}
+
       <DownloadButtons />
 
       <Section title="Profile">
