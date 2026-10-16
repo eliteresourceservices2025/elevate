@@ -29,6 +29,9 @@ export async function openSigningDocument(actor: AuthUser, envelopeId: string): 
   if (!(await allowRequest("download", actor.id))) throw new ActionFailure("Too many downloads. Wait a few minutes and try again.");
 
   const sealed = Boolean(env.sealedPath);
+  // A signed copy that holds personal details the contractor typed (bank details): only that contractor, HR and Super Admin may open it.
+  const holdsDetails = sealed && env.signeeDetails.length > 0;
+  if (holdsDetails && !isManager && !mine?.fillsDetails) throw new ActionFailure("This signed copy has the contractor's personal details, so only the contractor and HR can open it.");
   if (mine && mine.status === "pending" && !mine.viewedAt) {
     const ip = await clientIp();
     await db.transaction(async (tx) => {
@@ -36,7 +39,7 @@ export async function openSigningDocument(actor: AuthUser, envelopeId: string): 
       await appendEvent(tx, envelopeId, { type: "viewed", actorUserId: actor.id, signerId: mine.id, ip: ip === "unknown" ? null : ip });
     });
   }
-  await writeAudit({ actor, action: "signing.document_view", targetType: "esign_envelope", targetId: envelopeId, metadata: { sealed } });
+  await writeAudit({ actor, action: "signing.document_view", targetType: "esign_envelope", targetId: envelopeId, metadata: { sealed, ...(holdsDetails ? { holdsDetails: true } : {}) } });
   const base = env.title.replace(/[^\p{L}\p{N} ._-]/gu, "").trim().slice(0, 60) || "document";
   return { envelopeId, path: env.sealedPath ?? env.originalPath, sealed, fileName: `${base}${sealed ? " (signed)" : ""}.pdf` };
 }

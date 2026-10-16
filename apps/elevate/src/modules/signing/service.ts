@@ -62,7 +62,22 @@ export type NewEnvelope = {
   initialEachPage?: boolean;
   /** Details the signee types in while signing (keys from SIGNEE_DETAIL_FIELDS): only for ELEVATE users. */
   signeeDetails?: string[];
+  /** The checked PDF (page count and fingerprint) when the caller already did it for the same file, so a send to many people does it once. */
+  pdfInfo?: { pages: number; sha256: string };
+  /** False when the caller sends the queued emails itself, once, after creating several envelopes. */
+  emailNow?: boolean;
 };
+
+/** Checks a PDF by its bytes (size, type, readable, page count) and fingerprints it. Throws ActionFailure with a plain message. */
+export async function inspectPdf(pdf: Uint8Array): Promise<{ pages: number; sha256: string }> {
+  if (pdf.length === 0 || pdf.length > MAX_PDF_BYTES) throw new ActionFailure("The PDF must be 8 MB or smaller.");
+  if (!isPdf(pdf)) throw new ActionFailure("That file is not a PDF.");
+  try {
+    return { pages: (await readPdfInfo(pdf)).pages, sha256: sha256Hex(pdf) };
+  } catch (error) {
+    throw new ActionFailure(error instanceof Error && /pages/.test(error.message) ? error.message : "That PDF cannot be used. Password-protected or damaged files are refused.");
+  }
+}
 
 const SIGN_LINK = (envelopeId: string) => `/signing/${envelopeId}`;
 
@@ -130,14 +145,7 @@ export async function sendDraft(tx: Tx, actor: Actor, envelopeId: string, ip: st
  * the first event, and sends it unless `send` is false. Used by the HR form and, later, by offers and onboarding.
  */
 export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<{ id: string; links: { sent: number; failed: number } | null }> {
-  if (input.pdf.length === 0 || input.pdf.length > MAX_PDF_BYTES) throw new ActionFailure("The PDF must be 8 MB or smaller.");
-  if (!isPdf(input.pdf)) throw new ActionFailure("That file is not a PDF.");
-  let pages: number;
-  try {
-    pages = (await readPdfInfo(input.pdf)).pages;
-  } catch (error) {
-    throw new ActionFailure(error instanceof Error && /pages/.test(error.message) ? error.message : "That PDF cannot be used. Password-protected or damaged files are refused.");
-  }
+  const { pages, sha256: sha } = input.pdfInfo ?? (await inspectPdf(input.pdf));
   if (input.signers.length === 0 || input.signers.length > MAX_SIGNERS) throw new ActionFailure(`Add between 1 and ${MAX_SIGNERS} signees.`);
   if (input.signers.some((s) => Boolean(s.userId) === Boolean(s.external))) throw new ActionFailure("Each signee is either an ELEVATE user or an outside person with a name and email.");
   const ids = input.signers.flatMap((s) => (s.userId ? [s.userId] : []));
@@ -152,7 +160,6 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
     if (real.length !== ids.length) throw new ActionFailure("One of the signees does not have an active ELEVATE account.");
   }
 
-  const sha = sha256Hex(input.pdf);
   const path = `originals/${randomUUID()}.pdf`;
   const storage = getDocumentStorage();
   await storage.write(BUCKETS.signed, path, input.pdf, "application/pdf");
@@ -181,7 +188,7 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
     });
     // Outside signers are emailed their link once the envelope is committed (the link points at a row that now exists)
     const links = created.externalIds.length ? await issueExternalLinks(created.externalIds, "turn") : null;
-    if (input.send) await sendQueuedEmailNow();
+    if (input.send && input.emailNow !== false) await sendQueuedEmailNow();
     return { id: created.id, links };
   } catch (error) {
     await storage.remove(BUCKETS.signed, [path]).catch(() => undefined);
@@ -346,8 +353,11 @@ export async function sealEnvelope(envelopeId: string): Promise<boolean> {
     if (!fresh || fresh.status !== "out" || fresh.sealedSha256) return false; // someone else sealed it first
     await tx.update(esignEnvelopes).set({ status: "completed", sealedPath: path, sealedSha256: sha, sealedAt, endedAt: sealedAt }).where(eq(esignEnvelopes.id, envelopeId));
     await appendEvent(tx, envelopeId, { type: "sealed", detail: { sha256: sha } }, sealedAt);
-    await notify(tx, [...new Set(userIds)].map((userId) => ({ userId, kind: "signing.completed", title: "A document was signed by everyone", body: "The sealed copy is ready to download.", link: SIGN_LINK(envelopeId) })));
+    const restricted = env.signeeDetails.length > 0;
+    await notify(tx, [...new Set(userIds)].map((userId) => ({ userId, kind: "signing.completed", title: "A document was signed by everyone", body: restricted ? "This signed copy has personal details: only the contractor and HR can open it." : "The sealed copy is ready to download.", link: SIGN_LINK(envelopeId) })));
     await writeAudit({ actor: null, action: "signing.seal", targetType: "esign_envelope", targetId: envelopeId, after: { sha256: sha } }, tx);
+    // The seal read the details the contractor typed (bank details): that is a sensitive read, so it is audited (field names only).
+    if (restricted) await writeAudit({ actor: null, action: "sensitive.view", targetType: "esign_envelope", targetId: envelopeId, metadata: { fields: env.signeeDetails, purpose: "printed on the signed copy" } }, tx);
     return true;
   });
   if (!done) await storage.remove(BUCKETS.signed, [path]).catch(() => undefined);
