@@ -15,9 +15,9 @@ test("HR offboards a person: checklist, remove access now, certificate", async (
   await signInEnrollingMfa(hr, await createHrAccount());
 
   await hr.goto("/offboarding/new");
-  await waitForHydration(hr, "#off-person");
-  const value = await hr.locator("#off-person option", { hasText: `Leaves${stamp}` }).getAttribute("value");
-  await hr.getByLabel("Person").selectOption(value!);
+  await waitForHydration(hr, "#off-search");
+  await hr.getByLabel("Search people").fill(`Leaves${stamp}`);
+  await hr.getByRole("checkbox", { name: new RegExp(`Leaves${stamp}`) }).check();
   await hr.getByRole("button", { name: "Start offboarding" }).click();
   await hr.waitForURL(/\/offboarding\/[0-9a-f-]{36}$/, slow);
   await expect(hr.getByRole("heading", { name: `Offboarding: Lia Leaves${stamp}` })).toBeVisible(slow);

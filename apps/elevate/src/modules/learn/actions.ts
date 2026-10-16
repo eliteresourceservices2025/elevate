@@ -79,16 +79,41 @@ export async function grantLearnRetry(input: unknown): Promise<ActionResult> {
 }
 
 /** HR puts someone on a course now, on a track (the nightly job does this for everyone who needs it). */
-export async function assignLearnTraining(input: unknown): Promise<ActionResult<{ created: boolean }>> {
+export async function assignLearnTraining(input: unknown): Promise<ActionResult<{ created: boolean; queued?: boolean }>> {
   const actor = await requireUser();
-  return runAction(async () => {
+  return runAction<{ created: boolean; queued?: boolean }>(async () => {
     await authorize(actor, "learn.assign");
     const parsed = assignTrainingSchema.safeParse(input);
     if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the form and try again.");
-    const { userId, course } = parsed.data;
+    const { course } = parsed.data;
     const info = await findLearnCourse(db, course);
     if (!info) return fail("That course was not found.");
     const track = info.fixedTrack ?? parsed.data.track;
+
+    // A person given by their record may have no account yet (a new hire who was invited and has not signed in). An assignment needs an
+    // account, so the request waits in a queue and the nightly run turns it into an assignment once they have signed in.
+    let userId = parsed.data.userId;
+    if (!userId) {
+      const found = (await db.execute(sql`select e.user_id from core.employees e where e.id = ${parsed.data.employeeId} and e.archived_at is null and e.status <> 'separated'`)) as unknown as { user_id: string | null }[];
+      if (!found[0]) return fail("That person is not an active team member.");
+      userId = found[0].user_id ?? undefined;
+      if (!userId) {
+        const queued = await db.transaction(async (tx) => {
+          const made = (await tx.execute(sql`
+            insert into learn.pending_assignments (employee_id, course_id, track, created_by)
+            select ${parsed.data.employeeId}, c.id, ${track}, ${actor.id} from learn.courses c
+            where c.slug = ${info.slug} and c.archived_at is null
+              and exists (select 1 from learn.course_versions v where v.course_id = c.id and v.status = 'published')
+            on conflict do nothing
+            returning employee_id`)) as unknown as unknown[];
+          if (made.length === 0) return false;
+          await writeAudit({ actor, action: "learn.assign_queued", targetType: "employee", targetId: parsed.data.employeeId, metadata: { track, course: info.slug } }, tx);
+          return true;
+        });
+        revalidatePath("/training");
+        return { ok: true as const, data: { created: false as boolean, queued } };
+      }
+    }
 
     const created = await db.transaction(async (tx) => {
       const version = (await tx.execute(sql`

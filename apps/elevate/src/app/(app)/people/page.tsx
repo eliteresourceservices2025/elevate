@@ -133,7 +133,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
         ) : null}
       </form>
 
-      <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+      <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
         <DirectoryTable rows={rows} seesClients={seesClients} sort={query.sort} dir={query.dir} params={filters} />
       </div>
 

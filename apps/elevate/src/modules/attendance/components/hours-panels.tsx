@@ -113,7 +113,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
       {review.rows.length === 0 ? (
         <p className="text-muted-foreground">Nobody has hours or a scheduled day that week.</p>
       ) : (
-        <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+        <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
           <Table>
             <TableHeader>
               <TableRow>

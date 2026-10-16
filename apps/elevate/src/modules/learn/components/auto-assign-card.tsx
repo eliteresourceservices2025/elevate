@@ -9,7 +9,7 @@ import { setAutoAssign } from "../actions";
 type Mode = "all" | "teams" | "paused";
 
 const MODES: { value: Mode; label: string; hint: string }[] = [
-  { value: "all", label: "Everyone", hint: "Each night, everyone active who needs this course is assigned it." },
+  { value: "all", label: "Everyone", hint: "Each night, everyone active who needs this course is assigned it. That includes new hires still in onboarding; one who has not signed in yet is assigned the night after their first sign-in." },
   { value: "teams", label: "Chosen teams only", hint: "Only people whose team is ticked are assigned automatically. Anyone else can still be assigned by hand." },
   { value: "paused", label: "Paused", hint: "Nobody is assigned automatically. People already assigned keep their reminders; leavers are still closed out." },
 ];

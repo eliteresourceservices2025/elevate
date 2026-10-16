@@ -94,7 +94,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
         {overview.log.length === 0 ? (
           <p className="text-muted-foreground">Nothing has been sent yet.</p>
         ) : (
-          <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+          <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -145,7 +145,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
           <input id="jp-unmatched" type="checkbox" className="size-4 accent-primary" checked={onlyUnmatched} onChange={(e) => setOnlyUnmatched(e.target.checked)} />
           Only people not matched
         </label>
-        <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+        <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
           <Table>
             <TableHeader>
               <TableRow>

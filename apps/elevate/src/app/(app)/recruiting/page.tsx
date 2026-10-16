@@ -87,7 +87,7 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
             <p className="text-muted-foreground">{canManage ? "No jobs yet. Create one to start receiving applications." : "You are not on the hiring team of any job."}</p>
           ) : (
             <>
-              <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+              <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
                 <Table>
                   <TableHeader>
                     <TableRow>
