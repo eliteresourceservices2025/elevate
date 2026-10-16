@@ -78,3 +78,17 @@ describe("validators", () => {
     expect(startOffboardingSchema.safeParse({ employeeId: "11111111-1111-4111-8111-111111111111", lastWorkingDay: "2026-05-10", reason: "fired" }).success).toBe(false);
   });
 });
+
+describe("saving a template that was read back from the database", () => {
+  it("accepts null for the optional fields (they are not set), instead of 'expected string, received null'", async () => {
+    
+    const parsed = checklistTemplateSchema.safeParse({
+      id: "7b0c1f0e-1c1a-4b6a-9b0e-3c1d2f4a5b6c",
+      kind: "onboarding",
+      name: "Contractor onboarding",
+      positionId: null,
+      items: [{ title: "Sign the handbook", details: null, owner: "person", dueOffsetDays: 3, required: true, check: "manual", documentTypeId: null, policyId: null, policyKind: null, signTemplateId: null, href: null }],
+    });
+    expect(parsed.success).toBe(true);
+  });
+});
