@@ -18,6 +18,7 @@ export async function createEmployeeRecord(
   actor: { id: string; email: string },
   input: CreateEmployeeInput,
   historySummary?: string,
+  extra: { talenthrId?: string | null } = {},
 ): Promise<{ id: string; employeeNumber: string; linkedAccount: boolean }> {
   const { teamId, managerId, positionId, ...v } = input;
   let positionTitle: string | null = null;
@@ -30,7 +31,7 @@ export async function createEmployeeRecord(
   const userId = await findLinkableUser(tx, [v.workEmail, v.personalEmail]);
   const [created] = await tx
     .insert(employees)
-    .values({ ...v, positionId: positionId ?? null, position: positionTitle, userId, createdBy: actor.id })
+    .values({ ...v, positionId: positionId ?? null, position: positionTitle, userId, talenthrId: extra.talenthrId ?? null, createdBy: actor.id })
     .returning({ id: employees.id, employeeNumber: employees.employeeNumber });
 
   // Team and manager go through the dated rules. A start date in the future counts from today.

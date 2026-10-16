@@ -55,14 +55,30 @@ export function toCsv(people: FakePerson[]): string {
   return lines.join("\r\n") + "\r\n";
 }
 
+/** A number from a tag, so the same tag always gives the same ids and different tags (almost always) different ones. */
+export function tagNumber(tag: string): number {
+  let h = 7;
+  for (const c of tag) h = (h * 31 + c.charCodeAt(0)) % 90000;
+  return h + 10000;
+}
+
+/** The TalentHR id fakeCompany gives person n of this tag. */
+export const companyId = (tag: string, n: number) => String(tagNumber(tag) * 10 + n);
+
 /** A small company: a head (1001), two managers and staff, one terminated. `tag` makes the emails unique per test. */
 export function fakeCompany(tag: string): FakePerson[] {
   const e = (n: number) => `${tag}.person${n}@example.com`;
+  // Everything that identifies a person (their TalentHR id, name and phone) is unique to this tag, as it is for real people: the import
+  // matches on the TalentHR id and warns about two records with one name, and tests share one database.
+  const base = tagNumber(tag) * 10;
+  const id = (n: number) => String(base + n);
+  const who = (n: number, over: FakePerson = {}): FakePerson =>
+    fakePerson(n, { "Employee ID *": id(n), "Last Name *": `Person${n} ${tag}`, "custom_fields:Phone": `+63 917 ${base}${n}`, "Email *": e(n), ...over });
   return [
-    fakePerson(1, { "Email *": e(1), "Supervisor ID *": "", "Job Title": "Operations Director", Department: "Leadership" }),
-    fakePerson(2, { "Email *": e(2), "Supervisor ID *": "1001", "Job Title": "Team Lead", Department: "Scribe" }),
-    fakePerson(3, { "Email *": e(3), "Supervisor ID *": "1002" }),
-    fakePerson(4, { "Email *": e(4), "Supervisor ID *": "1002", "Pay Rate Currency": "HNL", "custom_fields:Country": "Honduras" }),
-    fakePerson(5, { "Email *": e(5), "Supervisor ID *": "1002", "Employment Status": "Terminated", "Termination Date": "03/24/2026" }),
+    who(1, { "Supervisor ID *": "", "Job Title": "Operations Director", Department: "Leadership" }),
+    who(2, { "Supervisor ID *": id(1), "Job Title": "Team Lead", Department: "Scribe" }),
+    who(3, { "Supervisor ID *": id(2) }),
+    who(4, { "Supervisor ID *": id(2), "Pay Rate Currency": "HNL", "custom_fields:Country": "Honduras" }),
+    who(5, { "Supervisor ID *": id(2), "Employment Status": "Terminated", "Termination Date": "03/24/2026" }),
   ];
 }

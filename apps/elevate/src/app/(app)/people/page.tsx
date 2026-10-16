@@ -47,6 +47,11 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
               Change requests
             </Link>
           ) : null}
+          {can(user, "people.merge") ? (
+            <Link href="/people/duplicates" className={cn(buttonVariants({ variant: "outline" }))}>
+              Duplicates
+            </Link>
+          ) : null}
           {can(user, "people.manage_clients") ? (
             <Link href="/people/clients" className={cn(buttonVariants({ variant: "outline" }))}>
               Clients

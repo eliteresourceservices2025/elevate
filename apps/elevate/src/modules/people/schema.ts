@@ -37,6 +37,8 @@ export const employees = core
         .default(sql`'ERS-' || lpad(nextval('core.employee_number_seq')::text, 4, '0')`),
       // Set when the person signs in with a matching verified email. Null until then.
       userId: uuid("user_id").references(() => users.id),
+      /** The person's id in TalentHR, set by an import. Imports match on it first, so a work email or name changed here never makes a second record. */
+      talenthrId: text("talenthr_id"),
 
       legalFirstName: text("legal_first_name").notNull(),
       legalMiddleName: text("legal_middle_name"),
@@ -79,6 +81,7 @@ export const employees = core
       uniqueIndex("employees_number_idx").on(t.employeeNumber),
       uniqueIndex("employees_work_email_idx").on(sql`lower(${t.workEmail})`),
       uniqueIndex("employees_user_idx").on(t.userId).where(sql`${t.userId} is not null`),
+      uniqueIndex("employees_talenthr_idx").on(t.talenthrId).where(sql`${t.talenthrId} is not null`),
       index("employees_status_idx").on(t.status),
       index("employees_manager_idx").on(t.managerId),
       index("employees_team_idx").on(t.teamId),

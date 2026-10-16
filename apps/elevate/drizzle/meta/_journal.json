@@ -575,6 +575,13 @@
       "when": 1792133007676,
       "tag": "0081_yummy_satana",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1792136432225,
+      "tag": "0082_famous_wither",
+      "breakpoints": true
     }
   ]
 }

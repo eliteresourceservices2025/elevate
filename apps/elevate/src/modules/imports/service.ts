@@ -7,6 +7,8 @@ import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { customFieldDefs, customFieldValues, emergencyContacts, employeeSensitive, employees } from "@/modules/people/schema";
 import { createEmployeeRecord } from "@/modules/people/create";
+import { compareWithExisting } from "@/modules/people/duplicates";
+import { loadPeopleForDuplicates } from "@/modules/people/duplicates-service";
 import { positions, teams, departments } from "@/modules/org/schema";
 import { applyReporting, todayInZone } from "@/modules/org/service";
 import { recordHistory, upsertSensitive, type Tx } from "@/modules/people/service";
@@ -54,6 +56,10 @@ export async function stageBatch(actor: Actor, input: StageInput): Promise<{ bat
   const emails = [...emailRow.keys()];
   const existing = emails.length ? await db.select().from(employees).where(inArray(sql`lower(${employees.workEmail})`, emails)) : [];
   const byEmail = new Map(existing.map((e) => [e.workEmail.toLowerCase(), e]));
+  // A person already imported is found by their TalentHR id, even if their work email or name was changed here since
+  const sourceIds = rows.flatMap((r) => (r.sourceId ? [r.sourceId] : []));
+  const byTalentId = new Map((sourceIds.length ? await db.select().from(employees).where(inArray(employees.talenthrId, sourceIds)) : []).map((e) => [e.talenthrId as string, e]));
+  const people = await loadPeopleForDuplicates(db);
 
   const batchId = randomUUID();
   const staged = rows.map((r, i) => {
@@ -61,9 +67,20 @@ export async function stageBatch(actor: Actor, input: StageInput): Promise<{ bat
     let outcome: "new" | "changed" | "unchanged" | "error" = "error";
     let changed: string[] = [];
     if (!hasError && r.input) {
-      const current = byEmail.get(r.input.workEmail);
-      if (!current) outcome = "new";
-      else {
+      const byId = r.sourceId ? byTalentId.get(r.sourceId) : undefined;
+      const current = byId ?? byEmail.get(r.input.workEmail);
+      if (!current) {
+        outcome = "new";
+        // A new row that looks like someone already here (same name): probably their email changed here. Never create a second record silently.
+        const known = compareWithExisting({ id: "", first: r.input.legalFirstName, last: r.input.legalLastName, workEmail: r.input.workEmail, personalEmail: r.input.personalEmail, mobile: r.input.mobile, birthDate: r.input.birthDate }, people);
+        if (known?.level === "same") {
+          r.issues.push({ level: "error", field: "Possible duplicate", message: `Looks like ${known.with.first} ${known.with.last} (${known.with.workEmail}) who is already here: same name and ${known.signals.join(" and ")}. Their work email probably changed. Update it on their record, then import again.` });
+          outcome = "error";
+        } else if (known) {
+          r.issues.push({ level: "warning", field: "Possible duplicate", message: `${known.with.first} ${known.with.last} (${known.with.workEmail}) is already here with the same name. If it is the same person, update their work email instead of importing this row.` });
+        }
+      } else {
+        if (byId && byId.workEmail.toLowerCase() !== r.input.workEmail) r.issues.push({ level: "warning", field: "Work email", message: `Matched by TalentHR ID. The work email here (${byId.workEmail}) differs from the file and is kept.` });
         changed = changedFields(r.input, current as unknown as Record<string, unknown>);
         if (current.userId) {
           const locked = ["status", "startDate", "endDate"];
@@ -177,11 +194,13 @@ export async function commitBatch(actor: Actor, batchId: string, opts: { skipErr
       const teamId = row.teamName ? await teamIdFor(tx, row.teamName, teamCache) : undefined;
       const position = row.positionTitle ? await positionFor(tx, row.positionTitle, positionCache) : null;
 
-      const [current] = await tx.select().from(employees).where(sql`lower(${employees.workEmail}) = ${input.workEmail}`);
+      const [byId] = row.sourceId ? await tx.select().from(employees).where(eq(employees.talenthrId, row.sourceId)) : [];
+      const [byEmail] = byId ? [] : await tx.select().from(employees).where(sql`lower(${employees.workEmail}) = ${input.workEmail}`);
+      const current = byId ?? byEmail;
       let employeeId: string;
       let created = false;
       if (!current) {
-        const made = await createEmployeeRecord(tx, actor, { ...input, teamId, positionId: position?.id }, "Imported from TalentHR");
+        const made = await createEmployeeRecord(tx, actor, { ...input, teamId, positionId: position?.id }, "Imported from TalentHR", { talenthrId: row.sourceId });
         employeeId = made.id;
         created = true;
         result.created += 1;
@@ -189,6 +208,11 @@ export async function commitBatch(actor: Actor, batchId: string, opts: { skipErr
         employeeId = current.id;
         const locked = current.userId !== null;
         const set: Record<string, unknown> = { updatedAt: new Date() };
+        // Remember the TalentHR id on a record found by email, so a later email change here cannot split it in two
+        if (row.sourceId && !current.talenthrId) {
+          const [other] = await tx.select({ id: employees.id }).from(employees).where(eq(employees.talenthrId, row.sourceId));
+          if (!other) set.talenthrId = row.sourceId;
+        }
         for (const k of r.changedFields) {
           // eslint-disable-next-line security/detect-object-injection -- k is a field name saved by stageBatch from a fixed list
           set[k] = (input as unknown as Record<string, unknown>)[k];

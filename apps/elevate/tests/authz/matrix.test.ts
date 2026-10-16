@@ -15,6 +15,7 @@ const EXPECTED: Record<string, string> = {
   "people.request_contact_change": "- - - - - O",
   "people.create": "A A - - - -",
   "people.archive": "A A - - - -",
+  "people.merge": "A A - - - -",
   "people.edit_sensitive": "A A - - - -",
   "people.approve_change": "A A - - - -",
   "people.view_client_assignments": "A A T - - O",

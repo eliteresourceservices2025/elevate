@@ -15,6 +15,8 @@ export const peoplePermissions = definePermissions({
   "people.edit_profile": { roles: { super_admin: "all", hr_admin: "all" } },
   "people.request_contact_change": { roles: { employee: "own" } }, // HR approves
   "people.create": { roles: { super_admin: "all", hr_admin: "all" } },
+  /** Merge two records of the same person and re-link a sign-in account to the right record (HR and Super Admin). */
+  "people.merge": { roles: { super_admin: "all", hr_admin: "all" } },
   "people.archive": { roles: { super_admin: "all", hr_admin: "all" } },
   "people.edit_sensitive": { roles: { super_admin: "all", hr_admin: "all" } },
   "people.approve_change": { roles: { super_admin: "all", hr_admin: "all" } },

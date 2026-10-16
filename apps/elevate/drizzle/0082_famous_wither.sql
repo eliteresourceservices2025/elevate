@@ -1,0 +1,2 @@
+ALTER TABLE "core"."employees" ADD COLUMN "talenthr_id" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "employees_talenthr_idx" ON "core"."employees" USING btree ("talenthr_id") WHERE "core"."employees"."talenthr_id" is not null;

@@ -17,6 +17,8 @@ import { positions } from "@/modules/org/schema";
 import { trainingReadiness, type TrainingReadiness } from "@/modules/learn/certificate-status";
 import { activeDirectReports, reportName, todayInZone } from "@/modules/org/service";
 import { createEmployeeRecord } from "./create";
+import { compareWithExisting } from "./duplicates";
+import { loadPeopleForDuplicates } from "./duplicates-service";
 import { viewBankChangeRequest } from "./queries";
 import { SENSITIVE_LABELS } from "./constants";
 import {
@@ -104,9 +106,21 @@ export async function createEmployee(input: unknown): Promise<ActionResult<{ id:
     const parsed = createEmployeeSchema.safeParse(input);
     if (!parsed.success) return fail(firstIssue(parsed.error));
     if ((parsed.data.teamId || parsed.data.managerId) && !can(actor, "org.manage_reporting")) return fail("You cannot set a team or manager.");
+    const { confirmDifferentPerson, ...person } = parsed.data;
+
+    // The same work email is refused by the database too; say so plainly first (this also covers an archived record holding it).
+    const [sameEmail] = await db.select({ id: employees.id }).from(employees).where(sql`lower(${employees.workEmail}) = ${person.workEmail.toLowerCase()}`).limit(1);
+    if (sameEmail) return fail("Someone with that work email already exists.");
+    // The same person added twice is how the directory and the org chart end up doubled: look before creating.
+    const known = compareWithExisting(
+      { id: "", first: person.legalFirstName, last: person.legalLastName, workEmail: person.workEmail, personalEmail: person.personalEmail, mobile: person.mobile, birthDate: person.birthDate },
+      await loadPeopleForDuplicates(db),
+    );
+    if (known?.level === "same") return fail(`Looks like ${known.with.first} ${known.with.last} (${known.with.workEmail}) is already in the directory: same name and ${known.signals.join(" and ")}. Open their record and update it instead of adding a second one.`);
+    if (known && !confirmDifferentPerson) return fail(`Possible duplicate: ${known.with.first} ${known.with.last} (${known.with.workEmail}) already has the same name. If this is the same person, update their record (their email may have changed). If it is a different person, tick "This is a different person" and add again.`);
 
     try {
-      const { id } = await db.transaction((tx) => createEmployeeRecord(tx, actor, parsed.data));
+      const { id } = await db.transaction((tx) => createEmployeeRecord(tx, actor, person));
       revalidateEmployee(id);
       return { ok: true, data: { id } };
     } catch (error) {
@@ -138,6 +152,9 @@ export async function createMyProfile(input: unknown): Promise<ActionResult<{ id
           await writeAudit({ actor, action: "people.link_self", targetType: "employee", targetId: linked }, tx);
           return linked;
         }
+        // A record with your name but another email is probably yours (it was made before you changed your email): do not make a second one
+        const same = compareWithExisting({ id: "", first: parsed.data.firstName, last: parsed.data.lastName, workEmail: actor.email }, await loadPeopleForDuplicates(tx));
+        if (same) throw new ActionFailure(`There is already a people record with your name (${same.with.workEmail}). Ask HR to link your account to it, so you do not end up with two.`);
         const [created] = await tx
           .insert(employees)
           .values({ legalFirstName: parsed.data.firstName, legalLastName: parsed.data.lastName, workEmail: actor.email, status: "active", userId: actor.id, createdBy: actor.id })
