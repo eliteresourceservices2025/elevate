@@ -13,6 +13,10 @@ export const POLICIES = {
   mfa: { requests: 10, window: "10 m" },
   reveal: { requests: 30, window: "10 m" },
   upload: { requests: 20, window: "10 m" },
+  /** Sending a document to many people: the browser sends batches of 10, so 60 requests is 600 people per 10 minutes. */
+  signSend: { requests: 60, window: "10 m" },
+  /** The pre-send check of everyone's details (reads records only, nothing is stored). */
+  signCheck: { requests: 120, window: "10 m" },
   download: { requests: 60, window: "10 m" },
   clock: { requests: 30, window: "10 m" },
   presence: { requests: 60, window: "10 m" },

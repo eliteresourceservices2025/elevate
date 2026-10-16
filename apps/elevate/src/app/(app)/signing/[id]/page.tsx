@@ -47,7 +47,11 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
         <section aria-label="Signed copy" className="space-y-2 rounded-xl border border-green-600/40 bg-green-600/10 p-4">
           <h2 className="text-lg font-semibold">Everyone has signed</h2>
           <p className="text-sm">Sealed {e.sealedAt ? `${formatInZone(e.sealedAt, undefined, "MMM d, yyyy h:mm a")} (${formatInZone(e.sealedAt, SECONDARY_TIMEZONE, "h:mm a")} Manila)` : ""}. The signed copy includes a certificate of completion.</p>
-          <EnvelopeDocument envelopeId={e.id} title="The signed document" openLabel="View the signed copy" sealed />
+          {e.canOpenSealed ? (
+            <EnvelopeDocument envelopeId={e.id} title="The signed document" openLabel="View the signed copy" sealed />
+          ) : (
+            <p className="text-sm">This signed copy has the contractor&apos;s personal details, so only the contractor and HR can open it.</p>
+          )}
           {e.sealedSha256 ? <p className="break-all font-mono text-xs text-muted-foreground">SHA-256: {e.sealedSha256}</p> : null}
         </section>
       ) : null}

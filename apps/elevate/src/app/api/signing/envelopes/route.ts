@@ -8,7 +8,7 @@ import { ActionFailure } from "@/lib/run-action";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { MAX_PDF_BYTES } from "@/modules/signing/constants";
 import { esignTemplates } from "@/modules/signing/schema";
-import { createEnvelope } from "@/modules/signing/service";
+import { createEnvelope, inspectPdf, sendQueuedEmailNow } from "@/modules/signing/service";
 import { assertSigneeValues, loadSigneeValues, renderComposedPdf, renderForSignee } from "@/modules/signing/compose";
 import { cleanSendInputs, fieldsUsed, mergeProblem, unfilledPlaceholders } from "@/modules/signing/merge";
 import { isSigneeDetailKey } from "@/modules/signing/constants";
@@ -32,7 +32,8 @@ export async function POST(request: Request) {
   if (Number(request.headers.get("content-length") ?? 0) > MAX_PDF_BYTES + 100_000) return json({ ok: false, error: "The PDF must be 8 MB or smaller." }, 413);
   // A "check" request only validates (no file stored, nothing created), so it does not count against the upload limit.
   const checkOnly = new URL(request.url).searchParams.get("check") === "1";
-  if (!checkOnly && !(await allowRequest("upload", actor.id))) return json({ ok: false, error: "Too many uploads. Wait a few minutes and try again." }, 429);
+  // Checks and sends have their own allowances: a send to many people is many requests (batches of 10), so it must not use up the upload limit.
+  if (!(await allowRequest(checkOnly ? "signCheck" : "signSend", actor.id))) return json({ ok: false, error: "Too many requests. Wait a few minutes and try again." }, 429);
 
   let form: FormData;
   try {
@@ -140,9 +141,11 @@ export async function POST(request: Request) {
       // The browser sends the people in batches of at most MAX_SIGNERS, so one request stays well inside the time limit.
       let first: string | undefined;
       let done = 0;
+      // The same PDF for everyone (no per-person details): check and fingerprint it once, not once per person.
+      const shared = pdfFor ? null : await inspectPdf(pdf as Uint8Array);
       try {
         for (const s of v.signers) {
-          const { id } = await createEnvelope(actor, { ...base, pdf: pdfFor ? await pdfFor(s.userId) : (pdf as Uint8Array), signers: [{ userId: s.userId, role: s.role ?? null, position: 1, fillsDetails: signeeDetails.length > 0 }, ...(counter ? [{ userId: counter.userId, role: counter.role, position: 2 }] : [])] });
+          const { id } = await createEnvelope(actor, { ...base, emailNow: false, ...(shared ? { pdfInfo: shared } : {}), pdf: pdfFor ? await pdfFor(s.userId) : (pdf as Uint8Array), signers: [{ userId: s.userId, role: s.role ?? null, position: 1, fillsDetails: signeeDetails.length > 0 }, ...(counter ? [{ userId: counter.userId, role: counter.role, position: 2 }] : [])] });
           first ??= id;
           done += 1;
         }
@@ -151,6 +154,8 @@ export async function POST(request: Request) {
         if (!(error instanceof ActionFailure)) console.error("create envelope failed:", errorDetail(error));
         return json({ ok: false, error: error instanceof ActionFailure ? error.message : "Something went wrong. Please try again.", count: done }, error instanceof ActionFailure ? 400 : 500);
       } finally {
+        // One flush for the whole batch (the emails of the copies created so far), instead of one per person.
+        if (done > 0 && base.send) await sendQueuedEmailNow();
         revalidatePath("/signing");
       }
       return json({ ok: true, id: first, count: done });
