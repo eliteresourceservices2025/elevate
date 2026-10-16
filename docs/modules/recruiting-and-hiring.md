@@ -47,3 +47,5 @@
 - Final hours are a manual task linking to `/hours-review`; ELEVATE never computes pay. Assets are manual tasks until Phase 4. Retention of separated people's data is unchanged (counsel).
 - Pages: `/onboarding`, `/onboarding/[id]`, `/onboarding/templates`, `/offboarding`, `/offboarding/new`, `/offboarding/[id]` (each its own menu address; lists are paged). Jobs `offboarding-separations`, `checklist-sync`, `checklist-reminders` are in the health registry.
 - Tests: `src/modules/onboarding/onboarding.test.ts` (pure), `tests/authz/onboarding-actions.test.ts`, `tests/integration/onboarding.test.ts`, `tests/e2e/offboarding.spec.ts`.
+
+**Wording in Signing screens:** the person who receives a document and signs it is the **signee** (labels, messages, notices). "Signer" is kept for ERS people who countersign, and in code, tables and JSON keys (`esign_signers`, `signers`), which do not change.

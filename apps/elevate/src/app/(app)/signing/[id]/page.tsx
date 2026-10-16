@@ -63,8 +63,8 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
         <p className="rounded-lg border bg-muted/40 p-3 text-sm">You signed this. The others still need to sign.</p>
       ) : null}
 
-      <section aria-label="Signers" className="space-y-2 rounded-xl border bg-card p-4">
-        <h2 className="text-lg font-semibold">Signers</h2>
+      <section aria-label="Signees" className="space-y-2 rounded-xl border bg-card p-4">
+        <h2 className="text-lg font-semibold">Signees</h2>
         <ol className="space-y-2 text-sm">
           {d.signers.map((s) => (
             <li key={s.id} className="flex flex-wrap items-center gap-2">
@@ -74,7 +74,7 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
                 {s.isMe ? " (you)" : ""}
               </span>
               {s.role ? <span className="text-muted-foreground">{s.role}</span> : null}
-              {s.outside ? <Badge variant="outline">Outside signer</Badge> : null}
+              {s.outside ? <Badge variant="outline">Outside signee</Badge> : null}
               {manager && s.email ? <span className="text-xs text-muted-foreground">{s.email}</span> : null}
               <Badge variant={s.status === "signed" ? "default" : s.status === "declined" ? "destructive" : "secondary"}>{SIGNER_STATUS_LABELS[s.status]}</Badge>
               {s.signedAt ? <span className="text-xs text-muted-foreground">{formatInZone(s.signedAt, undefined, "MMM d, yyyy h:mm a")}</span> : null}

@@ -162,7 +162,7 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
                 <div>
                   <p className="font-medium">{t.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {t.pages} {t.pages === 1 ? "page" : "pages"} · signers: {t.roles.join(", ")}
+                    {t.pages} {t.pages === 1 ? "page" : "pages"} · signees: {t.roles.join(", ")}
                     {t.description ? ` · ${t.description}` : ""}
                   </p>
                 </div>

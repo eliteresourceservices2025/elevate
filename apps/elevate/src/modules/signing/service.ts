@@ -7,7 +7,7 @@ import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { users } from "@/modules/core/schema";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
-import { queueEmails } from "@/modules/notifications/email-queue";
+import { flushEmailQueue, queueEmails } from "@/modules/notifications/email-queue";
 import { notify } from "@/modules/notifications/service";
 import { employees } from "@/modules/people/schema";
 import { computeEventHash, GENESIS_HASH, sha256Hex } from "./chain";
@@ -87,13 +87,26 @@ async function announceTurn(tx: Tx, envelopeId: string, signerIds: string[], kin
   return rows.filter((r) => r.userId === null).map((r) => r.id);
 }
 
+/**
+ * Sends the queued "a document is waiting for your signature" emails now, instead of at the next 30-minute run: people expect the
+ * email as soon as a document is sent. Best effort (call after the transaction commits): if the sender is not configured, the budget
+ * is used up or it fails, the emails simply stay queued and the regular job sends them.
+ */
+export async function sendQueuedEmailNow(): Promise<void> {
+  try {
+    await flushEmailQueue();
+  } catch (error) {
+    console.error("immediate email send failed:", error instanceof Error ? error.name : "unknown error");
+  }
+}
+
 /** Moves a draft out for signature: the people whose turn it is get notified. */
 export async function sendDraft(tx: Tx, actor: Actor, envelopeId: string, ip: string | null): Promise<{ externalIds: string[] }> {
   const [env] = await tx.select().from(esignEnvelopes).where(eq(esignEnvelopes.id, envelopeId)).for("update");
   if (!env) throw new ActionFailure("That document was not found.");
   if (env.status !== "draft") throw new ActionFailure("It was already sent.");
   const signers = await tx.select().from(esignSigners).where(eq(esignSigners.envelopeId, envelopeId));
-  if (signers.length === 0) throw new ActionFailure("Add at least one signer first.");
+  if (signers.length === 0) throw new ActionFailure("Add at least one signee first.");
 
   const now = new Date();
   // A draft kept for a while gets a fresh window from the day it is sent.
@@ -121,16 +134,16 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
   } catch (error) {
     throw new ActionFailure(error instanceof Error && /pages/.test(error.message) ? error.message : "That PDF cannot be used. Password-protected or damaged files are refused.");
   }
-  if (input.signers.length === 0 || input.signers.length > MAX_SIGNERS) throw new ActionFailure(`Add between 1 and ${MAX_SIGNERS} signers.`);
-  if (input.signers.some((s) => Boolean(s.userId) === Boolean(s.external))) throw new ActionFailure("Each signer is either an ELEVATE user or an outside person with a name and email.");
+  if (input.signers.length === 0 || input.signers.length > MAX_SIGNERS) throw new ActionFailure(`Add between 1 and ${MAX_SIGNERS} signees.`);
+  if (input.signers.some((s) => Boolean(s.userId) === Boolean(s.external))) throw new ActionFailure("Each signee is either an ELEVATE user or an outside person with a name and email.");
   const ids = input.signers.flatMap((s) => (s.userId ? [s.userId] : []));
   const outside = input.signers.flatMap((s) => (s.external ? [s.external.email.trim().toLowerCase()] : []));
   if (input.initialEachPage && input.signers.some((s) => s.external)) throw new ActionFailure("Initials on each page are only available when everyone signing has an ELEVATE account.");
   if (new Set(ids).size !== ids.length || new Set(outside).size !== outside.length) throw new ActionFailure("Each person can only be added once.");
-  if (input.signers.some((s) => s.external && (s.external.name.trim().length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.external.email.trim())))) throw new ActionFailure("An outside signer needs a name and a valid email.");
+  if (input.signers.some((s) => s.external && (s.external.name.trim().length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.external.email.trim())))) throw new ActionFailure("An outside signee needs a name and a valid email.");
   if (ids.length) {
     const real = await db.select({ id: users.id }).from(users).where(and(inArray(users.id, ids), isNull(users.archivedAt)));
-    if (real.length !== ids.length) throw new ActionFailure("One of the signers does not have an active ELEVATE account.");
+    if (real.length !== ids.length) throw new ActionFailure("One of the signees does not have an active ELEVATE account.");
   }
 
   const sha = sha256Hex(input.pdf);
@@ -161,6 +174,7 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
     });
     // Outside signers are emailed their link once the envelope is committed (the link points at a row that now exists)
     const links = created.externalIds.length ? await issueExternalLinks(created.externalIds, "turn") : null;
+    if (input.send) await sendQueuedEmailNow();
     return { id: created.id, links };
   } catch (error) {
     await storage.remove(BUCKETS.signed, [path]).catch(() => undefined);
