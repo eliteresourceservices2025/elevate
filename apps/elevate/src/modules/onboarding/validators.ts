@@ -3,7 +3,8 @@ import { CHECKS, EXIT_RETURN, KINDS, LEAVING_REASONS, OWNERS } from "./constants
 
 const uuid = z.string().uuid("Invalid id");
 const text = (max: number) => z.string().trim().max(max);
-const blankToUndefined = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v);
+// A blank box and a null (a field read back from the database) both mean "not set".
+const blankToUndefined = (v: unknown) => (v === null || (typeof v === "string" && v.trim() === "") ? undefined : v);
 const date = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date");
 
 export const itemSchema = z

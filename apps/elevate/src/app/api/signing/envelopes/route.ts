@@ -1,3 +1,4 @@
+import { errorDetail } from "@/lib/error-detail";
 import { NextResponse } from "next/server";
 import { ForbiddenError, authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
     return json({ ok: true, id });
   } catch (error) {
     if (error instanceof ActionFailure) return json({ ok: false, error: error.message }, 400);
-    console.error("create envelope failed:", error instanceof Error ? error.name : "unknown error");
+    console.error("create envelope failed:", errorDetail(error));
     return json({ ok: false, error: "Something went wrong. Please try again." }, 500);
   }
 }
