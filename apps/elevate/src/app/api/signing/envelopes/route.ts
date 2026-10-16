@@ -10,7 +10,8 @@ import { MAX_PDF_BYTES } from "@/modules/signing/constants";
 import { esignTemplates } from "@/modules/signing/schema";
 import { createEnvelope } from "@/modules/signing/service";
 import { assertSigneeValues, loadSigneeValues, renderComposedPdf, renderForSignee } from "@/modules/signing/compose";
-import { fieldsUsed, mergeProblem, unfilledPlaceholders } from "@/modules/signing/merge";
+import { cleanSendInputs, fieldsUsed, mergeProblem, unfilledPlaceholders } from "@/modules/signing/merge";
+import { isSigneeDetailKey } from "@/modules/signing/constants";
 import { composedBodySchema, countersignerSchema, createEnvelopeSchema } from "@/modules/signing/validators";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -58,6 +59,22 @@ export async function POST(request: Request) {
     let fileName = "document.pdf";
     const content = field("content");
     const each = field("individual") === "true";
+    // The Company's countersigner (optional, per-person copies only): signs after each person, on every copy.
+    let counter: { userId: string; role: string | null } | null = null;
+    const counterRaw = field("countersigner");
+    if (counterRaw) {
+      let counterJson: unknown;
+      try {
+        counterJson = JSON.parse(counterRaw);
+      } catch {
+        return json({ ok: false, error: "Check the countersigner and try again." }, 400);
+      }
+      const c = countersignerSchema.safeParse(counterJson);
+      if (!c.success) return json({ ok: false, error: c.error.issues[0]?.message ?? "Check the countersigner and try again." }, 400);
+      if (v.signers.some((s) => s.userId === c.data.userId)) return json({ ok: false, error: "The countersigner cannot also be one of the people signing their own copy." }, 400);
+      counter = { userId: c.data.userId, role: c.data.role ?? null };
+    }
+    if (counter && !each) return json({ ok: false, error: "A countersigner is added when each person signs their own copy." }, 400);
     // Details filled in from each person's record: {{contractor_name}} and the like (documents written in ELEVATE only).
     let pdfFor: ((userId: string) => Promise<Uint8Array>) | null = null;
     if (content !== undefined && content.trim() !== "") {
@@ -70,11 +87,21 @@ export async function POST(request: Request) {
       if (unfilled.length) return json({ ok: false, error: `Fill in ${unfilled.map((u) => `[[${u}]]`).join(", ")} in the document before sending.` }, 400);
       if (fieldsUsed(body.data).length > 0) {
         if (!each && v.signers.length > 1) return json({ ok: false, error: "This document fills in one person's details, so it must go out as each person's own copy. Tick Each person signs their own copy." }, 400);
+        // What HR typed for this send (pay terms, duties, schedule): the same for every copy.
+        let rawInputs: Record<string, unknown> = {};
+        try {
+          const parsedInputs: unknown = JSON.parse(field("inputs") ?? "{}");
+          if (parsedInputs && typeof parsedInputs === "object" && !Array.isArray(parsedInputs)) rawInputs = parsedInputs as Record<string, unknown>;
+        } catch {
+          return json({ ok: false, error: "Check the details you typed and try again." }, 400);
+        }
+        const typed = cleanSendInputs(body.data, rawInputs);
+        if ("error" in typed) return json({ ok: false, error: typed.error }, 400);
         const ids = v.signers.map((s) => s.userId);
         const people = await loadSigneeValues(ids);
-        assertSigneeValues(body.data, people, ids);
+        assertSigneeValues(body.data, people, ids, typed.values);
         if (checkOnly) return json({ ok: true, count: ids.length });
-        pdfFor = async (userId) => renderForSignee(v.title, body.data, people.get(userId) as { values: Record<string, string> });
+        pdfFor = async (userId) => renderForSignee(v.title, body.data, people.get(userId) as { values: Record<string, string> }, typed.values);
       } else {
         if (checkOnly) return json({ ok: true, count: v.signers.length });
         pdf = await renderComposedPdf(v.title, body.data);
@@ -93,24 +120,21 @@ export async function POST(request: Request) {
       fileName = upload.name || fileName;
     }
     if (checkOnly) return json({ ok: true, count: v.signers.length });
-    // The Company's countersigner (optional, per-person copies only): signs after each person, on every copy.
-    let counter: { userId: string; role: string | null } | null = null;
-    const counterRaw = field("countersigner");
-    if (counterRaw) {
-      let counterJson: unknown;
+    // Details the signee types in while signing (bank details on the agreement): a fixed list of keys, for the person, not the countersigner.
+    let signeeDetails: string[] = [];
+    const detailsRaw = field("signeeDetails");
+    if (detailsRaw) {
       try {
-        counterJson = JSON.parse(counterRaw);
+        const parsedDetails: unknown = JSON.parse(detailsRaw);
+        if (!Array.isArray(parsedDetails) || parsedDetails.length > 8 || parsedDetails.some((k) => typeof k !== "string" || !isSigneeDetailKey(k))) throw new Error("bad");
+        signeeDetails = [...new Set(parsedDetails as string[])];
       } catch {
-        return json({ ok: false, error: "Check the countersigner and try again." }, 400);
+        return json({ ok: false, error: "One of the details to collect is not supported." }, 400);
       }
-      const c = countersignerSchema.safeParse(counterJson);
-      if (!c.success) return json({ ok: false, error: c.error.issues[0]?.message ?? "Check the countersigner and try again." }, 400);
-      if (v.signers.some((s) => s.userId === c.data.userId)) return json({ ok: false, error: "The countersigner cannot also be one of the people signing their own copy." }, 400);
-      counter = { userId: c.data.userId, role: c.data.role ?? null };
     }
-    if (counter && !each) return json({ ok: false, error: "A countersigner is added when each person signs their own copy." }, 400);
     const ip = await clientIp();
-    const base = { title: v.title, fileName, templateId: v.templateId ?? null, order: v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" };
+    const base = {
+      signeeDetails, title: v.title, fileName, templateId: v.templateId ?? null, order: counter ? ("sequential" as const) : v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" };
     if (each) {
       // Each person gets their own copy (their own envelope, signature and sealed file): used for "everyone", a team or a client.
       // The browser sends the people in batches of at most MAX_SIGNERS, so one request stays well inside the time limit.
@@ -118,16 +142,20 @@ export async function POST(request: Request) {
       let done = 0;
       try {
         for (const s of v.signers) {
-          const { id } = await createEnvelope(actor, { ...base, pdf: pdfFor ? await pdfFor(s.userId) : (pdf as Uint8Array), signers: [{ userId: s.userId, role: s.role ?? null, position: 1 }, ...(counter ? [{ userId: counter.userId, role: counter.role, position: 2 }] : [])] });
+          const { id } = await createEnvelope(actor, { ...base, pdf: pdfFor ? await pdfFor(s.userId) : (pdf as Uint8Array), signers: [{ userId: s.userId, role: s.role ?? null, position: 1, fillsDetails: signeeDetails.length > 0 }, ...(counter ? [{ userId: counter.userId, role: counter.role, position: 2 }] : [])] });
           first ??= id;
           done += 1;
         }
+      } catch (error) {
+        // Tell the browser how many copies this batch already created, so a retry does not send them twice.
+        if (!(error instanceof ActionFailure)) console.error("create envelope failed:", errorDetail(error));
+        return json({ ok: false, error: error instanceof ActionFailure ? error.message : "Something went wrong. Please try again.", count: done }, error instanceof ActionFailure ? 400 : 500);
       } finally {
         revalidatePath("/signing");
       }
       return json({ ok: true, id: first, count: done });
     }
-    const { id } = await createEnvelope(actor, { ...base, pdf: pdfFor ? await pdfFor(v.signers[0].userId) : (pdf as Uint8Array), signers: v.signers });
+    const { id } = await createEnvelope(actor, { ...base, pdf: pdfFor ? await pdfFor(v.signers[0].userId) : (pdf as Uint8Array), signers: v.signers.map((s) => ({ ...s, fillsDetails: signeeDetails.length > 0 })) });
     revalidatePath("/signing");
     return json({ ok: true, id, count: 1 });
   } catch (error) {

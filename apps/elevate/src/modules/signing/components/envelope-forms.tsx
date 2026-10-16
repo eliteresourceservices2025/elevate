@@ -13,7 +13,9 @@ import type { SignerChoice, SigneeGroups, TemplateRow } from "../queries";
 import { useRouter } from "next/navigation";
 import { ComposeEditor } from "./compose-editor";
 import { BUILTIN_TEMPLATES } from "../builtin-templates";
-import { fieldsUsed } from "../merge";
+import { SEND_FIELDS, fieldsUsed, sendFieldsUsed } from "../merge";
+
+import { Textarea } from "@/components/ui/textarea";
 
 type Picked = { userId: string; role: string };
 
@@ -35,6 +37,8 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
   // Everyone, a team or a client: each person signs their own copy (their own document, signature and sealed file).
   const [copies, setCopies] = useState(false);
   const [sharedRole, setSharedRole] = useState("");
+  const [signeeDetails, setSigneeDetails] = useState<string[]>([]);
+  const [inputs, setInputs] = useState<Record<string, string>>(() => Object.fromEntries(SEND_FIELDS.flatMap((f) => (f.initial ? [[f.key, f.initial]] : []))));
   const [counterId, setCounterId] = useState("");
   const [counterRole, setCounterRole] = useState("");
   const [groupKind, setGroupKind] = useState<"everyone" | "team" | "client">("everyone");
@@ -64,10 +68,11 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
     setTitle(t.title);
     setContent(t.body);
     setSharedRole(t.roles[0] ?? "");
-    if (t.countersignerRole) {
-      setCounterRole(t.countersignerRole);
-      setCopies(true);
-    }
+    setSigneeDetails(t.signeeDetails ?? []);
+    // The countersigner and per-person copies belong to the document picked, not to the one before it
+    setCounterId("");
+    setCounterRole(t.countersignerRole ?? "");
+    setCopies(Boolean(t.countersignerRole));
     setPicked((list) => (list.length ? list.map((p, i) => ({ ...p, role: p.role || (t.roles[i] ?? "") })) : list));
   }
 
@@ -78,7 +83,7 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
       const r = await findSignees({ kind: groupKind, id: groupKind === "everyone" ? undefined : groupId });
       if (!r.ok) return void toast.error(r.error);
       const have = new Set(picked.map((p) => p.userId));
-      const fresh = r.data.people.filter((x) => !have.has(x.userId));
+      const fresh = r.data.people.filter((x) => !have.has(x.userId) && x.userId !== counterId);
       if (fresh.length === 0) return void toast.message("Everyone in that group is already added.");
       setPicked((l) => [...l, ...fresh.map((x) => ({ userId: x.userId, role: "" }))].slice(0, 500));
       if (picked.length + fresh.length > MAX_SIGNERS) setCopies(true);
@@ -93,6 +98,7 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
   async function submit(send: boolean) {
     const signers = picked.filter((p) => p.userId);
     if (signers.length !== picked.length) return void toast.error("Choose a person for every role.");
+    if (individual && counterId && signers.some((p) => p.userId === counterId)) return void toast.error("The countersigner cannot also be one of the people signing their own copy. Remove them from the list.");
     if (source === "write" && content.trim().length < 20) return void toast.error("Write the document (at least a few sentences).");
     if (source === "upload" && !file) return void toast.error("Attach the PDF.");
     if (source === "upload" && file && file.size > MAX_PDF_BYTES) return void toast.error("The PDF must be 8 MB or smaller.");
@@ -105,6 +111,10 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
       form.set("send", String(send));
       form.set("signers", JSON.stringify(batch.map((p, i) => ({ userId: p.userId, role: p.role || sharedRole, position: i + 1 }))));
       if (each) form.set("individual", "true");
+      if (source === "write") {
+        form.set("inputs", JSON.stringify(inputs));
+        if (signeeDetails.length) form.set("signeeDetails", JSON.stringify(signeeDetails));
+      }
       if (each && counterId) form.set("countersigner", JSON.stringify({ userId: counterId, role: counterRole }));
       if (initialEachPage) form.set("initialEachPage", "true");
       if (source === "write") form.set("content", content);
@@ -129,7 +139,10 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
           const batch = signers.slice(i, i + MAX_SIGNERS);
           setProgress({ done, total: signers.length });
           const body = await post(batch, true);
-          if (!body?.ok) return void toast.error(`${body?.error ?? "Something went wrong. Please try again."} ${done} of ${signers.length} were ${send ? "sent" : "saved"} before it stopped. Check Signing before trying again, so nobody gets two.`);
+          if (!body?.ok) {
+            const made = done + (body?.count ?? 0);
+            return void toast.error(`${body?.error ?? "Something went wrong. Please try again."} ${made} of ${signers.length} were ${send ? "sent" : "saved"} before it stopped. Check Signing before trying again, so nobody gets two.`);
+          }
           done += body.count ?? batch.length;
         }
         toast.success(send ? `Sent to ${done} ${done === 1 ? "person" : "people"}.` : `Saved ${done} drafts.`);
@@ -194,6 +207,36 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
               ))}
             </SelectField>
             <ComposeEditor value={content} onChange={setContent} title={title} />
+            {sendFieldsUsed(content).length > 0 ? (
+              <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                <p className="text-sm font-medium">Fill in for this send</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {sendFieldsUsed(content).map((f) => (
+                    <div key={f.key} className={f.kind === "textarea" ? "space-y-1 sm:col-span-2" : "space-y-1"}>
+                      {f.kind === "textarea" ? (
+                        <>
+                          <Label htmlFor={`send-${f.key}`}>{f.label}</Label>
+                          <Textarea id={`send-${f.key}`} rows={4} maxLength={f.max} value={inputs[f.key] ?? ""} onChange={(e) => setInputs((v) => ({ ...v, [f.key]: e.target.value }))} />
+                        </>
+                      ) : f.kind === "choice" ? (
+                        <SelectField id={`send-${f.key}`} label={f.label} value={inputs[f.key] ?? ""} onChange={(e) => setInputs((v) => ({ ...v, [f.key]: e.target.value }))}>
+                          {(f.options ?? []).map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </SelectField>
+                      ) : (
+                        <TextField id={`send-${f.key}`} label={f.label} value={inputs[f.key] ?? ""} onChange={(e) => setInputs((v) => ({ ...v, [f.key]: e.target.value }))} maxLength={f.max} />
+                      )}
+                      {f.hint ? <p className="text-xs text-muted-foreground">{f.hint}</p> : null}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">These are the same on every copy in this send. A document with different terms per person is sent one person at a time.</p>
+              </div>
+            ) : null}
+            {signeeDetails.length > 0 ? <p className="text-xs text-muted-foreground">The person will also be asked to type in their {signeeDetails.length} details (bank information) when signing. Those are kept encrypted and printed on the signed copy.</p> : null}
           </div>
         ) : source === "upload" ? (
           <div className="space-y-1.5">
@@ -279,7 +322,16 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
             </div>
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-56 flex-1">
-                <SelectField id="env-counter" label="Countersigned by the Company (optional, signs after each person)" value={counterId} onChange={(e) => setCounterId(e.target.value)}>
+                <SelectField
+                  id="env-counter"
+                  label="Countersigned by the Company (optional, signs after each person)"
+                  value={counterId}
+                  onChange={(e) => {
+                    setCounterId(e.target.value);
+                    // The countersigner cannot also sign their own copy
+                    setPicked((l) => l.filter((p) => p.userId !== e.target.value));
+                  }}
+                >
                   <option value="">No countersigner</option>
                   {people
                     .filter((x) => !taken.has(x.userId) || x.userId === counterId)
@@ -360,7 +412,7 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
               <SelectField id="env-add" label="Add a signee" value={add} onChange={(e) => setAdd(e.target.value)}>
                 <option value="">Choose a person</option>
                 {people
-                  .filter((x) => !taken.has(x.userId))
+                  .filter((x) => !taken.has(x.userId) && x.userId !== counterId)
                   .map((x) => (
                     <option key={x.userId} value={x.userId}>
                       {x.name} ({x.email})

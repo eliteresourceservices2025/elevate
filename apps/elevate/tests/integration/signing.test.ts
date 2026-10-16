@@ -542,3 +542,99 @@ describe("details filled in from people's records", () => {
     expect(pdf.length).toBeGreaterThan(500);
   });
 });
+
+describe("details typed in while signing", () => {
+  it("collects the contractor's details, keeps them encrypted, leaves the countersigner alone, and seals", async () => {
+    const { id } = await service.createEnvelope(
+      { id: hr.id, email: hr.email, roles: hr.roles },
+      { title: uniq("Agreement "), pdf: await samplePdf(2), fileName: "a.pdf", signers: [{ userId: ana.id, role: "Contractor", position: 1, fillsDetails: true }, { userId: ben.id, role: "ERS representative", position: 2 }], order: "sequential", expiryDays: 14, send: true, ip: null, signeeDetails: ["bank_name", "account_number", "account_name", "phone_number"] },
+    );
+    await open(ana, id);
+    expect(await signTyped(ana, id)).toEqual({ ok: false, error: expect.stringContaining("Bank name is needed") });
+    expect(await signTyped(ana, id, { details: { bank_name: "BDO", account_number: "abc", account_name: "Ana Reyes", phone_number: "+63 917 123 4567" } })).toEqual({ ok: false, error: expect.stringContaining("Account number") });
+    const details = { bank_name: "BDO", account_number: "0012 3456 7890", account_name: "Ana Reyes", phone_number: "+63 917 123 4567" };
+    expect((await signTyped(ana, id, { details })).ok).toBe(true);
+    const [row] = await rows<{ details_enc: string; fills_details: boolean }>(sql`select details_enc, fills_details from docs.esign_signers where envelope_id = ${id} and user_id = ${ana.id}`);
+    expect(row.fills_details).toBe(true);
+    expect(row.details_enc).toBeTruthy();
+    expect(row.details_enc).not.toContain("0012");
+    // The log records which details were collected, never their values
+    const events = await rows<{ detail: Record<string, unknown> }>(sql`select detail from docs.esign_events where envelope_id = ${id} and type = 'signed'`);
+    expect(JSON.stringify(events)).not.toContain("0012");
+    expect(JSON.stringify(events)).toContain("bank_name");
+
+    // The countersigner does not type any details
+    await open(ben, id);
+    expect((await signTyped(ben, id)).ok).toBe(true);
+    const [env] = await rows<{ status: string }>(sql`select status from docs.esign_envelopes where id = ${id}`);
+    expect(env.status).toBe("completed");
+  });
+});
+
+describe("the send route", () => {
+  const post = async (fields: Record<string, string>, query = "") => {
+    const { POST } = await import("@/app/api/signing/envelopes/route");
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.set(k, v);
+    const res = await POST(new Request(`http://localhost/api/signing/envelopes${query}`, { method: "POST", body: form }));
+    return { status: res.status, body: (await res.json()) as { ok: boolean; error?: string; id?: string; count?: number } };
+  };
+  const text = "This is a long enough document for the people who are going to sign it in ELEVATE.";
+  const signersJson = (users: TestUser[]) => JSON.stringify(users.map((u, i) => ({ userId: u.id, role: "Contractor", position: i + 1 })));
+  const countFor = async (title: string) => (await rows<{ n: number }>(sql`select count(*)::int as n from docs.esign_envelopes where title = ${title}`))[0].n;
+
+  it("adds the countersigner after each person, even when the form says 'parallel'", async () => {
+    as(hr);
+    const title = uniq("Counter ");
+    const r = await post({ title, content: text, individual: "true", order: "parallel", signers: signersJson([ana, ben]), countersigner: JSON.stringify({ userId: cara.id, role: "ERS representative" }) });
+    expect(r.body).toMatchObject({ ok: true, count: 2 });
+    const signers = await rows<{ position: number; role: string; user_id: string }>(sql`
+      select s.position, s.role, s.user_id from docs.esign_signers s join docs.esign_envelopes e on e.id = s.envelope_id where e.title = ${title} order by e.id, s.position`);
+    expect(signers).toHaveLength(4);
+    for (const s of signers.filter((x) => x.user_id === cara.id)) expect(s).toMatchObject({ position: 2, role: "ERS representative" });
+    expect(signers.filter((x) => x.user_id !== cara.id).every((x) => x.position === 1)).toBe(true);
+    // Only the person's turn is open at first
+    expect((await signerRow((await rows<{ id: string }>(sql`select id from docs.esign_envelopes where title = ${title} limit 1`))[0].id, cara))?.status).toBe("waiting");
+  });
+
+  it("refuses a countersigner who is also a signee before creating anything", async () => {
+    as(hr);
+    const title = uniq("Clash ");
+    const r = await post({ title, content: text, individual: "true", signers: signersJson([ana, ben]), countersigner: JSON.stringify({ userId: ben.id }) });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/countersigner cannot also/);
+    expect(await countFor(title)).toBe(0);
+    // also in a check-only request
+    const c = await post({ title, content: text, individual: "true", signers: signersJson([ben]), countersigner: JSON.stringify({ userId: ben.id }) }, "?check=1");
+    expect(c.status).toBe(400);
+  });
+
+  it("refuses text with [[parts]] still to fill in, and a countersigner on a shared document", async () => {
+    as(hr);
+    const t1 = uniq("Blank ");
+    const blank = await post({ title: t1, content: `${text} Address: [[Company business address]]`, signers: signersJson([ana]) });
+    expect(blank.status).toBe(400);
+    expect(blank.body.error).toMatch(/Company business address/);
+    const t2 = uniq("Shared ");
+    const shared = await post({ title: t2, content: text, signers: signersJson([ana, ben]), countersigner: JSON.stringify({ userId: cara.id }) });
+    expect(shared.status).toBe(400);
+    expect(await countFor(t1)).toBe(0);
+    expect(await countFor(t2)).toBe(0);
+  });
+
+  it("checks everyone first and sends nothing when someone's details are missing", async () => {
+    as(hr);
+    const title = uniq("Fields ");
+    const body = `${text} Name: {{contractor_name}} Address: {{contractor_address}}`;
+    await db.execute(sql`update core.employees set address_line = null where user_id = ${ana.id}`);
+    const checked = await post({ title, content: body, individual: "true", signers: signersJson([ana]) }, "?check=1");
+    expect(checked.status).toBe(400);
+    expect(checked.body.error).toMatch(/Ana Reyes: Address/);
+    expect(await countFor(title)).toBe(0);
+    // a document with fields needs per-person copies when there is more than one signee
+    const shared = await post({ title, content: body, signers: signersJson([ana, ben]) });
+    expect(shared.status).toBe(400);
+    expect(shared.body.error).toMatch(/own copy/);
+    expect(await countFor(title)).toBe(0);
+  });
+});

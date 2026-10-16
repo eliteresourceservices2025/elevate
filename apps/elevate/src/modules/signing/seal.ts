@@ -25,6 +25,8 @@ export type SealSigner = {
   consentVersion: string;
   /** Typed initials stamped at the foot of every original page, or null when the document did not ask for them. */
   initials?: string | null;
+  /** What the signee typed in while signing (for example bank details), printed under their signature. */
+  details?: { label: string; value: string }[] | null;
 };
 
 export type SealEvent = { seq: number; type: string; at: Date; actor: string | null; ip: string | null };
@@ -157,6 +159,12 @@ export async function sealPdf(input: SealInput): Promise<Uint8Array> {
     sig.page.drawText(manila(s.signedAt), { x: PAGE.margin + 290, y: top - 58, size: 9, font: regular, color: MUTED });
     sig.page.drawText(phoenix(s.signedAt), { x: PAGE.margin + 290, y: top - 71, size: 9, font: regular, color: MUTED });
     sig.y = top - 116;
+    if (s.details?.length) {
+      sig.ensure(30 + s.details.length * 16);
+      sig.text(`Details provided by ${s.name}`, { bold: true, size: 10 });
+      for (const d of s.details) sig.text(`${d.label}: ${d.value}`, { size: 10, indent: 10 });
+      sig.y -= 10;
+    }
   }
 
   // ---- Certificate ----------------------------------------------------------------------------------------------------

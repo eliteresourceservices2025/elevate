@@ -11,6 +11,8 @@ import { flushEmailQueue, queueEmails } from "@/modules/notifications/email-queu
 import { notify } from "@/modules/notifications/service";
 import { employees } from "@/modules/people/schema";
 import { computeEventHash, GENESIS_HASH, sha256Hex } from "./chain";
+import { fieldCrypto } from "@/lib/crypto";
+import { detailLabel, detailProblem, isSigneeDetailKey } from "./constants";
 import { CONSENT_VERSION, DEFAULT_EXPIRY_DAYS, MAX_PDF_BYTES, MAX_SIGNERS, allSigned, envelopeReference, initialedAllPages, isPdf, isValidInitials, signersToActivate, type EventType, type SigningOrder } from "./constants";
 import { issueExternalLinks } from "./external-mail";
 import { readPdfInfo, sealPdf, type SealSigner } from "./seal";
@@ -44,7 +46,7 @@ export async function appendEvent(tx: Tx, envelopeId: string, e: { type: EventTy
 }
 
 /** An ELEVATE user (userId) or an outside signer such as a candidate (external: name and email, signs by emailed link and code). */
-export type SignerSpec = { userId?: string; external?: { name: string; email: string }; role?: string | null; position?: number };
+export type SignerSpec = { userId?: string; external?: { name: string; email: string }; role?: string | null; position?: number; /** This person types in the envelope's signeeDetails while signing. */ fillsDetails?: boolean };
 
 export type NewEnvelope = {
   title: string;
@@ -58,6 +60,8 @@ export type NewEnvelope = {
   ip: string | null;
   /** Each signer must initial every page before signing. Only for ELEVATE users (outside signers have no page-by-page step). */
   initialEachPage?: boolean;
+  /** Details the signee types in while signing (keys from SIGNEE_DETAIL_FIELDS): only for ELEVATE users. */
+  signeeDetails?: string[];
 };
 
 const SIGN_LINK = (envelopeId: string) => `/signing/${envelopeId}`;
@@ -139,6 +143,8 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
   const ids = input.signers.flatMap((s) => (s.userId ? [s.userId] : []));
   const outside = input.signers.flatMap((s) => (s.external ? [s.external.email.trim().toLowerCase()] : []));
   if (input.initialEachPage && input.signers.some((s) => s.external)) throw new ActionFailure("Initials on each page are only available when everyone signing has an ELEVATE account.");
+  if (input.signeeDetails?.some((k) => !isSigneeDetailKey(k))) throw new ActionFailure("One of the details to collect is not supported.");
+  if (input.signeeDetails?.length && input.signers.some((s) => s.fillsDetails && s.external)) throw new ActionFailure("Details typed while signing are only available when everyone signing has an ELEVATE account.");
   if (new Set(ids).size !== ids.length || new Set(outside).size !== outside.length) throw new ActionFailure("Each person can only be added once.");
   if (input.signers.some((s) => s.external && (s.external.name.trim().length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.external.email.trim())))) throw new ActionFailure("An outside signee needs a name and a valid email.");
   if (ids.length) {
@@ -155,7 +161,7 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
       const now = new Date();
       const [env] = await tx
         .insert(esignEnvelopes)
-        .values({ title: input.title, templateId: input.templateId ?? null, createdBy: actor.id, signingOrder: input.order, originalPath: path, originalName: input.fileName.slice(0, 200), originalSha256: sha, pageCount: pages, initialEachPage: input.initialEachPage === true, expiresAt: new Date(now.getTime() + input.expiryDays * 86_400_000) })
+        .values({ title: input.title, templateId: input.templateId ?? null, createdBy: actor.id, signingOrder: input.order, originalPath: path, originalName: input.fileName.slice(0, 200), originalSha256: sha, pageCount: pages, initialEachPage: input.initialEachPage === true, signeeDetails: input.signeeDetails ?? [], expiresAt: new Date(now.getTime() + input.expiryDays * 86_400_000) })
         .returning({ id: esignEnvelopes.id });
       await tx.insert(esignSigners).values(
         input.signers.map((s, i) => ({
@@ -164,6 +170,7 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
           externalEmail: s.external ? s.external.email.trim().toLowerCase() : null,
           externalName: s.external ? s.external.name.trim() : null,
           role: s.role ?? null,
+          fillsDetails: Boolean(s.fillsDetails && input.signeeDetails?.length),
           position: input.order === "parallel" ? 1 : (s.position ?? i + 1),
         })),
       );
@@ -223,6 +230,8 @@ export type SignatureInput = {
   actorUserId: string | null;
   /** The initials and the pages the signer initialed, for an envelope that asks for initials on each page. */
   initials?: { text: string; pages: number[] } | null;
+  /** What the signee typed in, for an envelope that collects details (keys from SIGNEE_DETAIL_FIELDS). */
+  details?: Record<string, string> | null;
 };
 
 /**
@@ -248,13 +257,27 @@ export async function recordSignature(tx: Tx, v: SignatureInput): Promise<{ read
     initials = { text: given.text.trim().toUpperCase(), count: env.pageCount };
   }
 
+  let detailsEnc: string | null = null;
+  const wanted = row.fillsDetails ? env.signeeDetails : [];
+  if (wanted.length) {
+    const given = v.details ?? {};
+    const clean: Record<string, string> = {};
+    for (const key of wanted) {
+      if (!isSigneeDetailKey(key)) continue;
+      const problem = detailProblem(key, given[key] ?? "");
+      if (problem) throw new ActionFailure(problem);
+      clean[key] = (given[key] ?? "").trim();
+    }
+    detailsEnc = fieldCrypto().encrypt(JSON.stringify(clean), `esign_signer_details:${row.id}`);
+  }
+
   const now = new Date();
   await appendEvent(tx, v.envelopeId, { type: "consented", actorUserId: v.actorUserId, signerId: row.id, ip: v.ip, detail: { consentVersion: CONSENT_VERSION } }, now);
   await tx
     .update(esignSigners)
-    .set({ status: "signed", signedAt: now, ip: v.ip, mfaMethods: v.methods, consentVersion: CONSENT_VERSION, signatureKind: v.kind, signedName: v.signedName, signatureText: v.kind === "typed" ? v.typedText : null, signaturePng: v.kind === "drawn" && v.png ? v.png.toString("base64") : null, initialsText: initials?.text ?? null, initialedPages: initials?.count ?? null, codeHash: null, codeExpiresAt: null })
+    .set({ status: "signed", signedAt: now, ip: v.ip, mfaMethods: v.methods, consentVersion: CONSENT_VERSION, signatureKind: v.kind, signedName: v.signedName, signatureText: v.kind === "typed" ? v.typedText : null, signaturePng: v.kind === "drawn" && v.png ? v.png.toString("base64") : null, detailsEnc, initialsText: initials?.text ?? null, initialedPages: initials?.count ?? null, codeHash: null, codeExpiresAt: null })
     .where(eq(esignSigners.id, row.id));
-  await appendEvent(tx, v.envelopeId, { type: "signed", actorUserId: v.actorUserId, signerId: row.id, ip: v.ip, detail: { kind: v.kind, mfa: v.methods, ...(initials ? { initials: initials.text, initialedPages: initials.count } : {}) } }, new Date(now.getTime() + 1));
+  await appendEvent(tx, v.envelopeId, { type: "signed", actorUserId: v.actorUserId, signerId: row.id, ip: v.ip, detail: { kind: v.kind, mfa: v.methods, ...(initials ? { initials: initials.text, initialedPages: initials.count } : {}), ...(wanted.length ? { details: wanted } : {}) } }, new Date(now.getTime() + 1));
   return afterSignature(tx, v.envelopeId);
 }
 
@@ -300,6 +323,9 @@ export async function sealEnvelope(envelopeId: string): Promise<boolean> {
     png: s.signaturePng ? new Uint8Array(Buffer.from(s.signaturePng, "base64")) : null,
     consentVersion: s.consentVersion ?? "",
     initials: s.initialsText,
+    details: s.detailsEnc
+      ? Object.entries(JSON.parse(fieldCrypto().decrypt(s.detailsEnc, `esign_signer_details:${s.id}`)) as Record<string, string>).map(([key, value]) => ({ label: detailLabel(key), value }))
+      : null,
   }));
   const bytes = await sealPdf({
     original,

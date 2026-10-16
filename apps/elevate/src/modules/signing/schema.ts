@@ -42,6 +42,8 @@ export const esignEnvelopes = docs
       signingOrder: text("signing_order").notNull().default("sequential"),
       /** Every signer must initial each page before signing (documents written in ELEVATE; ELEVATE users only). */
       initialEachPage: boolean("initial_each_page").notNull().default(false),
+      /** Details the signee types in while signing (keys from SIGNEE_DETAIL_FIELDS, e.g. bank details): kept encrypted, printed on the signed copy. */
+      signeeDetails: text("signee_details").array().notNull().default(sql`'{}'::text[]`),
       /** The PDF as uploaded. Fixed once the envelope is sent. */
       originalPath: text("original_path").notNull(),
       originalName: text("original_name").notNull(),
@@ -109,6 +111,10 @@ export const esignSigners = docs
       /** A drawn signature as base64 PNG (60 KB at most, checked on the server). */
       signaturePng: text("signature_png"),
       /** Typed initials, and how many pages were initialed (all of them: the server refuses a partial set). */
+      /** This signer types in the envelope's signeeDetails (the Company's countersigner does not). */
+      fillsDetails: boolean("fills_details").notNull().default(false),
+      /** The details they typed, as JSON encrypted with the field key (context esign_signer_details:<signer id>). */
+      detailsEnc: text("details_enc"),
       initialsText: text("initials_text"),
       initialedPages: smallint("initialed_pages"),
       signedAt: timestamp("signed_at", { withTimezone: true }),

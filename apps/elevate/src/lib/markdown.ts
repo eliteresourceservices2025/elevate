@@ -90,6 +90,14 @@ export function parseInline(src: string, depth = 0): Inline[] {
   while (i < src.length) {
     const rest = src.slice(i);
 
+    // A backslash before one of the characters that mean formatting prints that character as it is (\*, \_, \[, \], \`, \\).
+    const escaped = /^\\([\\`*_[\]])/.exec(rest);
+    if (escaped) {
+      out.push(text(escaped[1]));
+      i += 2;
+      continue;
+    }
+
     const code = /^`([^`\n]+)`/.exec(rest);
     if (code) {
       out.push({ type: "code", text: code[1] });

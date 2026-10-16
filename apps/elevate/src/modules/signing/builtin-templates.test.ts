@@ -42,3 +42,18 @@ describe("the contract documents", () => {
     expect((await PDFDocument.load(pdf)).getPageCount()).toBeGreaterThan(4);
   });
 });
+
+describe("the Independent Contractor Agreement", () => {
+  it("uses known fields, asks for the bank details at signing (not in the text) and has a countersigner", async () => {
+    const { mergeProblem, sendFieldsUsed } = await import("./merge");
+    const ica = BUILTIN_TEMPLATES.find((t) => t.id === "independent-contractor-agreement");
+    expect(ica).toBeTruthy();
+    expect(mergeProblem(ica?.body ?? "")).toBeNull();
+    expect(sendFieldsUsed(ica?.body ?? "").map((f) => f.key).sort()).toEqual(["courts_location", "duties", "monthly_rate", "payment_frequency", "work_schedule"]);
+    expect(ica?.signeeDetails).toEqual(["bank_name", "account_number", "account_name", "phone_number"]);
+    expect(ica?.countersignerRole).toBe("ERS representative");
+    expect(ica?.body).not.toMatch(/Bank Name|Account Number/i);
+    const pdf = await renderComposedPdf(ica?.title ?? "", ica?.body ?? "");
+    expect((await PDFDocument.load(pdf)).getPageCount()).toBeGreaterThan(3);
+  });
+});

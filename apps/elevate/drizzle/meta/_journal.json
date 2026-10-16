@@ -554,6 +554,13 @@
       "when": 1792116904368,
       "tag": "0078_grey_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1792125326581,
+      "tag": "0079_equal_whiplash",
+      "breakpoints": true
     }
   ]
 }

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MAX_COMPOSED_CHARS, normalizeTypography } from "../constants";
 import { htmlToMarkdown } from "../html-to-markdown";
-import { SIGNEE_FIELDS, previewFields, unfilledPlaceholders } from "../merge";
+import { SEND_FIELDS, SIGNEE_FIELDS, previewFields, unfilledPlaceholders } from "../merge";
 
 type Edit = { value: string; start: number; end: number };
 
@@ -122,6 +122,12 @@ export function ComposeEditor({ value, onChange, title = "" }: { value: string; 
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             <span className="text-muted-foreground">Fill in from the person&apos;s record:</span>
             {SIGNEE_FIELDS.map((f) => (
+              <Button key={f.key} type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" title={`Insert {{${f.key}}}`} onClick={() => run((v, s, e) => ({ value: `${v.slice(0, s)}{{${f.key}}}${v.slice(e)}`, start: s + f.key.length + 4, end: s + f.key.length + 4 }))}>
+                {f.label}
+              </Button>
+            ))}
+            <span className="ml-2 text-muted-foreground">Typed in when sending:</span>
+            {SEND_FIELDS.map((f) => (
               <Button key={f.key} type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" title={`Insert {{${f.key}}}`} onClick={() => run((v, s, e) => ({ value: `${v.slice(0, s)}{{${f.key}}}${v.slice(e)}`, start: s + f.key.length + 4, end: s + f.key.length + 4 }))}>
                 {f.label}
               </Button>
