@@ -24,16 +24,17 @@ describe("ready-made documents", () => {
 });
 
 describe("the contract documents", () => {
-  it("use only known fields, and the NDA asks HR for the Company address before it can be sent", async () => {
+  it("use only known fields, and the NDA carries the registered Company address", async () => {
     const { mergeProblem, unfilledPlaceholders } = await import("./merge");
     for (const t of BUILTIN_TEMPLATES) expect(mergeProblem(t.body)).toBeNull();
     const nda = BUILTIN_TEMPLATES.find((t) => t.id === "nda");
     expect(nda?.countersignerRole).toBe("Head of People Operations");
-    expect(unfilledPlaceholders(nda?.body ?? "")).toEqual(["Company business address"]);
+    expect(nda?.body).toContain("8 The Green, Suite R, Dover, Delaware 19901");
+    expect(unfilledPlaceholders(nda?.body ?? "")).toEqual([]);
     expect(nda?.body).toContain("{{contractor_name}}");
     expect(nda?.body).toContain("{{contractor_address}}");
-    // Nothing else is left to fill in by hand, and no signature or date lines (the signature page covers them)
-    for (const t of BUILTIN_TEMPLATES) if (t.id !== "nda") expect(unfilledPlaceholders(t.body)).toEqual([]);
+    // Nothing is left to fill in by hand, and no signature or date lines (the signature page covers them)
+    for (const t of BUILTIN_TEMPLATES) expect(unfilledPlaceholders(t.body)).toEqual([]);
     for (const t of BUILTIN_TEMPLATES) expect(t.body).not.toMatch(/_{5,}/);
   });
   it("renders the handbook as several pages", async () => {

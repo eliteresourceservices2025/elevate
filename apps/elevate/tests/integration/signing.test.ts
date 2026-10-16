@@ -638,3 +638,54 @@ describe("the send route", () => {
     expect(await countFor(title)).toBe(0);
   });
 });
+
+describe("who can open a signed copy that holds personal details", () => {
+  const sealedWithDetails = async () => {
+    const { id } = await service.createEnvelope(
+      { id: hr.id, email: hr.email, roles: hr.roles },
+      { title: uniq("Agreement "), pdf: await samplePdf(2), fileName: "a.pdf", signers: [{ userId: ana.id, role: "Contractor", position: 1, fillsDetails: true }, { userId: ben.id, role: "ERS representative", position: 2 }], order: "sequential", expiryDays: 14, send: true, ip: null, signeeDetails: ["bank_name", "account_number", "account_name", "phone_number"] },
+    );
+    await open(ana, id);
+    await signTyped(ana, id, { details: { bank_name: "BDO", account_number: "0012 3456 7890", account_name: "Ana Reyes", phone_number: "+63 917 123 4567" } });
+    await open(ben, id);
+    await signTyped(ben, id);
+    return id;
+  };
+
+  it("lets the contractor, HR and Super Admin open it, and keeps the countersigner and others out", async () => {
+    const id = await sealedWithDetails();
+    expect((await rows<{ status: string }>(sql`select status from docs.esign_envelopes where id = ${id}`))[0].status).toBe("completed");
+    as(ana);
+    expect((await actions.getDocumentLink({ envelopeId: id })).ok).toBe(true);
+    as(hr);
+    expect((await actions.getDocumentLink({ envelopeId: id })).ok).toBe(true);
+    as(ben);
+    expect(await actions.getDocumentLink({ envelopeId: id })).toEqual({ ok: false, error: expect.stringContaining("only the contractor and HR") });
+    // The page says so instead of offering the copy
+    const detail = await queries.getEnvelopeDetail(id);
+    expect(detail.envelope).toMatchObject({ sealedRestricted: true, canOpenSealed: false });
+    as(ana);
+    expect((await queries.getEnvelopeDetail(id)).envelope.canOpenSealed).toBe(true);
+    as(hr);
+    expect((await queries.getEnvelopeDetail(id)).envelope.canOpenSealed).toBe(true);
+  });
+
+  it("audits the seal's read of the details (field names only) and everyone is still told it is done", async () => {
+    const id = await sealedWithDetails();
+    const [a] = await rows<{ metadata: { fields: string[] } }>(sql`select metadata from ops.audit_log where action = 'sensitive.view' and target_id = ${id}`);
+    expect(a.metadata.fields).toContain("account_number");
+    expect(JSON.stringify(a)).not.toContain("0012");
+    expect((await rows(sql`select 1 from ops.notifications where user_id = ${ben.id} and kind = 'signing.completed' and link = ${`/signing/${id}`}`)).length).toBe(1);
+  });
+
+  it("does not restrict an ordinary signed document", async () => {
+    const id = await send({ signers: [ana, ben] });
+    await open(ana, id);
+    await signTyped(ana, id);
+    await open(ben, id);
+    await signTyped(ben, id);
+    as(ben);
+    expect((await actions.getDocumentLink({ envelopeId: id })).ok).toBe(true);
+    expect((await queries.getEnvelopeDetail(id)).envelope).toMatchObject({ sealedRestricted: false, canOpenSealed: true });
+  });
+});
