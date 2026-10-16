@@ -11,7 +11,7 @@ export function SendInstructions() {
           <strong>Choose the document.</strong> Start from a ready-made one (PTO policy, Handbook, NDA, Independent Contractor Agreement), write or paste your own, or upload a PDF.
         </li>
         <li>
-          <strong>Fill in the [[parts in double brackets]].</strong> For example the Company address in the NDA. The document cannot be sent while any remain.
+          <strong>Fill in any [[parts in double brackets]].</strong> The document cannot be sent while any remain. (The ready-made documents have none: the NDA carries the Company&apos;s Delaware address.)
         </li>
         <li>
           <strong>Check the details on each person&apos;s profile.</strong> Name, address, role, start date and manager fill in from their record. If one is missing, nothing is sent and you are told who and what.

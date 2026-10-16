@@ -4,7 +4,7 @@ import type { BuiltinTemplate } from "./builtin-templates";
 // Differences from the Word versions, on purpose: the "Contractor Name / Signature / Date" and "By / Name / Title / Date" lines are not in
 // the body, because ELEVATE Sign adds a signature page and a certificate with each person's name, signature, date and time. The
 // agreement date is the signing date, which is only known when the contractor signs, so the NDA's opening says so. Text in [[double
-// brackets]] must be replaced by HR before sending (the editor warns and the send is refused while any remain).
+// brackets]], if a document has any, must be replaced by HR before sending (the editor warns and the send is refused while any remain).
 
 const HANDBOOK = `Welcome to ELITE Resource Services!
 
@@ -183,7 +183,7 @@ I, the undersigned, acknowledge that I have received and read the ELITE Resource
 
 const NDA = `This Non-Disclosure Agreement ("Agreement") is entered into on the date of the last electronic signature recorded on the signature page of this document, by and between:
 
-ELITE Resource Services ("Company"), with principal business address at [[Company business address]],
+ELITE Resource Services ("Company"), with principal business address at 8 The Green, Suite R, Dover, Delaware 19901,
 
 and
 

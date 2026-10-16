@@ -27,7 +27,7 @@ Every ready-made document in ELEVATE Sign, what differs from HR's Word or PDF ve
 
 ## Non-Disclosure Agreement
 
-- [ ] **Company address is blank.** The text shows `[[Company business address]]` and the document cannot be sent until HR types the address. (Or tell me the address and I will put it in.)
+- [ ] **Company address:** "8 The Green, Suite R, Dover, Delaware 19901" (the registered address in Delaware), as given by HR. Confirm it is the address the NDA should state.
 - [ ] The Recipient's **name and address fill in from their record**. A missing address stops the send.
 - [ ] **Company signatory.** The Word version names "ALTHEA MARIE S. BULFA, Head of People Operations". It is not in the text now. HR chooses the countersigner when sending (the role "Head of People Operations" is the default); the signature page prints their legal name from their account, with that role. Confirm that is acceptable, or that the name must appear on the first page.
 - [ ] The term "1 Year from the date of signing" and the Manila courts clause are unchanged.
