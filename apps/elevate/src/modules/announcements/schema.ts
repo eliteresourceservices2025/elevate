@@ -197,3 +197,48 @@ export const acknowledgmentReminders = docs
     ],
   )
   .enableRLS();
+
+/**
+ * The pop-up queue: an announcement or a policy HR chose to show as a pop-up when people sign in, before they use the app. It lives
+ * apart from the item so a published (frozen) policy can still be queued or rescheduled. `showFrom` is the first day it appears;
+ * `sortOrder` puts it in line (lowest first). A policy pops up with its current published version.
+ */
+export const popups = docs
+  .table(
+    "popups",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      announcementId: uuid("announcement_id").references(() => announcements.id),
+      policyId: uuid("policy_id").references(() => policies.id),
+      showFrom: date("show_from", { mode: "string" }).notNull(),
+      sortOrder: integer("sort_order").notNull().default(0),
+      createdBy: uuid("created_by"),
+      ...stamps,
+    },
+    (t) => [
+      uniqueIndex("popups_announcement_idx").on(t.announcementId).where(sql`${t.announcementId} is not null`),
+      uniqueIndex("popups_policy_idx").on(t.policyId).where(sql`${t.policyId} is not null`),
+      index("popups_queue_idx").on(t.showFrom, t.sortOrder),
+      check("popups_subject_chk", sql`(${t.announcementId} is null) <> (${t.policyId} is null)`),
+    ],
+  )
+  .enableRLS();
+
+/** A person closed a pop-up that needed no acknowledgment (for a policy: that version; a new version pops up again). Insert-only. */
+export const popupDismissals = docs
+  .table(
+    "popup_dismissals",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      userId: uuid("user_id").notNull(),
+      announcementId: uuid("announcement_id").references(() => announcements.id),
+      policyVersionId: uuid("policy_version_id").references(() => policyVersions.id),
+      dismissedAt: timestamp("dismissed_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      uniqueIndex("popup_dismissals_announcement_idx").on(t.userId, t.announcementId).where(sql`${t.announcementId} is not null`),
+      uniqueIndex("popup_dismissals_policy_idx").on(t.userId, t.policyVersionId).where(sql`${t.policyVersionId} is not null`),
+      check("popup_dismissals_subject_chk", sql`(${t.announcementId} is null) <> (${t.policyVersionId} is null)`),
+    ],
+  )
+  .enableRLS();

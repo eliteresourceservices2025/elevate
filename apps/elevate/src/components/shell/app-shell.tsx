@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useState, type ComponentProps, type ReactNode } from "react";
+import { Suspense, useCallback, useState, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { UnsavedChangesProvider } from "@/components/unsaved-changes";
+import { PopupQueue, type PopupItem } from "@/modules/announcements/components/popup-queue";
 import { AppHeader } from "./app-header";
 import { QuickTour } from "./quick-tour";
 import { SidebarNav } from "./sidebar-nav";
@@ -14,8 +15,11 @@ type HeaderProps = Omit<ComponentProps<typeof AppHeader>, "collapsed" | "onToggl
  * The frame of every signed-in page: the menu and the header stay put and only the content scrolls.
  * The menu can be narrowed to icons; the choice is a plain cookie so the server renders the right width at once.
  */
-export function AppShell({ initialCollapsed, tourAutoStart = false, banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; tourAutoStart?: boolean; banner: ReactNode; children: ReactNode }) {
+export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [], banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; tourAutoStart?: boolean; popups?: PopupItem[]; banner: ReactNode; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
+  // Queued announcements and policies come first; the quick tour waits until they are closed or acknowledged.
+  const [popupsDone, setPopupsDone] = useState(popups.length === 0);
+  const onPopupsDone = useCallback(() => setPopupsDone(true), []);
 
   function toggle() {
     const next = !collapsed;
@@ -55,8 +59,9 @@ export function AppShell({ initialCollapsed, tourAutoStart = false, banner, chil
         </div>
       </div>
       <Suspense fallback={null}>
-        <QuickTour autoStart={tourAutoStart} />
+        <QuickTour autoStart={tourAutoStart && popupsDone} />
       </Suspense>
+      {popups.length > 0 ? <PopupQueue items={popups} onDone={onPopupsDone} /> : null}
     </div>
   );
 }

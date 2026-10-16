@@ -12,5 +12,6 @@ export const announcementsPermissions = definePermissions({
   },
   "announcements.view_status": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   "announcements.remind": { roles: { super_admin: "all", hr_admin: "all" } },
+  "announcements.manage_popups": { roles: { super_admin: "all", hr_admin: "all" } },
   "announcements.export": { roles: { super_admin: "all", hr_admin: "all" } },
 });

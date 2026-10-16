@@ -11,6 +11,8 @@ import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { DownloadButton } from "@/modules/documents/components/document-list";
 import { AckedBadge, DueBadge, StatusTable } from "@/modules/announcements/components/ack-display";
 import { AcknowledgeButton, ArchiveAnnouncementButton, StatusActions } from "@/modules/announcements/components/ack-controls";
+import { PopupControl } from "@/modules/announcements/components/popup-admin";
+import { getPopupFor } from "@/modules/announcements/popup-queries";
 import { getAckStatus, getAnnouncement } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
 
@@ -21,6 +23,7 @@ export default async function AnnouncementPage({ params }: PageProps<"/announcem
   const a = await orNotFound(getAnnouncement(id));
   if (!a) notFound();
   const today = todayInZone();
+  const popup = a.canManage ? await orNotFound(getPopupFor("announcement", a.id)) : null;
   const status = a.canSeeStatus ? await orNotFound(getAckStatus({ kind: "announcement", id: a.id })) : null;
 
   return (
@@ -29,9 +32,12 @@ export default async function AnnouncementPage({ params }: PageProps<"/announcem
         <Link href="/announcements" className="text-sm text-primary underline-offset-4 hover:underline">
           All announcements
         </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {a.pinned ? <Pin className="size-5 text-primary" aria-label="Pinned" /> : null}
-          <h1 className="text-2xl font-bold">{a.title}</h1>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {a.pinned ? <Pin className="size-5 text-primary" aria-label="Pinned" /> : null}
+            <h1 className="text-2xl font-bold">{a.title}</h1>
+          </div>
+          {a.canManage ? <PopupControl kind="announcement" itemId={a.id} current={popup} today={today} /> : null}
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           Posted {formatInZone(a.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}

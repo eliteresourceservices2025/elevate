@@ -16,6 +16,8 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const actions = await import("@/modules/announcements/actions");
 const queries = await import("@/modules/announcements/queries");
+const popupActions = await import("@/modules/announcements/popup-actions");
+const popupQueries = await import("@/modules/announcements/popup-queries");
 const notificationActions = await import("@/modules/notifications/actions");
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -41,6 +43,9 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "discardDraft", call: () => actions.discardDraft({ policyId: ID }), allowed: HR },
   { name: "archivePolicy", call: () => actions.archivePolicy({ policyId: ID }), allowed: HR },
   { name: "publishDraft", call: () => actions.publishDraft({ policyId: ID }), allowed: HR },
+  { name: "setPopup", call: () => popupActions.setPopup({ kind: "announcement", itemId: ID, enabled: true }), allowed: HR },
+  { name: "movePopup", call: () => popupActions.movePopup({ popupId: ID, direction: "up" }), allowed: HR },
+  { name: "dismissPopup", call: () => popupActions.dismissPopup({ kind: "announcement", id: ID }), allowed: EVERYONE },
   { name: "setDigestOptOut", call: () => notificationActions.setDigestOptOut({ optOut: true }), allowed: EVERYONE },
   { name: "setTrainingReminderOptOut", call: () => notificationActions.setTrainingReminderOptOut({ optOut: true }), allowed: EVERYONE },
 ];
@@ -73,6 +78,9 @@ describe("announcement queries, every role", () => {
     { name: "getPolicy", call: () => queries.getPolicy(ID), allowed: EVERYONE },
     { name: "listMyPending", call: () => queries.listMyPending(), allowed: EVERYONE },
     { name: "getAckStatus", call: () => queries.getAckStatus({ kind: "announcement", id: ID }), allowed: TEAM_VIEW },
+    { name: "listMyPopups", call: () => popupQueries.listMyPopups(), allowed: EVERYONE },
+    { name: "listPopupQueue", call: () => popupQueries.listPopupQueue(), allowed: HR },
+    { name: "getPopupFor", call: () => popupQueries.getPopupFor("announcement", ID), allowed: HR },
     { name: "getComposeOptions", call: () => queries.getComposeOptions(), allowed: HR },
     { name: "getAnnouncementForEdit", call: () => queries.getAnnouncementForEdit(ID), allowed: HR },
   ];

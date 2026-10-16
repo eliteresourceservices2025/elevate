@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { DueBadge } from "@/modules/announcements/components/ack-display";
 import { FormDialog } from "@/components/form-dialog";
 import { NewPolicyForm } from "@/modules/announcements/components/policy-editor";
+import { PopupQueueAdmin } from "@/modules/announcements/components/popup-admin";
+import { listPopupQueue } from "@/modules/announcements/popup-queries";
 import { listAnnouncements, listPolicies } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
 
@@ -21,6 +23,7 @@ export const metadata: Metadata = { title: "Announcements" };
 const TABS = [
   { key: "announcements", label: "Announcements" },
   { key: "policies", label: "Policies" },
+  { key: "popups", label: "Pop-up queue" },
 ] as const;
 
 const KIND_LABEL = { general: null, privacy_notice: "Privacy notice", monitoring: "Monitoring policy" } as const;
@@ -31,11 +34,12 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
   const sp = await searchParams;
   const requested = sp.tab;
   const paging = parsePaging({ page: sp.page, size: sp.size }, 10);
-  const tab = TABS.find((t) => t.key === requested)?.key ?? "announcements";
+  const tab = TABS.find((t) => t.key === requested && (t.key !== "popups" || isHr))?.key ?? "announcements";
   const today = todayInZone();
 
   const items = tab === "announcements" ? await orNotFound(listAnnouncements()) : null;
   const policies = tab === "policies" ? await orNotFound(listPolicies()) : null;
+  const popupRows = tab === "popups" ? await orNotFound(listPopupQueue()) : null;
   const itemPage = items ? paginate(items, paging.page, paging.pageSize) : null;
   const policyPage = policies ? paginate(policies, paging.page, paging.pageSize) : null;
 
@@ -59,7 +63,7 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
       </div>
 
       <nav aria-label="Announcements sections" className="flex gap-1 border-b">
-        {TABS.map((t) => (
+        {TABS.filter((t) => t.key !== "popups" || isHr).map((t) => (
           <Link
             key={t.key}
             href={`/announcements?tab=${t.key}`}
@@ -98,6 +102,8 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
         )
       ) : null}
       {itemPage ? <PagerLinks info={itemPage.info} basePath="/announcements" query={{ tab: "announcements" }} defaultSize={10} label="announcements" /> : null}
+
+      {popupRows ? <PopupQueueAdmin rows={popupRows} /> : null}
 
       {policies ? (
         <div className="space-y-6">
