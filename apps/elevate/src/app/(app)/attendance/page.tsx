@@ -110,7 +110,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                   </Link>
                 </div>
               </div>
-              <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+              <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
                 <Table>
                   <TableHeader>
                     <TableRow>

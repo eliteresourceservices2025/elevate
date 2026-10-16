@@ -15,11 +15,12 @@ import { trainingFilterSchema } from "./validators";
 // Training status for HR and for leads. A lead sees status only (passed, not yet, overdue); scores and attempts are HR's. The
 // course is chosen by the filter (HIPAA by default); each person's NEWEST assignment for it decides what is shown.
 
-export type TrainingState = "none" | "open" | "overdue" | "passed" | "expired" | "cancelled";
+export type TrainingState = "none" | "open" | "overdue" | "passed" | "expired" | "cancelled" | "no_account" | "queued";
 
 export type TrainingRow = {
   employeeId: string;
-  userId: string;
+  /** Null for a new hire who has not signed in yet: they cannot have an assignment until they do (see "queued"). */
+  userId: string | null;
   name: string;
   team: string | null;
   assignmentId: string | null;
@@ -37,11 +38,12 @@ export type TrainingRow = {
 
 export type TrainingCounts = { people: number; passed: number; open: number; overdue: number; none: number };
 
-const LABEL: Record<TrainingState, string> = { none: "Not assigned", open: "Not yet", overdue: "Overdue", passed: "Passed", expired: "Expired", cancelled: "Closed" };
+const LABEL: Record<TrainingState, string> = { none: "Not assigned", open: "Not yet", overdue: "Overdue", passed: "Passed", expired: "Expired", cancelled: "Closed", no_account: "Not signed in yet", queued: "Queued" };
 
 type Raw = {
   employee_id: string;
-  user_id: string;
+  user_id: string | null;
+  queued: boolean;
   name: string;
   team_name: string | null;
   assignment_id: string | null;
@@ -83,7 +85,8 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
       where c.slug = ${course} order by a.user_id, a.assigned_at desc
     )
     select e.id as employee_id, u.id as user_id,
-           coalesce(nullif(btrim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), u.email) as name,
+           exists (select 1 from learn.pending_assignments pa join learn.courses pc on pc.id = pa.course_id where pa.employee_id = e.id and pc.slug = ${course}) as queued,
+           coalesce(nullif(btrim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), e.work_email) as name,
            tm.name as team_name, l.id as assignment_id, l.track, l.status, l.due_on::text as due_on,
            (select max(c.ends_on)::text from learn.certificates c join learn.assignments ca on ca.id = c.assignment_id join learn.courses cc on cc.id = ca.course_id
               where c.user_id = u.id and cc.slug = ${course}
@@ -91,10 +94,10 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
            ${canSeeResults ? sql`(select count(*)::int from learn.exam_attempts x where x.assignment_id = l.id and x.status = 'submitted')` : sql`null::int`} as attempts,
            ${canSeeResults ? sql`(select x.score_percent::float from learn.exam_attempts x where x.assignment_id = l.id and x.status = 'submitted' order by x.attempt_no desc limit 1)` : sql`null::float`} as last_score
     from core.employees e
-    join core.users u on u.id = e.user_id
+    left join core.users u on u.id = e.user_id
     left join core.teams tm on tm.id = e.team_id
     left join latest l on l.user_id = u.id
-    where e.archived_at is null and u.archived_at is null and e.status in ('onboarding', 'active', 'probation', 'on_leave')
+    where e.archived_at is null and (u.id is null or u.archived_at is null) and e.status in ('onboarding', 'active', 'probation', 'on_leave')
       ${picked.kind === "client_addon" && picked.clientId
         ? sql`and (l.id is not null or exists (select 1 from core.client_assignments cx where cx.employee_id = e.id and cx.client_id = ${picked.clientId}::uuid and cx.end_date is null))`
         : sql``}
@@ -103,7 +106,7 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
 
   const all: TrainingRow[] = raw.map((r) => {
     const open = r.status === "assigned" || r.status === "in_progress";
-    const state: TrainingState = r.assignment_id === null ? "none" : open ? (r.due_on !== null && r.due_on < today ? "overdue" : "open") : r.status === "passed" ? "passed" : r.status === "expired" ? "expired" : "cancelled";
+    const state: TrainingState = r.user_id === null ? (r.queued ? "queued" : "no_account") : r.assignment_id === null ? "none" : open ? (r.due_on !== null && r.due_on < today ? "overdue" : "open") : r.status === "passed" ? "passed" : r.status === "expired" ? "expired" : "cancelled";
     return {
       employeeId: r.employee_id,
       userId: r.user_id,
@@ -124,19 +127,19 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
   const counts: TrainingCounts = {
     people: all.length,
     passed: all.filter((r) => r.state === "passed").length,
-    open: all.filter((r) => r.state === "open").length,
+    open: all.filter((r) => r.state === "open" || r.state === "queued").length,
     overdue: all.filter((r) => r.state === "overdue").length,
-    none: all.filter((r) => r.state === "none" || r.state === "expired" || r.state === "cancelled").length,
+    none: all.filter((r) => r.state === "none" || r.state === "expired" || r.state === "cancelled" || r.state === "no_account").length,
   };
 
   const q = filters.q?.toLowerCase();
   const filtered = all.filter((r) => {
-    if (filters.state === "none" ? !["none", "expired", "cancelled"].includes(r.state) : filters.state === "open" ? r.state !== "open" && r.state !== "overdue" : filters.state && r.state !== filters.state) return false;
+    if (filters.state === "none" ? !["none", "expired", "cancelled", "no_account"].includes(r.state) : filters.state === "open" ? !["open", "overdue", "queued"].includes(r.state) : filters.state && r.state !== filters.state) return false;
     if (q && !r.name.toLowerCase().includes(q) && !(r.team ?? "").toLowerCase().includes(q)) return false;
     return true;
   });
   // The people who most need a nudge first: overdue, then not yet, then not assigned, then passed.
-  const rank: Record<TrainingState, number> = { overdue: 0, open: 1, none: 2, expired: 2, cancelled: 3, passed: 4 };
+  const rank: Record<TrainingState, number> = { overdue: 0, open: 1, queued: 1, none: 2, no_account: 2, expired: 2, cancelled: 3, passed: 4 };
   filtered.sort((a, b) => rank[a.state] - rank[b.state] || (a.dueOn ?? "").localeCompare(b.dueOn ?? "") || a.name.localeCompare(b.name));
 
   const info = pageInfo(filtered.length, paging.page, paging.pageSize);

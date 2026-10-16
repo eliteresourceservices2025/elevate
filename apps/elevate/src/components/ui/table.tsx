@@ -12,7 +12,7 @@ function Table({ className, containerClassName, ...props }: React.ComponentProps
   return (
     <div
       data-slot="table-container"
-      className={cn("scroll-shadow-x relative w-full overflow-x-auto", containerClassName)}
+      className={cn("scroll-shadow-x relative w-full overflow-x-auto rounded-xl border bg-card shadow-sm in-[.scroll-shadow-x]:rounded-none in-[.scroll-shadow-x]:border-0 in-[.scroll-shadow-x]:shadow-none", containerClassName)}
     >
       <table
         data-slot="table"

@@ -12,11 +12,15 @@ export const grantRetrySchema = z.discriminatedUnion("kind", [
 ]);
 
 /** HR puts someone on the training now (the nightly job does this for everyone who needs it). */
-export const assignTrainingSchema = z.object({
-  userId: uuid,
-  track: z.enum(["full", "essentials", "refresher"]),
-  course: courseSlug.default("hipaa"),
-});
+export const assignTrainingSchema = z
+  .object({
+    /** The person's account. Someone with no account yet (a new hire who has not signed in) is given as employeeId instead. */
+    userId: uuid.optional(),
+    employeeId: uuid.optional(),
+    track: z.enum(["full", "essentials", "refresher"]),
+    course: courseSlug.default("hipaa"),
+  })
+  .refine((v) => Boolean(v.userId) !== Boolean(v.employeeId), { message: "Choose one person." });
 
 /** HR chooses who a course is assigned to automatically. Teams are needed (and only used) for the "teams" mode. */
 export const autoAssignSchema = z

@@ -72,6 +72,39 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
       ${onUsers(sql`a.user_id`, scope)}
     returning a.id`);
 
+  // Training HR assigned to a new hire before they had an account: once the record is linked to an account it becomes a real assignment
+  // (in every mode, since HR chose it by hand). Rows for people who left are dropped.
+  let queuedMade = 0;
+  await rows(sql`
+    delete from learn.pending_assignments p where p.course_id = ${version.course_id}
+      and exists (select 1 from core.employees e where e.id = p.employee_id and (e.archived_at is not null or e.status = 'separated'))`);
+  const queued = await rows<{ user_id: string; employee_id: string; track: string; start_date: string | null }>(sql`
+    select u.id as user_id, p.employee_id::text as employee_id, p.track, e.start_date::text as start_date
+    from learn.pending_assignments p join core.employees e on e.id = p.employee_id join core.users u on u.id = e.user_id
+    where p.course_id = ${version.course_id} and e.archived_at is null and u.archived_at is null ${onUsers(sql`u.id`, scope)}`);
+  for (const q of queued) {
+    const need = assignmentNeed({ today, startDate: q.start_date, openAssignment: false, latestCertificateEndsOn: null, assignedToPhiClient: false });
+    if (!need.assign) continue;
+    const made = await db.transaction(async (tx) => {
+      const inserted = (await tx.execute(sql`
+        insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on)
+        select ${q.user_id}, ${version.course_id}, ${version.version_id}, ${q.track}, ${need.reason}, ${need.dueOn}::date
+        where not exists (select 1 from learn.assignments a where a.user_id = ${q.user_id} and a.course_id = ${version.course_id} and a.status in ('assigned', 'in_progress'))
+        returning id`)) as unknown as { id: string }[];
+      await tx.execute(sql`delete from learn.pending_assignments where employee_id = ${q.employee_id}::uuid and course_id = ${version.course_id}`);
+      if (inserted.length === 0) return false;
+      await notify(tx, {
+        userId: q.user_id,
+        kind: "learn.assigned",
+        title: `${info.noun.charAt(0).toUpperCase()}${info.noun.slice(1)} is assigned to you`,
+        body: `Please finish it by ${need.dueOn}. Your progress is saved as you go.`,
+        link: "/learn",
+      });
+      return true;
+    });
+    if (made) queuedMade += 1;
+  }
+
   const people = await rows<{ user_id: string; start_date: string | null; joined_on: string | null; team_id: string | null; phi: boolean; open_id: string | null; cert_ends: string | null }>(sql`
     select u.id as user_id, e.start_date::text as start_date, e.team_id::text as team_id,
            ${addonClient ? sql`(select min(ca2.start_date)::text from core.client_assignments ca2 where ca2.employee_id = e.id and ca2.client_id = ${addonClient}::uuid and ca2.end_date is null)` : sql`null::text`} as joined_on,
@@ -86,7 +119,7 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
       ${addonClient ? sql`and exists (select 1 from core.client_assignments ca3 where ca3.employee_id = e.id and ca3.client_id = ${addonClient}::uuid and ca3.end_date is null)` : sql``}
       ${onUsers(sql`u.id`, scope)}`);
 
-  let assigned = 0;
+  let assigned = queuedMade;
   let renewals = 0;
   for (const p of mode === "paused" ? [] : people) {
     if (mode === "teams" && !(p.team_id && pilotTeams.has(p.team_id))) continue;

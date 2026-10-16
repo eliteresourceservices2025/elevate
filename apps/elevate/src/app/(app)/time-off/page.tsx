@@ -142,7 +142,7 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
           {holidays.rows.length === 0 ? (
             <p className="text-muted-foreground">No holidays for {year} yet.</p>
           ) : (
-            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -193,7 +193,7 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
           {balances.rows.length === 0 ? (
             <p className="text-muted-foreground">Nobody holds prize days yet.</p>
           ) : (
-            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
               <Table>
                 <TableHeader>
                   <TableRow>

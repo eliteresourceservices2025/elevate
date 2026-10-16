@@ -9,7 +9,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { assignLearnTraining, grantLearnRetry } from "../actions";
 
 /** What HR can do for one person: put them on the training, or give more tries or more exam time (with a reason). */
-export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant, course = "hipaa", fixedTrack = false }: { userId: string; assignmentId: string | null; canAssign: boolean; canGrant: boolean; course?: string; fixedTrack?: boolean }) {
+export function TrainingRowActions({ userId, employeeId, queued = false, assignmentId, canAssign, canGrant, course = "hipaa", fixedTrack = false }: { userId: string | null; employeeId: string; queued?: boolean; assignmentId: string | null; canAssign: boolean; canGrant: boolean; course?: string; fixedTrack?: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
@@ -20,9 +20,10 @@ export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant, 
 
   const assign = () =>
     start(async () => {
-      const r = await assignLearnTraining({ userId, track, course });
+      // Someone who has not signed in yet has no account: the request is queued and becomes an assignment after their first sign-in.
+      const r = await assignLearnTraining({ ...(userId ? { userId } : { employeeId }), track, course });
       if (!r.ok) return void toast.error(r.error);
-      toast.success(r.data.created ? "Training assigned." : "Already assigned.");
+      toast.success(r.data.queued ? "Queued. It is assigned after they first sign in." : r.data.created ? "Training assigned." : "Already assigned.");
       router.refresh();
     });
 
@@ -38,6 +39,7 @@ export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant, 
 
   if (!assignmentId) {
     if (!canAssign) return null;
+    if (queued) return <span className="text-xs text-muted-foreground">Queued until they sign in</span>;
     return (
       <div className="flex items-center gap-1">
         {fixedTrack ? null : (
@@ -47,8 +49,8 @@ export function TrainingRowActions({ userId, assignmentId, canAssign, canGrant, 
           <option value="refresher">Refresher</option>
         </NativeSelect>
         )}
-        <Button size="sm" variant="outline" disabled={pending} onClick={assign}>
-          Assign
+        <Button size="sm" variant="outline" disabled={pending} onClick={assign} title={userId ? undefined : "They have not signed in yet: this is queued and assigned after their first sign-in"}>
+          {userId ? "Assign" : "Queue"}
         </Button>
       </div>
     );

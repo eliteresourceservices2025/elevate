@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, customType, date, index, integer, jsonb, numeric, pgSchema, primaryKey, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
-import { clients } from "@/modules/people/schema";
+import { clients, employees } from "@/modules/people/schema";
 
 // ELEVATE Learn (HIPAA training), release 1. Everything here is the TRAINING RECORD, so most of it is append-only or frozen:
 // a published course version cannot change, progress, answers, attestations, certificates and grants are insert-only, and an
@@ -511,6 +511,29 @@ export const assignmentRules = learn
       check("assignment_rules_mode_chk", sql`${t.mode} in ('all','teams','paused')`),
       check("assignment_rules_teams_chk", sql`${t.mode} <> 'teams' or cardinality(${t.teamIds}) > 0`),
     ],
+  )
+  .enableRLS();
+
+/**
+ * Training HR assigned to someone who has no ELEVATE sign-in yet (a new hire who was invited and has not signed in). An assignment
+ * needs an account, so this waits: the nightly run turns it into a real assignment as soon as the person's record is linked to an
+ * account, then deletes the row. Only ELEVATE reads it; the Learn app role has no grant.
+ */
+export const pendingAssignments = learn
+  .table(
+    "pending_assignments",
+    {
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      courseId: uuid("course_id")
+        .notNull()
+        .references(() => courses.id),
+      track: text("track").notNull(),
+      createdBy: uuid("created_by").references(() => users.id),
+      createdAt: stamp("created_at"),
+    },
+    (t) => [primaryKey({ columns: [t.employeeId, t.courseId] }), check("pending_assignments_track_chk", sql`${t.track} in (${list(TRACKS)})`)],
   )
   .enableRLS();
 

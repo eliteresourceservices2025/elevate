@@ -77,7 +77,7 @@ export function DocumentList({
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{emptyText}</p>;
 
   return (
-    <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+    <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
       <Table>
         <TableHeader>
           <TableRow>

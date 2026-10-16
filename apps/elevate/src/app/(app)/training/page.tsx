@@ -158,7 +158,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
                 {canSeeResults ? <TableCell>{r.lastScore === null ? "-" : `${r.lastScore}%`}</TableCell> : null}
                 {canManage ? (
                   <TableCell>
-                    <TrainingRowActions course={course} fixedTrack={fixedTrack} userId={r.userId} assignmentId={r.state === "open" || r.state === "overdue" ? r.assignmentId : null} canAssign={canManage} canGrant={canManage} />
+                    <TrainingRowActions course={course} fixedTrack={fixedTrack} userId={r.userId} employeeId={r.employeeId} queued={r.state === "queued"} assignmentId={r.state === "open" || r.state === "overdue" ? r.assignmentId : null} canAssign={canManage} canGrant={canManage} />
                   </TableCell>
                 ) : null}
               </TableRow>

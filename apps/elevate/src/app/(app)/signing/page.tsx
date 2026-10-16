@@ -71,7 +71,7 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
             <p className="text-muted-foreground">Nothing has been sent to you to sign.</p>
           ) : (
             <>
-              <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+              <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -127,7 +127,7 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
             <p className="text-muted-foreground">{view === "active" ? "No documents yet. Send one with \"Send a document\"." : view === "test" ? "No documents are marked as tests." : "Nothing is archived."}</p>
           ) : (
             <>
-              <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+              <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
                 <Table>
                   <TableHeader>
                     <TableRow>

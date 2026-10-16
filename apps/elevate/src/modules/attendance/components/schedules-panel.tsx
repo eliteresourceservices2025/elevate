@@ -205,7 +205,7 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
             </Button>
           </div>
         </div>
-        <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card">
+        <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
           <Table>
             <TableHeader>
               <TableRow>
