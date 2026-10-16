@@ -152,6 +152,8 @@ export async function createMyProfile(input: unknown): Promise<ActionResult<{ id
           await writeAudit({ actor, action: "people.link_self", targetType: "employee", targetId: linked }, tx);
           return linked;
         }
+        // A person who changed their email or name no longer matches their old record, and a second record is what this form used to make
+        if (!parsed.data.confirmNotListed) throw new ActionFailure("Look through the list of people first: your record may already be there under your old email or name. Choose it, or confirm that you are not in the list.");
         // A record with your name but another email is probably yours (it was made before you changed your email): do not make a second one
         const same = compareWithExisting({ id: "", first: parsed.data.firstName, last: parsed.data.lastName, workEmail: actor.email }, await loadPeopleForDuplicates(tx));
         if (same) throw new ActionFailure(`There is already a people record with your name (${same.with.workEmail}). Ask HR to link your account to it, so you do not end up with two.`);

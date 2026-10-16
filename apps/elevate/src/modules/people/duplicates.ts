@@ -38,22 +38,36 @@ export function strongSignals(a: PersonLike, b: PersonLike): string[] {
   return out;
 }
 
-/** People who share a name, with the extra signals for each pair. Groups of one are left out. */
+/**
+ * People who may be the same person: they share a name, OR a personal email, mobile number or birth date (so someone who changed their
+ * name AND email is still found). Records linked through a chain end up in one group. Groups of one are left out; the strongest first.
+ */
 export function groupPossibleDuplicates<T extends PersonLike>(people: readonly T[]): { key: string; people: T[]; signals: string[] }[] {
-  const byName = new Map<string, T[]>();
-  for (const p of people) {
-    const key = nameKey(p.first, p.last);
-    if (!key) continue;
-    byName.set(key, [...(byName.get(key) ?? []), p]);
+  const parent = people.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const why = new Map<number, Set<string>>();
+  const note = (root: number, s: string) => why.set(root, (why.get(root) ?? new Set<string>()).add(s));
+  const pairs: [number, number, string[]][] = [];
+  for (let i = 0; i < people.length; i++) {
+    for (let j = i + 1; j < people.length; j++) {
+      const reasons = strongSignals(people[i], people[j]);
+      const k = nameKey(people[i].first, people[i].last);
+      if (k && k === nameKey(people[j].first, people[j].last)) reasons.unshift("the same name");
+      if (reasons.length > 0) pairs.push([i, j, reasons]);
+    }
   }
+  for (const [i, j] of pairs) parent[find(i)] = find(j);
+  for (const [i, , reasons] of pairs) for (const r of reasons) note(find(i), r);
+  const byRoot = new Map<number, T[]>();
+  people.forEach((p, i) => byRoot.set(find(i), [...(byRoot.get(find(i)) ?? []), p]));
   const out: { key: string; people: T[]; signals: string[] }[] = [];
-  for (const [key, list] of byName) {
+  for (const [root, list] of byRoot) {
     if (list.length < 2) continue;
-    const signals = new Set<string>();
-    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) for (const s of strongSignals(list[i], list[j])) signals.add(s);
-    out.push({ key, people: list, signals: [...signals] });
+    out.push({ key: list.map((p) => p.id).sort().join("+"), people: list, signals: [...(why.get(root) ?? [])] });
   }
-  return out.sort((a, b) => b.signals.length - a.signals.length || a.key.localeCompare(b.key));
+  // More than a name in common first (a name alone could be two people)
+  const strength = (g: { signals: string[] }) => g.signals.filter((s) => s !== "the same name").length;
+  return out.sort((x, y) => strength(y) - strength(x) || x.key.localeCompare(y.key));
 }
 
 /**

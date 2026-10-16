@@ -9,9 +9,21 @@ import { employees } from "./schema";
 export type DuplicateReport = {
   groups: { key: string; signals: string[]; people: { id: string; name: string; workEmail: string; status: string; position: string | null; hasAccount: boolean; createdAt: Date }[] }[];
   accounts: { userId: string; email: string; createdAt: Date }[];
-  /** Everyone in the directory, to choose which record an account belongs to. */
+  /** Everyone in the directory, to choose which record an account belongs to (or to merge by hand). */
   records: { id: string; name: string; workEmail: string; hasAccount: boolean }[];
 };
+
+/** Every current record, for HR or Super Admin without a record of their own to find theirs (or a record to link). */
+export async function listRecordsToClaim(): Promise<DuplicateReport["records"]> {
+  const user = await requireUser();
+  await authorize(user, "people.merge");
+  const records = await db
+    .select({ id: employees.id, first: employees.legalFirstName, last: employees.legalLastName, workEmail: employees.workEmail, userId: employees.userId })
+    .from(employees)
+    .where(and(isNull(employees.archivedAt), ne(employees.status, "separated")))
+    .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName));
+  return records.map((r) => ({ id: r.id, name: `${r.last}, ${r.first}`, workEmail: r.workEmail, hasAccount: r.userId !== null }));
+}
 
 /** HR and Super Admin: people who may be in the directory twice, and sign-in accounts with no record. */
 export async function getDuplicateReport(): Promise<DuplicateReport> {

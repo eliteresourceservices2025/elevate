@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { createMyProfile } from "@/modules/people/actions";
+import { claimMyProfile } from "@/modules/people/duplicates-actions";
 import { cancelCorrection, decideCorrection, fileCorrectionForOthers, openEvidence, requestCorrection, requestEvidenceUpload, saveClockRules, savePreferences, saveShiftNote } from "../actions";
 import { EOD_TEMPLATE } from "../clock";
 import type { CorrectionItem, FilablePerson, RulesRow } from "../queries";
@@ -420,30 +421,72 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
 }
 
 /** For HR and Super Admin accounts without a people record: add themselves so they can use the clock like everyone else. */
-export function SetupProfileForm() {
+export function SetupProfileForm({ records }: { records: { id: string; name: string; workEmail: string; hasAccount: boolean }[] }) {
   const { run, pending } = useRun();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [mine, setMine] = useState("");
+  const [notListed, setNotListed] = useState(false);
+  const target = records.find((r) => r.id === mine);
   return (
-    <form
-      className="max-w-xl space-y-3 rounded-xl border bg-card p-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        run(() => createMyProfile({ firstName, lastName }), "Your profile is set up. The time clock is ready.");
-      }}
-    >
+    <div className="max-w-xl space-y-4 rounded-xl border bg-card p-4">
       <h3 className="font-semibold">Set up your profile</h3>
-      <p className="text-sm text-muted-foreground">
-        This adds you to the people directory with your sign-in email, so you can use the time clock, request time off and see your own data. HR can complete the rest of your details later.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <TextField id="sp-first" label="Legal first name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-        <TextField id="sp-last" label="Legal last name" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          First check whether you are already in the directory. If you changed your email or name (or HR did), your record is probably there under the old one, and making a second one would put you in the directory and the org chart twice.
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-64 flex-1">
+            <label htmlFor="sp-mine" className="text-sm font-medium">
+              Is one of these you?
+            </label>
+            <select id="sp-mine" value={mine} onChange={(e) => setMine(e.target.value)} className="mt-1 h-9 w-full rounded-lg border bg-background px-2 text-sm">
+              <option value="">Choose your record</option>
+              {records.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} ({r.workEmail}){r.hasAccount ? " - has a sign-in account" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button
+            type="button"
+            disabled={pending || !mine}
+            onClick={() => {
+              const replace = Boolean(target?.hasAccount);
+              if (replace && !window.confirm("That record already has a sign-in account (probably your old one). Use this account instead? The old account stays, without a people record.")) return;
+              run(() => claimMyProfile({ employeeId: mine, replaceExisting: replace }), "Linked. The time clock is ready.");
+            }}
+          >
+            This is me
+          </Button>
+        </div>
       </div>
-      <Button type="submit" disabled={pending || !firstName.trim() || !lastName.trim()}>
-        Set up my profile
-      </Button>
-    </form>
+      <form
+        className="space-y-3 border-t pt-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(() => createMyProfile({ firstName, lastName, confirmNotListed: true }), "Your profile is set up. The time clock is ready.");
+        }}
+      >
+        <label htmlFor="sp-notlisted" className="flex items-start gap-2 text-sm">
+          <input id="sp-notlisted" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={notListed} onChange={(e) => setNotListed(e.target.checked)} />
+          I looked through the list and I am not in it
+        </label>
+        {notListed ? (
+          <>
+            <p className="text-sm text-muted-foreground">This adds you to the people directory with your sign-in email, so you can use the time clock, request time off and see your own data. HR can complete the rest of your details later.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextField id="sp-first" label="Legal first name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+              <TextField id="sp-last" label="Legal last name" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            </div>
+            <Button type="submit" disabled={pending || !firstName.trim() || !lastName.trim()}>
+              Set up my profile
+            </Button>
+          </>
+        ) : null}
+      </form>
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { fieldCrypto } from "@/lib/crypto";
 import { ActionFailure } from "@/lib/run-action";
@@ -13,7 +13,7 @@ import { positions, teams, departments } from "@/modules/org/schema";
 import { applyReporting, todayInZone } from "@/modules/org/service";
 import { recordHistory, upsertSensitive, type Tx } from "@/modules/people/service";
 import { changedFields, normalizeRow, type DateFormat, type Issue, type NormalizedRow } from "./normalize";
-import { importBatches, importRows } from "./schema";
+import { importBatches, importPullItems, importRows } from "./schema";
 
 // Staging, committing and rolling back an import from TalentHR. Callers authorize first (these helpers take the acting user as a
 // parameter, so they live outside the "use server" file).
@@ -59,9 +59,15 @@ export async function stageBatch(actor: Actor, input: StageInput): Promise<{ bat
   const sourceIds = rows.flatMap((r) => (r.sourceId ? [r.sourceId] : []));
   const talentRows = sourceIds.length ? await db.select().from(employees).where(inArray(employees.talenthrId, sourceIds)) : [];
   // A record that was merged into another stands for the record it went into
-  const resolved = await followMerges(db, [...existing, ...talentRows]);
+  // People imported before the TalentHR id was stored here are known from the API pull (it records each person's TalentHR id against their record)
+  const pulled = sourceIds.length ? await db.select({ sourceId: importPullItems.sourceId, employeeId: importPullItems.employeeId }).from(importPullItems).where(and(eq(importPullItems.kind, "leave_history"), inArray(importPullItems.sourceId, sourceIds))) : [];
+  const pulledIds = [...new Set(pulled.flatMap((x) => (x.employeeId ? [x.employeeId] : [])))];
+  const pulledRows = pulledIds.length ? await db.select().from(employees).where(inArray(employees.id, pulledIds)) : [];
+  const pulledBySource = new Map(pulled.flatMap((x) => (x.employeeId ? [[x.sourceId, pulledRows.find((e) => e.id === x.employeeId)] as const] : [])).filter((x): x is readonly [string, (typeof pulledRows)[number]] => Boolean(x[1])));
+  const resolved = await followMerges(db, [...existing, ...talentRows, ...pulledRows]);
   const byEmail = new Map(existing.map((e) => [e.workEmail.toLowerCase(), resolved.get(e.id) as typeof e]));
   const byTalentId = new Map(talentRows.map((e) => [e.talenthrId as string, resolved.get(e.id) as typeof e]));
+  for (const [sourceId, e] of pulledBySource) if (!byTalentId.has(sourceId) && !e.archivedAt && (!e.talenthrId || e.talenthrId === sourceId)) byTalentId.set(sourceId, resolved.get(e.id) as typeof e);
   const people = await loadPeopleForDuplicates(db);
 
   const batchId = randomUUID();
@@ -197,7 +203,12 @@ export async function commitBatch(actor: Actor, batchId: string, opts: { skipErr
       const teamId = row.teamName ? await teamIdFor(tx, row.teamName, teamCache) : undefined;
       const position = row.positionTitle ? await positionFor(tx, row.positionTitle, positionCache) : null;
 
-      const [byId] = row.sourceId ? await tx.select().from(employees).where(eq(employees.talenthrId, row.sourceId)) : [];
+      let [byId] = row.sourceId ? await tx.select().from(employees).where(eq(employees.talenthrId, row.sourceId)) : [];
+      if (!byId && row.sourceId) {
+        // known from the API pull, though the id was never stored on the record
+        const [seen] = await tx.select({ employeeId: importPullItems.employeeId }).from(importPullItems).where(and(eq(importPullItems.kind, "leave_history"), eq(importPullItems.sourceId, row.sourceId)));
+        if (seen?.employeeId) [byId] = await tx.select().from(employees).where(and(eq(employees.id, seen.employeeId), isNull(employees.archivedAt), or(isNull(employees.talenthrId), eq(employees.talenthrId, row.sourceId))));
+      }
       const [byEmail] = byId ? [] : await tx.select().from(employees).where(sql`lower(${employees.workEmail}) = ${input.workEmail}`);
       const found = byId ?? byEmail;
       const current = found ? (await followMerges(tx, [found])).get(found.id) : undefined;

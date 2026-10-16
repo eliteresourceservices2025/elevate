@@ -92,7 +92,9 @@ describe("adding a person who is already here", () => {
     const me = await makeUser("owner", ["hr_admin"]);
     await makeRecord("Olive", last, { email: `${uniq("old")}@example.com` });
     as(me);
-    expect(await people.createMyProfile({ firstName: "Olive", lastName: last })).toMatchObject({ ok: false, error: expect.stringContaining("already a people record with your name") });
+    // not allowed to create a record without first confirming that none of the existing ones is theirs
+    expect(await people.createMyProfile({ firstName: "Zed", lastName: uniq("Nobody") })).toMatchObject({ ok: false, error: expect.stringContaining("Look through the list") });
+    expect(await people.createMyProfile({ firstName: "Olive", lastName: last, confirmNotListed: true })).toMatchObject({ ok: false, error: expect.stringContaining("already a people record with your name") });
     expect(await rows(sql`select 1 from core.employees where user_id = ${me.id}`)).toHaveLength(0);
   });
 });
@@ -203,6 +205,46 @@ describe("a sign-in account with no people record", () => {
   });
 });
 
+describe("an HR or Super Admin whose sign-in lost their record (changed email or name)", () => {
+  it("claims the existing record instead of making a second one, replacing the old account only when confirmed", async () => {
+    const oldAcct = await makeUser("hrold", ["hr_admin"]);
+    const me = await makeUser("hrnew", ["hr_admin"]); // the account they sign in with now
+    const rec = await makeRecord("Helena", uniq("Director"), { userId: oldAcct.id, email: oldAcct.email, age: 500 });
+    as(me);
+    const listed = await report.listRecordsToClaim();
+    expect(listed.find((r) => r.id === rec.id)).toMatchObject({ hasAccount: true });
+    expect((await m.claimMyProfile({ employeeId: rec.id })).error).toMatch(/already has a sign-in account/);
+    expect(await m.claimMyProfile({ employeeId: rec.id, replaceExisting: true })).toEqual({ ok: true, data: { replaced: true } });
+    expect((await record(rec.id)).user_id).toBe(me.id);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'people.relink_account' and target_id = ${rec.id}`)).toHaveLength(1);
+    // now they have a record: no second one, and no second claim
+    expect(await people.createMyProfile({ firstName: "Helena", lastName: "New", confirmNotListed: true })).toEqual({ ok: false, error: "You already have a people record." });
+    expect((await m.claimMyProfile({ employeeId: rec.id, replaceExisting: true })).error).toMatch(/already belongs/);
+    // people without HR reach cannot claim or list
+    as(staff);
+    expect(await m.claimMyProfile({ employeeId: rec.id, replaceExisting: true })).toEqual({ ok: false, error: NO_ACCESS });
+    await expect(report.listRecordsToClaim()).rejects.toThrow();
+  });
+});
+
+describe("a person who changed their name AND email is still found", () => {
+  it("lists two records with different names that share a mobile number, and merges them by hand", async () => {
+    const tag = uniq("Avila");
+    const oldUser = await makeUser("cong", ["super_admin"]);
+    const newUser = await makeUser("victor", []);
+    const keep = await makeRecord("Cong", tag, { userId: oldUser.id, email: oldUser.email, age: 400 });
+    const dup = await makeRecord("Victor", `Ormita ${tag}`, { userId: newUser.id, email: newUser.email, age: 5 });
+    await db.execute(sql`update core.employees set mobile = '+63 917 222 3333' where id in (${keep.id}, ${dup.id})`);
+    as(hr);
+    const found = (await report.getDuplicateReport()).groups.find((g) => g.people.some((p) => p.id === keep.id));
+    expect(found?.people.map((p) => p.id).sort()).toEqual([keep.id, dup.id].sort());
+    expect(found?.signals).toEqual(["the same mobile number"]);
+    expect(await m.mergeDuplicate({ keepId: keep.id, duplicateId: dup.id, adoptEmail: true })).toMatchObject({ ok: true, data: { accountMoved: true, emailAdopted: true } });
+    expect((await record(keep.id)).user_id).toBe(newUser.id);
+    expect((await orgQueries.getOrgChart()).filter((n) => n.name.includes(tag))).toHaveLength(1);
+  });
+});
+
 describe("the import no longer splits a person whose email or name changed here", () => {
   const stage = async (csv: string) => {
     const parsed = parseCsv(csv);
@@ -271,6 +313,22 @@ describe("the import no longer splits a person whose email or name changed here"
     expect(again2.summary.new).toBe(0);
     expect((await importService.commitBatch(hr, again2.batchId, { skipErrors: true })).restored).toBe(0);
     expect((await rows<{ archived_at: Date | null }>(sql`select archived_at from core.employees where id = ${imp2.id}`))[0].archived_at).not.toBeNull();
+  });
+
+  it("finds a person imported before the id was stored here, from the API pull, even when their email and name changed", async () => {
+    const tag = uniq("pulled");
+    const company = fakeCompany(tag);
+    // person 3 was imported long ago (no TalentHR id kept), then HR changed their email and name; the pull had recorded their TalentHR id
+    const old = await makeRecord("Renamed", `Person ${tag}`, { email: `${tag}.oldmail@example.com`, age: 300 });
+    const [pull] = await rows<{ id: string }>(sql`insert into ops.import_pulls (status) values ('done') returning id`);
+    await db.execute(sql`insert into ops.import_pull_items (pull_id, kind, source_id, employee_id, outcome) values (${pull.id}, 'leave_history', ${companyId(tag, 3)}, ${old.id}, 'archived')`);
+    const staged = await stage(toCsv(company));
+    expect(staged.summary.new).toBe(4); // person 3 is not new
+    await importService.commitBatch(hr, staged.batchId, { skipErrors: true });
+    // no second record for them, the old record kept its email and now remembers the id
+    expect(await rows(sql`select 1 from core.employees where work_email = ${`${tag}.person3@example.com`}`)).toHaveLength(0);
+    const kept = (await rows<{ work_email: string; talenthr_id: string }>(sql`select work_email, talenthr_id from core.employees where id = ${old.id}`))[0];
+    expect(kept).toEqual({ work_email: old.email, talenthr_id: companyId(tag, 3) });
   });
 
   it("remembers the TalentHR id on a person found by email, and flags a new row that looks like someone already here", async () => {

@@ -17,12 +17,14 @@ function GroupCard({ group }: { group: DuplicateReport["groups"][number] }) {
   const [keepId, setKeepId] = useState(group.people[0].id);
   const [adoptEmail, setAdoptEmail] = useState(true);
   const others = group.people.filter((p) => p.id !== keepId);
+  const title = [...new Set(group.people.map((p) => p.name))].join(" / ");
   return (
-    <section aria-label={group.people[0].name} className="space-y-3 rounded-xl border bg-card p-4">
+    <section aria-label={title} className="space-y-3 rounded-xl border bg-card p-4">
       <div>
-        <h3 className="font-semibold">{group.people[0].name}</h3>
+        <h3 className="font-semibold">{title}</h3>
         <p className="text-sm text-muted-foreground">
-          {group.people.length} records{group.signals.length ? `, with ${group.signals.join(" and ")}` : ", the same name only (they may be two different people)"}.
+          {group.people.length} records, with {group.signals.join(" and ")}
+          {group.signals.every((s) => s === "the same name") ? " only (they may be two different people)" : ""}.
         </p>
       </div>
       <fieldset className="space-y-2">
@@ -104,12 +106,70 @@ function AccountRow({ account, records }: { account: DuplicateReport["accounts"]
   );
 }
 
+/** Two records HR knows are the same person, whatever their names and emails now say: pick both and merge. */
+function ByHand({ records }: { records: DuplicateReport["records"] }) {
+  const { run, pending } = useRun();
+  const [keepId, setKeepId] = useState("");
+  const [duplicateId, setDuplicateId] = useState("");
+  const [adoptEmail, setAdoptEmail] = useState(true);
+  const dup = records.find((r) => r.id === duplicateId);
+  const options = (skip: string) =>
+    records
+      .filter((r) => r.id !== skip)
+      .map((r) => (
+        <option key={r.id} value={r.id}>
+          {r.name} ({r.workEmail}){r.hasAccount ? " - has a sign-in account" : ""}
+        </option>
+      ));
+  return (
+    <section aria-label="Merge by hand" className="space-y-3 rounded-xl border bg-card p-4">
+      <p className="text-sm text-muted-foreground">
+        When the name and email on the two records are different (someone changed both), pick them yourself. The record you keep should be the older one, with the history.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor="by-hand-keep">Keep this record</Label>
+          <NativeSelect id="by-hand-keep" value={keepId} onChange={(e) => setKeepId(e.target.value)}>
+            <option value="">Choose a record</option>
+            {options(duplicateId)}
+          </NativeSelect>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="by-hand-dup">Merge this one into it (it is archived)</Label>
+          <NativeSelect id="by-hand-dup" value={duplicateId} onChange={(e) => setDuplicateId(e.target.value)}>
+            <option value="">Choose a record</option>
+            {options(keepId)}
+          </NativeSelect>
+        </div>
+      </div>
+      <label htmlFor="by-hand-adopt" className="flex items-start gap-2 text-sm">
+        <input id="by-hand-adopt" type="checkbox" checked={adoptEmail} onChange={(e) => setAdoptEmail(e.target.checked)} className="mt-0.5 size-4 accent-primary" />
+        <span>The record that stays takes the other record&apos;s work email (when that one has the sign-in account the person uses now)</span>
+      </label>
+      <Button
+        type="button"
+        disabled={pending || !keepId || !duplicateId}
+        onClick={() => {
+          if (!window.confirm("Merge these two records? The second is archived and nothing is deleted, but anything recorded on it (time clock, leave, documents) stays on the archived record.")) return;
+          run(() => mergeDuplicate({ keepId, duplicateId, adoptEmail: adoptEmail && Boolean(dup?.hasAccount) }), (d) => (d?.accountMoved ? "Merged. The sign-in account moved to the record that stays." : "Merged."));
+        }}
+      >
+        Merge
+      </Button>
+    </section>
+  );
+}
+
 export function DuplicatesPanel({ report }: { report: DuplicateReport }) {
   return (
     <div className="space-y-8">
       <section aria-label="Possible duplicates" className="space-y-3">
         <h2 className="text-lg font-semibold">People who may be in the directory twice</h2>
-        {report.groups.length === 0 ? <p className="text-muted-foreground">No two records share a name.</p> : report.groups.map((g) => <GroupCard key={g.key} group={g} />)}
+        {report.groups.length === 0 ? <p className="text-muted-foreground">No two records share a name, a personal email, a mobile number or a birth date.</p> : report.groups.map((g) => <GroupCard key={g.key} group={g} />)}
+      </section>
+      <section aria-label="Merge by hand" className="space-y-3">
+        <h2 className="text-lg font-semibold">Merge two records by hand</h2>
+        <ByHand records={report.records} />
       </section>
       <section aria-label="Accounts without a record" className="space-y-3">
         <h2 className="text-lg font-semibold">Sign-in accounts with no people record</h2>

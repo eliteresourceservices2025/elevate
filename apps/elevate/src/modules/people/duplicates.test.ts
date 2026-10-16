@@ -32,9 +32,22 @@ describe("grouping", () => {
       p("4", "Dina", "Lim"),
       p("5", "Dina", "Lim"),
     ]);
-    expect(groups.map((g) => g.key)).toEqual(["ana reyes", "dina lim"]);
-    expect(groups[0].signals).toEqual(["the same birth date"]);
-    expect(groups[1].signals).toEqual([]);
+    expect(groups.map((g) => g.people.map((x) => x.id))).toEqual([["2", "3"], ["4", "5"]]);
+    expect(groups[0].signals).toEqual(["the same name", "the same birth date"]);
+    expect(groups[1].signals).toEqual(["the same name"]);
+  });
+
+  it("finds someone who changed their name AND email, by a shared personal email, mobile number or birth date, and chains records together", () => {
+    const groups = groupPossibleDuplicates([
+      p("a", "Cong", "Avila", { mobile: "+63 917 555 1212" }),
+      p("b", "Victor", "Ormita", { mobile: "0917-555-1212", birthDate: "1991-05-05" }),
+      p("c", "Vic", "Ormita-Avila", { birthDate: "1991-05-05" }),
+      p("d", "Eve", "Solo"),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].people.map((x) => x.id)).toEqual(["a", "b", "c"]);
+    expect(groups[0].signals).toEqual(expect.arrayContaining(["the same mobile number", "the same birth date"]));
+    expect(groups[0].signals).not.toContain("the same name");
   });
 });
 

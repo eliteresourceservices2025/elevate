@@ -654,7 +654,7 @@ describe("internal staff can use the clock too", () => {
     expect(await actions.clockIn({})).toEqual({ ok: false, error: "Your people record is not set up yet. Ask HR." });
 
     expect((await peopleActions.createMyProfile({ firstName: "x", lastName: "" })).ok).toBe(false);
-    const made = await peopleActions.createMyProfile({ firstName: "Olivia", lastName: "Owner" });
+    const made = await peopleActions.createMyProfile({ firstName: "Olivia", lastName: "Owner", confirmNotListed: true });
     expect(made.ok).toBe(true);
     const [e] = await rows<{ user_id: string; work_email: string; status: string }>(sql`select user_id, work_email, status from core.employees where user_id = ${owner.id}`);
     expect(e).toMatchObject({ user_id: owner.id, work_email: owner.email, status: "active" });

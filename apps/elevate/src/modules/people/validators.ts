@@ -265,7 +265,10 @@ export const dataRightsRequestSchema = z.object({
 export const myProfileSchema = z.object({
   firstName: requiredText("your first name"),
   lastName: requiredText("your last name"),
+  /** Ticked after looking through the existing records: your record may already be there under your old email or name. */
+  confirmNotListed: z.boolean().optional(),
 });
+export const claimSchema = z.object({ employeeId: uuid, replaceExisting: z.boolean().default(false) });
 
 // ---- Retention (docs/modules/people-retention-design.md) ----------------------------------------------------------------
 
