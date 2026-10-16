@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFormDialog } from "@/components/form-dialog";
 import { PersonPicker, type PickerOption } from "@/components/person-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,27 +9,26 @@ import { Label } from "@/components/ui/label";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { addCredential, importCredentials, removeCredential, type ImportSummary } from "../actions";
 
-const box = "space-y-3 rounded-xl border bg-card p-4";
-
 /** HR records one certificate by hand. */
 export function AddCredentialForm({ people }: { people: PickerOption[] }) {
   const { run, pending } = useRun();
+  const dialog = useFormDialog();
   const [employeeId, setEmployeeId] = useState<string | undefined>();
   const [name, setName] = useState("HIPAA Awareness certificate");
   const [issuedOn, setIssuedOn] = useState("");
   const [expiresOn, setExpiresOn] = useState("");
   return (
     <form
-      className={box}
+      className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
         run(() => addCredential({ employeeId, name, issuedOn, expiresOn }), "Certificate recorded.", () => {
           setIssuedOn("");
           setExpiresOn("");
+          dialog?.close(true);
         });
       }}
     >
-      <h2 className="text-lg font-semibold">Add a certificate</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <PersonPicker id="cred-person" label="Person" options={people} value={employeeId} onChange={setEmployeeId} />
         <div className="space-y-1">
@@ -72,6 +72,7 @@ export function RemoveCredentialButton({ id, label }: { id: string; label: strin
 /** Loads certificates from TalentHR's assets file: preview first, then confirm. The file is read in the browser and sent as text. */
 export function ImportCredentialsCard() {
   const { run, pending } = useRun();
+  const dialog = useFormDialog();
   const [csv, setCsv] = useState("");
   const [fileName, setFileName] = useState("");
   const [nameContains, setNameContains] = useState("HIPAA");
@@ -81,12 +82,14 @@ export function ImportCredentialsCard() {
     run<ImportSummary>(
       () => importCredentials({ csv, nameContains, commit }),
       (d) => (commit ? `Loaded ${d?.created ?? 0} certificates.` : ""),
-      (d) => setResult(d ?? null),
+      (d) => {
+        setResult(d ?? null);
+        if (commit) dialog?.markClean(); // loaded: the result stays on screen, and closing no longer asks
+      },
     );
 
   return (
-    <section aria-label="Load from TalentHR" className={box}>
-      <h2 className="text-lg font-semibold">Load from TalentHR</h2>
+    <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         Upload TalentHR&apos;s assets file (CSV). Rows whose name contains the text below and that are assigned to a person with an end date (Warranty end
         date) become certificates. Prices and everything else are ignored. Import the people first, because people are matched by email.
@@ -150,6 +153,6 @@ export function ImportCredentialsCard() {
           ) : null}
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }

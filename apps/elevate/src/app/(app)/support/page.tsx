@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import { orNotFound } from "@/lib/or-not-found";
+import { FormDialog } from "@/components/form-dialog";
 import { SupportForm, SupportList } from "@/modules/support/components/support-panels";
 import { listMySupportRequests, listSupportInbox } from "@/modules/support/queries";
 import { supportEmail } from "@/modules/support/service";
@@ -19,17 +20,22 @@ export default async function SupportPage({ searchParams }: PageProps<"/support"
 
   return (
     <div className="w-full max-w-3xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Contact support</h1>
-        <p className="mt-1 text-muted-foreground">
-          Something not working, or you cannot sign in? Tell us here. You can also email{" "}
-          <a href={`mailto:${supportEmail()}`} className="text-primary underline-offset-4 hover:underline">
-            {supportEmail()}
-          </a>
-          .
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="max-w-2xl">
+          <h1 className="text-2xl font-bold">Contact support</h1>
+          <p className="mt-1 text-muted-foreground">
+            Something not working, or you cannot sign in? Tell us here. You can also email{" "}
+            <a href={`mailto:${supportEmail()}`} className="text-primary underline-offset-4 hover:underline">
+              {supportEmail()}
+            </a>
+            .
+          </p>
+        </div>
+        {/* A link that asks for support from another page (it carries ?from=) opens the form straight away */}
+        <FormDialog label="Send a request to support" title="Contact support" defaultOpen={Boolean(from)} size="lg">
+          <SupportForm page={from} email={user.email} />
+        </FormDialog>
       </div>
-      <SupportForm page={from} email={user.email} />
 
       <section aria-label="Your requests" className="space-y-3">
         <h2 className="text-lg font-semibold">Your requests</h2>

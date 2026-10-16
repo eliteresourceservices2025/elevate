@@ -5,7 +5,8 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
-import { IncidentForm, IncidentList, PrivacyOfficerCard } from "@/modules/incidents/components/incident-panels";
+import { FormDialog } from "@/components/form-dialog";
+import { AddPrivacyOfficerForm, IncidentForm, IncidentList, PrivacyOfficerCard } from "@/modules/incidents/components/incident-panels";
 import { listClientChoices, listIncidentInbox, listMyIncidents, listPrivacyOfficers } from "@/modules/incidents/queries";
 import { STATUSES, type IncidentStatus } from "@/modules/incidents/constants";
 import { cn } from "@/lib/utils";
@@ -36,17 +37,24 @@ export default async function IncidentsPage({ searchParams }: PageProps<"/incide
 
   return (
     <div className="w-full max-w-4xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Privacy incidents</h1>
-        <p className="mt-1 text-muted-foreground">
-          Sent something to the wrong person, lost a device, clicked a suspicious link, or seen information you should not have? Tell us as soon as you notice. It does not matter whether you are sure it is a problem, and nobody is punished for reporting in good faith.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="max-w-3xl">
+          <h1 className="text-2xl font-bold">Privacy incidents</h1>
+          <p className="mt-1 text-muted-foreground">
+            Sent something to the wrong person, lost a device, clicked a suspicious link, or seen information you should not have? Tell us as soon as you notice. It does not matter whether you are sure it is a problem, and nobody is punished for reporting in good faith.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <FormDialog label="Report an incident" title="Report an incident" size="lg">
+            <IncidentForm clients={clients} />
+          </FormDialog>
+          {canDesignate ? (
+            <FormDialog label="Add a Privacy Officer" title="Add a Privacy Officer" description="HR and Super Admin always see reports. A Privacy Officer is someone else you name who reads and handles them too." variant="outline">
+              <AddPrivacyOfficerForm />
+            </FormDialog>
+          ) : null}
+        </div>
       </div>
-
-      <section aria-label="Report an incident" className="space-y-3">
-        <h2 className="text-lg font-semibold">Report an incident</h2>
-        <IncidentForm clients={clients} />
-      </section>
 
       <section aria-label="Your reports" className="space-y-3">
         <h2 className="text-lg font-semibold">Your reports</h2>

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { useFormDialog } from "@/components/form-dialog";
 import { toast } from "sonner";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { SelectField, TextField } from "@/components/form-fields";
@@ -22,11 +23,12 @@ export function SupportForm({ page, email }: { page: string | null; email: strin
   const [pending, startTransition] = useTransition();
   const [v, setV] = useState({ topic: "sign_in", subject: "", message: "", includePage: Boolean(page) });
   const { markSaved } = useWarnWhenEdited({ subject: v.subject, message: v.message });
+  const dialog = useFormDialog();
   const [done, setDone] = useState<{ emailed: boolean } | null>(null);
 
   if (done) {
     return (
-      <div role="status" className="space-y-3 rounded-xl border bg-card p-5">
+      <div role="status" className="space-y-3">
         <h2 className="text-lg font-semibold">We got your request</h2>
         <p className="text-sm text-muted-foreground">
           HR and the administrators were told in ELEVATE{done.emailed ? ", and the request was emailed to support" : ""}. We will reply to <strong>{email}</strong>. You can follow it below.
@@ -40,7 +42,7 @@ export function SupportForm({ page, email }: { page: string | null; email: strin
 
   return (
     <form
-      className="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+      className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {
@@ -49,6 +51,7 @@ export function SupportForm({ page, email }: { page: string | null; email: strin
             if (!result.ok) return void toast.error(result.error);
             markSaved();
             setDone({ emailed: result.data.emailed });
+            dialog?.markClean();
             router.refresh();
           } catch {
             toast.error("No connection. Try again.");

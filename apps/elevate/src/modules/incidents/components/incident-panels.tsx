@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
+import { useFormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -34,12 +35,13 @@ export function IncidentForm({ clients }: { clients: { id: string; name: string 
   const [pending, startTransition] = useTransition();
   const [v, setV] = useState({ ...blank, happenedOn: todayIso() });
   const { markSaved } = useWarnWhenEdited({ howFound: v.howFound, whatHappened: v.whatHappened, whoElseKnows: v.whoElseKnows, actionsTaken: v.actionsTaken });
+  const dialog = useFormDialog();
   const [done, setDone] = useState<{ id: string; reference: string } | null>(null);
   const set = (k: keyof typeof blank, value: string | boolean) => setV((s) => ({ ...s, [k]: value }));
 
   if (done) {
     return (
-      <div role="status" className="space-y-3 rounded-xl border bg-card p-5">
+      <div role="status" className="space-y-3">
         <h2 className="text-lg font-semibold">Thank you. Your report was sent.</h2>
         <p className="text-sm text-muted-foreground">
           Reference <strong>{done.reference}</strong>. HR and the Privacy Officer were told. You will see updates and any questions on the report. Reporting quickly is the right thing to do, and nobody is punished for reporting in good faith.
@@ -58,7 +60,7 @@ export function IncidentForm({ clients }: { clients: { id: string; name: string 
 
   return (
     <form
-      className="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+      className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {
@@ -67,6 +69,7 @@ export function IncidentForm({ clients }: { clients: { id: string; name: string 
             if (!result.ok) return void toast.error(result.error);
             markSaved();
             setDone(result.data);
+            dialog?.markClean();
             router.refresh();
           } catch {
             toast.error("No connection. Try again.");
@@ -241,18 +244,48 @@ export function IncidentThread({ incident, canHandleThis }: { incident: Incident
   );
 }
 
+/** The form that names a Privacy Officer (HR and Super Admin), for a modal. */
+export function AddPrivacyOfficerForm() {
+  const router = useRouter();
+  const dialog = useFormDialog();
+  const [pending, startTransition] = useTransition();
+  const [email, setEmail] = useState("");
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        startTransition(async () => {
+          try {
+            const result = await setPrivacyOfficer({ email, enabled: true });
+            if (!result.ok) return void toast.error(result.error);
+            toast.success("Privacy Officer added.");
+            dialog?.close(true);
+            router.refresh();
+          } catch {
+            toast.error("No connection. Try again.");
+          }
+        });
+      }}
+    >
+      <TextField id="po-email" type="email" label="Their sign-in email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+      <Button type="submit" disabled={pending}>
+        Add Privacy Officer
+      </Button>
+    </form>
+  );
+}
+
 /** HR and Super Admin name Privacy Officers here. */
 export function PrivacyOfficerCard({ officers }: { officers: { id: string; email: string; name: string | null }[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [email, setEmail] = useState("");
   const change = (target: string, enabled: boolean) =>
     startTransition(async () => {
       try {
         const result = await setPrivacyOfficer({ email: target, enabled });
         if (!result.ok) return void toast.error(result.error);
         toast.success(enabled ? "Privacy Officer added." : "Privacy Officer removed.");
-        if (enabled) setEmail("");
         router.refresh();
       } catch {
         toast.error("No connection. Try again.");
@@ -273,20 +306,6 @@ export function PrivacyOfficerCard({ officers }: { officers: { id: string; email
           </li>
         ))}
       </ul>
-      <form
-        className="flex flex-wrap items-end gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          change(email, true);
-        }}
-      >
-        <div className="min-w-64 flex-1">
-          <TextField id="po-email" type="email" label="Add by sign-in email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        </div>
-        <Button type="submit" size="sm" disabled={pending}>
-          Add
-        </Button>
-      </form>
     </section>
   );
 }

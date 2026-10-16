@@ -4,6 +4,7 @@ import { scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
+import { FormDialog } from "@/components/form-dialog";
 import { PagerLinks } from "@/components/pager";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Input } from "@/components/ui/input";
@@ -43,9 +44,14 @@ export default async function AssetsPage({ searchParams }: PageProps<"/assets">)
           <p className="mt-1 text-muted-foreground">Equipment inventory and who has what. No prices or values are kept here.</p>
         </div>
         {canManage ? (
-          <Link href="/assets/labels" className="rounded-lg border px-3 py-1.5 text-sm hover:bg-secondary/50">
-            Print labels
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/assets/labels" className="rounded-lg border px-3 py-1.5 text-sm hover:bg-secondary/50">
+              Print labels
+            </Link>
+            <FormDialog label="Register an item" title="Register an item" size="lg">
+              <RegisterAssetForm />
+            </FormDialog>
+          </div>
         ) : null}
       </div>
 
@@ -116,7 +122,6 @@ export default async function AssetsPage({ searchParams }: PageProps<"/assets">)
         </section>
       ) : null}
 
-      {canManage ? <RegisterAssetForm /> : null}
     </div>
   );
 }
