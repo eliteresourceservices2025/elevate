@@ -12,6 +12,7 @@ import { DEFAULT_EXPIRY_DAYS, MAX_PDF_BYTES, MAX_SIGNERS } from "../constants";
 import type { SignerChoice, TemplateRow } from "../queries";
 import { useRouter } from "next/navigation";
 import { ComposeEditor } from "./compose-editor";
+import { BUILTIN_TEMPLATES } from "../builtin-templates";
 
 type Picked = { userId: string; role: string };
 
@@ -41,6 +42,16 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
       setTitle((s) => s || t.name);
       setPicked(t.roles.map((role) => ({ userId: "", role })));
     }
+  }
+
+  /** Fills the title, the text and the signer role from a ready-made document. HR can still change all of it before sending. */
+  function applyBuiltin(id: string) {
+    const t = BUILTIN_TEMPLATES.find((x) => x.id === id);
+    if (!t) return;
+    if ((content.trim() || title.trim()) && !window.confirm("Replace what you have written with this ready-made document?")) return;
+    setTitle(t.title);
+    setContent(t.body);
+    setPicked((list) => (list.length ? list.map((p, i) => ({ ...p, role: p.role || (t.roles[i] ?? "") })) : list));
   }
 
   async function submit(send: boolean) {
@@ -110,7 +121,17 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
           </label>
         </div>
         {source === "write" ? (
-          <ComposeEditor value={content} onChange={setContent} />
+          <div className="space-y-3">
+            <SelectField id="env-builtin" label="Start from a ready-made document (optional)" value="" onChange={(e) => applyBuiltin(e.target.value)}>
+              <option value="">Blank document</option>
+              {BUILTIN_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </SelectField>
+            <ComposeEditor value={content} onChange={setContent} />
+          </div>
         ) : source === "upload" ? (
           <div className="space-y-1.5">
             <Label htmlFor="env-file">PDF (up to 8 MB, 100 pages)</Label>
