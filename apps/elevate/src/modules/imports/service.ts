@@ -8,7 +8,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { customFieldDefs, customFieldValues, emergencyContacts, employeeSensitive, employees } from "@/modules/people/schema";
 import { createEmployeeRecord } from "@/modules/people/create";
 import { compareWithExisting } from "@/modules/people/duplicates";
-import { loadPeopleForDuplicates } from "@/modules/people/duplicates-service";
+import { followMerges, loadPeopleForDuplicates } from "@/modules/people/duplicates-service";
 import { positions, teams, departments } from "@/modules/org/schema";
 import { applyReporting, todayInZone } from "@/modules/org/service";
 import { recordHistory, upsertSensitive, type Tx } from "@/modules/people/service";
@@ -55,10 +55,13 @@ export async function stageBatch(actor: Actor, input: StageInput): Promise<{ bat
 
   const emails = [...emailRow.keys()];
   const existing = emails.length ? await db.select().from(employees).where(inArray(sql`lower(${employees.workEmail})`, emails)) : [];
-  const byEmail = new Map(existing.map((e) => [e.workEmail.toLowerCase(), e]));
   // A person already imported is found by their TalentHR id, even if their work email or name was changed here since
   const sourceIds = rows.flatMap((r) => (r.sourceId ? [r.sourceId] : []));
-  const byTalentId = new Map((sourceIds.length ? await db.select().from(employees).where(inArray(employees.talenthrId, sourceIds)) : []).map((e) => [e.talenthrId as string, e]));
+  const talentRows = sourceIds.length ? await db.select().from(employees).where(inArray(employees.talenthrId, sourceIds)) : [];
+  // A record that was merged into another stands for the record it went into
+  const resolved = await followMerges(db, [...existing, ...talentRows]);
+  const byEmail = new Map(existing.map((e) => [e.workEmail.toLowerCase(), resolved.get(e.id) as typeof e]));
+  const byTalentId = new Map(talentRows.map((e) => [e.talenthrId as string, resolved.get(e.id) as typeof e]));
   const people = await loadPeopleForDuplicates(db);
 
   const batchId = randomUUID();
@@ -196,7 +199,8 @@ export async function commitBatch(actor: Actor, batchId: string, opts: { skipErr
 
       const [byId] = row.sourceId ? await tx.select().from(employees).where(eq(employees.talenthrId, row.sourceId)) : [];
       const [byEmail] = byId ? [] : await tx.select().from(employees).where(sql`lower(${employees.workEmail}) = ${input.workEmail}`);
-      const current = byId ?? byEmail;
+      const found = byId ?? byEmail;
+      const current = found ? (await followMerges(tx, [found])).get(found.id) : undefined;
       let employeeId: string;
       let created = false;
       if (!current) {

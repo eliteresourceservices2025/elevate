@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { BASE_ROLE } from "@/lib/roles";
@@ -50,6 +50,24 @@ export async function accountsWithoutRecord(tx: Reader): Promise<{ userId: strin
     .from(users)
     .where(and(isNull(users.archivedAt), sql`not exists (select 1 from core.employees e where e.user_id = ${users.id} and e.archived_at is null)`));
   return rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+type EmployeeRow = typeof employees.$inferSelect;
+
+/**
+ * Records merged into another one point at it (`merged_into_id`). An import that finds an archived duplicate by its email or TalentHR id
+ * must act on the record it was merged into, not bring the duplicate back. Returns each given record's final record (itself, if never merged).
+ */
+export async function followMerges(tx: Reader, list: readonly EmployeeRow[]): Promise<Map<string, EmployeeRow>> {
+  const out = new Map<string, EmployeeRow>(list.map((e) => [e.id, e]));
+  for (let hop = 0; hop < 5; hop++) {
+    const pending = [...out.entries()].filter(([, e]) => e.mergedIntoId);
+    if (pending.length === 0) break;
+    const targets = await tx.select().from(employees).where(inArray(employees.id, [...new Set(pending.map(([, e]) => e.mergedIntoId as string))]));
+    const byId = new Map(targets.map((t) => [t.id, t]));
+    for (const [key, e] of pending) out.set(key, byId.get(e.mergedIntoId as string) ?? e);
+  }
+  return out;
 }
 
 type Actor = { id: string; email: string; roles?: readonly string[] };
@@ -115,7 +133,12 @@ export async function mergeEmployees(tx: Tx, actor: Actor, p: { keepId: string; 
     if (!moved.ok) throw new ActionFailure(moved.error);
   }
 
-  await tx.update(employees).set({ archivedAt: new Date(), updatedAt: new Date() }).where(eq(employees.id, dup.id));
+  // The TalentHR id follows the person to the record that stays (when it has none), so later imports find the right record
+  if (dup.talenthrId && !keep.talenthrId) {
+    await tx.update(employees).set({ talenthrId: null }).where(eq(employees.id, dup.id));
+    await tx.update(employees).set({ talenthrId: dup.talenthrId }).where(eq(employees.id, keep.id));
+  }
+  await tx.update(employees).set({ archivedAt: new Date(), mergedIntoId: keep.id, updatedAt: new Date() }).where(eq(employees.id, dup.id));
   await recordHistory(tx, { employeeId: dup.id, eventType: "archived", summary: "Merged into another record of the same person and archived", changedBy: actor.id });
   await recordHistory(tx, { employeeId: keep.id, eventType: "merged", summary: `A duplicate record was merged in${accountMoved ? "; the sign-in account now belongs to this record" : ""}`, changedBy: actor.id });
   await writeAudit(

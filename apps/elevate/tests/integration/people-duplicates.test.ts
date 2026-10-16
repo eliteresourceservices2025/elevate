@@ -235,6 +235,44 @@ describe("the import no longer splits a person whose email or name changed here"
     expect(await rows(sql`select 1 from core.employees where work_email = ${`${tag}.person3@example.com`}`)).toHaveLength(0);
   });
 
+  it("after a merge, the import acts on the record that stayed: the archived duplicate is not brought back and its TalentHR id follows the person", async () => {
+    const tag = uniq("merged");
+    const csv = toCsv(fakeCompany(tag));
+    const first = await stage(csv);
+    await importService.commitBatch(hr, first.batchId, { skipErrors: true });
+    const imported = (await rows<{ id: string }>(sql`select id from core.employees where work_email = ${`${tag}.person3@example.com`}`))[0];
+    // the same human was also added by hand earlier, under their old email: that record stays, the imported one is the duplicate
+    const keeper = await makeRecord("Test3", `Person3 ${tag}`, { age: 400 });
+    as(hr);
+    expect(await m.mergeDuplicate({ keepId: keeper.id, duplicateId: imported.id, adoptEmail: false })).toMatchObject({ ok: true });
+    const kept = (await rows<{ talenthr_id: string | null }>(sql`select talenthr_id from core.employees where id = ${keeper.id}`))[0];
+    const dup = (await rows<{ talenthr_id: string | null; merged_into_id: string | null; archived_at: Date | null }>(sql`select talenthr_id, merged_into_id, archived_at from core.employees where id = ${imported.id}`))[0];
+    expect(kept.talenthr_id).toBe(companyId(tag, 3)); // the id moved to the record that stays
+    expect(dup).toMatchObject({ talenthr_id: null, merged_into_id: keeper.id });
+
+    // The same export again: nobody is new, the duplicate stays archived, and the keeper is the one updated
+    const again = await stage(csv);
+    expect(again.summary.new).toBe(0);
+    const done = await importService.commitBatch(hr, again.batchId, { skipErrors: true });
+    expect(done.restored).toBe(0);
+    expect((await rows<{ archived_at: Date | null }>(sql`select archived_at from core.employees where id = ${imported.id}`))[0].archived_at).not.toBeNull();
+    expect(await rows(sql`select 1 from core.employees where legal_last_name = ${`Person3 ${tag}`} and archived_at is null`)).toHaveLength(1);
+
+    // And a duplicate that was merged WITHOUT moving the id (the keeper already had its own) still points at the keeper
+    const tag2 = uniq("merged2");
+    const csv2 = toCsv(fakeCompany(tag2));
+    await importService.commitBatch(hr, (await stage(csv2)).batchId, { skipErrors: true });
+    const imp2 = (await rows<{ id: string }>(sql`select id from core.employees where work_email = ${`${tag2}.person4@example.com`}`))[0];
+    const keep2 = await makeRecord("Test4", `Person4 ${tag2}`, { age: 400 });
+    await db.execute(sql`update core.employees set talenthr_id = ${`own-${tag2}`} where id = ${keep2.id}`);
+    await m.mergeDuplicate({ keepId: keep2.id, duplicateId: imp2.id, adoptEmail: false });
+    expect((await rows<{ talenthr_id: string | null }>(sql`select talenthr_id from core.employees where id = ${imp2.id}`))[0].talenthr_id).toBe(companyId(tag2, 4)); // stays on the archived record
+    const again2 = await stage(csv2);
+    expect(again2.summary.new).toBe(0);
+    expect((await importService.commitBatch(hr, again2.batchId, { skipErrors: true })).restored).toBe(0);
+    expect((await rows<{ archived_at: Date | null }>(sql`select archived_at from core.employees where id = ${imp2.id}`))[0].archived_at).not.toBeNull();
+  });
+
   it("remembers the TalentHR id on a person found by email, and flags a new row that looks like someone already here", async () => {
     const tag = uniq("flag");
     // someone already here, made by hand (no TalentHR id yet), with a birth date

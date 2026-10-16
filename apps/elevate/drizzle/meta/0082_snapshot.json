@@ -1,5 +1,5 @@
 {
-  "id": "a577278d-6d0b-4860-a3cd-85e16b787558",
+  "id": "ec67a412-7f2a-4119-a6db-37b2a40d91d0",
   "prevId": "a236ac1a-c4cd-4ab0-be65-1cd6e977d9a3",
   "version": "7",
   "dialect": "postgresql",
@@ -12542,6 +12542,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "merged_into_id": {
+          "name": "merged_into_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "legal_first_name": {
           "name": "legal_first_name",
           "type": "text",
@@ -12775,6 +12781,22 @@
           "method": "btree",
           "with": {}
         },
+        "employees_merged_into_idx": {
+          "name": "employees_merged_into_idx",
+          "columns": [
+            {
+              "expression": "merged_into_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"core\".\"employees\".\"merged_into_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "employees_talenthr_idx": {
           "name": "employees_talenthr_idx",
           "columns": [
@@ -12845,6 +12867,20 @@
           "schemaTo": "core",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "employees_merged_into_id_employees_id_fk": {
+          "name": "employees_merged_into_id_employees_id_fk",
+          "tableFrom": "employees",
+          "tableTo": "employees",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "merged_into_id"
           ],
           "columnsTo": [
             "id"

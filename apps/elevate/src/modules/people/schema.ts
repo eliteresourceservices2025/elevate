@@ -39,6 +39,8 @@ export const employees = core
       userId: uuid("user_id").references(() => users.id),
       /** The person's id in TalentHR, set by an import. Imports match on it first, so a work email or name changed here never makes a second record. */
       talenthrId: text("talenthr_id"),
+      /** Set when this record was merged into another record of the same person and archived. An import that still names this record goes to the one it was merged into, so it is never brought back. */
+      mergedIntoId: uuid("merged_into_id").references((): AnyPgColumn => employees.id),
 
       legalFirstName: text("legal_first_name").notNull(),
       legalMiddleName: text("legal_middle_name"),
@@ -81,6 +83,7 @@ export const employees = core
       uniqueIndex("employees_number_idx").on(t.employeeNumber),
       uniqueIndex("employees_work_email_idx").on(sql`lower(${t.workEmail})`),
       uniqueIndex("employees_user_idx").on(t.userId).where(sql`${t.userId} is not null`),
+      index("employees_merged_into_idx").on(t.mergedIntoId).where(sql`${t.mergedIntoId} is not null`),
       uniqueIndex("employees_talenthr_idx").on(t.talenthrId).where(sql`${t.talenthrId} is not null`),
       index("employees_status_idx").on(t.status),
       index("employees_manager_idx").on(t.managerId),
