@@ -457,3 +457,24 @@ describe("initials on each page", () => {
     ).rejects.toThrow(/ELEVATE account/);
   });
 });
+
+describe("the email when a document is sent", () => {
+  it("goes out straight away to the person whose turn it is, and to the next signer after a signature", async () => {
+    const { setEmailSender } = await import("@/modules/notifications/email");
+    // Earlier tests in this file left mail waiting in the queue; start clean so only this document's mail is counted.
+    await db.execute(sql`delete from ops.email_queue`);
+    const sent: { to: string; subject: string }[] = [];
+    setEmailSender({ send: async (m: { to: string; subject: string }) => void sent.push({ to: m.to, subject: m.subject }) } as never);
+    try {
+      const id = await send();
+      expect(sent.filter((m) => m.to === ana.email).map((m) => m.subject)).toEqual(["A document is waiting for your signature"]);
+      expect(sent.some((m) => m.to === ben.email)).toBe(false); // not his turn yet
+
+      await open(ana, id);
+      expect((await signTyped(ana, id)).ok).toBe(true);
+      expect(sent.filter((m) => m.to === ben.email).map((m) => m.subject)).toEqual(["A document is waiting for your signature"]);
+    } finally {
+      setEmailSender(null);
+    }
+  });
+});

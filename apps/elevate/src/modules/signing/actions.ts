@@ -14,7 +14,7 @@ import { MAX_SIGNATURE_PNG_BYTES, MAX_SIGNATURE_PNG_SIZE, isTypedSignatureEncoda
 import { esignEnvelopes, esignSigners, esignTemplates } from "./schema";
 import { currentSignInMethods } from "./session";
 import { issueExternalLinks } from "./external-mail";
-import { appendEvent, endEnvelope, legalNames, recordSignature, sealEnvelope, sendDraft, voidEnvelopeTx } from "./service";
+import { appendEvent, endEnvelope, legalNames, recordSignature, sealEnvelope, sendDraft, sendQueuedEmailNow, voidEnvelopeTx } from "./service";
 import { openSigningDocument } from "./document";
 import { envelopeIdSchema, reasonSchema, signSchema, templateIdSchema } from "./validators";
 
@@ -35,6 +35,7 @@ export async function sendEnvelope(input: unknown): Promise<ActionResult> {
     const ip = await clientIp();
     const sent = await db.transaction((tx) => sendDraft(tx, actor, parsed.data.envelopeId, ip === "unknown" ? null : ip));
     if (sent.externalIds.length) await issueExternalLinks(sent.externalIds, "turn");
+    await sendQueuedEmailNow();
     refresh(parsed.data.envelopeId);
     return { ok: true, data: undefined };
   });
@@ -76,6 +77,7 @@ export async function remindSigners(input: unknown): Promise<ActionResult<{ remi
     });
     // Outside signers get a fresh link by email (it replaces the earlier one)
     if (outside.length) await issueExternalLinks(outside, "reminder");
+    await sendQueuedEmailNow();
     refresh(envelopeId);
     return { ok: true, data: { reminded } };
   });
@@ -173,6 +175,7 @@ export async function signEnvelope(input: unknown): Promise<ActionResult> {
     });
     const ready = outcome.ready;
     if (outcome.externalIds.length) await issueExternalLinks(outcome.externalIds, "turn"); // the next signer is an outside person
+    if (!ready) await sendQueuedEmailNow(); // the next signer's email goes out now
 
     // Sealing is outside the signature's transaction: if it fails, the signature stands and a job seals it within minutes.
     if (ready) await sealEnvelope(v.envelopeId).catch((error) => console.error("sealing failed:", error instanceof Error ? error.name : "unknown error"));

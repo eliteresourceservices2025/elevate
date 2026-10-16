@@ -7,7 +7,7 @@ import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { users } from "@/modules/core/schema";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
-import { queueEmails } from "@/modules/notifications/email-queue";
+import { flushEmailQueue, queueEmails } from "@/modules/notifications/email-queue";
 import { notify } from "@/modules/notifications/service";
 import { employees } from "@/modules/people/schema";
 import { computeEventHash, GENESIS_HASH, sha256Hex } from "./chain";
@@ -87,6 +87,19 @@ async function announceTurn(tx: Tx, envelopeId: string, signerIds: string[], kin
   return rows.filter((r) => r.userId === null).map((r) => r.id);
 }
 
+/**
+ * Sends the queued "a document is waiting for your signature" emails now, instead of at the next 30-minute run: people expect the
+ * email as soon as a document is sent. Best effort (call after the transaction commits): if the sender is not configured, the budget
+ * is used up or it fails, the emails simply stay queued and the regular job sends them.
+ */
+export async function sendQueuedEmailNow(): Promise<void> {
+  try {
+    await flushEmailQueue();
+  } catch (error) {
+    console.error("immediate email send failed:", error instanceof Error ? error.name : "unknown error");
+  }
+}
+
 /** Moves a draft out for signature: the people whose turn it is get notified. */
 export async function sendDraft(tx: Tx, actor: Actor, envelopeId: string, ip: string | null): Promise<{ externalIds: string[] }> {
   const [env] = await tx.select().from(esignEnvelopes).where(eq(esignEnvelopes.id, envelopeId)).for("update");
@@ -161,6 +174,7 @@ export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<
     });
     // Outside signers are emailed their link once the envelope is committed (the link points at a row that now exists)
     const links = created.externalIds.length ? await issueExternalLinks(created.externalIds, "turn") : null;
+    if (input.send) await sendQueuedEmailNow();
     return { id: created.id, links };
   } catch (error) {
     await storage.remove(BUCKETS.signed, [path]).catch(() => undefined);
