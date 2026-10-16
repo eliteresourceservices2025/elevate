@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,7 @@ const box = "space-y-3 rounded-xl border bg-card p-4";
 /** HR registers an item. Warns against putting private data in the notes. */
 export function RegisterAssetForm() {
   const { run, pending, router } = useRun();
+  const dialog = useFormDialog();
   const [tag, setTag] = useState("");
   const [name, setName] = useState("");
   const [category, setCategory] = useState<Category>("laptop");
@@ -23,13 +25,15 @@ export function RegisterAssetForm() {
   const [notes, setNotes] = useState("");
   return (
     <form
-      className={box}
+      className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => createAsset({ tag, name, category, serialNumber, purchaseDate, notes }), "Item registered.", (d) => router.push(`/assets/${encodeURIComponent((d as { tag: string }).tag)}`));
+        run(() => createAsset({ tag, name, category, serialNumber, purchaseDate, notes }), "Item registered.", (d) => {
+          dialog?.close(true);
+          router.push(`/assets/${encodeURIComponent((d as { tag: string }).tag)}`);
+        });
       }}
     >
-      <h2 className="text-lg font-semibold">Register an item</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="asset-tag">Asset tag</Label>

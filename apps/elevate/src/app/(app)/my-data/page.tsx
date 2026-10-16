@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
+import { FormDialog } from "@/components/form-dialog";
 import { DataRightsForm, DownloadButtons } from "@/modules/privacy/components/my-data-controls";
 import { getMyData } from "@/modules/privacy/queries";
 
@@ -47,7 +48,8 @@ export default async function MyDataPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="max-w-2xl">
         <h1 className="text-2xl font-bold">My data</h1>
         <p className="mt-1 text-muted-foreground">
           What ELEVATE holds about you. Only you see this page.
@@ -62,6 +64,14 @@ export default async function MyDataPage() {
             </>
           ) : null}
         </p>
+        </div>
+        <FormDialog
+          label="Ask HR about your data"
+          title="Ask HR about your data"
+          description="You can ask HR to correct your data or to delete it. HR reviews every request. Some records must be kept by law, so nothing is deleted automatically."
+        >
+          <DataRightsForm hasOpenRequest={openRequest} />
+        </FormDialog>
       </div>
 
       <DownloadButtons />
@@ -202,11 +212,8 @@ export default async function MyDataPage() {
         )}
       </Section>
 
-      <Section title="Ask HR about your data">
-        <p className="text-sm text-muted-foreground">
-          You can ask HR to correct your data or to delete it. HR reviews every request. Some records must be kept by law, so nothing is deleted automatically.
-        </p>
-        {data.requests.length > 0 ? (
+      {data.requests.length > 0 ? (
+        <Section title="Your requests to HR">
           <ul className="space-y-1 text-sm">
             {data.requests.map((r, i) => (
               <li key={i}>
@@ -214,9 +221,8 @@ export default async function MyDataPage() {
               </li>
             ))}
           </ul>
-        ) : null}
-        <DataRightsForm hasOpenRequest={openRequest} />
-      </Section>
+        </Section>
+      ) : null}
     </div>
   );
 }

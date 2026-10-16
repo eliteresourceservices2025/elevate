@@ -35,6 +35,7 @@ test("an employee sees and downloads their data and sends a data rights request 
   expect(fs.readFileSync((await pdfDownload.path())!).subarray(0, 5).toString()).toBe("%PDF-");
 
   // Ask HR to correct something
+  await empPage.getByRole("button", { name: "Ask HR about your data" }).click();
   await empPage.getByLabel("Tell HR what to do").fill("Please correct the spelling of my last name.");
   await empPage.getByRole("button", { name: "Send request" }).click();
   await expect(empPage.getByText("Your request was sent to HR.")).toBeVisible();

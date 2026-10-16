@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { orNotFound } from "@/lib/or-not-found";
+import { FormDialog } from "@/components/form-dialog";
 import { NewAddonForm } from "@/modules/learn/components/studio-editors";
 import {
   StudioCourseList,
@@ -39,25 +40,24 @@ export default async function CourseStudioPage() {
 
   return (
     <div className="w-full space-y-8">
-      <div className="max-w-3xl">
-        <h1 className="text-2xl font-bold">Course studio</h1>
-        <p className="mt-1 text-muted-foreground">
-          Read the training courses, see what changed between versions, and edit the wording and
-          exam questions. A published version never changes: an edit is always a new version that
-          someone other than the editor publishes.
-        </p>
-      </div>
-
-      <section aria-label="New client add-on" className="rounded-xl border bg-card p-6">
-        <div className="mb-4 max-w-3xl">
-          <h2 className="text-lg font-semibold">New client add-on</h2>
-          <p className="text-sm text-muted-foreground">
-            A short course for the people assigned to one client. Nothing is assigned until you
-            publish it.
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="max-w-3xl">
+          <h1 className="text-2xl font-bold">Course studio</h1>
+          <p className="mt-1 text-muted-foreground">
+            Read the training courses, see what changed between versions, and edit the wording and
+            exam questions. A published version never changes: an edit is always a new version that
+            someone other than the editor publishes.
           </p>
         </div>
-        <NewAddonForm clients={addonClients} />
-      </section>
+        <FormDialog
+          label="New client add-on"
+          title="New client add-on"
+          description="A short course for the people assigned to one client. Nothing is assigned until you publish it."
+          size="lg"
+        >
+          <NewAddonForm clients={addonClients} />
+        </FormDialog>
+      </div>
 
       {list.length === 0 ? (
         <p className="rounded-xl border p-6 text-sm text-muted-foreground">

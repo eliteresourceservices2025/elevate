@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SelectField } from "@/components/form-fields";
+import { useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,6 +40,7 @@ export function DownloadButtons() {
 
 export function DataRightsForm({ hasOpenRequest }: { hasOpenRequest: boolean }) {
   const router = useRouter();
+  const dialog = useFormDialog();
   const [pending, startTransition] = useTransition();
   const [kind, setKind] = useState<DataRightsKind>("correction");
   const [details, setDetails] = useState("");
@@ -55,6 +57,7 @@ export function DataRightsForm({ hasOpenRequest }: { hasOpenRequest: boolean }) 
           if (!result.ok) return void toast.error(result.error);
           toast.success("Your request was sent to HR.");
           setDetails("");
+          dialog?.close(true);
           router.refresh();
         });
       }}

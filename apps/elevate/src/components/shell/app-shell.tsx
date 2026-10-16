@@ -44,7 +44,7 @@ export function AppShell({ initialCollapsed, tourAutoStart = false, banner, chil
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
         <AppHeader {...header} collapsed={collapsed} onToggleSidebar={toggle} />
-        <div className="flex-1 overflow-y-auto print:overflow-visible">
+        <div className="flex-1 scroll-smooth overflow-y-auto motion-reduce:scroll-auto print:overflow-visible">
           {banner}
           {/* Side padding: 16px on a phone, 40px on a tablet or laptop, 48px on a large screen. Pages fill the width between. */}
           <UnsavedChangesProvider>
