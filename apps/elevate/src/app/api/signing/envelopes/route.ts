@@ -9,7 +9,8 @@ import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { MAX_PDF_BYTES } from "@/modules/signing/constants";
 import { esignTemplates } from "@/modules/signing/schema";
 import { createEnvelope } from "@/modules/signing/service";
-import { renderComposedPdf } from "@/modules/signing/compose";
+import { assertSigneeValues, loadSigneeValues, renderComposedPdf, renderForSignee } from "@/modules/signing/compose";
+import { fieldsUsed, mergeProblem } from "@/modules/signing/merge";
 import { composedBodySchema, createEnvelopeSchema } from "@/modules/signing/validators";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -28,7 +29,9 @@ export async function POST(request: Request) {
     throw error;
   }
   if (Number(request.headers.get("content-length") ?? 0) > MAX_PDF_BYTES + 100_000) return json({ ok: false, error: "The PDF must be 8 MB or smaller." }, 413);
-  if (!(await allowRequest("upload", actor.id))) return json({ ok: false, error: "Too many uploads. Wait a few minutes and try again." }, 429);
+  // A "check" request only validates (no file stored, nothing created), so it does not count against the upload limit.
+  const checkOnly = new URL(request.url).searchParams.get("check") === "1";
+  if (!checkOnly && !(await allowRequest("upload", actor.id))) return json({ ok: false, error: "Too many uploads. Wait a few minutes and try again." }, 429);
 
   let form: FormData;
   try {
@@ -54,11 +57,26 @@ export async function POST(request: Request) {
     let pdf: Uint8Array | null = null;
     let fileName = "document.pdf";
     const content = field("content");
+    const each = field("individual") === "true";
+    // Details filled in from each person's record: {{contractor_name}} and the like (documents written in ELEVATE only).
+    let pdfFor: ((userId: string) => Promise<Uint8Array>) | null = null;
     if (content !== undefined && content.trim() !== "") {
       // Written in the editor: rendered to a PDF here, then it is an ordinary envelope.
       const body = composedBodySchema.safeParse(content);
       if (!body.success) return json({ ok: false, error: body.error.issues[0]?.message ?? "Check the document and try again." }, 400);
-      pdf = await renderComposedPdf(v.title, body.data);
+      const problem = mergeProblem(body.data);
+      if (problem) return json({ ok: false, error: problem }, 400);
+      if (fieldsUsed(body.data).length > 0) {
+        if (!each && v.signers.length > 1) return json({ ok: false, error: "This document fills in one person's details, so it must go out as each person's own copy. Tick Each person signs their own copy." }, 400);
+        const ids = v.signers.map((s) => s.userId);
+        const people = await loadSigneeValues(ids);
+        assertSigneeValues(body.data, people, ids);
+        if (checkOnly) return json({ ok: true, count: ids.length });
+        pdfFor = async (userId) => renderForSignee(v.title, body.data, people.get(userId) as { values: Record<string, string> });
+      } else {
+        if (checkOnly) return json({ ok: true, count: v.signers.length });
+        pdf = await renderComposedPdf(v.title, body.data);
+      }
       fileName = `${v.title.replace(/[^A-Za-z0-9 _-]+/g, "").trim().slice(0, 60) || "document"}.pdf`;
     } else if (v.templateId) {
       const [t] = await db.select().from(esignTemplates).where(eq(esignTemplates.id, v.templateId));
@@ -72,16 +90,17 @@ export async function POST(request: Request) {
       pdf = new Uint8Array(await upload.arrayBuffer());
       fileName = upload.name || fileName;
     }
+    if (checkOnly) return json({ ok: true, count: v.signers.length });
     const ip = await clientIp();
-    const base = { title: v.title, pdf, fileName, templateId: v.templateId ?? null, order: v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" };
-    if (field("individual") === "true") {
+    const base = { title: v.title, fileName, templateId: v.templateId ?? null, order: v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" };
+    if (each) {
       // Each person gets their own copy (their own envelope, signature and sealed file): used for "everyone", a team or a client.
       // The browser sends the people in batches of at most MAX_SIGNERS, so one request stays well inside the time limit.
       let first: string | undefined;
       let done = 0;
       try {
         for (const s of v.signers) {
-          const { id } = await createEnvelope(actor, { ...base, signers: [{ userId: s.userId, role: s.role ?? null, position: 1 }] });
+          const { id } = await createEnvelope(actor, { ...base, pdf: pdfFor ? await pdfFor(s.userId) : (pdf as Uint8Array), signers: [{ userId: s.userId, role: s.role ?? null, position: 1 }] });
           first ??= id;
           done += 1;
         }
@@ -90,7 +109,7 @@ export async function POST(request: Request) {
       }
       return json({ ok: true, id: first, count: done });
     }
-    const { id } = await createEnvelope(actor, { ...base, signers: v.signers });
+    const { id } = await createEnvelope(actor, { ...base, pdf: pdfFor ? await pdfFor(v.signers[0].userId) : (pdf as Uint8Array), signers: v.signers });
     revalidatePath("/signing");
     return json({ ok: true, id, count: 1 });
   } catch (error) {

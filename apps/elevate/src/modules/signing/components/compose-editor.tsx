@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MAX_COMPOSED_CHARS, normalizeTypography } from "../constants";
 import { htmlToMarkdown } from "../html-to-markdown";
+import { SIGNEE_FIELDS, previewFields } from "../merge";
 
 type Edit = { value: string; start: number; end: number };
 
@@ -85,7 +86,7 @@ export function ComposeEditor({ value, onChange, title = "" }: { value: string; 
                 <h2 className="mt-4 text-center text-xl font-bold leading-tight">{title.trim() || "Document title"}</h2>
               </div>
               <div className="mt-6">
-                {value.trim() ? <Markdown source={value} maxLength={MAX_COMPOSED_CHARS} /> : <p className="text-sm text-neutral-500">Nothing to preview yet.</p>}
+                {value.trim() ? <Markdown source={previewFields(value)} maxLength={MAX_COMPOSED_CHARS} /> : <p className="text-sm text-neutral-500">Nothing to preview yet.</p>}
               </div>
               <p className="mt-10 border-t pt-2 text-[10px] font-bold tracking-wider text-neutral-600">ELITE RESOURCE SERVICES</p>
             </div>
@@ -117,8 +118,16 @@ export function ComposeEditor({ value, onChange, title = "" }: { value: string; 
             }}
             aria-describedby="compose-hint"
           />
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">Fill in from the person&apos;s record:</span>
+            {SIGNEE_FIELDS.map((f) => (
+              <Button key={f.key} type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" title={`Insert {{${f.key}}}`} onClick={() => run((v, s, e) => ({ value: `${v.slice(0, s)}{{${f.key}}}${v.slice(e)}`, start: s + f.key.length + 4, end: s + f.key.length + 4 }))}>
+                {f.label}
+              </Button>
+            ))}
+          </div>
           <p id="compose-hint" className="text-xs text-muted-foreground">
-            Type or paste the document. Pasting from Word or Google Docs keeps headings, bold, italic and lists. Do not include client or patient information.
+            Type or paste the document. Pasting from Word or Google Docs keeps headings, bold, italic and lists. Do not include client or patient information. A field such as {"{{contractor_name}}"} is replaced with each person&apos;s details when it is sent, so the document goes out as each person&apos;s own copy.
           </p>
         </>
       )}

@@ -517,3 +517,28 @@ describe("adding signees by group", () => {
     expect(groups.clients.find((c) => c.id === client.id)?.count).toBe(1);
   });
 });
+
+describe("details filled in from people's records", () => {
+  it("reads name, address, role, start date and manager, and names who is missing what", async () => {
+    const { loadSigneeValues, assertSigneeValues, renderForSignee } = await import("@/modules/signing/compose");
+    const boss = await makeUser("mf-boss", ["employee"], ["Bea", "Santos"]);
+    const full = await makeUser("mf-full", ["employee"], ["Carl", "Dizon"]);
+    const bare = await makeUser("mf-bare", ["employee"], ["Dina", "Evangelista"]);
+    await db.execute(sql`update core.employees set address_line = '12 Mabini St', city = 'Quezon City', province = 'Metro Manila', postal_code = '1100', position = 'Virtual Assistant', start_date = '2026-11-02',
+      manager_id = (select id from core.employees where user_id = ${boss.id}) where user_id = ${full.id}`);
+
+    const people = await loadSigneeValues([full.id, bare.id]);
+    expect(people.get(full.id)?.values).toEqual({
+      contractor_name: "Carl Dizon",
+      contractor_address: "12 Mabini St, Quezon City, Metro Manila 1100, Philippines",
+      role_title: "Virtual Assistant",
+      start_date: expect.stringMatching(/2026/),
+      reporting_line: "Bea Santos",
+    });
+    const text = "Agreement with {{contractor_name}} of {{contractor_address}}.";
+    expect(() => assertSigneeValues(text, people, [full.id])).not.toThrow();
+    expect(() => assertSigneeValues(text, people, [full.id, bare.id])).toThrow(/Dina Evangelista: Address/);
+    const pdf = await renderForSignee("Test", `${text} This text is long enough to be a document.`, people.get(full.id) as { values: Record<string, string> });
+    expect(pdf.length).toBeGreaterThan(500);
+  });
+});
