@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
+import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import {
   archiveDepartment,
@@ -35,15 +36,76 @@ function useRun() {
   return { run, pending };
 }
 
-function Card({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+function Card({ title, description, action, children }: { title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <div>
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        {action}
       </div>
       {children}
     </section>
+  );
+}
+
+function AddTeamForm({ departments }: { departments: Dept[] }) {
+  const { run, pending } = useRun();
+  const dialog = useFormDialog();
+  const [name, setName] = useState("");
+  const [departmentId, setDepartmentId] = useState(departments[0]?.id ?? "");
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => createTeam({ name, departmentId }), "Team added.", () => dialog?.close(true));
+      }}
+    >
+      <TextField id="nt" label="New team" value={name} onChange={(e) => setName(e.target.value)} required />
+      <SelectField id="ntd" label="Department" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} required>
+        {departments.length === 0 ? <option value="">Add a department first</option> : null}
+        {departments.map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.name}
+          </option>
+        ))}
+      </SelectField>
+      <Button type="submit" disabled={pending || !departmentId || name.trim().length < 2}>
+        Add team
+      </Button>
+    </form>
+  );
+}
+
+function AddPositionForm({ departments }: { departments: Dept[] }) {
+  const { run, pending } = useRun();
+  const dialog = useFormDialog();
+  const [title, setTitle] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => createPosition({ title, departmentId }), "Position added.", () => dialog?.close(true));
+      }}
+    >
+      <TextField id="np" label="New position" value={title} onChange={(e) => setTitle(e.target.value)} required />
+      <SelectField id="npd" label="Department (optional)" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+        <option value="">Any</option>
+        {departments.map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.name}
+          </option>
+        ))}
+      </SelectField>
+      <Button type="submit" disabled={pending || title.trim().length < 2}>
+        Add position
+      </Button>
+    </form>
   );
 }
 
@@ -112,10 +174,6 @@ export function StructureAdmin({ departments, teams, positions }: { departments:
   const deptName = (id: string | null) => departments.find((d) => d.id === id)?.name ?? "No department";
 
   const [newDept, setNewDept] = useState("");
-  const [newTeam, setNewTeam] = useState("");
-  const [newTeamDept, setNewTeamDept] = useState(departments[0]?.id ?? "");
-  const [newPosition, setNewPosition] = useState("");
-  const [newPositionDept, setNewPositionDept] = useState("");
   const [moveDept, setMoveDept] = useState<ReadonlyMap<string, string>>(new Map());
 
   return (
@@ -150,27 +208,15 @@ export function StructureAdmin({ departments, teams, positions }: { departments:
         </ul>
       </Card>
 
-      <Card title="Teams" description="Where people sit. A person is in one team; their manager is set separately.">
-        <form
-          className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3 sm:items-end"
-          onSubmit={(e) => {
-            e.preventDefault();
-            run(() => createTeam({ name: newTeam, departmentId: newTeamDept }), "Team added.", () => setNewTeam(""));
-          }}
-        >
-          <TextField id="nt" label="New team" value={newTeam} onChange={(e) => setNewTeam(e.target.value)} required />
-          <SelectField id="ntd" label="Department" value={newTeamDept} onChange={(e) => setNewTeamDept(e.target.value)} required>
-            {departments.length === 0 ? <option value="">Add a department first</option> : null}
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </SelectField>
-          <Button type="submit" disabled={pending || !newTeamDept || newTeam.trim().length < 2}>
-            Add team
-          </Button>
-        </form>
+      <Card
+        title="Teams"
+        description="Where people sit. A person is in one team; their manager is set separately."
+        action={
+          <FormDialog label="Add a team" title="Add a team" description="A team belongs to one department. Move people into it from their profile.">
+            <AddTeamForm departments={departments} />
+          </FormDialog>
+        }
+      >
         <ul className="divide-y rounded-xl border bg-card px-4">
           {teams.length === 0 ? <li className="py-3 text-sm text-muted-foreground">No teams yet.</li> : null}
           {teams.map((t) => (
@@ -200,27 +246,15 @@ export function StructureAdmin({ departments, teams, positions }: { departments:
         </ul>
       </Card>
 
-      <Card title="Positions" description="The job titles people can hold. People pick from this list instead of typing a title.">
-        <form
-          className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-3 sm:items-end"
-          onSubmit={(e) => {
-            e.preventDefault();
-            run(() => createPosition({ title: newPosition, departmentId: newPositionDept }), "Position added.", () => setNewPosition(""));
-          }}
-        >
-          <TextField id="np" label="New position" value={newPosition} onChange={(e) => setNewPosition(e.target.value)} required />
-          <SelectField id="npd" label="Department (optional)" value={newPositionDept} onChange={(e) => setNewPositionDept(e.target.value)}>
-            <option value="">Any</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </SelectField>
-          <Button type="submit" disabled={pending || newPosition.trim().length < 2}>
-            Add position
-          </Button>
-        </form>
+      <Card
+        title="Positions"
+        description="The job titles people can hold. People pick from this list instead of typing a title."
+        action={
+          <FormDialog label="Add a position" title="Add a position" description="People pick a position from this list instead of typing a title.">
+            <AddPositionForm departments={departments} />
+          </FormDialog>
+        }
+      >
         <ul className="divide-y rounded-xl border bg-card px-4">
           {positions.length === 0 ? <li className="py-3 text-sm text-muted-foreground">No positions yet.</li> : null}
           {positions.map((p) => (

@@ -4,6 +4,7 @@ import { scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
+import { FormDialog } from "@/components/form-dialog";
 import { StartOnboardingForm } from "@/modules/onboarding/components/case-actions";
 import { CaseTable, MyTasks } from "@/modules/onboarding/components/case-table";
 import { listMyTasks, listOnboardingCandidates, listOnboardingCases } from "@/modules/onboarding/queries";
@@ -29,20 +30,25 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/onboa
           <h1 className="text-2xl font-bold">Onboarding</h1>
           <p className="mt-1 text-muted-foreground">Checklists for new people: documents, policies, equipment and meeting the team.</p>
         </div>
-        {hr ? (
-          <Link href="/onboarding/templates" className="text-sm text-primary underline-offset-2 hover:underline">
-            Checklist templates
-          </Link>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-3">
+          {hr ? (
+            <Link href="/onboarding/templates" className="text-sm text-primary underline-offset-2 hover:underline">
+              Checklist templates
+            </Link>
+          ) : null}
+          {canStart ? (
+            <FormDialog
+              label="Start onboarding"
+              title="Start onboarding"
+              description="For people added under People (not hired through Recruiting), who have no checklist until you start one. Tick one or many."
+              size="lg"
+            >
+              {candidates.length > 0 ? <StartOnboardingForm people={candidates} today={todayInZone()} /> : <p className="text-sm text-muted-foreground">Everyone already has an onboarding checklist.</p>}
+            </FormDialog>
+          ) : null}
+        </div>
       </div>
       <MyTasks tasks={tasks.filter((t) => t.kind === "onboarding")} />
-      {canStart ? (
-        <section aria-label="Start onboarding" className="space-y-2">
-          <h2 className="text-lg font-semibold">Start onboarding for someone already added</h2>
-          <p className="text-sm text-muted-foreground">A person added under People (not hired through Recruiting) has no checklist until you start one here.</p>
-          {candidates.length > 0 ? <StartOnboardingForm people={candidates} today={todayInZone()} /> : <p className="text-sm text-muted-foreground">Everyone already has an onboarding checklist.</p>}
-        </section>
-      ) : null}
       <section aria-label="Cases" className="space-y-2">
         <h2 className="text-lg font-semibold">{mineOnly ? "Your onboarding" : "Onboarding in progress and finished"}</h2>
         <CaseTable rows={cases} kind="onboarding" page={paging.page} pageSize={paging.pageSize} basePath="/onboarding" />

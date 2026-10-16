@@ -9,6 +9,8 @@ import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { AckedBadge, DueBadge, StatusTable } from "@/modules/announcements/components/ack-display";
 import { AcknowledgeButton, StatusActions } from "@/modules/announcements/components/ack-controls";
 import { DraftEditor, StartDraftButton } from "@/modules/announcements/components/policy-editor";
+import { PopupControl } from "@/modules/announcements/components/popup-admin";
+import { getPopupFor } from "@/modules/announcements/popup-queries";
 import { getAckStatus, getPolicy } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
 
@@ -21,6 +23,7 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
   const p = await orNotFound(getPolicy(id));
   if (!p) notFound();
   const today = todayInZone();
+  const popup = p.canManage && p.kind === "general" && p.current ? await orNotFound(getPopupFor("policy", p.id)) : null;
   const status = p.canSeeStatus && p.current ? await orNotFound(getAckStatus({ kind: "policy_version", id: p.current.id })) : null;
 
   return (
@@ -29,9 +32,12 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
         <Link href="/announcements?tab=policies" className="text-sm text-primary underline-offset-4 hover:underline">
           All policies
         </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold">{p.title}</h1>
-          {KIND_LABEL[p.kind] ? <Badge variant="outline">{KIND_LABEL[p.kind]}</Badge> : null}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold">{p.title}</h1>
+            {KIND_LABEL[p.kind] ? <Badge variant="outline">{KIND_LABEL[p.kind]}</Badge> : null}
+          </div>
+          {p.canManage && p.kind === "general" && p.current ? <PopupControl kind="policy" itemId={p.id} current={popup} today={today} /> : null}
         </div>
         {p.current?.publishedAt ? (
           <p className="mt-1 text-sm text-muted-foreground">

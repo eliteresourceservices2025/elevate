@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createEmployeeAccount, createHrAccount, signInEnrollingMfa, waitForHydration } from "./helpers";
+import { createEmployeeAccount, createHrAccount, hydrated, signInEnrollingMfa } from "./helpers";
 
 // HR ticks several people and starts onboarding, then offboarding, for all of them in one go.
 
@@ -14,15 +14,15 @@ test("HR starts onboarding and offboarding for several people at once", async ({
   await signInEnrollingMfa(hr, await createHrAccount());
 
   await hr.goto("/onboarding");
-  await waitForHydration(hr, "#on-search");
+  await (await hydrated(hr.getByRole("button", { name: "Start onboarding", exact: true }))).click();
   await hr.getByLabel("Search people").fill(`Bulk${stamp}`);
   await hr.getByRole("button", { name: "Select all shown" }).click();
   await expect(hr.getByText("2 selected")).toBeVisible();
   await hr.getByRole("button", { name: "Start onboarding for 2 people" }).click();
   await expect(hr.getByText("2 of 2 started.")).toBeVisible(slow);
 
-  await hr.goto("/offboarding/new");
-  await waitForHydration(hr, "#off-search");
+  await hr.goto("/offboarding");
+  await (await hydrated(hr.getByRole("button", { name: "Start an offboarding" }))).click();
   await hr.getByLabel("Search people").fill(`Bulk${stamp}`);
   await hr.getByRole("button", { name: "Select all shown" }).click();
   hr.once("dialog", (d) => d.accept());

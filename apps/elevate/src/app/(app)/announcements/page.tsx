@@ -11,7 +11,10 @@ import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { DueBadge } from "@/modules/announcements/components/ack-display";
+import { FormDialog } from "@/components/form-dialog";
 import { NewPolicyForm } from "@/modules/announcements/components/policy-editor";
+import { PopupQueueAdmin } from "@/modules/announcements/components/popup-admin";
+import { listPopupQueue } from "@/modules/announcements/popup-queries";
 import { listAnnouncements, listPolicies } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
 
@@ -20,6 +23,7 @@ export const metadata: Metadata = { title: "Announcements" };
 const TABS = [
   { key: "announcements", label: "Announcements" },
   { key: "policies", label: "Policies" },
+  { key: "popups", label: "Pop-up queue" },
 ] as const;
 
 const KIND_LABEL = { general: null, privacy_notice: "Privacy notice", monitoring: "Monitoring policy" } as const;
@@ -30,11 +34,12 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
   const sp = await searchParams;
   const requested = sp.tab;
   const paging = parsePaging({ page: sp.page, size: sp.size }, 10);
-  const tab = TABS.find((t) => t.key === requested)?.key ?? "announcements";
+  const tab = TABS.find((t) => t.key === requested && (t.key !== "popups" || isHr))?.key ?? "announcements";
   const today = todayInZone();
 
   const items = tab === "announcements" ? await orNotFound(listAnnouncements()) : null;
   const policies = tab === "policies" ? await orNotFound(listPolicies()) : null;
+  const popupRows = tab === "popups" ? await orNotFound(listPopupQueue()) : null;
   const itemPage = items ? paginate(items, paging.page, paging.pageSize) : null;
   const policyPage = policies ? paginate(policies, paging.page, paging.pageSize) : null;
 
@@ -50,10 +55,15 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
             New announcement
           </Link>
         ) : null}
+        {isHr && tab === "policies" ? (
+          <FormDialog label="Add a policy" title="Add a policy" description="It is saved as a draft. Nobody sees it until you publish it." size="xl">
+            <NewPolicyForm today={today} />
+          </FormDialog>
+        ) : null}
       </div>
 
       <nav aria-label="Announcements sections" className="flex gap-1 border-b">
-        {TABS.map((t) => (
+        {TABS.filter((t) => t.key !== "popups" || isHr).map((t) => (
           <Link
             key={t.key}
             href={`/announcements?tab=${t.key}`}
@@ -93,6 +103,8 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
       ) : null}
       {itemPage ? <PagerLinks info={itemPage.info} basePath="/announcements" query={{ tab: "announcements" }} defaultSize={10} label="announcements" /> : null}
 
+      {popupRows ? <PopupQueueAdmin rows={popupRows} /> : null}
+
       {policies ? (
         <div className="space-y-6">
           {policies.length === 0 ? <p className="text-muted-foreground">No policies have been published yet.</p> : null}
@@ -116,12 +128,6 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
             ))}
           </ul>
           {policyPage ? <PagerLinks info={policyPage.info} basePath="/announcements" query={{ tab: "policies" }} defaultSize={10} label="policies" /> : null}
-          {isHr ? (
-            <section className="space-y-3">
-              <h2 className="text-lg font-semibold">Add a policy</h2>
-              <NewPolicyForm today={today} />
-            </section>
-          ) : null}
         </div>
       ) : null}
 

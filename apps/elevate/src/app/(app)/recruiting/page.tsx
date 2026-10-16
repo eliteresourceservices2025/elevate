@@ -13,6 +13,7 @@ import { orNotFound } from "@/lib/or-not-found";
 import { paginate, parsePaging } from "@/lib/pagination";
 import { formatInZone } from "@/lib/time";
 import { CalendarCard } from "@/modules/recruiting/components/calendar-card";
+import { FormDialog } from "@/components/form-dialog";
 import { RetentionForm } from "@/modules/recruiting/components/opening-forms";
 import { STAGE_LABELS, STAGES } from "@/modules/recruiting/constants";
 import { getCalendarCard, getRecruitingSummary, getRetentionView, listOpenings } from "@/modules/recruiting/queries";
@@ -49,6 +50,11 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
             <Link href="/recruiting/careers-page" className={buttonVariants({ variant: "outline" })}>
               Edit careers page
             </Link>
+          ) : null}
+          {retention ? (
+            <FormDialog label="Applicant data retention" title="Applicant data retention" variant="outline" size="lg">
+              <RetentionForm initial={{ enabled: retention.retentionEnabled, rejectedMonths: retention.rejectedMonths, withdrawnMonths: retention.withdrawnMonths }} />
+            </FormDialog>
           ) : null}
           {canManage ? (
             <Link href="/recruiting/new" className={buttonVariants()}>
@@ -142,13 +148,6 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
       ) : null}
 
       {calendar ? <CalendarCard status={calendar} flash={typeof sp.calendar === "string" ? sp.calendar : undefined} /> : null}
-
-      {retention ? (
-        <section aria-label="Applicant data retention" className="space-y-2 rounded-xl border bg-card p-4">
-          <h2 className="text-lg font-semibold">Applicant data retention</h2>
-          <RetentionForm initial={{ enabled: retention.retentionEnabled, rejectedMonths: retention.rejectedMonths, withdrawnMonths: retention.withdrawnMonths }} />
-        </section>
-      ) : null}
 
       <p className="text-xs text-muted-foreground">
         The public job list is at{" "}

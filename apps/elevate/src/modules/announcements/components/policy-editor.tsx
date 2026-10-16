@@ -37,7 +37,7 @@ export function NewPolicyForm({ today }: { today: string }) {
 
   return (
     <form
-      className="space-y-4 rounded-xl border bg-card p-4"
+      className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {

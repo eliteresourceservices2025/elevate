@@ -41,7 +41,7 @@ test("the quick tour starts for a new account, walks through, stops starting by 
   await page.goto("/settings");
   await page.getByRole("link", { name: /Quick tour/ }).click();
   await expect(page.getByRole("dialog", { name: "Welcome to ELEVATE" })).toBeVisible({ timeout: 15_000 });
-  await expect(page).toHaveURL(/\/dashboard$/); // the ?tour=1 marker is taken off the address
+  await expect(page).toHaveURL(/\/settings$/); // the tour starts where they are, and the ?tour=1 marker is taken off the address
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 

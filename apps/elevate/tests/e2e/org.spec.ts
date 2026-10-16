@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createHrAccount, signInEnrollingMfa } from "./helpers";
+import { createHrAccount, signInEnrollingMfa, hydrated } from "./helpers";
 
 // Needs the local Supabase with migrations applied. Creates throwaway fake data in the local database.
 test("HR builds a team and a reporting line, and the org chart shows it", async ({ page }) => {
@@ -17,13 +17,15 @@ test("HR builds a team and a reporting line, and the org chart shows it", async 
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByRole("listitem").filter({ hasText: deptName }).first()).toBeVisible();
 
+  await (await hydrated(page.getByRole("button", { name: "Add a team" }))).click();
   await page.getByLabel("New team").fill(teamName);
   await page.getByLabel("Department", { exact: true }).first().selectOption({ label: deptName });
-  await page.getByRole("button", { name: "Add team" }).click();
+  await page.getByRole("button", { name: "Add team", exact: true }).click();
   await expect(page.getByRole("listitem").filter({ hasText: teamName }).first()).toBeVisible();
 
+  await (await hydrated(page.getByRole("button", { name: "Add a position" }))).click();
   await page.getByLabel("New position").fill(positionTitle);
-  await page.getByRole("button", { name: "Add position" }).click();
+  await page.getByRole("button", { name: "Add position", exact: true }).click();
   await expect(page.getByRole("listitem").filter({ hasText: positionTitle }).first()).toBeVisible();
 
   // A manager, then someone who reports to them

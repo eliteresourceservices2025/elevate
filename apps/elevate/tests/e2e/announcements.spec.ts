@@ -70,7 +70,7 @@ test("HR posts, an employee acknowledges, and HR sees the status", async ({ brow
   // --- HR publishes a policy; the employee is asked to acknowledge it ---
   const policyTitle = `Conduct ${stamp}`;
   await hrPage.goto("/announcements?tab=policies");
-  await waitForHydration(hrPage, "#np-title");
+  await (await hydrated(hrPage.getByRole("button", { name: "Add a policy" }))).click();
   await hrPage.getByLabel("Policy title").fill(policyTitle);
   await hrPage.getByLabel("Text", { exact: true }).fill("# Be kind\n\n- Respect each other");
   await hrPage.getByRole("button", { name: "Create draft" }).click();
