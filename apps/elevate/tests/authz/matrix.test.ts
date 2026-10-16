@@ -97,6 +97,7 @@ const EXPECTED: Record<string, string> = {
   "onboarding.manage": "A A T - - -",
   "onboarding.view": "A A T O O O",
   "onboarding.manage_templates": "A A - - - -",
+  "onboarding.start": "A A - - - -",
   "offboarding.view": "A A T O O O",
   "offboarding.manage": "A A - - - -",
   "offboarding.exit_interview": "O O O O O O",

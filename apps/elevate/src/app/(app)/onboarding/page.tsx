@@ -4,8 +4,10 @@ import { scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
+import { StartOnboardingForm } from "@/modules/onboarding/components/case-actions";
 import { CaseTable, MyTasks } from "@/modules/onboarding/components/case-table";
-import { listMyTasks, listOnboardingCases } from "@/modules/onboarding/queries";
+import { listMyTasks, listOnboardingCandidates, listOnboardingCases } from "@/modules/onboarding/queries";
+import { todayInZone } from "@/modules/org/service";
 
 export const metadata: Metadata = { title: "Onboarding" };
 
@@ -17,6 +19,8 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/onboa
   const [cases, tasks] = await Promise.all([orNotFound(listOnboardingCases()), listMyTasks()]);
   const hr = scopeFor(user, "onboarding.manage_templates") === "all";
   const mineOnly = scopeFor(user, "onboarding.view") === "own";
+  const canStart = scopeFor(user, "onboarding.start") === "all";
+  const candidates = canStart ? await orNotFound(listOnboardingCandidates()) : [];
 
   return (
     <div className="w-full space-y-6">
@@ -32,6 +36,13 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/onboa
         ) : null}
       </div>
       <MyTasks tasks={tasks.filter((t) => t.kind === "onboarding")} />
+      {canStart ? (
+        <section aria-label="Start onboarding" className="space-y-2">
+          <h2 className="text-lg font-semibold">Start onboarding for someone already added</h2>
+          <p className="text-sm text-muted-foreground">A person added under People (not hired through Recruiting) has no checklist until you start one here.</p>
+          {candidates.length > 0 ? <StartOnboardingForm people={candidates} today={todayInZone()} /> : <p className="text-sm text-muted-foreground">Everyone already has an onboarding checklist.</p>}
+        </section>
+      ) : null}
       <section aria-label="Cases" className="space-y-2">
         <h2 className="text-lg font-semibold">{mineOnly ? "Your onboarding" : "Onboarding in progress and finished"}</h2>
         <CaseTable rows={cases} kind="onboarding" page={paging.page} pageSize={paging.pageSize} basePath="/onboarding" />

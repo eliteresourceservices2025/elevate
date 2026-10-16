@@ -21,9 +21,9 @@ import { employees } from "@/modules/people/schema";
 import { changeEmployeeStatus } from "@/modules/people/status";
 import { createEnvelope, loadTemplatePdf } from "@/modules/signing/service";
 import { sha256Hex } from "@/modules/signing/chain";
-import { itemsFor, personContext, executeSeparation, insertTasks, announce, satisfiedTasks, syncCase, todayIn } from "./service";
+import { itemsFor, personContext, executeSeparation, insertTasks, announce, satisfiedTasks, syncCase, todayIn, openOnboardingCase } from "./service";
 import { certificates, checklistTasks, checklistTemplateItems, checklistTemplates, exitInterviews, offboardingCases, onboardingCases } from "./schema";
-import { caseIdSchema, certificateSchema, checklistTemplateSchema, completeTaskSchema, exitInterviewSchema, skipTaskSchema, startOffboardingSchema, taskIdSchema, templateIdSchema } from "./validators";
+import { caseIdSchema, certificateSchema, checklistTemplateSchema, completeTaskSchema, exitInterviewSchema, skipTaskSchema, startOffboardingSchema, startOnboardingSchema, taskIdSchema, templateIdSchema } from "./validators";
 import { progress } from "./constants";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
@@ -218,6 +218,35 @@ export async function completeOnboarding(input: unknown): Promise<ActionResult> 
 }
 
 // ---- Offboarding ------------------------------------------------------------------------------------------------------------
+
+/**
+ * Opens the onboarding checklist for a person who was added directly under People (not hired through Recruiting). The checklist comes
+ * from the template for their position, or the default one; tasks are due relative to the start date.
+ */
+export async function startOnboarding(input: unknown): Promise<ActionResult<{ caseId: string }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "onboarding.start");
+    const parsed = startOnboardingSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const v = parsed.data;
+    try {
+      const caseId = await db.transaction(async (tx) => {
+        const [e] = await tx.select({ status: employees.status, archivedAt: employees.archivedAt }).from(employees).where(eq(employees.id, v.employeeId));
+        if (!e || e.archivedAt || e.status === "separated") throw new ActionFailure("That person was not found or has already left.");
+        const [existing] = await tx.select({ id: onboardingCases.id }).from(onboardingCases).where(eq(onboardingCases.employeeId, v.employeeId));
+        if (existing) throw new ActionFailure("That person already has an onboarding checklist.");
+        const { caseId } = await openOnboardingCase(tx, actor, { employeeId: v.employeeId, applicationId: null, offerId: null, startDate: v.startDate, withoutOfferReason: "Added directly under People, not hired through Recruiting" });
+        return caseId;
+      });
+      refresh(`/onboarding/${caseId}`);
+      return { ok: true, data: { caseId } };
+    } catch (error) {
+      if (isUniqueViolation(error)) return fail("That person already has an onboarding checklist.");
+      throw error;
+    }
+  });
+}
 
 export async function startOffboarding(input: unknown): Promise<ActionResult<{ caseId: string }>> {
   const actor = await requireUser();

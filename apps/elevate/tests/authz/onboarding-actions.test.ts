@@ -30,6 +30,7 @@ const cases: { name: string; allowed: RoleSlug[]; call: () => Promise<{ ok: bool
   { name: "archiveChecklistTemplate", allowed: HR, call: () => actions.archiveChecklistTemplate({ templateId: ID }) },
   { name: "completeOnboarding", allowed: HR, call: () => actions.completeOnboarding({ caseId: ID }) },
   { name: "sendTaskAgreement", allowed: HR, call: () => actions.sendTaskAgreement({ taskId: ID }) },
+  { name: "startOnboarding", allowed: HR, call: () => actions.startOnboarding({ employeeId: ID, startDate: "2099-01-01" }) },
   { name: "startOffboarding", allowed: HR, call: () => actions.startOffboarding({ employeeId: ID, lastWorkingDay: "2099-01-01", reason: "resignation" }) },
   { name: "cancelOffboarding", allowed: HR, call: () => actions.cancelOffboarding({ caseId: ID }) },
   { name: "removeAccessNow", allowed: HR, call: () => actions.removeAccessNow({ caseId: ID }) },

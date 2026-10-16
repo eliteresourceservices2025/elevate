@@ -49,3 +49,5 @@
 - Tests: `src/modules/onboarding/onboarding.test.ts` (pure), `tests/authz/onboarding-actions.test.ts`, `tests/integration/onboarding.test.ts`, `tests/e2e/offboarding.spec.ts`.
 
 **Wording in Signing screens:** the person who receives a document and signs it is the **signee** (labels, messages, notices). "Signer" is kept for ERS people who countersign, and in code, tables and JSON keys (`esign_signers`, `signers`), which do not change.
+
+**Starting onboarding for a person added directly** (`startOnboarding`, permission `onboarding.start`, HR and Super Admin; migration 0078 makes `onboarding_cases.application_id` optional): a person created under People (not hired through Recruiting) has no case, so nothing shows in progress. HR opens one on **Onboarding > Start onboarding for someone already added** (person and start date). It uses the position template or the default list, once per person, and stores the reason "Added directly under People".

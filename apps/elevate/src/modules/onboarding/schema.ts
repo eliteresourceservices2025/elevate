@@ -68,9 +68,8 @@ export const onboardingCases = talent
       employeeId: uuid("employee_id")
         .notNull()
         .references(() => employees.id),
-      applicationId: uuid("application_id")
-        .notNull()
-        .references(() => applications.id),
+      /** Empty for a person added directly under People (no Recruiting application). */
+      applicationId: uuid("application_id").references(() => applications.id),
       offerId: uuid("offer_id").references(() => offers.id),
       templateId: uuid("template_id").references(() => checklistTemplates.id),
       startDate: date("start_date", { mode: "string" }),

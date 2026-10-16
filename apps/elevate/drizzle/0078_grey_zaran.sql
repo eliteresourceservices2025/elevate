@@ -1,0 +1,1 @@
+ALTER TABLE "talent"."onboarding_cases" ALTER COLUMN "application_id" DROP NOT NULL;
