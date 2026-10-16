@@ -30,6 +30,9 @@ export type SignatureKind = (typeof SIGNATURE_KINDS)[number];
 export const MAX_PDF_BYTES = 8 * 1024 * 1024; // the sealed copy adds pages and must stay under the 10 MB bucket limit
 export const MAX_PDF_PAGES = 100;
 export const MAX_SIGNERS = 10;
+/** A document written inside ELEVATE: the Markdown source is limited so the PDF stays well under MAX_PDF_BYTES and MAX_PDF_PAGES. */
+export const MAX_COMPOSED_CHARS = 60_000;
+export const MIN_COMPOSED_CHARS = 20;
 export const DEFAULT_EXPIRY_DAYS = 14;
 export const MAX_EXPIRY_DAYS = 90;
 export const REMINDER_EVERY_DAYS = 3;
@@ -47,6 +50,39 @@ export const CONSENT_TEXT =
  */
 export function isTypedSignatureEncodable(text: string): boolean {
   return text.length > 0 && /^[\x20-\x7E -ÿ]+$/.test(text);
+}
+
+/**
+ * Word and Google Docs use curly quotes, long dashes, bullets and ellipses that the standard PDF font cannot draw (they would print
+ * as "?"). They become their plain equivalents before the document is rendered.
+ */
+export function normalizeTypography(text: string): string {
+  return text
+    .replace(/[‘’‚′]/g, "'")
+    .replace(/[“”„″]/g, '"')
+    .replace(/[–—−]/g, "-")
+    .replace(/…/g, "...")
+    .replace(/[•●○▪‣]/g, "-")
+    .replace(/[   ​﻿]/g, " ");
+}
+
+/** Initials are 2 to 5 letters the PDF font can draw (Latin-1), no digits or symbols that would not read as initials. */
+export function isValidInitials(text: string): boolean {
+  return /^[A-Za-zÀ-ÖØ-öø-ÿ. -]{2,5}$/.test(text.trim()) && isTypedSignatureEncodable(text.trim());
+}
+
+/** "Maria Santos" -> "MS": a starting suggestion the signer can change. */
+export function suggestInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = parts.length > 1 ? [parts[0], parts[parts.length - 1]].map((p) => p[0]).join("") : (parts[0] ?? "").slice(0, 2);
+  return letters.toUpperCase().slice(0, 5);
+}
+
+/** True when pages is exactly 1..count with no gaps or repeats: the signer initialed every page. */
+export function initialedAllPages(pages: number[], count: number): boolean {
+  if (pages.length !== count) return false;
+  const seen = new Set(pages);
+  return seen.size === count && pages.every((n) => Number.isInteger(n) && n >= 1 && n <= count);
 }
 
 export type SignerLike = { position: number; status: SignerStatus };

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, jsonb, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
 import { docs } from "@/modules/documents/schema";
 
@@ -40,6 +40,8 @@ export const esignEnvelopes = docs
         .references(() => users.id),
       status: text("status").notNull().default("draft"),
       signingOrder: text("signing_order").notNull().default("sequential"),
+      /** Every signer must initial each page before signing (documents written in ELEVATE; ELEVATE users only). */
+      initialEachPage: boolean("initial_each_page").notNull().default(false),
       /** The PDF as uploaded. Fixed once the envelope is sent. */
       originalPath: text("original_path").notNull(),
       originalName: text("original_name").notNull(),
@@ -106,6 +108,9 @@ export const esignSigners = docs
       signatureText: text("signature_text"),
       /** A drawn signature as base64 PNG (60 KB at most, checked on the server). */
       signaturePng: text("signature_png"),
+      /** Typed initials, and how many pages were initialed (all of them: the server refuses a partial set). */
+      initialsText: text("initials_text"),
+      initialedPages: smallint("initialed_pages"),
       signedAt: timestamp("signed_at", { withTimezone: true }),
       ip: text("ip"),
       /** How they signed in, e.g. "password, totp". */

@@ -422,3 +422,38 @@ describe("the evidence cannot be changed", () => {
     expect((await actions.discardDraft({ envelopeId: id })).ok).toBe(false);
   });
 });
+
+describe("initials on each page", () => {
+  const sendWithInitials = async (signers: TestUser[] = [ana]) => {
+    const { id } = await service.createEnvelope(
+      { id: hr.id, email: hr.email, roles: hr.roles },
+      { title: uniq("Handbook "), pdf: await samplePdf(3), fileName: "handbook.pdf", signers: signers.map((p) => ({ userId: p.id, role: "Contractor" })), order: "sequential", expiryDays: 14, send: true, ip: "203.0.113.9", initialEachPage: true },
+    );
+    return id;
+  };
+
+  it("refuses to sign until every page is initialed, then stamps the sealed copy and records the initials", async () => {
+    const id = await sendWithInitials();
+    await open(ana, id);
+    expect(await signTyped(ana, id)).toEqual({ ok: false, error: expect.stringContaining("Initial every page") });
+    expect(await signTyped(ana, id, { initials: "AR", initialedPages: [1, 2] })).toEqual({ ok: false, error: expect.stringContaining("all 3 pages") });
+    expect(await signTyped(ana, id, { initials: "A1", initialedPages: [1, 2, 3] })).toEqual({ ok: false, error: expect.stringContaining("Initials are") });
+    expect(await signerRow(id, ana)).toMatchObject({ status: "pending" });
+
+    expect((await signTyped(ana, id, { initials: "ar", initialedPages: [3, 1, 2] })).ok).toBe(true);
+    const [row] = await rows<{ initials_text: string; initialed_pages: number }>(sql`select initials_text, initialed_pages from docs.esign_signers where envelope_id = ${id} and user_id = ${ana.id}`);
+    expect(row).toEqual({ initials_text: "AR", initialed_pages: 3 });
+    const [env] = await rows<{ status: string; sealed_path: string }>(sql`select status, sealed_path from docs.esign_envelopes where id = ${id}`);
+    expect(env.status).toBe("completed");
+    expect((await PDFDocument.load(fake.objects.get(fake.key("signed-docs", env.sealed_path))!)).getPageCount()).toBe(3 + 2);
+  });
+
+  it("does not ask for initials on a normal document, and refuses initials with an outside signer", async () => {
+    const id = await send({ signers: [ana] });
+    await open(ana, id);
+    expect((await signTyped(ana, id)).ok).toBe(true);
+    await expect(
+      service.createEnvelope({ id: hr.id, email: hr.email, roles: hr.roles }, { title: uniq("X "), pdf: await samplePdf(2), fileName: "x.pdf", signers: [{ external: { name: "Out Sider", email: `${uniq("o")}@example.com` } }], order: "sequential", expiryDays: 14, send: false, ip: null, initialEachPage: true }),
+    ).rejects.toThrow(/ELEVATE account/);
+  });
+});

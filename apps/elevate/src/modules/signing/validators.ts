@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_EXPIRY_DAYS, MAX_SIGNERS, SIGNATURE_KINDS, SIGNING_ORDERS } from "./constants";
+import { MAX_COMPOSED_CHARS, MAX_EXPIRY_DAYS, MAX_SIGNERS, SIGNATURE_KINDS, SIGNING_ORDERS } from "./constants";
 
 const uuid = z.string().uuid("Invalid id");
 const text = (max: number) => z.string().trim().max(max);
@@ -22,6 +22,9 @@ export const createEnvelopeSchema = z.object({
 });
 export type CreateEnvelopeInput = z.input<typeof createEnvelopeSchema>;
 
+/** A document written in ELEVATE (Markdown text), turned into the PDF that is then signed. */
+export const composedBodySchema = z.string().min(1, "Write the document").max(MAX_COMPOSED_CHARS, "The document is too long (60,000 characters at most)");
+
 export const templateSchema = z.object({
   name: text(120).min(3, "Give the template a name"),
   description: z.preprocess(blankToUndefined, text(500).optional()),
@@ -40,6 +43,9 @@ export const signSchema = z
     typedText: z.preprocess(blankToUndefined, text(60).optional()),
     /** A drawn signature: the PNG as base64 (no data: prefix). */
     pngBase64: z.preprocess(blankToUndefined, z.string().max(90_000).optional()),
+    /** Documents that need initials on each page: the initials and every page number the signer initialed. */
+    initials: z.preprocess(blankToUndefined, text(5).optional()),
+    initialedPages: z.array(z.number().int().min(1).max(200)).max(200).optional(),
   })
   .refine((v) => (v.kind === "typed" ? Boolean(v.typedText) : Boolean(v.pngBase64)), { message: "Add your signature", path: ["kind"] });
 

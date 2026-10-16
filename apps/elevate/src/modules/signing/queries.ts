@@ -89,6 +89,7 @@ export async function getEnvelopeDetail(envelopeId: string) {
       status: env.status as EnvelopeStatus,
       order: env.signingOrder,
       pages: env.pageCount,
+      initialEachPage: env.initialEachPage,
       createdBy: names.get(env.createdBy) ?? "ERS",
       createdAt: env.createdAt,
       sentAt: env.sentAt,

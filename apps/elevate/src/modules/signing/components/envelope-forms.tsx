@@ -11,6 +11,7 @@ import { archiveTemplate, discardDraft, remindSigners, sendEnvelope, voidEnvelop
 import { DEFAULT_EXPIRY_DAYS, MAX_PDF_BYTES, MAX_SIGNERS } from "../constants";
 import type { SignerChoice, TemplateRow } from "../queries";
 import { useRouter } from "next/navigation";
+import { ComposeEditor } from "./compose-editor";
 
 type Picked = { userId: string; role: string };
 
@@ -19,7 +20,9 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
   const router = useRouter();
   const template = templates.find((t) => t.id === initialTemplateId) ?? null;
   const [title, setTitle] = useState(template?.name ?? "");
-  const [source, setSource] = useState<"upload" | "template">(template ? "template" : "upload");
+  const [source, setSource] = useState<"write" | "upload" | "template">(template ? "template" : "write");
+  const [content, setContent] = useState("");
+  const [initialEachPage, setInitialEachPage] = useState(false);
   const [templateId, setTemplateId] = useState(template?.id ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [order, setOrder] = useState<"sequential" | "parallel">("sequential");
@@ -43,6 +46,7 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
   async function submit(send: boolean) {
     const signers = picked.filter((p) => p.userId);
     if (signers.length !== picked.length) return void toast.error("Choose a person for every role.");
+    if (source === "write" && content.trim().length < 20) return void toast.error("Write the document (at least a few sentences).");
     if (source === "upload" && !file) return void toast.error("Attach the PDF.");
     if (source === "upload" && file && file.size > MAX_PDF_BYTES) return void toast.error("The PDF must be 8 MB or smaller.");
     if (source === "template" && !templateId) return void toast.error("Choose a template.");
@@ -52,7 +56,9 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
     form.set("expiryDays", expiryDays);
     form.set("send", String(send));
     form.set("signers", JSON.stringify(signers.map((p, i) => ({ userId: p.userId, role: p.role, position: i + 1 }))));
-    if (source === "template") form.set("templateId", templateId);
+    if (initialEachPage) form.set("initialEachPage", "true");
+    if (source === "write") form.set("content", content);
+    else if (source === "template") form.set("templateId", templateId);
     else if (file) form.set("file", file);
     setSending(true);
     try {
@@ -90,6 +96,10 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">The document</legend>
         <div className="flex flex-wrap gap-4 text-sm">
+          <label htmlFor="env-src-write" className="flex items-center gap-2">
+            <input id="env-src-write" type="radio" name="source" checked={source === "write"} onChange={() => setSource("write")} className="size-4 accent-primary" />
+            Write or paste it here
+          </label>
           <label htmlFor="env-src-upload" className="flex items-center gap-2">
             <input id="env-src-upload" type="radio" name="source" checked={source === "upload"} onChange={() => setSource("upload")} className="size-4 accent-primary" />
             Upload a PDF
@@ -99,7 +109,9 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
             Use a template {templates.length === 0 ? "(none saved yet)" : ""}
           </label>
         </div>
-        {source === "upload" ? (
+        {source === "write" ? (
+          <ComposeEditor value={content} onChange={setContent} />
+        ) : source === "upload" ? (
           <div className="space-y-1.5">
             <Label htmlFor="env-file">PDF (up to 8 MB, 100 pages)</Label>
             <input id="env-file" type="file" accept="application/pdf,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:bg-secondary file:px-3 file:py-1.5" />
@@ -191,6 +203,14 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
         </SelectField>
         <TextField id="env-expiry" label="Days to sign before it expires" type="number" min={1} max={90} value={expiryDays} onChange={(e) => setExpiryDays(e.target.value)} />
       </div>
+
+      <label htmlFor="env-initials" className="flex items-start gap-2 text-sm">
+        <input id="env-initials" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={initialEachPage} onChange={(e) => setInitialEachPage(e.target.checked)} />
+        <span>
+          Each person initials every page before signing
+          <span className="block text-xs text-muted-foreground">They read the document page by page and initial each one. The initials are stamped at the foot of every page of the signed copy.</span>
+        </span>
+      </label>
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={sending || picked.length === 0}>
