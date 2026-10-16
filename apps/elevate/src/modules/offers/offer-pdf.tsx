@@ -21,6 +21,11 @@ const styles = StyleSheet.create({
   footer: { position: "absolute", bottom: 28, left: 60, right: 60, fontSize: 8.5, color: "#6b6680", flexDirection: "row", justifyContent: "space-between" },
 });
 
+/** The inline text (bold, italic, code, link labels) as react-pdf nodes; shared with the signing letterhead. */
+export function renderInlineNodes(nodes: Inline[]): ReactNode[] {
+  return inline(nodes);
+}
+
 function inline(nodes: Inline[], key = ""): ReactNode[] {
   return nodes.map((n, i) => {
     const k = `${key}${i}`;

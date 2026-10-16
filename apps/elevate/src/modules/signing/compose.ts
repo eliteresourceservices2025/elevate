@@ -1,8 +1,7 @@
 import "server-only";
 import { parseMarkdown } from "@/lib/markdown";
 import { ActionFailure } from "@/lib/run-action";
-import { renderOfferPdf } from "@/modules/offers/offer-pdf";
-import { latin } from "@/modules/privacy/pdf";
+import { renderLetterheadPdf } from "./letterhead-pdf";
 import { MAX_COMPOSED_CHARS, MIN_COMPOSED_CHARS, normalizeTypography } from "./constants";
 
 /**
@@ -16,5 +15,5 @@ export async function renderComposedPdf(title: string, markdown: string): Promis
   if (text.length > MAX_COMPOSED_CHARS) throw new ActionFailure("The document is too long (60,000 characters at most).");
   const blocks = parseMarkdown(text, MAX_COMPOSED_CHARS);
   if (blocks.length === 0) throw new ActionFailure("Write the document (at least a few sentences).");
-  return renderOfferPdf({ title, blocks, footer: `${latin(title).slice(0, 70)} | ELEVATE Sign` });
+  return renderLetterheadPdf({ title, blocks });
 }
