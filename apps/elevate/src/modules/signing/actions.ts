@@ -16,7 +16,8 @@ import { currentSignInMethods } from "./session";
 import { issueExternalLinks } from "./external-mail";
 import { appendEvent, endEnvelope, legalNames, recordSignature, sealEnvelope, sendDraft, sendQueuedEmailNow, voidEnvelopeTx } from "./service";
 import { openSigningDocument } from "./document";
-import { envelopeIdSchema, reasonSchema, signSchema, templateIdSchema } from "./validators";
+import { resolveSigneeGroup, type SignerChoice } from "./queries";
+import { envelopeIdSchema, reasonSchema, signSchema, signeeGroupSchema, templateIdSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
 const refresh = (id?: string) => {
@@ -52,6 +53,18 @@ export async function voidEnvelope(input: unknown): Promise<ActionResult> {
     await db.transaction((tx) => voidEnvelopeTx(tx, actor, envelopeId, reason, ip === "unknown" ? null : ip));
     refresh(envelopeId);
     return { ok: true, data: undefined };
+  });
+}
+
+/** The people in a group (everyone, a team, or a client's current assignments), for adding as signees. */
+export async function findSignees(input: unknown): Promise<ActionResult<{ people: SignerChoice[] }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "signing.manage");
+    const parsed = signeeGroupSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const people = await resolveSigneeGroup(parsed.data.kind, parsed.data.id ?? null);
+    return { ok: true, data: { people } };
   });
 }
 

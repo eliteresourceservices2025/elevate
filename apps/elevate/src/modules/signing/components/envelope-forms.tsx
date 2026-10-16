@@ -7,9 +7,9 @@ import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { archiveTemplate, discardDraft, remindSigners, sendEnvelope, voidEnvelope } from "../actions";
+import { archiveTemplate, discardDraft, findSignees, remindSigners, sendEnvelope, voidEnvelope } from "../actions";
 import { DEFAULT_EXPIRY_DAYS, MAX_PDF_BYTES, MAX_SIGNERS } from "../constants";
-import type { SignerChoice, TemplateRow } from "../queries";
+import type { SignerChoice, SigneeGroups, TemplateRow } from "../queries";
 import { useRouter } from "next/navigation";
 import { ComposeEditor } from "./compose-editor";
 import { BUILTIN_TEMPLATES } from "../builtin-templates";
@@ -17,7 +17,7 @@ import { BUILTIN_TEMPLATES } from "../builtin-templates";
 type Picked = { userId: string; role: string };
 
 /** HR: send a PDF (or a saved template) to one or more people to sign. */
-export function NewEnvelopeForm({ people, templates, initialTemplateId }: { people: SignerChoice[]; templates: TemplateRow[]; initialTemplateId?: string }) {
+export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }: { people: SignerChoice[]; templates: TemplateRow[]; groups: SigneeGroups; initialTemplateId?: string }) {
   const router = useRouter();
   const template = templates.find((t) => t.id === initialTemplateId) ?? null;
   const [title, setTitle] = useState(template?.name ?? "");
@@ -31,6 +31,15 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
   const [picked, setPicked] = useState<Picked[]>(template ? template.roles.map(() => ({ userId: "", role: "" })).map((p, i) => ({ ...p, role: template.roles[i] })) : []);
   const [add, setAdd] = useState("");
   const [sending, setSending] = useState(false);
+  // Everyone, a team or a client: each person signs their own copy (their own document, signature and sealed file).
+  const [copies, setCopies] = useState(false);
+  const [sharedRole, setSharedRole] = useState("");
+  const [groupKind, setGroupKind] = useState<"everyone" | "team" | "client">("everyone");
+  const [groupId, setGroupId] = useState("");
+  const [finding, setFinding] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const many = picked.length > MAX_SIGNERS;
+  const individual = copies || many;
 
   const chosen = templates.find((t) => t.id === templateId) ?? null;
   const taken = new Set(picked.map((p) => p.userId));
@@ -54,6 +63,25 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
     setPicked((list) => (list.length ? list.map((p, i) => ({ ...p, role: p.role || (t.roles[i] ?? "") })) : list));
   }
 
+  /** Adds the people of a group (everyone, a team, or a client's current assignments). The list comes from the server. */
+  async function addGroup() {
+    setFinding(true);
+    try {
+      const r = await findSignees({ kind: groupKind, id: groupKind === "everyone" ? undefined : groupId });
+      if (!r.ok) return void toast.error(r.error);
+      const have = new Set(picked.map((p) => p.userId));
+      const fresh = r.data.people.filter((x) => !have.has(x.userId));
+      if (fresh.length === 0) return void toast.message("Everyone in that group is already added.");
+      setPicked((l) => [...l, ...fresh.map((x) => ({ userId: x.userId, role: "" }))].slice(0, 500));
+      if (picked.length + fresh.length > MAX_SIGNERS) setCopies(true);
+      toast.success(`Added ${fresh.length} ${fresh.length === 1 ? "person" : "people"}.`);
+    } catch {
+      toast.error("No connection. Try again.");
+    } finally {
+      setFinding(false);
+    }
+  }
+
   async function submit(send: boolean) {
     const signers = picked.filter((p) => p.userId);
     if (signers.length !== picked.length) return void toast.error("Choose a person for every role.");
@@ -61,20 +89,38 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
     if (source === "upload" && !file) return void toast.error("Attach the PDF.");
     if (source === "upload" && file && file.size > MAX_PDF_BYTES) return void toast.error("The PDF must be 8 MB or smaller.");
     if (source === "template" && !templateId) return void toast.error("Choose a template.");
-    const form = new FormData();
-    form.set("title", title);
-    form.set("order", order);
-    form.set("expiryDays", expiryDays);
-    form.set("send", String(send));
-    form.set("signers", JSON.stringify(signers.map((p, i) => ({ userId: p.userId, role: p.role, position: i + 1 }))));
-    if (initialEachPage) form.set("initialEachPage", "true");
-    if (source === "write") form.set("content", content);
-    else if (source === "template") form.set("templateId", templateId);
-    else if (file) form.set("file", file);
+    const post = async (batch: Picked[], each: boolean) => {
+      const form = new FormData();
+      form.set("title", title);
+      form.set("order", order);
+      form.set("expiryDays", expiryDays);
+      form.set("send", String(send));
+      form.set("signers", JSON.stringify(batch.map((p, i) => ({ userId: p.userId, role: p.role || sharedRole, position: i + 1 }))));
+      if (each) form.set("individual", "true");
+      if (initialEachPage) form.set("initialEachPage", "true");
+      if (source === "write") form.set("content", content);
+      else if (source === "template") form.set("templateId", templateId);
+      else if (file) form.set("file", file);
+      const response = await fetch("/api/signing/envelopes", { method: "POST", body: form });
+      return (await response.json().catch(() => null)) as { ok: boolean; error?: string; id?: string; count?: number } | null;
+    };
     setSending(true);
     try {
-      const response = await fetch("/api/signing/envelopes", { method: "POST", body: form });
-      const body = (await response.json().catch(() => null)) as { ok: boolean; error?: string; id?: string } | null;
+      if (individual) {
+        if (send && signers.length > 1 && !window.confirm(`Send this document to ${signers.length} people, each as their own copy?`)) return;
+        let done = 0;
+        for (let i = 0; i < signers.length; i += MAX_SIGNERS) {
+          const batch = signers.slice(i, i + MAX_SIGNERS);
+          setProgress({ done, total: signers.length });
+          const body = await post(batch, true);
+          if (!body?.ok) return void toast.error(`${body?.error ?? "Something went wrong. Please try again."} ${done} of ${signers.length} were ${send ? "sent" : "saved"} before it stopped. Check Signing before trying again, so nobody gets two.`);
+          done += body.count ?? batch.length;
+        }
+        toast.success(send ? `Sent to ${done} ${done === 1 ? "person" : "people"}.` : `Saved ${done} drafts.`);
+        router.push("/signing");
+        return;
+      }
+      const body = await post(signers, false);
       if (!body?.ok || !body.id) return void toast.error(body?.error ?? "Something went wrong. Please try again.");
       toast.success(send ? "Sent for signature." : "Saved as a draft.");
       router.push(`/signing/${body.id}`);
@@ -82,6 +128,7 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
       toast.error("No connection. Try again.");
     } finally {
       setSending(false);
+      setProgress(null);
     }
   }
 
@@ -153,7 +200,89 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Who signs</legend>
         {picked.length === 0 ? <p className="text-sm text-muted-foreground">Add at least one person. They need an ELEVATE account.</p> : null}
-        <ol className="space-y-2">
+        <div className="flex flex-wrap items-end gap-2 rounded-lg border bg-muted/30 p-3">
+          <div className="w-44">
+            <SelectField
+              id="env-group-kind"
+              label="Add a group"
+              value={groupKind}
+              onChange={(e) => {
+                setGroupKind(e.target.value as "everyone" | "team" | "client");
+                setGroupId("");
+              }}
+            >
+              <option value="everyone">Everyone ({groups.everyone})</option>
+              <option value="team" disabled={groups.teams.length === 0}>
+                A team
+              </option>
+              <option value="client" disabled={groups.clients.length === 0}>
+                A client&apos;s assignees
+              </option>
+            </SelectField>
+          </div>
+          {groupKind === "team" ? (
+            <div className="min-w-48 flex-1">
+              <SelectField id="env-group-team" label="Team" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                <option value="">Choose a team</option>
+                {groups.teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.count})
+                  </option>
+                ))}
+              </SelectField>
+            </div>
+          ) : null}
+          {groupKind === "client" ? (
+            <div className="min-w-48 flex-1">
+              <SelectField id="env-group-client" label="Client" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                <option value="">Choose a client</option>
+                {groups.clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.count})
+                  </option>
+                ))}
+              </SelectField>
+            </div>
+          ) : null}
+          <Button type="button" variant="outline" disabled={finding || (groupKind !== "everyone" && !groupId)} onClick={() => void addGroup()}>
+            Add them
+          </Button>
+          <p className="basis-full text-xs text-muted-foreground">Adds the people who currently have an ELEVATE account. A client adds the people assigned to it today.</p>
+        </div>
+        <label htmlFor="env-copies" className="flex items-start gap-2 text-sm">
+          <input id="env-copies" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={individual} disabled={many} onChange={(e) => setCopies(e.target.checked)} />
+          <span>
+            Each person signs their own copy
+            <span className="block text-xs text-muted-foreground">One document per person, each with its own signature and signed copy. Used for policies sent to many people{many ? " (on, because more than 10 people are added)" : ""}.</span>
+          </span>
+        </label>
+        {individual ? (
+          <div className="max-w-sm">
+            <TextField id="env-shared-role" label="Role shown on each document (optional)" value={sharedRole} onChange={(e) => setSharedRole(e.target.value)} maxLength={60} placeholder="Contractor" />
+          </div>
+        ) : null}
+        {many ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">{picked.length} people</p>
+            <ul className="max-h-64 divide-y overflow-y-auto rounded-lg border text-sm">
+              {picked.map((p, i) => {
+                const person = people.find((x) => x.userId === p.userId);
+                return (
+                  <li key={p.userId} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                    <span>{person ? `${person.name} (${person.email})` : p.userId}</span>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setPicked((l) => l.filter((_, k) => k !== i))} aria-label={`Remove ${person?.name ?? "person"}`}>
+                      Remove
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setPicked([])}>
+              Remove everyone
+            </Button>
+          </div>
+        ) : null}
+        <ol className={many ? "hidden" : "space-y-2"}>
           {picked.map((p, i) => (
             <li key={i} className="flex flex-wrap items-end gap-2">
               <span className="w-6 pb-2 text-sm text-muted-foreground">{order === "sequential" ? `${i + 1}.` : ""}</span>
@@ -172,7 +301,7 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
               <div className="w-48">
                 <TextField id={`env-r-${i}`} label="Role (shown on the document)" value={p.role} onChange={(e) => setPicked((l) => l.map((x, k) => (k === i ? { ...x, role: e.target.value } : x)))} maxLength={60} />
               </div>
-              {order === "sequential" ? (
+              {order === "sequential" && !individual ? (
                 <>
                   <Button type="button" variant="ghost" size="sm" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move person ${i + 1} up`}>
                     Up
@@ -188,7 +317,7 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
             </li>
           ))}
         </ol>
-        {picked.length < MAX_SIGNERS ? (
+        {picked.length < MAX_SIGNERS || individual ? (
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-56 flex-1">
               <SelectField id="env-add" label="Add a signee" value={add} onChange={(e) => setAdd(e.target.value)}>
@@ -218,10 +347,14 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
       </fieldset>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <SelectField id="env-order" label="Signing order" value={order} onChange={(e) => setOrder(e.target.value as "sequential" | "parallel")}>
-          <option value="sequential">One after another, in the order above</option>
-          <option value="parallel">Everyone at the same time</option>
-        </SelectField>
+        {individual ? (
+          <p className="self-end text-sm text-muted-foreground">Each person gets their own document, so there is no signing order.</p>
+        ) : (
+          <SelectField id="env-order" label="Signing order" value={order} onChange={(e) => setOrder(e.target.value as "sequential" | "parallel")}>
+            <option value="sequential">One after another, in the order above</option>
+            <option value="parallel">Everyone at the same time</option>
+          </SelectField>
+        )}
         <TextField id="env-expiry" label="Days to sign before it expires" type="number" min={1} max={90} value={expiryDays} onChange={(e) => setExpiryDays(e.target.value)} />
       </div>
 
@@ -235,7 +368,7 @@ export function NewEnvelopeForm({ people, templates, initialTemplateId }: { peop
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={sending || picked.length === 0}>
-          Send for signature
+          {progress ? `Sending ${progress.done} of ${progress.total}...` : individual && picked.length > 1 ? `Send to ${picked.length} people` : "Send for signature"}
         </Button>
         <Button type="button" variant="outline" disabled={sending || picked.length === 0} onClick={() => void submit(false)}>
           Save as draft

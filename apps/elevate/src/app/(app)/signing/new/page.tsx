@@ -3,14 +3,14 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { NewEnvelopeForm } from "@/modules/signing/components/envelope-forms";
-import { listSignerChoices, listTemplates } from "@/modules/signing/queries";
+import { listSignerChoices, listSigneeGroups, listTemplates } from "@/modules/signing/queries";
 
 export const metadata: Metadata = { title: "Send a document" };
 
 export default async function NewEnvelopePage({ searchParams }: PageProps<"/signing/new">) {
   await requireUser();
   const sp = await searchParams;
-  const [people, templates] = await Promise.all([orNotFound(listSignerChoices()), orNotFound(listTemplates())]);
+  const [people, templates, groups] = await Promise.all([orNotFound(listSignerChoices()), orNotFound(listTemplates()), orNotFound(listSigneeGroups())]);
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -20,7 +20,7 @@ export default async function NewEnvelopePage({ searchParams }: PageProps<"/sign
         <h1 className="mt-2 text-2xl font-bold">Send a document</h1>
         <p className="mt-1 text-muted-foreground">Each person signs while signed in to ELEVATE with their authenticator code. When the last person signs, ELEVATE seals the document and adds a certificate.</p>
       </div>
-      <NewEnvelopeForm people={people} templates={templates} initialTemplateId={typeof sp.template === "string" ? sp.template : undefined} />
+      <NewEnvelopeForm people={people} templates={templates} groups={groups} initialTemplateId={typeof sp.template === "string" ? sp.template : undefined} />
     </div>
   );
 }

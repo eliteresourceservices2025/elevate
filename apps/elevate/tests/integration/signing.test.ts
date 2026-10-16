@@ -478,3 +478,42 @@ describe("the email when a document is sent", () => {
     }
   });
 });
+
+describe("adding signees by group", () => {
+  it("finds everyone, a team, or a client's current assignees, and only people with accounts who have not left", async () => {
+    const [d] = await rows<{ id: string }>(sql`insert into core.departments (name) values (${uniq("Dept ")}) returning id`);
+    const [team] = await rows<{ id: string }>(sql`insert into core.teams (department_id, name) values (${d.id}, ${uniq("Team ")}) returning id`);
+    const [client] = await rows<{ id: string }>(sql`insert into core.clients (name) values (${uniq("Client ")}) returning id`);
+    const inTeam = await makeUser("grp-a", ["employee"], ["Gina", "Alba"]);
+    const onClient = await makeUser("grp-b", ["employee"], ["Hugo", "Bautista"]);
+    const left = await makeUser("grp-c", ["employee"], ["Iris", "Cruz"]);
+    await db.execute(sql`update core.employees set team_id = ${team.id} where user_id in (${inTeam.id}, ${left.id})`);
+    await db.execute(sql`update core.employees set status = 'separated' where user_id = ${left.id}`);
+    await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date) select id, ${client.id}, '2026-01-05' from core.employees where user_id = ${onClient.id}`);
+    // an ended assignment does not count
+    await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date, end_date) select id, ${client.id}, '2025-01-05', '2025-06-30' from core.employees where user_id = ${inTeam.id}`);
+
+    as(hr);
+    const ids = async (kind: "everyone" | "team" | "client", id?: string) => {
+      const r = await actions.findSignees({ kind, id });
+      if (!r.ok) throw new Error(r.error);
+      return (r.data as { people: { userId: string }[] }).people.map((p) => p.userId);
+    };
+    expect(await ids("team", team.id)).toEqual([inTeam.id]); // the one who left is not offered
+    expect(await ids("client", client.id)).toEqual([onClient.id]);
+    const all = await ids("everyone");
+    expect(all).toEqual(expect.arrayContaining([inTeam.id, onClient.id]));
+    expect(all).not.toContain(left.id);
+    expect((await actions.findSignees({ kind: "team" })).ok).toBe(false); // a team needs an id
+
+    // Not for people who are not HR
+    as(ana);
+    expect(await actions.findSignees({ kind: "everyone" })).toEqual({ ok: false, error: NO_ACCESS });
+    const groups = await (async () => {
+      as(hr);
+      return queries.listSigneeGroups();
+    })();
+    expect(groups.teams.find((t) => t.id === team.id)?.count).toBe(1);
+    expect(groups.clients.find((c) => c.id === client.id)?.count).toBe(1);
+  });
+});

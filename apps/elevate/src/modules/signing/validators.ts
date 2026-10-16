@@ -31,6 +31,10 @@ export const templateSchema = z.object({
   roles: z.array(text(60).min(1)).min(1, "Name at least one signee role").max(MAX_SIGNERS),
 });
 
+export const signeeGroupSchema = z
+  .object({ kind: z.enum(["everyone", "team", "client"]), id: z.preprocess(blankToUndefined, uuid.optional()) })
+  .refine((v) => v.kind === "everyone" || Boolean(v.id), { message: "Choose a team or a client", path: ["id"] });
+
 export const envelopeIdSchema = z.object({ envelopeId: uuid });
 export const templateIdSchema = z.object({ templateId: uuid });
 export const reasonSchema = z.object({ envelopeId: uuid, reason: text(500).min(3, "Give a short reason") });

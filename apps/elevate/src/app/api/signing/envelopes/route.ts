@@ -17,7 +17,7 @@ import { revalidatePath } from "next/cache";
 // HR creates (and usually sends) an envelope from an uploaded PDF or a saved template. A route handler rather than a server action
 // because the PDF is large. requireUser() (MFA enforced) and authorize() come first, exactly as in an action.
 
-const json = (body: { ok: boolean; error?: string; id?: string }, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
+const json = (body: { ok: boolean; error?: string; id?: string; count?: number }, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 export async function POST(request: Request) {
   const actor = await requireUser();
@@ -73,9 +73,26 @@ export async function POST(request: Request) {
       fileName = upload.name || fileName;
     }
     const ip = await clientIp();
-    const { id } = await createEnvelope(actor, { title: v.title, pdf, fileName, templateId: v.templateId ?? null, signers: v.signers, order: v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" });
+    const base = { title: v.title, pdf, fileName, templateId: v.templateId ?? null, order: v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" };
+    if (field("individual") === "true") {
+      // Each person gets their own copy (their own envelope, signature and sealed file): used for "everyone", a team or a client.
+      // The browser sends the people in batches of at most MAX_SIGNERS, so one request stays well inside the time limit.
+      let first: string | undefined;
+      let done = 0;
+      try {
+        for (const s of v.signers) {
+          const { id } = await createEnvelope(actor, { ...base, signers: [{ userId: s.userId, role: s.role ?? null, position: 1 }] });
+          first ??= id;
+          done += 1;
+        }
+      } finally {
+        revalidatePath("/signing");
+      }
+      return json({ ok: true, id: first, count: done });
+    }
+    const { id } = await createEnvelope(actor, { ...base, signers: v.signers });
     revalidatePath("/signing");
-    return json({ ok: true, id });
+    return json({ ok: true, id, count: 1 });
   } catch (error) {
     if (error instanceof ActionFailure) return json({ ok: false, error: error.message }, 400);
     console.error("create envelope failed:", errorDetail(error));
