@@ -1,3 +1,4 @@
+import { errorDetail } from "@/lib/error-detail";
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { ForbiddenError, authorize } from "@/lib/authz";
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
     await storage.remove(BUCKETS.signed, [path]).catch(() => undefined);
     const duplicate = error instanceof Error && /esign_templates_name_idx|duplicate key/.test(`${error.message} ${(error as { cause?: Error }).cause?.message ?? ""}`);
     if (duplicate) return json({ ok: false, error: "A template with that name already exists." }, 400);
-    console.error("create template failed:", error instanceof Error ? error.name : "unknown error");
+    console.error("create template failed:", errorDetail(error));
     return json({ ok: false, error: "Something went wrong. Please try again." }, 500);
   }
 }

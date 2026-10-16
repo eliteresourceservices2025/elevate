@@ -1,3 +1,4 @@
+import { errorDetail } from "@/lib/error-detail";
 import "server-only";
 import { ForbiddenError } from "@/lib/authz";
 
@@ -28,7 +29,7 @@ export async function runAction<T>(body: () => Promise<ActionResult<T>>): Promis
   } catch (error) {
     if (error instanceof ActionFailure) return fail(error.message);
     if (error instanceof ForbiddenError) return fail("You do not have access to do that.");
-    console.error("action failed:", error instanceof Error ? error.name : "unknown error");
+    console.error("action failed:", errorDetail(error));
     return fail("Something went wrong. Try again.");
   }
 }
