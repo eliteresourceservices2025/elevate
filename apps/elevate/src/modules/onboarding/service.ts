@@ -73,7 +73,7 @@ async function announce(tx: Tx, p: { kind: Kind; caseId: string; person: Awaited
 }
 
 /** Opens the onboarding case for a hire (called by hiring): the case, its tasks from the right template, and the notices. */
-export async function openOnboardingCase(tx: Tx, actor: Actor, p: { employeeId: string; applicationId: string; offerId: string | null; startDate: string; withoutOfferReason: string | null }): Promise<{ caseId: string }> {
+export async function openOnboardingCase(tx: Tx, actor: Actor, p: { employeeId: string; applicationId: string | null; offerId: string | null; startDate: string; withoutOfferReason: string | null }): Promise<{ caseId: string }> {
   const person = await personContext(tx, p.employeeId);
   const { templateId, items } = await itemsFor(tx, "onboarding", person.positionId);
   const [c] = await tx

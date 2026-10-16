@@ -257,3 +257,33 @@ describe("offboarding and separation", () => {
     expect(audit.length).toBe(1);
   });
 });
+
+describe("starting onboarding for a person added directly under People", () => {
+  it("opens the checklist from the template, once, and lists only people without one", async () => {
+    const direct = await makePerson("direct", ["employee"], leadEmployeeId());
+    as(hr);
+    const before = await queries.listOnboardingCandidates();
+    expect(before.some((p) => p.id === direct.employeeId)).toBe(true);
+
+    const started = await actions.startOnboarding({ employeeId: direct.employeeId, startDate: "2026-11-02" });
+    expect(started.ok).toBe(true);
+    const caseId = (started as { data: { caseId: string } }).data.caseId;
+    const [c] = await rows<{ status: string; application_id: string | null; start_date: string }>(sql`select status, application_id, start_date::text from talent.onboarding_cases where id = ${caseId}`);
+    expect(c).toMatchObject({ status: "open", application_id: null, start_date: "2026-11-02" });
+    expect((await rows(sql`select 1 from talent.checklist_tasks where onboarding_case_id = ${caseId}`)).length).toBeGreaterThanOrEqual(7);
+
+    // Once only, and no longer offered
+    expect((await actions.startOnboarding({ employeeId: direct.employeeId, startDate: "2026-11-02" })).ok).toBe(false);
+    expect((await queries.listOnboardingCandidates()).some((p) => p.id === direct.employeeId)).toBe(false);
+    // It shows in the cases list as in progress
+    expect((await queries.listOnboardingCases()).some((r) => r.employeeId === direct.employeeId && r.status === "open")).toBe(true);
+  });
+
+  it("is HR only", async () => {
+    const other = await makePerson("direct2", ["employee"]);
+    as(stranger);
+    expect((await actions.startOnboarding({ employeeId: other.employeeId, startDate: "2026-11-02" })).ok).toBe(false);
+    as(recruiter);
+    expect((await actions.startOnboarding({ employeeId: other.employeeId, startDate: "2026-11-02" })).ok).toBe(false);
+  });
+});

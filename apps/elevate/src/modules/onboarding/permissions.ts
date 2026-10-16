@@ -7,6 +7,7 @@ const OWN = { recruiter: "own", executive: "own", employee: "own" } as const;
 
 export const onboardingPermissions = definePermissions({
   "onboarding.manage": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  "onboarding.start": { roles: { super_admin: "all", hr_admin: "all" } },
   "onboarding.view_own_tasks": { roles: { employee: "own" } },
   "onboarding.view": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", ...OWN } },
   "onboarding.manage_templates": { roles: { super_admin: "all", hr_admin: "all" } },

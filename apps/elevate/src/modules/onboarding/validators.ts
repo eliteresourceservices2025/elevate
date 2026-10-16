@@ -42,6 +42,8 @@ export const taskIdSchema = z.object({ taskId: uuid });
 export const completeTaskSchema = z.object({ taskId: uuid, note: z.preprocess(blankToUndefined, text(500).optional()) });
 export const skipTaskSchema = z.object({ taskId: uuid, reason: text(500).min(3, "Give a short reason") });
 
+export const startOnboardingSchema = z.object({ employeeId: uuid, startDate: date });
+
 export const startOffboardingSchema = z.object({
   employeeId: uuid,
   lastWorkingDay: date,

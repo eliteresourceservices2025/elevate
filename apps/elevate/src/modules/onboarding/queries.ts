@@ -263,6 +263,20 @@ export async function getTemplates() {
   return { templates: views, positions: pos, documentTypes: docTypes, signTemplates, policies: policyOptions };
 }
 
+/** People HR can start an onboarding checklist for: current people (not left) who have no onboarding case yet. */
+export async function listOnboardingCandidates() {
+  const user = await requireUser();
+  if (scopeFor(user, "onboarding.start") !== "all") throw new ForbiddenError("onboarding.start");
+  const have = await db.select({ employeeId: onboardingCases.employeeId }).from(onboardingCases);
+  const done = new Set(have.map((o) => o.employeeId));
+  const rows = await db
+    .select({ id: employees.id, first: employees.legalFirstName, last: employees.legalLastName, position: employees.position, status: employees.status, startDate: employees.startDate })
+    .from(employees)
+    .where(and(isNull(employees.archivedAt)))
+    .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName));
+  return rows.filter((r) => r.status !== "separated" && !done.has(r.id)).map((r) => ({ id: r.id, name: `${r.last}, ${r.first}`, position: r.position, startDate: r.startDate ?? null }));
+}
+
 /** People HR can start an offboarding for: current people with no open case. */
 export async function listOffboardingCandidates() {
   const user = await requireUser();

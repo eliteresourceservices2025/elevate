@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { cancelOffboarding, completeOffboarding, completeOnboarding, issueCertificate, removeAccessNow, startOffboarding, submitExitInterview } from "../actions";
+import { cancelOffboarding, completeOffboarding, completeOnboarding, issueCertificate, removeAccessNow, startOffboarding, startOnboarding, submitExitInterview } from "../actions";
 import { LEAVING_LABELS, LEAVING_REASONS, type LeavingReason } from "../constants";
 
 export function CompleteOnboardingButton({ caseId, ready }: { caseId: string; ready: boolean }) {
@@ -62,6 +62,52 @@ export function OffboardingControls({ caseId, employeeId, accessRemoved, open, r
       </div>
       {confirm ? <p className="text-sm text-muted-foreground">They are marked separated, lose their client assignments and schedule, and can no longer sign in.</p> : null}
     </div>
+  );
+}
+
+/** HR: open the onboarding checklist for a person who was added directly under People (not hired through Recruiting). */
+export function StartOnboardingForm({ people, today }: { people: { id: string; name: string; position: string | null; startDate: string | null }[]; today: string }) {
+  const { run, pending, router } = useRun();
+  const [employeeId, setEmployeeId] = useState("");
+  const [startDate, setStartDate] = useState(today);
+  return (
+    <form
+      className="max-w-xl space-y-4 rounded-xl border bg-card p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => startOnboarding({ employeeId, startDate }), "Onboarding started.", (d) => router.push(`/onboarding/${(d as { caseId: string }).caseId}`));
+      }}
+    >
+      <div className="space-y-1">
+        <Label htmlFor="on-person">Person</Label>
+        <NativeSelect
+          id="on-person"
+          value={employeeId}
+          onChange={(e) => {
+            setEmployeeId(e.target.value);
+            const p = people.find((x) => x.id === e.target.value);
+            if (p?.startDate) setStartDate(p.startDate);
+          }}
+          required
+        >
+          <option value="">Choose a person</option>
+          {people.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+              {p.position ? `, ${p.position}` : ""}
+            </option>
+          ))}
+        </NativeSelect>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="on-start">Start date</Label>
+        <Input id="on-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+        <p className="text-xs text-muted-foreground">Tasks are due relative to this day. The checklist comes from the template for their position, or the default one.</p>
+      </div>
+      <Button type="submit" disabled={pending || !employeeId}>
+        Start onboarding
+      </Button>
+    </form>
   );
 }
 
