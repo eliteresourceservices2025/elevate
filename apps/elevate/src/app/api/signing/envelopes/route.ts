@@ -10,8 +10,8 @@ import { MAX_PDF_BYTES } from "@/modules/signing/constants";
 import { esignTemplates } from "@/modules/signing/schema";
 import { createEnvelope } from "@/modules/signing/service";
 import { assertSigneeValues, loadSigneeValues, renderComposedPdf, renderForSignee } from "@/modules/signing/compose";
-import { fieldsUsed, mergeProblem } from "@/modules/signing/merge";
-import { composedBodySchema, createEnvelopeSchema } from "@/modules/signing/validators";
+import { fieldsUsed, mergeProblem, unfilledPlaceholders } from "@/modules/signing/merge";
+import { composedBodySchema, countersignerSchema, createEnvelopeSchema } from "@/modules/signing/validators";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -66,6 +66,8 @@ export async function POST(request: Request) {
       if (!body.success) return json({ ok: false, error: body.error.issues[0]?.message ?? "Check the document and try again." }, 400);
       const problem = mergeProblem(body.data);
       if (problem) return json({ ok: false, error: problem }, 400);
+      const unfilled = unfilledPlaceholders(body.data);
+      if (unfilled.length) return json({ ok: false, error: `Fill in ${unfilled.map((u) => `[[${u}]]`).join(", ")} in the document before sending.` }, 400);
       if (fieldsUsed(body.data).length > 0) {
         if (!each && v.signers.length > 1) return json({ ok: false, error: "This document fills in one person's details, so it must go out as each person's own copy. Tick Each person signs their own copy." }, 400);
         const ids = v.signers.map((s) => s.userId);
@@ -91,6 +93,22 @@ export async function POST(request: Request) {
       fileName = upload.name || fileName;
     }
     if (checkOnly) return json({ ok: true, count: v.signers.length });
+    // The Company's countersigner (optional, per-person copies only): signs after each person, on every copy.
+    let counter: { userId: string; role: string | null } | null = null;
+    const counterRaw = field("countersigner");
+    if (counterRaw) {
+      let counterJson: unknown;
+      try {
+        counterJson = JSON.parse(counterRaw);
+      } catch {
+        return json({ ok: false, error: "Check the countersigner and try again." }, 400);
+      }
+      const c = countersignerSchema.safeParse(counterJson);
+      if (!c.success) return json({ ok: false, error: c.error.issues[0]?.message ?? "Check the countersigner and try again." }, 400);
+      if (v.signers.some((s) => s.userId === c.data.userId)) return json({ ok: false, error: "The countersigner cannot also be one of the people signing their own copy." }, 400);
+      counter = { userId: c.data.userId, role: c.data.role ?? null };
+    }
+    if (counter && !each) return json({ ok: false, error: "A countersigner is added when each person signs their own copy." }, 400);
     const ip = await clientIp();
     const base = { title: v.title, fileName, templateId: v.templateId ?? null, order: v.order, expiryDays: v.expiryDays, send: v.send, ip: ip === "unknown" ? null : ip, initialEachPage: field("initialEachPage") === "true" };
     if (each) {
@@ -100,7 +118,7 @@ export async function POST(request: Request) {
       let done = 0;
       try {
         for (const s of v.signers) {
-          const { id } = await createEnvelope(actor, { ...base, pdf: pdfFor ? await pdfFor(s.userId) : (pdf as Uint8Array), signers: [{ userId: s.userId, role: s.role ?? null, position: 1 }] });
+          const { id } = await createEnvelope(actor, { ...base, pdf: pdfFor ? await pdfFor(s.userId) : (pdf as Uint8Array), signers: [{ userId: s.userId, role: s.role ?? null, position: 1 }, ...(counter ? [{ userId: counter.userId, role: counter.role, position: 2 }] : [])] });
           first ??= id;
           done += 1;
         }

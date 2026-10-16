@@ -31,6 +31,11 @@ export function mergeProblem(body: string): string | null {
   return null;
 }
 
+/** Parts of a ready-made document that HR must replace before it is sent, written [[like this]]. */
+export function unfilledPlaceholders(body: string): string[] {
+  return [...new Set([...body.matchAll(/\[\[([^\]\n]{1,80})\]\]/g)].map((m) => m[1].trim()))];
+}
+
 /** A value made safe to print: no braces or control characters, no characters that format text, bounded. */
 export function cleanValue(raw: string): string {
   return raw
