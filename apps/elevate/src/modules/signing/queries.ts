@@ -95,7 +95,6 @@ export async function getEnvelopeDetail(envelopeId: string) {
       initialEachPage: env.initialEachPage,
       signeeDetails: env.signeeDetails,
       /** The signed copy holds personal details: only the contractor who typed them, HR and Super Admin can open it. */
-      sealedRestricted: env.signeeDetails.length > 0,
       canOpenSealed: manager || env.signeeDetails.length === 0 || Boolean(mine?.fillsDetails),
       createdBy: names.get(env.createdBy) ?? "ERS",
       createdAt: env.createdAt,

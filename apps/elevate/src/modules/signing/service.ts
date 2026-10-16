@@ -146,6 +146,8 @@ export async function sendDraft(tx: Tx, actor: Actor, envelopeId: string, ip: st
  */
 export async function createEnvelope(actor: Actor, input: NewEnvelope): Promise<{ id: string; links: { sent: number; failed: number } | null }> {
   const { pages, sha256: sha } = input.pdfInfo ?? (await inspectPdf(input.pdf));
+  // A caller that passes the checked info saves the parse, not the fingerprint check: hashing is cheap, a wrong fingerprint is not.
+  if (input.pdfInfo && sha256Hex(input.pdf) !== input.pdfInfo.sha256) throw new ActionFailure("The document changed after it was checked. Please try again.");
   if (input.signers.length === 0 || input.signers.length > MAX_SIGNERS) throw new ActionFailure(`Add between 1 and ${MAX_SIGNERS} signees.`);
   if (input.signers.some((s) => Boolean(s.userId) === Boolean(s.external))) throw new ActionFailure("Each signee is either an ELEVATE user or an outside person with a name and email.");
   const ids = input.signers.flatMap((s) => (s.userId ? [s.userId] : []));
@@ -312,6 +314,10 @@ export async function sealEnvelope(envelopeId: string): Promise<boolean> {
   if (!original) throw new Error("The original document is missing from storage.");
   if (sha256Hex(original) !== env.originalSha256) throw new Error("The original document no longer matches its fingerprint.");
 
+  // Reading the details the contractor typed (bank details) to print them is a sensitive read: audited every time (field names only),
+  // before they are decrypted, so a retry or a lost race still leaves a record.
+  if (signers.some((s) => s.detailsEnc)) await writeAudit({ actor: null, action: "sensitive.view", targetType: "esign_envelope", targetId: envelopeId, metadata: { fields: env.signeeDetails, purpose: "printed on the signed copy" } });
+
   const userIds = [env.createdBy, ...signers.flatMap((s) => (s.userId ? [s.userId] : []))];
   const names = await legalNames(db, userIds);
   const emails = new Map((await db.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, userIds))).map((u) => [u.id, u.email]));
@@ -357,7 +363,6 @@ export async function sealEnvelope(envelopeId: string): Promise<boolean> {
     await notify(tx, [...new Set(userIds)].map((userId) => ({ userId, kind: "signing.completed", title: "A document was signed by everyone", body: restricted ? "This signed copy has personal details: only the contractor and HR can open it." : "The sealed copy is ready to download.", link: SIGN_LINK(envelopeId) })));
     await writeAudit({ actor: null, action: "signing.seal", targetType: "esign_envelope", targetId: envelopeId, after: { sha256: sha } }, tx);
     // The seal read the details the contractor typed (bank details): that is a sensitive read, so it is audited (field names only).
-    if (restricted) await writeAudit({ actor: null, action: "sensitive.view", targetType: "esign_envelope", targetId: envelopeId, metadata: { fields: env.signeeDetails, purpose: "printed on the signed copy" } }, tx);
     return true;
   });
   if (!done) await storage.remove(BUCKETS.signed, [path]).catch(() => undefined);

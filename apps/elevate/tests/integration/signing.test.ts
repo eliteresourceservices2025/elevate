@@ -663,7 +663,7 @@ describe("who can open a signed copy that holds personal details", () => {
     expect(await actions.getDocumentLink({ envelopeId: id })).toEqual({ ok: false, error: expect.stringContaining("only the contractor and HR") });
     // The page says so instead of offering the copy
     const detail = await queries.getEnvelopeDetail(id);
-    expect(detail.envelope).toMatchObject({ sealedRestricted: true, canOpenSealed: false });
+    expect(detail.envelope.canOpenSealed).toBe(false);
     as(ana);
     expect((await queries.getEnvelopeDetail(id)).envelope.canOpenSealed).toBe(true);
     as(hr);
@@ -686,6 +686,37 @@ describe("who can open a signed copy that holds personal details", () => {
     await signTyped(ben, id);
     as(ben);
     expect((await actions.getDocumentLink({ envelopeId: id })).ok).toBe(true);
-    expect((await queries.getEnvelopeDetail(id)).envelope).toMatchObject({ sealedRestricted: false, canOpenSealed: true });
+    expect((await queries.getEnvelopeDetail(id)).envelope.canOpenSealed).toBe(true);
+  });
+});
+
+describe("the emails of a per-person send", () => {
+  it("go out right after the batch (one flush), not at the next job run", async () => {
+    const { setEmailSender } = await import("@/modules/notifications/email");
+    const { POST } = await import("@/app/api/signing/envelopes/route");
+    await db.execute(sql`delete from ops.email_queue`);
+    const sent: { to: string; subject: string }[] = [];
+    setEmailSender({ send: async (m: { to: string; subject: string }) => void sent.push({ to: m.to, subject: m.subject }) } as never);
+    try {
+      as(hr);
+      const form = new FormData();
+      form.set("title", uniq("Batch "));
+      form.set("content", "This is a long enough document for the people who are going to sign it in ELEVATE.");
+      form.set("individual", "true");
+      form.set("signers", JSON.stringify([ana, ben].map((u, i) => ({ userId: u.id, role: "Contractor", position: i + 1 }))));
+      const res = await POST(new Request("http://localhost/api/signing/envelopes", { method: "POST", body: form }));
+      expect(res.status).toBe(200);
+      for (const u of [ana, ben]) expect(sent.filter((m) => m.to === u.email).map((m) => m.subject)).toEqual(["A document is waiting for your signature"]);
+    } finally {
+      setEmailSender(null);
+    }
+  });
+
+  it("refuses a PDF whose bytes do not match the checked fingerprint", async () => {
+    const pdf = await samplePdf(1);
+    const info = await service.inspectPdf(pdf);
+    await expect(
+      service.createEnvelope({ id: hr.id, email: hr.email, roles: hr.roles }, { title: uniq("Mismatch "), pdf: await samplePdf(2), pdfInfo: info, fileName: "x.pdf", signers: [{ userId: ana.id }], order: "sequential", expiryDays: 14, send: false, ip: null }),
+    ).rejects.toThrow(/changed after it was checked/);
   });
 });
