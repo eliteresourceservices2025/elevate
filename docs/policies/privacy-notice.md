@@ -10,6 +10,7 @@ Elite Resource Services ("ERS", "we") runs ELEVATE, the internal system we use t
 - **Your profile and work records:** your position, team, who you report to, the clients you are assigned to, your start date and status, schedule, time off and prize days, equipment assigned to you, and the documents you or HR upload (for example your contract, ID copies and certificates).
 - **Personal details:** date of birth, civil status, phone, home address and emergency contact, where you or HR provide them.
 - **Sensitive details:** government ID numbers (TIN, SSS, PhilHealth, Pag-IBIG), bank or payout details and your pay rate. These are stored encrypted and can be seen only by the HR and administrator roles that need them for payroll and compliance, and by you.
+- **Optional self-identification:** your gender, pronouns and religion, only if you choose to share them in your profile, and, if you apply for a job, your gender and religion in the optional part of the application form. Every question can be skipped, and you can change or remove your answers at any time. Religion and gender are stored encrypted (pronouns are shown next to your name for colleagues if you choose one). Nobody can see another person's gender or religion. HR sees only combined counts of 5 or more people, never a name, to check that our workplace and hiring are fair. We do not use these answers to decide whether to hire, promote, pay or assess anyone. They are deleted when your record is removed.
 - **Working time:** clock-in, break and clock-out records, the network address you clocked in from, requests to correct your time, and notes you add at the end of a shift. Our separate Monitoring policy explains the work screenshots we capture with Jibble and the optional location setting.
 - **Performance and development:** goals, early-engagement and periodic reviews, ratings and feedback.
 - **Training records:** the courses assigned to you in ELEVATE Learn (for example HIPAA and cybersecurity), your answers in the exams, your results and the certificates you earn.
@@ -32,7 +33,7 @@ We do not sell personal data, use it for advertising or make decisions about you
 ## Who can see it
 
 - **You** can see your own records under "My data".
-- **Your team leads** see what they need to manage their team: schedule, time records, leave requests and reviews they take part in. They do not see your birth date, civil status, personal email, home address or sensitive details.
+- **Your team leads** see what they need to manage their team: schedule, time records, leave requests and reviews they take part in. They do not see your birth date, civil status, personal email, home address or sensitive details, and nobody sees your optional gender or religion answers.
 - **HR** sees employee records and, with administrators, the sensitive details. Every time a sensitive detail is opened, the action is logged.
 - **Clients** are told your name, role and working hours where needed to serve them. We do not share your sensitive details or personal records with clients.
 - **Authorities and other parties** only where the law requires it, or with your consent.

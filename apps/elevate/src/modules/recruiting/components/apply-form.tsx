@@ -5,6 +5,8 @@ import { Markdown } from "@/components/markdown";
 import { TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { APPLICANT_NOTE } from "@/modules/demographics/constants";
+import { SelfIdFields } from "@/modules/demographics/components/self-id-fields";
 import { RESUME_MAX_BYTES } from "../constants";
 
 /** The public application form. The hidden "website" field is a honeypot: people never see or fill it. */
@@ -62,6 +64,16 @@ export function ApplyForm({ openingId, noticeTitle, noticeBody }: { openingId: s
         <Label htmlFor="ap-note">Anything you would like us to know (optional)</Label>
         <textarea id="ap-note" name="note" rows={4} maxLength={2000} className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
       </div>
+
+      <fieldset className="space-y-3 rounded-lg border p-3">
+        <legend className="px-1 text-sm font-semibold">About you (optional)</legend>
+        <p className="text-sm text-muted-foreground">{APPLICANT_NOTE}</p>
+        <SelfIdFields
+          idPrefix="ap"
+          withPronouns={false}
+          errors={{ gender: fieldError("gender"), genderOther: fieldError("genderOther"), religion: fieldError("religion"), religionOther: fieldError("religionOther") }}
+        />
+      </fieldset>
 
       {/* Honeypot: hidden from people and from assistive technology. Bots that fill every field are quietly ignored. */}
       <div aria-hidden="true" className="absolute left-[-10000px] h-0 w-0 overflow-hidden">

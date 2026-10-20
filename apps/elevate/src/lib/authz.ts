@@ -15,6 +15,7 @@ import { offersPermissions } from "@/modules/offers/permissions";
 import { onboardingPermissions } from "@/modules/onboarding/permissions";
 import { orgPermissions } from "@/modules/org/permissions";
 import { privacyPermissions } from "@/modules/privacy/permissions";
+import { demographicsPermissions } from "@/modules/demographics/permissions";
 import { peoplePermissions } from "@/modules/people/permissions";
 import { recruitingPermissions } from "@/modules/recruiting/permissions";
 import { reviewsPermissions } from "@/modules/reviews/permissions";
@@ -30,6 +31,7 @@ import type { PermissionRule, RoleSlug, Scope } from "./roles";
 
 export const PERMISSIONS = {
   ...peoplePermissions,
+  ...demographicsPermissions,
   ...orgPermissions,
   ...documentsPermissions,
   ...announcementsPermissions,
