@@ -33,9 +33,9 @@ const TYPES: Record<string, { category: DocumentCategory; icon: LucideIcon }> = 
   client_confidentiality: { category: "agreements", icon: Lock },
   resume: { category: "other", icon: FileUser },
   other_employee: { category: "other", icon: File },
-  policy: { category: "company", icon: ScrollText },
-  form: { category: "company", icon: ClipboardList },
-  other_company: { category: "company", icon: File },
+  company_policy: { category: "company", icon: ScrollText },
+  company_form: { category: "company", icon: ClipboardList },
+  company_other: { category: "company", icon: File },
 };
 
 export function typeStyle(slug: string): { category: DocumentCategory; icon: LucideIcon; className: string } {
@@ -43,3 +43,6 @@ export function typeStyle(slug: string): { category: DocumentCategory; icon: Luc
   const t = Object.hasOwn(TYPES, slug) ? TYPES[slug] : { category: "other" as const, icon: File };
   return { ...t, className: CATEGORY_STYLES[t.category] };
 }
+
+/** Every type slug that has its own style (a test checks that every type the database is seeded with is here). */
+export const KNOWN_TYPE_SLUGS = Object.keys(TYPES);
