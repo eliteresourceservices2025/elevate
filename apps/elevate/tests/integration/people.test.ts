@@ -238,17 +238,17 @@ describe("change requests", () => {
     const { user, id } = await linkedEmployee("contactreq@example.com");
     as(user);
     expect(await actions.requestContactChange({})).toMatchObject({ ok: false });
-    expect((await actions.requestContactChange({ mobile: "+63 917 123 4567", city: "Cebu" })).ok).toBe(true);
+    expect((await actions.requestContactChange({ mobile: "+63 917 123 4567", city: "City of Cebu" })).ok).toBe(true);
     const [req] = await rows<{ id: string; payload: Record<string, string> }>(sql`select id, payload from core.change_requests where employee_id = ${id}`);
-    expect(req.payload).toEqual({ mobile: "+63 917 123 4567", city: "Cebu" });
+    expect(req.payload).toEqual({ mobile: "+63 917 123 4567", city: "City of Cebu" });
 
     as(hr);
     expect((await actions.reviewChangeRequest({ requestId: req.id, decision: "approve" })).ok).toBe(true);
     const [e] = await rows<{ mobile: string; city: string }>(sql`select mobile, city from core.employees where id = ${id}`);
-    expect(e).toEqual({ mobile: "+63 917 123 4567", city: "Cebu" });
+    expect(e).toEqual({ mobile: "+63 917 123 4567", city: "City of Cebu" });
     const [h] = await rows<{ before: Record<string, unknown>; after: Record<string, unknown> }>(sql`select before, after from core.employment_history where employee_id = ${id} and event_type = 'profile_changed'`);
     expect(h.before).toEqual({ mobile: null, city: null });
-    expect(h.after).toEqual({ mobile: "+63 917 123 4567", city: "Cebu" });
+    expect(h.after).toEqual({ mobile: "+63 917 123 4567", city: "City of Cebu" });
   });
 
   it("emergency contacts replace the old list on approval", async () => {
@@ -270,7 +270,7 @@ describe("change requests", () => {
     const a = await linkedEmployee("cancel.a@example.com");
     const b = await linkedEmployee("cancel.b@example.com");
     as(a.user);
-    await actions.requestContactChange({ city: "Davao" });
+    await actions.requestContactChange({ city: "City of Davao" });
     const [req] = await rows<{ id: string }>(sql`select id from core.change_requests where employee_id = ${a.id}`);
     as(b.user);
     expect(await actions.cancelChangeRequest({ requestId: req.id })).toMatchObject({ ok: false });
