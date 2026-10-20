@@ -5,6 +5,7 @@ import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatDateOnly, formatInZone } fr
 import type { SensitiveField } from "../constants";
 import { SENSITIVE_LABELS, STATUS_LABELS } from "../constants";
 import Link from "next/link";
+import { formatAddress } from "../address-data";
 import { legalName } from "../format";
 import type { getProfile } from "../queries";
 import { RevealField } from "./reveal-field";
@@ -42,9 +43,8 @@ const sensitiveLabel = (f: SensitiveField) => SENSITIVE_LABELS[f]; // eslint-dis
 
 export function PersonalSection({ profile }: { profile: Profile }) {
   const { employee: e, access } = profile;
-  // A country on its own is not an address, so it is shown only together with a street, city, province or postal code.
-  const place = [e.addressLine, e.city, e.province, e.postalCode].filter(Boolean);
-  const address = place.length > 0 ? [...place, e.country].filter(Boolean).join(", ") : "";
+  // A country on its own is not an address, so formatAddress gives "" unless there is a street, city, province or postal code.
+  const address = formatAddress(e);
 
   return (
     <div className="space-y-6">
@@ -68,7 +68,7 @@ export function PersonalSection({ profile }: { profile: Profile }) {
           <summary className="cursor-pointer text-sm font-medium text-primary">Request a change to my contact details</summary>
           <div className="mt-3">
             <ContactChangeForm
-              current={{ mobile: e.mobile ?? "", personalEmail: e.personalEmail ?? "", addressLine: e.addressLine ?? "", city: e.city ?? "", province: e.province ?? "", postalCode: e.postalCode ?? "" }}
+              current={{ mobile: e.mobile ?? "", personalEmail: e.personalEmail ?? "", addressLine: e.addressLine ?? "", city: e.city ?? "", province: e.province ?? "", postalCode: e.postalCode ?? "", country: e.country }}
             />
           </div>
         </details>

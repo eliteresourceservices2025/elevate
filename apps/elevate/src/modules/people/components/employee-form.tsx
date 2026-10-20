@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import { toast } from "sonner";
 import { FormSection, SelectField, TextField } from "@/components/form-fields";
@@ -11,7 +11,9 @@ import { Button } from "@/components/ui/button";
 import { useUnsavedChanges } from "@/components/unsaved-changes";
 import { createEmployee, updateEmployee } from "../actions";
 import { CIVIL_STATUSES, EMPLOYEE_STATUSES, WORKER_TYPES, statusLabel } from "../constants";
-import { createEmployeeSchema, employeeFieldsSchema, type EmployeeFieldsInput } from "../validators";
+import { savedAddressOf } from "../address-data";
+import { createEmployeeFormSchema, employeeFieldsSchemaFor, type EmployeeFieldsInput } from "../validators";
+import { AddressFields, type AddressValue } from "./address-fields";
 
 type Options = {
   positions: { id: string; title: string }[];
@@ -31,17 +33,25 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace("_", "
 export function EmployeeForm(props: Props) {
   const router = useRouter();
   const creating = props.mode === "create";
+  // An address saved before the country lists existed keeps saving as it is until someone changes it.
+  const resolver = useMemo(
+    () => zodResolver(creating ? createEmployeeFormSchema(savedAddressOf(props.defaults)) : employeeFieldsSchemaFor(savedAddressOf(props.defaults))) as unknown as Resolver<FormValues>,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the saved address is read once, when the form opens
+    [],
+  );
   const {
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<FormValues>({
-    resolver: zodResolver(creating ? createEmployeeSchema : employeeFieldsSchema) as unknown as Resolver<FormValues>,
+    resolver,
     defaultValues: { status: "onboarding", workerType: "contractor", country: "PH", ...props.defaults },
   });
   useUnsavedChanges(isDirty && !isSubmitting);
   const status = useWatch({ control, name: "status" });
+  const [addressLine, city, province, postalCode, country] = useWatch({ control, name: ["addressLine", "city", "province", "postalCode", "country"] });
   // Shown after the server says someone with the same name exists
   const [maybeDuplicate, setMaybeDuplicate] = useState(false);
 
@@ -86,11 +96,14 @@ export function EmployeeForm(props: Props) {
         <TextField id="workEmail" label="Work email" type="email" autoComplete="off" error={errors.workEmail?.message} {...register("workEmail")} />
         <TextField id="personalEmail" label="Personal email" type="email" autoComplete="off" error={errors.personalEmail?.message} {...register("personalEmail")} />
         <TextField id="mobile" label="Mobile" type="tel" autoComplete="off" error={errors.mobile?.message} {...register("mobile")} />
-        <TextField id="addressLine" label="Address" error={errors.addressLine?.message} {...register("addressLine")} />
-        <TextField id="city" label="City" error={errors.city?.message} {...register("city")} />
-        <TextField id="province" label="Province" error={errors.province?.message} {...register("province")} />
-        <TextField id="postalCode" label="Postal code" error={errors.postalCode?.message} {...register("postalCode")} />
-        <TextField id="country" label="Country code" hint="Two letters, for example PH." maxLength={2} error={errors.country?.message} {...register("country")} />
+        <AddressFields
+          idPrefix="address"
+          value={{ addressLine, city, province, postalCode, country } as AddressValue}
+          onChange={(patch) => {
+            for (const [k, v] of Object.entries(patch)) setValue(k as "city", v, { shouldDirty: true, shouldValidate: false });
+          }}
+          errors={{ addressLine: errors.addressLine?.message, city: errors.city?.message, province: errors.province?.message, postalCode: errors.postalCode?.message, country: errors.country?.message }}
+        />
       </FormSection>
 
       <FormSection title="Employment">

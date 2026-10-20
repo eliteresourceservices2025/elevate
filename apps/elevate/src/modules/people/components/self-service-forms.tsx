@@ -4,6 +4,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 import { useFieldArray, useForm, useWatch, type Resolver } from "react-hook-form";
 import { toast } from "sonner";
 import { TextField } from "@/components/form-fields";
@@ -11,12 +12,14 @@ import { Button } from "@/components/ui/button";
 import { requestBankChange, requestContactChange, requestEmergencyContactsChange } from "../actions";
 import {
   bankChangeSchema,
-  contactChangeSchema,
+  contactChangeSchemaFor,
   emergencyContactsChangeSchema,
   type BankChangeInput,
   type ContactChangeInput,
   type EmergencyContactsInput,
 } from "../validators";
+import { savedAddressOf } from "../address-data";
+import { AddressFields, type AddressValue } from "./address-fields";
 
 // Self-service forms. Nothing is saved directly: each one sends a request that HR approves.
 
@@ -35,14 +38,20 @@ function useSubmitted() {
 
 export function ContactChangeForm({ current }: { current: ContactChangeInput }) {
   const done = useSubmitted();
+  // What is already saved keeps saving as it is; only a changed address must fit the country lists.
+  const resolver = useMemo(
+    () => zodResolver(contactChangeSchemaFor(savedAddressOf(current))) as unknown as Resolver<ContactChangeInput>,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the saved address is read once, when the form opens
+    [],
+  );
   const {
     register,
     handleSubmit,
+    control,
+    setValue,
     formState: { errors, isSubmitting },
-  } = useForm<ContactChangeInput>({
-    resolver: zodResolver(contactChangeSchema) as unknown as Resolver<ContactChangeInput>,
-    defaultValues: current,
-  });
+  } = useForm<ContactChangeInput>({ resolver, defaultValues: { ...current, country: current.country || "PH" } });
+  const [addressLine, city, province, postalCode, country] = useWatch({ control, name: ["addressLine", "city", "province", "postalCode", "country"] });
 
   return (
     <form onSubmit={handleSubmit(async (v) => void done(await requestContactChange(v)))} className="space-y-4 rounded-xl border bg-card p-4" noValidate>
@@ -50,10 +59,14 @@ export function ContactChangeForm({ current }: { current: ContactChangeInput }) 
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField id="c-mobile" label="Mobile" type="tel" error={errors.mobile?.message} {...register("mobile")} />
         <TextField id="c-personalEmail" label="Personal email" type="email" error={errors.personalEmail?.message} {...register("personalEmail")} />
-        <TextField id="c-addressLine" label="Address" error={errors.addressLine?.message} {...register("addressLine")} />
-        <TextField id="c-city" label="City" error={errors.city?.message} {...register("city")} />
-        <TextField id="c-province" label="Province" error={errors.province?.message} {...register("province")} />
-        <TextField id="c-postalCode" label="Postal code" error={errors.postalCode?.message} {...register("postalCode")} />
+        <AddressFields
+          idPrefix="c"
+          value={{ addressLine, city, province, postalCode, country } as AddressValue}
+          onChange={(patch) => {
+            for (const [k, v] of Object.entries(patch)) setValue(k as "city", v, { shouldDirty: true });
+          }}
+          errors={{ addressLine: errors.addressLine?.message, city: errors.city?.message, province: errors.province?.message, postalCode: errors.postalCode?.message, country: errors.country?.message }}
+        />
       </div>
       {errors.root?.message ? <p role="alert" className="text-sm text-destructive">{errors.root.message}</p> : null}
       <Button type="submit" disabled={isSubmitting}>

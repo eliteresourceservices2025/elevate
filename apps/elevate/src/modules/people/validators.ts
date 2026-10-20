@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from "@/lib/pagination";
 import { isValidTimeZone } from "@/lib/time";
+import { addressIssues, type AddressParts, type LegacyAddress } from "./address-data";
 import {
   CIVIL_STATUSES,
   CUSTOM_FIELD_TYPES,
@@ -55,7 +56,17 @@ const address = {
   postalCode: text(12),
 };
 
-export const employeeFieldsSchema = z.object({
+/**
+ * Country-aware address rules (US state and ZIP, Philippine province, city and postal code). `legacy` is what the person
+ * already has saved: an unchanged old free-text value still saves. Without it the rules are strict, which is right for new people.
+ */
+function withAddressRules<S extends z.ZodType<AddressParts>>(schema: S, legacy?: LegacyAddress) {
+  return schema.superRefine((v, ctx) => {
+    for (const issue of addressIssues(v, legacy)) ctx.addIssue({ code: "custom", path: [issue.field], message: issue.message });
+  });
+}
+
+const employeeFieldsBase = z.object({
   legalFirstName: requiredText("a first name"),
   legalMiddleName: text(80),
   legalLastName: requiredText("a last name"),
@@ -74,25 +85,33 @@ export const employeeFieldsSchema = z.object({
   endDate: optionalDate,
 });
 
+export const employeeFieldsSchema = withAddressRules(employeeFieldsBase);
+/** Same form rules, letting the saved address through unchanged. */
+export const employeeFieldsSchemaFor = (legacy?: LegacyAddress) => withAddressRules(employeeFieldsBase, legacy);
+
 const separatedNeedsEndDate = (v: { status?: string; endDate?: string }) => v.status !== "separated" || Boolean(v.endDate);
 const endDateRule = { message: "Enter the last working day for a separated person", path: ["endDate"] };
 
 // Team and manager are optional at creation and go through the dated reporting rules.
-export const createEmployeeSchema = employeeFieldsSchema
-  .extend({
-    teamId: z.preprocess(blankToUndefined, uuid.optional()),
-    managerId: z.preprocess(blankToUndefined, uuid.optional()),
-    /** Ticked after the form said someone with the same name is already in the directory and this is truly a different person. */
-    confirmDifferentPerson: z.boolean().optional(),
-  })
-  .refine(separatedNeedsEndDate, endDateRule);
+const createEmployeeBase = employeeFieldsBase.extend({
+  teamId: z.preprocess(blankToUndefined, uuid.optional()),
+  managerId: z.preprocess(blankToUndefined, uuid.optional()),
+  /** Ticked after the form said someone with the same name is already in the directory and this is truly a different person. */
+  confirmDifferentPerson: z.boolean().optional(),
+});
+export const createEmployeeSchema = withAddressRules(createEmployeeBase).refine(separatedNeedsEndDate, endDateRule);
+/** For imports of existing records (TalentHR files): old addresses are free text, so the country lists are not enforced. */
+export const importedEmployeeSchema = createEmployeeBase.refine(separatedNeedsEndDate, endDateRule);
+export const createEmployeeFormSchema = (legacy?: LegacyAddress) =>
+  withAddressRules(createEmployeeBase, legacy).refine(separatedNeedsEndDate, endDateRule);
 
 export const mergeSchema = z.object({ keepId: uuid, duplicateId: uuid, adoptEmail: z.boolean().default(false) });
 export const relinkSchema = z.object({ userId: uuid, employeeId: uuid, replaceExisting: z.boolean().default(false) });
 
-export const updateEmployeeSchema = employeeFieldsSchema
-  .extend({ employeeId: uuid })
-  .refine(separatedNeedsEndDate, endDateRule);
+const updateEmployeeBase = employeeFieldsBase.extend({ employeeId: uuid });
+export const updateEmployeeSchema = withAddressRules(updateEmployeeBase).refine(separatedNeedsEndDate, endDateRule);
+export const updateEmployeeSchemaFor = (legacy?: LegacyAddress) =>
+  withAddressRules(updateEmployeeBase, legacy).refine(separatedNeedsEndDate, endDateRule);
 
 export const archiveEmployeeSchema = z.object({ employeeId: uuid, restore: z.boolean().default(false) });
 
@@ -136,9 +155,11 @@ export const revealSensitiveSchema = z.object({ employeeId: uuid, field: z.enum(
 
 // --- Self-service change requests -------------------------------------------
 
-export const contactChangeSchema = z
-  .object({ mobile, personalEmail: optionalEmail, ...address, country: z.preprocess(blankToUndefined, countryCode.optional()) })
-  .refine((v) => Object.values(v).some((x) => x !== undefined), "Change at least one field");
+const contactChangeBase = z.object({ mobile, personalEmail: optionalEmail, ...address, country: z.preprocess(blankToUndefined, countryCode.optional()) });
+// A request may carry only some fields; the country then comes from `legacy` (the person's saved one).
+export const contactChangeSchemaFor = (legacy?: LegacyAddress) =>
+  withAddressRules(contactChangeBase, legacy).refine((v) => Object.values(v).some((x) => x !== undefined), "Change at least one field");
+export const contactChangeSchema = contactChangeSchemaFor();
 
 export const emergencyContactSchema = z.object({
   name: requiredText("a name"),
