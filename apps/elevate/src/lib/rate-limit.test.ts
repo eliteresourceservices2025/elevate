@@ -6,6 +6,7 @@ describe("when the rate limiter is missing or down", () => {
     expect(allowWhenLimiterUnavailable("clock", true)).toBe(true);
     expect(allowWhenLimiterUnavailable("presence", true)).toBe(true);
     expect(allowWhenLimiterUnavailable("clock", false)).toBe(true);
+    expect(allowWhenLimiterUnavailable("careersFeed", true)).toBe(true); // the public job list only repeats what the careers page shows
   });
 
   it("still refuses everything else in production (fail closed), and allows it in development", () => {

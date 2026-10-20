@@ -4,6 +4,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { Markdown } from "@/components/markdown";
 import { ApplyForm } from "@/modules/recruiting/components/apply-form";
 import { getPublicOpening, getPublicPrivacyNotice } from "@/modules/recruiting/queries";
+import { baseUrl, jobPostingJsonLd, safeJsonLd } from "@/modules/recruiting/public-feed";
 import { looksLikeId } from "@/modules/recruiting/slug";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,9 @@ export default async function CareerDetailPage({ params }: PageProps<"/careers/[
   const notice = await getPublicPrivacyNotice();
   return (
     <div className="space-y-8">
+      {/* Structured data for job search sites. The JSON is escaped so a description can never close the tag. */}
+      {/* eslint-disable-next-line react/no-danger -- JSON-LD must be raw JSON text; safeJsonLd escapes "<" and the line separators */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jobPostingJsonLd(opening, baseUrl(process.env.NEXT_PUBLIC_APP_URL))) }} />
       <div>
         <Link href="/careers" className="text-sm text-primary underline-offset-4 hover:underline">
           ← All positions

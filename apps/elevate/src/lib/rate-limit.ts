@@ -22,6 +22,8 @@ export const POLICIES = {
   presence: { requests: 60, window: "10 m" },
   /** Public applications, per address. */
   careers: { requests: 5, window: "1 h" },
+  /** The public job feed read by the company's website, per address (the cache in front of it answers most requests). */
+  careersFeed: { requests: 120, window: "10 m" },
   /** The public "verify a document" check, per address. */
   verify: { requests: 30, window: "10 m" },
   /** An outside signer asking for an emailed code (per link), checking a code (per link), and everything else on their pages (per address). */
@@ -40,9 +42,10 @@ export const POLICIES = {
 
 /**
  * Attendance must never depend on the rate limiter: if the limiter is not configured or cannot be reached, the clock and the
- * "still here" ping keep working (the clock has its own state checks and lock). Login, uploads and the rest still fail closed.
+ * "still here" ping keep working (the clock has its own state checks and lock). The public job feed only shows what the public careers page
+ * already shows, so it stays up too. Login, uploads and the rest still fail closed.
  */
-const FAIL_OPEN: ReadonlySet<keyof typeof POLICIES> = new Set(["clock", "presence"]);
+const FAIL_OPEN: ReadonlySet<keyof typeof POLICIES> = new Set(["clock", "presence", "careersFeed"]);
 
 /** Whether a request may go ahead when the limiter is missing or down. */
 export function allowWhenLimiterUnavailable(policy: keyof typeof POLICIES, production: boolean): boolean {
