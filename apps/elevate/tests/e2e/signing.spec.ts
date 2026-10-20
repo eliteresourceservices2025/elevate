@@ -138,6 +138,13 @@ test("HR sends a document, two people sign it (typed and drawn), it is sealed, a
   await tomPage.getByRole("button", { name: "Sign document" }).click();
   await expect(tomPage.getByText("Everyone has signed").first()).toBeVisible(slow);
 
+  // The signed copy is also filed in the signer's own Documents, as a verified Signed document
+  await tomPage.goto("/people/me?tab=documents");
+  const filed = tomPage.getByRole("row", { name: new RegExp(title) });
+  await expect(filed).toBeVisible(slow);
+  await expect(filed.getByText(/Signed document/).first()).toBeVisible();
+  await expect(filed.getByText("Verified")).toBeVisible();
+
   // HR sees it completed, with a sealed copy; the sealed file verifies publicly, a changed file does not
   await hrPage.goto(envelopeUrl);
   await expect(hrPage.getByText("Completed").first()).toBeVisible(slow);

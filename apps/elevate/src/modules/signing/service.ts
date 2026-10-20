@@ -8,6 +8,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { users } from "@/modules/core/schema";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { flushEmailQueue, queueEmails } from "@/modules/notifications/email-queue";
+import { fileSignedCopies } from "./filing";
 import { notify } from "@/modules/notifications/service";
 import { employees } from "@/modules/people/schema";
 import { computeEventHash, GENESIS_HASH, sha256Hex } from "./chain";
@@ -370,6 +371,8 @@ export async function sealEnvelope(envelopeId: string): Promise<boolean> {
   if (!done) await storage.remove(BUCKETS.signed, [path]).catch(() => undefined);
   // Outside signers get a link to read and download the signed copy
   if (done) await issueExternalLinks(signers.filter((x) => x.userId === null).map((x) => x.id), "completed").catch(() => undefined);
+  // The signed copy is also filed in the Documents of the signers who have an account (best effort: the sweep files it later if this fails)
+  if (done) await fileSignedCopies(envelopeId).catch((error: unknown) => console.error("filing the signed copy failed:", error instanceof Error ? error.name : "unknown error"));
   return done;
 }
 

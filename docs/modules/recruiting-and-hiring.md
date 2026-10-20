@@ -70,6 +70,9 @@
 
 Interview invitations (to the applicant and the interviewers' calendar emails), cancellations, rejections and "we received your application" are queued and then sent right away by `sendRecruitingEmailsNow()` (`recruiting/immediate.ts`), best effort after the transaction commits. If no sender is configured, a daily cap is used up or the send fails, they stay queued and the 30-minute jobs send them.
 
+## Signed documents filed in the signers' Documents
+
+When an envelope is sealed (and by the 30-minute sweep for older ones, 50 envelopes per run), `fileSignedCopies()` (`signing/filing.ts`) files a copy of the sealed PDF as a **Signed document** in the Documents of every signer who has an ELEVATE account and a people record (`fileSystemDocument()`, migration 0087; one row per signer in `docs.system_documents`). Outside signers (an applicant signing by emailed link) have no Documents and get nothing. A document that holds details typed while signing (bank details) is filed ONLY for the contractor who typed them, never for the countersigner; HR sees it through the person's Documents like any file. The copy is made in the employee bucket, never a pointer to the signing bucket (retention for a person's documents would delete the signed evidence).
 ## Offer letter design and completing an onboarding
 
 - An offer letter is drawn with the signing document design (`renderLetterheadPdf`, `signing/letterhead-pdf.tsx`): centered logo and title, watermark, one-inch margins, the ELITE footer. The template's first heading becomes the centered title (`offerLetterParts()` in `offers/merge.ts`), "Offer of Engagement" when a letter starts with text. `offer-pdf.tsx` still draws the certificate of engagement and the import reconciliation report.

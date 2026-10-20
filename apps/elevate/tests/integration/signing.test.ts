@@ -21,6 +21,7 @@ const actions = await import("@/modules/signing/actions");
 const queries = await import("@/modules/signing/queries");
 const service = await import("@/modules/signing/service");
 const jobs = await import("@/modules/signing/jobs");
+const docActions = await import("@/modules/documents/actions");
 const { sha256Hex } = await import("@/modules/signing/chain");
 
 type TestUser = { id: string; email: string; roles: RoleSlug[] };
@@ -568,6 +569,81 @@ describe("details typed in while signing", () => {
     expect((await signTyped(ben, id)).ok).toBe(true);
     const [env] = await rows<{ status: string }>(sql`select status from docs.esign_envelopes where id = ${id}`);
     expect(env.status).toBe("completed");
+  });
+});
+
+describe("signed copies filed in the signers' Documents", () => {
+  const filed = (envelopeId: string) =>
+    rows<{ employee_id: string; user_id: string; title: string; slug: string; verified: boolean; storage_path: string; sha256: string }>(sql`
+      select sd.employee_id, e.user_id, d.title, t.slug, d.verified_at is not null as verified, d.storage_path, d.sha256
+      from docs.system_documents sd
+      join docs.esign_signers s on s.id = sd.source_id
+      join docs.documents d on d.id = sd.document_id join docs.document_types t on t.id = d.type_id
+      join core.employees e on e.id = sd.employee_id
+      where sd.source_kind = 'esign_signer' and s.envelope_id = ${envelopeId}`);
+
+  it("files the sealed copy for every signer with an account: the same bytes, verified, as a signed document", async () => {
+    const title = uniq("Filed agreement ");
+    const id = await send({ title });
+    await open(ana, id);
+    expect((await signTyped(ana, id)).ok).toBe(true);
+    expect(await filed(id)).toHaveLength(0); // not sealed yet: nothing to file
+    await open(ben, id);
+    expect((await signTyped(ben, id, { typedText: "Ben Cruz" })).ok).toBe(true);
+
+    const [env] = await rows<{ sealed_sha256: string }>(sql`select sealed_sha256 from docs.esign_envelopes where id = ${id}`);
+    const docs = await filed(id);
+    expect(docs.map((d) => d.user_id).sort()).toEqual([ana.id, ben.id].sort());
+    for (const d of docs) {
+      expect(d).toMatchObject({ title, slug: "signed_document", verified: true, sha256: env.sealed_sha256 });
+      expect(d.storage_path.startsWith(`${d.employee_id}/`)).toBe(true); // a copy in the person's own folder of the employee bucket
+      expect(fake.objects.get(fake.key("employee-docs", d.storage_path))).toBeDefined();
+    }
+    // Someone who did not sign has none
+    expect((await rows(sql`select 1 from docs.documents where employee_id in (select id from core.employees where user_id = ${outsider.id}) and title = ${title}`))).toHaveLength(0);
+  });
+
+  it("files a document with typed-in personal details only for the contractor who typed them, never for the countersigner", async () => {
+    const title = uniq("Restricted agreement ");
+    const { id } = await service.createEnvelope(
+      { id: hr.id, email: hr.email, roles: hr.roles },
+      { title, pdf: await samplePdf(2), fileName: "a.pdf", signers: [{ userId: ana.id, role: "Contractor", position: 1, fillsDetails: true }, { userId: ben.id, role: "ERS representative", position: 2 }], order: "sequential", expiryDays: 14, send: true, ip: null, signeeDetails: ["bank_name", "account_number", "account_name", "phone_number"] },
+    );
+    await open(ana, id);
+    expect((await signTyped(ana, id, { details: { bank_name: "BDO", account_number: "0012 3456 7890", account_name: "Ana Reyes", phone_number: "+63 917 123 4567" } })).ok).toBe(true);
+    await open(ben, id);
+    expect((await signTyped(ben, id, { typedText: "Ben Cruz" })).ok).toBe(true);
+    const docs = await filed(id);
+    expect(docs.map((d) => d.user_id)).toEqual([ana.id]);
+  });
+
+  it("catches up envelopes completed before filing existed, a second sweep adds nothing, and the person can open their own copy", async () => {
+    const title = uniq("Older agreement ");
+    const id = await send({ title, signers: [ana] });
+    await open(ana, id);
+    expect((await signTyped(ana, id)).ok).toBe(true);
+    // As if it had been completed before this existed: remove the filed copy
+    const first = await filed(id);
+    expect(first).toHaveLength(1);
+    await db.execute(sql`delete from docs.system_documents where document_id in (select d.id from docs.documents d where d.storage_path = ${first[0].storage_path})`);
+    await db.execute(sql`delete from docs.documents where storage_path = ${first[0].storage_path}`);
+    expect(await filed(id)).toHaveLength(0);
+
+    const sweep = await jobs.runEsignSealSweep();
+    expect(sweep.filed).toBeGreaterThanOrEqual(1);
+    const again = await filed(id);
+    expect(again).toHaveLength(1);
+    expect((await jobs.runEsignSealSweep()).filed).toBe(0);
+    expect(await filed(id)).toHaveLength(1);
+
+    // The person can download their own copy (a 60-second link), HR can, an employee who did not sign cannot
+    const docId = (await rows<{ id: string }>(sql`select id from docs.documents where storage_path = ${again[0].storage_path}`))[0].id;
+    as(ana);
+    expect((await docActions.getDownloadUrl({ documentId: docId })).ok).toBe(true);
+    as(hr);
+    expect((await docActions.getDownloadUrl({ documentId: docId })).ok).toBe(true);
+    as(outsider);
+    expect((await docActions.getDownloadUrl({ documentId: docId })).ok).toBe(false);
   });
 });
 

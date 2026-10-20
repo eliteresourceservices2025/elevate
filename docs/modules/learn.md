@@ -47,3 +47,7 @@
 ## New hires who have not signed in yet
 
 Training status lists people in onboarding even before they have an ELEVATE account (state "Not signed in yet"). An assignment needs an account, so HR can **queue** the training (`learn.pending_assignments`, migration 0083, ELEVATE only, no Learn grant). The nightly `runLearnAssign` turns a queued row into a real assignment (reason `new_hire` or `manual` by the start date, notice sent) once the person record is linked to an account, then deletes the row; rows for people who left are dropped. Automatic assignment already includes people in onboarding, so someone who signs in later is assigned the night after their first sign-in with no queue needed.
+
+## A copy of each certificate in the person's Documents
+
+`runLearnSync` also files a copy of every recorded certificate's PDF in the person's Documents as a **Training certificate** (`fileSystemDocument()` in `documents/service.ts`; migration 0087). It runs for every recorded certificate with no copy yet, so it also catches up certificates recorded before this existed (50 per run). The copy is verified (the person cannot archive it; HR can), stored in the employee bucket under the person's own folder, and listed in `docs.system_documents` (one row per source and person, so a repeat files nothing). A revoked certificate's copy is archived (the file is kept). A person at the 100-document limit gets none and the run goes on.

@@ -6,6 +6,7 @@ import { notify } from "@/modules/notifications/service";
 import { reminderDue } from "./constants";
 import { esignEnvelopes, esignSigners } from "./schema";
 import { issueExternalLinks } from "./external-mail";
+import { fileSignedCopies } from "./filing";
 import { appendEvent, endEnvelope, sealEnvelope } from "./service";
 import { queueEmails } from "@/modules/notifications/email-queue";
 
@@ -76,6 +77,13 @@ export async function runEsignSealSweep() {
       console.error("sealing failed:", error instanceof Error ? error.name : "unknown error");
     }
   }
-  return { sealed, failed };
+  // Copies of signed documents that were never filed in the signers' Documents (signed before that existed, or filing failed): a few per run
+  let filed = 0;
+  try {
+    filed = (await fileSignedCopies()).filed;
+  } catch (error) {
+    console.error("filing signed copies failed:", error instanceof Error ? error.name : "unknown error");
+  }
+  return { sealed, failed, filed };
 }
 
