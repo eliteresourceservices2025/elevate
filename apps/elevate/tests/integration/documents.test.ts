@@ -325,6 +325,56 @@ describe("HR overview", () => {
   });
 });
 
+describe("HR all files", () => {
+  it("lists every person's documents with the person, type and folder; filters by type and search; pages; HR only", async () => {
+    const tag = uniq("AllFiles");
+    const a = await person(`${tag}A`);
+    const b = await person(`${tag}B`);
+    const x = await upload({ actor: hr, employeeId: a.id, slug: "contract" });
+    const y = await upload({ actor: hr, employeeId: a.id, slug: "government_id", expiresOn: addDays(today, 365) });
+    const z = await upload({ actor: hr, employeeId: b.id, slug: "contract" });
+    const gone = await makeEmployee(`${tag}Gone`, { status: "separated" });
+    await upload({ actor: hr, employeeId: gone, slug: "contract" });
+    const ids = (r: Awaited<typeof x>) => (r.ticket.ok ? r.ticket.data.documentId : "");
+
+    as(hr);
+    const all = await docQueries.listAllEmployeeDocuments({ q: tag, page: 1, pageSize: 25 });
+    expect(all.rows.map((r) => r.id).sort()).toEqual([ids(x), ids(y), ids(z)].sort()); // not the person who left
+    expect(all.rows.find((r) => r.id === ids(y))).toMatchObject({ typeSlug: "government_id", employeeId: a.id });
+    expect(all.info.total).toBe(3);
+
+    const contracts = await docQueries.listAllEmployeeDocuments({ q: tag, typeSlug: "contract", page: 1, pageSize: 25 });
+    expect(contracts.rows.map((r) => r.id).sort()).toEqual([ids(x), ids(z)].sort());
+    expect(contracts.types.some((t) => t.slug === "contract")).toBe(true);
+
+    // the folder of a document shows, and a removed folder does not
+    as(a.user);
+    const folder = await docs.createFolder({ employeeId: a.id, name: "Mine" });
+    expect(folder.ok).toBe(true);
+    await docs.moveDocument({ documentId: ids(x), folderId: folder.ok ? (folder.data as { id: string }).id : null });
+    as(hr);
+    expect((await docQueries.listAllEmployeeDocuments({ q: tag, typeSlug: "contract", page: 1, pageSize: 25 })).rows.find((r) => r.id === ids(x))?.folderName).toBe("Mine");
+
+    const page1 = await docQueries.listAllEmployeeDocuments({ q: tag, page: 1, pageSize: 2 });
+    const page2 = await docQueries.listAllEmployeeDocuments({ q: tag, page: 2, pageSize: 2 });
+    expect(page1.rows).toHaveLength(2);
+    expect(page2.rows).toHaveLength(1);
+    expect(new Set([...page1.rows, ...page2.rows].map((r) => r.id)).size).toBe(3);
+
+    // archived documents are left out; a search with wildcard characters finds nothing rather than everything
+    as(hr);
+    await docs.archiveDocument({ documentId: ids(z) });
+    expect((await docQueries.listAllEmployeeDocuments({ q: tag, page: 1, pageSize: 25 })).info.total).toBe(2);
+    expect((await docQueries.listAllEmployeeDocuments({ q: "%", page: 1, pageSize: 25 })).info.total).toBe(0);
+
+    // only HR and Super Admin
+    as(a.user);
+    await expect(docQueries.listAllEmployeeDocuments({ page: 1, pageSize: 25 })).rejects.toThrow();
+    as(lead);
+    await expect(docQueries.listAllEmployeeDocuments({ page: 1, pageSize: 25 })).rejects.toThrow();
+  });
+});
+
 describe("expiry reminders", () => {
   async function docFor(employeeId: string, expiresOn: string) {
     const r = await upload({ actor: hr, employeeId, slug: "hipaa_training", expiresOn: addDays(today, 365) });

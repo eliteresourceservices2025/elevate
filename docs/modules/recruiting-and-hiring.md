@@ -69,3 +69,12 @@
 ## Emails go out at once
 
 Interview invitations (to the applicant and the interviewers' calendar emails), cancellations, rejections and "we received your application" are queued and then sent right away by `sendRecruitingEmailsNow()` (`recruiting/immediate.ts`), best effort after the transaction commits. If no sender is configured, a daily cap is used up or the send fails, they stay queued and the 30-minute jobs send them.
+
+## Offer letter design and completing an onboarding
+
+- An offer letter is drawn with the signing document design (`renderLetterheadPdf`, `signing/letterhead-pdf.tsx`): centered logo and title, watermark, one-inch margins, the ELITE footer. The template's first heading becomes the centered title (`offerLetterParts()` in `offers/merge.ts`), "Offer of Engagement" when a letter starts with text. `offer-pdf.tsx` still draws the certificate of engagement and the import reconciliation report.
+- HR and Super Admin can "Complete anyway" with a reason when required tasks are open (`completeOnboarding` with `overrideReason`): the open tasks are closed as skipped with the reason, the person becomes active, and the audit entry keeps the reason and the titles that were open. They can also tick a task ELEVATE would tick itself (a policy, documents, training) by hand with a reason (`completeTask`, audited with `byHr`).
+
+## Documents list: types, filters and All files
+
+Each document type has a category (identity and checks, training, agreements, company, other) with its own colour and an icon per type (`documents/type-style.ts`, a type nobody planned for falls back to "Other"); the list shows a Type badge column, type filter chips with counts, a search box and Group by type or folder (`document-filters.tsx`, used by the person's tab and the Company tab). HR and Super Admin also have an **All files** tab on `/documents` (`listAllEmployeeDocuments`, `documents.view_overview`): every active employee document, paged, filtered by search and type; downloads stay on the person's own page (signed 60-second links, audited).
