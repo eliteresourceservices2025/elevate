@@ -9,10 +9,12 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatDateOnly, formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import { DocumentList, ExpiryBadge } from "@/modules/documents/components/document-list";
+import { CompanyDocuments } from "@/modules/documents/components/company-documents";
+import { ExpiryBadge } from "@/modules/documents/components/document-list";
+import { TypeBadge } from "@/modules/documents/components/type-badge";
 import { NewTypeForm, TypeRow } from "@/modules/documents/components/type-admin";
 import { UploadForm } from "@/modules/documents/components/upload-form";
-import { getDocumentOverview, getUploadOptions, listCompanyDocuments, listDocumentTypes } from "@/modules/documents/queries";
+import { getDocumentOverview, getUploadOptions, listAllEmployeeDocuments, listCompanyDocuments, listDocumentTypes } from "@/modules/documents/queries";
 
 export const metadata: Metadata = { title: "Documents" };
 
@@ -20,6 +22,7 @@ const HR_TABS = [
   { key: "attention", label: "Expiring and expired" },
   { key: "missing", label: "Missing" },
   { key: "verify", label: "To verify" },
+  { key: "files", label: "All files" },
   { key: "company", label: "Company documents" },
   { key: "types", label: "Types" },
 ] as const;
@@ -45,6 +48,9 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
   const attention = overview ? paginate(overview.attention, paging.page, paging.pageSize) : null;
   const missing = overview ? paginate(overview.missing, paging.page, paging.pageSize) : null;
   const unverified = overview ? paginate(overview.unverified, paging.page, paging.pageSize) : null;
+  const one = (v: string | string[] | undefined) => (typeof v === "string" && v !== "" ? v : undefined);
+  const filesQuery = { q: one(sp.q), type: one(sp.type) };
+  const files = isHr && tab === "files" ? await orNotFound(listAllEmployeeDocuments({ q: filesQuery.q, typeSlug: filesQuery.type, page: paging.page, pageSize: paging.pageSize })) : null;
   const company = tab === "company" ? await listCompanyDocuments() : null;
   const companyUpload = tab === "company" && can(user, "documents.manage_company") ? await getUploadOptions("company") : null;
   const types = isHr && tab === "types" ? await orNotFound(listDocumentTypes()) : null;
@@ -176,9 +182,80 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
         )
       ) : null}
 
+      {files ? (
+        <div className="space-y-4">
+          <form method="get" action="/documents" className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="tab" value="files" />
+            <div className="space-y-1">
+              <label htmlFor="files-q" className="block text-xs">
+                Search by person, title or file name
+              </label>
+              <input id="files-q" name="q" defaultValue={filesQuery.q ?? ""} maxLength={80} className="h-8 w-64 rounded-lg border border-input bg-transparent px-2.5 text-sm" />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="files-type" className="block text-xs">
+                Type
+              </label>
+              <select id="files-type" name="type" defaultValue={filesQuery.type ?? ""} className="h-8 w-56 rounded-lg border border-input bg-transparent px-2 text-sm">
+                <option value="">All types</option>
+                {files.types.map((t) => (
+                  <option key={t.slug} value={t.slug}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button type="submit" className="h-8 rounded-lg border bg-card px-3 text-sm shadow-sm hover:bg-secondary/60">
+              Filter
+            </button>
+          </form>
+          {files.rows.length === 0 ? (
+            <p className="text-muted-foreground">No document matches.</p>
+          ) : (
+            <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Person</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Document</TableHead>
+                    <TableHead>Folder</TableHead>
+                    <TableHead>Expiry</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {files.rows.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>
+                        <PersonLink id={r.employeeId} name={r.employeeName} number={r.employeeNumber} />
+                      </TableCell>
+                      <TableCell>
+                        <TypeBadge slug={r.typeSlug} name={r.typeName} />
+                      </TableCell>
+                      <TableCell>
+                        {r.title}
+                        <div className="text-xs text-muted-foreground">{r.fileName}</div>
+                      </TableCell>
+                      <TableCell>{r.folderName ?? <span className="text-muted-foreground">No folder</span>}</TableCell>
+                      <TableCell>
+                        <ExpiryBadge status={r.expiry} expiresOn={r.expiresOn} />
+                      </TableCell>
+                      <TableCell>{r.verified ? <Badge variant="secondary">Verified</Badge> : <Badge variant="outline">Not verified</Badge>}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          <PagerLinks info={files.info} basePath="/documents" query={{ tab: "files", q: filesQuery.q, type: filesQuery.type }} label="documents" />
+          <p className="text-xs text-muted-foreground">Open a person to download, verify or archive their files.</p>
+        </div>
+      ) : null}
+
       {company ? (
         <div className="space-y-6">
-          <DocumentList rows={company} viewerIsHr={can(user, "documents.manage_company")} showAudience={can(user, "documents.manage_company")} emptyText="No company documents yet." />
+          <CompanyDocuments rows={company} viewerIsHr={can(user, "documents.manage_company")} showAudience={can(user, "documents.manage_company")} />
           {companyUpload ? (
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">Add a company document</h2>

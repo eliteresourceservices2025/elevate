@@ -11,19 +11,69 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { cancelOffboarding, completeOffboarding, completeOnboarding, issueCertificate, removeAccessNow, startOffboarding, startOnboarding, submitExitInterview } from "../actions";
-import { useFormDialog } from "@/components/form-dialog";
+import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { PeoplePicker } from "./people-picker";
 import { LEAVING_LABELS, LEAVING_REASONS, type LeavingReason } from "../constants";
 
-export function CompleteOnboardingButton({ caseId, ready }: { caseId: string; ready: boolean }) {
+export function CompleteOnboardingButton({ caseId, ready, openTasks = [] }: { caseId: string; ready: boolean; openTasks?: string[] }) {
   const { run, pending } = useRun();
   return (
-    <div className="space-y-1">
+    <div className="flex flex-wrap items-center gap-3">
       <Button disabled={pending || !ready} onClick={() => run(() => completeOnboarding({ caseId }), "Onboarding complete. The person is now active.")}>
         Complete onboarding
       </Button>
-      {ready ? null : <p className="text-xs text-muted-foreground">Every required task has to be done first.</p>}
+      {ready ? null : (
+        <>
+          <FormDialog
+            label="Complete anyway"
+            variant="outline"
+            title="Complete anyway"
+            description="Use this when a task was forgotten or was done outside ELEVATE. The person becomes Active, the tasks still open are closed as skipped with your reason, and it is recorded."
+          >
+            <CompleteAnywayForm caseId={caseId} openTasks={openTasks} />
+          </FormDialog>
+          <p className="text-xs text-muted-foreground">
+            {openTasks.length} required {openTasks.length === 1 ? "task is" : "tasks are"} still open.
+          </p>
+        </>
+      )}
     </div>
+  );
+}
+
+function CompleteAnywayForm({ caseId, openTasks }: { caseId: string; openTasks: string[] }) {
+  const { run, pending, router } = useRun();
+  const dialog = useFormDialog();
+  const [reason, setReason] = useState("");
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => completeOnboarding({ caseId, overrideReason: reason }), "Onboarding complete. The person is now active.", () => {
+          dialog?.close(true);
+          router.refresh();
+        });
+      }}
+    >
+      {openTasks.length > 0 ? (
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Still open (these will be closed as skipped):</p>
+          <ul className="list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
+            {openTasks.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="space-y-1">
+        <Label htmlFor="ca-reason">Why are you completing it?</Label>
+        <Textarea id="ca-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={3} required />
+      </div>
+      <Button type="submit" disabled={pending || reason.trim().length < 5}>
+        Complete onboarding
+      </Button>
+    </form>
   );
 }
 

@@ -18,10 +18,10 @@ import { ensureInvitation } from "@/modules/settings/invite";
 import { issueExternalLinks } from "@/modules/signing/external-mail";
 import { createEnvelope, sendDraft, voidEnvelopeTx } from "@/modules/signing/service";
 import { esignSigners } from "@/modules/signing/schema";
-import { templateProblem } from "./merge";
+import { offerLetterParts, templateProblem } from "./merge";
 import { buildLetter, latestSigned, loadApplicant, loadTemplate, offerById, offerValues, offersFor } from "./service";
 import { offerTemplates, offers } from "./schema";
-import { renderOfferPdf } from "./offer-pdf";
+import { renderLetterheadPdf } from "@/modules/signing/letterhead-pdf";
 import { hireSchema, makeOfferSchema, offerIdSchema, offerTemplateSchema, previewSchema, templateIdSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
@@ -119,7 +119,9 @@ export async function makeOffer(input: unknown): Promise<ActionResult<{ offerId:
 
     const letter = buildLetter(template.body, offerValues(applicant.name, v));
     if (!letter.ok) return fail(letter.error);
-    const pdf = await renderOfferPdf({ title: `Offer: ${v.roleTitle}`, blocks: letter.blocks, footer: "Elite Resource Services" });
+    // The same design as the signing documents: centered logo and title, watermark, one-inch margins, the ELITE footer.
+    const parts = offerLetterParts(letter.blocks);
+    const pdf = await renderLetterheadPdf({ title: parts.title, blocks: parts.body });
 
     const signers = [{ external: { name: applicant.name, email: applicant.email }, role: "Applicant" }, ...(v.counterSignerUserId ? [{ userId: v.counterSignerUserId, role: "ERS representative" }] : [])];
     const created = await createEnvelope(actor, { title: `Offer: ${v.roleTitle}`, pdf, fileName: "offer.pdf", signers, order: "sequential", expiryDays: v.expiryDays, send: v.send, ip: await ipOf() });
