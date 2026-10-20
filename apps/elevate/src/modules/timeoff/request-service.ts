@@ -14,12 +14,12 @@ import { holidayCalendarsFor, loadLedger, lockEmployeeLedger } from "./service";
 type Executor = Pick<typeof db, "execute" | "insert" | "select" | "update">;
 export type RequestRow = typeof leaveRequests.$inferSelect;
 
-/** Holidays that apply to a person inside a date range: the Philippines plus their clients' calendars (verified or not). */
+/** Holidays that apply to a person inside a date range: the Philippines plus their clients' calendars. Only CHECKED days count: a day HR has not ticked "verified" is ignored until then. */
 export async function holidaysInRange(executor: Executor, employeeId: string, start: string, end: string): Promise<{ date: string; name: string; calendar: string }[]> {
   const calendars = await holidayCalendarsFor(executor, employeeId);
   const rows = (await executor.execute(sql`
     select date::text as date, name, calendar from time.holidays
-    where archived_at is null and date between ${start}::date and ${end}::date
+    where archived_at is null and verified and date between ${start}::date and ${end}::date
       and calendar in (${sql.join(calendars.map((c) => sql`${c}`), sql`, `)})
     order by date, calendar`)) as unknown as { date: string; name: string; calendar: string }[];
   return rows;

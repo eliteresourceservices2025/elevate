@@ -396,6 +396,30 @@ describe("holiday import from Nager.Date", () => {
   });
 });
 
+describe("only checked holidays count", () => {
+  it("ignores an unchecked day in every reader until HR ticks it", async () => {
+    const date = "2043-03-01";
+    await db.execute(sql`delete from time.holidays where date = ${date}`);
+    await db.execute(sql`insert into time.holidays (calendar, date, name, kind, verified) values ('PH', ${date}, ${uniq("Unchecked ")}, 'other', false)`);
+    const p = await person("Holiday");
+    const { historicalHolidayDatesFor } = await import("@/modules/timeoff/service");
+    const { holidaysInRange } = await import("@/modules/timeoff/request-service");
+
+    expect([...(await historicalHolidayDatesFor(db, p.employeeId, date, date))]).toEqual([]);
+    expect(await holidaysInRange(db, p.employeeId, date, date)).toEqual([]);
+    as(p.user);
+    const before = await db.execute(sql`select 1 from time.holidays where date = ${date} and archived_at is null and verified`);
+    expect(before).toHaveLength(0);
+    // The Holidays tab still lists it, with the Verify badge, so HR can find and check it.
+    expect((await queries.getHolidays(2043)).rows.some((h) => h.date === date && !h.verified)).toBe(true);
+
+    await db.execute(sql`update time.holidays set verified = true where date = ${date}`);
+    expect([...(await historicalHolidayDatesFor(db, p.employeeId, date, date))]).toEqual([date]);
+    expect((await holidaysInRange(db, p.employeeId, date, date)).map((h) => h.date)).toEqual([date]);
+    await db.execute(sql`delete from time.holidays where date = ${date}`);
+  });
+});
+
 describe("leave types", () => {
   it("starts with a prize day type and an unpaid type, and refuses duplicate names", async () => {
     as(hr);

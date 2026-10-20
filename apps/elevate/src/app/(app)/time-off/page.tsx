@@ -179,11 +179,11 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
           {holidays.canManage ? (
             <>
               <p className="text-sm text-muted-foreground">
-                The government proclaims Philippine holidays each year, so those dates start as &quot;Verify&quot;: check them against the official proclamation and add any that are missing.
+                The government proclaims Philippine holidays each year, so those dates start as &quot;Verify&quot;. A day only counts (no absence flag, not a leave day, shown on calendars) once you tick &quot;Mark checked&quot;: check each against the official proclamation and add any that are missing.
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 <ImportHolidaysButton year={year} />
-                <span className="text-sm text-muted-foreground">Adds public holidays from Nager.Date that are missing. Philippine ones start as &quot;Verify&quot;.</span>
+                <span className="text-sm text-muted-foreground">Adds public holidays from Nager.Date that are missing. Philippine ones start as &quot;Verify&quot; and do not count until you mark them checked.</span>
               </div>
               <NewHolidayForm defaultDate={`${year}-01-01`} />
             </>
