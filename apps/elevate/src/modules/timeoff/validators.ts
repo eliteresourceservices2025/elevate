@@ -53,3 +53,5 @@ export const holidaySchema = z.object({
 });
 export const updateHolidaySchema = holidaySchema.extend({ holidayId: uuid });
 export const archiveHolidaySchema = z.object({ holidayId: uuid });
+
+export const importHolidaysSchema = z.object({ year: z.number().int().min(2020, "Choose a year from 2020").max(2100, "Choose a year up to 2100") });

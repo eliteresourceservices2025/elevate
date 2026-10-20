@@ -6,8 +6,10 @@ export type JobInfo = { label: string; everyMinutes: number };
 
 const DAILY = 1440;
 const WEEKLY = 10_080;
+const MONTHLY = 43_200;
 
 export const JOBS: Record<string, JobInfo> = {
+  "holiday-sync": { label: "Public holiday import (Nager.Date)", everyMinutes: MONTHLY },
   "document-expiry-reminders": { label: "Document expiry reminders", everyMinutes: DAILY },
   "credential-reminders": { label: "Certificate expiry reminders", everyMinutes: DAILY },
   "anniversary-reminders": { label: "Work anniversary reminders", everyMinutes: DAILY },

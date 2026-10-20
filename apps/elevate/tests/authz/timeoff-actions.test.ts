@@ -36,6 +36,8 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "archiveLeaveType", call: () => actions.archiveLeaveType({ leaveTypeId: ID }), allowed: HR },
   { name: "createHoliday", call: () => actions.createHoliday(holiday), allowed: HR },
   { name: "updateHoliday", call: () => actions.updateHoliday({ ...holiday, holidayId: ID }), allowed: HR },
+  { name: "importHolidays", call: () => actions.importHolidays({ year: 2026 }), allowed: HR },
+  { name: "verifyAllHolidays", call: () => actions.verifyAllHolidays({ year: 2026 }), allowed: HR },
   { name: "archiveHoliday", call: () => actions.archiveHoliday({ holidayId: ID }), allowed: HR },
 ];
 

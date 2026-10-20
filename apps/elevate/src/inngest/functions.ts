@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { runLearnAssign, runLearnPurge, runLearnReminders, runLearnSync } from "@/modules/learn/jobs";
 import { runAnniversaryReminders } from "@/modules/people/anniversary-jobs";
 import { cleanupPendingUploads, runExpiryReminders } from "@/modules/documents/jobs";
-import { runLeaveExpiry } from "@/modules/timeoff/jobs";
+import { runHolidaySync, runLeaveExpiry } from "@/modules/timeoff/jobs";
 import { runLeaveRequestReminders } from "@/modules/timeoff/request-jobs";
 import { runDailyDigest } from "@/modules/notifications/digest";
 import { flushEmailQueue } from "@/modules/notifications/email-queue";
@@ -113,6 +113,12 @@ export const emailSender = inngest.createFunction(
 export const leaveExpiry = inngest.createFunction(
   { id: "leave-expiry", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 15 1 * * *` } },
   async ({ step }) => step.run("expire", () => track("leave-expiry", () => runLeaveExpiry(todayInZone()))),
+);
+
+/** Monthly (1st, 2:00 AM): add the public holidays Nager.Date lists for this year and next that are missing. HR still verifies Philippine days. */
+export const holidaySync = inngest.createFunction(
+  { id: "holiday-sync", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 0 2 1 * *` } },
+  async ({ step }) => step.run("sync", () => track("holiday-sync", () => runHolidaySync(todayInZone()))),
 );
 
 /** Daily at 1:20 AM: remind approvers of requests waiting 2 working days, and send stale lead steps (4 days) to HR. */
@@ -299,4 +305,4 @@ export const importPurge = inngest.createFunction(
   async ({ step }) => step.run("purge", () => track("import-purge", () => runImportPurge())),
 );
 
-export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge];
+export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge];

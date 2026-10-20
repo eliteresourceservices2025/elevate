@@ -242,7 +242,7 @@ describe("nightly flags against a schedule", () => {
 
     // Then the same day becomes a public holiday: working it counts in full, and being late no longer applies
     const name = uniq("Test holiday ");
-    await db.execute(sql`insert into time.holidays (calendar, date, name, kind) values ('PH', ${Y}::date, ${name}, 'other')`);
+    await db.execute(sql`insert into time.holidays (calendar, date, name, kind, verified) values ('PH', ${Y}::date, ${name}, 'other', true)`);
     try {
       await jobs.rebuildAttendanceDays();
     } finally {
@@ -316,7 +316,7 @@ describe("bounded historical attendance reconciliation", () => {
       values (${p.employeeId}, '2026-10-05', '2026-10-07', '09:00', '17:00', array[1,2,3,4,5]::smallint[], 60, ${PHX})`);
     const h1 = uniq("Historical US holiday ");
     const h2 = uniq("After assignment ");
-    await db.execute(sql`insert into time.holidays (calendar, date, name, kind) values ('US', '2026-10-06', ${h1}, 'other'), ('US', '2026-10-07', ${h2}, 'other')`);
+    await db.execute(sql`insert into time.holidays (calendar, date, name, kind, verified) values ('US', '2026-10-06', ${h1}, 'other', true), ('US', '2026-10-07', ${h2}, 'other', true)`);
     await event(p.employeeId, "clock_in", at("2026-10-06", "09:00"));
     await event(p.employeeId, "clock_out", at("2026-10-06", "13:00"));
     try {

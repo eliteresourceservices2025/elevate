@@ -209,7 +209,7 @@ export async function getTeamCalendar(month: string): Promise<CalendarView> {
   const cals = mode === "all" || !me ? ["PH", "US"] : await holidayCalendarsFor(db, me.id);
   const holidays = (await db.execute(sql`
     select date::text as date, name, calendar from time.holidays
-    where archived_at is null and date between ${first}::date and ${last}::date and calendar in (${list(cals)}) order by date, calendar`)) as unknown as { date: string; name: string; calendar: string }[];
+    where archived_at is null and verified and date between ${first}::date and ${last}::date and calendar in (${list(cals)}) order by date, calendar`)) as unknown as { date: string; name: string; calendar: string }[];
 
   return { month: ym, mode, dates, entries, counts: Object.fromEntries(counts), holidays };
 }
