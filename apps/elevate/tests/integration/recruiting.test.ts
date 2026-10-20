@@ -405,6 +405,33 @@ describe("interviews and scorecards", () => {
     expect(cancel[0].attachment.content).toContain("METHOD:CANCEL");
   });
 
+  it("sends the interview emails the moment the interview is scheduled, not at the next 30-minute run", async () => {
+    const sent: { to: string; subject: string }[] = [];
+    setEmailSender({ send: async (m) => void sent.push({ to: m.to, subject: m.subject }) });
+    // The daily caps are shared by everything else in this database: give this test room so it only checks the timing.
+    const before = { staff: process.env.EMAIL_DAILY_BUDGET, applicants: process.env.CANDIDATE_EMAIL_DAILY_BUDGET };
+    process.env.EMAIL_DAILY_BUDGET = "1000";
+    process.env.CANDIDATE_EMAIL_DAILY_BUDGET = "500";
+    try {
+      const opening = await openJob();
+      const email = `${uniq("now")}@example.com`;
+      await apply(opening, { email });
+      const appId = (await appFor(opening, email))!;
+      as(recruiter);
+      const ivId = idOf(await actions.scheduleInterview({ applicationId: appId, startsAt: new Date(Date.now() + 86_400_000).toISOString(), minutes: 30, location: "Room 1", interviewerUserIds: [lead.id], emailCandidate: true }));
+      // Both the applicant's invitation and the interviewer's calendar email are already sent, with no job run in between.
+      expect(await rows<{ status: string }>(sql`select status from talent.candidate_emails where dedupe_key = ${`interview:${ivId}`}`)).toEqual([{ status: "sent" }]);
+      expect(await rows<{ status: string }>(sql`select status from ops.email_queue where dedupe_key = ${`interview:${ivId}`}`)).toEqual([{ status: "sent" }]);
+      expect(sent.some((m) => m.to === email && /interview/i.test(m.subject))).toBe(true);
+    } finally {
+      setEmailSender(null);
+      for (const [key, value] of [["EMAIL_DAILY_BUDGET", before.staff], ["CANDIDATE_EMAIL_DAILY_BUDGET", before.applicants]] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it("refuses a past time, an ineligible interviewer and a closed application", async () => {
     const opening = await openJob();
     const email = `${uniq("bad")}@example.com`;
@@ -462,7 +489,6 @@ describe("interviews and scorecards", () => {
 describe("applicant emails", () => {
   it("sends queued mail under its own daily cap and skips applicants whose data was removed", async () => {
     const sent: { to: string; subject: string; bcc?: string }[] = [];
-    setEmailSender({ send: async (m) => void sent.push({ to: m.to, subject: m.subject, bcc: m.bcc }) });
     process.env.EMAIL_APPLICANT_BCC = "talent@example.com";
     await db.execute(sql`delete from talent.candidate_emails`);
 
@@ -474,6 +500,8 @@ describe("applicant emails", () => {
     const bApp = (await appFor(opening, b))!;
     await db.execute(sql`update talent.candidates set anonymized_at = now() where id = (select candidate_id from talent.applications where id = ${bApp})`);
 
+    // No sender yet, so the two "we received your application" notes wait in the queue (with a sender they would go out at once).
+    setEmailSender({ send: async (m) => void sent.push({ to: m.to, subject: m.subject, bcc: m.bcc }) });
     const result = await jobs.sendCandidateEmails();
     expect(result).toMatchObject({ configured: true, sent: 1, skipped: 1 });
     expect(sent).toEqual([{ to: a, subject: "We received your application", bcc: "talent@example.com" }]);

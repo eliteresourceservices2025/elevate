@@ -40,6 +40,8 @@ async function readInPage(page: Page, envelopeUrl: string) {
   expect(response.headers()["content-type"]).toContain("application/pdf");
   expect(response.headers()["content-disposition"]).toContain("inline");
   expect((await response.body()).subarray(0, 5).toString()).toBe("%PDF-");
+  // The fetch above is what records that the signer opened it; the page shows it after a refresh (in a real browser the frame load does this).
+  await page.reload();
 }
 
 test("HR sends a document, two people sign it (typed and drawn), it is sealed, and the signed copy verifies on the public page", async ({ browser }) => {
@@ -60,6 +62,7 @@ test("HR sends a document, two people sign it (typed and drawn), it is sealed, a
   await hrPage.waitForURL("**/signing/new", slow);
   await waitForHydration(hrPage, "#env-title");
   await hrPage.getByLabel("Document title").fill(title);
+  await hrPage.getByLabel("Upload a PDF").check(); // writing it in the page is the default now
   await hrPage.locator("#env-file").setInputFiles({ name: "agreement.pdf", mimeType: "application/pdf", buffer: await pdf() });
   for (const account of [sia, tom]) {
     const select = hrPage.locator("#env-add");
@@ -96,7 +99,7 @@ test("HR sends a document, two people sign it (typed and drawn), it is sealed, a
   await waitForHydration(tomPage, "#sig-consent");
   await readInPage(tomPage, envelopeUrl);
   await expect(tomPage.getByText("You opened it. You can sign now.")).toBeVisible(slow);
-  await tomPage.getByRole("tab", { name: "Draw it" }).click();
+  await tomPage.getByRole("tab", { name: "Draw or upload" }).click();
   const pad = tomPage.getByTestId("signature-pad");
   const box = (await pad.boundingBox())!;
   await tomPage.mouse.move(box.x + 30, box.y + 80);
@@ -104,6 +107,33 @@ test("HR sends a document, two people sign it (typed and drawn), it is sealed, a
   await tomPage.mouse.move(box.x + 120, box.y + 30, { steps: 8 });
   await tomPage.mouse.move(box.x + 220, box.y + 110, { steps: 8 });
   await tomPage.mouse.up();
+  await expect(tomPage.getByRole("button", { name: "Clear" })).toBeEnabled();
+
+  // Someone who cannot draw with a mouse uploads a photo of their signature on paper (cleaned up and cropped in the browser)
+  await tomPage.getByRole("button", { name: "Clear" }).click();
+  const photo = await tomPage.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 1200;
+    c.height = 800;
+    const g = c.getContext("2d")!;
+    g.fillStyle = "#ebe6dc"; // slightly grey paper
+    g.fillRect(0, 0, 1200, 800);
+    for (let i = 0; i < 4000; i++) {
+      g.fillStyle = `rgba(120,110,100,${Math.random() * 0.08})`;
+      g.fillRect(Math.random() * 1200, Math.random() * 800, 3, 3);
+    }
+    g.strokeStyle = "#1c2a63"; // blue ink
+    g.lineWidth = 9;
+    g.lineCap = "round";
+    g.beginPath();
+    g.moveTo(300, 450);
+    g.bezierCurveTo(380, 250, 460, 650, 560, 420);
+    g.bezierCurveTo(640, 300, 720, 560, 880, 380);
+    g.stroke();
+    return c.toDataURL("image/jpeg", 0.8).split(",")[1];
+  });
+  await tomPage.getByTestId("signature-photo-input").setInputFiles({ name: "my-signature.jpg", mimeType: "image/jpeg", buffer: Buffer.from(photo, "base64") });
+  await expect(tomPage.getByRole("button", { name: "Clear" })).toBeEnabled({ timeout: 15_000 });
   await tomPage.getByLabel(/I agree to sign this document electronically/).check();
   await tomPage.getByRole("button", { name: "Sign document" }).click();
   await expect(tomPage.getByText("Everyone has signed").first()).toBeVisible(slow);

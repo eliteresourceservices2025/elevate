@@ -140,6 +140,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
   const ip = rawIp === "unknown" ? null : rawIp.slice(0, 64);
 
   let mirrored = 0;
+  let mirroredEmployeeId: string | undefined;
   const result = await db.transaction(async (tx) => {
     await lockEmployeeClock(tx, person.id);
     const replay = replayClock(await loadRecentEvents(tx, person.id));
@@ -212,6 +213,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
     // A person listed in JIBBLE_SELF_TEST_EMAILS is testing the link on their own account: allowed without the policy and team switch.
     const selfTest = isSelfTestEmail(actor.email, selfTestEmails());
     mirrored = await enqueueMirror(tx, { employeeId: person.id, events: inserted, allowed: (monitoring && rules.jibbleMirror) || selfTest });
+    mirroredEmployeeId = person.id;
 
     return {
       state: transition(endsBreakToo ? "working" : replay.state, endsBreakToo ? "clock_out" : type)!,
@@ -220,7 +222,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
       sessionId: type === "clock_out" ? (replay.sessions[replay.sessions.length - 1]?.startEventId ?? null) : null,
     };
   });
-  if (mirrored > 0) await kickMirror();
+  if (mirrored > 0) await kickMirror(mirroredEmployeeId);
   return result;
 }
 
@@ -287,7 +289,7 @@ export async function verifyEvidence(tx: Executor, employeeId: string, ids: stri
   const unique = [...new Set(ids)];
   const verified: string[] = [];
   for (const id of unique) {
-    const [row] = await tx.select().from(correctionEvidence).where(and(eq(correctionEvidence.id, id), eq(correctionEvidence.employeeId, employeeId), isNull(correctionEvidence.correctionId), isNull(correctionEvidence.extraRequestId), isNull(correctionEvidence.purgedAt))).limit(1);
+    const [row] = await tx.select().from(correctionEvidence).where(and(eq(correctionEvidence.id, id), eq(correctionEvidence.employeeId, employeeId), isNull(correctionEvidence.correctionId), isNull(correctionEvidence.extraRequestId), isNull(correctionEvidence.issueId), isNull(correctionEvidence.purgedAt))).limit(1);
     if (!row || (uploadedBy && row.uploadedBy && row.uploadedBy !== uploadedBy)) throw new ActionFailure("One of the screenshots is not valid. Add it again.");
     const bytes = await getDocumentStorage().read(BUCKETS.employee, row.storagePath);
     const type = bytes ? imageType(bytes) : null;

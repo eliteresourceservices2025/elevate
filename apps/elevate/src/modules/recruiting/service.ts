@@ -136,6 +136,8 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
       await storage.remove(BUCKETS.recruiting, [path]).catch(() => undefined);
       return { ok: true };
     }
+    // The "we got your application" note goes out now, not at the next 30-minute run (imported here: jobs.ts imports this file).
+    await (await import("./immediate")).sendRecruitingEmailsNow();
     // The newest resume replaces the old one (applicants fix their file); the old object is removed only after the commit.
     if (result.oldResume) await storage.remove(BUCKETS.recruiting, [result.oldResume]).catch(() => undefined);
     return { ok: true };

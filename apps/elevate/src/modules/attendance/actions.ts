@@ -183,8 +183,8 @@ export async function requestCorrection(input: unknown): Promise<ActionResult> {
     const { events, evidenceIds, kind, reason } = parsed.data;
     const problem = await checkProposal(person.id, events, Date.now());
     if (problem) return fail(problem);
-    // Time that was never clocked needs proof: a claim that adds a clock-in must carry at least one screenshot.
-    if (events.some((e) => e.type === "clock_in") && evidenceIds.length === 0) {
+    // Every appeal carries proof: at least one screenshot (for example your browser history, or the error you saw).
+    if (evidenceIds.length === 0) {
       return fail("Attach at least one screenshot (for example your browser history) that shows when you started working.");
     }
 
@@ -270,12 +270,12 @@ export async function openEvidence(input: unknown): Promise<ActionResult<{ url: 
     if (!parsed.success) return fail(BAD);
     if (!(await allowRequest("download", actor.id))) return fail("Too many downloads. Wait a few minutes and try again.");
     const [ev] = await db.select().from(correctionEvidence).where(eq(correctionEvidence.id, parsed.data.evidenceId)).limit(1);
-    if (!ev || (!ev.correctionId && !ev.extraRequestId) || ev.purgedAt) return fail("That screenshot is no longer available.");
+    if (!ev || (!ev.correctionId && !ev.extraRequestId && !ev.issueId) || ev.purgedAt) return fail("That screenshot is no longer available.");
     const [person] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, ev.employeeId));
     if (person?.userId === actor.id) await authorize(actor, "attendance.request_correction", { ownerUserId: actor.id });
     else await authorize(actor, "attendance.approve_correction", { ownerUserId: person?.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, ev.employeeId) });
     const url = await getDocumentStorage().createSignedDownload(BUCKETS.employee, ev.storagePath, 60, `evidence.${ev.mime === "image/png" ? "png" : "jpg"}`);
-    await writeAudit({ actor, action: "clock.evidence_view", targetType: "employee", targetId: ev.employeeId, metadata: { evidenceId: ev.id, correctionId: ev.correctionId, extraRequestId: ev.extraRequestId } });
+    await writeAudit({ actor, action: "clock.evidence_view", targetType: "employee", targetId: ev.employeeId, metadata: { evidenceId: ev.id, correctionId: ev.correctionId, extraRequestId: ev.extraRequestId, issueId: ev.issueId } });
     return { ok: true, data: { url } };
   });
 }

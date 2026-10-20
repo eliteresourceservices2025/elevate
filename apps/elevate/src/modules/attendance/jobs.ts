@@ -164,7 +164,7 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
       const holiday = holidays.has(d.date);
       const late = shift && !holiday ? lateMinutes(d.firstIn, shift, rules.lateGraceMinutes) : 0;
       const early = shift && !holiday && d.lastOut !== null && !d.open ? earlyLeaveMinutes(d.lastOut, shift, rules.lateGraceMinutes) : 0;
-      const extra = extraMinutes({ workedMinutes: d.workedMinutes, shift, hasSchedule, holiday });
+      const extra = extraMinutes({ workedMinutes: d.workedMinutes, breakMinutes: d.breakMinutes, shift, hasSchedule, holiday });
       // What approved extra hours requests cover, and what is left over (unapproved).
       const split = approvedExtra(extra, granted.get(d.date) ?? 0);
 
@@ -347,14 +347,17 @@ export async function runQuietSessionAlerts(now = new Date()): Promise<{ noticed
 export async function purgeEvidence(now = new Date()): Promise<{ purged: number }> {
   const orphanCutoff = new Date(now.getTime() - DAY_MS);
   const keepCutoff = new Date(now.getTime() - EVIDENCE_KEEP_DAYS * DAY_MS);
-  const orphans = await db.select({ id: correctionEvidence.id, path: correctionEvidence.storagePath }).from(correctionEvidence).where(sql`${correctionEvidence.correctionId} is null and ${correctionEvidence.createdAt} < ${orphanCutoff.toISOString()}::timestamptz`).limit(500);
+  const orphans = await db.select({ id: correctionEvidence.id, path: correctionEvidence.storagePath }).from(correctionEvidence).where(sql`${correctionEvidence.correctionId} is null and ${correctionEvidence.extraRequestId} is null and ${correctionEvidence.issueId} is null and ${correctionEvidence.createdAt} < ${orphanCutoff.toISOString()}::timestamptz`).limit(500);
   if (orphans.length > 0) {
     await getDocumentStorage().remove(BUCKETS.employee, orphans.map((o) => o.path));
     for (const o of orphans) await db.delete(correctionEvidence).where(eq(correctionEvidence.id, o.id));
   }
   const old = (await db.execute(sql`
     select ev.id, ev.storage_path as path from time.correction_evidence ev join time.clock_corrections c on c.id = ev.correction_id
-    where ev.purged_at is null and c.status <> 'pending' and c.decided_at < ${keepCutoff.toISOString()}::timestamptz limit 500`)) as unknown as { id: string; path: string }[];
+    where ev.purged_at is null and c.status <> 'pending' and c.decided_at < ${keepCutoff.toISOString()}::timestamptz
+    union
+    select ev.id, ev.storage_path as path from time.correction_evidence ev join time.tech_issue_reports r on r.id = ev.issue_id
+    where ev.purged_at is null and r.status = 'handled' and r.handled_at < ${keepCutoff.toISOString()}::timestamptz limit 500`)) as unknown as { id: string; path: string }[];
   if (old.length > 0) {
     await getDocumentStorage().remove(BUCKETS.employee, old.map((o) => o.path));
     for (const o of old) await db.update(correctionEvidence).set({ purgedAt: now }).where(eq(correctionEvidence.id, o.id));

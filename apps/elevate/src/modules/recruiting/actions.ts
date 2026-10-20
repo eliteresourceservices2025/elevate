@@ -19,6 +19,7 @@ import { notify } from "@/modules/notifications/service";
 import { canMove } from "./constants";
 import { buildInterviewIcs, interviewMail, rejectionMail } from "./mail";
 import { applicationStageHistory, applications, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
+import { sendRecruitingEmailsNow } from "./immediate";
 import { authorizeForOpening, freeSlug, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
 import { clearBanner } from "./careers-banner";
 import { careersPageSchema, cancelInterviewSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
@@ -188,6 +189,7 @@ export async function rejectApplication(input: unknown): Promise<ActionResult> {
       }
       return row.app.openingId;
     });
+    await sendRecruitingEmailsNow();
     refresh(openingId, v.applicationId);
     return { ok: true, data: undefined };
   });
@@ -292,6 +294,7 @@ export async function scheduleInterview(input: unknown): Promise<ActionResult<{ 
       if (calendar.mode === "google") await discardInterviewEvent(actor.id, calendar.eventId); // do not leave an orphan event on their calendar
       throw error;
     }
+    await sendRecruitingEmailsNow();
     refresh(row.app.openingId, v.applicationId);
     return { ok: true, data: { id: interviewId, calendar: calendar.mode, meetLink: calendar.mode === "google" ? calendar.meetLink : null, warning: calendar.mode === "ics" ? calendar.warning : null } };
   });
@@ -327,6 +330,7 @@ export async function cancelInterview(input: unknown): Promise<ActionResult<{ wa
       }
       return { applicationId: iv.applicationId, eventId: iv.googleEventId, calendarUserId: iv.calendarUserId };
     });
+    await sendRecruitingEmailsNow();
     const warning = done.eventId && done.calendarUserId ? await deleteInterviewEvent(done.calendarUserId, done.eventId) : null;
     const openingId = await openingIdOfApplication(db, done.applicationId);
     refresh(openingId ?? undefined, done.applicationId);

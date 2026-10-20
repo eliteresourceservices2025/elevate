@@ -128,7 +128,7 @@ function SignStep({ token, defaultName }: { token: string; defaultName: string }
         <div role="tablist" aria-label="How to sign" className="flex gap-2">
           {(["typed", "drawn"] as const).map((k) => (
             <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={`rounded-lg border px-3 py-1.5 text-sm ${kind === k ? "border-primary bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-secondary/50"}`}>
-              {k === "typed" ? "Type my name" : "Draw it"}
+              {k === "typed" ? "Type my name" : "Draw or upload"}
             </button>
           ))}
         </div>

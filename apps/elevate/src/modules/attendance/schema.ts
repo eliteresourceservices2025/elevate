@@ -336,8 +336,10 @@ export const correctionEvidence = time
         .references(() => employees.id),
       /** Null until the claim is submitted; an upload never attached is cleaned up after a day. */
       correctionId: uuid("correction_id").references(() => clockCorrections.id),
-      /** Or to an extra hours request. At most one of the two. */
+      /** Or to an extra hours request. At most one of the three. */
       extraRequestId: uuid("extra_request_id").references(() => extraHoursRequests.id),
+      /** Or to a technical issue report (a screenshot is required with one). */
+      issueId: uuid("issue_id").references(() => techIssueReports.id),
       /** The sign-in account that uploaded it (a lead or HR uploads for someone else); null for older rows. */
       uploadedBy: uuid("uploaded_by"),
       storagePath: text("storage_path").notNull(),
@@ -347,7 +349,7 @@ export const correctionEvidence = time
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       purgedAt: timestamp("purged_at", { withTimezone: true }),
     },
-    (t) => [uniqueIndex("correction_evidence_path_idx").on(t.storagePath), index("correction_evidence_claim_idx").on(t.correctionId), check("correction_evidence_mime_chk", sql`${t.mime} in ('image/jpeg','image/png')`), check("correction_evidence_one_parent_chk", sql`not (${t.correctionId} is not null and ${t.extraRequestId} is not null)`), index("correction_evidence_extra_idx").on(t.extraRequestId)],
+    (t) => [uniqueIndex("correction_evidence_path_idx").on(t.storagePath), index("correction_evidence_claim_idx").on(t.correctionId), check("correction_evidence_mime_chk", sql`${t.mime} in ('image/jpeg','image/png')`), check("correction_evidence_one_parent_chk", sql`num_nonnulls(${t.correctionId}, ${t.extraRequestId}, ${t.issueId}) <= 1`), index("correction_evidence_extra_idx").on(t.extraRequestId), index("correction_evidence_issue_idx").on(t.issueId)],
   )
   .enableRLS();
 
@@ -442,5 +444,40 @@ export const hoursSettings = time
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [check("hours_settings_single_chk", sql`${t.id} = 1`), check("hours_settings_kind_chk", sql`${t.payPeriodKind} in ('semi_monthly','weekly','biweekly','monthly')`)],
+  )
+  .enableRLS();
+
+export const ISSUE_KINDS = ["clock", "jibble", "internet_power", "device", "other"] as const;
+
+/**
+ * A technical issue a contractor reports (the clock or Jibble not working, an outage, a failed device). It is a report only: it never
+ * adds, changes or removes a clock event or any hours (a missed or wrong time is a correction request). It tells the lead and HR so
+ * they know what happened and can follow up. Free text written by the person: no client or patient information.
+ */
+export const techIssueReports = time
+  .table(
+    "tech_issue_reports",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      reportedBy: uuid("reported_by").notNull(),
+      kind: text("kind").notNull(),
+      /** When the problem started, as the person says it (not a clock event). */
+      happenedAt: timestamp("happened_at", { withTimezone: true }).notNull(),
+      details: text("details").notNull(),
+      status: text("status").notNull().default("open"),
+      handledBy: uuid("handled_by"),
+      handledAt: timestamp("handled_at", { withTimezone: true }),
+      handlingNote: text("handling_note"),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      index("tech_issue_reports_employee_idx").on(t.employeeId, t.createdAt),
+      index("tech_issue_reports_open_idx").on(t.createdAt).where(sql`${t.status} = 'open'`),
+      check("tech_issue_reports_kind_chk", sql`${t.kind} in ('clock','jibble','internet_power','device','other')`),
+      check("tech_issue_reports_status_chk", sql`${t.status} in ('open','handled')`),
+    ],
   )
   .enableRLS();

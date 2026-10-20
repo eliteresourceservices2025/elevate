@@ -88,11 +88,18 @@ export const EXTRA_THRESHOLD_MINUTES = 15;
 /**
  * Extra minutes in a day: worked time beyond the scheduled hours. Work on a rest day or a holiday counts in full. People with
  * no schedule at all have no extra (nothing to measure against). Anything under the threshold is ignored.
+ *
+ * The scheduled hours already have the scheduled unpaid break taken out, but the break is only taken out of WORKED time when the
+ * person actually presses Break. A break that was not taken (all of it, or part of it) is time inside the shift window, not extra:
+ * someone who works the whole 4-hour window of a 3.5-hour shift (30 minutes unpaid break scheduled) and never presses Break worked
+ * the window, so nothing is extra. `breakMinutes` is the break actually taken; leave it out to assume the scheduled break was taken.
  */
-export function extraMinutes(input: { workedMinutes: number; shift: Shift | null; hasSchedule: boolean; holiday: boolean }, threshold = EXTRA_THRESHOLD_MINUTES): number {
+export function extraMinutes(input: { workedMinutes: number; shift: Shift | null; hasSchedule: boolean; holiday: boolean; breakMinutes?: number }, threshold = EXTRA_THRESHOLD_MINUTES): number {
   if (!input.hasSchedule || input.workedMinutes < threshold) return 0;
   if (input.shift === null || input.holiday) return input.workedMinutes;
-  const over = input.workedMinutes - input.shift.scheduledMinutes;
+  const scheduledBreak = input.shift.schedule.breakMinutes;
+  const unusedBreak = input.breakMinutes === undefined ? 0 : Math.max(0, scheduledBreak - input.breakMinutes);
+  const over = input.workedMinutes - (input.shift.scheduledMinutes + unusedBreak);
   return over >= threshold ? over : 0;
 }
 

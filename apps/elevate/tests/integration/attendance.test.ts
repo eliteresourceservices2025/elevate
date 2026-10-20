@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoleSlug } from "@/lib/roles";
 import { FakeStorage, PDF_BYTES, PNG_BYTES } from "./fake-storage";
 
@@ -30,6 +30,14 @@ const as = (u: TestUser) => {
 const HOUR = 3_600_000;
 const iso = (agoMs: number) => new Date(Date.now() - agoMs).toISOString();
 const fake = new FakeStorage();
+
+/** One uploaded screenshot, ready to attach: every time correction appeal carries at least one. */
+async function proof(): Promise<string> {
+  const ticket = await actions.requestEvidenceUpload({ mime: "image/png", size: PNG_BYTES.length });
+  if (!ticket.ok) throw new Error(ticket.error);
+  fake.put("employee-docs", ticket.data.path, PNG_BYTES);
+  return ticket.data.id;
+}
 
 async function makeUser(label: string, roles: RoleSlug[]): Promise<TestUser> {
   const id = randomUUID();
@@ -310,7 +318,17 @@ describe("corrections", () => {
     const worker = await person("Worker", ["employee"], { managerId: lead.employeeId });
     return { lead, worker };
   }
-  const propose = (events: { type: string; at: string }[], reason = "Forgot to clock out") => actions.requestCorrection({ reason, events });
+  // A refused request leaves its screenshot unused, so it is reused for the next try (a person may hold 6 unused at most).
+  let spare: string | null = null;
+  beforeEach(() => {
+    spare = null;
+  });
+  const propose = async (events: { type: string; at: string }[], reason = "Forgot to clock out") => {
+    const id = spare ?? (await proof());
+    const result = await actions.requestCorrection({ reason, events, evidenceIds: [id] });
+    spare = result.ok ? null : id;
+    return result;
+  };
   const pending = async (employeeId: string) => (await rows<{ id: string }>(sql`select id from time.clock_corrections where employee_id = ${employeeId} and status = 'pending'`))[0]?.id;
 
   it("adds new events when the lead approves, and never changes the original ones", async () => {
@@ -754,7 +772,7 @@ describe("\"I stopped at\" requests", () => {
     await event(worker.employeeId, "clock_in", iso(3 * HOUR));
     as(worker.user);
     const stopAt = iso(2 * HOUR);
-    expect((await actions.requestCorrection({ reason: "My internet connection dropped.", kind: "connection_problem", events: [{ type: "clock_out", at: stopAt }] })).ok).toBe(true);
+    expect((await actions.requestCorrection({ reason: "My internet connection dropped.", kind: "connection_problem", events: [{ type: "clock_out", at: stopAt }], evidenceIds: [await proof()] })).ok).toBe(true);
 
     const status = await queries.getClockStatus();
     expect(status?.state).toBe("working");
@@ -767,7 +785,7 @@ describe("\"I stopped at\" requests", () => {
     await actions.cancelCorrection({ correctionId: status!.pendingClockOut!.id });
     expect((await queries.getClockStatus())?.pendingClockOut).toBeNull();
     // A new request, approved by the lead
-    expect((await actions.requestCorrection({ reason: "My device restarted.", kind: "device_problem", events: [{ type: "clock_out", at: stopAt }] })).ok).toBe(true);
+    expect((await actions.requestCorrection({ reason: "My device restarted.", kind: "device_problem", events: [{ type: "clock_out", at: stopAt }], evidenceIds: [await proof()] })).ok).toBe(true);
     const [c] = await rows<{ id: string; kind: string }>(sql`select id, kind from time.clock_corrections where employee_id = ${worker.employeeId} and status = 'pending'`);
     expect(c.kind).toBe("device_problem");
     as(lead.user);
@@ -791,6 +809,15 @@ describe("time claims with evidence", () => {
   }
   const claimEvents = (startAgo = 3 * HOUR, endAgo = HOUR) => [{ type: "clock_in", at: iso(startAgo) }, { type: "clock_out", at: iso(endAgo) }];
 
+  it("needs a screenshot for every appeal, also one that only adds a clock-out", async () => {
+    const { worker } = await setup();
+    await event(worker.employeeId, "clock_in", iso(14 * HOUR)); // an open session from yesterday
+    as(worker.user);
+    const claim = { reason: "Forgot to clock out", kind: "forgot", events: [{ type: "clock_out", at: iso(6 * HOUR) }] };
+    expect(await actions.requestCorrection(claim)).toEqual({ ok: false, error: "Attach at least one screenshot (for example your browser history) that shows when you started working." });
+    expect((await actions.requestCorrection({ ...claim, evidenceIds: [await proof()] })).ok).toBe(true);
+  });
+
   it("needs a screenshot when the claim adds a clock-in, and attaches checked evidence", async () => {
     const { lead, worker } = await setup();
     as(worker.user);
@@ -808,7 +835,7 @@ describe("time claims with evidence", () => {
 
     // The same screenshot cannot be attached twice, and a clock-out only claim needs no proof
     expect((await actions.requestCorrection({ reason: "Again with the same file", kind: "forgot", events: claimEvents(10 * HOUR, 9 * HOUR), evidenceIds: [shot.id] })).ok).toBe(false);
-    expect((await actions.requestCorrection({ reason: "Forgot to clock out", kind: "forgot", events: [{ type: "clock_out", at: iso(30 * 60_000) }] })).ok).toBe(false); // no open session: does not fit, and not for lack of proof
+    expect((await actions.requestCorrection({ reason: "Forgot to clock out", kind: "forgot", events: [{ type: "clock_out", at: iso(30 * 60_000) }], evidenceIds: [await proof()] })).ok).toBe(false); // no open session: does not fit, and not for lack of proof
   });
 
   it("refuses a file that is not really a JPG or PNG and deletes it, and someone else's screenshot", async () => {

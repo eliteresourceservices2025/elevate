@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { SignaturePhotoError, photoToSignaturePng } from "../signature-photo";
 
 const WIDTH = 520;
 const HEIGHT = 160;
@@ -14,6 +16,8 @@ export function SignaturePad({ onChange, label = "Draw your signature" }: { onCh
   const canvas = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const [empty, setEmpty] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const c = canvas.current;
@@ -56,6 +60,35 @@ export function SignaturePad({ onChange, label = "Draw your signature" }: { onCh
     const url = canvas.current?.toDataURL("image/png") ?? "";
     onChange(url.startsWith("data:image/png;base64,") ? url.slice("data:image/png;base64,".length) : null);
   };
+  /** A photo of a signature written on paper (for people who cannot draw with a mouse): cleaned up, cropped and shown in the box. */
+  const importPhoto = async (file: File) => {
+    setBusy(true);
+    try {
+      const png = await photoToSignaturePng(file);
+      const image = new Image();
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("preview"));
+        image.src = `data:image/png;base64,${png}`;
+      });
+      const c = canvas.current;
+      const ctx = c?.getContext("2d");
+      if (c && ctx) {
+        ctx.clearRect(0, 0, WIDTH, HEIGHT);
+        const fit = Math.min(WIDTH / image.width, HEIGHT / image.height, 1);
+        const w = image.width * fit;
+        const h = image.height * fit;
+        ctx.drawImage(image, (WIDTH - w) / 2, (HEIGHT - h) / 2, w, h);
+      }
+      setEmpty(false);
+      onChange(png);
+    } catch (error) {
+      toast.error(error instanceof SignaturePhotoError ? error.message : "That picture could not be used. Try another, or draw your signature.");
+    } finally {
+      setBusy(false);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  };
   const clear = () => {
     const c = canvas.current;
     c?.getContext("2d")?.clearRect(0, 0, WIDTH, HEIGHT);
@@ -85,8 +118,25 @@ export function SignaturePad({ onChange, label = "Draw your signature" }: { onCh
         <Button type="button" variant="outline" size="sm" onClick={clear} disabled={empty}>
           Clear
         </Button>
-        <p className="text-xs text-muted-foreground">Prefer typing? Switch to Type my name. You can use the mouse, a finger or a pen.</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => fileInput.current?.click()} disabled={busy}>
+          Upload a photo of my signature
+        </Button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          aria-label="Photo of your signature"
+          data-testid="signature-photo-input"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void importPhoto(f);
+          }}
+        />
       </div>
+      <p className="text-xs text-muted-foreground">
+        Hard to draw with a mouse? Sign with dark ink on plain light paper, take a photo (or a scan) and upload it: it is cleaned up and cropped for you. Or switch to Type my name.
+      </p>
     </div>
   );
 }

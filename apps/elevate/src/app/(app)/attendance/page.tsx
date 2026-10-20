@@ -14,6 +14,9 @@ import { formatDuration, MINUTE } from "@/modules/attendance/clock";
 import { AutoRefresh } from "@/modules/attendance/components/auto-refresh";
 import { CorrectionForm, CorrectionList, FileForOthersForm, PreferencesForm, RulesForm, SetupProfileForm, ShiftNote } from "@/modules/attendance/components/attendance-forms";
 import { BulkCorrectionsPanel } from "@/modules/attendance/components/bulk-corrections-panel";
+import { FormDialog } from "@/components/form-dialog";
+import { IssueList, ReportIssueForm } from "@/modules/attendance/components/issue-panels";
+import { listIssueQueue, listMyIssues } from "@/modules/attendance/issue-queries";
 import { HealthPanel } from "@/modules/health/components/health-panel";
 import { getSystemHealth } from "@/modules/health/queries";
 import { ExportPanel } from "@/modules/attendance/components/hours-panels";
@@ -25,6 +28,7 @@ export const metadata: Metadata = { title: "Attendance" };
 const ALL_TABS = [
   { key: "mine", label: "My time" },
   { key: "corrections", label: "Corrections" },
+  { key: "issues", label: "Technical issues" },
   { key: "export", label: "Hours export" },
   { key: "rules", label: "Rules" },
   { key: "health", label: "Health" },
@@ -40,7 +44,8 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const params = await searchParams;
   const moved = typeof params.tab === "string" ? MOVED[params.tab] : undefined;
   if (moved) redirect(typeof params.rweek === "string" && params.tab === "review" ? `${moved}?rweek=${encodeURIComponent(params.rweek)}` : moved);
-  const allowed = new Set<string>(["mine"]);
+  const allowed = new Set<string>(["mine", "issues"]);
+  const canHandleIssues = ["all", "team"].includes(String(scopeFor(user, "attendance.handle_issue")));
   const approve = scopeFor(user, "attendance.approve_correction");
   if (approve === "all" || approve === "team") allowed.add("corrections");
   if (scopeFor(user, "attendance.manage_rules")) allowed.add("rules");
@@ -50,6 +55,9 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   const tab = tabs.find((t) => t.key === params.tab)?.key ?? "mine";
 
   const mine = tab === "mine" ? await orNotFound(getMyTime(typeof params.week === "string" ? params.week : undefined)) : null;
+  // The person's own reports: read once, for the list on the Technical issues tab and the zone the report form shows times in.
+  const myIssues = await orNotFound(listMyIssues());
+  const issueQueue = tab === "issues" && canHandleIssues ? await orNotFound(listIssueQueue()) : null;
   const queue = tab === "corrections" ? await orNotFound(listCorrectionQueue()) : null;
   const filable = tab === "corrections" && ["all", "team"].includes(String(scopeFor(user, "attendance.file_for_others"))) ? await orNotFound(listFilablePeople()) : null;
   const hoursSettings = tab === "export" ? await orNotFound(getHoursSettings()) : null;
@@ -59,9 +67,14 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
 
   return (
     <div className="w-full space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Attendance</h1>
-        <p className="mt-1 text-muted-foreground">The time clock is in the header. ELEVATE is the only source of your hours.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Attendance</h1>
+          <p className="mt-1 text-muted-foreground">The time clock is in the header. ELEVATE is the only source of your hours.</p>
+        </div>
+        <FormDialog label="Report a technical issue" title="Report a technical issue" description="The clock or Jibble not working, an outage, a failed device. Your lead and HR are told." variant="outline">
+          <ReportIssueForm zone={myIssues?.zone ?? "America/Phoenix"} />
+        </FormDialog>
       </div>
 
       <nav aria-label="Attendance sections" className="flex flex-wrap gap-1 border-b">
@@ -76,6 +89,21 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
           </Link>
         ))}
       </nav>
+
+      {tab === "issues" ? (
+        <div className="space-y-6">
+          <section aria-label="My technical issue reports" className="space-y-2">
+            <h2 className="text-lg font-semibold">My reports</h2>
+            {myIssues ? <IssueList items={myIssues.items} zone={myIssues.zone} mode="mine" empty="You have not reported any technical issues." /> : <p className="text-sm text-muted-foreground">You do not have a people record yet. Ask HR.</p>}
+          </section>
+          {issueQueue ? (
+            <section aria-label="Technical issue reports to handle" className="space-y-2">
+              <h2 className="text-lg font-semibold">{issueQueue.scope === "team" ? "Your team's reports" : "All reports"}</h2>
+              <IssueList items={issueQueue.items} zone="America/Phoenix" mode="queue" empty="No technical issues are waiting." />
+            </section>
+          ) : null}
+        </div>
+      ) : null}
 
       {tab === "mine" ? (
         mine ? (
@@ -221,6 +249,23 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
             <section aria-label="My corrections" className="space-y-2">
               <h2 className="text-lg font-semibold">My corrections</h2>
               <CorrectionList items={mine.corrections} zone={mine.zone} mode="mine" empty="You have not asked for any corrections." />
+            </section>
+
+            <section aria-label="My technical issue reports" className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold">My technical issue reports</h2>
+                <FormDialog label="Report a technical issue" title="Report a technical issue" description="The clock or Jibble not working, an outage, a failed device. A screenshot is required. Your lead and HR are told." variant="outline">
+                  <ReportIssueForm zone={mine.zone} />
+                </FormDialog>
+              </div>
+              {myIssues ? <IssueList items={myIssues.items.slice(0, 5)} zone={myIssues.zone} mode="mine" empty="You have not reported any technical issues." /> : null}
+              {myIssues && myIssues.items.length > 5 ? (
+                <p className="text-sm">
+                  <Link href="/attendance?tab=issues" className="text-primary underline-offset-4 hover:underline">
+                    All my reports
+                  </Link>
+                </p>
+              ) : null}
             </section>
           </div>
         ) : (
