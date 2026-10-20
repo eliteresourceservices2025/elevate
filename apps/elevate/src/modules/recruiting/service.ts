@@ -5,6 +5,8 @@ import { authorize, type ActionName, type AuthzUser } from "@/lib/authz";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
+import { applicantSelfIdSchema } from "@/modules/demographics/validators";
+import { saveApplicantSelfId } from "@/modules/demographics/service";
 import { sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { notify } from "@/modules/notifications/service";
@@ -76,6 +78,10 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
   }
   const v = parsed.data;
 
+  // The optional self-identification answers are checked on their own. They never decide anything about the application.
+  const selfId = applicantSelfIdSchema.safeParse({ gender: v.gender, genderOther: v.genderOther, religion: v.religion, religionOther: v.religionOther });
+  if (!selfId.success) return { ok: false, error: selfId.error.issues[0]?.message ?? "Check your answers and try again.", field: String(selfId.error.issues[0]?.path[0] ?? "gender") };
+
   if (!file || file.bytes.length === 0) return { ok: false, error: "Please attach your resume (PDF or DOCX).", field: "resume" };
   if (file.bytes.length > RESUME_MAX_BYTES) return { ok: false, error: "Your resume is too large. The limit is 4 MB.", field: "resume" };
   const kind = sniffFileKind(file.bytes);
@@ -118,6 +124,7 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
       const [app] = await tx.insert(applications).values({ openingId: opening.id, candidateId, note: v.note ?? null }).onConflictDoNothing().returning({ id: applications.id });
       if (!app) return { duplicate: true as const, oldResume: null };
 
+      await saveApplicantSelfId(tx, candidateId, selfId.data);
       await tx.insert(applicationStageHistory).values({ applicationId: app.id, fromStage: null, toStage: "applied" });
       await writeAudit({ actor: null, action: "recruiting.apply", targetType: "application", targetId: app.id, after: { openingId: opening.id, noticeVersion } }, tx);
 
