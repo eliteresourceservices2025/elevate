@@ -1,8 +1,8 @@
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { parseMarkdown } from "@/lib/markdown";
-import { DEFAULT_OFFER_TEMPLATE, OPTIONAL_BLANK, cleanValue, fieldsUsed, inlineText, missingFields, renderBlocks, renderText, templateProblem } from "./merge";
-import { renderOfferPdf } from "./offer-pdf";
+import { renderLetterheadPdf } from "@/modules/signing/letterhead-pdf";
+import { DEFAULT_OFFER_TEMPLATE, DEFAULT_OFFER_TITLE, OPTIONAL_BLANK, cleanValue, fieldsUsed, inlineText, missingFields, offerLetterParts, renderBlocks, renderText, templateProblem } from "./merge";
 import { offerStatus } from "./service";
 import { hireSchema, makeOfferSchema, offerTemplateSchema } from "./validators";
 
@@ -48,16 +48,30 @@ describe("filling a letter", () => {
   });
 });
 
+describe("the letter title", () => {
+  it("uses the template's first heading as the centered title and keeps it out of the body", () => {
+    const parts = offerLetterParts(renderBlocks(DEFAULT_OFFER_TEMPLATE, values));
+    expect(parts.title).toBe("Independent contractor agreement offer");
+    expect(parts.body[0]).toMatchObject({ type: "paragraph" });
+    expect(parts.body.some((b) => b.type === "heading" && inlineText(b.children) === parts.title)).toBe(false);
+  });
+  it("falls back to the default title when a letter starts with text, and when the heading is empty after filling", () => {
+    expect(offerLetterParts(renderBlocks("Dear {{candidate_name}},\n\nWelcome.", values)).title).toBe(DEFAULT_OFFER_TITLE);
+    expect(offerLetterParts([]).title).toBe(DEFAULT_OFFER_TITLE);
+  });
+});
+
 describe("the PDF", () => {
   it("draws the letter with headings, lists and bold text, and survives characters the font cannot draw", async () => {
-    const bytes = await renderOfferPdf({ title: "Offer: VA", blocks: renderBlocks(`${DEFAULT_OFFER_TEMPLATE}\n\nGreetings 山田 \u{1F600}`, values), footer: "Elite Resource Services" });
+    const parts = offerLetterParts(renderBlocks(`${DEFAULT_OFFER_TEMPLATE}\n\nGreetings 山田 \u{1F600}`, values));
+    const bytes = await renderLetterheadPdf({ title: parts.title, blocks: parts.body });
     expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe("%PDF-");
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBeGreaterThanOrEqual(1);
   });
   it("runs to several pages for a long letter", async () => {
     const long = Array.from({ length: 60 }, (_, i) => `Paragraph ${i} ${"words ".repeat(40)}`).join("\n\n");
-    const bytes = await renderOfferPdf({ title: "Long", blocks: renderBlocks(long, values), footer: "Elite Resource Services" });
+    const bytes = await renderLetterheadPdf({ title: DEFAULT_OFFER_TITLE, blocks: renderBlocks(long, values) });
     expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(2);
   });
 });

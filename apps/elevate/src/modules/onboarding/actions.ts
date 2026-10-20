@@ -1,7 +1,7 @@
 "use server";
 
 import { randomBytes, randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -23,7 +23,7 @@ import { createEnvelope, loadTemplatePdf } from "@/modules/signing/service";
 import { sha256Hex } from "@/modules/signing/chain";
 import { itemsFor, personContext, executeSeparation, insertTasks, announce, satisfiedTasks, syncCase, todayIn, openOnboardingCase } from "./service";
 import { certificates, checklistTasks, checklistTemplateItems, checklistTemplates, exitInterviews, offboardingCases, onboardingCases } from "./schema";
-import { caseIdSchema, certificateSchema, checklistTemplateSchema, completeTaskSchema, exitInterviewSchema, skipTaskSchema, startOffboardingSchema, startOnboardingSchema, taskIdSchema, templateIdSchema } from "./validators";
+import { caseIdSchema, certificateSchema, checklistTemplateSchema, completeOnboardingSchema, completeTaskSchema, exitInterviewSchema, skipTaskSchema, startOffboardingSchema, startOnboardingSchema, taskIdSchema, templateIdSchema } from "./validators";
 import { progress } from "./constants";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
@@ -109,14 +109,21 @@ export async function completeTask(input: unknown): Promise<ActionResult> {
     if (!task || !(await mayActOnTask(actor, task))) return fail("You do not have access to do that.");
     const kind = task.onboardingCaseId ? "onboarding" : "offboarding";
     await authorize(actor, kind === "onboarding" ? "onboarding.view" : "offboarding.view", { ownerUserId: actor.id, managerChainUserIds: [actor.id] });
-    if (task.check !== "manual") return fail("ELEVATE completes this one by itself when it is done.");
+    // A task ELEVATE ticks by itself (a policy, documents, training...) is ticked by hand only by HR / Super Admin, and only with a reason:
+    // it is how a task that was done outside ELEVATE, or that the person forgot, no longer holds the onboarding up.
+    const byHr = task.check !== "manual";
+    if (byHr) {
+      // Onboarding only: an offboarding task such as removing access must really happen, so it is never ticked by hand.
+      if (kind !== "onboarding" || scopeFor(actor, "onboarding.manage") !== "all") return fail("ELEVATE completes this one by itself when it is done.");
+      if (!parsed.data.note || parsed.data.note.trim().length < 3) return fail("Give a short reason for marking it done by hand.");
+    }
     await db.transaction(async (tx) => {
       const [fresh] = await tx.select().from(checklistTasks).where(eq(checklistTasks.id, task.id)).for("update");
       if (!fresh || fresh.status !== "todo") throw new ActionFailure("That task is already closed.");
       const [c] = fresh.onboardingCaseId ? await tx.select({ status: onboardingCases.status }).from(onboardingCases).where(eq(onboardingCases.id, fresh.onboardingCaseId)) : await tx.select({ status: offboardingCases.status }).from(offboardingCases).where(eq(offboardingCases.id, fresh.offboardingCaseId as string));
       if (c?.status !== "open") throw new ActionFailure("This checklist is closed.");
       await tx.update(checklistTasks).set({ status: "done", completedBy: actor.id, completedAt: new Date(), note: parsed.data.note ?? null }).where(eq(checklistTasks.id, task.id));
-      await writeAudit({ actor, action: "checklist.task_done", targetType: "checklist_task", targetId: task.id, after: { title: task.title } }, tx);
+      await writeAudit({ actor, action: "checklist.task_done", targetType: "checklist_task", targetId: task.id, after: { title: task.title, ...(byHr ? { byHr: true, reason: parsed.data.note } : {}) } }, tx);
     });
     refresh();
     return { ok: true, data: undefined };
@@ -195,8 +202,9 @@ export async function completeOnboarding(input: unknown): Promise<ActionResult> 
   return runAction(async () => {
     await authorize(actor, "onboarding.manage");
     if (scopeFor(actor, "onboarding.manage") !== "all") return fail("You do not have access to do that.");
-    const parsed = caseIdSchema.safeParse(input);
+    const parsed = completeOnboardingSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
+    const { overrideReason } = parsed.data;
     await syncCase("onboarding", parsed.data.caseId);
     await db.transaction(async (tx) => {
       const [c] = await tx.select().from(onboardingCases).where(eq(onboardingCases.id, parsed.data.caseId)).for("update");
@@ -206,10 +214,17 @@ export async function completeOnboarding(input: unknown): Promise<ActionResult> 
       const [e] = await tx.select({ userId: employees.userId }).from(employees).where(eq(employees.id, c.employeeId));
       const ok = await satisfiedTasks(tx, tasks, { employeeId: c.employeeId, userId: e?.userId ?? null, today: todayIn() });
       const p = progress(tasks.map((t) => ({ status: t.status as "todo" | "done" | "skipped", required: t.required, dueOn: t.dueOn, satisfied: ok.has(t.id) })), todayIn());
-      if (p.requiredOpen > 0) throw new ActionFailure(`${p.requiredOpen} required ${p.requiredOpen === 1 ? "task is" : "tasks are"} still open.`);
+      // Required tasks still open: only with a reason ("complete anyway", for a task that was forgotten or cannot be done). The tasks that
+      // are still open are then closed as skipped with that reason, so the finished record agrees with itself.
+      const left = tasks.filter((t) => t.status === "todo" && !ok.has(t.id));
+      const leftRequired = left.filter((t) => t.required).map((t) => t.title);
+      if (p.requiredOpen > 0 && !overrideReason) throw new ActionFailure(`${p.requiredOpen} required ${p.requiredOpen === 1 ? "task is" : "tasks are"} still open. Close them, or complete anyway with a reason.`);
+      if (overrideReason && left.length > 0) {
+        await tx.update(checklistTasks).set({ status: "skipped", completedBy: actor.id, completedAt: new Date(), note: `Closed when HR completed the onboarding: ${overrideReason}` }).where(and(eq(checklistTasks.onboardingCaseId, c.id), inArray(checklistTasks.id, left.map((t) => t.id)), eq(checklistTasks.status, "todo")));
+      }
       await tx.update(onboardingCases).set({ status: "completed", completedAt: new Date(), completedBy: actor.id }).where(eq(onboardingCases.id, c.id));
-      await changeEmployeeStatus(tx, actor, c.employeeId, "active", { summary: "Onboarding completed" });
-      await writeAudit({ actor, action: "onboarding.complete", targetType: "employee", targetId: c.employeeId, after: { caseId: c.id } }, tx);
+      await changeEmployeeStatus(tx, actor, c.employeeId, "active", { summary: overrideReason && leftRequired.length > 0 ? "Onboarding completed by HR with tasks still open" : "Onboarding completed" });
+      await writeAudit({ actor, action: "onboarding.complete", targetType: "employee", targetId: c.employeeId, after: { caseId: c.id, ...(overrideReason && leftRequired.length > 0 ? { overrideReason, openRequiredTasks: leftRequired } : {}) } }, tx);
       if (e?.userId) await notify(tx, { userId: e.userId, kind: "onboarding.completed", title: "Onboarding complete", body: "You are all set. Welcome to the team.", link: "/dashboard" });
     });
     refresh();

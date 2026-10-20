@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { archiveFolder, createFolder, renameFolder } from "../actions";
 import type { DocumentRow, FolderRow } from "../queries";
 import { DocumentList } from "./document-list";
+import { DocumentFilterBar, GroupedDocuments, useDocumentFilters } from "./document-filters";
 
 const ALL = "all";
 const NONE = "none";
@@ -32,8 +33,11 @@ export function DocumentLibrary({ employeeId, rows, folders, canOrganize, viewer
   // A folder that was just removed is no longer there to be selected.
   const active = view === ALL || view === NONE || folders.some((f) => f.id === view) ? view : ALL;
   const folder = folders.find((f) => f.id === active) ?? null;
-  const shown = rows.filter((r) => (active === ALL ? true : active === NONE ? r.folderId === null || !folders.some((f) => f.id === r.folderId) : r.folderId === active));
-  const paged = usePaged(shown, active);
+  const inFolder = rows.filter((r) => (active === ALL ? true : active === NONE ? r.folderId === null || !folders.some((f) => f.id === r.folderId) : r.folderId === active));
+  // Search, type chips and grouping apply inside the chosen folder.
+  const filters = useDocumentFilters(inFolder);
+  const shown = filters.filtered;
+  const paged = usePaged(shown, `${active}|${filters.type}|${filters.q}`);
   const countIn = (id: string) => rows.filter((r) => r.folderId === id).length;
   const unfiled = rows.filter((r) => r.folderId === null || !folders.some((f) => f.id === r.folderId)).length;
 
@@ -156,13 +160,27 @@ export function DocumentLibrary({ employeeId, rows, folders, canOrganize, viewer
         </div>
       ) : null}
 
-      <DocumentList
-        rows={paged.rows}
-        viewerIsHr={viewerIsHr}
-        folders={canOrganize ? folders : undefined}
-        emptyText={active === ALL ? "No documents uploaded yet." : "Nothing in this folder yet. Move a document here from its row."}
-      />
-      <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="documents" />
+      {inFolder.length > 0 ? <DocumentFilterBar filters={filters} canGroupByFolder={folders.length > 0} /> : null}
+
+      {filters.group === "none" ? (
+        <>
+          <DocumentList
+            rows={paged.rows}
+            viewerIsHr={viewerIsHr}
+            folders={canOrganize ? folders : undefined}
+            emptyText={filters.filtering ? "No document matches." : active === ALL ? "No documents uploaded yet." : "Nothing in this folder yet. Move a document here from its row."}
+          />
+          <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="documents" />
+        </>
+      ) : (
+        <GroupedDocuments
+          rows={shown}
+          group={filters.group}
+          folders={canOrganize ? folders : undefined}
+          viewerIsHr={viewerIsHr}
+          emptyText={filters.filtering ? "No document matches." : "No documents uploaded yet."}
+        />
+      )}
     </div>
   );
 }

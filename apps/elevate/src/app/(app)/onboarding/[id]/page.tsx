@@ -31,7 +31,7 @@ export default async function OnboardingCasePage({ params }: PageProps<"/onboard
         {c.hiredWithoutOfferReason && c.canManage ? <p className="mt-1 text-sm text-muted-foreground">Hired without a signed offer: {c.hiredWithoutOfferReason}</p> : null}
       </div>
       <TaskList tasks={c.tasks} canManage={c.canManage} open={c.status === "open"} />
-      {c.canManage && c.status === "open" ? <CompleteOnboardingButton caseId={c.id} ready={c.progress.ready} /> : null}
+      {c.canManage && c.status === "open" ? <CompleteOnboardingButton caseId={c.id} ready={c.progress.ready} openTasks={c.tasks.filter((t) => t.required && t.status === "todo").map((t) => t.title)} /> : null}
     </div>
   );
 }

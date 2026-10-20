@@ -17,6 +17,7 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
   await page.getByLabel("Work email").fill(`dana.${stamp}@example.com`);
   await page.getByRole("button", { name: "Add person" }).click();
   await page.waitForURL(/\/people\/[0-9a-f-]{36}$/);
+  const personUrl = page.url();
 
   await page.getByRole("navigation", { name: "Profile sections" }).getByRole("link", { name: "Documents" }).click();
   await expect(page.getByText("Do not upload client records or patient information.")).toBeVisible();
@@ -62,6 +63,27 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
   await page.getByRole("button", { name: "Remove folder" }).click();
   await expect(page.getByText("Folder removed.")).toBeVisible();
   await expect(page.getByRole("row", { name: /Signed contract/ })).toBeVisible();
+
+  // The type is a badge of its own (not buried in grey text), and the list can be searched and grouped
+  await expect(row.getByText("Contract", { exact: true })).toBeVisible();
+  await page.getByLabel("Search documents").fill("no such file");
+  await expect(page.getByText("No document matches.")).toBeVisible();
+  await page.getByLabel("Search documents").fill("signed");
+  await page.getByLabel("Group by").selectOption("type");
+  await expect(page.getByRole("region", { name: "Contract" }).getByRole("row", { name: /Signed contract/ })).toBeVisible();
+  await page.getByLabel("Group by").selectOption("none");
+  await page.getByLabel("Search documents").fill("");
+
+  // HR sees everyone's files in one list, filtered by search
+  await page.goto("/documents?tab=files");
+  await page.getByLabel("Search by person, title or file name").fill(`Docs${stamp}`);
+  await page.getByRole("button", { name: "Filter" }).click();
+  const all = page.getByRole("row", { name: /Signed contract/ });
+  await expect(all).toBeVisible();
+  await expect(all.getByRole("link", { name: new RegExp(`Docs${stamp}`) })).toBeVisible();
+  await expect(all.getByText("Contract", { exact: true })).toBeVisible();
+  await page.goto(`${personUrl}?tab=documents`);
+  await waitForHydration(page, "#up-file");
 
   // A program disguised as a PDF is refused by the server and leaves nothing behind
   await fill("Sneaky", { name: "invoice.pdf", mimeType: "application/pdf", buffer: Buffer.from([0x4d, 0x5a, 0x90, 0, 3, 0, 0, 0, 4, 0, 0, 0, 0xff, 0xff, 0, 0]) });
