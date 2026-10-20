@@ -13,6 +13,7 @@ const { db } = await import("@/lib/db");
 const actions = await import("@/modules/timeoff/actions");
 const queries = await import("@/modules/timeoff/queries");
 const jobs = await import("@/modules/timeoff/jobs");
+const { syncHolidays } = await import("@/modules/timeoff/holiday-sync");
 const { addDays } = await import("@/modules/timeoff/service");
 const { todayInZone } = await import("@/modules/org/service");
 
@@ -329,6 +330,69 @@ describe("holidays", () => {
     expect(await actions.archiveHoliday({ holidayId: h.id })).toEqual({ ok: false, error: "That holiday was not found." });
     expect((await actions.createHoliday({ ...holiday, calendar: "MX" })).ok).toBe(false);
     expect(await rows(sql`select 1 from ops.audit_log where action in ('holiday.create','holiday.update','holiday.archive') and target_id = ${h.id}`)).toHaveLength(3);
+  });
+});
+
+describe("holiday import from Nager.Date", () => {
+  // A fake Nager response for a year no seed covers, so the test is repeatable and never calls the network.
+  const nager = (rowsByCalendar: Record<string, unknown[]>) => async (url: string) => {
+    const calendar = url.split("/").pop() as string;
+    return { ok: true, status: 200, json: async () => rowsByCalendar[calendar] ?? [] };
+  };
+  const wipe = (year: number) => db.execute(sql`delete from time.holidays where date between ${`${year}-01-01`} and ${`${year}-12-31`}`);
+
+  it("adds missing days only, keeps HR's rows and archived days, and a re-run adds nothing", async () => {
+    const year = 2041;
+    await wipe(year);
+    // HR already has Dec 25 under another spelling (verified), and archived Jun 12 on purpose.
+    await db.execute(sql`insert into time.holidays (calendar, date, name, kind, verified) values ('PH', ${`${year}-12-25`}, 'Pasko', 'regular', true)`);
+    await db.execute(sql`insert into time.holidays (calendar, date, name, kind, verified, archived_at) values ('PH', ${`${year}-06-12`}, 'Independence Day', 'regular', true, now())`);
+    const fake = nager({
+      PH: [
+        { date: `${year}-12-25`, name: "Christmas Day", global: true, types: ["Public"] },
+        { date: `${year}-06-12`, name: "Independence Day", global: true, types: ["Public"] },
+        { date: `${year}-11-30`, name: "Bonifacio Day", global: true, types: ["Public"] },
+        { date: `${year}-03-01`, name: "Some new proclaimed day", global: true, types: ["Public"] },
+      ],
+      US: [
+        { date: `${year}-07-04`, name: "Independence Day", global: true, types: ["Public", "Bank"] },
+        { date: `${year}-02-12`, name: "Lincoln's Birthday", global: false, types: ["Observance"] },
+      ],
+    });
+    expect(await syncHolidays([year], undefined, fake)).toEqual({ added: 3, alreadyThere: 2, failed: [] });
+    const got = await rows<{ calendar: string; date: string; name: string; kind: string; verified: boolean; archived_at: string | null }>(
+      sql`select calendar, date::text, name, kind, verified, archived_at::text from time.holidays where date between ${`${year}-01-01`} and ${`${year}-12-31`} order by date, calendar`,
+    );
+    expect(got.map((r) => `${r.calendar} ${r.date} ${r.name}`)).toEqual([
+      `PH ${year}-03-01 Some new proclaimed day`,
+      `PH ${year}-06-12 Independence Day`,
+      `US ${year}-07-04 Independence Day`,
+      `PH ${year}-11-30 Bonifacio Day`,
+      `PH ${year}-12-25 Pasko`,
+    ]);
+    expect(got.find((r) => r.name === "Some new proclaimed day")).toMatchObject({ kind: "other", verified: false });
+    expect(got.find((r) => r.name === "Bonifacio Day")).toMatchObject({ kind: "regular", verified: false });
+    expect(got.find((r) => r.calendar === "US")).toMatchObject({ kind: "federal", verified: true });
+    expect(got.find((r) => r.name === "Independence Day" && r.calendar === "PH")!.archived_at).not.toBeNull();
+    expect(got.find((r) => r.name === "Pasko")).toMatchObject({ verified: true });
+
+    expect(await syncHolidays([year], undefined, fake)).toEqual({ added: 0, alreadyThere: 5, failed: [] });
+    await wipe(year);
+  });
+
+  it("reports an unreachable calendar and still imports the other; the HR button needs the permission", async () => {
+    const year = 2042;
+    await wipe(year);
+    const partly = async (url: string) => (url.endsWith("/PH") ? { ok: false, status: 503, json: async () => [] } : { ok: true, status: 200, json: async () => [{ date: `${year}-01-01`, name: "New Year's Day", global: true, types: ["Public"] }] });
+    const result = await syncHolidays([year], undefined, partly);
+    expect(result.added).toBe(1);
+    expect(result.failed).toEqual([`PH ${year}: Nager.Date refused the request (HTTP 503)`]);
+    await wipe(year);
+
+    as(await makeUser("emp", ["employee"]));
+    expect(await actions.importHolidays({ year })).toEqual({ ok: false, error: NO_ACCESS });
+    as(hr);
+    expect((await actions.importHolidays({ year: 1999 })).ok).toBe(false);
   });
 });
 

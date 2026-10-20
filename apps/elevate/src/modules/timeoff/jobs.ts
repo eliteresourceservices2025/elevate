@@ -5,6 +5,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { notify } from "@/modules/notifications/service";
 import { formatDays, expiryAmount, unusedByPool } from "./ledger";
 import { leaveExpiryReminders, leaveLedger } from "./schema";
+import { syncHolidays, holidayYearsToSync, type HolidaySyncResult } from "./holiday-sync";
 import { addDays, loadLedger, lockEmployeeLedger } from "./service";
 
 // Background work (no signed-in person). src/inngest wraps this in a scheduled function. Rows written here
@@ -84,4 +85,13 @@ export async function runLeaveExpiry(today: string): Promise<LeaveExpiryRun> {
   }
 
   return { expired, daysWrittenOff, reminded };
+}
+
+/** Monthly: keeps this year's and next year's public holidays filled in from Nager.Date. Adds only; never changes an existing day. */
+export async function runHolidaySync(today: string): Promise<HolidaySyncResult> {
+  const result = await syncHolidays(holidayYearsToSync(today));
+  // What could be fetched is already saved. Throwing makes Inngest retry and the health page show the job failing,
+  // instead of recording a green run while Nager.Date has been unreachable for months.
+  if (result.failed.length > 0) throw new Error(`Holiday import incomplete: ${result.failed.length} list(s) not fetched`);
+  return result;
 }

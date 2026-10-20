@@ -12,6 +12,7 @@ import { notify } from "@/modules/notifications/service";
 import { todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { formatDays } from "./ledger";
+import { syncHolidays } from "./holiday-sync";
 import { holidays, leaveLedger, leaveTypes } from "./schema";
 import { balanceNow, lockEmployeeLedger } from "./service";
 import {
@@ -20,6 +21,7 @@ import {
   archiveLeaveTypeSchema,
   awardSchema,
   holidaySchema,
+  importHolidaysSchema,
   leaveTypeSchema,
   updateHolidaySchema,
   updateLeaveTypeSchema,
@@ -221,6 +223,21 @@ export async function createHoliday(input: unknown): Promise<ActionResult> {
     }
     refresh();
     return { ok: true, data: undefined };
+  });
+}
+
+/** HR button: adds the days Nager.Date lists for a year that ELEVATE does not have yet. Never changes or removes an existing holiday. */
+export async function importHolidays(input: unknown): Promise<ActionResult<{ added: number; alreadyThere: number; failed: string[] }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "timeoff.manage_holidays");
+    const parsed = importHolidaysSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const result = await syncHolidays([parsed.data.year], { id: actor.id, email: actor.email });
+    if (result.added === 0 && result.failed.length > 0) return fail("Nager.Date could not be reached. Try again later or add the holidays by hand.");
+    refresh();
+    return { ok: true, data: result };
   });
 }
 

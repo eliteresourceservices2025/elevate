@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { archiveHoliday, archiveLeaveType, createHoliday, createLeaveType, updateHoliday, updateLeaveType } from "../actions";
+import { archiveHoliday, archiveLeaveType, createHoliday, createLeaveType, importHolidays, updateHoliday, updateLeaveType } from "../actions";
 import type { HolidayRow, LeaveTypeRow } from "../queries";
 
 function useRun() {
@@ -148,6 +148,30 @@ function HolidayFields({ id, calendar, setCalendar, date, setDate, name, setName
       </div>
       {box(`${id}-verified`, "Checked against the official calendar", verified, setVerified)}
     </>
+  );
+}
+
+/** Adds the year's public holidays from Nager.Date. Days already on the calendar are never changed. */
+export function ImportHolidaysButton({ year }: { year: number }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  return (
+    <Button
+      variant="outline"
+      disabled={pending}
+      onClick={() =>
+        startTransition(async () => {
+          const result = await importHolidays({ year });
+          if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
+          const { added, alreadyThere, failed } = result.data;
+          toast.success(added > 0 ? `Added ${added} holiday${added === 1 ? "" : "s"} for ${year}. Check the new Philippine ones.` : `Nothing new for ${year}: ${alreadyThere} already on the calendar.`);
+          if (failed.length > 0) toast.warning("Some lists could not be fetched. Try again later.");
+          router.refresh();
+        })
+      }
+    >
+      {pending ? "Importing..." : `Import ${year} from Nager.Date`}
+    </Button>
   );
 }
 
