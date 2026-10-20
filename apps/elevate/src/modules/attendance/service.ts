@@ -33,7 +33,7 @@ export async function lockEmployeeClock(tx: Executor, employeeId: string): Promi
 export async function loadRecentEvents(executor: Executor, employeeId: string, limit = 60): Promise<ClockEventLite[]> {
   const rows = (await executor.execute(sql`
     select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms, planned_break_minutes as planned
-    from time.clock_events where employee_id = ${employeeId} order by occurred_at desc, created_at desc limit ${limit}`)) as unknown as {
+    from time.v_clock_events where employee_id = ${employeeId} order by occurred_at desc, created_at desc limit ${limit}`)) as unknown as {
     id: string; type: ClockType; at: number; created_ms: number; planned: number | null;
   }[];
   return rows.reverse().map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned }));
@@ -43,7 +43,7 @@ export async function loadRecentEvents(executor: Executor, employeeId: string, l
 export async function loadEventsBetween(executor: Executor, employeeId: string, fromMs: number, toMs: number): Promise<ClockEventLite[]> {
   const rows = (await executor.execute(sql`
     select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms, planned_break_minutes as planned
-    from time.clock_events
+    from time.v_clock_events
     where employee_id = ${employeeId} and occurred_at >= to_timestamp(${fromMs / 1000}) and occurred_at <= to_timestamp(${toMs / 1000})
     order by occurred_at, created_at`)) as unknown as { id: string; type: ClockType; at: number; created_ms: number; planned: number | null }[];
   return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned }));
@@ -302,4 +302,61 @@ export async function verifyEvidence(tx: Executor, employeeId: string, ids: stri
     verified.push(row.id);
   }
   return verified;
+}
+
+// ---- Changing recorded time (add events, remove wrong ones) ---------------------------------------------------------------------
+
+const DAY_MS = 86_400_000;
+const MAX_SESSION_MS = 16 * 3_600_000;
+/** An appeal from the person or a lead's proposal may go this far back; HR and Super Admin may change time further back (but not further than a year). */
+export const MAX_APPEAL_AGE_MS = 31 * DAY_MS;
+export const MAX_EDIT_AGE_MS = 365 * DAY_MS;
+
+export type ProposedEvents = { type: ClockType; at: string }[];
+
+/**
+ * Replays the person's events (without the ones being removed) together with the proposed ones: every proposed event must fit, nothing
+ * that fitted before may stop fitting (for example removing a clock-in and leaving its clock-out), and no session may run over 16 hours.
+ * `maxAgeMs` is how far back a change may reach (null = no limit besides a year). Returns the reason it cannot be applied, or null.
+ */
+export async function checkProposal(
+  employeeId: string,
+  proposed: ProposedEvents,
+  nowMs: number,
+  lock?: Pick<typeof db, "execute">,
+  opts: { voidIds?: string[]; maxAgeMs?: number } = {},
+): Promise<string | null> {
+  const executor = lock ?? db;
+  const voidIds = opts.voidIds ?? [];
+  const maxAge = opts.maxAgeMs ?? MAX_APPEAL_AGE_MS;
+  const times = proposed.map((p) => Date.parse(p.at));
+  if (times.some((t) => t > nowMs + 60_000)) return "A correction cannot be in the future.";
+  if (times.some((t) => t < nowMs - maxAge)) return maxAge >= MAX_EDIT_AGE_MS ? "Changes can only go back a year." : "Corrections can only go back 31 days. Ask HR for older ones.";
+
+  // The time of an event being removed also counts: it is part of the stretch of the record that changes.
+  let voidTimes: number[] = [];
+  if (voidIds.length > 0) {
+    const found = (await executor.execute(sql`select (extract(epoch from occurred_at) * 1000)::float8 as at from time.clock_events where employee_id = ${employeeId} and id = any(${`{${voidIds.join(",")}}`}::uuid[])`)) as unknown as { at: number }[];
+    voidTimes = found.map((r) => Number(r.at));
+  }
+  const all = [...times, ...voidTimes];
+  if (all.length === 0) return null;
+  if (voidTimes.some((t) => t < nowMs - maxAge)) return maxAge >= MAX_EDIT_AGE_MS ? "Changes can only go back a year." : "Corrections can only go back 31 days. Ask HR for older ones.";
+
+  const from = Math.min(...all) - DAY_MS;
+  const to = Math.max(...all) + DAY_MS;
+  const existing = ((await executor.execute(sql`
+    select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms
+    from time.v_clock_events where employee_id = ${employeeId} and occurred_at between to_timestamp(${from / 1000}) and to_timestamp(${to / 1000})`)) as unknown as {
+    id: string; type: ClockType; at: number; created_ms: number;
+  }[]).map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms) }));
+  // Anything already inconsistent before the change is not this change's problem. But the proposed events must fit,
+  // and they must not make an event that was fine before stop fitting (for example a clock-in before an open session).
+  const baselineInvalid = new Set(replayClock(existing).invalid.map((e) => e.id));
+  const kept = existing.filter((e) => !voidIds.includes(e.id ?? ""));
+  const withProposed = [...kept, ...proposed.map((p, i) => ({ id: `proposed-${i}`, type: p.type, at: Date.parse(p.at), createdAtMs: Number.MAX_SAFE_INTEGER }))];
+  const replay = replayClock(withProposed);
+  if (replay.invalid.some((e) => e.id?.startsWith("proposed-") || !baselineInvalid.has(e.id))) return voidIds.length > 0 ? "That change does not fit with the other clock events (for example a clock-out left with no clock-in)." : "Those events do not fit with your existing clock events (for example a clock-out with no clock-in).";
+  if (replay.sessions.some((s) => (s.endAt ?? nowMs) - s.startAt > MAX_SESSION_MS)) return "That would make a session longer than 16 hours.";
+  return null;
 }

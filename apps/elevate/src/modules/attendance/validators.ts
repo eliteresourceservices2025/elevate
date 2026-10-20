@@ -43,6 +43,20 @@ export const correctionRequestSchema = z.object({
 });
 /** A lead or HR files a correction for someone else. */
 export const fileForOthersSchema = z.object({ employeeId: uuid, reason, events: proposedEvents, kind: kind.default("other") });
+/** HR or a lead changes someone's recorded time: events to remove (by id) and events to add, with a reason. At least one change. */
+export const editAttendanceSchema = z
+  .object({
+    employeeId: uuid,
+    voidEventIds: z.array(uuid).max(6, "Remove six events at most at once").default([]),
+    events: z
+      .array(z.object({ type: CLOCK_TYPES, at: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a real date and time") }))
+      .max(6, "Add six events at most at once")
+      .default([]),
+    reason,
+  })
+  .refine((v) => v.voidEventIds.length + v.events.length > 0, { message: "Remove or add at least one event", path: ["events"] });
+/** Which person and which calendar day (YYYY-MM-DD in the person's own zone) to show for changing. */
+export const loadDaySchema = z.object({ employeeId: uuid, date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date") });
 export const EVIDENCE_MAX_BYTES = 5_000_000;
 export const evidenceUploadSchema = z.object({ mime: z.enum(["image/jpeg", "image/png"]), size: z.number().int().min(1).max(EVIDENCE_MAX_BYTES, "Each screenshot must be 5 MB or smaller") });
 export const evidenceIdSchema = z.object({ evidenceId: uuid });

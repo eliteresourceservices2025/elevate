@@ -2,20 +2,26 @@ import type { Metadata } from "next";
 import { Badge } from "@/components/ui/badge";
 import { PagerLinks } from "@/components/pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { FormDialog } from "@/components/form-dialog";
+import { scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
+import { EditHoursForm } from "@/modules/attendance/components/edit-hours-form";
 import { orNotFound } from "@/lib/or-not-found";
 import { paginate, parsePaging } from "@/lib/pagination";
 import { formatDateOnly, formatInZone } from "@/lib/time";
 import { formatDuration, MINUTE } from "@/modules/attendance/clock";
 import { FLAG_LABELS } from "@/modules/attendance/flag-labels";
-import { listFlags, listShiftNotes, listWorkingNow } from "@/modules/attendance/queries";
+import { listFilablePeople, listFlags, listShiftNotes, listWorkingNow } from "@/modules/attendance/queries";
 
 export const metadata: Metadata = { title: "Team attendance" };
 
 const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
 
 export default async function TeamAttendancePage({ searchParams }: PageProps<"/team-attendance">) {
-  await requireUser();
+  const user = await requireUser();
+  const editScope = scopeFor(user, "attendance.edit_hours");
+  const canEdit = editScope === "all" || editScope === "team";
+  const editPeople = canEdit ? await orNotFound(listFilablePeople()) : [];
   const params = await searchParams;
   const [working, flags, notes] = await Promise.all([orNotFound(listWorkingNow()), orNotFound(listFlags()), orNotFound(listShiftNotes())]);
   const query = { wpage: one(params.wpage), wsize: one(params.wsize), fpage: one(params.fpage), fsize: one(params.fsize), npage: one(params.npage), nsize: one(params.nsize) };
@@ -29,9 +35,16 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
 
   return (
     <div className="w-full space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Team attendance</h1>
-        <p className="mt-1 text-muted-foreground">Who is clocked in, what needs a look, and the end-of-day reports from your team.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Team attendance</h1>
+          <p className="mt-1 text-muted-foreground">Who is clocked in, what needs a look, and the end-of-day reports from your team.</p>
+        </div>
+        {canEdit ? (
+          <FormDialog label="Change someone's time" title="Change someone's time" description="Remove an event that was recorded wrongly and add the right ones, with a reason." size="xl" variant="outline">
+            <EditHoursForm people={editPeople} applyNow={editScope === "all"} />
+          </FormDialog>
+        ) : null}
       </div>
 
       <section aria-label="Working now" className="space-y-2">

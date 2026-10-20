@@ -17,8 +17,9 @@ import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { groupByPerson, parseCorrectionsCsv } from "./bulk-corrections";
 import { EOD_EDIT_WINDOW_MS, needsHrDecision, replayClock } from "./clock";
-import { clockCorrections, clockEvents, clockPrefs, clockRules, correctionEvidence, idlePrompts, shiftNotes } from "./schema";
-import { evidencePath, loadRecentEvents, lockEmployeeClock, monitoringPolicyPublished, performClock, personForUser, rulesFor, selfiePath, verifyEvidence, type ClockResult } from "./service";
+import { clockCorrections, clockEvents, clockEventVoids, clockPrefs, clockRules, correctionEvidence, idlePrompts, shiftNotes } from "./schema";
+import { rebuildAfterChange } from "./edit-service";
+import { MAX_APPEAL_AGE_MS, MAX_EDIT_AGE_MS, checkProposal, evidencePath, loadRecentEvents, lockEmployeeClock, monitoringPolicyPublished, performClock, personForUser, rulesFor, selfiePath, verifyEvidence, type ClockResult } from "./service";
 import {
   EVIDENCE_MAX_BYTES,
   bulkCorrectionsSchema,
@@ -40,8 +41,6 @@ import {
 const BAD = "Check the request and try again.";
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? BAD;
 const DAY_MS = 86_400_000;
-const MAX_CORRECTION_AGE_MS = 31 * DAY_MS;
-const MAX_SESSION_MS = 16 * 3_600_000;
 
 function refresh() {
   revalidatePath("/attendance");
@@ -149,29 +148,6 @@ export async function answerIdlePrompt(input: unknown): Promise<ActionResult> {
 // --- Corrections ---------------------------------------------------------------------------------
 
 type Proposed = { type: "clock_in" | "break_start" | "break_end" | "clock_out"; at: string }[];
-
-/** Replays the person's real events together with the proposed ones: every proposed event must fit, and no session may be absurdly long. */
-async function checkProposal(employeeId: string, proposed: Proposed, nowMs: number, lock?: Pick<typeof db, "execute">): Promise<string | null> {
-  const times = proposed.map((p) => Date.parse(p.at));
-  if (times.some((t) => t > nowMs + 60_000)) return "A correction cannot be in the future.";
-  if (times.some((t) => t < nowMs - MAX_CORRECTION_AGE_MS)) return "Corrections can only go back 31 days. Ask HR for older ones.";
-
-  const from = Math.min(...times) - DAY_MS;
-  const to = Math.max(...times) + DAY_MS;
-  const existing = ((await (lock ?? db).execute(sql`
-    select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms
-    from time.clock_events where employee_id = ${employeeId} and occurred_at between to_timestamp(${from / 1000}) and to_timestamp(${to / 1000})`)) as unknown as {
-    id: string; type: Proposed[number]["type"]; at: number; created_ms: number;
-  }[]).map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms) }));
-  // Anything already inconsistent before the correction is not this request's problem. But the proposed events must fit,
-  // and they must not make an event that was fine before stop fitting (for example a clock-in before an open session).
-  const baselineInvalid = new Set(replayClock(existing).invalid.map((e) => e.id));
-  const withProposed = [...existing, ...proposed.map((p, i) => ({ id: `proposed-${i}`, type: p.type, at: Date.parse(p.at), createdAtMs: Number.MAX_SAFE_INTEGER }))];
-  const replay = replayClock(withProposed);
-  if (replay.invalid.some((e) => e.id?.startsWith("proposed-") || !baselineInvalid.has(e.id))) return "Those events do not fit with your existing clock events (for example a clock-out with no clock-in).";
-  if (replay.sessions.some((s) => (s.endAt ?? nowMs) - s.startAt > MAX_SESSION_MS)) return "That would make a session longer than 16 hours.";
-  return null;
-}
 
 export async function requestCorrection(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
@@ -311,6 +287,8 @@ export async function decideCorrection(input: unknown): Promise<ActionResult> {
     if (decision === "reject" && !note) return fail("Give a short reason so the person knows why.");
     if (events && decision !== "approve") return fail("Times can only be changed when approving.");
 
+    let earliestMs = Date.now();
+    let employeeToRebuild: string | null = null;
     await db.transaction(async (tx) => {
       const [c] = await tx.select().from(clockCorrections).where(eq(clockCorrections.id, correctionId)).for("update");
       if (!c) throw new ActionFailure("That request was not found.");
@@ -329,19 +307,35 @@ export async function decideCorrection(input: unknown): Promise<ActionResult> {
 
       if (decision === "approve") {
         await lockEmployeeClock(tx, c.employeeId);
-        const problem = await checkProposal(c.employeeId, proposed, Date.now(), tx);
+        // HR and Super Admin may decide older ones than a lead may (up to a year); a change that removes events is checked with those events gone.
+        const maxAgeMs = scopeFor(actor, "attendance.approve_correction") === "all" ? MAX_EDIT_AGE_MS : MAX_APPEAL_AGE_MS;
+        const voids = c.voidEventIds;
+        if (voids.length > 0) {
+          const [{ n }] = (await tx.execute(sql`select count(*)::int as n from time.v_clock_events where employee_id = ${c.employeeId} and id = any(${`{${voids.join(",")}}`}::uuid[])`)) as unknown as { n: number }[];
+          if (n !== voids.length) throw new ActionFailure("It cannot be applied now: an event it removes is no longer on the record.");
+        }
+        const problem = await checkProposal(c.employeeId, proposed, Date.now(), tx, { voidIds: voids, maxAgeMs });
         if (problem) throw new ActionFailure(`It cannot be applied now: ${problem}`);
-        await tx.insert(clockEvents).values(
-          proposed.map((p) => ({
-            employeeId: c.employeeId,
-            type: p.type,
-            occurredAt: new Date(p.at),
-            source: "admin_correction",
-            correctionId: c.id,
-            correctionReason: c.reason,
-            createdBy: actor.id,
-          })),
-        );
+        if (voids.length > 0) {
+          const removedAt = (await tx.execute(sql`select occurred_at from time.clock_events where id = any(${`{${voids.join(",")}}`}::uuid[])`)) as unknown as { occurred_at: string | Date }[];
+          earliestMs = Math.min(earliestMs, ...removedAt.map((r) => new Date(r.occurred_at).getTime()));
+          await tx.insert(clockEventVoids).values(voids.map((eventId) => ({ eventId, reason: c.reason, voidedBy: actor.id, correctionId: c.id })));
+        }
+        earliestMs = Math.min(earliestMs, ...proposed.map((p) => Date.parse(p.at)));
+        if (proposed.length > 0) {
+          await tx.insert(clockEvents).values(
+            proposed.map((p) => ({
+              employeeId: c.employeeId,
+              type: p.type,
+              occurredAt: new Date(p.at),
+              source: "admin_correction",
+              correctionId: c.id,
+              correctionReason: c.reason,
+              createdBy: actor.id,
+            })),
+          );
+        }
+        employeeToRebuild = c.employeeId;
       }
       await tx
         .update(clockCorrections)
@@ -350,8 +344,10 @@ export async function decideCorrection(input: unknown): Promise<ActionResult> {
       if (person.userId) {
         await notify(tx, { userId: person.userId, kind: `attendance.correction_${decision === "approve" ? "approved" : "rejected"}`, title: decision === "approve" ? (changed ? "Your time correction was approved with changes" : "Your time correction was approved") : "Your time correction was rejected", body: changed ? `The times were adjusted by your reviewer.${note ? ` ${note}` : ""}` : note, link: "/attendance" });
       }
-      await writeAudit({ actor, action: `clock.correction_${decision}`, targetType: "employee", targetId: c.employeeId, before: null, after: { correctionId: c.id, proposed, reason: c.reason }, metadata: { note: note ?? null, adjusted: changed } }, tx);
+      await writeAudit({ actor, action: `clock.correction_${decision}`, targetType: "employee", targetId: c.employeeId, before: null, after: { correctionId: c.id, proposed, removed: c.voidEventIds, reason: c.reason }, metadata: { note: note ?? null, adjusted: changed } }, tx);
     });
+    // The person's days are rebuilt from the events that count now, so the hours show the change at once (not at the next nightly run)
+    if (employeeToRebuild) await rebuildAfterChange(employeeToRebuild, earliestMs);
     refresh();
     return { ok: true, data: undefined };
   });

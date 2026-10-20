@@ -26,7 +26,8 @@ export async function wrapUpAttendance(tx: Tx, employeeId: string, lastWorkingDa
 }
 
 /** True when the person's latest clock event is not a clock-out (a session is open). */
-export async function openSession(tx: Pick<typeof db, "select">, employeeId: string): Promise<boolean> {
-  const [last] = await tx.select({ type: clockEvents.type }).from(clockEvents).where(eq(clockEvents.employeeId, employeeId)).orderBy(desc(clockEvents.occurredAt)).limit(1);
+export async function openSession(tx: Pick<typeof db, "select" | "execute">, employeeId: string): Promise<boolean> {
+  // The events that count (a removed event is not one of them): read from the view, not the raw table.
+  const [last] = (await tx.execute(sql`select type from time.v_clock_events where employee_id = ${employeeId} order by occurred_at desc, created_at desc limit 1`)) as unknown as { type: string }[];
   return Boolean(last && last.type !== "clock_out");
 }

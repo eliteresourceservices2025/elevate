@@ -176,7 +176,7 @@ export async function runJibbleRepair(now = new Date(), client: JibbleClient | n
     left join core.users u on u.id = e.user_id
     join time.jibble_people p on p.employee_id = e.id
     where (coalesce(r.jibble_mirror, false) or ${selfTestMatch}) and e.archived_at is null and e.status <> 'separated'
-      and exists (select 1 from time.clock_events c where c.employee_id = e.id and c.occurred_at > ${new Date(now.getTime() - 2 * DAY_MS).toISOString()}::timestamptz)
+      and exists (select 1 from time.v_clock_events c where c.employee_id = e.id and c.occurred_at > ${new Date(now.getTime() - 2 * DAY_MS).toISOString()}::timestamptz)
     limit 400`)) as unknown as { employee_id: string; jibble_person_id: string }[];
 
   let authProblem = false;

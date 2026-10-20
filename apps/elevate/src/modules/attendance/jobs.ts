@@ -64,7 +64,7 @@ async function flagAbsences(now: Date, from: string, to: string, onlyEmployeeId?
         // A row created solely to record absence has no event-derived data to retain.
         await db.execute(sql`delete from time.attendance_days where employee_id = ${employeeId} and date = ${date}::date
           and sessions = 0 and 'absent' = any(flags) and flags <@ array['absent']::text[]
-          and not exists (select 1 from time.clock_events ev where ev.employee_id = ${employeeId}
+          and not exists (select 1 from time.v_clock_events ev where ev.employee_id = ${employeeId}
             and (ev.occurred_at at time zone ${prefs.zone})::date = ${date}::date)`);
         await db.execute(sql`update time.attendance_days set flags = array_remove(flags, 'absent'),
           scheduled_minutes = case when ${shift?.scheduledMinutes ?? null}::int is null then null else scheduled_minutes end
@@ -88,7 +88,7 @@ export async function rebuildAttendanceDays(now = new Date(), daysBack = 3, only
   // The normal nightly job searches event owners; the explicit maintenance path supplies one owner.
   const people = onlyEmployeeId
     ? [{ employee_id: onlyEmployeeId }]
-    : ((await db.execute(sql`select distinct employee_id from time.clock_events where occurred_at >= to_timestamp(${fromMs / 1000})`)) as unknown as { employee_id: string }[]);
+    : ((await db.execute(sql`select distinct employee_id from time.v_clock_events where occurred_at >= to_timestamp(${fromMs / 1000})`)) as unknown as { employee_id: string }[]);
   return rebuildRange(people, earliest, latest, fromMs - DAY_MS, now.getTime(), now, daysBack, onlyEmployeeId);
 }
 
@@ -107,7 +107,7 @@ export async function rebuildHistoricalAttendanceDays(employeeId: string, from: 
   // An open session at the lower edge cannot be replayed from a bounded read. Do not guess its hours.
   const eventFromMs = fromMs - 2 * DAY_MS;
   const [boundary] = (await db.execute(sql`
-    select type from time.clock_events where employee_id = ${employeeId}
+    select type from time.v_clock_events where employee_id = ${employeeId}
       and occurred_at < to_timestamp(${eventFromMs / 1000})
     order by occurred_at desc, created_at desc limit 1`)) as unknown as { type: string }[];
   if (boundary && boundary.type !== "clock_out") throw new Error("A clock session crosses the reconciliation boundary. Review it before rebuilding.");
@@ -136,7 +136,7 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         select
           bool_or(outside_allowed_range) as outside,
           bool_or(source = 'admin_correction') as corrected
-        from time.clock_events
+        from time.v_clock_events
         where employee_id = ${employeeId} and occurred_at between to_timestamp(${d.firstIn / 1000}) and to_timestamp(${end / 1000})`)) as unknown as { outside: boolean | null; corrected: boolean | null }[];
       const [idle] = (await db.execute(sql`
         select count(*)::int as n from time.idle_prompts
@@ -232,7 +232,7 @@ async function missedAtShiftEnd(now: Date): Promise<number> {
              (array_agg(id order by occurred_at desc, created_at desc) filter (where type = 'clock_in'))[1] as event_id,
              (array_agg(type order by occurred_at desc, created_at desc))[1] as last_type,
              (extract(epoch from max(occurred_at) filter (where type = 'clock_in')) * 1000)::float8 as last_in_ms
-      from time.clock_events where occurred_at > now() - interval '3 days' group by employee_id
+      from time.v_clock_events where occurred_at > now() - interval '3 days' group by employee_id
     ) s
     join core.employees e on e.id = s.employee_id
     where s.last_type <> 'clock_out' and s.event_id is not null
@@ -279,7 +279,7 @@ async function missedAfterTwelveHours(now: Date): Promise<{ noticed: number }> {
              (array_agg(id order by occurred_at desc, created_at desc) filter (where type = 'clock_in'))[1] as event_id,
              (array_agg(type order by occurred_at desc, created_at desc))[1] as last_type,
              (max(occurred_at) filter (where type = 'clock_in')) as last_in
-      from time.clock_events where occurred_at > now() - interval '7 days' group by employee_id
+      from time.v_clock_events where occurred_at > now() - interval '7 days' group by employee_id
     ) s
     join core.employees e on e.id = s.employee_id
     where s.last_type <> 'clock_out' and s.last_in < ${cutoff.toISOString()}::timestamptz
@@ -317,7 +317,7 @@ export async function runQuietSessionAlerts(now = new Date()): Promise<{ noticed
              (array_agg(id order by occurred_at desc, created_at desc) filter (where type = 'clock_in'))[1] as event_id,
              (array_agg(type order by occurred_at desc, created_at desc))[1] as last_type,
              max(occurred_at) as last_event
-      from time.clock_events where occurred_at > now() - interval '3 days' group by employee_id
+      from time.v_clock_events where occurred_at > now() - interval '3 days' group by employee_id
     ) s
     join core.employees e on e.id = s.employee_id
     left join time.clock_presence p on p.employee_id = s.employee_id
@@ -384,7 +384,7 @@ export async function runOverbreakAlerts(now = new Date()): Promise<{ noticed: n
     select last.employee_id, last.event_id, last.planned, (extract(epoch from last.occurred_at) * 1000)::float8 as started_ms
     from (
       select distinct on (employee_id) employee_id, id as event_id, type, planned_break_minutes as planned, occurred_at
-      from time.clock_events where occurred_at > now() - interval '12 hours'
+      from time.v_clock_events where occurred_at > now() - interval '12 hours'
       order by employee_id, occurred_at desc, created_at desc
     ) last
     where last.type = 'break_start' and last.planned is not null
