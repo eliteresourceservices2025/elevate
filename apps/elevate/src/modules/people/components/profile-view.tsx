@@ -21,6 +21,8 @@ import { initialsOf } from "@/lib/initials";
 import { ChangePhotoButton, ProfilePicture, RemovePhotoButton } from "@/modules/people/components/profile-picture";
 import { listOrgOptions } from "@/modules/org/queries";
 import { getProfile, listClientsForFilter } from "@/modules/people/queries";
+import { SelfIdCard } from "@/modules/demographics/components/self-id-card";
+import { getMySelfIdentification, getPronounsFor } from "@/modules/demographics/queries";
 
 const TABS = [
   { key: "personal", label: "Personal" },
@@ -46,6 +48,8 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
 
   const today = formatInZone(new Date(), DEFAULT_TIMEZONE, "yyyy-MM-dd");
   const orgOptions = active.key === "employment" && access.canManageReporting ? await listOrgOptions() : undefined;
+  const pronouns = await getPronounsFor(e.id);
+  const mine = (own || access.isSelf) && active.key === "personal" ? await getMySelfIdentification() : null;
   const clients = active.key === "clients" && access.canManageAssignments ? await listClientsForFilter() : [];
 
   return (
@@ -66,7 +70,10 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
               {!own && !access.isSelf && e.photo && access.canEdit ? <RemovePhotoButton userId={e.photo.userId} /> : null}
             </div>
             <div>
-            <h1 className="text-2xl font-bold">{displayName(e)}</h1>
+            <h1 className="text-2xl font-bold">
+              {displayName(e)}
+              {pronouns ? <span className="ml-2 text-base font-normal text-muted-foreground">({pronouns})</span> : null}
+            </h1>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span>{e.employeeNumber}</span>
               <span aria-hidden>·</span>
@@ -107,6 +114,7 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
       </nav>
 
       {active.key === "personal" ? <PersonalSection profile={profile} /> : null}
+      {mine ? <SelfIdCard initial={mine} /> : null}
       {active.key === "employment" ? <EmploymentSection profile={profile} orgOptions={orgOptions} today={today} /> : null}
       {active.key === "ids" ? <IdsSection profile={profile} /> : null}
       {active.key === "payout" ? <PayoutSection profile={profile} /> : null}

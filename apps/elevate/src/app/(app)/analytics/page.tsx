@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { AnalyticsDashboard } from "@/modules/analytics/components/dashboard";
 import { getDashboard } from "@/modules/analytics/queries";
+import { SelfIdSummary } from "@/modules/demographics/components/self-id-summary";
 
 export const metadata: Metadata = { title: "Analytics" };
 
@@ -18,6 +19,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps<"/analyt
         <p className="mt-1 text-muted-foreground">Headcount, turnover, time off, attendance and hiring. Totals only, read-only.</p>
       </div>
       <AnalyticsDashboard data={data} canExport={can(user, "analytics.export")} />
+      {can(user, "demographics.view_summary") ? <SelfIdSummary /> : null}
     </div>
   );
 }

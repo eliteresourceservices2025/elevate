@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/modules/audit/write";
+import { deleteApplicantSelfId } from "@/modules/demographics/service";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { getEmailSender } from "@/modules/notifications/email";
 import { retentionMonths } from "./constants";
@@ -121,6 +122,7 @@ export async function runRecruitingRetention(now = new Date()) {
         await tx.update(applicationStageHistory).set({ note: null }).where(inArray(applicationStageHistory.applicationId, apps));
         await tx.update(applications).set({ note: null, closeReason: null }).where(inArray(applications.id, apps));
       }
+      await deleteApplicantSelfId(tx, candidateId); // the applicant's voluntary self-identification answers go too
       await tx
         .update(candidates)
         .set({ email: `removed-${candidateId}@removed.invalid`, fullName: "Removed applicant", phone: null, country: null, resumePath: null, resumeName: null, resumeKind: null, resumeSha256: null, anonymizedAt: now })

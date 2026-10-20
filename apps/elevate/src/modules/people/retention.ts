@@ -5,6 +5,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { blankEmployeeDocuments } from "@/modules/documents/retention";
 import { getDocumentStorage, type Bucket } from "@/modules/documents/storage";
 import { retentionStage, DEFAULT_ANONYMIZE_AFTER_MONTHS, DEFAULT_ARCHIVE_AFTER_MONTHS } from "./retention-rules";
+import { clearEmployeeSelfId } from "@/modules/demographics/service";
 import { customFieldValues, emergencyContacts, employeeSensitive, employees, peopleRetentionSettings } from "./schema";
 
 // Internals for the retention job and its settings form. Not a "use server" file: nothing here is a public endpoint.
@@ -105,6 +106,7 @@ export async function runPeopleRetention(now = new Date()) {
             updatedAt: now,
           })
           .where(eq(employees.id, r.id));
+        await clearEmployeeSelfId(tx, r.id); // voluntary self-identification answers go with the record
         const sensitive = await tx.delete(employeeSensitive).where(eq(employeeSensitive.employeeId, r.id)).returning({ id: employeeSensitive.employeeId });
         const contacts = await tx.delete(emergencyContacts).where(eq(emergencyContacts.employeeId, r.id)).returning({ id: emergencyContacts.id });
         const custom = await tx.delete(customFieldValues).where(eq(customFieldValues.employeeId, r.id)).returning({ id: customFieldValues.fieldDefId });
