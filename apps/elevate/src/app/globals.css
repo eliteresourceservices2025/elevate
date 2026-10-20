@@ -35,6 +35,21 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-surface: var(--success-surface);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-surface: var(--warning-surface);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-surface: var(--info-surface);
+
+  /* One control-height scale: h-control-sm / h-control / h-control-lg. Buttons, inputs and selects use it so a row of them lines up. */
+  --spacing-control-sm: 1.75rem;
+  --spacing-control: 2rem;
+  --spacing-control-lg: 2.25rem;
+
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -78,6 +93,17 @@
   --accent: #e2be2b;
   --accent-foreground: #2b2000;
   --destructive: #c62828;
+  /* Status colours. The plain colour is for text and icons on white or on its own surface (4.5:1 or better on both) and for solid
+     fills with white text; the surface is the tinted background. Gold stays a fill colour, never a status colour. */
+  --success: #1b6b3a;
+  --success-foreground: #ffffff;
+  --success-surface: #e6f4ea;
+  --warning: #7a5200;
+  --warning-foreground: #ffffff;
+  --warning-surface: #fff3d1;
+  --info: #1c5aa0;
+  --info-foreground: #ffffff;
+  --info-surface: #e6f0fb;
   --border: rgb(108 26 186 / 0.16);
   --input: rgb(108 26 186 / 0.28);
   --ring: #6c1aba;
@@ -115,6 +141,15 @@
   --accent: #e2be2b;
   --accent-foreground: #1d1500;
   --destructive: #ef7c7c;
+  --success: #6fd196;
+  --success-foreground: #0f1f15;
+  --success-surface: #16291d;
+  --warning: #f0c75e;
+  --warning-foreground: #2e2511;
+  --warning-surface: #2e2511;
+  --info: #7db8f5;
+  --info-foreground: #0d1d30;
+  --info-surface: #14253a;
   --border: rgb(255 255 255 / 0.12);
   --input: rgb(255 255 255 / 0.2);
   --ring: #e2be2b;
@@ -135,20 +170,20 @@
 
 /* A table wider than the screen scrolls sideways inside its card. These edge shadows show there is more to the left or right and
    fade away at the ends (the cover gradients scroll with the content; the shadows stay put). */
-/* Every table in the content area: a tinted header and alternating rows, light and dark. The header rule is not in a layer so it wins
+/* Every table in the content area (a table with the data-plain attribute, set by <Table plain>, opts out and styles itself): a tinted header and alternating rows, light and dark. The header rule is not in a layer so it wins
    over the per-table colours; the row stripes are in the base layer so a row that sets its own colour (a warning, a selection) still wins. */
-#main table thead {
+#main table:not([data-plain]) thead {
   background-color: color-mix(in oklab, var(--primary) 10%, var(--card));
 }
-#main table thead th {
+#main table:not([data-plain]) thead th {
   color: var(--foreground);
   font-weight: 600;
 }
 @layer base {
-  #main table tbody tr:nth-child(even) {
+  #main table:not([data-plain]) tbody tr:nth-child(even) {
     background-color: color-mix(in oklab, var(--primary) 4.5%, transparent);
   }
-  #main table tbody tr:hover {
+  #main table:not([data-plain]) tbody tr:hover {
     background-color: color-mix(in oklab, var(--primary) 9%, transparent);
   }
 }

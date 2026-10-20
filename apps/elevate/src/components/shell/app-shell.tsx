@@ -37,6 +37,13 @@ export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [],
     // link into view, a route change), which pushed the header and the top of the menu out of sight until a refresh. A clipped box
     // cannot scroll at all, so only the content area below ever moves.
     <div data-app-shell className="relative flex h-dvh overflow-clip print:block print:h-auto print:overflow-visible">
+      {/* Skip link: first stop for keyboard users. Fixed, not absolute, so focusing it can never scroll the shell. */}
+      <a
+        href="#main"
+        className="fixed top-2 left-2 z-[100] -translate-y-20 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg focus:translate-y-0 focus-visible:ring-3 focus-visible:ring-ring/50 print:hidden"
+      >
+        Skip to content
+      </a>
       <aside
         data-tour="menu"
         className={cn(
@@ -52,7 +59,7 @@ export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [],
           {banner}
           {/* Side padding: 16px on a phone, 40px on a tablet or laptop, 48px on a large screen. Pages fill the width between. */}
           <UnsavedChangesProvider>
-            <main id="main" className="px-4 py-5 md:px-10 md:py-6 2xl:px-12 print:p-0">
+            <main id="main" tabIndex={-1} className="px-4 py-5 md:px-10 md:py-6 2xl:px-12 print:p-0 focus:outline-none">
               {children}
             </main>
           </UnsavedChangesProvider>
