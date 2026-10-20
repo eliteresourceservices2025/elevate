@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/modules/core/schema";
-import { getEmailSender } from "./email";
+import { emailProvider, getEmailSender } from "./email";
 import { renderEmail } from "./email-content";
 import { emailQueue } from "./schema";
 
@@ -13,10 +13,14 @@ export const EMAIL_PRIORITY = { ack_due: 1, invite: 1, digest: 2, reminder: 2 } 
 const MAX_ATTEMPTS = 3;
 const DIGEST_MAX_AGE_HOURS = 24;
 
-/** Emails allowed per rolling 24 hours. The free Resend plan sends 100 a day; we stay under it. */
+/**
+ * Emails allowed per rolling 24 hours. We stay under the free plan's cap: Resend 100 a day, Brevo 300 a day. The gap
+ * is for sign-in, support, signing-link and applicant mail, which share the cap but do not go through this queue.
+ */
 export function dailyEmailBudget(): number {
-  const n = Number(process.env.EMAIL_DAILY_BUDGET ?? 90);
-  return Number.isFinite(n) ? Math.max(0, Math.min(1000, Math.floor(n))) : 90;
+  const fallback = emailProvider() === "brevo" ? 250 : 90;
+  const n = Number(process.env.EMAIL_DAILY_BUDGET ?? fallback);
+  return Number.isFinite(n) ? Math.max(0, Math.min(1000, Math.floor(n))) : fallback;
 }
 
 export type QueuedEmail = {

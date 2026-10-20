@@ -10,7 +10,7 @@ import { getRetentionSettings } from "./service";
 
 const MAX_ATTEMPTS = 3;
 
-/** Emails to applicants allowed per rolling 24 hours (separate from the staff email budget; Resend's free plan is 100 a day). */
+/** Emails to applicants allowed per rolling 24 hours (separate from the staff email budget; the free plans allow 100 (Resend) or 300 (Brevo) a day). */
 export function candidateEmailBudget(): number {
   const n = Number(process.env.CANDIDATE_EMAIL_DAILY_BUDGET ?? 20);
   return Number.isFinite(n) ? Math.max(0, Math.min(500, Math.floor(n))) : 20;

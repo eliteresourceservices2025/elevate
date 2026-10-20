@@ -12,7 +12,7 @@ Companion to the "ELEVATE — HRIS Architecture Plan" doc. Follow the steps in o
 | GitHub | Free (private repo) | Code, Actions CI, Dependabot |
 | Vercel | Pro ($20/mo) | Hosting (Hobby forbids commercial use) |
 | Supabase | Pro ($25/mo) for production, Free for staging | Postgres, Auth, Storage |
-| Resend | Free | Transactional email |
+| Brevo (or Resend) | Free | Transactional email |
 | Inngest | Free | Background jobs |
 | Upstash | Free | Redis for rate limiting |
 | Sentry | Free | Error monitoring |
@@ -232,7 +232,7 @@ Disconnecting in ELEVATE revokes the permission at Google. Anyone can also remov
 
 ## 7. Other services
 
-- **Resend:** add and verify a sending subdomain (e.g. `mail.<ERS domain>`) with the SPF/DKIM records it gives; create an API key restricted to sending.
+- **Brevo (or Resend):** add and verify a sending subdomain (e.g. `mail.<ERS domain>`) with the SPF/DKIM records it gives; create an API key restricted to sending.
 - **Inngest:** create an app, copy the event key and signing key; locally run `pnpm dlx inngest-cli@latest dev`.
 - **Upstash:** create a Redis database in the Singapore region; copy the REST URL and token.
 - **Sentry:** create a Next.js project; run `pnpm dlx @sentry/wizard@latest -i nextjs`; set `sendDefaultPii: false` and scrub request bodies.
