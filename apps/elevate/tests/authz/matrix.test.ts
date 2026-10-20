@@ -66,6 +66,7 @@ const EXPECTED: Record<string, string> = {
   "attendance.clock": "O O O O O O",
   "attendance.request_correction": "O O O O O O",
   "attendance.report_issue": "O O O O O O",
+  "attendance.edit_hours": "A A T - - -",
   "attendance.handle_issue": "A A T - - -",
   "attendance.set_preferences": "O O O O O O",
   "attendance.approve_correction": "A A T - - -",

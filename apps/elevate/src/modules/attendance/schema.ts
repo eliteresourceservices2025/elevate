@@ -146,6 +146,8 @@ export const clockCorrections = time
       kind: text("kind").notNull().default("other"),
       /** Corrections filed together from one spreadsheet (an outage, many people at once) share a batch id, so another HR admin can decide them together. */
       batchId: uuid("batch_id"),
+      /** Clock events this change removes (voids) as well as the ones it adds: set by a lead's or HR's edit of someone's time. */
+      voidEventIds: uuid("void_event_ids").array().notNull().default(sql`'{}'::uuid[]`),
       /** Set when the reviewer changed the times before approving: what the person first asked for. */
       originalProposed: jsonb("original_proposed").$type<{ type: string; at: string }[]>(),
       status: text("status").notNull().default("pending"),
@@ -479,5 +481,28 @@ export const techIssueReports = time
       check("tech_issue_reports_kind_chk", sql`${t.kind} in ('clock','jibble','internet_power','device','other')`),
       check("tech_issue_reports_status_chk", sql`${t.status} in ('open','handled')`),
     ],
+  )
+  .enableRLS();
+
+/**
+ * A clock event taken out of the person's hours (it was recorded wrongly), with the reason. The event itself is never changed or
+ * deleted: this row marks it as removed, and everything that builds hours reads time.v_clock_events (the events without a void).
+ * Insert-only like the events (a trigger refuses update, delete and truncate); a wrong void is fixed by adding the event back as a
+ * new correction.
+ */
+export const clockEventVoids = time
+  .table(
+    "clock_event_voids",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      eventId: uuid("event_id")
+        .notNull()
+        .references(() => clockEvents.id),
+      reason: text("reason").notNull(),
+      voidedBy: uuid("voided_by").notNull(),
+      correctionId: uuid("correction_id").references(() => clockCorrections.id),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [uniqueIndex("clock_event_voids_event_idx").on(t.eventId), check("clock_event_voids_reason_chk", sql`char_length(${t.reason}) between 5 and 300`)],
   )
   .enableRLS();

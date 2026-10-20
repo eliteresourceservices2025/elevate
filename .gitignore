@@ -22,3 +22,6 @@ docs/*.mp4
 
 # Claude Code local settings (may hold the OmniRoute access key)
 .claude/settings.local.json
+
+# The WordPress plugin zip is built with pnpm wordpress:zip
+wordpress/*.zip

@@ -259,6 +259,15 @@ export function CorrectionList({ items, zone, mode, empty }: { items: Correction
               </li>
             ))}
           </ul>
+          {c.removes.length > 0 ? (
+            <ul className="text-sm text-destructive">
+              {c.removes.map((p, i) => (
+                <li key={i}>
+                  Remove {TYPE_LABEL.get(p.type) ?? p.type} at {formatInZone(p.at, zone, "MMM d, yyyy h:mm a")}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {c.originalProposed ? (
             <p className="text-xs text-muted-foreground">
               The reviewer changed the times. First asked: {c.originalProposed.map((p) => `${TYPE_LABEL.get(p.type) ?? p.type} ${formatInZone(p.at, zone, "MMM d, h:mm a")}`).join(", ")}.

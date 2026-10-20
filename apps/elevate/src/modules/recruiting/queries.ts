@@ -26,6 +26,15 @@ export async function listPublicOpenings(): Promise<Omit<PublicOpening, "descrip
     .orderBy(desc(jobOpenings.openedAt));
 }
 
+/** Every open job with its description, for the public job feed (the same jobs as the careers page, newest first). */
+export async function listPublicOpeningsWithDescriptions(): Promise<PublicOpening[]> {
+  return db
+    .select({ id: jobOpenings.id, slug: jobOpenings.slug, title: jobOpenings.title, location: jobOpenings.location, payNote: jobOpenings.payNote, description: jobOpenings.description, openedAt: jobOpenings.openedAt })
+    .from(jobOpenings)
+    .where(and(eq(jobOpenings.status, "open"), isNull(jobOpenings.archivedAt)))
+    .orderBy(desc(jobOpenings.openedAt));
+}
+
 /** One open job by its readable address, or by its id (old links keep working). */
 export async function getPublicOpening(idOrSlug: string): Promise<PublicOpening | null> {
   const value = idOrSlug.trim().toLowerCase();

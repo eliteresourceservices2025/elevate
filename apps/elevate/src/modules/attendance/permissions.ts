@@ -11,6 +11,9 @@ export const attendancePermissions = definePermissions({
   "attendance.request_correction": {
     roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },
   },
+  // Change someone's recorded time (remove a wrongly recorded event, add the right ones). HR and Super Admin apply it at once, for anyone
+  // but themselves; a Team Lead's change for their team is a proposal that HR or Super Admin approves.
+  "attendance.edit_hours": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   // A technical issue report (the clock or Jibble not working, an outage): the person's own; leads and HR handle them.
   "attendance.report_issue": {
     roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },

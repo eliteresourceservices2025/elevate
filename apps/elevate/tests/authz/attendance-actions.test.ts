@@ -23,6 +23,7 @@ const extraQueries = await import("@/modules/attendance/extra-hours-queries");
 const hoursActions = await import("@/modules/attendance/hours-actions");
 const hoursQueries = await import("@/modules/attendance/hours-queries");
 const issueActions = await import("@/modules/attendance/issue-actions");
+const editActions = await import("@/modules/attendance/edit-actions");
 const issueQueries = await import("@/modules/attendance/issue-queries");
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -71,6 +72,8 @@ const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: st
   { name: "exportHours", call: () => hoursActions.exportHours({ periodStart: "2026-10-01", kind: "daily", includeUnapproved: false }), allowed: HR },
   { name: "fileBulkCorrections", call: () => actions.fileBulkCorrections({ csv: "email,type,time\nana@example.com,clock_in,2026-10-05 09:00", timeZone: "Asia/Manila", reason: "Outage", kind: "other" }), allowed: HR },
   { name: "decideCorrectionBatch", call: () => actions.decideCorrectionBatch({ batchId: ID, decision: "approve" }), allowed: HR },
+  { name: "editAttendance", call: () => editActions.editAttendance({ employeeId: ID, voidEventIds: [], events: [{ type: "clock_out", at: new Date(Date.now() - 3_600_000).toISOString() }], reason: "Forgot to clock out" }), allowed: TEAM_OR_HR },
+  { name: "loadEditableDay", call: () => editActions.loadEditableDay({ employeeId: ID, date: "2026-10-12" }), allowed: TEAM_OR_HR },
   { name: "reportTechIssue", call: () => issueActions.reportTechIssue({ kind: "jibble", happenedAt: new Date(Date.now() - 600_000).toISOString(), details: "Jibble kept running after I clocked out." }), allowed: EVERYONE },
   { name: "saveClockRules", call: () => actions.saveClockRules(rules), allowed: HR },
 ];

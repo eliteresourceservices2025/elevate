@@ -97,6 +97,15 @@ async function evidenceFor(ids: string[]): Promise<Map<string, EvidenceItem[]>> 
   return out;
 }
 
+/** The events (type and time) a set of changes remove, by event id: shown beside each change so a reviewer sees what goes as well as what is added. */
+async function eventsByIds(ids: string[]): Promise<Map<string, { type: string; at: string }>> {
+  const out = new Map<string, { type: string; at: string }>();
+  if (ids.length === 0) return out;
+  const rows = (await db.execute(sql`select id, type, occurred_at from time.clock_events where id in (${list(ids)})`)) as unknown as { id: string; type: string; occurred_at: string | Date }[];
+  for (const r of rows) out.set(r.id, { type: r.type, at: new Date(r.occurred_at).toISOString() });
+  return out;
+}
+
 export type WeekDay = DayTotals & { weekday: string };
 export type CorrectionItem = {
   id: string;
@@ -115,6 +124,8 @@ export type CorrectionItem = {
   filedBy: string | null;
   /** What the person first asked for, when the reviewer changed the times. */
   originalProposed: { type: string; at: string }[] | null;
+  /** Clock events this change removes (a lead's or HR's edit of someone's time), with their times. */
+  removes: { type: string; at: string }[];
   /** Only HR can decide it: filed for the person, or older than a week when filed. */
   hrOnly: boolean;
 };
@@ -189,10 +200,11 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
   const current = scheduleFor(schedules, weekStart) ?? scheduleFor(schedules, addDays(weekStart, 6));
 
   const rows = (await db.execute(sql`
-    select c.id, c.employee_id, c.reason, c.proposed, c.status, c.decision_note, c.created_at, c.kind, c.original_proposed, c.requested_by,
+    select c.id, c.employee_id, c.reason, c.proposed, c.status, c.decision_note, c.created_at, c.kind, c.original_proposed, c.requested_by, c.void_event_ids,
            (select e2.legal_first_name || ' ' || e2.legal_last_name from core.employees e2 where e2.user_id = c.requested_by and c.requested_by <> ${user.id}) as filed_by
     from time.clock_corrections c where c.employee_id = ${me.id} order by c.created_at desc limit 20`)) as unknown as Row[];
   const evidence = await evidenceFor(rows.map((r) => String(r.id)));
+  const removed = await eventsByIds(rows.flatMap((r) => (r.void_event_ids as string[] | null) ?? []));
   const sessionIds = days.flatMap((d) => d.sessionList.map((s) => s.eventId).filter((id): id is string => Boolean(id)));
   const noteRows = sessionIds.length === 0 ? [] : ((await db.execute(sql`select session_event_id, body, edited from time.shift_notes where employee_id = ${me.id} and session_event_id in (${list(sessionIds)})`)) as unknown as { session_event_id: string; body: string; edited: boolean }[]);
   return {
@@ -220,6 +232,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
       evidence: evidence.get(String(r.id)) ?? [],
       filedBy: (r.filed_by as string | null) ?? null,
       originalProposed: (r.original_proposed as { type: string; at: string }[] | null) ?? null,
+      removes: ((r.void_event_ids as string[] | null) ?? []).flatMap((id) => removed.get(id) ?? []),
       hrOnly: false,
     })),
   };
@@ -239,7 +252,7 @@ export async function listWorkingNow(): Promise<{ rows: WorkingNowRow[]; scope: 
   const rows = (await db.execute(sql`
     select * from (
       select distinct on (e.employee_id) e.employee_id, e.type, (extract(epoch from e.occurred_at) * 1000)::float8 as at, e.outside_allowed_range
-      from time.clock_events e
+      from time.v_clock_events e
       where e.occurred_at > now() - interval '48 hours' ${filter}
       order by e.employee_id, e.occurred_at desc, e.created_at desc
     ) last
@@ -302,13 +315,14 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
   if (restrict && restrict.length === 0) return { items: [], scope };
   const filter = restrict ? sql`and c.employee_id in (${list(restrict)})` : sql``;
   const rows = (await db.execute(sql`
-    select c.id, c.employee_id, c.reason, c.proposed, c.status, c.decision_note, c.created_at, c.requested_by, c.kind, c.original_proposed,
+    select c.id, c.employee_id, c.reason, c.proposed, c.status, c.decision_note, c.created_at, c.requested_by, c.kind, c.original_proposed, c.void_event_ids,
            (select e2.legal_first_name || ' ' || e2.legal_last_name from core.employees e2 where e2.user_id = c.requested_by and c.requested_by is distinct from e.user_id limit 1) as filed_by,
            e.user_id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
     from time.clock_corrections c join core.employees e on e.id = c.employee_id
     where c.status = 'pending' ${filter} order by c.created_at limit 100`)) as unknown as Row[];
 
   const evidence = await evidenceFor(rows.map((r) => String(r.id)));
+  const removed = await eventsByIds(rows.flatMap((r) => (r.void_event_ids as string[] | null) ?? []));
   const items: CorrectionItem[] = [];
   for (const r of rows) {
     const own = r.user_id === user.id || r.requested_by === user.id;
@@ -331,6 +345,7 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
       evidence: evidence.get(String(r.id)) ?? [],
       filedBy: (r.filed_by as string | null) ?? null,
       originalProposed: (r.original_proposed as { type: string; at: string }[] | null) ?? null,
+      removes: ((r.void_event_ids as string[] | null) ?? []).flatMap((id) => removed.get(id) ?? []),
       hrOnly,
     });
   }
