@@ -208,19 +208,19 @@ describe("nightly flags against a schedule", () => {
     await event(early.employeeId, "clock_in", at(Y, "09:00"));
     await event(early.employeeId, "clock_out", at(Y, "15:00"));
     await event(extra.employeeId, "clock_in", at(Y, "09:00"));
-    await event(extra.employeeId, "clock_out", at(Y, "19:00")); // 10 hours worked against 7 scheduled
-    await event(shifted.employeeId, "clock_in", at(Y, "10:00")); // an hour late and an hour past: 8 hours, 1 hour over the 7
+    await event(extra.employeeId, "clock_out", at(Y, "19:00")); // 10 hours worked straight (no break pressed) in a 9 to 5 window: 2 hours past it
+    await event(shifted.employeeId, "clock_in", at(Y, "10:00")); // an hour late and an hour past: 8 hours, exactly the 8 hour window
     await event(shifted.employeeId, "clock_out", at(Y, "18:00"));
     await jobs.rebuildAttendanceDays();
     const e = await dayRow(early.employeeId, Y);
     expect(e).toMatchObject({ early_leave_minutes: 120, extra_minutes: 0 });
     expect(e.flags).toContain("left_early");
     const x = await dayRow(extra.employeeId, Y);
-    expect(x).toMatchObject({ extra_minutes: 180, worked_minutes: 600 });
+    expect(x).toMatchObject({ extra_minutes: 120, worked_minutes: 600 }); // the unpaid break was not pressed, so its hour is window time, not extra
     expect(x.flags).toContain("extra_hours");
     const s = await dayRow(shifted.employeeId, Y);
     expect(s.late_minutes).toBe(60);
-    expect(s.extra_minutes).toBe(60); // worked 8h, scheduled 7h
+    expect(s.extra_minutes).toBe(0); // worked the 8 hour window straight through: the unused hour of break is not extra
   });
 
   it("counts work on a rest day or a holiday in full", async () => {
