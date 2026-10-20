@@ -164,7 +164,7 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
       const holiday = holidays.has(d.date);
       const late = shift && !holiday ? lateMinutes(d.firstIn, shift, rules.lateGraceMinutes) : 0;
       const early = shift && !holiday && d.lastOut !== null && !d.open ? earlyLeaveMinutes(d.lastOut, shift, rules.lateGraceMinutes) : 0;
-      const extra = extraMinutes({ workedMinutes: d.workedMinutes, shift, hasSchedule, holiday });
+      const extra = extraMinutes({ workedMinutes: d.workedMinutes, breakMinutes: d.breakMinutes, shift, hasSchedule, holiday });
       // What approved extra hours requests cover, and what is left over (unapproved).
       const split = approvedExtra(extra, granted.get(d.date) ?? 0);
 

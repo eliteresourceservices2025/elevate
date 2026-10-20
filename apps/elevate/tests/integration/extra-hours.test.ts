@@ -332,7 +332,7 @@ describe("what approved extra hours do to the day", () => {
     const p = await person(label, { clientId });
     const Y = await workedDate();
     await db.execute(sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone) values (${p.employeeId}, current_date - 10, '09:00', '17:00', array[1,2,3,4,5,6,7]::smallint[], 60, ${PHX})`);
-    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', ${at(Y, "09:00")}), (${p.employeeId}, 'clock_out', ${at(Y, "19:00")})`); // 10h worked, 7h scheduled: 3h extra
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', ${at(Y, "09:00")}), (${p.employeeId}, 'clock_out', ${at(Y, "20:00")})`); // 11h worked straight through a 9 to 5 shift (no break pressed, so the unpaid break is window time): 3h past the window = 3h extra
     if (approvedMinutes !== null) {
       await db.execute(sql`insert into time.extra_hours_requests (employee_id, client_id, source, status, window_start, window_end, minutes, contact_name, reason, filed_by, decided_at)
         values (${p.employeeId}, ${clientId}, 'va', 'approved', ${at(Y, "17:00")}, ${at(Y, "17:00").replace(/.*/, () => new Date(Date.parse(at(Y, "17:00")) + approvedMinutes * MIN).toISOString())}, ${approvedMinutes}, 'Dana', 'Client work', ${p.user.id}, now())`);
@@ -355,6 +355,27 @@ describe("what approved extra hours do to the day", () => {
     const none = await worked("EffNone", null);
     expect(await day(none.p.employeeId, none.Y)).toMatchObject({ extra_minutes: 180, approved_extra_minutes: 0 });
     expect((await day(none.p.employeeId, none.Y)).flags).toContain("unapproved_extra");
+  });
+
+  it("does not count a scheduled unpaid break that was not taken as extra (a 4 hour shift with a 30 minute break, worked 4h 02m straight through)", async () => {
+    const p = await person("NoBreak", { clientId: await newClient() });
+    const Y = await workedDate();
+    await db.execute(sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone) values (${p.employeeId}, current_date - 10, '13:00', '17:00', array[1,2,3,4,5,6,7]::smallint[], 30, ${PHX})`);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', ${at(Y, "13:03")}), (${p.employeeId}, 'clock_out', ${at(Y, "17:05")})`);
+    await jobs.rebuildAttendanceDays(new Date(), 7, p.employeeId);
+    expect(await day(p.employeeId, Y)).toMatchObject({ extra_minutes: 0, approved_extra_minutes: 0 });
+    expect((await day(p.employeeId, Y)).flags).not.toContain("extra_hours");
+    as(p.user);
+    const d = (await attendanceQueries.getMyTime(Y))!.days.find((x) => x.date === Y)!;
+    expect(d.extraMinutes).toBe(0);
+    expect(d.workedMinutes).toBe(242); // the whole 4h 02m is shown as worked
+
+    // The same day with a 30 minute break pressed: the break comes off worked time and nothing is extra either
+    const q = await person("TookBreak", { clientId: await newClient() });
+    await db.execute(sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone) values (${q.employeeId}, current_date - 10, '13:00', '17:00', array[1,2,3,4,5,6,7]::smallint[], 30, ${PHX})`);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${q.employeeId}, 'clock_in', ${at(Y, "13:00")}), (${q.employeeId}, 'break_start', ${at(Y, "15:00")}), (${q.employeeId}, 'break_end', ${at(Y, "15:30")}), (${q.employeeId}, 'clock_out', ${at(Y, "17:30")})`);
+    await jobs.rebuildAttendanceDays(new Date(), 7, q.employeeId);
+    expect(await day(q.employeeId, Y)).toMatchObject({ extra_minutes: 30 }); // 4h worked + 30 min past the shift end against 3h 30m scheduled and a taken break
   });
 
   it("shows the person approved and unapproved extra live in My time", async () => {

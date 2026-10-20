@@ -37,7 +37,7 @@ After a clock event is saved, `kickMirror(employeeId)` (`jibble/enqueue.ts`) sen
 
 ## Extra hours and the scheduled break
 
-Extra hours are worked time beyond the scheduled hours, and the scheduled hours already have the scheduled unpaid break taken out. Someone who takes a shorter break than scheduled therefore shows extra minutes. The hours review shows "Worked X against Y scheduled; break taken Z" next to each extra so the number can be explained.
+Extra hours are worked time beyond the scheduled hours. The scheduled hours have the scheduled unpaid break taken out, and worked time only has a break taken out when the person presses Break. So the part of the scheduled break that was NOT taken is time inside the shift window and is **not** extra: the allowance is scheduled minutes + (scheduled break - break actually taken). Example (reported 2026-10-16): a 4-hour shift with a 30-minute unpaid break (3h 30m scheduled), worked 4h 02m with no break pressed, showed "Extra +32m"; it is now no extra (allowance 4h, 2 minutes over, under the 15-minute threshold). `extraMinutes()` takes `breakMinutes` (taken); left out it assumes the scheduled break was taken. The hours review still shows "Worked X against Y scheduled; break taken Z" next to each extra.
 
 ## A time correction appeal always carries a screenshot
 

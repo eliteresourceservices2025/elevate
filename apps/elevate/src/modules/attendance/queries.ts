@@ -167,7 +167,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
     const shift = shiftOn(schedules, prefs.zone, date);
     const worked = d?.workedMinutes ?? 0;
     const holiday = holidays.has(date);
-    const extra = extraMinutes({ workedMinutes: worked, shift, hasSchedule: hasScheduleAround(schedules, date), holiday });
+    const extra = extraMinutes({ workedMinutes: worked, breakMinutes: d?.breakMinutes ?? 0, shift, hasSchedule: hasScheduleAround(schedules, date), holiday });
     return {
       date,
       weekday: WEEKDAY.format(new Date(`${date}T00:00:00Z`)),

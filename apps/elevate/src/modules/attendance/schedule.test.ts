@@ -102,6 +102,19 @@ describe("late, early and extra", () => {
     expect(extraMinutes({ ...base, workedMinutes: 300 })).toBe(0); // short day is not extra
   });
 
+  it("does not count an unpaid break that was not taken as extra (a 4 hour shift with a 30 minute break, worked straight through)", () => {
+    const fourHours: ScheduleLite = { ...nineToFive, startTime: "09:00", endTime: "13:00", breakMinutes: 30 };
+    const short = shiftOn([fourHours], NY, "2026-10-05")!;
+    expect(short.scheduledMinutes).toBe(210);
+    const base = { shift: short, hasSchedule: true, holiday: false };
+    expect(extraMinutes({ ...base, workedMinutes: 242, breakMinutes: 0 })).toBe(0); // 4h 02m, no break pressed: the window, not extra
+    expect(extraMinutes({ ...base, workedMinutes: 242 })).toBe(32); // with no break information the scheduled break is assumed taken
+    expect(extraMinutes({ ...base, workedMinutes: 210, breakMinutes: 30 })).toBe(0); // took the whole break
+    expect(extraMinutes({ ...base, workedMinutes: 232, breakMinutes: 10 })).toBe(0); // took part of it: the other 20 minutes are window time
+    expect(extraMinutes({ ...base, workedMinutes: 270, breakMinutes: 0 })).toBe(30); // stayed 30 minutes past the window: that is extra
+    expect(extraMinutes({ ...base, workedMinutes: 255, breakMinutes: 30 })).toBe(45); // took the break and still worked 45 over
+  });
+
   it("counts a rest day or holiday in full, and nothing for people with no schedule", () => {
     expect(extraMinutes({ workedMinutes: 240, shift: null, hasSchedule: true, holiday: false })).toBe(240);
     expect(extraMinutes({ workedMinutes: 240, shift, hasSchedule: true, holiday: true })).toBe(240);
