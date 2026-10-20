@@ -1,0 +1,17 @@
+import type { ComponentProps } from "react";
+import { cn } from "@/lib/utils";
+
+/** The standard page widths. List and detail pages fill the shell ("full"); reading pages and forms keep a readable line length. */
+const WIDTHS = {
+  full: "",
+  wide: "max-w-6xl",
+  form: "max-w-3xl",
+  narrow: "max-w-2xl",
+} as const;
+
+export type PageWidth = keyof typeof WIDTHS;
+
+/** Wraps a page's content at one of the standard widths with the standard gap between sections. */
+export function PageContainer({ width = "full", className, ...props }: ComponentProps<"div"> & { width?: PageWidth }) {
+  return <div className={cn("flex flex-col gap-6", WIDTHS[width], className)} {...props} />;
+}

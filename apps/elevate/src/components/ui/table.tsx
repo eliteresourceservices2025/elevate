@@ -1,14 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 /**
  * A table wider than its box scrolls sideways inside this container, with edge shadows that show there is more to see
  * (see .scroll-shadow-x). The shadows fade into the colour of whatever the table sits on: a card by default; for a table that
  * sits straight on the page pass containerClassName="[--shadow-cover:var(--background)]".
+ * Inside #main every table gets the tinted header and striped rows from globals.css; `plain` opts this table out (data-plain).
  */
-function Table({ className, containerClassName, ...props }: React.ComponentProps<"table"> & { containerClassName?: string }) {
+function Table({ className, containerClassName, plain = false, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; plain?: boolean }) {
   return (
     <div
       data-slot="table-container"
@@ -16,6 +17,7 @@ function Table({ className, containerClassName, ...props }: React.ComponentProps
     >
       <table
         data-slot="table"
+        data-plain={plain ? "" : undefined}
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
       />
