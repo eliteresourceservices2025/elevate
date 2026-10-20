@@ -11,11 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { createMyProfile } from "@/modules/people/actions";
 import { claimMyProfile } from "@/modules/people/duplicates-actions";
-import { cancelCorrection, decideCorrection, fileCorrectionForOthers, openEvidence, requestCorrection, requestEvidenceUpload, saveClockRules, savePreferences, saveShiftNote } from "../actions";
+import { EvidenceField, uploadEvidence } from "./evidence-field";
+import { cancelCorrection, decideCorrection, fileCorrectionForOthers, openEvidence, requestCorrection, saveClockRules, savePreferences, saveShiftNote } from "../actions";
 import { EOD_TEMPLATE } from "../clock";
 import type { CorrectionItem, FilablePerson, RulesRow } from "../queries";
 
@@ -94,8 +94,6 @@ const KINDS = [
   { key: "other", label: "Something else" },
 ] as const;
 const KIND_LABEL = new Map<string, string>(KINDS.map((k) => [k.key, k.label]));
-const MAX_FILES = 3;
-const MAX_FILE_BYTES = 5_000_000;
 const LOCAL = "yyyy-MM-dd'T'HH:mm";
 
 /** Ask for missing clock events. Times are entered in the person's own zone; a lead approves; nothing existing is edited. A claim that adds a clock-in needs a screenshot. */
@@ -107,7 +105,6 @@ export function CorrectionForm({ zone }: { zone: string }) {
   const [reason, setReason] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const preset = PRESETS.find((p) => p.key === presetKey) ?? PRESETS[0];
-  const needsProof = preset.fields.some((f) => f.type === "clock_in");
 
   return (
     <form
@@ -120,15 +117,9 @@ export function CorrectionForm({ zone }: { zone: string }) {
         });
         run(
           async () => {
-            const evidenceIds: string[] = [];
-            for (const f of files) {
-              const ticket = await requestEvidenceUpload({ mime: f.type, size: f.size });
-              if (!ticket.ok) return ticket;
-              const { error } = await createSupabaseBrowserClient().storage.from("employee-docs").uploadToSignedUrl(ticket.data.path, ticket.data.token, f, { contentType: f.type });
-              if (error) return { ok: false as const, error: "A screenshot did not upload. Try again." };
-              evidenceIds.push(ticket.data.id);
-            }
-            return requestCorrection({ reason, kind, events, evidenceIds });
+            const uploaded = await uploadEvidence(files);
+            if (!uploaded.ok) return uploaded;
+            return requestCorrection({ reason, kind, events, evidenceIds: uploaded.ids });
           },
           "Correction sent for approval.",
           () => {
@@ -140,7 +131,7 @@ export function CorrectionForm({ zone }: { zone: string }) {
       }}
     >
       <h3 className="font-semibold">Ask for a time correction</h3>
-      <p className="text-sm text-muted-foreground">Your lead approves it. Your original clock events are never changed; an approved correction adds new ones. Times are in {zone}.</p>
+      <p className="text-sm text-muted-foreground">Your lead approves it, and a screenshot is needed as proof. Your original clock events are never changed; an approved correction adds new ones. Times are in {zone}.</p>
       <SelectField id="cr-kind" label="What do you need to add?" value={presetKey} onChange={(e) => setPresetKey(e.target.value)}>
         {PRESETS.map((p) => (
           <option key={p.key} value={p.key}>
@@ -161,31 +152,10 @@ export function CorrectionForm({ zone }: { zone: string }) {
         ))}
       </div>
       <TextField id="cr-reason" label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} required />
-      <div className="space-y-1.5">
-        <Label htmlFor="cr-files">Screenshots as proof{needsProof ? " (required)" : " (optional)"}</Label>
-        <Input
-          id="cr-files"
-          type="file"
-          accept="image/jpeg,image/png"
-          multiple
-          onChange={(e) => {
-            const picked = Array.from(e.target.files ?? []).slice(0, MAX_FILES);
-            if ((e.target.files?.length ?? 0) > MAX_FILES) toast.error(`Attach ${MAX_FILES} screenshots at most.`);
-            const tooBig = picked.find((f) => f.size > MAX_FILE_BYTES);
-            if (tooBig) {
-              toast.error("Each screenshot must be 5 MB or smaller.");
-              e.target.value = "";
-              return setFiles([]);
-            }
-            setFiles(picked);
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          A screenshot of your browser history that shows when you started, a JPG or PNG up to 5 MB, three at most. Crop it to the times and sites.{" "}
-          <strong>Never include client or patient information.</strong> Only you, your leads and HR can open it, and it is deleted 90 days after the decision.
-        </p>
-      </div>
-      <Button type="submit" disabled={pending || (needsProof && files.length === 0)}>
+      <EvidenceField id="cr-files" label="Screenshots as proof" onFiles={setFiles}>
+        A screenshot of your browser history that shows when you started, or of the error you saw. Every appeal needs one.
+      </EvidenceField>
+      <Button type="submit" disabled={pending || files.length === 0}>
         Send for approval
       </Button>
     </form>

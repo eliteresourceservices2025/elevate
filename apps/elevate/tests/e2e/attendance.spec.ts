@@ -83,6 +83,7 @@ test("an employee asks to fix a forgotten clock-out and their lead approves it",
   await waitForHydration(workerPage, "#cr-kind");
   await workerPage.getByLabel("I stopped working at").fill(stoppedLocal);
   await workerPage.getByLabel("Reason").fill("Closed my laptop and forgot");
+  await workerPage.getByLabel(/Screenshots as proof/).setInputFiles({ name: "history.png", mimeType: "image/png", buffer: PNG_1X1 }); // every appeal carries a screenshot
   await workerPage.getByRole("button", { name: "Send for approval" }).click();
   await expect(workerPage.getByText("Correction sent for approval.")).toBeVisible();
 
@@ -149,6 +150,8 @@ test("an HR or Super Admin account without a people record can set one up and us
   await expect(setup).toBeVisible();
   await setup.click();
   await page.waitForURL("**/attendance");
+  // The people directory is checked first (so nobody gets a second record): say you are not in the list
+  await (await hydrated(page.getByLabel("I looked through the list and I am not in it"))).check();
   await waitForHydration(page, "#sp-first");
   await page.getByLabel("Legal first name").fill("Hana");
   await page.getByLabel("Legal last name").fill(`Admin${stamp}`);
@@ -220,6 +223,8 @@ test("welcome back after a long gap: the person can ask their lead to clock them
   const asMs = (v: string) => Date.parse(`${v}:00Z`);
   expect(Math.abs(asMs(prefilled) - asMs(phoenix(2 * 3_600_000)))).toBeLessThanOrEqual(3 * 60_000);
   await dialog.getByLabel("What happened?").selectOption("device_problem");
+  await expect(dialog.getByRole("button", { name: "Ask my lead to clock me out" })).toBeDisabled(); // a screenshot is needed first
+  await dialog.getByLabel(/Screenshot as proof/).setInputFiles({ name: "error.png", mimeType: "image/png", buffer: PNG_1X1 });
   await dialog.getByRole("button", { name: "Ask my lead to clock me out" }).click();
   await expect(page.getByText(/Waiting for approval of your clock-out/)).toBeVisible(slow);
   await expect(dialog).toHaveCount(0);

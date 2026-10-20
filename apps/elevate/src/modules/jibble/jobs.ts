@@ -52,7 +52,7 @@ export type MirrorRun = { sent: number; retrying: number; failed: number; skippe
  * set up for the person, or already used) clocks them out instead, so screenshots still stop, and its end clocks them back in.
  * Nothing is sent while paused, or outside production except to named test people. Jibble being down never touches the clock.
  */
-export async function processMirrorQueue(now = new Date(), client: JibbleClient | null = getJibbleClient()): Promise<MirrorRun> {
+export async function processMirrorQueue(now = new Date(), client: JibbleClient | null = getJibbleClient(), only?: { employeeId: string }): Promise<MirrorRun> {
   const run: MirrorRun = { sent: 0, retrying: 0, failed: 0, skipped: 0 };
   if (!client || (await jibblePaused())) return run;
 
@@ -64,7 +64,7 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
       (select l2.fallback from time.jibble_link_log l2 where l2.employee_id = l.employee_id and l2.action = 'StartBreak' and l2.status = 'sent' and l2.created_at < l.created_at
         order by l2.created_at desc limit 1) as previous_fallback
     from time.jibble_link_log l left join time.jibble_people p on p.employee_id = l.employee_id left join time.clock_events ev on ev.id = l.event_id
-    where l.status = 'queued' order by l.employee_id, l.created_at limit 500`)) as unknown as Due[];
+    where l.status = 'queued' ${only ? sql`and l.employee_id = ${only.employeeId}::uuid` : sql``} order by l.employee_id, l.created_at limit 500`)) as unknown as Due[];
 
   const byPerson = new Map<string, Due[]>();
   for (const r of rows) byPerson.set(r.employee_id, [...(byPerson.get(r.employee_id) ?? []), r]);

@@ -18,6 +18,8 @@ export type ReviewDay = {
   weekday: string;
   scheduledMinutes: number | null;
   workedMinutes: number;
+  /** Break time actually taken that day (the scheduled unpaid break is already taken out of the scheduled hours). */
+  breakMinutes: number;
   extraMinutes: number;
   approvedExtraMinutes: number;
   lateMinutes: number;
@@ -89,6 +91,7 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
         weekday: WEEKDAY.format(new Date(`${d.date}T00:00:00Z`)),
         scheduledMinutes: d.scheduledMinutes,
         workedMinutes: d.workedMinutes,
+        breakMinutes: d.breakMinutes,
         extraMinutes: d.extraMinutes,
         approvedExtraMinutes: d.approvedExtraMinutes,
         lateMinutes: d.lateMinutes,

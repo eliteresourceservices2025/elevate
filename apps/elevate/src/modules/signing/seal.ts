@@ -184,7 +184,7 @@ export async function sealPdf(input: SealInput): Promise<Uint8Array> {
     cert.text(`${s.name}${s.role ? ` (${s.role})` : ""}`, { bold: true });
     cert.text(s.email, { indent: 10, color: MUTED });
     cert.text(`Signed ${utc(s.signedAt)} | ${manila(s.signedAt)}`, { indent: 10 });
-    cert.text(`IP address ${s.ip ?? "not recorded"} | Signed in with ${s.mfa ?? "MFA (method not recorded)"} | ${s.kind === "drawn" ? "Drew" : "Typed"} signature`, { indent: 10 });
+    cert.text(`IP address ${s.ip ?? "not recorded"} | Signed in with ${s.mfa ?? "MFA (method not recorded)"} | ${s.kind === "drawn" ? "Drew or uploaded" : "Typed"} signature`, { indent: 10 });
     cert.text(`Agreed to sign electronically (consent wording version ${s.consentVersion})`, { indent: 10, gap: s.initials ? 0 : 6 });
     if (s.initials) cert.text(`Initialed every page of the document as "${s.initials}"`, { indent: 10, gap: 6 });
   }

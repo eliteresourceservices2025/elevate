@@ -38,7 +38,7 @@ export const correctionRequestSchema = z.object({
   reason,
   events: proposedEvents,
   kind: kind.default("other"),
-  /** Screenshots uploaded with requestEvidenceUpload. Required when the claim adds a clock-in. */
+  /** Screenshots uploaded with requestEvidenceUpload. Required (the action checks that there is at least one). */
   evidenceIds: z.array(uuid).max(3, "Attach three screenshots at most").default([]),
 });
 /** A lead or HR files a correction for someone else. */

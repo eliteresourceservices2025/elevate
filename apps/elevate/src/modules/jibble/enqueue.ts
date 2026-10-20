@@ -28,8 +28,28 @@ export async function enqueueMirror(tx: Executor, input: { employeeId: string; e
   return allowed ? steps.length : 0;
 }
 
-/** After the transaction commits: ask the job runner to send now instead of waiting for the 15-minute sweep. Best effort. */
-export async function kickMirror(): Promise<void> {
+/**
+ * After the transaction commits: send the queued Jibble calls now, so screenshots stop the moment someone clocks out (they kept running
+ * for minutes when this waited for a job). The send runs after the response (Next's `after`), so a slow or failing Jibble never slows
+ * the ELEVATE clock; anything that fails stays queued and is retried by the sweep. Where there is no request to run after (a script, a
+ * test) it asks the job runner instead, and without that the 15-minute sweep sends it. Best effort.
+ */
+export async function kickMirror(employeeId?: string): Promise<void> {
+  try {
+    const { after } = await import("next/server");
+    after(async () => {
+      try {
+        const { processMirrorQueue } = await import("./jobs");
+        // Only this person's calls: another click at the same moment sends its own, so two runs never pick up the same rows.
+        await processMirrorQueue(new Date(), undefined, employeeId ? { employeeId } : undefined);
+      } catch (error) {
+        console.error("jibble immediate send failed:", error instanceof Error ? error.name : "unknown error");
+      }
+    });
+    return;
+  } catch {
+    // No request scope: fall through to the job runner.
+  }
   if (!process.env.INNGEST_EVENT_KEY && !process.env.INNGEST_DEV) {
     // Without the event key the call waits for the 15-minute sweep. Say so in the log (once per click), never anything about the person.
     console.error("jibble mirror kick skipped: INNGEST_EVENT_KEY is not set");

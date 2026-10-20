@@ -181,4 +181,16 @@
   h4 {
     font-family: var(--font-heading);
   }
+  /* The open list of a native dropdown is painted by the browser with the option's own colours. On a transparent or tinted select in
+     dark mode it came out light text on a light list. Give every option the popover colours of the current theme. */
+  select,
+  select option,
+  select optgroup {
+    color: var(--foreground);
+  }
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
 }

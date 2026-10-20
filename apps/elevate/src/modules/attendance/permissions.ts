@@ -11,6 +11,11 @@ export const attendancePermissions = definePermissions({
   "attendance.request_correction": {
     roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },
   },
+  // A technical issue report (the clock or Jibble not working, an outage): the person's own; leads and HR handle them.
+  "attendance.report_issue": {
+    roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },
+  },
+  "attendance.handle_issue": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   "attendance.set_preferences": {
     roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },
   },

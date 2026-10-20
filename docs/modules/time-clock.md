@@ -26,3 +26,19 @@
 - **File for others** (`fileCorrectionForOthers`, `attendance.file_for_others`: HR anyone, lead their downline): notifies the person and HR; HR decides.
 - **End-of-day notes** (`time.shift_notes`, one per session keyed by its clock-in event id, plain text up to 5,000 characters): optional box after clock-out (`ClockResult.sessionId`), editable by the author for 24 hours after clock-out (`edited` is set), visible to the author, the chain of leads and HR (`attendance.notes_view`). A team rule `eod_expected` only adds a `no_eod` flag to the nightly rebuild; it never blocks clock-out.
 - E2E: after any clock-out the "Wrap up your day" box opens; click "Skip" before the next step.
+
+## Technical issue reports
+
+A contractor can report a problem with the clock, Jibble, their connection or a device from Attendance ("Report a technical issue" on the My time tab next to the time correction, and the Technical issues tab; any clock state, no clock events needed). **A screenshot is required** (1 to 3 JPG or PNG, up to 5 MB, stored like correction proof in `time.correction_evidence.issue_id`, migration 0086; deleted 90 days after the report is handled; never client or patient information). `time.tech_issue_reports` (migration 0085) holds the report: kind, when it started, free text (no client or patient information), open or handled. It is only a report: it never adds, changes or removes a clock event or hours (missing time is a correction request, and the person can send both). Permissions: `attendance.report_issue` (own, everyone) and `attendance.handle_issue` (HR all, a lead their people through `timeChainUserIds`; nobody handles their own). The lead and HR are notified (the notice names the kind, never the text); at most 5 open reports per person; reports must be within 31 days.
+
+## Jibble send on clock-out
+
+After a clock event is saved, `kickMirror(employeeId)` (`jibble/enqueue.ts`) sends that person's queued Jibble calls straight away using Next's `after()` (after the response, so Jibble being slow or down never slows the ELEVATE clock). A call that fails stays queued for the 15-minute sweep. Where there is no request (scripts, tests) it falls back to the Inngest event.
+
+## Extra hours and the scheduled break
+
+Extra hours are worked time beyond the scheduled hours, and the scheduled hours already have the scheduled unpaid break taken out. Someone who takes a shorter break than scheduled therefore shows extra minutes. The hours review shows "Worked X against Y scheduled; break taken Z" next to each extra so the number can be explained.
+
+## A time correction appeal always carries a screenshot
+
+`requestCorrection` refuses an appeal with no screenshot, whatever it adds (before, only one that added a clock-in needed it). Corrections a lead or HR file for someone else and HR's bulk corrections are unchanged. The daily evidence purge now keeps screenshots attached to extra hours requests and issue reports (it used to treat anything not attached to a correction as an orphan after a day).

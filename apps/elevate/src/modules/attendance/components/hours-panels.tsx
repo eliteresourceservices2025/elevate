@@ -180,6 +180,8 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
                               <span className="w-28">Worked {hours(d.workedMinutes)}</span>
                               <span className="w-28">{d.scheduledMinutes !== null ? `Scheduled ${hours(d.scheduledMinutes)}` : "Rest day"}</span>
                               <span className="w-32">{d.extraMinutes ? `Extra +${formatDuration(d.extraMinutes * MINUTE)}` : ""}</span>
+                              {/* Where an extra comes from: worked time beyond the scheduled hours. A shorter break than the one scheduled is worked time too. */}
+                              {d.extraMinutes && d.scheduledMinutes !== null ? <span className="text-xs text-muted-foreground">Worked {hours(d.workedMinutes)} against {hours(d.scheduledMinutes)} scheduled; break taken {hours(d.breakMinutes)}</span> : null}
                               <span className="space-x-1">
                                 {d.flags.map((f) => (
                                   <Badge key={f} variant="outline">

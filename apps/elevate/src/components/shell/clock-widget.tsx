@@ -14,6 +14,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import { BREAK_CHOICES, EOD_TEMPLATE, HEARTBEAT_MS, MINUTE, breakLabel, formatClock, needsWelcomeBack } from "@/modules/attendance/clock";
 import { coveringWindow } from "@/modules/attendance/extra-hours";
+import { EvidenceField, uploadEvidence } from "@/modules/attendance/components/evidence-field";
 import { answerIdlePrompt, cancelCorrection, clockIn, clockOut, endBreak, pingPresence, reportIdlePrompt, requestClockSelfie, requestCorrection, saveShiftNote, startBreak } from "@/modules/attendance/actions";
 import type { ClockStatus } from "@/modules/attendance/queries";
 
@@ -103,12 +104,16 @@ function WelcomeBack({ seenMs, startMs, zone, online, onDone }: { seenMs: number
   const [at, setAt] = useState(() => formatInZone(seenMs, zone, LOCAL));
   const [cause, setCause] = useState<(typeof CAUSES)[number]["key"]>("connection_problem");
   const [busy, setBusy] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
 
   async function send() {
     setBusy(true);
     try {
       const picked = CAUSES.find((c) => c.key === cause)!;
-      const result = await requestCorrection({ reason: picked.reason, kind: picked.key, events: [{ type: "clock_out", at: fromZonedTime(at, zone).toISOString() }] });
+      // Every time correction appeal carries a screenshot of what happened.
+      const uploaded = await uploadEvidence(files);
+      if (!uploaded.ok) return void toast.error(uploaded.error);
+      const result = await requestCorrection({ reason: picked.reason, kind: picked.key, events: [{ type: "clock_out", at: fromZonedTime(at, zone).toISOString() }], evidenceIds: uploaded.ids });
       if (!result.ok) return void toast.error(result.error);
       toast.success("Sent to your lead. You stay clocked in until it is approved, or you can cancel it.");
       onDone();
@@ -149,9 +154,12 @@ function WelcomeBack({ seenMs, startMs, zone, online, onDone }: { seenMs: number
                 ))}
               </select>
             </div>
+            <EvidenceField id="wb-files" label="Screenshot as proof" onFiles={setFiles}>
+              For example the error you saw, or your browser history around the time you stopped.
+            </EvidenceField>
             <p className="text-xs text-muted-foreground">Your lead approves this. Until then you stay clocked in, and your hours are not final.</p>
             <div className="flex gap-2">
-              <Button disabled={busy || !online || !at} onClick={() => void send()}>
+              <Button disabled={busy || !online || !at || files.length === 0} onClick={() => void send()}>
                 Ask my lead to clock me out
               </Button>
               <Button variant="ghost" onClick={() => setStopping(false)}>
