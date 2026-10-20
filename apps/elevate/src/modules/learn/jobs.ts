@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/modules/audit/write";
+import { archiveSystemDocuments, fileSystemDocument } from "@/modules/documents/service";
 import { queueEmails, type QueuedEmail } from "@/modules/notifications/email-queue";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { managerChainUserIds } from "@/modules/org/service";
@@ -377,7 +378,29 @@ export async function runLearnReminders(today: string, scope?: Scope & { hrUserI
 
 // ---- Certificates into ELEVATE's Certificates ---------------------------------------------------------------------------------
 
-export type SyncRun = { recorded: number; archived: number; waiting: number };
+export type SyncRun = { recorded: number; archived: number; waiting: number; filed: number };
+
+type CertificateRow = { id: string; assignment_id: string; issued_on: string; ends_on: string; title: string; reference: string; holder_name: string };
+
+/** The certificate as a PDF (the emailed copy and the copy filed in the person's Documents are the same file). */
+async function renderCertificate(executor: { execute: typeof db.execute }, c: CertificateRow): Promise<Uint8Array> {
+  const transcriptRows = (await executor.execute(sql`select learn.certificate_transcript(${c.assignment_id}::uuid) as t`)) as unknown as {
+    t: { modules?: { title: string; completedOn: string | null }[]; scorePercent?: number | null; takenOn?: string | null; ipAddress?: string | null } | null;
+  }[];
+  const transcript = transcriptRows[0]?.t ?? null;
+  return renderCertificatePdf({
+    modules: transcript?.modules ?? [],
+    scorePercent: transcript?.scorePercent ?? null,
+    takenOn: transcript?.takenOn ?? null,
+    ipAddress: transcript?.ipAddress ?? null,
+    holderName: c.holder_name,
+    courseTitle: c.title,
+    issuedOn: c.issued_on,
+    endsOn: c.ends_on,
+    reference: c.reference,
+    verifyUrl: learnBaseUrl() ? `${learnBaseUrl()}/verify` : "the verify page of ELEVATE Learn",
+  });
+}
 
 /**
  * Every 30 minutes: a certificate earned in Learn is recorded in Certificates (so the existing expiry reminders, the dashboard and
@@ -414,22 +437,7 @@ export async function runLearnSync(scope?: Scope): Promise<SyncRun> {
       await tx.execute(sql`insert into learn.certificate_sync (certificate_id, credential_id) values (${c.id}, ${credentialId}) on conflict do nothing`);
       await notify(tx, { userId: c.user_id, kind: "learn.certified", title: "Your training certificate is recorded", body: `${c.title}, valid until ${c.ends_on}. It also appears under Certificates.`, link: "/credentials" });
       // The emailed copy: a PDF of the certificate, attached once (the queue's dedupe key). The email says nothing else.
-      const transcriptRows = (await tx.execute(sql`select learn.certificate_transcript(${c.assignment_id}::uuid) as t`)) as unknown as {
-        t: { modules?: { title: string; completedOn: string | null }[]; scorePercent?: number | null; takenOn?: string | null; ipAddress?: string | null } | null;
-      }[];
-      const transcript = transcriptRows[0]?.t ?? null;
-      const pdf = await renderCertificatePdf({
-        modules: transcript?.modules ?? [],
-        scorePercent: transcript?.scorePercent ?? null,
-        takenOn: transcript?.takenOn ?? null,
-        ipAddress: transcript?.ipAddress ?? null,
-        holderName: c.holder_name,
-        courseTitle: c.title,
-        issuedOn: c.issued_on,
-        endsOn: c.ends_on,
-        reference: c.reference,
-        verifyUrl: learnBaseUrl() ? `${learnBaseUrl()}/verify` : "the verify page of ELEVATE Learn",
-      });
+      const pdf = await renderCertificate(tx, c);
       await queueEmails(tx, [
         {
           userId: c.user_id,
@@ -455,8 +463,42 @@ export async function runLearnSync(scope?: Scope): Promise<SyncRun> {
       ${scope?.userIds ? sql`and s.certificate_id in (select id from learn.certificates where user_id = any(${uuidArray(scope.userIds)}::uuid[]))` : sql``}
     returning k.id`);
 
-  if (recorded || archived.length) await writeAudit({ actor: null, action: "learn.sync", metadata: { recorded, archived: archived.length } });
-  return { recorded, archived: archived.length, waiting };
+  // The certificate is also filed in the person's Documents (a copy of the same PDF). This runs for every recorded certificate that has no
+  // copy yet, so it also catches up the ones recorded before this existed, a few at a time. A revoked certificate's copy is archived.
+  const filed = await fileCertificateCopies(scope);
+
+  if (recorded || archived.length || filed) await writeAudit({ actor: null, action: "learn.sync", metadata: { recorded, archived: archived.length, filed } });
+  return { recorded, archived: archived.length, waiting, filed };
+}
+
+/** Certificates filed per run: enough to catch up quickly, few enough to keep a run short. */
+const FILE_BATCH = 50;
+
+async function fileCertificateCopies(scope?: Scope): Promise<number> {
+  const pending = await rows<CertificateRow & { employee_id: string }>(sql`
+    select c.id, c.assignment_id, c.issued_on::text, c.ends_on::text, co.title, c.reference, c.holder_name,
+           (select e.id from core.employees e where e.user_id = c.user_id and e.archived_at is null order by e.created_at desc limit 1) as employee_id
+    from learn.certificates c
+    join learn.certificate_sync cs on cs.certificate_id = c.id
+    join learn.assignments a on a.id = c.assignment_id join learn.courses co on co.id = a.course_id
+    where not exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id)
+      and not exists (select 1 from docs.system_documents d where d.source_kind = 'learn_certificate' and d.source_id = c.id)
+      ${onUsers(sql`c.user_id`, scope)}
+    order by c.created_at limit ${FILE_BATCH}`);
+  let filed = 0;
+  for (const c of pending) {
+    if (!c.employee_id) continue;
+    try {
+      const pdf = await renderCertificate(db, c);
+      const result = await fileSystemDocument({ employeeId: c.employee_id, typeSlug: "training_certificate", title: `${c.title} certificate`, fileName: `ers-certificate-${c.reference}.pdf`, bytes: pdf, sourceKind: "learn_certificate", sourceId: c.id });
+      if (result === "filed") filed += 1;
+    } catch (error) {
+      console.error("filing a certificate failed:", error instanceof Error ? error.name : "unknown error");
+    }
+  }
+  const revoked = await rows<{ id: string }>(sql`select r.certificate_id as id from learn.certificate_revocations r where exists (select 1 from docs.system_documents d where d.source_kind = 'learn_certificate' and d.source_id = r.certificate_id) ${scope?.userIds ? sql`and r.certificate_id in (select id from learn.certificates where user_id = any(${uuidArray(scope.userIds)}::uuid[]))` : sql``}`);
+  await archiveSystemDocuments("learn_certificate", revoked.map((r) => r.id));
+  return filed;
 }
 
 // ---- Clean-up -----------------------------------------------------------------------------------------------------------------

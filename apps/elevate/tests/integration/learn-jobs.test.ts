@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { RoleSlug } from "@/lib/roles";
+import { FakeStorage } from "./fake-storage";
 import { testDatabaseUrl } from "./global-setup";
 
 // ELEVATE's side of training against the real database: the nightly assignment (tracks, due dates, renewals, people who left,
@@ -19,8 +20,10 @@ const admin = postgres(testDatabaseUrl(process.env.TEST_DB_ADMIN_URL!), { max: 2
 
 const { db } = await import("@/lib/db");
 const { loadCourse } = await import("@/modules/learn/publish");
+const { setDocumentStorage } = await import("@/modules/documents/storage");
 const jobs = await import("@/modules/learn/jobs");
 const actions = await import("@/modules/learn/actions");
+const docActions = await import("@/modules/documents/actions");
 const queries = await import("@/modules/learn/queries");
 
 afterAll(async () => {
@@ -69,7 +72,10 @@ let versionId: string;
 let courseId: string;
 let reviewerId: string;
 
+const fakeStorage = new FakeStorage();
+
 beforeAll(async () => {
+  setDocumentStorage(fakeStorage);
   reviewerId = randomUUID();
   await db.execute(sql`insert into core.users (id, email) values (${reviewerId}, ${`${uniq("rev")}@example.com`})`);
   const r = await loadCourse(admin, { publish: true, reviewerUserId: reviewerId, counselApprovedOn: "2026-11-01", actorUserId: reviewerId });
@@ -442,6 +448,74 @@ describe("certificates into Certificates", () => {
     const ghost = { id: accountOnly, email: "", roles: [] as RoleSlug[], employeeId: "" };
     await withCertificate(ghost, plus(TODAY, 100));
     expect(await jobs.runLearnSync({ userIds: [accountOnly] })).toMatchObject({ recorded: 0, waiting: 1 });
+  });
+});
+
+describe("certificates filed in the person's Documents", () => {
+  const filedFor = (employeeId: string) =>
+    rows<{ id: string; title: string; status: string; verified: boolean; archived: boolean; slug: string; original_name: string; storage_path: string; source_id: string }>(sql`
+      select d.id, d.title, d.status, d.verified_at is not null as verified, d.archived_at is not null as archived, t.slug, d.original_name, d.storage_path, sd.source_id
+      from docs.system_documents sd join docs.documents d on d.id = sd.document_id join docs.document_types t on t.id = d.type_id
+      where sd.employee_id = ${employeeId} and sd.source_kind = 'learn_certificate'`);
+
+  it("files a copy of the certificate PDF once, verified, as a training certificate; a repeat adds nothing; a revocation archives it", async () => {
+    const person = await makePerson();
+    const { certificateId } = await withCertificate(person, plus(TODAY, 300), plus(TODAY, -65));
+    const run = await jobs.runLearnSync({ userIds: [person.id] });
+    expect(run).toMatchObject({ recorded: 1, filed: 1 });
+
+    const [doc] = await filedFor(person.employeeId);
+    expect(doc).toMatchObject({ slug: "training_certificate", status: "active", verified: true, archived: false, source_id: certificateId });
+    expect(doc.title).toMatch(/certificate$/);
+    expect(doc.original_name).toMatch(/^ers-certificate-.*\.pdf$/);
+    const stored = await fakeStorage.read("employee-docs", doc.storage_path);
+    expect(Buffer.from(stored!).subarray(0, 5).toString()).toBe("%PDF-");
+    expect(doc.storage_path.startsWith(`${person.employeeId}/`)).toBe(true); // the person's own folder in the employee bucket, never the signing bucket
+
+    // The person can see it and cannot remove it (it is verified); another employee cannot see it
+    const mine = await rows<{ id: string }>(sql`select id from docs.documents where employee_id = ${person.employeeId} and status = 'active'`);
+    expect(mine.map((m) => m.id)).toContain(doc.id);
+    as(person);
+    expect((await docActions.archiveDocument({ documentId: doc.id })).ok).toBe(false);
+    const other = await makePerson();
+    as(other);
+    expect((await docActions.getDownloadUrl({ documentId: doc.id })).ok).toBe(false);
+
+    // Repeating files nothing more
+    expect(await jobs.runLearnSync({ userIds: [person.id] })).toMatchObject({ recorded: 0, filed: 0 });
+    expect(await filedFor(person.employeeId)).toHaveLength(1);
+
+    // A revocation archives the copy (the file itself is kept)
+    await db.execute(sql`insert into learn.certificate_revocations (certificate_id, revoked_by, reason) values (${certificateId}, ${person.id}, 'Test of revocation')`);
+    await jobs.runLearnSync({ userIds: [person.id] });
+    const after = await filedFor(person.employeeId);
+    expect(after[0].archived).toBe(true);
+    expect(await fakeStorage.read("employee-docs", doc.storage_path)).not.toBeNull();
+  });
+
+  it("catches up a certificate that was recorded before filing existed, and leaves someone with no people record alone", async () => {
+    const person = await makePerson();
+    const { certificateId } = await withCertificate(person, plus(TODAY, 200));
+    // recorded the old way: a sync row exists but no copy was ever filed
+    const cred = await rows<{ id: string }>(sql`insert into talent.credentials (employee_id, name, issued_on, expires_on, source) values (${person.employeeId}, 'Old', ${plus(TODAY, -165)}::date, ${plus(TODAY, 200)}::date, 'learn') returning id`);
+    await db.execute(sql`insert into learn.certificate_sync (certificate_id, credential_id) values (${certificateId}, ${cred[0].id})`);
+    expect(await filedFor(person.employeeId)).toHaveLength(0);
+    expect(await jobs.runLearnSync({ userIds: [person.id] })).toMatchObject({ recorded: 0, filed: 1 });
+    expect(await filedFor(person.employeeId)).toHaveLength(1);
+    expect(await jobs.runLearnSync({ userIds: [person.id] })).toMatchObject({ filed: 0 });
+  });
+
+  it("files nothing for a person who is at the 100 document limit, and does not stop the rest of the run", async () => {
+    const full = await makePerson();
+    const [t] = await rows<{ id: string }>(sql`select id from docs.document_types where slug = 'other_employee'`);
+    for (let i = 0; i < 100; i++) await db.execute(sql`insert into docs.documents (type_id, employee_id, title, status, storage_bucket, storage_path, original_name, uploaded_by, finalized_at) values (${t.id}, ${full.employeeId}, ${`Filler ${i}`}, 'active', 'employee-docs', ${`${full.employeeId}/filler-${i}.pdf`}, 'x.pdf', ${randomUUID()}, now())`);
+    const ok = await makePerson();
+    await withCertificate(full, plus(TODAY, 100));
+    await withCertificate(ok, plus(TODAY, 100));
+    const run = await jobs.runLearnSync({ userIds: [full.id, ok.id] });
+    expect(run).toMatchObject({ recorded: 2, filed: 1 });
+    expect(await filedFor(full.employeeId)).toHaveLength(0);
+    expect(await filedFor(ok.employeeId)).toHaveLength(1);
   });
 });
 

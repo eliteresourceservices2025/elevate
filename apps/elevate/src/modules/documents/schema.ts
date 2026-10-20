@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, check, type AnyPgColumn, date, index, integer, pgSchema, text, timestamp, uniqueIndex, uuid, boolean } from "drizzle-orm/pg-core";
+import { bigint, check, type AnyPgColumn, date, index, integer, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid, boolean } from "drizzle-orm/pg-core";
 import { clients, employees } from "@/modules/people/schema";
 
 // Document vault (A3). Files live in private Supabase Storage buckets; only metadata is here.
@@ -125,6 +125,35 @@ export const documentReminders = docs
     (t) => [
       uniqueIndex("document_reminders_unique_idx").on(t.documentId, t.daysBefore),
       check("document_reminders_days_chk", sql`${t.daysBefore} in (30, 7, 0)`),
+    ],
+  )
+  .enableRLS();
+
+export const SYSTEM_SOURCE_KINDS = ["learn_certificate", "esign_signer"] as const;
+
+/**
+ * A copy ELEVATE itself filed in a person's Documents (a training certificate they earned, a document they signed), and where it came
+ * from, so each source is filed once per person (the primary key) and a revoked certificate's copy can be found and archived.
+ */
+export const systemDocuments = docs
+  .table(
+    "system_documents",
+    {
+      /** learn_certificate: source_id is the learn.certificates id. esign_signer: source_id is the docs.esign_signers id. */
+      sourceKind: text("source_kind").notNull(),
+      sourceId: uuid("source_id").notNull(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      documentId: uuid("document_id")
+        .notNull()
+        .references(() => documents.id),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      primaryKey({ columns: [t.sourceKind, t.sourceId, t.employeeId] }),
+      uniqueIndex("system_documents_document_idx").on(t.documentId),
+      check("system_documents_kind_chk", sql`${t.sourceKind} in ('learn_certificate','esign_signer')`),
     ],
   )
   .enableRLS();
