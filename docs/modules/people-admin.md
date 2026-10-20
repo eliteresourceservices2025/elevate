@@ -51,3 +51,10 @@ A person whose work email or name was edited here could end up in the directory 
 - **Finding a person who changed name and email:** the duplicate finder groups records that share a name OR a personal email, mobile number or birth date (chained), and **Merge by hand** lets HR pick any two records. Imports also recognise a person the API pull already knows by their TalentHR id (`import_pull_items`, kind `leave_history`), so people imported before the id was stored here are matched too.
 - Linking stays by account once made (`userId`), never by email text; a changed work email does not unlink anyone.
 - Test fixtures: `fakeCompany(tag)` now makes ids, last names and phones unique per tag, because the import matches on the TalentHR id and warns about shared names and tests share one database.
+
+## Addresses (US and Philippines)
+
+- The address stays in five plain columns on `core.employees`. `modules/people/address-data.ts` holds the US states, the Philippine provinces and cities (`psgc-ph.json`, built once by `scripts/build-psgc.mts` from the PSA's PSGC data via the psgc.gitlab.io mirror; never fetched at runtime) and `formatAddress`, `addressLabels`, `addressIssues`.
+- Rules follow the country: US state code in the list and ZIP `12345` or `12345-6789`; Philippines province and city in the lists and a 4-digit postal code; other countries are free text. Barangay is typed in the address line.
+- Saved values are never blocked: `updateEmployee` and `requestContactChange` read the saved address and pass it as `legacy`, so an old free-text value that is not being changed still saves (the picker shows it as "(current) X"). Imports (`importedEmployeeSchema`) skip the lists.
+- PSGC lists Maguindanao as one province (the 2022 split into del Norte and del Sur is not in the mirror yet); regenerate the file when the PSA publishes it.

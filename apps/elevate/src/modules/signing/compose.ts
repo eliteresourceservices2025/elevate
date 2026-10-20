@@ -3,6 +3,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import { formatDateOnly } from "@/lib/time";
+import { formatAddress } from "@/modules/people/address-data";
 import { employees } from "@/modules/people/schema";
 import { parseMarkdown } from "@/lib/markdown";
 import { ActionFailure } from "@/lib/run-action";
@@ -51,7 +52,7 @@ export async function loadSigneeValues(userIds: string[]): Promise<Map<string, {
   for (const r of rows) {
     if (!r.userId) continue;
     const name = [r.first, r.middle, r.last].filter(Boolean).join(" ");
-    const address = [r.addressLine, r.city, [r.province, r.postalCode].filter(Boolean).join(" "), r.country === "PH" ? "Philippines" : r.country].filter((p) => p && p.trim()).join(", ");
+    const address = formatAddress(r);
     out.set(r.userId, {
       name,
       values: {

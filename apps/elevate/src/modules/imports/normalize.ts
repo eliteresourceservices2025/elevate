@@ -1,5 +1,5 @@
 import { normalizePayRate } from "@/modules/people/ids";
-import { createEmployeeSchema, type CreateEmployeeInput } from "@/modules/people/validators";
+import { importedEmployeeSchema, type CreateEmployeeInput } from "@/modules/people/validators";
 import type { Destination } from "./mapping";
 
 // Turns one row of a TalentHR export into what ELEVATE stores, and says what is wrong with it. Pure: no database.
@@ -154,7 +154,7 @@ export function normalizeRow(raw: Record<string, string>, mapping: Record<string
     startDate,
     endDate: status === "separated" ? endDate : undefined,
   };
-  const parsed = createEmployeeSchema.safeParse(candidate);
+  const parsed = importedEmployeeSchema.safeParse(candidate);
   let input: CreateEmployeeInput | null = null;
   if (parsed.success) input = parsed.data;
   else for (const i of parsed.error.issues) issues.push({ level: "error", field: String(i.path[0] ?? "Row"), message: i.message });

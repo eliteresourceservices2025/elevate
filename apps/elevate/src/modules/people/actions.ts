@@ -49,7 +49,7 @@ import {
   bankChangeSchema,
   cancelChangeSchema,
   clientSchema,
-  contactChangeSchema,
+  contactChangeSchemaFor,
   createEmployeeSchema,
   customFieldDefSchema,
   customFieldValuesSchema,
@@ -61,9 +61,20 @@ import {
   reviewChangeSchema,
   updateAssignmentSchema,
   updateClientSchema,
-  updateEmployeeSchema,
+  updateEmployeeSchemaFor,
   updateSensitiveSchema,
 } from "./validators";
+
+/** The address already on file, so an old free-text value that is not being changed still saves. */
+async function savedAddress(employeeId: unknown) {
+  if (typeof employeeId !== "string" || !z.uuid().safeParse(employeeId).success) return undefined;
+  const [row] = await db
+    .select({ country: employees.country, city: employees.city, province: employees.province, postalCode: employees.postalCode })
+    .from(employees)
+    .where(eq(employees.id, employeeId))
+    .limit(1);
+  return row;
+}
 
 const BAD_FORM = "Check the form and try again.";
 const firstIssue = (error: { issues: { message: string }[] }) => error.issues[0]?.message ?? BAD_FORM;
@@ -180,7 +191,8 @@ export async function updateEmployee(input: unknown): Promise<ActionResult> {
 
   return runAction(async () => {
     await authorize(actor, "people.edit_profile");
-    const parsed = updateEmployeeSchema.safeParse(input);
+    const saved = await savedAddress(typeof input === "object" && input ? (input as { employeeId?: unknown }).employeeId : undefined);
+    const parsed = updateEmployeeSchemaFor(saved).safeParse(input);
     if (!parsed.success) return fail(firstIssue(parsed.error));
     const { employeeId, positionId, ...v } = parsed.data;
 
@@ -433,10 +445,9 @@ export async function requestContactChange(input: unknown): Promise<ActionResult
     await authorize(actor, "people.request_contact_change", { ownerUserId: me?.userId ?? undefined });
     if (!me) return fail("Your people record is not set up yet. Ask HR.");
 
-    const parsed = contactChangeSchema.safeParse(input);
-    if (!parsed.success) return fail(firstIssue(parsed.error));
-
     const [current] = await db.select().from(employees).where(eq(employees.id, me.id)).limit(1);
+    const parsed = contactChangeSchemaFor(current).safeParse(input);
+    if (!parsed.success) return fail(firstIssue(parsed.error));
     const proposed = Object.fromEntries(
       CONTACT_FIELDS.flatMap((f) => {
         // eslint-disable-next-line security/detect-object-injection -- f is a key of CONTACT_FIELDS
