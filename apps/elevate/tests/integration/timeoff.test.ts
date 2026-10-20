@@ -420,6 +420,34 @@ describe("only checked holidays count", () => {
   });
 });
 
+describe("mark all holidays checked", () => {
+  it("ticks only that year's unchecked, live days, audits the count, and is HR only", async () => {
+    const year = 2044;
+    await db.execute(sql`delete from time.holidays where date between ${`${year}-01-01`} and ${`${year + 1}-12-31`}`);
+    await db.execute(sql`insert into time.holidays (calendar, date, name, kind, verified, archived_at) values
+      ('PH', ${`${year}-01-01`}, 'A', 'other', false, null), ('PH', ${`${year}-05-01`}, 'B', 'other', false, null),
+      ('US', ${`${year}-07-04`}, 'C', 'federal', true, null), ('PH', ${`${year}-06-12`}, 'D', 'other', false, now()),
+      ('PH', ${`${year + 1}-01-01`}, 'E', 'other', false, null)`);
+
+    as(await makeUser("emp", ["employee"]));
+    expect(await actions.verifyAllHolidays({ year })).toEqual({ ok: false, error: NO_ACCESS });
+    as(hr);
+    expect((await actions.verifyAllHolidays({ year: 1999 })).ok).toBe(false);
+    expect(await actions.verifyAllHolidays({ year })).toEqual({ ok: true, data: { marked: 2 } });
+    const state = await rows<{ name: string; verified: boolean }>(sql`select name, verified from time.holidays where date between ${`${year}-01-01`} and ${`${year + 1}-12-31`} order by name`);
+    expect(state).toEqual([
+      { name: "A", verified: true },
+      { name: "B", verified: true },
+      { name: "C", verified: true },
+      { name: "D", verified: false }, // archived: left alone
+      { name: "E", verified: false }, // another year: left alone
+    ]);
+    expect(await actions.verifyAllHolidays({ year })).toEqual({ ok: true, data: { marked: 0 } });
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'holiday.verify_all' and metadata->>'marked' = '2' and metadata->>'year' = ${String(year)}`)).toHaveLength(1);
+    await db.execute(sql`delete from time.holidays where date between ${`${year}-01-01`} and ${`${year + 1}-12-31`}`);
+  });
+});
+
 describe("leave types", () => {
   it("starts with a prize day type and an unpaid type, and refuses duplicate names", async () => {
     as(hr);

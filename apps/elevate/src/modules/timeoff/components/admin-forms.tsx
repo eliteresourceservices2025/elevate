@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { archiveHoliday, archiveLeaveType, createHoliday, createLeaveType, importHolidays, updateHoliday, updateLeaveType } from "../actions";
+import { archiveHoliday, archiveLeaveType, createHoliday, createLeaveType, importHolidays, updateHoliday, updateLeaveType, verifyAllHolidays } from "../actions";
 import type { HolidayRow, LeaveTypeRow } from "../queries";
 
 function useRun() {
@@ -171,6 +171,24 @@ export function ImportHolidaysButton({ year }: { year: number }) {
       }
     >
       {pending ? "Importing..." : `Import ${year} from Nager.Date`}
+    </Button>
+  );
+}
+
+/** After HR has compared the year's list with the official proclamation: ticks every unchecked day at once. */
+export function VerifyAllHolidaysButton({ year, count }: { year: number; count: number }) {
+  const { run, pending } = useRun();
+  if (count === 0) return null;
+  return (
+    <Button
+      variant="outline"
+      disabled={pending}
+      onClick={() => {
+        if (!window.confirm(`Mark all ${count} unchecked ${year} holidays as checked? Only do this after comparing them with the official list: checked days count for absence flags and leave.`)) return;
+        run(() => verifyAllHolidays({ year }), `Marked ${count} holidays as checked.`);
+      }}
+    >
+      Mark all {count} as checked
     </Button>
   );
 }
