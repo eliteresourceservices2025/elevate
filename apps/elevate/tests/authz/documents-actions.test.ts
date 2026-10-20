@@ -64,6 +64,7 @@ describe("document and notification queries, every role", () => {
   const queryCases: { name: string; call: () => Promise<unknown>; allowed: RoleSlug[] }[] = [
     { name: "getDocumentOverview", call: () => queries.getDocumentOverview(), allowed: HR },
     { name: "listDocumentTypes", call: () => queries.listDocumentTypes(), allowed: HR },
+    { name: "listAllEmployeeDocuments", call: () => queries.listAllEmployeeDocuments({ page: 1, pageSize: 25 }), allowed: HR },
     { name: "getUploadOptions (company)", call: () => queries.getUploadOptions("company"), allowed: HR },
     { name: "listCompanyDocuments", call: () => queries.listCompanyDocuments(), allowed: [...ROLE_SLUGS] },
     { name: "countMyUnread", call: () => notificationQueries.countMyUnread(), allowed: [...ROLE_SLUGS] },

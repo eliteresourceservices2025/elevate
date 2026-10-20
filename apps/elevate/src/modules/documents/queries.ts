@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { todayInZone } from "@/modules/org/service";
 import { clients, employees } from "@/modules/people/schema";
+import { pageInfo, type PageInfo } from "@/lib/pagination";
 import { expiryStatus, type ExpiryStatus } from "./expiry";
 import { documentFolders, documentTypes, documents } from "./schema";
 import { clientChoices } from "./service";
@@ -126,7 +127,7 @@ export async function listCompanyDocuments(): Promise<DocumentRow[]> {
   return rows.map((r) => toRow(r, today));
 }
 
-export type TypeOption = { id: string; name: string; requiresExpiry: boolean; requiresClient: boolean };
+export type TypeOption = { id: string; slug: string; name: string; requiresExpiry: boolean; requiresClient: boolean };
 
 /** What the upload form offers: active types for the target, and the clients the person may choose. */
 export async function getUploadOptions(target: "employee" | "company", employeeId?: string) {
@@ -138,7 +139,7 @@ export async function getUploadOptions(target: "employee" | "company", employeeI
   }
 
   const types = await db
-    .select({ id: documentTypes.id, name: documentTypes.name, requiresExpiry: documentTypes.requiresExpiry, requiresClient: documentTypes.requiresClient })
+    .select({ id: documentTypes.id, slug: documentTypes.slug, name: documentTypes.name, requiresExpiry: documentTypes.requiresExpiry, requiresClient: documentTypes.requiresClient })
     .from(documentTypes)
     .where(and(eq(documentTypes.scope, target), isNull(documentTypes.archivedAt)))
     .orderBy(documentTypes.name);
@@ -254,4 +255,53 @@ export async function listDocumentTypes(): Promise<TypeAdminRow[]> {
     .where(isNull(documentTypes.archivedAt))
     .orderBy(documentTypes.scope, documentTypes.name);
   return rows.map((r) => ({ ...r, scope: r.scope === "company" ? "company" : "employee" }));
+}
+
+export type AllFilesRow = DocumentRow & { employeeId: string; employeeName: string; employeeNumber: string; folderName: string | null };
+
+/**
+ * Every employee's documents in one list, for HR (and Super Admin): newest first, filtered by a search on the title, file name or
+ * person and by type, paged here. Archived and still-pending uploads are left out, and so are people who have left.
+ */
+export async function listAllEmployeeDocuments(opts: { q?: string; typeSlug?: string; page: number; pageSize: number }): Promise<{ rows: AllFilesRow[]; info: PageInfo; types: { slug: string; name: string }[] }> {
+  const user = await requireUser();
+  await authorize(user, "documents.view_overview");
+  const today = todayInZone();
+  const name = sql<string>`coalesce(nullif(btrim(e.preferred_name), ''), e.legal_first_name) || ' ' || e.legal_last_name`;
+  const q = opts.q?.trim().slice(0, 80) ?? "";
+  const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  const where = sql`d.status = 'active' and d.archived_at is null and d.employee_id is not null and e.archived_at is null and e.status <> 'separated'
+    ${opts.typeSlug ? sql`and t.slug = ${opts.typeSlug}` : sql``}
+    ${q ? sql`and (d.title ilike ${like} or d.original_name ilike ${like} or ${name} ilike ${like})` : sql``}`;
+  const [{ n }] = (await db.execute(sql`
+    select count(*)::int as n from docs.documents d join docs.document_types t on t.id = d.type_id join core.employees e on e.id = d.employee_id where ${where}`)) as unknown as { n: number }[];
+  const info = pageInfo(n, opts.page, opts.pageSize);
+  const raw = (await db.execute(sql`
+    select d.id, d.title, t.name as type_name, t.slug as type_slug, d.original_name, d.mime_type, d.size_bytes, c.name as client_name,
+           d.expires_on::text as expires_on, d.verified_at, d.archived_at, d.audience, d.folder_id, d.created_at,
+           e.id as employee_id, e.employee_number, ${name} as employee_name, f.name as folder_name
+    from docs.documents d
+    join docs.document_types t on t.id = d.type_id
+    join core.employees e on e.id = d.employee_id
+    left join core.clients c on c.id = d.client_id
+    left join docs.document_folders f on f.id = d.folder_id and f.archived_at is null
+    where ${where}
+    order by d.created_at desc
+    limit ${info.pageSize} offset ${info.offset}`)) as unknown as Record<string, unknown>[];
+  const rows = raw.map((r): AllFilesRow => ({
+    ...toRow(
+      {
+        id: String(r.id), title: String(r.title), typeName: String(r.type_name), typeSlug: String(r.type_slug), originalName: String(r.original_name), mimeType: (r.mime_type as string | null) ?? null,
+        sizeBytes: r.size_bytes === null ? null : Number(r.size_bytes), clientName: (r.client_name as string | null) ?? null, expiresOn: (r.expires_on as string | null) ?? null,
+        verifiedAt: (r.verified_at as Date | null) ?? null, archivedAt: (r.archived_at as Date | null) ?? null, audience: String(r.audience), folderId: (r.folder_id as string | null) ?? null, createdAt: new Date(r.created_at as string | Date),
+      },
+      today,
+    ),
+    employeeId: String(r.employee_id),
+    employeeName: String(r.employee_name),
+    employeeNumber: String(r.employee_number),
+    folderName: (r.folder_name as string | null) ?? null,
+  }));
+  const types = (await db.execute(sql`select distinct t.slug, t.name from docs.document_types t where t.scope = 'employee' order by t.name`)) as unknown as { slug: string; name: string }[];
+  return { rows, info, types };
 }

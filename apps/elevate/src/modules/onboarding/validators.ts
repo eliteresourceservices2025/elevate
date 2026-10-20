@@ -38,6 +38,8 @@ export type ChecklistTemplateInput = z.input<typeof checklistTemplateSchema>;
 
 export const templateIdSchema = z.object({ templateId: uuid });
 export const caseIdSchema = z.object({ caseId: uuid });
+/** Completing an onboarding; a reason is given only to complete it while required tasks are still open ("complete anyway"). */
+export const completeOnboardingSchema = z.object({ caseId: uuid, overrideReason: z.preprocess(blankToUndefined, text(500).min(5, "Give a short reason").optional()) });
 export const taskIdSchema = z.object({ taskId: uuid });
 export const completeTaskSchema = z.object({ taskId: uuid, note: z.preprocess(blankToUndefined, text(500).optional()) });
 export const skipTaskSchema = z.object({ taskId: uuid, reason: text(500).min(3, "Give a short reason") });

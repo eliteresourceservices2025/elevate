@@ -10,6 +10,13 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cancelUpload, finalizeUpload, requestUpload } from "../actions";
 import { ALLOWED_MIME_TYPES, ALLOWED_TYPES_TEXT, MAX_FILE_BYTES, formatBytes } from "../files";
 import type { TypeOption } from "../queries";
+import { CATEGORY_LABELS, typeStyle, type DocumentCategory } from "../type-style";
+
+/** The types in sections by category, in the order of the categories. */
+function groupTypes(types: TypeOption[]): { category: DocumentCategory; types: TypeOption[] }[] {
+  const order = Object.keys(CATEGORY_LABELS) as DocumentCategory[];
+  return order.map((category) => ({ category, types: types.filter((t) => typeStyle(t.slug).category === category) })).filter((g) => g.types.length > 0);
+}
 
 type Props = {
   target: "employee" | "company";
@@ -109,10 +116,14 @@ export function UploadForm({ target, employeeId, types, clients, folders = [], t
       <div className="grid gap-4 sm:grid-cols-2">
         <SelectField id="up-type" label="Document type" value={typeId} onChange={(e) => setTypeId(e.target.value)} required>
           <option value="">Choose…</option>
-          {types.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
+          {groupTypes(types).map((g) => (
+            <optgroup key={g.category} label={CATEGORY_LABELS[g.category]}>
+              {g.types.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </SelectField>
         <TextField id="up-title" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} hint="For example: NBI clearance 2026" required />

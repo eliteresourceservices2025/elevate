@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { Download, File, FileImage, FileText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
@@ -12,6 +12,15 @@ import { archiveDocument, getDownloadUrl, moveDocument, verifyDocument } from ".
 import type { ExpiryStatus } from "../expiry";
 import { formatBytes } from "../files";
 import type { DocumentRow, FolderRow } from "../queries";
+import { TypeBadge } from "./type-badge";
+
+/** A small icon for the kind of file (PDF, picture, Word), so the file name line reads at a glance. */
+function FileKindIcon({ mime }: { mime: string | null }) {
+  const className = "size-3.5 shrink-0";
+  if (mime?.startsWith("image/")) return <FileImage className={className} aria-hidden />;
+  if (mime === "application/pdf") return <FileText className={className} aria-hidden />;
+  return <File className={className} aria-hidden />;
+}
 
 export function ExpiryBadge({ status, expiresOn }: { status: ExpiryStatus; expiresOn: string | null }) {
   if (status === "none" || !expiresOn) return <span className="text-muted-foreground">No expiry</span>;
@@ -81,6 +90,7 @@ export function DocumentList({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Type</TableHead>
             <TableHead>Document</TableHead>
             <TableHead>Expiry</TableHead>
             <TableHead>Status</TableHead>
@@ -91,11 +101,17 @@ export function DocumentList({
           {rows.map((r) => (
             <TableRow key={r.id} className={r.archived ? "opacity-60" : undefined}>
               <TableCell>
+                <TypeBadge slug={r.typeSlug} name={r.typeName} />
+              </TableCell>
+              <TableCell>
                 <div className="font-medium">{r.title}</div>
-                <div className="text-xs text-muted-foreground">
-                  {r.typeName}
-                  {r.clientName ? ` · ${r.clientName}` : ""} · {r.fileName}
-                  {r.sizeBytes ? ` (${formatBytes(r.sizeBytes)})` : ""}
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <FileKindIcon mime={r.mimeType} />
+                  <span>
+                    {r.clientName ? `${r.clientName} · ` : ""}
+                    {r.fileName}
+                    {r.sizeBytes ? ` (${formatBytes(r.sizeBytes)})` : ""}
+                  </span>
                 </div>
               </TableCell>
               <TableCell>

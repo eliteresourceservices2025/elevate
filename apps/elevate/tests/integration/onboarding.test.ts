@@ -150,6 +150,49 @@ describe("onboarding checklist", () => {
     expect((await act.completeOnboarding({ caseId: c.caseId })).ok).toBe(false);
   });
 
+  it("lets HR complete anyway with a reason when a task was forgotten: open tasks are closed as skipped, the person becomes active, it is audited", async () => {
+    const hire = await makePerson("hire-stuck", ["employee"], leadEmployeeId());
+    const c = await openCase(hire.employeeId);
+    as(hr);
+    // Everything but one task is done: the case is stuck on a task nobody ticked
+    const todo = await rows<{ id: string; title: string }>(sql`select id, title from talent.checklist_tasks where onboarding_case_id = ${c.caseId} and status = 'todo' and required and check_kind = 'manual' order by created_at`);
+    for (const t of todo.slice(1)) expect((await act.completeTask({ taskId: t.id })).ok).toBe(true);
+    const stuck = await act.completeOnboarding({ caseId: c.caseId });
+    expect(stuck.ok).toBe(false);
+    expect(stuck.error).toMatch(/complete anyway/i);
+
+    // A lead cannot, a reason that is too short is refused, then HR does it
+    as(lead);
+    expect((await act.completeOnboarding({ caseId: c.caseId, overrideReason: "Forgot to tick it" })).error).toBe(NO_ACCESS);
+    as(hr);
+    expect((await act.completeOnboarding({ caseId: c.caseId, overrideReason: "no" })).ok).toBe(false);
+    expect((await act.completeOnboarding({ caseId: c.caseId, overrideReason: "She forgot to tick the second task" })).ok).toBe(true);
+
+    const [e] = await rows<{ status: string }>(sql`select status from core.employees where id = ${hire.employeeId}`);
+    expect(e.status).toBe("active");
+    const closed = await rows<{ status: string; note: string | null }>(sql`select status, note from talent.checklist_tasks where onboarding_case_id = ${c.caseId} and id = ${todo[0].id}`);
+    expect(closed[0].status).toBe("skipped");
+    expect(closed[0].note).toContain("She forgot to tick the second task");
+    expect((await rows(sql`select 1 from talent.checklist_tasks where onboarding_case_id = ${c.caseId} and status = 'todo' and not auto_completed and check_kind = 'manual'`))).toHaveLength(0);
+    const [audit] = await rows<{ after: { overrideReason: string; openRequiredTasks: string[] } }>(sql`select after from ops.audit_log where action = 'onboarding.complete' and target_id = ${hire.employeeId} order by id desc limit 1`);
+    expect(audit.after.overrideReason).toBe("She forgot to tick the second task");
+    expect(audit.after.openRequiredTasks).toContain(todo[0].title);
+    expect((await act.completeOnboarding({ caseId: c.caseId, overrideReason: "Again, for the record" })).ok).toBe(false); // already closed
+  });
+
+  it("lets HR tick a task ELEVATE would tick itself, with a reason; nobody else can", async () => {
+    const hire = await makePerson("hire-auto", ["employee"], leadEmployeeId());
+    const c = await openCase(hire.employeeId);
+    const [policy] = await rows<{ id: string }>(sql`select id from talent.checklist_tasks where onboarding_case_id = ${c.caseId} and check_kind = 'policy' and status = 'todo' limit 1`);
+    as(hire.user);
+    expect((await act.completeTask({ taskId: policy.id })).error).toMatch(/by itself/);
+    as(hr);
+    expect((await act.completeTask({ taskId: policy.id })).error).toMatch(/reason/);
+    expect((await act.completeTask({ taskId: policy.id, note: "Read it with her on a call" })).ok).toBe(true);
+    const [row] = await rows<{ status: string; note: string }>(sql`select status, note from talent.checklist_tasks where id = ${policy.id}`);
+    expect(row).toMatchObject({ status: "done", note: "Read it with her on a call" });
+  });
+
   it("shows a person only their own onboarding, and a stranger none", async () => {
     const hire = await makePerson("hire5", ["employee"], leadEmployeeId());
     const c = await openCase(hire.employeeId);

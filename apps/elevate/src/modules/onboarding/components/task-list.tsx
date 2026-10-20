@@ -16,6 +16,7 @@ import type { TaskView } from "../queries";
 export function TaskList({ tasks, canManage, open }: { tasks: TaskView[]; canManage: boolean; open: boolean }) {
   const { run, pending } = useRun();
   const [skipping, setSkipping] = useState<string | null>(null);
+  const [marking, setMarking] = useState<string | null>(null);
   const [reason, setReason] = useState("");
 
   return (
@@ -44,7 +45,7 @@ export function TaskList({ tasks, canManage, open }: { tasks: TaskView[]; canMan
                 </Link>
               ) : null}
               {t.canAct ? (
-                <Button size="sm" disabled={pending} onClick={() => run(() => completeTask({ taskId: t.id }), "Task done.")}>
+                <Button size="sm" disabled={pending} onClick={() => (t.actNeedsReason ? (setMarking(marking === t.id ? null : t.id), setSkipping(null), setReason("")) : run(() => completeTask({ taskId: t.id }), "Task done."))}>
                   Mark done
                 </Button>
               ) : null}
@@ -54,7 +55,7 @@ export function TaskList({ tasks, canManage, open }: { tasks: TaskView[]; canMan
                 </Button>
               ) : null}
               {canManage && open && t.status === "todo" ? (
-                <Button size="sm" variant="ghost" disabled={pending} onClick={() => (setSkipping(skipping === t.id ? null : t.id), setReason(""))}>
+                <Button size="sm" variant="ghost" disabled={pending} onClick={() => (setSkipping(skipping === t.id ? null : t.id), setMarking(null), setReason(""))}>
                   Skip
                 </Button>
               ) : null}
@@ -65,6 +66,23 @@ export function TaskList({ tasks, canManage, open }: { tasks: TaskView[]; canMan
               ) : null}
             </div>
           </div>
+          {marking === t.id ? (
+            <form
+              className="flex flex-wrap items-end gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                run(() => completeTask({ taskId: t.id, note: reason }), "Task marked done.", () => setMarking(null));
+              }}
+            >
+              <div className="space-y-1">
+                <Label htmlFor={`mark-${t.id}`}>Why are you marking it done by hand?</Label>
+                <Input id={`mark-${t.id}`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} className="w-72" placeholder="For example: done outside ELEVATE" />
+              </div>
+              <Button size="sm" type="submit" disabled={pending || reason.trim().length < 3}>
+                Mark done
+              </Button>
+            </form>
+          ) : null}
           {skipping === t.id ? (
             <form
               className="flex flex-wrap items-end gap-2"

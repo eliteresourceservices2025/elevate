@@ -88,6 +88,23 @@ export function inlineText(nodes: Inline[]): string {
   return nodes.map((n) => (n.type === "text" || n.type === "code" ? n.text : inlineText(n.children))).join("");
 }
 
+/** The title printed centered under the logo when a letter has no heading of its own. */
+export const DEFAULT_OFFER_TITLE = "Offer of Engagement";
+
+/**
+ * Splits a filled letter into the title that is printed centered under the logo and the body. The signing documents print a centered
+ * title, so a letter whose first block is a heading (every template written before this design) gives that heading as the title instead
+ * of printing it twice; any other letter gets the default title.
+ */
+export function offerLetterParts(blocks: Block[]): { title: string; body: Block[] } {
+  const [first, ...rest] = blocks;
+  if (first && first.type === "heading") {
+    const text = inlineText(first.children).trim();
+    if (text) return { title: text, body: rest };
+  }
+  return { title: DEFAULT_OFFER_TITLE, body: blocks };
+}
+
 export const DEFAULT_OFFER_TEMPLATE = `# Independent contractor agreement offer
 
 Dear {{candidate_name}},

@@ -98,6 +98,8 @@ export type TaskView = {
   note: string | null;
   href: string | null;
   canAct: boolean;
+  /** HR ticking a task ELEVATE would tick by itself: a reason is needed. */
+  actNeedsReason: boolean;
   canSendAgreement: boolean;
   overdue: boolean;
 };
@@ -167,7 +169,8 @@ async function detail(kind: Kind, id: string): Promise<CaseDetail> {
       auto: satisfied || t.autoCompleted,
       note: t.note,
       href: t.href,
-      canAct: open && t.status === "todo" && !satisfied && mayAct && t.check === "manual",
+      canAct: open && t.status === "todo" && !satisfied && mayAct && (t.check === "manual" || (isHr && kind === "onboarding")),
+      actNeedsReason: t.check !== "manual",
       canSendAgreement: open && isHr && t.check === "signature" && !t.envelopeId && t.status === "todo",
       overdue: status === "todo" && t.dueOn < today,
     };
