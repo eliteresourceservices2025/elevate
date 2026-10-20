@@ -39,7 +39,7 @@ We do not sell personal data, use it for advertising or make decisions about you
 
 ## Companies that help us run ELEVATE
 
-These providers process data for us under their own security and data-protection terms: Supabase (database, sign-in and file storage, hosted in Singapore), Vercel (hosting), Google (sign-in if you choose it), Resend (email), Upstash (abuse protection), Inngest (scheduled tasks) and Jibble (work screenshots, as described in the Monitoring policy). Some of them store or handle data outside the Philippines. We use them only for the purposes above.
+These providers process data for us under their own security and data-protection terms: Supabase (database, sign-in and file storage, hosted in Singapore), Vercel (hosting), Google (sign-in if you choose it), Brevo and Brevo and Resend (email), Upstash (abuse protection), Inngest (scheduled tasks) and Jibble (work screenshots, as described in the Monitoring policy). Some of them store or handle data outside the Philippines. We use them only for the purposes above.
 
 ## How long we keep it
 

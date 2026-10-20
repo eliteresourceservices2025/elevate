@@ -11,9 +11,9 @@
 - **Removing a policy:** `archivePolicy` archives (never erases) a policy that was never published and has kind `general`; the built-in privacy notice and monitoring policy, and anything published, cannot be removed. `createPolicy` always makes kind `general`: the sign-in gate and the Jibble switch read the built-in ones by kind, so their text is edited in those policies, not in new ones.
 - Markdown goes through `src/lib/markdown.ts` into React elements, never an HTML string. Do not add `dangerouslySetInnerHTML` for user text.
 - The seeded privacy notice and monitoring policy are DRAFT placeholders; publishing refuses text containing "DRAFT PLACEHOLDER". Phase 1.5 and the Jibble mirror gate read them by `kind`.
-- **Email:** everything is queued in `ops.email_queue` and sent by the `email-sender` job under a rolling 24-hour budget (`EMAIL_DAILY_BUDGET`, default 90 of Resend's free 100). Acknowledgment emails go first, then the weekday 8:00 AM Manila digest. Bodies carry counts and a link only. With no `RESEND_API_KEY`/`EMAIL_FROM` nothing is sent and the queue waits. Tests use `setEmailSender()`.
+- **Email:** everything is queued in `ops.email_queue` and sent by the `email-sender` job under a rolling 24-hour budget (`EMAIL_DAILY_BUDGET`, default 250 on Brevo's free 300 a day, 90 on Resend's free 100; `EMAIL_PROVIDER` picks the sender, Brevo over SMTP by default once `BREVO_SMTP_KEY` is set). Acknowledgment emails go first, then the weekday 8:00 AM Manila digest. Bodies carry counts and a link only. With no provider key (`BREVO_SMTP_LOGIN`+`BREVO_SMTP_KEY`, or `RESEND_API_KEY`) and `EMAIL_FROM` nothing is sent and the queue waits. Tests use `setEmailSender()`.
 - Pass `Date` values to drizzle comparison helpers (`lt`, `gte`), not raw `sql` fragments: raw fragments skip the driver's date encoding.
-- Production go-live: Supabase's built-in auth email is heavily rate-limited; configure custom SMTP (Resend can do it) when the Pro project is created.
+- Production go-live: Supabase's built-in auth email is heavily rate-limited; configure custom SMTP (Brevo or Resend; use the same Brevo SMTP login and key) when the Pro project is created.
 
 ## Privacy notice and "My data" (Phase 1.5)
 

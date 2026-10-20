@@ -26,7 +26,7 @@ export const notifications = ops
   .enableRLS();
 
 // Email queue (1.4). Emails are queued first and sent by a job under a daily budget, because the free
-// Resend plan allows 100 a day. Bodies hold counts and links only: email is not a secure channel.
+// Resend plan allows 100 a day and Brevo's 300 (see dailyEmailBudget). Bodies hold counts and links only: email is not a secure channel.
 export const emailQueue = ops
   .table(
     "email_queue",

@@ -22,7 +22,7 @@ One GitHub repository, **two Vercel projects**: ELEVATE (`apps/elevate`) and Saf
    - Multi-factor: TOTP on.
    - URL configuration: **Site URL** = the ELEVATE address; Redirect URLs: `<elevate address>/auth/callback` and `<elevate address>/auth/confirm`.
    - Email templates: paste `supabase/templates/confirmation.html` (Confirm signup) and `recovery.html` (Reset password).
-   - **SMTP:** Supabase's built-in email sends only a few messages an hour. Set custom SMTP to Resend (Part 3) before inviting more than a couple of people.
+   - **SMTP:** Supabase's built-in email sends only a few messages an hour. Set custom SMTP to Brevo (Part 3; host `smtp-relay.brevo.com`, port 587, the SMTP login and key) before inviting more than a couple of people.
 5. **Run the migrations** from your computer. In PowerShell, in the repository folder, set the connection in this window only (it overrides `.env.local`, which stays untouched), then run:
 
    ```powershell
@@ -66,7 +66,7 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"        
 
 - **Upstash** (upstash.com): create a Redis database in Singapore; copy the REST URL and token. Create a **second** database for Safe Voice if you can (so its rate limits are separate).
 - **Inngest** (inngest.com): create an app; copy the **event key** and **signing key**. After the first deploy, register `https://<elevate address>/api/inngest` in the Inngest dashboard (Part 6).
-- **Resend** (resend.com): add and verify a sending domain (it gives you DNS records). Create a sending-only API key. Without a verified domain it can only email yourself. Use the same Resend account's SMTP details in Supabase (Part 1, step 4).
+- **Brevo** (brevo.com, the default sender): authenticate the sending subdomain (for example `mail.<ERS domain>`, it gives you DNS records), then create an SMTP key under SMTP & API > SMTP (the SMTP key, not the API key). Free plan: 300 emails a day. **Resend** (resend.com) still works as the alternative (`EMAIL_PROVIDER=resend`): add and verify a sending domain (it gives you DNS records). Create a sending-only API key. Without a verified domain it can only email yourself. Use the same Resend account's SMTP details in Supabase (Part 1, step 4).
 - **Google sign-in** (console.cloud.google.com): an OAuth client of type Web with the authorized redirect URI `https://<project-ref>.supabase.co/auth/v1/callback`; paste its client ID and secret into Supabase > Authentication > Providers > Google. (Calendar for interviews uses a second client, `docs/SETUP.md` 6b: optional for the demo.)
 - **Sentry**: optional for the demo. Do not turn on anything that sends personal data.
 
@@ -86,7 +86,7 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"        
    | `DATABASE_URL` | transaction pooler string (port 6543) |
    | `FIELD_ENCRYPTION_KEYS` | the new `v1:...` key |
    | `ELEVATE_ENV` | `production` (Production only, never Preview) |
-   | `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | from Resend; a monitored address, not no-reply |
+   | `EMAIL_PROVIDER` (`brevo`), `BREVO_SMTP_LOGIN`, `BREVO_SMTP_KEY` (or `RESEND_API_KEY` for Resend), `EMAIL_FROM`, `EMAIL_REPLY_TO` | from Brevo; a monitored address, not no-reply |
    | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | from Upstash |
    | `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` | from Inngest (leave `INNGEST_DEV` empty) |
    | `CRON_SECRET` | the random value |
@@ -179,7 +179,7 @@ Follow `docs/SETUP.md` section 15 and the go-live checklist: import people (Sett
 
 - **Supabase Free:** no automatic backups, pauses after about a week of inactivity, small database and storage, strict limits on built-in auth email, some security options (such as leaked-password protection) are Pro only.
 - **Vercel Hobby:** personal non-commercial use, one seat, daily cron only, shorter function time limits (large imports or PDF work may time out).
-- **Resend Free:** about 100 emails a day and one domain.
+- **Brevo Free:** 300 emails a day. **Resend Free:** about 100 emails a day.
 - **Inngest and Upstash free tiers** are enough for a demo and a pilot.
 
 ## Part 10. Deploying an update
@@ -216,5 +216,5 @@ Then push and let Vercel deploy. Adding a column with a default is safe for the 
 - "Sign-ups are refused": the Before User Created hook is not on (Part 1, step 6).
 - "Safe Voice cases: not connected": `SAFEVOICE_HANDLER_DATABASE_URL` is missing or wrong.
 - Reports are refused (429) on Safe Voice: the Upstash variables are missing.
-- No emails: custom SMTP or the Resend domain is not verified yet.
+- No emails: custom SMTP or the Brevo (or Resend) sending domain is not verified yet.
 - Anything about outages and recovery: `docs/RUNBOOK.md`.

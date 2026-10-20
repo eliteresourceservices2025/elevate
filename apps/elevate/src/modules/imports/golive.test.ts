@@ -13,4 +13,16 @@ describe("go-live checklist rules", () => {
     expect(partial.notProduction).toBe(true);
     expect(JSON.stringify(partial)).not.toContain("value");
   });
+  it("asks for Brevo's SMTP login and key, not the Resend key, when Brevo is the provider", () => {
+    const env = Object.fromEntries(REQUIRED_ENV.map((k) => [k, "value"]));
+    const brevoOk = { ...env, RESEND_API_KEY: undefined, EMAIL_PROVIDER: "brevo", BREVO_SMTP_LOGIN: "l", BREVO_SMTP_KEY: "k", ELEVATE_ENV: "production" };
+    expect(envProblems(brevoOk).missing).toEqual([]);
+    expect(envProblems({ ...brevoOk, BREVO_SMTP_LOGIN: " " }).missing).toEqual(["BREVO_SMTP_LOGIN"]);
+    expect(envProblems({ ...brevoOk, EMAIL_PROVIDER: undefined, BREVO_SMTP_KEY: undefined }).missing).toEqual(["RESEND_API_KEY"]);
+  });
+  it("follows the same provider rule as the sender: EMAIL_PROVIDER=resend wins over a leftover Brevo key", () => {
+    const env = Object.fromEntries(REQUIRED_ENV.map((k) => [k, "value"]));
+    const resendWins = { ...env, RESEND_API_KEY: undefined, EMAIL_PROVIDER: "resend", BREVO_SMTP_KEY: "k", ELEVATE_ENV: "production" };
+    expect(envProblems(resendWins).missing).toEqual(["RESEND_API_KEY"]);
+  });
 });

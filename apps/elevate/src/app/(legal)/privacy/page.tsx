@@ -64,7 +64,7 @@ export default function PrivacyPage() {
         <li>Supabase (database, sign-in and file storage)</li>
         <li>Vercel (hosting)</li>
         <li>Google (sign-in, if you choose it, and interview calendars if HR connects one)</li>
-        <li>Resend (sending email)</li>
+        <li>Brevo and Resend (sending email)</li>
         <li>Upstash (protecting sign-in and forms from abuse)</li>
         <li>Inngest (running scheduled background tasks)</li>
         <li>Jibble (work screenshots, only for teams covered by a published monitoring policy)</li>
