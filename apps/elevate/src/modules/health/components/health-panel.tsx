@@ -13,7 +13,7 @@ export function HealthPanel({ health }: { health: SystemHealth }) {
   const j = health.jibble;
   return (
     <div className="space-y-6">
-      <div role="status" className={`rounded-xl border p-4 text-sm ${bad.length === 0 && (j.oldestMinutes ?? 0) < 15 ? "border-green-600/40 bg-green-600/10" : "border-red-500/50 bg-red-500/10"}`}>
+      <div role="status" className={`rounded-xl border p-4 text-sm ${bad.length === 0 && (j.oldestMinutes ?? 0) < 15 ? "border-success/40 bg-success-surface text-success" : "border-destructive/40 bg-destructive/10 text-destructive"}`}>
         {bad.length === 0 && (j.oldestMinutes ?? 0) < 15 ? (
           <>Everything is running. Checked {formatInZone(health.checkedAt, undefined, "h:mm a")}.</>
         ) : (
@@ -31,7 +31,7 @@ export function HealthPanel({ health }: { health: SystemHealth }) {
           ["Pages checking in, last 10 min", health.clock.stillHereLast10Minutes],
           ["Last clock action", health.clock.lastClockAt ? formatInZone(health.clock.lastClockAt, undefined, "MMM d, h:mm a") : "-"],
         ].map(([label, value]) => (
-          <div key={String(label)} className="rounded-xl border bg-card p-4">
+          <div key={String(label)} className="rounded-2xl border bg-card p-5 shadow-sm">
             <p className="text-xs text-muted-foreground">{label}</p>
             <p className="text-xl font-semibold">{value}</p>
           </div>
@@ -42,7 +42,7 @@ export function HealthPanel({ health }: { health: SystemHealth }) {
         <h2 className="text-lg font-semibold">Jibble</h2>
         <p className="text-sm">
           {j.configured ? "Connected." : "Not set up."} {j.paused ? <Badge variant="secondary">Paused</Badge> : null} Waiting: <strong>{j.queued}</strong> · Oldest waiting: <strong>{j.oldestMinutes === null ? "none" : `${j.oldestMinutes} min`}</strong> · Failed in 24 hours:{" "}
-          <strong className={j.failed24h ? "text-red-600" : undefined}>{j.failed24h}</strong> · Last sent: <strong>{j.lastSentAt ? formatInZone(j.lastSentAt, undefined, "MMM d, h:mm a") : "never"}</strong>
+          <strong className={j.failed24h ? "text-destructive" : undefined}>{j.failed24h}</strong> · Last sent: <strong>{j.lastSentAt ? formatInZone(j.lastSentAt, undefined, "MMM d, h:mm a") : "never"}</strong>
         </p>
       </section>
 

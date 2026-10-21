@@ -41,7 +41,7 @@ export function BulkCorrectionsPanel({ batches }: { batches: CorrectionBatch[] }
   return (
     <div className="space-y-4">
       <form
-        className="space-y-3 rounded-xl border bg-card p-4"
+        className="space-y-3 rounded-2xl border bg-card p-5 shadow-sm"
         onSubmit={(e) => {
           e.preventDefault();
           run<BulkResult>(
@@ -94,7 +94,7 @@ export function BulkCorrectionsPanel({ batches }: { batches: CorrectionBatch[] }
       </form>
 
       {result ? (
-        <div role="status" className="space-y-2 rounded-xl border bg-card p-4 text-sm">
+        <div role="status" className="space-y-2 rounded-2xl border bg-card p-5 shadow-sm text-sm">
           <p>
             <strong>{result.created}</strong> {result.created === 1 ? "person was" : "people were"} filed. {result.failed.length + result.parseErrors.length > 0 ? "These rows were not filed:" : ""}
           </p>
@@ -122,7 +122,7 @@ export function BulkCorrectionsPanel({ batches }: { batches: CorrectionBatch[] }
         ) : (
           <ul className="space-y-3">
             {batches.map((b) => (
-              <li key={b.batchId} className="space-y-2 rounded-xl border bg-card p-4">
+              <li key={b.batchId} className="space-y-2 rounded-2xl border bg-card p-5 shadow-sm">
                 <p className="text-sm">
                   <strong>{b.waiting}</strong> {b.waiting === 1 ? "correction" : "corrections"} for {b.people} {b.people === 1 ? "person" : "people"}, filed by {b.filedBy} on {formatInZone(b.createdAt, undefined, "MMM d, h:mm a")}.
                   <span className="block text-muted-foreground">{b.reason}</span>

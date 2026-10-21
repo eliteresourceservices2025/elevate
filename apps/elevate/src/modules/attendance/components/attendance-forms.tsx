@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { Badge } from "@/components/ui/badge";
+import { useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,17 +38,18 @@ const ZONES = ["America/Phoenix", "America/New_York", "America/Chicago", "Americ
 
 export function PreferencesForm({ shareLocation, timeZone, monitoringPublished }: { shareLocation: boolean; timeZone: string | null; monitoringPublished: boolean }) {
   const { run, pending } = useRun();
+  const dialog = useFormDialog();
   const [share, setShare] = useState(shareLocation);
   const [zone, setZone] = useState(timeZone ?? "");
   return (
     <form
-      className="space-y-3 rounded-xl border bg-card p-4"
+      className={dialog ? "space-y-3" : "space-y-3 rounded-2xl border bg-card p-5 shadow-sm"}
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => savePreferences({ shareLocation: share, timeZone: zone }), "Settings saved.");
+        run(() => savePreferences({ shareLocation: share, timeZone: zone }), "Settings saved.", () => dialog?.close(true));
       }}
     >
-      <h3 className="font-semibold">Your clock settings</h3>
+      {dialog ? null : <h3 className="font-semibold">Your clock settings</h3>}
       <TextField id="pf-zone" label="Your time zone" list="pf-zones" value={zone} onChange={(e) => setZone(e.target.value)} placeholder={`Company zone (${DEFAULT_TIMEZONE})`} hint="Decides which calendar day a clock-in counts for. A night shift counts for the day it started." />
       <datalist id="pf-zones">
         {ZONES.map((z) => (
@@ -99,6 +101,7 @@ const LOCAL = "yyyy-MM-dd'T'HH:mm";
 /** Ask for missing clock events. Times are entered in the person's own zone; a lead approves; nothing existing is edited. A claim that adds a clock-in needs a screenshot. */
 export function CorrectionForm({ zone }: { zone: string }) {
   const { run, pending } = useRun();
+  const dialog = useFormDialog();
   const [presetKey, setPresetKey] = useState("out");
   const [kind, setKind] = useState<(typeof KINDS)[number]["key"]>("forgot");
   const [times, setTimes] = useState<string[]>(["", ""]);
@@ -108,7 +111,7 @@ export function CorrectionForm({ zone }: { zone: string }) {
 
   return (
     <form
-      className="space-y-3 rounded-xl border bg-card p-4"
+      className={dialog ? "space-y-3" : "space-y-3 rounded-2xl border bg-card p-5 shadow-sm"}
       onSubmit={(e) => {
         e.preventDefault();
         const events = preset.fields.map((f, i) => {
@@ -126,11 +129,12 @@ export function CorrectionForm({ zone }: { zone: string }) {
             setTimes(["", ""]);
             setReason("");
             setFiles([]);
+            dialog?.close(true);
           },
         );
       }}
     >
-      <h3 className="font-semibold">Ask for a time correction</h3>
+      {dialog ? null : <h3 className="font-semibold">Ask for a time correction</h3>}
       <p className="text-sm text-muted-foreground">Your lead approves it, and a screenshot is needed as proof. Your original clock events are never changed; an approved correction adds new ones. Times are in {zone}.</p>
       <SelectField id="cr-kind" label="What do you need to add?" value={presetKey} onChange={(e) => setPresetKey(e.target.value)}>
         {PRESETS.map((p) => (
@@ -174,7 +178,7 @@ export function FileForOthersForm({ people, zone }: { people: FilablePerson[]; z
   if (people.length === 0) return null;
   return (
     <form
-      className="space-y-3 rounded-xl border bg-card p-4"
+      className="space-y-3 rounded-2xl border bg-card p-5 shadow-sm"
       onSubmit={(e) => {
         e.preventDefault();
         const events = preset.fields.map((f, i) => {
@@ -239,12 +243,12 @@ export function CorrectionList({ items, zone, mode, empty }: { items: Correction
     if (!result.ok) return void toast.error(result.error);
     window.open(result.data.url, "_blank", "noopener,noreferrer");
   };
-  if (items.length === 0) return <p className="text-muted-foreground">{empty}</p>;
+  if (items.length === 0) return <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</p>;
   return (
     <div className="space-y-3">
     <ul className="space-y-3">
       {paged.rows.map((c) => (
-        <li key={c.id} className="space-y-2 rounded-xl border bg-card p-4">
+        <li key={c.id} className="space-y-2 rounded-2xl border bg-card p-5 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
             {mode === "queue" ? <span className="font-semibold">{c.employeeName}</span> : null}
             <Badge variant={STATUS_VARIANT.get(c.status) ?? "outline"}>{c.status}</Badge>
@@ -357,7 +361,7 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
   const [jibble, setJibble] = useState(row.jibbleMirror);
   return (
     <form
-      className="space-y-3 rounded-xl border bg-card p-4"
+      className="space-y-3 rounded-2xl border bg-card p-5 shadow-sm"
       onSubmit={(e) => {
         e.preventDefault();
         run(
@@ -408,7 +412,7 @@ export function SetupProfileForm({ records }: { records: { id: string; name: str
   const [notListed, setNotListed] = useState(false);
   const target = records.find((r) => r.id === mine);
   return (
-    <div className="max-w-xl space-y-4 rounded-xl border bg-card p-4">
+    <div className="max-w-xl space-y-4 rounded-2xl border bg-card p-5 shadow-sm">
       <h3 className="font-semibold">Set up your profile</h3>
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">

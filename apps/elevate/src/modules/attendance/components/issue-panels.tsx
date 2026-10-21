@@ -80,7 +80,7 @@ export function IssueList({ items, zone, mode, empty }: { items: IssueItem[]; zo
     if (!result.ok) return void toast.error(result.error);
     window.open(result.data.url, "_blank", "noopener,noreferrer");
   };
-  if (items.length === 0) return <p className="rounded-xl border p-6 text-sm text-muted-foreground">{empty}</p>;
+  if (items.length === 0) return <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</p>;
   return (
     <ul className="space-y-3">
       {items.map((i) => (
