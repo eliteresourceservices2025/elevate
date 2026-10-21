@@ -131,7 +131,7 @@ export function LintList({ issues }: { issues: LintIssue[] }) {
         </div>
       ) : null}
       {warnings.length > 0 ? (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+        <div className="rounded-lg border border-warning/40 bg-warning-surface p-3">
           <p className="font-medium">{warnings.length} to consider</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">{warnings.map((i, n) => <li key={n}>{i.where}: {i.message}</li>)}</ul>
         </div>

@@ -157,7 +157,7 @@ export function AssignClientForm({
         Assign
       </Button>
       {handlesPhi && readiness ? (
-        <p role="status" className={`text-sm sm:col-span-4 ${readiness.state === "passed" ? "text-muted-foreground" : "rounded-lg border border-amber-500/40 bg-amber-500/10 p-2"}`}>
+        <p role="status" className={`text-sm sm:col-span-4 ${readiness.state === "passed" ? "text-muted-foreground" : "rounded-lg border border-warning/40 bg-warning-surface p-2"}`}>
           {readiness.state === "passed"
             ? `HIPAA training: passed, valid until ${readiness.validUntil}.`
             : readiness.state === "open"
@@ -169,7 +169,7 @@ export function AssignClientForm({
         </p>
       ) : null}
       {addons.map((addon) => (
-        <p key={addon.label} role="status" className={`text-sm sm:col-span-4 ${addon.readiness.state === "passed" ? "text-muted-foreground" : "rounded-lg border border-amber-500/40 bg-amber-500/10 p-2"}`}>
+        <p key={addon.label} role="status" className={`text-sm sm:col-span-4 ${addon.readiness.state === "passed" ? "text-muted-foreground" : "rounded-lg border border-warning/40 bg-warning-surface p-2"}`}>
           {addon.readiness.state === "passed"
             ? `${addon.label}: passed, valid until ${addon.readiness.validUntil}.`
             : addon.readiness.state === "open"

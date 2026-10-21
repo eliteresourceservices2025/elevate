@@ -48,7 +48,7 @@ export default async function SignPage({ params }: PageProps<"/sign/[token]">) {
           Someone else signs before you. We will email you when it is your turn.
         </p>
       ) : state === "signed" ? (
-        <p role="status" className="rounded-xl border border-green-600/40 bg-green-600/10 p-5 text-sm">
+        <p role="status" className="rounded-xl border border-success/40 bg-success-surface p-5 text-sm">
           Thank you, you have signed. The others still need to sign. We will email you a link to the signed copy when everyone has.
         </p>
       ) : !session ? (
@@ -60,7 +60,7 @@ export default async function SignPage({ params }: PageProps<"/sign/[token]">) {
         <ExternalFlow token={token} step="sign" email="" name={signer.externalName ?? ""} />
       ) : (
         <>
-          <p role="status" className="rounded-xl border border-green-600/40 bg-green-600/10 p-5 text-sm">
+          <p role="status" className="rounded-xl border border-success/40 bg-success-surface p-5 text-sm">
             Thank you. Everyone has signed. Below is your signed copy, with its certificate of completion.
           </p>
           <ExternalFlow token={token} step="view" email="" name={signer.externalName ?? ""} />

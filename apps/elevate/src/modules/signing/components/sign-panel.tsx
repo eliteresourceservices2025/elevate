@@ -71,7 +71,7 @@ export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null
         ) : (
           <EnvelopeDocument envelopeId={envelopeId} title="The document to sign" openLabel="Read the document" />
         )}
-        {needInitials ? null : viewed ? <p className="text-sm text-green-700">You opened it. You can sign now.</p> : <p className="text-sm text-muted-foreground">Open and read it first. Signing is available after you have opened it.</p>}
+        {needInitials ? null : viewed ? <p className="text-sm text-success">You opened it. You can sign now.</p> : <p className="text-sm text-muted-foreground">Open and read it first. Signing is available after you have opened it.</p>}
       </div>
 
       <form

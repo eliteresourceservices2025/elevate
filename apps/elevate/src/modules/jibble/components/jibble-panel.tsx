@@ -42,18 +42,18 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
   return (
     <div className="space-y-6">
       {overview.paused ? (
-        <div role="status" className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
+        <div role="status" className="rounded-xl border border-warning/40 bg-warning-surface p-4 text-sm">
           <strong>Sending to Jibble is paused.</strong> Nothing is being sent, so screenshots may not be running. The ELEVATE clock is not affected. {overview.counts.queued} {overview.counts.queued === 1 ? "call is" : "calls are"} waiting. When you resume, calls that waited more than 10 minutes are dropped and everyone&apos;s Jibble status is set right from ELEVATE.
         </div>
       ) : null}
       {isSendingSlow(overview.sendDelay.slow, overview.sendDelay.total) ? (
-        <p role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+        <p role="alert" className="rounded-lg border border-warning/40 bg-warning-surface p-3 text-sm">
           <strong>Calls are reaching Jibble late.</strong> {overview.sendDelay.slow} of the last {overview.sendDelay.total} waited over {SLOW_SEND_MINUTES} minutes, so screenshots start and stop late.
           The usual cause is the job service&apos;s event key (INNGEST_EVENT_KEY) missing or from the wrong environment in the host settings. Check Settings &gt; Go-live, then the events in the job service.
         </p>
       ) : null}
       {!overview.paused && overview.oldestQueuedMinutes !== null && overview.oldestQueuedMinutes >= 15 ? (
-        <div role="status" className="rounded-xl border border-red-500/50 bg-red-500/10 p-4 text-sm">
+        <div role="status" className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm">
           The oldest waiting call to Jibble has waited <strong>{overview.oldestQueuedMinutes} minutes</strong>. Jibble may be slow or refusing calls: check the recent calls below.
         </div>
       ) : null}
@@ -68,7 +68,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
           policy is published{overview.monitoringPublished ? " (it is)" : " (it is not yet)"} and the switch for the team is on in the Rules tab ({overview.teamsOn} {overview.teamsOn === 1 ? "team is" : "teams are"} on). Each night ELEVATE compares totals and flags days that differ by more than {overview.toleranceMinutes} minutes.
         </p>
         {overview.selfTestPeople > 0 ? (
-          <p role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <p role="status" className="rounded-lg border border-warning/40 bg-warning-surface p-3 text-sm">
             <strong>Self-test is on</strong> for {overview.selfTestPeople} {overview.selfTestPeople === 1 ? "person" : "people"} (set in the host settings as JIBBLE_SELF_TEST_EMAILS). Their clock is mirrored to Jibble even
             without the published policy or the team switch. Remove the setting when testing is finished.
           </p>
@@ -85,7 +85,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
           </Button>
         </div>
         <p className="text-sm">
-          Waiting: <strong>{overview.counts.queued}</strong> · Sent in the last 24 hours: <strong>{overview.counts.sent24h}</strong> · Failed: <strong className={overview.counts.failed ? "text-red-600" : undefined}>{overview.counts.failed}</strong>
+          Waiting: <strong>{overview.counts.queued}</strong> · Sent in the last 24 hours: <strong>{overview.counts.sent24h}</strong> · Failed: <strong className={overview.counts.failed ? "text-destructive" : undefined}>{overview.counts.failed}</strong>
         </p>
       </section>
 

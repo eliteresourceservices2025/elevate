@@ -133,7 +133,7 @@ export function BulkUpload({ target, employeeId, types }: { target: "employee" |
         <ul className="divide-y rounded-lg border text-sm" aria-label="Files to upload">
           {items.map((i) => (
             <li key={i.key} className="flex items-center gap-2 px-3 py-2">
-              {i.state === "uploading" ? <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden /> : i.state === "done" ? <CheckCircle2 className="size-4 shrink-0 text-green-600" aria-hidden /> : i.state === "failed" ? <CircleAlert className="size-4 shrink-0 text-destructive" aria-hidden /> : <span className="size-4 shrink-0" aria-hidden />}
+              {i.state === "uploading" ? <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden /> : i.state === "done" ? <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden /> : i.state === "failed" ? <CircleAlert className="size-4 shrink-0 text-destructive" aria-hidden /> : <span className="size-4 shrink-0" aria-hidden />}
               <span className="min-w-0 flex-1 truncate">{i.file.name}</span>
               <span className={cn("shrink-0 text-xs", i.state === "failed" ? "text-destructive" : "text-muted-foreground")}>
                 {i.state === "waiting" ? formatBytes(i.file.size) : i.state === "uploading" ? "Uploading…" : i.state === "done" ? "Saved" : i.message}

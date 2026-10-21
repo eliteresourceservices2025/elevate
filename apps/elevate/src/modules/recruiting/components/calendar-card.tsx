@@ -21,7 +21,7 @@ export function CalendarCard({ status, flash }: { status: CalendarStatus; flash?
     <section aria-label="Google Calendar" className="space-y-3 rounded-xl border bg-card p-4">
       <h2 className="text-lg font-semibold">Google Calendar</h2>
       {note ? (
-        <p role="status" className={`rounded-lg border p-3 text-sm ${note.tone === "ok" ? "border-green-600/40 bg-green-600/10" : "border-amber-500/50 bg-amber-500/10"}`}>
+        <p role="status" className={`rounded-lg border p-3 text-sm ${note.tone === "ok" ? "border-success/40 bg-success-surface" : "border-warning/40 bg-warning-surface"}`}>
           {note.text}
         </p>
       ) : null}

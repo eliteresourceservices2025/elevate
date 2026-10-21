@@ -77,7 +77,7 @@ export function IncidentForm({ clients }: { clients: { id: string; name: string 
         });
       }}
     >
-      <div role="note" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+      <div role="note" className="rounded-lg border border-warning/40 bg-warning-surface p-3 text-sm">
         <strong>No patient information.</strong> {NO_PATIENT_DATA_WARNING}
       </div>
       <SelectField id="in-kind" label="What happened?" value={v.kind} onChange={(e) => set("kind", e.target.value)}>
