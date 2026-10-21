@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { Breadcrumbs } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 import { orNotFound } from "@/lib/or-not-found";
-import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
+import { DEFAULT_TIMEZONE, formatDateOnly, formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import { STATUS_LABELS } from "@/modules/people/constants";
-import { ArchiveButton, PendingRequests } from "@/modules/people/components/hr-panels";
+import { STATUS_BADGE, STATUS_LABELS } from "@/modules/people/constants";
+import { ArchiveMenu, PendingRequests } from "@/modules/people/components/hr-panels";
 import {
   ClientsSection,
   EmergencySection,
@@ -52,60 +54,74 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
   const mine = (own || access.isSelf) && active.key === "personal" ? await getMySelfIdentification() : null;
   const clients = active.key === "clients" && access.canManageAssignments ? await listClientsForFilter() : [];
 
+  // The key facts under the name: only what this person's view of the profile already allows. The client comes from the assignments, which
+  // only people who may see the Client assignments tab get.
+  const currentClients = access.canViewClients ? profile.assignments.filter((a) => !a.endDate).map((a) => a.clientName) : null;
+  const facts: { label: string; value: string | null }[] = [
+    { label: "Employee no.", value: e.employeeNumber },
+    { label: "Team", value: e.teamName },
+    { label: "Manager", value: e.managerName },
+    ...(currentClients ? [{ label: "Client", value: currentClients.join(", ") || null }] : []),
+    { label: "Started", value: e.startDate ? formatDateOnly(e.startDate) : null },
+  ];
+
   return (
-    <div className="w-full space-y-6">
-      <div>
-        {own ? (
-          <p className="text-sm text-muted-foreground">My profile</p>
-        ) : (
-          <Link href="/people" className="text-sm text-primary underline-offset-4 hover:underline">
-            ← People
-          </Link>
-        )}
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-4">
-            <div className="flex flex-col items-center gap-1">
+    <PageContainer>
+      <div className="space-y-3">
+        <Breadcrumbs items={own ? [{ label: "My profile" }] : [{ label: "People", href: "/people" }, { label: displayName(e) }]} />
+
+        <section aria-label="Profile summary" className="overflow-clip rounded-2xl border bg-card shadow-sm animate-in fade-in-0 duration-300 motion-reduce:animate-none">
+          <div className="flex flex-wrap items-start gap-x-5 gap-y-4 p-5 md:p-6">
+            <div className="flex flex-col items-center gap-1.5">
               <ProfilePicture initials={initialsOf(displayName(e), e.workEmail)} photo={e.photo} />
               {own || access.isSelf ? <ChangePhotoButton hasPhoto={e.photo !== null} /> : null}
               {!own && !access.isSelf && e.photo && access.canEdit ? <RemovePhotoButton userId={e.photo.userId} /> : null}
             </div>
-            <div>
-            <h1 className="text-2xl font-bold">
-              {displayName(e)}
-              {pronouns ? <span className="ml-2 text-base font-normal text-muted-foreground">({pronouns})</span> : null}
-            </h1>
-            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>{e.employeeNumber}</span>
-              <span aria-hidden>·</span>
-              <span>{e.position ?? "No position set"}</span>
-              <Badge variant={e.status === "active" ? "default" : "secondary"}>{STATUS_LABELS[e.status]}</Badge>
-              {e.archived ? <Badge variant="outline">Archived</Badge> : null}
-              {access.canEdit && !e.linked ? <Badge variant="outline">Not signed in yet</Badge> : null}
-            </p>
+            <div className="min-w-[min(100%,14rem)] flex-1">
+              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+                {displayName(e)}
+                {pronouns ? <span className="ml-2 text-base font-normal text-muted-foreground">({pronouns})</span> : null}
+              </h1>
+              <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span>{e.position ?? "No position set"}</span>
+                <Badge variant={STATUS_BADGE[e.status]}>{STATUS_LABELS[e.status]}</Badge>
+                {e.archived ? <Badge variant="outline">Archived</Badge> : null}
+                {access.canEdit && !e.linked ? <Badge variant="info">Not signed in yet</Badge> : null}
+              </p>
             </div>
+            {access.canEdit ? (
+              <div className="flex items-center gap-2 print:hidden">
+                <Link href={`/people/${e.id}/edit`} className={cn(buttonVariants())}>
+                  Edit profile
+                </Link>
+                {access.canArchive ? <ArchiveMenu employeeId={e.id} archived={e.archived} /> : null}
+              </div>
+            ) : null}
           </div>
-          {access.canEdit ? (
-            <div className="flex gap-2">
-              <Link href={`/people/${e.id}/edit`} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
-                Edit
-              </Link>
-              {access.canArchive ? <ArchiveButton employeeId={e.id} archived={e.archived} /> : null}
-            </div>
-          ) : null}
-        </div>
+          {/* Each cell draws its right and bottom hairline; the list is pulled out by 1px so the outer edge's lines are clipped away. */}
+          <ul className="-mr-px -mb-px grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] border-t">
+            {facts.map((f) => (
+              <li key={f.label} className="border-r border-b px-5 py-3 md:px-6">
+                <p className="text-xs text-muted-foreground">{f.label}</p>
+                <p className="mt-0.5 text-sm font-semibold">{f.value ?? <span className="font-normal text-muted-foreground/70">Not set</span>}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
 
       <PendingRequests requests={profile.pendingRequests} canCancel={access.canRequestChange} />
 
-      <nav aria-label="Profile sections" className="flex flex-wrap gap-1 border-b">
+      {/* One row that scrolls sideways on a narrow screen, instead of wrapping onto three lines. */}
+      <nav aria-label="Profile sections" className="-mt-2 flex gap-6 overflow-x-auto border-b">
         {visible.map((t) => (
           <Link
             key={t.key}
             href={`${basePath}?tab=${t.key}`}
             aria-current={t.key === active.key ? "page" : undefined}
             className={cn(
-              "-mb-px rounded-t-lg border-b-2 px-3 py-2 text-sm",
-              t.key === active.key ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
+              "-mb-px border-b-2 py-2.5 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring",
+              t.key === active.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
             {t.label}
@@ -126,6 +142,6 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
       {active.key === "clients" ? <ClientsSection profile={profile} clients={clients} today={today} /> : null}
       {active.key === "documents" ? <EmployeeDocuments employeeId={e.id} canUpload={access.canUploadDocuments} /> : null}
       {active.key === "history" ? <HistorySection profile={profile} /> : null}
-    </div>
+    </PageContainer>
   );
 }
