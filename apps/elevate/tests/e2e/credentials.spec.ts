@@ -15,6 +15,8 @@ test("HR adds a certificate, the person sees it, and a plain employee cannot man
   const name = `HIPAA E2E ${stamp}`;
   const ends = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
   await hrPage.goto("/credentials");
+  // The form opens in a modal from the button at the top of the page.
+  await hrPage.getByRole("button", { name: "Add a certificate" }).click();
   await waitForHydration(hrPage, "#cred-person");
   await hrPage.getByLabel("Person").fill(`Holder${stamp}, Cert`);
   await hrPage.getByLabel("Certificate", { exact: true }).fill(name);

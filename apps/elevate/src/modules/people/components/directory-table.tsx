@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { initialsOf } from "@/lib/initials";
 import { formatDateOnly } from "@/lib/time";
-import { STATUS_LABELS, type EmployeeStatus } from "../constants";
+import { STATUS_BADGE, STATUS_LABELS } from "../constants";
 import { displayName } from "../format";
 import type { DirectoryRow } from "../queries";
 
@@ -23,18 +23,10 @@ type Props = {
   params: Record<string, string>;
 };
 
-const STATUS_VARIANT: Record<EmployeeStatus, "success" | "info" | "warning" | "secondary"> = {
-  active: "success",
-  onboarding: "info",
-  probation: "warning",
-  on_leave: "warning",
-  separated: "secondary",
-};
-
 function StatusBadges({ row }: { row: DirectoryRow }) {
   return (
     <span className="flex flex-wrap items-center gap-1">
-      <Badge variant={STATUS_VARIANT[row.status]}>{STATUS_LABELS[row.status]}</Badge>
+      <Badge variant={STATUS_BADGE[row.status]}>{STATUS_LABELS[row.status]}</Badge>
       {row.archived ? <Badge variant="outline">Archived</Badge> : null}
     </span>
   );

@@ -9,6 +9,8 @@ test("the menu and header stay fixed, and the menu can be narrowed to icons", as
   const page = await context.newPage();
   await signInEnrollingMfa(page, await createHrAccount());
   await page.goto("/people");
+  // Let the page hydrate before the test adds its own elements to it; a mismatch makes React redraw the shell and forget a click.
+  await waitForHydration(page, 'button[aria-label="Hide menu labels"]');
 
   // Only the content area scrolls: the page itself never does.
   const metrics = () =>

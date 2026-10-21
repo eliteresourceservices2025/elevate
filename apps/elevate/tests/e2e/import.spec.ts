@@ -38,7 +38,7 @@ test("HR imports a TalentHR export: upload, preview, commit, reconcile", async (
 
   // The people are in the directory
   await hr.goto(`/people?q=${tag}`);
-  await expect(hr.getByText(`Test3 Person3`).first()).toBeVisible(slow);
+  await expect(hr.getByRole("link", { name: /Test3 Person3/ }).first()).toBeVisible(slow);
 
   // An ordinary employee cannot open the import
   const employee = await createEmployeeAccount("Emi", `NoImport${Date.now()}`);

@@ -20,7 +20,7 @@ export type Profile = Awaited<ReturnType<typeof getProfile>>;
 
 /** One label and its value. An empty value reads as a muted "Not set" instead of a bare dash. */
 export function Detail({ label, children }: { label: string; children: ReactNode }) {
-  const empty = children === null || children === undefined || children === "" || children === "—";
+  const empty = children === null || children === undefined || children === "";
   return (
     <div className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
       <dt className="shrink-0 text-sm text-muted-foreground">{label}</dt>
@@ -44,7 +44,8 @@ const Section = ({ title, children }: { title: string; children: ReactNode }) =>
 );
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace("_", " ");
-const dash = (v: string | null | undefined) => (v && v.trim() ? v : "—");
+/** A value to show, or null when there is none (Detail then reads "Not set"). */
+const dash = (v: string | null | undefined) => (v && v.trim() ? v : null);
 const sensitiveLabel = (f: SensitiveField) => SENSITIVE_LABELS[f]; // eslint-disable-line security/detect-object-injection
 
 export function PersonalSection({ profile }: { profile: Profile }) {
@@ -63,8 +64,8 @@ export function PersonalSection({ profile }: { profile: Profile }) {
         <DetailList title="Identity">
           <Detail label="Legal name">{legalName(e)}</Detail>
           <Detail label="Preferred name">{dash(e.preferredName)}</Detail>
-          <Detail label="Birth date">{formatDateOnly(e.birthDate)}</Detail>
-          <Detail label="Civil status">{e.civilStatus ? cap(e.civilStatus) : "—"}</Detail>
+          <Detail label="Birth date">{e.birthDate ? formatDateOnly(e.birthDate) : null}</Detail>
+          <Detail label="Civil status">{e.civilStatus ? cap(e.civilStatus) : null}</Detail>
         </DetailList>
         <DetailList title="Contact">
           <Detail label="Work email">{e.workEmail}</Detail>
@@ -104,7 +105,7 @@ export function EmploymentSection({ profile, orgOptions, today }: { profile: Pro
         {e.attendanceLeadName ? <Detail label="Attendance lead">{e.attendanceLeadName}</Detail> : null}
         {e.reportsCount > 0 ? <Detail label="Direct reports">{e.reportsCount}</Detail> : null}
         <Detail label="Worker type">{cap(e.workerType)}</Detail>
-        <Detail label="Start date">{formatDateOnly(e.startDate)}</Detail>
+        <Detail label="Start date">{e.startDate ? formatDateOnly(e.startDate) : null}</Detail>
         {e.endDate ? <Detail label="Last working day">{formatDateOnly(e.endDate)}</Detail> : null}
         {!access.canEdit
           ? customFields.map((f) => (
