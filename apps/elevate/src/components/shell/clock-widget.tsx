@@ -426,16 +426,16 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
     <div data-tour="clock" className="relative flex items-center gap-2">
       {working ? (
         <span className="hidden items-center gap-1.5 text-sm sm:flex" aria-live="off">
-          <span className={cn("size-2.5 rounded-full", onBreak ? (over ? "bg-red-600" : "bg-amber-500") : "bg-green-600")} aria-hidden />
-          <span className={cn("font-medium", over && "text-red-600")}>{shownLabel}</span>
-          <span className={cn("font-mono text-base font-semibold", over ? "text-red-600" : "text-foreground")} suppressHydrationWarning>
+          <span className={cn("size-2.5 rounded-full", onBreak ? (over ? "bg-destructive" : "bg-warning") : "bg-success")} aria-hidden />
+          <span className={cn("font-medium", over && "text-destructive")}>{shownLabel}</span>
+          <span className={cn("text-base font-semibold tabular-nums", over ? "text-destructive" : "text-foreground")} suppressHydrationWarning>
             {shownTime}
           </span>
         </span>
       ) : null}
 
       {!online ? (
-        <span role="status" className="flex items-center gap-1 rounded-full bg-red-600/10 px-2 py-1 text-xs font-medium text-red-700 dark:text-red-400">
+        <span role="status" className="flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive">
           <WifiOff className="size-3.5" aria-hidden />
           {browserOnline ? "Cannot reach ELEVATE: refresh, or sign in again" : "Offline: clock paused"}
         </span>
@@ -520,7 +520,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
       {showBreakUp ? (
         <div role="alertdialog" aria-modal="true" aria-labelledby="break-up-title" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm space-y-4 rounded-2xl bg-card p-6 shadow-2xl">
-            <h2 id="break-up-title" className="text-xl font-bold text-red-600">
+            <h2 id="break-up-title" className="text-xl font-bold text-destructive">
               Your break is up
             </h2>
             <p className="text-sm">

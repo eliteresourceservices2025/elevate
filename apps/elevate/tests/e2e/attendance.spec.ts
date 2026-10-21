@@ -52,9 +52,9 @@ test("an employee clocks in, takes a break and clocks out from the header", asyn
   await page.goto("/attendance");
   const week = page.getByRole("region", { name: "This week" });
   await expect(week.getByText("In progress")).toHaveCount(0, slow);
-  await expect(week.getByRole("row").filter({ hasText: "Total" })).toBeVisible(slow);
-  await expect(week.locator("tr[data-session]")).toHaveCount(2, slow);
-  await expect(week.locator("tr[data-session]").first()).toContainText("of 15m"); // the first session shows its 15 minute break
+  await expect(week.getByText("Total", { exact: true })).toBeVisible(slow);
+  await expect(week.locator("[data-session]")).toHaveCount(2, slow);
+  await expect(week.locator("[data-session]").first()).toContainText("of 15m"); // the first session shows its 15 minute break
 });
 
 test("an employee asks to fix a forgotten clock-out and their lead approves it", async ({ browser }) => {
@@ -80,6 +80,8 @@ test("an employee asks to fix a forgotten clock-out and their lead approves it",
   // He says he stopped 6 hours ago (his zone is the company zone, Phoenix, until he sets another)
   const stoppedLocal = new Date(Date.now() - 6 * 3_600_000).toLocaleString("sv-SE", { timeZone: "America/Phoenix" }).slice(0, 16).replace(" ", "T");
   await workerPage.goto("/attendance");
+  // The form opens in a modal from the button at the top of the page.
+  await (await hydrated(workerPage.getByRole("button", { name: "Ask for a correction" }))).click();
   await waitForHydration(workerPage, "#cr-kind");
   await workerPage.getByLabel("I stopped working at").fill(stoppedLocal);
   await workerPage.getByLabel("Reason").fill("Closed my laptop and forgot");
@@ -129,7 +131,7 @@ test("a break that runs past its length shows a pop-up, is recorded as an overbr
   await page.goto("/attendance");
   const week = page.getByRole("region", { name: "This week" });
   await expect(week.getByText(/\+\d+ min/).first()).toBeVisible({ timeout: 30_000 });
-  await expect(week.locator("tr[data-session]").first()).toContainText("over)");
+  await expect(week.locator("[data-session]").first()).toContainText("over)");
 
   const check = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
   try {
@@ -251,6 +253,7 @@ test("a time claim with a screenshot is reviewed by the lead, who can open the p
   const page = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(page, worker);
   await page.goto("/attendance");
+  await (await hydrated(page.getByRole("button", { name: "Ask for a correction" }))).click();
   await waitForHydration(page, "#cr-kind");
   await page.getByLabel("What do you need to add?").selectOption("session");
   await page.getByLabel("Why?").selectOption("forgot");
@@ -274,7 +277,7 @@ test("a time claim with a screenshot is reviewed by the lead, who can open the p
 
   // The approved time is on the worker's timesheet as a finished session
   await page.goto("/attendance");
-  await expect(page.locator("tr[data-session]")).toHaveCount(1, slow);
+  await expect(page.locator("[data-session]")).toHaveCount(1, slow);
 });
 
 test("HR sees the Jibble tab and the per-team switch, and nobody else gets the tab", async ({ browser }) => {
@@ -322,7 +325,6 @@ test("HR sets a schedule and the employee sees it in both time zones", async ({ 
   await page.goto("/attendance");
   await expect(page.getByRole("region", { name: "My schedule" })).toContainText("Mon to Fri, 9:00 PM - 5:00 AM (Asia/Manila)", slow);
   await expect(page.getByRole("region", { name: "My schedule" })).toContainText("9:00 PM - 5:00 AM in Manila");
-  await expect(page.getByRole("columnheader", { name: "Shift" })).toBeVisible();
   await expect(page.getByText("Rest day").first()).toBeVisible();
 });
 

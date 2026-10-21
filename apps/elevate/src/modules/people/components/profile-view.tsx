@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { TabNav } from "@/components/tab-nav";
 import { Breadcrumbs } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
 import { orNotFound } from "@/lib/or-not-found";
@@ -112,22 +113,7 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
 
       <PendingRequests requests={profile.pendingRequests} canCancel={access.canRequestChange} />
 
-      {/* One row that scrolls sideways on a narrow screen, instead of wrapping onto three lines. */}
-      <nav aria-label="Profile sections" className="-mt-2 flex gap-6 overflow-x-auto border-b">
-        {visible.map((t) => (
-          <Link
-            key={t.key}
-            href={`${basePath}?tab=${t.key}`}
-            aria-current={t.key === active.key ? "page" : undefined}
-            className={cn(
-              "-mb-px border-b-2 py-2.5 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring",
-              t.key === active.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </Link>
-        ))}
-      </nav>
+      <TabNav label="Profile sections" items={visible.map((t) => ({ key: t.key, label: t.label, href: `${basePath}?tab=${t.key}` }))} current={active.key} />
 
       {active.key === "personal" ? <PersonalSection profile={profile} /> : null}
       {mine ? (
