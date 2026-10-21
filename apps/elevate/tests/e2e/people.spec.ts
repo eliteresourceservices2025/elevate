@@ -47,7 +47,8 @@ test("HR finds where to add a client, adds one, and assigns it to a person", asy
 
   // The People page links to Clients (it used to be reachable only by typing the address)
   await page.goto("/people");
-  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.getByRole("button", { name: "Manage" }).click();
+  await page.getByRole("menuitem", { name: "Clients" }).click();
   await page.waitForURL("**/people/clients", slow);
   await waitForHydration(page, "#nc-name");
   await page.getByRole("button", { name: "Dark", exact: true }).click();
