@@ -75,7 +75,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
             <Input id="q" name="q" defaultValue={query.q ?? ""} placeholder="Search people" className="h-control-lg pl-9" />
           </div>
           {/* A plain checkbox shows and hides the other filters below the tablet width, with no script. Not part of the search (no name). */}
-          <input id="filters-toggle" type="checkbox" defaultChecked={activeFilters > 0} className="peer sr-only" />
+          <input id="filters-toggle" type="checkbox" defaultChecked={activeFilters > 0} className="peer sr-only sm:hidden" />
           <label htmlFor="filters-toggle" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "cursor-pointer peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50 sm:hidden")}>
             <SlidersHorizontal aria-hidden />
             Filters{activeFilters > 0 ? ` (${activeFilters})` : ""}

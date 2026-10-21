@@ -118,6 +118,13 @@ export function DirectoryTable({ rows, seesClients, sort, dir, params }: Props) 
   return (
     <>
       {/* Phone: one card per person. The table below takes over from the tablet width. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-4 py-2 text-xs text-muted-foreground md:hidden">
+        Sort by
+        <SortHeader label="Name" column="name" sort={sort} dir={dir} params={params} />
+        <SortHeader label="Position" column="position" sort={sort} dir={dir} params={params} />
+        <SortHeader label="Status" column="status" sort={sort} dir={dir} params={params} />
+        <SortHeader label="Started" column="start" sort={sort} dir={dir} params={params} />
+      </div>
       <ul className="divide-y md:hidden">
         {rows.map((row) => (
           <li key={row.id}>
