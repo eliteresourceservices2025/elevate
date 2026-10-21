@@ -260,10 +260,11 @@ export const customFieldValuesSchema = z.object({
 export const DIRECTORY_SORTS = ["name", "position", "status", "start"] as const;
 
 export const directoryQuerySchema = z.object({
-  q: z.preprocess(blankToUndefined, z.string().trim().max(80).optional()),
-  status: z.preprocess(blankToUndefined, z.enum(EMPLOYEE_STATUSES).optional()),
-  client: z.preprocess(blankToUndefined, uuid.optional()),
-  team: z.preprocess(blankToUndefined, uuid.optional()),
+  // A bad filter value in the address (an old bookmark, a typo) is ignored instead of failing the page, like page, size and sort.
+  q: z.preprocess(blankToUndefined, z.string().trim().max(80).optional()).catch(undefined),
+  status: z.preprocess(blankToUndefined, z.enum(EMPLOYEE_STATUSES).optional()).catch(undefined),
+  client: z.preprocess(blankToUndefined, uuid.optional()).catch(undefined),
+  team: z.preprocess(blankToUndefined, uuid.optional()).catch(undefined),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
   size: z.coerce.number().int().refine((n) => (PAGE_SIZES as readonly number[]).includes(n)).catch(DEFAULT_PAGE_SIZE),
   sort: z.enum(DIRECTORY_SORTS).catch("name"),
