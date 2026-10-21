@@ -149,9 +149,10 @@ test("email notification choices live in Settings and the account menu, not on t
   // The checkbox saves straight away and survives a reload.
   const box = page.getByLabel(/Email me a weekday summary/);
   await waitForHydration(page, "#digest-pref");
-  await expect(box).toBeChecked();
+  // Email choices are opt-in (migration 0071): the box starts unchecked.
+  await expect(box).not.toBeChecked();
   await box.click(); // it changes once the server has saved it
-  await expect(page.getByText("Daily summary email turned off.")).toBeVisible();
+  await expect(page.getByText("Daily summary email turned on.")).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel(/Email me a weekday summary/)).not.toBeChecked();
+  await expect(page.getByLabel(/Email me a weekday summary/)).toBeChecked();
 });

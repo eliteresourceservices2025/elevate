@@ -16,7 +16,7 @@ test("a person opens HIPAA training from ELEVATE and lands signed in on Learn", 
 
   // The menu item is its own page with a clear button.
   await page.goto("/learn");
-  await expect(page.getByRole("heading", { name: "HIPAA training" })).toBeVisible(slow);
+  await expect(page.getByRole("heading", { name: "My training" })).toBeVisible(slow);
   await waitForHydration(page, "main button");
   await page.getByRole("button", { name: /Open HIPAA training/ }).click();
 
