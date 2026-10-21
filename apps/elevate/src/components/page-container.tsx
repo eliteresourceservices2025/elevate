@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 const WIDTHS = {
   full: "",
   wide: "max-w-6xl",
+  medium: "max-w-4xl",
   form: "max-w-3xl",
   narrow: "max-w-2xl",
 } as const;

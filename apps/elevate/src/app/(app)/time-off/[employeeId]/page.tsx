@@ -27,7 +27,7 @@ export default async function PersonTimeOffPage({ params }: PageProps<"/time-off
         <Link href="/time-off?tab=balances" className="text-sm text-primary underline-offset-4 hover:underline">
           All balances
         </Link>
-        <h1 className="mt-2 text-2xl font-bold">
+        <h1 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">
           {data.name} <span className="text-base font-normal text-muted-foreground">{data.employeeNumber}</span>
         </h1>
       </div>

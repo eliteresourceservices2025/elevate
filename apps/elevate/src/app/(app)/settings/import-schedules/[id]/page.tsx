@@ -5,6 +5,8 @@ import { orNotFound } from "@/lib/or-not-found";
 import { FinishedBatch } from "@/modules/schedule-import/components/import-outcome";
 import { PlanView } from "@/modules/schedule-import/components/plan-view";
 import { getScheduleImportPlan, getScheduleImportStatus, listAliasTargets } from "@/modules/schedule-import/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Schedule import preview" };
 
@@ -17,15 +19,13 @@ export default async function ScheduleImportPreviewPage({ params }: PageProps<"/
     const status = await orNotFound(getScheduleImportStatus(id));
     if (!status) notFound();
     return (
-      <div className="w-full space-y-6">
-        <div>
-          <Link href="/settings/import-schedules" className="text-sm text-primary underline-offset-2 hover:underline">
-            Import schedules and clients
-          </Link>
-          <h1 className="mt-1 text-2xl font-bold">Schedule import</h1>
-        </div>
+      <PageContainer>
+        <PageHeader
+          title="Schedule import"
+          breadcrumbs={[{ label: "Import schedules and clients", href: "/settings/import-schedules" }, { label: "Schedule import" }]}
+        />
         <FinishedBatch batchId={id} status={status} />
-      </div>
+      </PageContainer>
     );
   }
   const { batch, plan, digest } = data;
@@ -37,7 +37,7 @@ export default async function ScheduleImportPreviewPage({ params }: PageProps<"/
         <Link href="/settings/import-schedules" className="text-sm text-primary underline-offset-2 hover:underline">
           Import schedules and clients
         </Link>
-        <h1 className="mt-1 text-2xl font-bold">Preview: {batch.fileName}</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">Preview: {batch.fileName}</h1>
         <p className="mt-1 text-muted-foreground">
           {batch.observations} clocked-in days read, {plan.totals.pairs} people and clients on the sheet: {plan.totals.ready} matched, {plan.totals.needsDecision} need a person.
         </p>

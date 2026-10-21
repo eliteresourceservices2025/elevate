@@ -23,7 +23,7 @@ export default async function OnboardingCasePage({ params }: PageProps<"/onboard
         <Link href="/onboarding" className="text-sm text-primary underline-offset-2 hover:underline">
           All onboarding
         </Link>
-        <h1 className="mt-1 text-2xl font-bold">Onboarding: {c.name}</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">Onboarding: {c.name}</h1>
         <p className="text-muted-foreground">
           {c.position ? `${c.position}. ` : ""}Starts {formatDateOnly(c.date)}. {c.progress.done} of {c.progress.total} tasks done.
           {c.status !== "open" ? ` This onboarding is ${c.status}.` : ""}

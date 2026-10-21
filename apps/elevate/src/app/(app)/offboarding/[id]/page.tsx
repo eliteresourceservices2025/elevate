@@ -25,7 +25,7 @@ export default async function OffboardingCasePage({ params }: PageProps<"/offboa
         <Link href="/offboarding" className="text-sm text-primary underline-offset-2 hover:underline">
           All offboarding
         </Link>
-        <h1 className="mt-1 text-2xl font-bold">Offboarding: {c.name}</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">Offboarding: {c.name}</h1>
         <p className="text-muted-foreground">
           {c.position ? `${c.position}. ` : ""}Last working day {formatDateOnly(c.date)}
           {c.reason && c.canManage ? ` (${LEAVING_LABELS[c.reason as LeavingReason]})` : ""}. {c.progress.done} of {c.progress.total} tasks done.

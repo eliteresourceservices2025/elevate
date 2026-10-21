@@ -12,6 +12,8 @@ import { formatDateOnly, formatInZone } from "@/lib/time";
 import { formatDuration, MINUTE } from "@/modules/attendance/clock";
 import { FLAG_LABELS } from "@/modules/attendance/flag-labels";
 import { listFilablePeople, listFlags, listShiftNotes, listWorkingNow } from "@/modules/attendance/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Team attendance" };
 
@@ -34,18 +36,26 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
   const n = cut(notes.rows, query.npage, query.nsize, 10);
 
   return (
-    <div className="w-full space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Team attendance</h1>
-          <p className="mt-1 text-muted-foreground">Who is clocked in, what needs a look, and the end-of-day reports from your team.</p>
-        </div>
-        {canEdit ? (
-          <FormDialog label="Change someone's time" title="Change someone's time" description="Remove an event that was recorded wrongly and add the right ones, with a reason." size="xl" variant="outline">
-            <EditHoursForm people={editPeople} applyNow={editScope === "all"} />
-          </FormDialog>
-        ) : null}
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Team attendance"
+        description="Who is clocked in, what needs a look, and the end-of-day reports from your team."
+        actions={
+          <>
+            {canEdit ? (
+              <FormDialog
+                label="Change someone's time"
+                title="Change someone's time"
+                description="Remove an event that was recorded wrongly and add the right ones, with a reason."
+                size="xl"
+                variant="outline"
+              >
+                <EditHoursForm people={editPeople} applyNow={editScope === "all"} />
+              </FormDialog>
+            ) : null}
+          </>
+        }
+      />
 
       <section aria-label="Working now" className="space-y-2">
         <h2 className="text-lg font-semibold">Working now</h2>
@@ -156,6 +166,6 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
           </>
         )}
       </section>
-    </div>
+    </PageContainer>
   );
 }

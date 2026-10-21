@@ -22,7 +22,7 @@ export default async function SupportPage({ searchParams }: PageProps<"/support"
     <div className="w-full max-w-3xl space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="max-w-2xl">
-          <h1 className="text-2xl font-bold">Contact support</h1>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Contact support</h1>
           <p className="mt-1 text-muted-foreground">
             Something not working, or you cannot sign in? Tell us here. You can also email{" "}
             <a href={`mailto:${supportEmail()}`} className="text-primary underline-offset-4 hover:underline">

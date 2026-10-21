@@ -59,7 +59,7 @@ export default async function StudioVersionPage({
         </Link>
       </p>
       <div>
-        <h1 className="flex flex-wrap items-center gap-2 text-2xl font-bold">
+        <h1 className="flex flex-wrap items-center gap-2 text-2xl font-bold tracking-tight md:text-3xl">
           {loaded.content.title}, version {v.version}
           <Badge variant={v.status === "published" ? "default" : "outline"}>
             {v.status === "published" ? "Live" : v.status === "draft" ? "Draft" : "Retired"}

@@ -5,6 +5,8 @@ import { orNotFound } from "@/lib/or-not-found";
 import { RememberedMatches } from "@/modules/schedule-import/components/remembered-matches";
 import { SheetUploader } from "@/modules/schedule-import/components/sheet-uploader";
 import { listAliases, listScheduleImports } from "@/modules/schedule-import/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Import schedules and clients" };
 
@@ -12,17 +14,12 @@ export default async function ImportSchedulesPage() {
   const batches = await orNotFound(listScheduleImports());
   const aliases = await orNotFound(listAliases());
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/settings" className="text-sm text-primary underline-offset-2 hover:underline">
-          Settings
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">Import schedules and clients</h1>
-        <p className="mt-1 max-w-3xl text-muted-foreground">
-          Upload the attendance sheet and see who works for which client, on which shift and in which time zone, compared with what ELEVATE holds. This step only
-          shows a preview, and you choose what to apply. Hours are never read from the sheet.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Import schedules and clients"
+        description="Upload the attendance sheet and see who works for which client, on which shift and in which time zone, compared with what ELEVATE holds. This step only shows a preview, and you choose what to apply. Hours are never read from the sheet."
+        breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Import schedules and clients" }]}
+      />
       <SheetUploader />
       <section aria-label="Earlier uploads" className="space-y-2">
         <h2 className="text-lg font-semibold">Earlier uploads</h2>
@@ -49,6 +46,6 @@ export default async function ImportSchedulesPage() {
         )}
       </section>
       <RememberedMatches aliases={aliases} />
-    </div>
+    </PageContainer>
   );
 }

@@ -10,6 +10,8 @@ import { paginate, parsePaging } from "@/lib/pagination";
 import { formatDateOnly } from "@/lib/time";
 import { STAGE_LABELS } from "@/modules/reviews/constants";
 import { getReviewSummary, listCycles, listReviews, type ReviewRow } from "@/modules/reviews/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Reviews" };
 
@@ -71,28 +73,28 @@ export default async function ReviewsPage({ searchParams }: PageProps<"/reviews"
   const otherP = parsePaging({ page: q.opage, size: q.osize });
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold">Reviews</h1>
-          <p className="mt-1 text-muted-foreground">Self reviews, lead reviews and goals. Reviews record ratings and feedback only; ELEVATE never links them to pay.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <Link href="/reviews/goals" className="text-primary underline-offset-2 hover:underline">
-            Goals
-          </Link>
-          {hr ? (
-            <>
-              <Link href="/reviews/templates" className="text-primary underline-offset-2 hover:underline">
-                Templates
-              </Link>
-              <Link href="/reviews/cycles/new" className="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground">
-                Launch a cycle
-              </Link>
-            </>
-          ) : null}
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Reviews"
+        description="Self reviews, lead reviews and goals. Reviews record ratings and feedback only; ELEVATE never links them to pay."
+        actions={
+          <>
+            <Link href="/reviews/goals" className="text-primary underline-offset-2 hover:underline">
+              Goals
+            </Link>
+            {hr ? (
+              <>
+                <Link href="/reviews/templates" className="text-primary underline-offset-2 hover:underline">
+                  Templates
+                </Link>
+                <Link href="/reviews/cycles/new" className="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground">
+                  Launch a cycle
+                </Link>
+              </>
+            ) : null}
+          </>
+        }
+      />
 
       {summaryOnly ? (
         <section aria-label="Summary" className="space-y-2">
@@ -163,6 +165,6 @@ export default async function ReviewsPage({ searchParams }: PageProps<"/reviews"
           )}
         </section>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

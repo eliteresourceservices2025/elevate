@@ -30,7 +30,7 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
         <Link href="/signing" className="text-sm text-primary underline-offset-4 hover:underline">
           ← Signing
         </Link>
-        <h1 className="mt-2 flex flex-wrap items-center gap-3 text-2xl font-bold">
+        <h1 className="mt-2 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight md:text-3xl">
           {e.title}
           <Badge variant={STATUS_VARIANT[e.status]}>{STATUS_LABELS[e.status]}</Badge>
           {e.isTest ? <Badge variant="outline">Test</Badge> : null}

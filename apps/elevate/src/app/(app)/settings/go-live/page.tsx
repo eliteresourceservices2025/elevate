@@ -15,7 +15,7 @@ export default async function GoLivePage() {
         <Link href="/settings" className="text-sm text-primary underline-offset-2 hover:underline">
           Settings
         </Link>
-        <h1 className="mt-1 text-2xl font-bold">Go-live checklist</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">Go-live checklist</h1>
         <p className="mt-1 text-muted-foreground">
           {done} of {rows.length} done. The first rows check themselves from this system; the rest are yours to tick off.
         </p>

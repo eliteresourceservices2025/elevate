@@ -27,7 +27,7 @@ export default async function EditPersonPage({ params }: PageProps<"/people/[id]
         <Link href={`/people/${id}`} className="text-sm text-primary underline-offset-4 hover:underline">
           ← {displayName(e)}
         </Link>
-        <h1 className="mt-2 text-2xl font-bold">Edit {displayName(e)}</h1>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">Edit {displayName(e)}</h1>
         <p className="mt-1 text-muted-foreground">Changes are written to the history and the audit log. IDs and bank details are edited on their own tabs.</p>
       </div>
       <EmployeeForm

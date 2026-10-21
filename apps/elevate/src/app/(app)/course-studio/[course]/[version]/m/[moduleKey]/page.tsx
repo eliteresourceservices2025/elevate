@@ -26,7 +26,7 @@ export default async function StudioModulePage({ params }: PageProps<"/course-st
           Back to version {version}
         </Link>
       </p>
-      <h1 className="text-2xl font-bold">{m.title}</h1>
+      <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{m.title}</h1>
       <p className="text-sm text-muted-foreground">
         {draft ? "Editing a draft. Each screen and the module settings are saved separately." : "This version is frozen; this is a read-only view."}
       </p>

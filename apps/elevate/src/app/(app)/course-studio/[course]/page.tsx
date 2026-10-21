@@ -29,7 +29,7 @@ export default async function CourseVersionsPage({ params }: PageProps<"/course-
       </p>
       <div className="max-w-3xl">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold">{c.title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{c.title}</h1>
           {c.kind === "client_addon" ? (
             <Badge variant="outline">Client add-on{c.clientName ? `: ${c.clientName}` : ""}</Badge>
           ) : (

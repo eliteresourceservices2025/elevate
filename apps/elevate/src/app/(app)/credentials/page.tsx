@@ -13,6 +13,8 @@ import { AddCredentialForm, ImportCredentialsCard } from "@/modules/credentials/
 import { CredentialTable } from "@/modules/credentials/components/credential-tables";
 import { credentialCounts, getMyCredentials, listCredentialPeople, listCredentials, listTeamCredentials } from "@/modules/credentials/queries";
 import { STATUSES, STATUS_LABELS } from "@/modules/credentials/rules";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Certificates" };
 
@@ -37,23 +39,25 @@ export default async function CredentialsPage({ searchParams }: PageProps<"/cred
   const people = canManage ? await orNotFound(listCredentialPeople()) : [];
 
   return (
-    <div className="w-full space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="max-w-3xl">
-          <h1 className="text-2xl font-bold">Certificates</h1>
-          <p className="mt-1 text-muted-foreground">Training certificates that expire, such as HIPAA awareness. ELEVATE reminds the person and HR 30 days and 7 days before, and on the end date.</p>
-        </div>
-        {canManage ? (
-          <div className="flex flex-wrap gap-2">
-            <FormDialog label="Add a certificate" title="Add a certificate" size="lg">
-              <AddCredentialForm people={people} />
-            </FormDialog>
-            <FormDialog label="Load from TalentHR" title="Load from TalentHR" variant="outline" size="lg">
-              <ImportCredentialsCard />
-            </FormDialog>
-          </div>
-        ) : null}
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Certificates"
+        description="Training certificates that expire, such as HIPAA awareness. ELEVATE reminds the person and HR 30 days and 7 days before, and on the end date."
+        actions={
+          <>
+            {canManage ? (
+              <div className="flex flex-wrap gap-2">
+                <FormDialog label="Add a certificate" title="Add a certificate" size="lg">
+                  <AddCredentialForm people={people} />
+                </FormDialog>
+                <FormDialog label="Load from TalentHR" title="Load from TalentHR" variant="outline" size="lg">
+                  <ImportCredentialsCard />
+                </FormDialog>
+              </div>
+            ) : null}
+          </>
+        }
+      />
 
       <section aria-label="My certificates" className="space-y-2">
         <h2 className="text-lg font-semibold">My certificates</h2>
@@ -111,6 +115,6 @@ export default async function CredentialsPage({ searchParams }: PageProps<"/cred
         </section>
       ) : null}
 
-    </div>
+    </PageContainer>
   );
 }

@@ -27,7 +27,7 @@ export default async function OpeningPage({ params }: PageProps<"/recruiting/[id
           <Link href="/recruiting" className="text-sm text-primary underline-offset-4 hover:underline">
             ← Recruiting
           </Link>
-          <h1 className="mt-2 text-2xl font-bold">{opening.title}</h1>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">{opening.title}</h1>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <Badge variant={opening.status === "open" ? "default" : "secondary"}>{opening.status === "open" ? "Open" : opening.status === "closed" ? "Closed" : "Draft"}</Badge>
             {opening.teamName ? <span>{opening.teamName}</span> : null}

@@ -9,6 +9,8 @@ import { StartOnboardingForm } from "@/modules/onboarding/components/case-action
 import { CaseTable, MyTasks } from "@/modules/onboarding/components/case-table";
 import { listMyTasks, listOnboardingCandidates, listOnboardingCases } from "@/modules/onboarding/queries";
 import { todayInZone } from "@/modules/org/service";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Onboarding" };
 
@@ -24,35 +26,39 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/onboa
   const candidates = canStart ? await orNotFound(listOnboardingCandidates()) : [];
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold">Onboarding</h1>
-          <p className="mt-1 text-muted-foreground">Checklists for new people: documents, policies, equipment and meeting the team.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {hr ? (
-            <Link href="/onboarding/templates" className="text-sm text-primary underline-offset-2 hover:underline">
-              Checklist templates
-            </Link>
-          ) : null}
-          {canStart ? (
-            <FormDialog
-              label="Start onboarding"
-              title="Start onboarding"
-              description="For people added under People (not hired through Recruiting), who have no checklist until you start one. Tick one or many."
-              size="lg"
-            >
-              {candidates.length > 0 ? <StartOnboardingForm people={candidates} today={todayInZone()} /> : <p className="text-sm text-muted-foreground">Everyone already has an onboarding checklist.</p>}
-            </FormDialog>
-          ) : null}
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Onboarding"
+        description="Checklists for new people: documents, policies, equipment and meeting the team."
+        actions={
+          <>
+            {hr ? (
+              <Link href="/onboarding/templates" className="text-sm text-primary underline-offset-2 hover:underline">
+                Checklist templates
+              </Link>
+            ) : null}
+            {canStart ? (
+              <FormDialog
+                label="Start onboarding"
+                title="Start onboarding"
+                description="For people added under People (not hired through Recruiting), who have no checklist until you start one. Tick one or many."
+                size="lg"
+              >
+                {candidates.length > 0 ? (
+                  <StartOnboardingForm people={candidates} today={todayInZone()} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">Everyone already has an onboarding checklist.</p>
+                )}
+              </FormDialog>
+            ) : null}
+          </>
+        }
+      />
       <MyTasks tasks={tasks.filter((t) => t.kind === "onboarding")} />
       <section aria-label="Cases" className="space-y-2">
         <h2 className="text-lg font-semibold">{mineOnly ? "Your onboarding" : "Onboarding in progress and finished"}</h2>
         <CaseTable rows={cases} kind="onboarding" page={paging.page} pageSize={paging.pageSize} basePath="/onboarding" />
       </section>
-    </div>
+    </PageContainer>
   );
 }

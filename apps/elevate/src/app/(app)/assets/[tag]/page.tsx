@@ -8,6 +8,8 @@ import { AssignForm, EditAssetForm, ReturnForm, StatusControls } from "@/modules
 import { AssetQr } from "@/modules/assets/components/qr-code";
 import { HistoryTable, StatusBadge } from "@/modules/assets/components/asset-tables";
 import { getAsset, listAssignablePeople } from "@/modules/assets/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Asset" };
 
@@ -20,22 +22,26 @@ export default async function AssetPage({ params }: PageProps<"/assets/[tag]">) 
   const withPerson = asset.history.find((h) => !h.returnedAt);
 
   return (
-    <div className="w-full space-y-6">
+    <PageContainer>
       <div>
         <Link href="/assets" className="text-sm text-primary underline-offset-2 hover:underline">
           Assets
         </Link>
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">{asset.name}</h1>
-            <p className="mt-1 flex flex-wrap items-center gap-2 text-muted-foreground">
+        <PageHeader
+          title={asset.name}
+          description={
+            <>
               <span className="font-mono text-foreground">{asset.tag}</span>
               <StatusBadge status={asset.status} />
               {asset.archived ? <span className="text-xs">archived</span> : null}
-            </p>
-          </div>
-          <AssetQr path={assetPath(asset.tag)} size={88} label={`QR code for item ${asset.tag}`} />
-        </div>
+            </>
+          }
+          actions={
+            <>
+              <AssetQr path={assetPath(asset.tag)} size={88} label={`QR code for item ${asset.tag}`} />
+            </>
+          }
+        />
       </div>
 
       <dl className="grid gap-3 rounded-xl border bg-card p-4 text-sm sm:grid-cols-2">
@@ -86,6 +92,6 @@ export default async function AssetPage({ params }: PageProps<"/assets/[tag]">) 
         <h2 className="text-lg font-semibold">Hand-over history</h2>
         <HistoryTable rows={asset.history} showPerson={asset.canManage || asset.history.some((h) => h.employeeId !== asset.history[0]?.employeeId)} showStaff={asset.canManage} />
       </section>
-    </div>
+    </PageContainer>
   );
 }

@@ -29,7 +29,7 @@ export default async function StudioDiffPage({ params, searchParams }: PageProps
           Back to the versions
         </Link>
       </p>
-      <h1 className="text-2xl font-bold">
+      <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
         What changed from version {from} to version {to}
       </h1>
       {diff.unchanged ? <p className="rounded-xl border p-4 text-sm text-muted-foreground">Nothing is different between these two versions.</p> : null}
