@@ -37,7 +37,7 @@ export function ApplyForm({ openingId, noticeTitle, noticeBody }: { openingId: s
 
   if (state === "done") {
     return (
-      <div role="status" className="rounded-lg border border-green-600/40 bg-green-600/10 p-4 text-sm">
+      <div role="status" className="rounded-lg border border-success/40 bg-success-surface p-4 text-sm">
         <p className="font-semibold">Thank you, we received your application.</p>
         <p className="mt-1">If it looks like a fit, someone from our team will be in touch. You do not need to do anything else.</p>
       </div>

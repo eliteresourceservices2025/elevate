@@ -21,7 +21,7 @@ export function ImportOutcome({ outcome }: { outcome: ApplyOutcome }) {
   const router = useRouter();
   return (
     <div className="space-y-4">
-      <div role="status" className="rounded-xl border border-green-600/40 bg-green-600/10 p-4 text-sm">
+      <div role="status" className="rounded-xl border border-success/40 bg-success-surface p-4 text-sm">
         <p className="font-medium">The import was applied.</p>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>{outcome.assignmentsAdded} client assignments added</li>

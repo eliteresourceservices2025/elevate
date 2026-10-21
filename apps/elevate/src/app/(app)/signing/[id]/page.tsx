@@ -47,7 +47,7 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
       {e.sealing ? <p role="status" className="rounded-lg border bg-muted/40 p-3 text-sm">Everyone has signed. The document is being sealed and will be ready in a moment. Refresh this page.</p> : null}
 
       {e.status === "completed" ? (
-        <section aria-label="Signed copy" className="space-y-2 rounded-xl border border-green-600/40 bg-green-600/10 p-4">
+        <section aria-label="Signed copy" className="space-y-2 rounded-xl border border-success/40 bg-success-surface p-4">
           <h2 className="text-lg font-semibold">Everyone has signed</h2>
           <p className="text-sm">Sealed {e.sealedAt ? `${formatInZone(e.sealedAt, undefined, "MMM d, yyyy h:mm a")} (${formatInZone(e.sealedAt, SECONDARY_TIMEZONE, "h:mm a")} Manila)` : ""}. The signed copy includes a certificate of completion.</p>
           {e.canOpenSealed ? (

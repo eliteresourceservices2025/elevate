@@ -66,7 +66,7 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
 
       {minePage && mine ? (
         <section aria-label="Documents to sign" className="space-y-2">
-          {waiting > 0 ? <p role="status" className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm">You have {waiting} {waiting === 1 ? "document" : "documents"} waiting for your signature.</p> : null}
+          {waiting > 0 ? <p role="status" className="rounded-lg border border-warning/40 bg-warning-surface p-3 text-sm">You have {waiting} {waiting === 1 ? "document" : "documents"} waiting for your signature.</p> : null}
           {mine.length === 0 ? (
             <p className="text-muted-foreground">Nothing has been sent to you to sign.</p>
           ) : (

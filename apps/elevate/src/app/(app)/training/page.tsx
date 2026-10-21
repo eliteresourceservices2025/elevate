@@ -70,7 +70,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         </p>
       ) : null}
       {!published ? (
-        <p role="note" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+        <p role="note" className="rounded-xl border border-warning/40 bg-warning-surface p-3 text-sm">
           This course is not published yet, so nobody is assigned and people cannot be added. Publishing needs a reviewer and the date counsel approved it.
         </p>
       ) : null}
@@ -78,7 +78,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
       {auto ? (
         <>
           {auto.rule.mode === "paused" && published ? (
-            <p role="note" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <p role="note" className="rounded-xl border border-warning/40 bg-warning-surface p-3 text-sm">
               Automatic assignment is <strong>paused</strong> for this course: nobody is assigned until you choose a pilot or everyone below.
             </p>
           ) : null}

@@ -75,7 +75,7 @@ export default async function CourseVersionsPage({ params }: PageProps<"/course-
 
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
           {draft ? (
-            <section className="space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-sm">
+            <section className="space-y-3 rounded-xl border border-warning/40 bg-warning-surface p-5 text-sm">
               <h2 className="text-base font-semibold">There is a draft</h2>
               <p>Version {draft.version} is being edited.</p>
               <Link

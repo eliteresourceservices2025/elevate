@@ -215,7 +215,7 @@ export function OfferPanel({ applicationId, panel }: { applicationId: string; pa
       </ul>
 
       {panel.hiredEmployeeId ? (
-        <p className="rounded-lg border border-green-600/40 bg-green-600/10 p-3 text-sm">
+        <p className="rounded-lg border border-success/40 bg-success-surface p-3 text-sm">
           Hired.{" "}
           {panel.canHire ? (
             <Link href={`/people/${panel.hiredEmployeeId}`} className="font-medium text-primary underline-offset-4 hover:underline">
