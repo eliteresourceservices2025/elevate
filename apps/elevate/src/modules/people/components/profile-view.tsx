@@ -114,7 +114,11 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
       </nav>
 
       {active.key === "personal" ? <PersonalSection profile={profile} /> : null}
-      {mine ? <SelfIdCard initial={mine} /> : null}
+      {mine ? (
+        <div>
+          <SelfIdCard initial={mine} />
+        </div>
+      ) : null}
       {active.key === "employment" ? <EmploymentSection profile={profile} orgOptions={orgOptions} today={today} /> : null}
       {active.key === "ids" ? <IdsSection profile={profile} /> : null}
       {active.key === "payout" ? <PayoutSection profile={profile} /> : null}

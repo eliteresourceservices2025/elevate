@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { formatInZone, SECONDARY_TIMEZONE } from "@/lib/time";
-import { CancelInterviewButton, InterviewForm, MoveControls, NoteForm, RejectForm, ResumeViewer, ScorecardForm } from "@/modules/recruiting/components/application-panels";
+import { CancelInterviewButton, InterviewForm, DeleteApplicationForm, MoveControls, NoteForm, RejectForm, ResumeViewer, ScorecardForm } from "@/modules/recruiting/components/application-panels";
 import { CRITERIA, INTERVIEW_KIND_LABELS, RECOMMENDATION_LABELS, STAGE_LABELS, averageRating, type Recommendation } from "@/modules/recruiting/constants";
 import { scopeFor } from "@/lib/authz";
 import { OfferPanel } from "@/modules/offers/components/offer-panel";
@@ -91,6 +91,15 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
             </details>
           ) : null}
         </section>
+      ) : null}
+
+      {scopeFor(user, "recruiting.delete_application") && !candidate.removed ? (
+        <details className="rounded-xl border bg-card p-4">
+          <summary className="cursor-pointer text-sm font-medium text-destructive">Erase this application (test data)</summary>
+          <div className="mt-3">
+            <DeleteApplicationForm applicationId={app.id} openingId={opening.id} />
+          </div>
+        </details>
       ) : null}
 
       {offerPanel ? <OfferPanel applicationId={app.id} panel={offerPanel} /> : null}

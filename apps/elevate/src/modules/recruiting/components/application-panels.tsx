@@ -9,7 +9,7 @@ import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { addNote, cancelInterview, getResumeLink, moveApplication, rejectApplication, scheduleInterview, submitScorecard } from "../actions";
+import { addNote, cancelInterview, deleteApplication, getResumeLink, moveApplication, rejectApplication, scheduleInterview, submitScorecard } from "../actions";
 import { BOARD_STAGES, CRITERIA, INTERVIEW_KINDS, INTERVIEW_KIND_LABELS, RECOMMENDATIONS, RECOMMENDATION_LABELS, STAGE_LABELS, type CriterionKey, type Stage } from "../constants";
 import type { PersonChoice } from "../queries";
 import { useRun } from "./use-run";
@@ -117,6 +117,27 @@ export function RejectForm({ applicationId, sendRejection }: { applicationId: st
       ) : null}
       <Button type="submit" variant="destructive" disabled={pending}>
         Close application
+      </Button>
+    </form>
+  );
+}
+
+/** Super Admin only: erases the application for good (test data). The word DELETE has to be typed. */
+export function DeleteApplicationForm({ applicationId, openingId }: { applicationId: string; openingId: string }) {
+  const { run, pending, router } = useRun();
+  const [confirm, setConfirm] = useState("");
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => deleteApplication({ applicationId, confirm }), "Application erased.", () => router.push(`/recruiting/${openingId}`));
+      }}
+    >
+      <p className="text-sm text-muted-foreground">This erases the application for good: the applicant, their resume, notes, interviews and scorecards. It cannot be undone. Use it for test data only; an applicant with an offer or a hire cannot be erased.</p>
+      <TextField id="del-app" label="Type DELETE to confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
+      <Button type="submit" variant="destructive" disabled={pending || confirm !== "DELETE"}>
+        Erase application
       </Button>
     </form>
   );

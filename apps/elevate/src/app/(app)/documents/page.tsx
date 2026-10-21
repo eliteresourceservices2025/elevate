@@ -13,6 +13,7 @@ import { CompanyDocuments } from "@/modules/documents/components/company-documen
 import { ExpiryBadge } from "@/modules/documents/components/document-list";
 import { TypeBadge } from "@/modules/documents/components/type-badge";
 import { NewTypeForm, TypeRow } from "@/modules/documents/components/type-admin";
+import { BulkUpload } from "@/modules/documents/components/bulk-upload";
 import { UploadForm } from "@/modules/documents/components/upload-form";
 import { getDocumentOverview, getUploadOptions, listAllEmployeeDocuments, listCompanyDocuments, listDocumentTypes } from "@/modules/documents/queries";
 
@@ -255,11 +256,12 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
 
       {company ? (
         <div className="space-y-6">
-          <CompanyDocuments rows={company} viewerIsHr={can(user, "documents.manage_company")} showAudience={can(user, "documents.manage_company")} />
+          <CompanyDocuments rows={company} viewerIsHr={can(user, "documents.manage_company")} showAudience={can(user, "documents.manage_company")} categorize={companyUpload ? { types: companyUpload.types, clients: [], today, withAudience: true } : undefined} />
           {companyUpload ? (
             <section className="space-y-3">
               <h2 className="text-lg font-semibold">Add a company document</h2>
               <UploadForm target="company" types={companyUpload.types} clients={[]} today={today} />
+              <BulkUpload target="company" types={companyUpload.types} />
             </section>
           ) : null}
         </div>

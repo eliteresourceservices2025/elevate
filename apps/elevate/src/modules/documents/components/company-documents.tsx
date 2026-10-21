@@ -2,11 +2,12 @@
 
 import { ClientPager, usePaged } from "@/components/client-pager";
 import type { DocumentRow } from "../queries";
+import type { CategorizeOptions } from "./categorize-document";
 import { DocumentFilterBar, GroupedDocuments, useDocumentFilters } from "./document-filters";
 import { DocumentList } from "./document-list";
 
 /** The company's documents with the same type chips, search and grouping as a person's Documents tab, and pages. */
-export function CompanyDocuments({ rows, viewerIsHr, showAudience }: { rows: DocumentRow[]; viewerIsHr: boolean; showAudience: boolean }) {
+export function CompanyDocuments({ rows, viewerIsHr, showAudience, categorize }: { rows: DocumentRow[]; viewerIsHr: boolean; showAudience: boolean; categorize?: CategorizeOptions }) {
   const filters = useDocumentFilters(rows);
   const paged = usePaged(filters.filtered, `${filters.type}|${filters.q}`);
   const empty = filters.filtering ? "No document matches." : "No company documents yet.";
@@ -15,11 +16,11 @@ export function CompanyDocuments({ rows, viewerIsHr, showAudience }: { rows: Doc
       {rows.length > 0 ? <DocumentFilterBar filters={filters} /> : null}
       {filters.group === "none" ? (
         <>
-          <DocumentList rows={paged.rows} viewerIsHr={viewerIsHr} showAudience={showAudience} emptyText={empty} />
+          <DocumentList rows={paged.rows} viewerIsHr={viewerIsHr} showAudience={showAudience} emptyText={empty} categorize={categorize} />
           <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="documents" />
         </>
       ) : (
-        <GroupedDocuments rows={filters.filtered} group="type" viewerIsHr={viewerIsHr} showAudience={showAudience} emptyText={empty} />
+        <GroupedDocuments rows={filters.filtered} group="type" viewerIsHr={viewerIsHr} showAudience={showAudience} emptyText={empty} categorize={categorize} />
       )}
     </div>
   );

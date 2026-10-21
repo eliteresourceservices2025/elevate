@@ -29,6 +29,13 @@ describe("how a document type looks", () => {
     expect(slugs.filter((slug) => !KNOWN_TYPE_SLUGS.includes(slug))).toEqual([]);
   });
 
+  it("has a style for the Unsorted types that bulk uploads land in", () => {
+    const seed = readFileSync(path.join(process.cwd(), "drizzle", "0090_unsorted_document_types.sql"), "utf8");
+    const slugs = [...seed.matchAll(/^\s*\('([a-z_]+)',/gm)].map((m) => m[1]);
+    expect(slugs).toEqual(["unsorted_employee", "unsorted_company"]);
+    expect(slugs.filter((slug) => !KNOWN_TYPE_SLUGS.includes(slug))).toEqual([]);
+  });
+
   it("labels every category", () => {
     expect(Object.keys(CATEGORY_LABELS).sort()).toEqual(["agreements", "company", "identity", "other", "training"]);
   });

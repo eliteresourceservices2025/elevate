@@ -97,3 +97,9 @@ export function formatBytes(n: number): string {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/** "Report_2026.final.pdf" becomes "Report 2026.final": the file name without its extension, as a starting title HR can change later. */
+export function titleFromFileName(fileName: string): string {
+  const base = fileName.replace(/\.[^.]+$/, "").replace(/_+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+  return base.length >= 2 ? base : "Document";
+}

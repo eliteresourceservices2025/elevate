@@ -4,9 +4,10 @@ import { ExternalLink } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
-import { OpeningStatusButtons } from "@/modules/recruiting/components/opening-forms";
+import { DeleteOpeningButton, OpeningStatusButtons } from "@/modules/recruiting/components/opening-forms";
 import { PipelineBoard } from "@/modules/recruiting/components/pipeline-board";
 import type { OpeningStatus } from "@/modules/recruiting/constants";
 import { getOpeningBoard } from "@/modules/recruiting/queries";
@@ -14,7 +15,7 @@ import { getOpeningBoard } from "@/modules/recruiting/queries";
 export const metadata: Metadata = { title: "Job pipeline" };
 
 export default async function OpeningPage({ params }: PageProps<"/recruiting/[id]">) {
-  await requireUser();
+  const user = await requireUser();
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const board = await orNotFound(getOpeningBoard(id));
@@ -44,6 +45,7 @@ export default async function OpeningPage({ params }: PageProps<"/recruiting/[id
             <Link href={`/recruiting/${opening.id}/edit`} className={buttonVariants({ variant: "outline", size: "sm" })}>
               Edit job
             </Link>
+            {scopeFor(user, "recruiting.delete_opening") ? <DeleteOpeningButton id={opening.id} applications={Object.values(board.columns).reduce((n, c) => n + c.length, 0)} /> : null}
           </div>
         ) : null}
       </div>

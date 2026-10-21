@@ -18,6 +18,7 @@ import { clientChoices } from "./service";
 import { BUCKETS, getDocumentStorage, type Bucket } from "./storage";
 import {
   archiveDocumentTypeSchema,
+  changeDocumentTypeSchema,
   createFolderSchema,
   documentIdSchema,
   folderIdSchema,
@@ -435,6 +436,48 @@ export async function moveDocument(input: unknown): Promise<ActionResult> {
       await writeAudit({ actor, action: "document.move", targetType: "employee", targetId: found.doc.employeeId!, metadata: { documentId: found.doc.id, folderId: parsed.data.folderId } }, tx);
     });
     refresh(found.doc.employeeId);
+    return { ok: true, data: undefined };
+  });
+}
+
+/**
+ * Gives a document its real type (and title, expiry and client when that type needs them): the "categorize later" step after a bulk
+ * upload, or a fix for a wrong type. A person can do it for their own unverified files; HR for any; company files need manage_company.
+ * The type must be of the same kind (a person's file stays a person's file).
+ */
+export async function changeDocumentType(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    const parsed = changeDocumentTypeSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const v = parsed.data;
+
+    const found = await loadDocument(v.documentId);
+    if (found?.doc.employeeId) await authorize(actor, "documents.organize", { ownerUserId: found.ownerUserId });
+    else await authorize(actor, "documents.manage_company");
+    if (!found || found.doc.archivedAt) return fail("That document was not found.");
+    const { doc } = found;
+    if (doc.verifiedBy && !can(actor, "documents.verify")) return fail("HR has verified this document, so only HR can change its type.");
+
+    const [type] = await db.select().from(documentTypes).where(and(eq(documentTypes.id, v.typeId), isNull(documentTypes.archivedAt))).limit(1);
+    if (!type || type.scope !== (doc.employeeId ? "employee" : "company")) return fail("Choose a document type.");
+    if (type.requiresExpiry && !v.expiresOn) return fail("Enter the expiry date for this type of document.");
+    if (v.expiresOn && v.expiresOn < todayInZone() && v.expiresOn !== doc.expiresOn) return fail("That expiry date has already passed.");
+
+    let clientId: string | null = null;
+    if (type.requiresClient) {
+      if (!v.clientId) return fail("Choose the client this document is for.");
+      const allowed = await clientChoices(actor, doc.employeeId!);
+      if (!allowed.some((c) => c.id === v.clientId)) return fail("Choose one of your clients.");
+      clientId = v.clientId;
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.update(documents).set({ typeId: type.id, title: v.title, clientId, expiresOn: v.expiresOn ?? null, ...(!doc.employeeId && v.audience ? { audience: v.audience } : {}), updatedAt: new Date() }).where(eq(documents.id, doc.id));
+      await writeAudit({ actor, action: "document.change_type", targetType: doc.employeeId ? "employee" : "company", targetId: doc.employeeId ?? "company", metadata: { documentId: doc.id, fromTypeId: doc.typeId, toTypeId: type.id } }, tx);
+    });
+    refresh(doc.employeeId);
     return { ok: true, data: undefined };
   });
 }

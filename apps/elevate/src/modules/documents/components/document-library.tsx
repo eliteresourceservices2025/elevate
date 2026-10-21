@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { archiveFolder, createFolder, renameFolder } from "../actions";
 import type { DocumentRow, FolderRow } from "../queries";
+import type { CategorizeOptions } from "./categorize-document";
 import { DocumentList } from "./document-list";
 import { DocumentFilterBar, GroupedDocuments, useDocumentFilters } from "./document-filters";
 
@@ -21,7 +22,7 @@ const NONE = "none";
  * A person's documents with folders and pages. A row of folder buttons filters the list ("All", "No folder", then each folder with its
  * count), the list is paged, and each document can be moved to a folder from its row. The person (and HR) make and remove folders.
  */
-export function DocumentLibrary({ employeeId, rows, folders, canOrganize, viewerIsHr }: { employeeId: string; rows: DocumentRow[]; folders: FolderRow[]; canOrganize: boolean; viewerIsHr: boolean }) {
+export function DocumentLibrary({ employeeId, rows, folders, canOrganize, viewerIsHr, categorize }: { employeeId: string; rows: DocumentRow[]; folders: FolderRow[]; canOrganize: boolean; viewerIsHr: boolean; categorize?: CategorizeOptions }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [view, setView] = useState<string>(ALL);
@@ -168,6 +169,7 @@ export function DocumentLibrary({ employeeId, rows, folders, canOrganize, viewer
             rows={paged.rows}
             viewerIsHr={viewerIsHr}
             folders={canOrganize ? folders : undefined}
+            categorize={categorize}
             emptyText={filters.filtering ? "No document matches." : active === ALL ? "No documents uploaded yet." : "Nothing in this folder yet. Move a document here from its row."}
           />
           <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="documents" />
@@ -177,6 +179,7 @@ export function DocumentLibrary({ employeeId, rows, folders, canOrganize, viewer
           rows={shown}
           group={filters.group}
           folders={canOrganize ? folders : undefined}
+          categorize={categorize}
           viewerIsHr={viewerIsHr}
           emptyText={filters.filtering ? "No document matches." : "No documents uploaded yet."}
         />

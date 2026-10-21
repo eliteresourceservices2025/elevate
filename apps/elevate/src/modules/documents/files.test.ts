@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALLOWED_MIME_TYPES, FILE_TYPES, formatBytes, kindFromMime, sanitizeFileName, sniffFileKind } from "./files";
+import { ALLOWED_MIME_TYPES, FILE_TYPES, formatBytes, kindFromMime, sanitizeFileName, sniffFileKind, titleFromFileName } from "./files";
 
 const bytes = (...b: number[]) => new Uint8Array([...b, 0, 0, 0, 0, 0, 0, 0, 0]);
 const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0));
@@ -84,5 +84,14 @@ describe("formatBytes", () => {
     expect(formatBytes(512)).toBe("512 B");
     expect(formatBytes(2048)).toBe("2 KB");
     expect(formatBytes(5 * 1024 * 1024)).toBe("5.0 MB");
+  });
+});
+
+describe("titleFromFileName", () => {
+  it("turns a file name into a starting title", () => {
+    expect(titleFromFileName("Report_2026.final.pdf")).toBe("Report 2026.final");
+    expect(titleFromFileName("  NBI   clearance .jpg")).toBe("NBI clearance");
+    expect(titleFromFileName("a.png")).toBe("Document");
+    expect(titleFromFileName("x".repeat(300) + ".pdf")).toHaveLength(120);
   });
 });

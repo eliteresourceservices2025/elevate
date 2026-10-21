@@ -629,3 +629,82 @@ describe("the one-row settings and table protections", () => {
     expect(await service.getRetentionSettings()).toMatchObject({ id: 1 });
   });
 });
+
+describe("deleting a job ad and erasing an application", () => {
+  it("deletes a job nobody applied to, hides one that has applications, and only HR and Super Admin can", async () => {
+    const admin = await makeUser("sa", ["super_admin", "employee"]);
+    const empty = await openJob();
+    as(recruiter);
+    expect(await actions.deleteOpening({ id: empty })).toEqual({ ok: false, error: NO_ACCESS });
+    as(hr);
+    expect(await actions.deleteOpening({ id: empty })).toEqual({ ok: true, data: { erased: true } });
+    expect(await rows(sql`select 1 from talent.job_openings where id = ${empty}`)).toHaveLength(0);
+    expect(await actions.deleteOpening({ id: empty })).toEqual({ ok: false, error: "That job was not found." });
+
+    const busy = await openJob();
+    const email = `${uniq("del")}@example.com`;
+    await apply(busy, { email });
+    as(admin);
+    expect(await actions.deleteOpening({ id: busy })).toEqual({ ok: true, data: { erased: false } });
+    const [row] = await rows<{ status: string; archived_at: string | null }>(sql`select status, archived_at from talent.job_openings where id = ${busy}`);
+    expect(row.status).toBe("closed");
+    expect(row.archived_at).not.toBeNull();
+    expect(await appFor(busy, email)).toBeTruthy(); // the application is kept
+    expect(await queries.listPublicOpenings()).not.toContainEqual(expect.objectContaining({ id: busy }));
+  });
+
+  it("erases an application for good with its applicant, notes, interview, scorecards and resume; only the Super Admin can, and it needs the word DELETE", async () => {
+    const admin = await makeUser("sa2", ["super_admin", "employee"]);
+    const opening = await openJob();
+    const email = `${uniq("erase")}@example.com`;
+    await apply(opening, { email });
+    const appId = (await appFor(opening, email))!;
+    const [cand] = await rows<{ id: string; resume_path: string | null }>(sql`select c.id, c.resume_path from talent.candidates c join talent.applications a on a.candidate_id = c.id where a.id = ${appId}`);
+    expect(cand.resume_path).toBeTruthy();
+
+    as(recruiter);
+    await actions.addNote({ applicationId: appId, body: "Strong phone manner." });
+    const ivId = idOf(await actions.scheduleInterview({ applicationId: appId, startsAt: new Date(Date.now() + 3_600_000).toISOString(), minutes: 45, location: "https://meet.example.com/x", interviewerUserIds: [lead.id], emailCandidate: false }));
+    await db.execute(sql`update talent.interviews set starts_at = now() - interval '2 hours' where id = ${ivId}`);
+    as(lead);
+    expect((await actions.submitScorecard({ interviewId: ivId, ratings: { communication: 4, skills: 4, reliability: 5, culture: 3 }, recommendation: "yes", comments: "Fine." })).ok).toBe(true);
+
+    for (const who of [hr, recruiter, lead]) {
+      as(who);
+      expect(await actions.deleteApplication({ applicationId: appId, confirm: "DELETE" })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+    as(admin);
+    expect((await actions.deleteApplication({ applicationId: appId, confirm: "delete" })).ok).toBe(false);
+    expect(await actions.deleteApplication({ applicationId: appId, confirm: "DELETE" })).toEqual({ ok: true, data: { openingId: opening } });
+
+    for (const table of ["applications", "application_stage_history", "candidate_notes", "interviews", "scorecards", "candidate_emails"]) {
+      expect(await rows(sql.raw(`select 1 from talent.${table} where ${table === "applications" ? "id" : "application_id"} = '${appId}'`)), table).toHaveLength(0);
+    }
+    expect(await rows(sql`select 1 from talent.candidates where id = ${cand.id}`)).toHaveLength(0);
+    expect(fake.removed.some((k) => k.includes(cand.resume_path!))).toBe(true);
+    expect(fake.objects.size === 0 || ![...fake.objects.keys()].some((k) => k.includes(cand.resume_path!))).toBe(true);
+    const [audit] = await rows<{ metadata: Record<string, unknown> }>(sql`select metadata from ops.audit_log where action = 'recruiting.application_erase' and target_id = ${appId}`);
+    expect(audit.metadata).toMatchObject({ interviews: 1, applicantErased: true });
+    expect(JSON.stringify(audit.metadata)).not.toContain(email);
+  });
+
+  it("keeps the applicant when they have another application, and refuses an application with an offer", async () => {
+    const admin = await makeUser("sa3", ["super_admin", "employee"]);
+    const one = await openJob();
+    const two = await openJob();
+    const email = `${uniq("twice")}@example.com`;
+    await apply(one, { email });
+    await apply(two, { email });
+    const appOne = (await appFor(one, email))!;
+    as(admin);
+    expect((await actions.deleteApplication({ applicationId: appOne, confirm: "DELETE" })).ok).toBe(true);
+    expect(await appFor(two, email)).toBeTruthy();
+    expect(await rows(sql`select 1 from talent.candidates where lower(email) = ${email.toLowerCase()}`)).toHaveLength(1);
+
+    const hired = `${uniq("hired")}@example.com`;
+    await apply(two, { email: hired });
+    const hiredApp = (await appFor(two, hired))!;
+    await db.execute(sql`update talent.applications set stage = 'hired', closed_at = now() where id = ${hiredApp}`);
+    expect(await actions.deleteApplication({ applicationId: hiredApp, confirm: "DELETE" })).toEqual({ ok: false, error: "This applicant has an offer or was hired, so it cannot be erased." });
+  });
+});

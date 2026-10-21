@@ -583,3 +583,49 @@ describe("folders", () => {
     expect(await docs.renameFolder({ folderId: f.data.id, name: "Hijacked" })).toEqual({ ok: false, error: NO_ACCESS });
   });
 });
+
+describe("bulk upload into Unsorted, then categorize later", () => {
+  const typeOf = async (id: string) => (await rows<{ slug: string; title: string; expires_on: string | null }>(sql`select t.slug, d.title, d.expires_on::text from docs.documents d join docs.document_types t on t.id = d.type_id where d.id = ${id}`))[0];
+
+  it("a file lands as Unsorted and HR or the owner can give it a real type; a type that needs an expiry date asks for it", async () => {
+    const p = await person("Sorter");
+    const stranger = await person("SortStranger");
+    const filed = await upload({ actor: p.user, employeeId: p.id, slug: "unsorted_employee" });
+    expect(filed.finalize).toEqual({ ok: true, data: undefined });
+    const id = filed.ticket.ok ? filed.ticket.data.documentId : "";
+    expect((await typeOf(id)).slug).toBe("unsorted_employee");
+
+    const nbi = await typeId("nbi_clearance");
+    as(stranger.user);
+    expect(await docs.changeDocumentType({ documentId: id, typeId: nbi, title: "NBI 2026", expiresOn: addDays(today, 200) })).toEqual({ ok: false, error: NO_ACCESS });
+
+    as(p.user);
+    expect(await docs.changeDocumentType({ documentId: id, typeId: nbi, title: "NBI 2026" })).toEqual({ ok: false, error: "Enter the expiry date for this type of document." });
+    expect((await docs.changeDocumentType({ documentId: id, typeId: nbi, title: "NBI 2026", expiresOn: addDays(today, 200) })).ok).toBe(true);
+    expect(await typeOf(id)).toMatchObject({ slug: "nbi_clearance", title: "NBI 2026", expires_on: addDays(today, 200) });
+
+    // a company type cannot be put on a person's file
+    expect(await docs.changeDocumentType({ documentId: id, typeId: await typeId("company_policy"), title: "Policy" })).toEqual({ ok: false, error: "Choose a document type." });
+
+    // once HR verified it, only HR can change it again
+    as(hr);
+    await docs.verifyDocument({ documentId: id, verified: true });
+    as(p.user);
+    expect(await docs.changeDocumentType({ documentId: id, typeId: await typeId("contract"), title: "Contract" })).toEqual({ ok: false, error: "HR has verified this document, so only HR can change its type." });
+    as(hr);
+    expect((await docs.changeDocumentType({ documentId: id, typeId: await typeId("contract"), title: "Contract" })).ok).toBe(true);
+    expect((await typeOf(id)).slug).toBe("contract");
+  });
+
+  it("company files: only HR can file or categorize them", async () => {
+    const p = await person("CompanySorter");
+    const filed = await upload({ actor: hr, slug: "unsorted_company" });
+    const id = filed.ticket.ok ? filed.ticket.data.documentId : "";
+    as(p.user);
+    expect(await docs.changeDocumentType({ documentId: id, typeId: await typeId("company_form"), title: "Form" })).toEqual({ ok: false, error: NO_ACCESS });
+    as(hr);
+    expect((await docs.changeDocumentType({ documentId: id, typeId: await typeId("company_form"), title: "Form", audience: "hr_only" })).ok).toBe(true);
+    expect((await typeOf(id)).slug).toBe("company_form");
+    expect((await rows<{ audience: string }>(sql`select audience from docs.documents where id = ${id}`))[0].audience).toBe("hr_only");
+  });
+});
