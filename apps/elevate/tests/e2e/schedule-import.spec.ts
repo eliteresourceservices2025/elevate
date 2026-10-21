@@ -12,7 +12,8 @@ test("HR imports schedules and clients from an attendance sheet: upload, preview
   test.setTimeout(240_000);
   const slow = { timeout: 45_000 };
   const stamp = Date.now();
-  const last = `Import${stamp}`;
+  // The name matcher ignores digits, so the unique part must be letters or every leftover test person would match this one.
+  const last = `Import${[...String(stamp)].map((d) => "abcdefghij"[Number(d)]).join("")}`;
   const clientName = `E2E Sheet Client ${stamp}`;
 
   const person = await createEmployeeAccount("Sched", last);
