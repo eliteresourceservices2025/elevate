@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatDateOnly, formatInZone } from "@/lib/time";
 import type { SensitiveField } from "../constants";
-import { SENSITIVE_LABELS, STATUS_LABELS } from "../constants";
+import { SENSITIVE_LABELS, STATUS_BADGE, STATUS_LABELS } from "../constants";
 import Link from "next/link";
 import { formatAddress } from "../address-data";
 import { legalName } from "../format";
@@ -17,17 +18,22 @@ import { BankChangeForm, ContactChangeForm, EmergencyContactsForm } from "./self
 
 export type Profile = Awaited<ReturnType<typeof getProfile>>;
 
+/** One label and its value. An empty value reads as a muted "Not set" instead of a bare dash. */
 export function Detail({ label, children }: { label: string; children: ReactNode }) {
+  const empty = children === null || children === undefined || children === "";
   return (
-    <div className="grid gap-0.5 py-2 sm:grid-cols-3 sm:gap-4">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="text-sm sm:col-span-2">{children ?? "—"}</dd>
+    <div className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+      <dt className="shrink-0 text-sm text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-sm sm:text-right">{empty ? <span className="text-muted-foreground/70">Not set</span> : children}</dd>
     </div>
   );
 }
 
-const DetailList = ({ children }: { children: ReactNode }) => (
-  <dl className="divide-y rounded-xl border bg-card px-4">{children}</dl>
+const DetailList = ({ title, children, className }: { title?: string; children: ReactNode; className?: string }) => (
+  <section className={cn("rounded-2xl border bg-card shadow-sm", className)}>
+    {title ? <h2 className="px-5 pt-4 pb-1 text-base font-semibold">{title}</h2> : null}
+    <dl className="divide-y divide-border/70 px-5">{children}</dl>
+  </section>
 );
 
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
@@ -38,7 +44,8 @@ const Section = ({ title, children }: { title: string; children: ReactNode }) =>
 );
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace("_", " ");
-const dash = (v: string | null | undefined) => (v && v.trim() ? v : "—");
+/** A value to show, or null when there is none (Detail then reads "Not set"). */
+const dash = (v: string | null | undefined) => (v && v.trim() ? v : null);
 const sensitiveLabel = (f: SensitiveField) => SENSITIVE_LABELS[f]; // eslint-disable-line security/detect-object-injection
 
 export function PersonalSection({ profile }: { profile: Profile }) {
@@ -53,16 +60,20 @@ export function PersonalSection({ profile }: { profile: Profile }) {
           Limited view: you see this person&apos;s work details. Birth date, civil status, personal email and home address are visible only to HR and the person.
         </p>
       ) : null}
-      <DetailList>
-        <Detail label="Legal name">{legalName(e)}</Detail>
-        <Detail label="Preferred name">{dash(e.preferredName)}</Detail>
-        <Detail label="Birth date">{formatDateOnly(e.birthDate)}</Detail>
-        <Detail label="Civil status">{e.civilStatus ? cap(e.civilStatus) : "—"}</Detail>
-        <Detail label="Work email">{e.workEmail}</Detail>
-        <Detail label="Personal email">{dash(e.personalEmail)}</Detail>
-        <Detail label="Mobile">{dash(e.mobile)}</Detail>
-        <Detail label="Address">{dash(address)}</Detail>
-      </DetailList>
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        <DetailList title="Identity">
+          <Detail label="Legal name">{legalName(e)}</Detail>
+          <Detail label="Preferred name">{dash(e.preferredName)}</Detail>
+          <Detail label="Birth date">{e.birthDate ? formatDateOnly(e.birthDate) : null}</Detail>
+          <Detail label="Civil status">{e.civilStatus ? cap(e.civilStatus) : null}</Detail>
+        </DetailList>
+        <DetailList title="Contact">
+          <Detail label="Work email">{e.workEmail}</Detail>
+          <Detail label="Personal email">{dash(e.personalEmail)}</Detail>
+          <Detail label="Mobile">{dash(e.mobile)}</Detail>
+          <Detail label="Address">{dash(address)}</Detail>
+        </DetailList>
+      </div>
       {access.canRequestChange ? (
         <details className="group">
           <summary className="cursor-pointer text-sm font-medium text-primary">Request a change to my contact details</summary>
@@ -83,18 +94,18 @@ export function EmploymentSection({ profile, orgOptions, today }: { profile: Pro
   const { employee: e, access, customFields } = profile;
   return (
     <div className="space-y-6">
-      <DetailList>
+      <DetailList title="Employment" className="max-w-3xl">
         <Detail label="Employee number">{e.employeeNumber}</Detail>
         <Detail label="Position">{dash(e.position)}</Detail>
         <Detail label="Status">
-          <Badge variant={e.status === "active" ? "default" : "secondary"}>{STATUS_LABELS[e.status]}</Badge>
+          <Badge variant={STATUS_BADGE[e.status]}>{STATUS_LABELS[e.status]}</Badge>
         </Detail>
         <Detail label="Team">{dash(e.teamName)}</Detail>
         <Detail label="Manager">{dash(e.managerName)}</Detail>
         {e.attendanceLeadName ? <Detail label="Attendance lead">{e.attendanceLeadName}</Detail> : null}
         {e.reportsCount > 0 ? <Detail label="Direct reports">{e.reportsCount}</Detail> : null}
         <Detail label="Worker type">{cap(e.workerType)}</Detail>
-        <Detail label="Start date">{formatDateOnly(e.startDate)}</Detail>
+        <Detail label="Start date">{e.startDate ? formatDateOnly(e.startDate) : null}</Detail>
         {e.endDate ? <Detail label="Last working day">{formatDateOnly(e.endDate)}</Detail> : null}
         {!access.canEdit
           ? customFields.map((f) => (
@@ -131,7 +142,7 @@ const PAYOUT_FIELDS = ["bankName", "bankAccountName", "bankAccountNumber", "payR
 function SensitiveList({ profile, fields }: { profile: Profile; fields: readonly SensitiveField[] }) {
   const masks = profile.sensitive?.masks ?? {};
   return (
-    <DetailList>
+    <DetailList className="max-w-3xl">
       {fields.map((f) => (
         <Detail key={f} label={sensitiveLabel(f)}>
           <RevealField

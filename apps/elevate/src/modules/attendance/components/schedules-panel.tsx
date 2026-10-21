@@ -133,7 +133,7 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
     <div className="space-y-6">
       {fix ? (
         <form
-          className="space-y-4 rounded-xl border border-amber-500/50 bg-card p-4"
+          className="space-y-4 rounded-xl border border-warning/50 bg-card p-5 shadow-sm"
           onSubmit={(e) => {
             e.preventDefault();
             run(

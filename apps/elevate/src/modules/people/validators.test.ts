@@ -154,6 +154,14 @@ describe("directoryQuerySchema", () => {
     expect(r).toMatchObject({ page: 1, sort: "name", dir: "asc", archived: false });
     expect(r.status).toBeUndefined();
   });
+  it("ignores filter values that are not valid instead of failing", () => {
+    const r = directoryQuerySchema.parse({ q: "x".repeat(200), status: "zzz", client: "not-a-uuid", team: "123", page: "2" });
+    expect(r).toMatchObject({ page: 2, archived: false });
+    expect(r.q).toBeUndefined();
+    expect(r.status).toBeUndefined();
+    expect(r.client).toBeUndefined();
+    expect(r.team).toBeUndefined();
+  });
   it("accepts valid filters", () => {
     const r = directoryQuerySchema.parse({ q: " maria ", status: "active", page: "3", sort: "start", dir: "desc", archived: "1" });
     expect(r).toMatchObject({ q: "maria", status: "active", page: 3, sort: "start", dir: "desc", archived: true });

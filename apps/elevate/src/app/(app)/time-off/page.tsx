@@ -11,7 +11,7 @@ import { formatDateOnly } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { todayInZone } from "@/modules/org/service";
 import { formatDays } from "@/modules/timeoff/ledger";
-import { HolidayControls, HOLIDAY_KIND_LABELS, LeaveTypeRowForm, NewHolidayForm, NewLeaveTypeForm } from "@/modules/timeoff/components/admin-forms";
+import { HolidayControls, HOLIDAY_KIND_LABELS, ImportHolidaysButton, LeaveTypeRowForm, NewHolidayForm, NewLeaveTypeForm, VerifyAllHolidaysButton } from "@/modules/timeoff/components/admin-forms";
 import { AdjustForm, AwardForm } from "@/modules/timeoff/components/award-forms";
 import { BalanceView } from "@/modules/timeoff/components/balance-view";
 import { CalendarMonth } from "@/modules/timeoff/components/calendar-view";
@@ -179,8 +179,13 @@ export default async function TimeOffPage({ searchParams }: PageProps<"/time-off
           {holidays.canManage ? (
             <>
               <p className="text-sm text-muted-foreground">
-                The government proclaims Philippine holidays each year, so those dates start as &quot;Verify&quot;: check them against the official proclamation and add any that are missing.
+                The government proclaims Philippine holidays each year, so those dates start as &quot;Verify&quot;. A day only counts (no absence flag, not a leave day, shown on calendars) once you tick &quot;Mark checked&quot;: check each against the official proclamation and add any that are missing.
               </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <ImportHolidaysButton year={year} />
+                <VerifyAllHolidaysButton year={year} count={holidays.rows.filter((h) => !h.verified).length} />
+                <span className="text-sm text-muted-foreground">Adds public holidays from Nager.Date that are missing. Philippine ones start as &quot;Verify&quot; and do not count until you mark them checked.</span>
+              </div>
               <NewHolidayForm defaultDate={`${year}-01-01`} />
             </>
           ) : null}

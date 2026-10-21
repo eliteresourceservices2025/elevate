@@ -10,6 +10,15 @@ export const STATUS_LABELS: Record<EmployeeStatus, string> = {
   separated: "Separated",
 };
 
+/** The badge colour of each status (the semantic tokens), for the directory and the profile. */
+export const STATUS_BADGE: Record<EmployeeStatus, "success" | "info" | "warning" | "secondary"> = {
+  active: "success",
+  onboarding: "info",
+  probation: "warning",
+  on_leave: "warning",
+  separated: "secondary",
+};
+
 // Typed EmployeeStatus keys only.
 export const statusLabel = (status: EmployeeStatus): string => STATUS_LABELS[status]; // eslint-disable-line security/detect-object-injection
 

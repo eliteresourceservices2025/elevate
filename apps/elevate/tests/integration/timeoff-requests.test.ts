@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { RoleSlug } from "@/lib/roles";
 
 // Real-database tests for leave requests, approvals, cancellation, reminders and the team calendar (Phase 2.2).
@@ -104,7 +104,15 @@ const decide = (actor: TestUser, requestId: string, decision: "approve" | "decli
 const statusOf = async (requestId: string) => (await rows<{ status: string }>(sql`select status from time.leave_requests where id = ${requestId}`))[0].status;
 const notes = (userId: string, kind: string) => rows(sql`select 1 from ops.notifications where user_id = ${userId} and kind = ${kind}`);
 
+// Only CHECKED holidays count. The seeded Philippine days start unchecked, so HR "ticks" them for these tests and exactly
+// those rows are put back afterwards (timeoff.test.ts checks the shipped state).
+let tickedHolidayIds: string[] = [];
+afterAll(async () => {
+  for (const id of tickedHolidayIds) await db.execute(sql`update time.holidays set verified = false where id = ${id}`);
+});
+
 beforeAll(async () => {
+  tickedHolidayIds = (await rows<{ id: string }>(sql`update time.holidays set verified = true where calendar = 'PH' and date between '2026-01-01' and '2027-12-31' and not verified returning id`)).map((r) => r.id);
   prize = await typeId("prize_day");
   ({ user: hr, employeeId: hrEmployeeId } = await person("hr", ["hr_admin", "employee"]));
   ({ user: hr2 } = await person("hr2", ["hr_admin", "employee"]));

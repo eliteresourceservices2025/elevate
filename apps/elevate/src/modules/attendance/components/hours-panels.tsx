@@ -205,7 +205,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
       )}
       {review.rows.length > 0 ? <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="people" /> : null}
       {review.testDays.length > 0 ? (
-        <section className="space-y-2 rounded-xl border bg-card p-4" aria-label="Marked test only">
+        <section className="space-y-2 rounded-2xl border bg-card p-5 shadow-sm" aria-label="Marked test only">
           <h3 className="text-sm font-semibold">Marked test only ({review.testDays.length})</h3>
           <p className="text-xs text-muted-foreground">These days stay in the clock history but are left out of this review, of payroll exports and of the &quot;not approved&quot; counts.</p>
           <ul className="space-y-1 text-sm">
@@ -243,7 +243,7 @@ function TestDayRow({ day, canClear }: { day: TeamReview["testDays"][number]; ca
 function ProgressBox({ progress }: { progress: HoursSettings["progress"][number] }) {
   const open = progress.teams.filter((t) => t.pendingDays > 0);
   return (
-    <div role="status" className={`rounded-lg border p-3 text-sm ${progress.pendingDays === 0 ? "border-green-600/40 bg-green-600/10" : "border-amber-500/50 bg-amber-500/10"}`}>
+    <div role="status" className={`rounded-lg border p-3 text-sm ${progress.pendingDays === 0 ? "border-success/40 bg-success-surface text-success" : "border-warning/40 bg-warning-surface text-warning"}`}>
       {progress.totalDays === 0 ? (
         "No finished days in this period yet."
       ) : progress.pendingDays === 0 ? (
@@ -291,7 +291,7 @@ export function ExportPanel({ settings }: { settings: HoursSettings }) {
 
   return (
     <div className="space-y-6">
-      <section aria-label="Export hours" className="space-y-3 rounded-xl border bg-card p-4">
+      <section aria-label="Export hours" className="space-y-3 rounded-2xl border bg-card p-5 shadow-sm">
         <h2 className="text-lg font-semibold">Export hours for payroll</h2>
         <p className="text-sm text-muted-foreground">
           ELEVATE totals and labels hours; it does not compute pay. By default only days a lead or HR approved, with the numbers they approved, are included. Hours that were corrected after approval are left out until approved again.
@@ -319,7 +319,7 @@ export function ExportPanel({ settings }: { settings: HoursSettings }) {
       </section>
 
       <form
-        className="space-y-3 rounded-xl border bg-card p-4"
+        className="space-y-3 rounded-2xl border bg-card p-5 shadow-sm"
         onSubmit={(e) => {
           e.preventDefault();
           run(() => savePayPeriod({ kind, biweeklyAnchor: kind === "biweekly" ? anchor : undefined }), () => "Pay periods saved.");

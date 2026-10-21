@@ -27,14 +27,14 @@ export function ZoneClock({ zone }: { zone?: string | null }) {
       <div>
         <dt className="sr-only">{t.primaryZone}</dt>
         <dd>
-          <span className="font-mono text-sm font-medium text-foreground">{t.primary}</span>{" "}
+          <span className="text-sm font-medium text-foreground tabular-nums">{t.primary}</span>{" "}
           {zoneLabel(t.primaryZone)}
         </dd>
       </div>
       <div>
         <dt className="sr-only">{t.secondaryZone}</dt>
         <dd>
-          <span className="font-mono text-sm font-medium text-foreground">{t.secondary}</span>{" "}
+          <span className="text-sm font-medium text-foreground tabular-nums">{t.secondary}</span>{" "}
           {zoneLabel(t.secondaryZone)}
         </dd>
       </div>

@@ -4,13 +4,14 @@ import { todayInZone } from "@/modules/org/service";
 import { getTracker } from "../panel-queries";
 import { percentDone, whenLabel, type TrackerCase } from "../tracker";
 import { guarded } from "./guard";
+import { Panel } from "./panel";
 
 function CaseList({ kind, cases, total, empty }: { kind: "onboarding" | "offboarding"; cases: TrackerCase[]; total: number; empty: string }) {
   const today = todayInZone();
   const base = `/${kind}`;
   return (
-    <div className="space-y-2">
-      <div className="flex items-baseline justify-between gap-3">
+    <div>
+      <div className="flex items-baseline justify-between gap-3 px-5 pt-1 pb-2">
         <h3 className="text-sm font-semibold">
           {kind === "onboarding" ? "Onboarding" : "Offboarding"} <span className="font-normal text-muted-foreground">({total})</span>
         </h3>
@@ -19,14 +20,14 @@ function CaseList({ kind, cases, total, empty }: { kind: "onboarding" | "offboar
         </Link>
       </div>
       {cases.length === 0 ? (
-        <p className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">{empty}</p>
+        <p className="px-5 pb-3 text-sm text-muted-foreground">{empty}</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="divide-y divide-border/70 border-t border-border/70">
           {cases.map((c) => {
             const pct = percentDone(c.done, c.total);
             return (
               <li key={c.id}>
-                <Link href={`${base}/${c.id}`} className="block rounded-xl border bg-card p-3 outline-none transition-colors hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring">
+                <Link href={`${base}/${c.id}`} className="block px-5 py-3 outline-none transition-colors hover:bg-secondary/50 focus-visible:bg-secondary/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="truncate text-sm font-medium">{c.name}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">{whenLabel(kind, c.date, today)}</span>
@@ -41,7 +42,7 @@ function CaseList({ kind, cases, total, empty }: { kind: "onboarding" | "offboar
                   </span>
                   {c.overdue > 0 || (kind === "offboarding" && !c.accessRemoved) ? (
                     <span className="mt-1.5 flex flex-wrap gap-x-3 text-xs">
-                      {c.overdue > 0 ? <span className="font-medium text-amber-700 dark:text-amber-400">{c.overdue} required {c.overdue === 1 ? "task" : "tasks"} overdue</span> : null}
+                      {c.overdue > 0 ? <span className="font-medium text-warning">{c.overdue} required {c.overdue === 1 ? "task" : "tasks"} overdue</span> : null}
                       {kind === "offboarding" && !c.accessRemoved ? <span className="text-muted-foreground">Access not removed yet</span> : null}
                     </span>
                   ) : null}
@@ -61,16 +62,20 @@ export async function Tracker() {
     const t = await getTracker();
     if (!t) return null;
     return (
-      <section aria-label="Onboarding and offboarding" className="space-y-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <ClipboardCheck className="size-5 text-primary" aria-hidden />
-          Onboarding and offboarding
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <Panel
+        label="Onboarding and offboarding"
+        title={
+          <>
+            <ClipboardCheck className="size-5 text-primary" aria-hidden />
+            Onboarding and offboarding
+          </>
+        }
+      >
+        <div className="grid gap-2 pb-2 sm:grid-cols-2 sm:divide-x sm:divide-border/70">
           <CaseList kind="onboarding" cases={t.onboarding} total={t.onboardingTotal} empty="Nobody is being onboarded." />
           <CaseList kind="offboarding" cases={t.offboarding} total={t.offboardingTotal} empty="Nobody is leaving." />
         </div>
-      </section>
+      </Panel>
     );
   });
 }

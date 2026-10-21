@@ -5,7 +5,9 @@ import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { DueBadge } from "@/modules/announcements/components/ack-display";
 import { listAnnouncements, listMyPending } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
+import { cn } from "@/lib/utils";
 import { guarded } from "./guard";
+import { Panel, PanelList, ROW_LINK } from "./panel";
 
 /** Policies and announcements that wait for this person's acknowledgment. */
 export async function WaitingForYou() {
@@ -14,21 +16,20 @@ export async function WaitingForYou() {
     if (pending.length === 0) return null;
     const today = todayInZone();
     return (
-      <section aria-label="Waiting for you" className="space-y-2">
-        <h2 className="text-lg font-semibold">Waiting for you</h2>
+      <Panel label="Waiting for you" title="Waiting for you" count={pending.length}>
         {/* Nothing waiting is ever hidden: a long list scrolls inside its own box so it cannot push the rest of the page away. */}
-        <ul className="max-h-[26rem] space-y-2 overflow-y-auto pr-1" tabIndex={pending.length > 5 ? 0 : undefined} aria-label={pending.length > 5 ? "Everything waiting for you (scrolls)" : undefined}>
+        <PanelList className="max-h-[26rem] overflow-y-auto" tabIndex={pending.length > 5 ? 0 : undefined} aria-label={pending.length > 5 ? "Everything waiting for you (scrolls)" : undefined}>
           {pending.map((p) => (
             <li key={`${p.kind}-${p.versionId ?? p.id}`}>
-              <Link href={p.link} className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3 outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring">
+              <Link href={p.link} className={cn(ROW_LINK, "flex-wrap items-center gap-2")}>
                 <span className="font-medium">{p.title}</span>
                 <Badge variant="outline">{p.kind === "policy" ? `Policy, version ${p.version}` : "Announcement"}</Badge>
                 <DueBadge due={p.due} dueOn={p.dueOn} today={today} />
               </Link>
             </li>
           ))}
-        </ul>
-      </section>
+        </PanelList>
+      </Panel>
     );
   });
 }
@@ -38,18 +39,12 @@ export async function LatestAnnouncements() {
     const latest = await listAnnouncements({ limit: 3 });
     if (latest.length === 0) return null;
     return (
-      <section aria-label="Latest announcements" className="space-y-2">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold">Latest announcements</h2>
-          <Link href="/announcements" className="text-sm text-primary underline-offset-4 hover:underline">
-            See all
-          </Link>
-        </div>
-        <ul className="space-y-2">
+      <Panel label="Latest announcements" title="Latest announcements" href="/announcements">
+        <PanelList>
           {latest.map((a) => (
             <li key={a.id}>
-              <Link href={`/announcements/${a.id}`} className="block rounded-xl border bg-card p-3 outline-none hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring">
-                <span className="flex items-center gap-2 font-medium">
+              <Link href={`/announcements/${a.id}`} className={cn(ROW_LINK, "flex-col gap-0.5")}>
+                <span className="flex items-center gap-2 text-sm font-medium">
                   {a.pinned ? <Pin className="size-4 text-primary" aria-label="Pinned" /> : null}
                   {a.title}
                 </span>
@@ -57,8 +52,8 @@ export async function LatestAnnouncements() {
               </Link>
             </li>
           ))}
-        </ul>
-      </section>
+        </PanelList>
+      </Panel>
     );
   });
 }

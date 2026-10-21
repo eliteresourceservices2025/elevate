@@ -23,7 +23,7 @@ describe("self-identification tables stay inside the demographics module", () =>
       .filter((f) => NAMES.test(readFileSync(f, "utf8")))
       .map((f) => path.relative(SRC, f));
     expect(offenders).toEqual([]);
-  });
+  }, 30_000); // it reads every source file, which is slow when the whole suite runs at once
 
   it("recruiting and review code never reads gender or religion", () => {
     const offenders = ["recruiting", "reviews", "offers", "onboarding"]

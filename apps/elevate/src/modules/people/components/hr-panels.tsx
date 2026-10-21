@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
-import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import { MoreHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,20 +42,26 @@ function useRun() {
   return { run, pending };
 }
 
-export function ArchiveButton({ employeeId, archived }: { employeeId: string; archived: boolean }) {
+/** More actions on a profile: archive or restore the record. Archiving still asks first. */
+export function ArchiveMenu({ employeeId, archived }: { employeeId: string; archived: boolean }) {
   const { run, pending } = useRun();
   return (
-    <Button
-      variant={archived ? "outline" : "ghost"}
-      size="sm"
-      disabled={pending}
-      onClick={() => {
-        if (!archived && !window.confirm("Archive this person? They disappear from the directory but their history is kept.")) return;
-        run(() => archiveEmployee({ employeeId, restore: archived }), archived ? "Record restored." : "Record archived.");
-      }}
-    >
-      {archived ? "Restore" : "Archive"}
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger aria-label="More actions" disabled={pending} className={cn(buttonVariants({ variant: "outline", size: "icon" }), "outline-none")}>
+        <MoreHorizontal aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem
+          variant={archived ? "default" : "destructive"}
+          onClick={() => {
+            if (!archived && !window.confirm("Archive this person? They disappear from the directory but their history is kept.")) return;
+            run(() => archiveEmployee({ employeeId, restore: archived }), archived ? "Record restored." : "Record archived.");
+          }}
+        >
+          {archived ? "Restore record" : "Archive"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -65,7 +75,7 @@ export function PendingRequests({
   const { run, pending } = useRun();
   if (requests.length === 0) return null;
   return (
-    <div role="status" className="rounded-xl border border-brand-gold bg-brand-gold/10 p-4 text-sm">
+    <Alert variant="warning" role="status" className="p-4">
       <p className="font-medium">Waiting for HR approval</p>
       <ul className="mt-2 space-y-1">
         {requests.map((r) => (
@@ -79,7 +89,7 @@ export function PendingRequests({
           </li>
         ))}
       </ul>
-    </div>
+    </Alert>
   );
 }
 
