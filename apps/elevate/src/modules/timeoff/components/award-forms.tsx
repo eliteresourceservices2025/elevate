@@ -37,7 +37,7 @@ export function AwardForm({ people, types, today, fixedEmployee }: { people: Pic
 
   return (
     <form
-      className="space-y-4 rounded-xl border bg-card p-4"
+      className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm"
       onSubmit={(e) => {
         e.preventDefault();
         run(() => awardDays({ employeeId, leaveTypeId, days, reason, expiresOn }), "Prize days awarded.", () => {
@@ -86,7 +86,7 @@ export function AdjustForm({ people, types, fixedEmployee }: { people: PickerOpt
 
   return (
     <form
-      className="space-y-4 rounded-xl border bg-card p-4"
+      className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm"
       onSubmit={(e) => {
         e.preventDefault();
         run(() => adjustBalance({ employeeId, leaveTypeId, days, reason }), "Balance corrected.", () => setReason(""));

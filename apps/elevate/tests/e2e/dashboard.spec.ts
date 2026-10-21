@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
-import { createEmployeeAccount, createHrAccount, signInEnrollingMfa, waitForHydration } from "./helpers";
+import { createEmployeeAccount, createHrAccount, hydrated, signInEnrollingMfa, waitForHydration } from "./helpers";
 
 // Needs the local Supabase with migrations applied. The dashboard adapts to a person's roles; the search follows their access.
 
@@ -100,6 +100,7 @@ test("a lead decides a request from the dashboard queue; declining needs a reaso
 
   for (const day of days) {
     await empPage.goto("/time-off?tab=requests");
+    await (await hydrated(empPage.getByRole("button", { name: "Request time off" }))).click(); // the form opens in a modal
     await waitForHydration(empPage, "#rq-start");
     await empPage.getByLabel("First day").fill(day);
     await expect(empPage.getByText("This uses 1 day")).toBeVisible();
