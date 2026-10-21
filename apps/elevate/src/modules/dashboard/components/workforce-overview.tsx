@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { Users } from "lucide-react";
 import type { Breakdown } from "@/modules/analytics/view";
 import { getWorkforce } from "../panel-queries";
 import { sparkline } from "../workforce";
 import { guarded } from "./guard";
+import { Panel } from "./panel";
 
 function Bars({ title, data }: { title: string; data: Breakdown | null }) {
   if (!data || data.hiddenAll) return null;
@@ -47,17 +47,18 @@ export async function WorkforceOverview() {
     const first = w.trend.find((p) => p.headcount !== null)?.headcount ?? null;
     const change = first !== null && w.headcountNow !== null ? w.headcountNow - first : null;
     return (
-      <section aria-label="Workforce overview" className="space-y-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
+      <Panel
+        label="Workforce overview"
+        title={
+          <>
             <Users className="size-5 text-primary" aria-hidden />
             Workforce overview
-          </h2>
-          <Link href="/analytics" className="text-sm text-primary underline-offset-4 hover:underline">
-            Full analytics
-          </Link>
-        </div>
-        <div className="space-y-4 rounded-xl border bg-card p-4">
+          </>
+        }
+        href="/analytics"
+        hrefLabel="Full analytics"
+      >
+        <div className="space-y-4 px-5 pt-1 pb-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-xs text-muted-foreground">{w.scopeLabel}</p>
@@ -80,7 +81,7 @@ export async function WorkforceOverview() {
           </div>
           <p className="text-xs text-muted-foreground">Up to date as of {w.asOf}. Groups under 5 people are merged into Other.</p>
         </div>
-      </section>
+      </Panel>
     );
   });
 }

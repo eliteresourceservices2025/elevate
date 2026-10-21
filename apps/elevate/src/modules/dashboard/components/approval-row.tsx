@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult } from "@/lib/run-action";
@@ -47,8 +47,8 @@ export function ApprovalRow({ item, waitedDays }: { item: QueueItem; waitedDays:
   }
 
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card p-3">
-      <div className="min-w-0 flex-1">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3.5">
+      <div className="min-w-[min(100%,14rem)] flex-1">
         <p className="truncate text-sm font-medium">
           {item.who} <span className="font-normal text-muted-foreground">· {KIND_LABEL[item.kind]}</span>
         </p>
@@ -63,7 +63,7 @@ export function ApprovalRow({ item, waitedDays }: { item: QueueItem; waitedDays:
             Approve
           </Button>
         ) : (
-          <Link href={item.href} className="inline-flex h-7 items-center rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground outline-none hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring">
+          <Link href={item.href} className={buttonVariants({ size: "sm" })}>
             Review
           </Link>
         )}
