@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
 import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/auth";
 import { authorize } from "@/lib/authz";
@@ -45,10 +46,12 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     </Suspense>
   ) : null;
 
+  const quickActions = <QuickActions user={user} lens={lens} />;
+
   return (
     <PageContainer>
-      <Suspense fallback={<div className="h-28" aria-hidden />}>
-        <GreetingHeader roles={user.roles} lenses={lenses} lens={lens} actions={<QuickActions user={user} lens={lens} />} />
+      <Suspense fallback={<PageHeader title="Dashboard" actions={quickActions} />}>
+        <GreetingHeader roles={user.roles} lenses={lenses} lens={lens} actions={quickActions} />
       </Suspense>
 
       <Suspense fallback={<KpiCardsSkeleton />}>

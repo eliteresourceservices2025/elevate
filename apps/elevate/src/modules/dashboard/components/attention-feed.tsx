@@ -6,12 +6,13 @@ import type { Severity } from "../attention";
 import { getAttention } from "../feed-queries";
 import type { Lens } from "../lens";
 import { guarded } from "./guard";
+import { SEVERITY_VARIANT } from "./severity";
 import { Panel, PanelList, PanelNote, ROW_LINK } from "./panel";
 
-const LOOK: Record<Severity, { dot: string; variant: "destructive" | "warning" | "info"; label: string; pill: string }> = {
-  urgent: { dot: "bg-destructive", variant: "destructive", label: "Urgent", pill: "Urgent" },
-  warn: { dot: "bg-warning", variant: "warning", label: "Needs attention", pill: "Review" },
-  info: { dot: "bg-info", variant: "info", label: "For your information", pill: "Info" },
+const LOOK: Record<Severity, { dot: string; label: string; pill: string }> = {
+  urgent: { dot: "bg-destructive", label: "Urgent", pill: "Urgent" },
+  warn: { dot: "bg-warning", label: "Needs attention", pill: "Review" },
+  info: { dot: "bg-info", label: "For your information", pill: "Info" },
 };
 
 /** What needs eyes now, most urgent first. Plain counts that link to where each is fixed: no names, no private details. */
@@ -25,7 +26,7 @@ export async function AttentionFeed({ lens }: { lens: Lens }) {
         ) : (
           <PanelList>
             {items.map((item) => {
-              const { dot, variant, label, pill } = LOOK[item.severity];
+              const { dot, label, pill } = LOOK[item.severity];
               return (
                 <li key={item.id}>
                   <Link href={item.href} className={cn(ROW_LINK, "items-center")}>
@@ -35,7 +36,7 @@ export async function AttentionFeed({ lens }: { lens: Lens }) {
                       <span className="block text-sm font-medium">{item.title}</span>
                       {item.detail ? <span className="block text-xs text-muted-foreground">{item.detail}</span> : null}
                     </span>
-                    <Badge variant={variant} aria-hidden>
+                    <Badge variant={SEVERITY_VARIANT[item.severity]} aria-hidden>
                       {pill}
                     </Badge>
                   </Link>

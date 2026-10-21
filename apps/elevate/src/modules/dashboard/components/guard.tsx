@@ -15,16 +15,16 @@ function PanelProblem({ name, slow }: { name: string; slow: boolean }) {
 }
 
 /**
- * Runs one panel. If its reads fail or take too long, the page shows a small notice in its place instead of hanging or breaking:
+ * Runs one panel (`fallback` replaces the default notice when the panel has something that must stay, like the header's buttons). If its reads fail or take too long, the page shows a small notice in its place instead of hanging or breaking:
  * one slow or failing panel never takes the whole dashboard with it. Redirects and not-found still work (they must pass through),
  * and only the error's class name is logged, never a query, a parameter or a person's data.
  */
-export async function guarded(name: string, render: () => Promise<ReactNode>): Promise<ReactNode> {
+export async function guarded(name: string, render: () => Promise<ReactNode>, fallback?: ReactNode): Promise<ReactNode> {
   try {
     return await withTimeout(render(), PANEL_TIMEOUT_MS);
   } catch (error) {
     unstable_rethrow(error);
     console.error("dashboard panel failed:", name, error instanceof Error ? error.name : "unknown error");
-    return <PanelProblem name={name} slow={error instanceof PanelTimeout} />;
+    return fallback ?? <PanelProblem name={name} slow={error instanceof PanelTimeout} />;
   }
 }

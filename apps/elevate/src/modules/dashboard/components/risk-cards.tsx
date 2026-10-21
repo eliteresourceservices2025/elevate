@@ -5,13 +5,10 @@ import type { Severity } from "../attention";
 import type { Lens } from "../lens";
 import { getRisks } from "../panel-queries";
 import { guarded } from "./guard";
+import { SEVERITY_VARIANT } from "./severity";
 import { Panel, PanelList, PanelNote, ROW_LINK } from "./panel";
 
-const LOOK: Record<Severity, { variant: "destructive" | "warning" | "info"; label: string }> = {
-  urgent: { variant: "destructive", label: "Urgent" },
-  warn: { variant: "warning", label: "Watch" },
-  info: { variant: "info", label: "Heads up" },
-};
+const LABEL: Record<Severity, string> = { urgent: "Urgent", warn: "Watch", info: "Heads up" };
 
 /** Early warnings about teams and operations. Each card states the rule behind it, so nothing is a black box. */
 export async function RiskCards({ lens }: { lens: Lens }) {
@@ -35,7 +32,7 @@ export async function RiskCards({ lens }: { lens: Lens }) {
         ) : (
           <PanelList>
             {cards.map((card) => {
-              const { variant, label } = LOOK[card.severity];
+              const label = LABEL[card.severity];
               return (
                 <li key={card.id}>
                   <Link href={card.href} className={ROW_LINK}>
@@ -49,7 +46,7 @@ export async function RiskCards({ lens }: { lens: Lens }) {
                         {card.rule}
                       </span>
                     </span>
-                    <Badge variant={variant} aria-hidden>
+                    <Badge variant={SEVERITY_VARIANT[card.severity]} aria-hidden>
                       {label}
                     </Badge>
                   </Link>

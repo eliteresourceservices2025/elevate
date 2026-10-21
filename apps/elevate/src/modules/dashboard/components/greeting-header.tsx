@@ -51,5 +51,5 @@ export async function GreetingHeader({ roles, lenses, lens, actions }: { roles: 
         </div>
       </div>
     );
-  });
+  }, <PageHeader title="Dashboard" actions={actions} />);
 }
