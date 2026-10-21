@@ -17,7 +17,7 @@ export function ErrorState({ title = "Something went wrong", description = "We c
       </span>
       <h2 className="text-lg font-semibold">{title}</h2>
       <p className="text-sm text-muted-foreground">{description}</p>
-      {digest ? <p className="font-mono text-xs text-muted-foreground">Reference: {digest}</p> : null}
+      {digest ? <p className="text-xs text-muted-foreground tabular-nums">Reference: {digest}</p> : null}
       {reset || children ? (
         <div className="flex flex-wrap justify-center gap-2">
           {reset ? <Button onClick={reset}>Try again</Button> : null}

@@ -11,7 +11,7 @@ import { LENS_COOKIE, LENS_LABELS, type Lens } from "../lens";
 export function LensTabs({ lenses, current }: { lenses: Lens[]; current: Lens }) {
   if (lenses.length < 2) return null;
   return (
-    <nav aria-label="Dashboard view" className="flex flex-wrap gap-1 rounded-xl border bg-card p-1">
+    <nav aria-label="Dashboard view" className="-mb-px flex flex-wrap gap-5">
       {lenses.map((lens) => (
         <Link
           key={lens}
@@ -25,8 +25,8 @@ export function LensTabs({ lenses, current }: { lenses: Lens[]; current: Lens })
             }
           }}
           className={cn(
-            "rounded-lg px-3 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-            lens === current ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+            "border-b-2 py-2 text-sm font-medium outline-none transition-colors focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring",
+            lens === current ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
           )}
         >
           {/* eslint-disable-next-line security/detect-object-injection -- lens is a typed Lens */}

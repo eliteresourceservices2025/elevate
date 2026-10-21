@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
+import { PageContainer } from "@/components/page-container";
+import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/auth";
 import { authorize } from "@/lib/authz";
@@ -21,7 +23,7 @@ export const metadata: Metadata = { title: "Dashboard" };
 // Many small reads, so give the page room if the database is slow; each panel streams in as it finishes.
 export const maxDuration = 60;
 
-const Loading = ({ height = "h-40" }: { height?: string }) => <Skeleton className={`${height} rounded-xl`} />;
+const Loading = ({ height = "h-40" }: { height?: string }) => <Skeleton className={`${height} rounded-2xl`} />;
 
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const user = await requireUser();
@@ -44,19 +46,19 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     </Suspense>
   ) : null;
 
+  const quickActions = <QuickActions user={user} lens={lens} />;
+
   return (
-    <div className="w-full space-y-6">
-      <Suspense fallback={<div className="h-20" aria-hidden />}>
-        <GreetingHeader roles={user.roles} lenses={lenses} lens={lens} />
+    <PageContainer>
+      <Suspense fallback={<PageHeader title="Dashboard" actions={quickActions} />}>
+        <GreetingHeader roles={user.roles} lenses={lenses} lens={lens} actions={quickActions} />
       </Suspense>
 
       <Suspense fallback={<KpiCardsSkeleton />}>
         <KpiCards lens={lens} />
       </Suspense>
 
-      <QuickActions user={user} lens={lens} />
-
-      <div className="grid items-start gap-6 lg:grid-cols-2">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
           {showApprovals ? (
             <Suspense fallback={<Loading />}>
@@ -80,7 +82,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
       </div>
 
       {showTracker || showWorkforce ? (
-        <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
           {showTracker ? (
             <Suspense fallback={<Loading height="h-56" />}>
               <Tracker />
@@ -94,7 +96,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
         </div>
       ) : null}
 
-      <div className="grid items-start gap-6 lg:grid-cols-2">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
           <Suspense fallback={<Loading />}>
             <WaitingForYou />
@@ -106,6 +108,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
           </Suspense>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }

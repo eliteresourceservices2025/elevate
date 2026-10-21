@@ -27,8 +27,8 @@ export function PageHeader({ title, description, actions, breadcrumbs, className
         </Breadcrumb>
       ) : null}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        <div className="min-w-[min(100%,18rem)] flex-1">
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{title}</h1>
           {description ? <p className="mt-1 max-w-prose text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2 print:hidden">{actions}</div> : null}
