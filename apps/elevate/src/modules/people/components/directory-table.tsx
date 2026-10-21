@@ -5,9 +5,11 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { initialsOf } from "@/lib/initials";
 import { formatDateOnly } from "@/lib/time";
-import { STATUS_LABELS } from "../constants";
+import { STATUS_LABELS, type EmployeeStatus } from "../constants";
 import { displayName } from "../format";
 import type { DirectoryRow } from "../queries";
 
@@ -21,6 +23,31 @@ type Props = {
   params: Record<string, string>;
 };
 
+const STATUS_VARIANT: Record<EmployeeStatus, "success" | "info" | "warning" | "secondary"> = {
+  active: "success",
+  onboarding: "info",
+  probation: "warning",
+  on_leave: "warning",
+  separated: "secondary",
+};
+
+function StatusBadges({ row }: { row: DirectoryRow }) {
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      <Badge variant={STATUS_VARIANT[row.status]}>{STATUS_LABELS[row.status]}</Badge>
+      {row.archived ? <Badge variant="outline">Archived</Badge> : null}
+    </span>
+  );
+}
+
+function Initials({ row }: { row: DirectoryRow }) {
+  return (
+    <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
+      {initialsOf(displayName(row), row.workEmail)}
+    </span>
+  );
+}
+
 function SortHeader({ label, column, sort, dir, params }: { label: string; column: Sort } & Pick<Props, "sort" | "dir" | "params">) {
   const active = sort === column;
   const nextDir = active && dir === "asc" ? "desc" : "asc";
@@ -28,7 +55,7 @@ function SortHeader({ label, column, sort, dir, params }: { label: string; colum
   return (
     <Link
       href={`/people?${qs.toString()}`}
-      className="inline-flex items-center gap-1 font-medium hover:underline"
+      className="inline-flex items-center gap-1 hover:text-foreground"
       aria-label={`Sort by ${label}${active ? `, currently ${dir === "asc" ? "ascending" : "descending"}` : ""}`}
     >
       {label}
@@ -46,11 +73,17 @@ export function DirectoryTable({ rows, seesClients, sort, dir, params }: Props) 
         id: "name",
         header: () => <SortHeader label="Name" column="name" sort={sort} dir={dir} params={params} />,
         cell: ({ row }) => (
-          <div>
-            <Link href={`/people/${row.original.id}`} className="font-medium text-primary underline-offset-4 hover:underline">
-              {displayName(row.original)}
-            </Link>
-            <div className="text-xs text-muted-foreground">{row.original.employeeNumber}</div>
+          <div className="flex items-center gap-3">
+            <Initials row={row.original} />
+            <div className="min-w-0">
+              <Link href={`/people/${row.original.id}`} className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline">
+                {displayName(row.original)}
+              </Link>
+              <div className="max-w-[22rem] truncate text-xs text-muted-foreground">
+                {row.original.employeeNumber}
+                <span className="hidden lg:inline"> · {row.original.workEmail}</span>
+              </div>
+            </div>
           </div>
         ),
       },
@@ -59,26 +92,19 @@ export function DirectoryTable({ rows, seesClients, sort, dir, params }: Props) 
         header: () => <SortHeader label="Position" column="position" sort={sort} dir={dir} params={params} />,
         cell: ({ row }) => row.original.position ?? "—",
       },
-      { id: "team", header: () => "Team", cell: ({ row }) => row.original.team ?? "—" },
-      { id: "manager", header: () => "Manager", cell: ({ row }) => row.original.managerName ?? "—" },
-      { id: "email", header: () => "Work email", cell: ({ row }) => <span className="break-all">{row.original.workEmail}</span> },
+      { id: "team", header: () => "Team", cell: ({ row }) => <span className="text-muted-foreground">{row.original.team ?? "—"}</span> },
     ];
-    if (seesClients) cols.push({ id: "clients", header: () => "Client", cell: ({ row }) => row.original.clientNames ?? "—" });
+    if (seesClients) cols.push({ id: "clients", header: () => "Client", cell: ({ row }) => <span className="text-muted-foreground">{row.original.clientNames ?? "—"}</span> });
     cols.push(
       {
         id: "status",
         header: () => <SortHeader label="Status" column="status" sort={sort} dir={dir} params={params} />,
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1">
-            <Badge variant={row.original.status === "active" ? "default" : "secondary"}>{STATUS_LABELS[row.original.status]}</Badge>
-            {row.original.archived ? <Badge variant="outline">Archived</Badge> : null}
-          </div>
-        ),
+        cell: ({ row }) => <StatusBadges row={row.original} />,
       },
       {
         id: "start",
         header: () => <SortHeader label="Started" column="start" sort={sort} dir={dir} params={params} />,
-        cell: ({ row }) => formatDateOnly(row.original.startDate),
+        cell: ({ row }) => <span className="text-muted-foreground">{formatDateOnly(row.original.startDate)}</span>,
       },
     );
     return cols;
@@ -87,34 +113,54 @@ export function DirectoryTable({ rows, seesClients, sort, dir, params }: Props) 
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel(), manualSorting: true, manualPagination: true });
 
+  if (rows.length === 0) return <EmptyState className="m-4 border-0" title="No one matches those filters" description="Try a different search, or clear the filters." />;
+
   return (
-    <Table>
-      <TableHeader>
-        {table.getHeaderGroups().map((group) => (
-          <TableRow key={group.id}>
-            {group.headers.map((h) => (
-              <TableHead key={h.id}>{flexRender(h.column.columnDef.header, h.getContext())}</TableHead>
-            ))}
-          </TableRow>
+    <>
+      {/* Phone: one card per person. The table below takes over from the tablet width. */}
+      <ul className="divide-y md:hidden">
+        {rows.map((row) => (
+          <li key={row.id}>
+            <Link href={`/people/${row.id}`} className="flex items-start gap-3 px-4 py-3.5 outline-none transition-colors hover:bg-secondary/50 focus-visible:bg-secondary/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+              <Initials row={row} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-start justify-between gap-2">
+                  <span className="font-medium">{displayName(row)}</span>
+                  <StatusBadges row={row} />
+                </span>
+                {row.position ? <span className="block text-sm text-muted-foreground">{row.position}</span> : null}
+                <span className="block text-xs text-muted-foreground">{[row.employeeNumber, row.team, seesClients ? row.clientNames : null].filter(Boolean).join(" · ")}</span>
+              </span>
+            </Link>
+          </li>
         ))}
-      </TableHeader>
-      <TableBody>
-        {table.getRowModel().rows.length === 0 ? (
-          <TableRow>
-            <TableCell colSpan={columns.length} className="text-center text-muted-foreground">
-              No one matches those filters.
-            </TableCell>
-          </TableRow>
-        ) : (
-          table.getRowModel().rows.map((row) => (
-            <TableRow key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-              ))}
-            </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
+      </ul>
+      <div className="hidden md:block">
+        <Table plain containerClassName="rounded-none border-0 shadow-none">
+          <TableHeader className="bg-secondary/40">
+            {table.getHeaderGroups().map((group) => (
+              <TableRow key={group.id} className="hover:bg-transparent">
+                {group.headers.map((h) => (
+                  <TableHead key={h.id} className="h-10 px-4 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    {flexRender(h.column.columnDef.header, h.getContext())}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {table.getRowModel().rows.map((row) => (
+              <TableRow key={row.id}>
+                {row.getVisibleCells().map((cell) => (
+                  <TableCell key={cell.id} className="px-4 py-3 whitespace-normal">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }
