@@ -17,7 +17,7 @@ export default async function LabelsPage({ searchParams }: PageProps<"/assets/la
         <Link href="/assets" className="text-sm text-primary underline-offset-2 hover:underline">
           Assets
         </Link>
-        <h1 className="mt-1 text-2xl font-bold">Print asset labels</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">Print asset labels</h1>
         <p className="mt-1 text-muted-foreground">
           {tags.length > 0 ? "Labels for the item you chose." : "Labels for every item that is not archived."} Each QR code opens the item&apos;s page in ELEVATE (sign-in required). It holds only the address, no personal data.
         </p>

@@ -21,7 +21,7 @@ export default async function EditOpeningPage({ params }: PageProps<"/recruiting
         <Link href={`/recruiting/${id}`} className="text-sm text-primary underline-offset-4 hover:underline">
           ← {o.title}
         </Link>
-        <h1 className="mt-2 text-2xl font-bold">Edit job</h1>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">Edit job</h1>
       </div>
       <OpeningForm
         teams={options.teams}

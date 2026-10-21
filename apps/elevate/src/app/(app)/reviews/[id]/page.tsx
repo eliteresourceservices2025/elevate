@@ -23,7 +23,7 @@ export default async function ReviewPage({ params }: PageProps<"/reviews/[id]">)
         <Link href="/reviews" className="text-sm text-primary underline-offset-2 hover:underline">
           All reviews
         </Link>
-        <h1 className="mt-1 text-2xl font-bold">
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">
           {r.isPerson ? "Your review" : `Review: ${r.name}`}
         </h1>
         <p className="text-muted-foreground">

@@ -28,7 +28,7 @@ export default async function CyclePage({ params, searchParams }: PageProps<"/re
         <Link href="/reviews" className="text-sm text-primary underline-offset-2 hover:underline">
           All reviews
         </Link>
-        <h1 className="mt-1 text-2xl font-bold">{cycle.name}</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">{cycle.name}</h1>
         <p className="text-muted-foreground">
           {CYCLE_LABELS[cycle.type as CycleType]}. Due: self {formatDateOnly(cycle.selfDueOn)}, lead {formatDateOnly(cycle.leadDueOn)}, calibration {formatDateOnly(cycle.calibrateDueOn)}. {cycle.status === "closed" ? "Closed." : ""}
         </p>

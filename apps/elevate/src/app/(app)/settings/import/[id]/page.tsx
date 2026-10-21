@@ -32,7 +32,7 @@ export default async function ImportBatchPage({ params, searchParams }: PageProp
         <Link href="/settings/import" className="text-sm text-primary underline-offset-2 hover:underline">
           All imports
         </Link>
-        <h1 className="mt-1 text-2xl font-bold">{batch.fileName}</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">{batch.fileName}</h1>
         <p className="text-muted-foreground">
           {batch.rowCount} rows. {batch.status === "preview" ? "Nothing has been created yet." : batch.status === "committed" ? "Committed." : batch.status === "rolled_back" ? "Rolled back." : "Discarded."}
         </p>

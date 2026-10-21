@@ -14,7 +14,7 @@ export default async function EditAnnouncementPage({ params }: PageProps<"/annou
   const { announcement: a } = data;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold">Edit announcement</h1>
+      <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Edit announcement</h1>
       <AnnouncementForm
         today={todayInZone()}
         teams={[]}

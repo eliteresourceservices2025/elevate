@@ -7,6 +7,8 @@ import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { FormDialog } from "@/components/form-dialog";
 import { DataRightsForm, DownloadButtons } from "@/modules/privacy/components/my-data-controls";
 import { getMyData } from "@/modules/privacy/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "My data" };
 
@@ -47,32 +49,36 @@ export default async function MyDataPage() {
     : [];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="max-w-2xl">
-        <h1 className="text-2xl font-bold">My data</h1>
-        <p className="mt-1 text-muted-foreground">
-          What ELEVATE holds about you. Only you see this page.
-          {noticePolicyId ? (
-            <>
-              {" "}
-              Read the{" "}
-              <Link href={`/announcements/policies/${noticePolicyId}`} className="text-primary underline underline-offset-4">
-                privacy notice
-              </Link>
-              .
-            </>
-          ) : null}
-        </p>
-        </div>
-        <FormDialog
-          label="Ask HR about your data"
-          title="Ask HR about your data"
-          description="You can ask HR to correct your data or to delete it. HR reviews every request. Some records must be kept by law, so nothing is deleted automatically."
-        >
-          <DataRightsForm hasOpenRequest={openRequest} />
-        </FormDialog>
-      </div>
+    <PageContainer width="form">
+      <PageHeader
+        title="My data"
+        description={
+          <>
+            What ELEVATE holds about you. Only you see this page.
+            {noticePolicyId ? (
+              <>
+                {" "}
+                Read the{" "}
+                <Link href={`/announcements/policies/${noticePolicyId}`} className="text-primary underline underline-offset-4">
+                  privacy notice
+                </Link>
+                .
+              </>
+            ) : null}
+          </>
+        }
+        actions={
+          <>
+            <FormDialog
+              label="Ask HR about your data"
+              title="Ask HR about your data"
+              description="You can ask HR to correct your data or to delete it. HR reviews every request. Some records must be kept by law, so nothing is deleted automatically."
+            >
+              <DataRightsForm hasOpenRequest={openRequest} />
+            </FormDialog>
+          </>
+        }
+      />
 
       {openRequest ? <p className="text-sm text-muted-foreground">You have a request waiting for HR. You can send another once it is handled.</p> : null}
 
@@ -225,6 +231,6 @@ export default async function MyDataPage() {
           </ul>
         </Section>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

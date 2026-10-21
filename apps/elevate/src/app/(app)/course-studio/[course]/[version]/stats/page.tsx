@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { orNotFound } from "@/lib/or-not-found";
 import { getCourseStats } from "@/modules/learn/studio-queries";
 import { LEARN_MIN_GROUP } from "@/modules/learn/studio-stats";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Course statistics" };
 
@@ -13,19 +15,22 @@ export default async function StudioStatsPage({ params }: { params: Promise<{ co
   if (!stats) notFound();
 
   return (
-    <div className="w-full max-w-6xl space-y-6">
+    <PageContainer width="wide">
       <p className="text-sm">
         <Link href={`/course-studio/${course}/${version}`} className="text-primary underline-offset-4 hover:underline">
           Back to version {version}
         </Link>
       </p>
-      <div>
-        <h1 className="text-2xl font-bold">How learners do: version {stats.version}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Built from {stats.attempts} submitted exam {stats.attempts === 1 ? "try" : "tries"}. Counts and percentages only: no names and no one&apos;s score. A figure
-          that comes from fewer than {LEARN_MIN_GROUP} people is not shown. Use it to find lessons or questions that need rewording, not to judge people.
-        </p>
-      </div>
+      <PageHeader
+        title={<>How learners do: version {stats.version}</>}
+        description={
+          <>
+            Built from {stats.attempts} submitted exam {stats.attempts === 1 ? "try" : "tries"}. Counts and percentages only: no names and no
+            one&apos;s score. A figure that comes from fewer than {LEARN_MIN_GROUP} people is not shown. Use it to find lessons or questions
+            that need rewording, not to judge people.
+          </>
+        }
+      />
 
       <section aria-labelledby="mods-h" className="space-y-2">
         <h2 id="mods-h" className="text-lg font-semibold">
@@ -85,6 +90,6 @@ export default async function StudioStatsPage({ params }: { params: Promise<{ co
           ))}
         </ul>
       </section>
-    </div>
+    </PageContainer>
   );
 }

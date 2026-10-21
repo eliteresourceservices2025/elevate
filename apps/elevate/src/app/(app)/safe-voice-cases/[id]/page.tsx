@@ -45,7 +45,7 @@ export default async function SafeVoiceCasePage({ params }: PageProps<"/safe-voi
         <Link href="/safe-voice-cases" className="text-sm text-primary underline-offset-2 hover:underline">
           All cases
         </Link>
-        <h1 className="mt-1 flex flex-wrap items-center gap-2 text-2xl font-bold">
+        <h1 className="mt-1 flex flex-wrap items-center gap-2 text-2xl font-bold tracking-tight md:text-3xl">
           <span className="font-mono">{caseReference(c.id)}</span>
           <Badge variant={c.status === "closed" ? "outline" : "secondary"}>{STATUS_LABELS[c.status]}</Badge>
           {c.outcome ? <Badge variant="outline">{OUTCOME_LABELS[c.outcome]}</Badge> : null}

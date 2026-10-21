@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { orNotFound } from "@/lib/or-not-found";
 import { DigestPreference } from "@/modules/notifications/components/digest-preference";
 import { TrainingReminderPreference } from "@/modules/notifications/components/training-reminder-preference";
 import { getMyDigestOptOut, getMyTrainingReminderOptOut } from "@/modules/notifications/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Email notifications" };
 
@@ -13,18 +14,16 @@ export default async function NotificationSettingsPage() {
   const trainingOptedOut = await orNotFound(getMyTrainingReminderOptOut());
 
   return (
-    <div className="w-full max-w-3xl space-y-6">
-      <div>
-        <Link href="/settings" className="text-sm text-primary underline-offset-4 hover:underline">
-          ← Settings
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold">Email notifications</h1>
-        <p className="mt-1 text-muted-foreground">Choose which emails ELEVATE sends you. Notifications inside ELEVATE (the bell) are not affected.</p>
-      </div>
+    <PageContainer width="form">
+      <PageHeader
+        title="Email notifications"
+        description="Choose which emails ELEVATE sends you. Notifications inside ELEVATE (the bell) are not affected."
+        breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Email notifications" }]}
+      />
       <div className="space-y-4 rounded-xl border bg-card p-4">
         <DigestPreference optedOut={optedOut} />
         <TrainingReminderPreference optedOut={trainingOptedOut} />
       </div>
-    </div>
+    </PageContainer>
   );
 }

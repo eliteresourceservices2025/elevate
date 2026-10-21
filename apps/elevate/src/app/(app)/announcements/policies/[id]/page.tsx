@@ -34,7 +34,7 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
         </Link>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold">{p.title}</h1>
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{p.title}</h1>
             {KIND_LABEL[p.kind] ? <Badge variant="outline">{KIND_LABEL[p.kind]}</Badge> : null}
           </div>
           {p.canManage && p.kind === "general" && p.current ? <PopupControl kind="policy" itemId={p.id} current={popup} today={today} /> : null}

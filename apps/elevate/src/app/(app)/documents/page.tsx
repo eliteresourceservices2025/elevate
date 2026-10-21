@@ -16,6 +16,8 @@ import { NewTypeForm, TypeRow } from "@/modules/documents/components/type-admin"
 import { BulkUpload } from "@/modules/documents/components/bulk-upload";
 import { UploadForm } from "@/modules/documents/components/upload-form";
 import { getDocumentOverview, getUploadOptions, listAllEmployeeDocuments, listCompanyDocuments, listDocumentTypes } from "@/modules/documents/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Documents" };
 
@@ -57,21 +59,23 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
   const types = isHr && tab === "types" ? await orNotFound(listDocumentTypes()) : null;
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Documents</h1>
-        <p className="mt-1 text-muted-foreground">
-          {isHr
-            ? "Files for every person and for the company, with expiry tracking."
-            : "Company policies and forms. Your own documents are on "}
-          {isHr ? null : (
-            <Link href="/people/me?tab=documents" className="text-primary underline-offset-4 hover:underline">
-              your profile
-            </Link>
-          )}
-          {isHr ? null : "."}
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Documents"
+        description={
+          <>
+            {isHr
+              ? "Files for every person and for the company, with expiry tracking."
+              : "Company policies and forms. Your own documents are on "}
+            {isHr ? null : (
+              <Link href="/people/me?tab=documents" className="text-primary underline-offset-4 hover:underline">
+                your profile
+              </Link>
+            )}
+            {isHr ? null : "."}
+          </>
+        }
+      />
 
       {isHr ? (
         <nav aria-label="Documents sections" className="flex flex-wrap gap-1 border-b">
@@ -282,6 +286,6 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
       ) : null}
 
       <p className="text-xs text-muted-foreground">Dates follow the {DEFAULT_TIMEZONE} calendar. Today is {formatDateOnly(today)}.</p>
-    </div>
+    </PageContainer>
   );
 }

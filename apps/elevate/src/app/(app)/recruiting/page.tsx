@@ -17,6 +17,8 @@ import { FormDialog } from "@/components/form-dialog";
 import { RetentionForm } from "@/modules/recruiting/components/opening-forms";
 import { STAGE_LABELS, STAGES } from "@/modules/recruiting/constants";
 import { getCalendarCard, getRecruitingSummary, getRetentionView, listOpenings } from "@/modules/recruiting/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Recruiting" };
 
@@ -36,33 +38,39 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
   const page = openings ? paginate(openings.rows, paging.page, paging.pageSize) : null;
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Recruiting</h1>
-          <p className="mt-1 text-muted-foreground">Jobs, applicants, interviews and scorecards. Applicants are kept apart from people records until they are hired.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <a href="/careers" target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline" })}>
-            View careers page <ExternalLink aria-hidden /> <span className="sr-only">(opens in a new tab)</span>
-          </a>
-          {scopeFor(user, "recruiting.manage_careers_page") ? (
-            <Link href="/recruiting/careers-page" className={buttonVariants({ variant: "outline" })}>
-              Edit careers page
-            </Link>
-          ) : null}
-          {retention ? (
-            <FormDialog label="Applicant data retention" title="Applicant data retention" variant="outline" size="lg">
-              <RetentionForm initial={{ enabled: retention.retentionEnabled, rejectedMonths: retention.rejectedMonths, withdrawnMonths: retention.withdrawnMonths }} />
-            </FormDialog>
-          ) : null}
-          {canManage ? (
-            <Link href="/recruiting/new" className={buttonVariants()}>
-              New job
-            </Link>
-          ) : null}
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Recruiting"
+        description="Jobs, applicants, interviews and scorecards. Applicants are kept apart from people records until they are hired."
+        actions={
+          <>
+            <a href="/careers" target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline" })}>
+              View careers page <ExternalLink aria-hidden /> <span className="sr-only">(opens in a new tab)</span>
+            </a>
+            {scopeFor(user, "recruiting.manage_careers_page") ? (
+              <Link href="/recruiting/careers-page" className={buttonVariants({ variant: "outline" })}>
+                Edit careers page
+              </Link>
+            ) : null}
+            {retention ? (
+              <FormDialog label="Applicant data retention" title="Applicant data retention" variant="outline" size="lg">
+                <RetentionForm
+                  initial={{
+                    enabled: retention.retentionEnabled,
+                    rejectedMonths: retention.rejectedMonths,
+                    withdrawnMonths: retention.withdrawnMonths,
+                  }}
+                />
+              </FormDialog>
+            ) : null}
+            {canManage ? (
+              <Link href="/recruiting/new" className={buttonVariants()}>
+                New job
+              </Link>
+            ) : null}
+          </>
+        }
+      />
 
       {summary ? (
         <section aria-label="Summary" className="space-y-2">
@@ -164,6 +172,6 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
           </>
         ) : null}
       </p>
-    </div>
+    </PageContainer>
   );
 }

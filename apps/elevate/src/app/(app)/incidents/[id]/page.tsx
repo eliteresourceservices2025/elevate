@@ -5,6 +5,8 @@ import { orNotFound } from "@/lib/or-not-found";
 import { IncidentThread, StatusBadge } from "@/modules/incidents/components/incident-panels";
 import { kindLabel } from "@/modules/incidents/constants";
 import { getIncident } from "@/modules/incidents/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Privacy incident" };
 
@@ -22,19 +24,21 @@ export default async function IncidentPage({ params }: PageProps<"/incidents/[id
   if (!incident) notFound();
 
   return (
-    <div className="w-full max-w-3xl space-y-6">
+    <PageContainer width="form">
       <p className="text-sm">
         <Link href="/incidents" className="text-primary underline-offset-4 hover:underline">
           Back to privacy incidents
         </Link>
       </p>
-      <div>
-        <h1 className="text-2xl font-bold">{incident.reference}</h1>
-        <p className="mt-1 flex flex-wrap items-center gap-2 text-muted-foreground">
-          {kindLabel(incident.kind)}
-          <StatusBadge status={incident.status} ongoing={incident.ongoing && incident.status !== "closed"} />
-        </p>
-      </div>
+      <PageHeader
+        title={incident.reference}
+        description={
+          <>
+            {kindLabel(incident.kind)}
+            <StatusBadge status={incident.status} ongoing={incident.ongoing && incident.status !== "closed"} />
+          </>
+        }
+      />
       <dl className="space-y-4 rounded-xl border bg-card p-4">
         <Field label="Filed by" value={incident.from} />
         <Field label="Client" value={incident.client} />
@@ -45,6 +49,6 @@ export default async function IncidentPage({ params }: PageProps<"/incidents/[id
         <Field label="Already done" value={incident.actionsTaken} />
       </dl>
       <IncidentThread incident={incident} canHandleThis={incident.isHandler && !incident.isOwner} />
-    </div>
+    </PageContainer>
   );
 }

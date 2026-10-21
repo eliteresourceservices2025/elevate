@@ -35,7 +35,7 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
         <Link href={`/recruiting/${opening.id}`} className="text-sm text-primary underline-offset-4 hover:underline">
           ← {opening.title}
         </Link>
-        <h1 className="mt-2 flex flex-wrap items-center gap-3 text-2xl font-bold">
+        <h1 className="mt-2 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight md:text-3xl">
           {name}
           <Badge variant={app.stage === "hired" ? "default" : app.stage === "rejected" ? "destructive" : "secondary"}>{STAGE_LABELS[app.stage]}</Badge>
         </h1>

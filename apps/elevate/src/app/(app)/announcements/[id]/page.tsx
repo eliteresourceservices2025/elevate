@@ -39,7 +39,7 @@ export default async function AnnouncementPage({ params }: PageProps<"/announcem
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             {a.pinned ? <Pin className="size-5 text-primary" aria-label="Pinned" /> : null}
-            <h1 className="text-2xl font-bold">{a.title}</h1>
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{a.title}</h1>
           </div>
           {a.canManage ? <PopupControl kind="announcement" itemId={a.id} current={popup} today={today} /> : null}
         </div>

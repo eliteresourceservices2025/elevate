@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { CHANGE_CATEGORY_LABELS, CHANGE_STATUSES, DATA_RIGHTS_LABELS, type ChangeStatus, type DataRightsKind } from "@/modules/people/constants";
 import { RequestReview } from "@/modules/people/components/request-review";
 import { listChangeRequests } from "@/modules/people/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Change requests" };
 
@@ -74,17 +76,12 @@ export default async function RequestsPage({ searchParams }: PageProps<"/people/
   const { rows: requests, info } = paginate(all, paging.page, paging.pageSize);
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/people" className="text-sm text-primary underline-offset-4 hover:underline">
-          ← People
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold">Change requests</h1>
-        <p className="mt-1 text-muted-foreground">
-          People ask for changes to their contact details, emergency contacts and bank details. Approve to apply them. You cannot
-          review a request on your own record.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Change requests"
+        description="People ask for changes to their contact details, emergency contacts and bank details. Approve to apply them. You cannot review a request on your own record."
+        breadcrumbs={[{ label: "People", href: "/people" }, { label: "Change requests" }]}
+      />
 
       <nav aria-label="Status" className="flex gap-1 border-b">
         {(["pending", "approved", "rejected"] as const).map((s) => (
@@ -119,6 +116,6 @@ export default async function RequestsPage({ searchParams }: PageProps<"/people/
         ))}
       </ul>
       <PagerLinks info={info} basePath="/people/requests" query={{ status }} defaultSize={10} label="requests" />
-    </div>
+    </PageContainer>
   );
 }

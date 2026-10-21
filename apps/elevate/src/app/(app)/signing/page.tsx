@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { SIGNER_STATUS_LABELS, STATUS_LABELS } from "@/modules/signing/constants";
 import { ArchiveTemplateButton, NewTemplateForm } from "@/modules/signing/components/envelope-forms";
 import { listEnvelopes, listMySigning, listTemplates, type EnvelopeFilter } from "@/modules/signing/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Signing" };
 
@@ -36,23 +38,28 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
   const waiting = mine?.filter((m) => m.myStatus === "pending" && m.envelopeStatus === "out").length ?? 0;
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Signing</h1>
-          <p className="mt-1 text-muted-foreground">ELEVATE Sign: agreements and forms signed electronically, sealed with a certificate. Anyone can check a signed copy on the public{" "}
+    <PageContainer>
+      <PageHeader
+        title="Signing"
+        description={
+          <>
+            ELEVATE Sign: agreements and forms signed electronically, sealed with a certificate. Anyone can check a signed copy on the public{" "}
             <Link href="/verify" className="text-primary underline-offset-4 hover:underline">
               Verify document
             </Link>{" "}
             page.
-          </p>
-        </div>
-        {manage ? (
-          <Link href="/signing/new" className={buttonVariants()}>
-            Send a document
-          </Link>
-        ) : null}
-      </div>
+          </>
+        }
+        actions={
+          <>
+            {manage ? (
+              <Link href="/signing/new" className={buttonVariants()}>
+                Send a document
+              </Link>
+            ) : null}
+          </>
+        }
+      />
 
       {tabs.length > 1 ? (
         <nav aria-label="Signing sections" className="flex flex-wrap gap-1 border-b">
@@ -193,6 +200,6 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
           <NewTemplateForm />
         </section>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

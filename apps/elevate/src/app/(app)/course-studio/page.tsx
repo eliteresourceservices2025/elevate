@@ -7,6 +7,8 @@ import {
   type StudioListCourse,
 } from "@/modules/learn/components/studio-course-list";
 import { getStudioCourses, listAddonClients } from "@/modules/learn/studio-queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Course studio" };
 
@@ -39,25 +41,23 @@ export default async function CourseStudioPage() {
   });
 
   return (
-    <div className="w-full space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="max-w-3xl">
-          <h1 className="text-2xl font-bold">Course studio</h1>
-          <p className="mt-1 text-muted-foreground">
-            Read the training courses, see what changed between versions, and edit the wording and
-            exam questions. A published version never changes: an edit is always a new version that
-            someone other than the editor publishes.
-          </p>
-        </div>
-        <FormDialog
-          label="New client add-on"
-          title="New client add-on"
-          description="A short course for the people assigned to one client. Nothing is assigned until you publish it."
-          size="lg"
-        >
-          <NewAddonForm clients={addonClients} />
-        </FormDialog>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Course studio"
+        description="Read the training courses, see what changed between versions, and edit the wording and exam questions. A published version never changes: an edit is always a new version that someone other than the editor publishes."
+        actions={
+          <>
+            <FormDialog
+              label="New client add-on"
+              title="New client add-on"
+              description="A short course for the people assigned to one client. Nothing is assigned until you publish it."
+              size="lg"
+            >
+              <NewAddonForm clients={addonClients} />
+            </FormDialog>
+          </>
+        }
+      />
 
       {list.length === 0 ? (
         <p className="rounded-xl border p-6 text-sm text-muted-foreground">
@@ -66,6 +66,6 @@ export default async function CourseStudioPage() {
       ) : (
         <StudioCourseList courses={list} />
       )}
-    </div>
+    </PageContainer>
   );
 }
