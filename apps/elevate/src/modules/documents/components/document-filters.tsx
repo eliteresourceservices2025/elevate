@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { cn } from "@/lib/utils";
 import type { DocumentRow, FolderRow } from "../queries";
+import type { CategorizeOptions } from "./categorize-document";
 import { DocumentList } from "./document-list";
 import { TypeBadge } from "./type-badge";
 
@@ -97,6 +98,7 @@ export function GroupedDocuments({
   viewerIsHr,
   showAudience,
   emptyText,
+  categorize,
 }: {
   rows: DocumentRow[];
   group: Exclude<GroupBy, "none">;
@@ -104,6 +106,7 @@ export function GroupedDocuments({
   viewerIsHr: boolean;
   showAudience?: boolean;
   emptyText: string;
+  categorize?: CategorizeOptions;
 }) {
   const sections = useMemo(() => {
     const map = new Map<string, { key: string; label: string; slug?: string; rows: DocumentRow[] }>();
@@ -126,7 +129,7 @@ export function GroupedDocuments({
             {s.slug ? <TypeBadge slug={s.slug} name={s.label} /> : s.label}
             <span className="text-xs font-normal text-muted-foreground">{s.rows.length}</span>
           </h3>
-          <DocumentList rows={s.rows} viewerIsHr={viewerIsHr} showAudience={showAudience} folders={folders} emptyText={emptyText} />
+          <DocumentList rows={s.rows} viewerIsHr={viewerIsHr} showAudience={showAudience} folders={folders} emptyText={emptyText} categorize={categorize} />
         </section>
       ))}
     </div>

@@ -29,7 +29,7 @@ test("HR uploads a document, downloads it, and a disguised file is refused", asy
     await page.getByLabel("Title").fill(title);
     await page.locator("#up-file").setInputFiles(file);
     await page.getByLabel("This file contains no client or patient information.").check();
-    await page.getByRole("button", { name: "Upload" }).click();
+    await page.getByRole("button", { name: "Upload", exact: true }).click();
   };
 
   // A real PDF is accepted, saved as verified (HR uploaded it), and downloads byte for byte

@@ -92,6 +92,8 @@ const EXPECTED: Record<string, string> = {
   "recruiting.download_resume": "A A T A - -",
   "recruiting.connect_calendar": "O O - O - -", // your own Google Calendar only
   "recruiting.manage_retention": "A A - - - -",
+  "recruiting.delete_opening": "A A - - - -",
+  "recruiting.delete_application": "A - - - - -", // Super Admin only: erases an application for good
   "people.manage_retention": "A A - - - -",
   "offers.manage_templates": "A A - - - -",
   "offers.make": "A A - A - -",

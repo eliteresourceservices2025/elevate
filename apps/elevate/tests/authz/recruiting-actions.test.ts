@@ -38,6 +38,8 @@ const cases: { name: string; allowed: RoleSlug[]; call: () => Promise<{ ok: bool
   { name: "saveCareersPage", allowed: MANAGERS, call: () => actions.saveCareersPage({ title: "Join us", intro: "Hello" }) },
   { name: "removeCareersBanner", allowed: MANAGERS, call: () => actions.removeCareersBanner() },
   { name: "saveRetention", allowed: HR, call: () => actions.saveRetention({ enabled: false, rejectedMonths: 12, withdrawnMonths: 6 }) },
+  { name: "deleteOpening", allowed: HR, call: () => actions.deleteOpening({ id: ID }) },
+  { name: "deleteApplication", allowed: ["super_admin"], call: () => actions.deleteApplication({ applicationId: ID, confirm: "DELETE" }) },
 ];
 
 beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));

@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { getUploadOptions, listEmployeeDocuments, listEmployeeFolders } from "../queries";
 import { DocumentLibrary } from "./document-library";
+import { BulkUpload } from "./bulk-upload";
 import { UploadForm } from "./upload-form";
 
 /** The Documents tab on a profile: the person's files, plus the upload form for anyone allowed to add. */
@@ -14,11 +15,12 @@ export async function EmployeeDocuments({ employeeId, canUpload }: { employeeId:
 
   return (
     <div className="space-y-6">
-      <DocumentLibrary employeeId={employeeId} rows={rows} folders={folders} canOrganize={canUpload} viewerIsHr={can(user, "documents.verify")} />
+      <DocumentLibrary employeeId={employeeId} rows={rows} folders={folders} canOrganize={canUpload} viewerIsHr={can(user, "documents.verify")} categorize={options ? { types: options.types, clients: options.clients, today } : undefined} />
       {options ? (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Upload a document</h2>
           <UploadForm target="employee" employeeId={employeeId} types={options.types} clients={options.clients} folders={folders} today={today} />
+          <BulkUpload target="employee" employeeId={employeeId} types={options.types} />
         </section>
       ) : null}
     </div>

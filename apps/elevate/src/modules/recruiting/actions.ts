@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -18,11 +18,14 @@ import { queueEmails } from "@/modules/notifications/email-queue";
 import { notify } from "@/modules/notifications/service";
 import { canMove } from "./constants";
 import { buildInterviewIcs, interviewMail, rejectionMail } from "./mail";
-import { applicationStageHistory, applications, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
+import { deleteApplicantSelfId } from "@/modules/demographics/service";
+import { offers } from "@/modules/offers/schema";
+import { onboardingCases } from "@/modules/onboarding/schema";
+import { applicationStageHistory, applications, candidateEmails, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
 import { sendRecruitingEmailsNow } from "./immediate";
 import { authorizeForOpening, freeSlug, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
 import { clearBanner } from "./careers-banner";
-import { careersPageSchema, cancelInterviewSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
+import { careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
 const MANILA = "Asia/Manila";
@@ -132,6 +135,36 @@ export async function setOpeningStatus(input: unknown): Promise<ActionResult> {
   });
 }
 
+/**
+ * Removes a job ad from the lists. A job nobody applied to is erased; one that has applications is archived instead (hidden, with its
+ * applications kept for the retention rules), so a delete never destroys an applicant record by accident.
+ */
+export async function deleteOpening(input: unknown): Promise<ActionResult<{ erased: boolean }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.delete_opening");
+    const parsed = deleteOpeningSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { id } = parsed.data;
+    const erased = await db.transaction(async (tx) => {
+      const [before] = await tx.select().from(jobOpenings).where(and(eq(jobOpenings.id, id), isNull(jobOpenings.archivedAt))).for("update");
+      if (!before) throw new ActionFailure("That job was not found.");
+      const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(applications).where(eq(applications.openingId, id));
+      if (n === 0) {
+        await tx.delete(openingHiringTeam).where(eq(openingHiringTeam.openingId, id));
+        await tx.delete(jobOpenings).where(eq(jobOpenings.id, id));
+      } else {
+        await tx.update(jobOpenings).set({ status: "closed", closedAt: before.closedAt ?? new Date(), archivedAt: new Date(), updatedAt: new Date() }).where(eq(jobOpenings.id, id));
+      }
+      await writeAudit({ actor, action: "recruiting.opening_delete", targetType: "job_opening", targetId: id, before: { status: before.status, title: before.title }, metadata: { erased: n === 0, applications: n } }, tx);
+      return n === 0;
+    });
+    revalidatePath("/careers");
+    refresh(id);
+    return { ok: true, data: { erased } };
+  });
+}
+
 // ---- Pipeline -------------------------------------------------------------------------------------------------------------
 
 export async function moveApplication(input: unknown): Promise<ActionResult> {
@@ -157,6 +190,56 @@ export async function moveApplication(input: unknown): Promise<ActionResult> {
     });
     refresh(openingId, applicationId);
     return { ok: true, data: undefined };
+  });
+}
+
+/**
+ * Erases one application for good, with the applicant, notes, interviews, scorecards and resume if it was their only one. For test
+ * data (Super Admin only). Refused once an offer or onboarding exists: those hold signed documents and a person record. The
+ * append-only tables are opened for this transaction only, the same way the retention job does it.
+ */
+export async function deleteApplication(input: unknown): Promise<ActionResult<{ openingId: string }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.delete_application");
+    const parsed = deleteApplicationSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { applicationId } = parsed.data;
+    const done = await db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('talent.retention', 'on', true)`);
+      const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
+      if (!app) throw new ActionFailure("That application was not found.");
+      const [offer] = await tx.select({ id: offers.id }).from(offers).where(eq(offers.applicationId, applicationId)).limit(1);
+      const [onboarding] = await tx.select({ id: onboardingCases.id }).from(onboardingCases).where(eq(onboardingCases.applicationId, applicationId)).limit(1);
+      if (offer || onboarding || app.stage === "hired") throw new ActionFailure("This applicant has an offer or was hired, so it cannot be erased.");
+      const ivs = await tx.select({ id: interviews.id, eventId: interviews.googleEventId, calendarUserId: interviews.calendarUserId, status: interviews.status }).from(interviews).where(eq(interviews.applicationId, applicationId));
+      const ivIds = ivs.map((i) => i.id);
+      if (ivIds.length) {
+        await tx.delete(scorecards).where(inArray(scorecards.interviewId, ivIds));
+        await tx.delete(interviewers).where(inArray(interviewers.interviewId, ivIds));
+      }
+      await tx.delete(interviews).where(eq(interviews.applicationId, applicationId));
+      await tx.delete(candidateNotes).where(eq(candidateNotes.applicationId, applicationId));
+      await tx.delete(candidateEmails).where(eq(candidateEmails.applicationId, applicationId));
+      await tx.delete(applicationStageHistory).where(eq(applicationStageHistory.applicationId, applicationId));
+      await tx.delete(applications).where(eq(applications.id, applicationId));
+      // The applicant goes too when this was their only application.
+      const [other] = await tx.select({ id: applications.id }).from(applications).where(eq(applications.candidateId, app.candidateId)).limit(1);
+      let resumePath: string | null = null;
+      if (!other) {
+        const [c] = await tx.select({ resumePath: candidates.resumePath }).from(candidates).where(eq(candidates.id, app.candidateId));
+        resumePath = c?.resumePath ?? null;
+        await deleteApplicantSelfId(tx, app.candidateId);
+        await tx.delete(candidates).where(eq(candidates.id, app.candidateId));
+      }
+      // Ids and counts only, never the applicant's name.
+      await writeAudit({ actor, action: "recruiting.application_erase", targetType: "application", targetId: applicationId, before: { stage: app.stage }, metadata: { openingId: app.openingId, interviews: ivIds.length, applicantErased: !other } }, tx);
+      return { openingId: app.openingId, resumePath, events: ivs.filter((i) => i.eventId && i.calendarUserId && i.status === "scheduled") };
+    });
+    if (done.resumePath) await getDocumentStorage().remove(BUCKETS.recruiting, [done.resumePath]);
+    for (const e of done.events) await deleteInterviewEvent(e.calendarUserId!, e.eventId!); // best effort: a failure only leaves a calendar event to delete by hand
+    refresh(done.openingId, applicationId);
+    return { ok: true, data: { openingId: done.openingId } };
   });
 }
 

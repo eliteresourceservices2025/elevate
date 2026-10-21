@@ -1,4 +1,4 @@
-import { BadgeCheck, ClipboardList, File, FileSignature, FileUser, GraduationCap, IdCard, Lock, ScrollText, SearchCheck, ShieldCheck, type LucideIcon } from "lucide-react";
+import { BadgeCheck, ClipboardList, File, FileSignature, FileUser, FolderInput, GraduationCap, IdCard, Lock, ScrollText, SearchCheck, ShieldCheck, type LucideIcon } from "lucide-react";
 
 // How a document type looks. The colour tells the CATEGORY apart at a glance (identity and checks, training, agreements, company, other)
 // and the icon tells the type. A type HR adds later falls back to "Other" until it is given a place here. Class names are written out in
@@ -31,6 +31,8 @@ const TYPES: Record<string, { category: DocumentCategory; icon: LucideIcon }> = 
   contract: { category: "agreements", icon: FileSignature },
   signed_document: { category: "agreements", icon: FileSignature },
   client_confidentiality: { category: "agreements", icon: Lock },
+  unsorted_employee: { category: "other", icon: FolderInput },
+  unsorted_company: { category: "company", icon: FolderInput },
   resume: { category: "other", icon: FileUser },
   other_employee: { category: "other", icon: File },
   company_policy: { category: "company", icon: ScrollText },

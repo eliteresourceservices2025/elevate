@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateOnly } from "@/lib/time";
+import { CategorizeDocument, type CategorizeOptions } from "./categorize-document";
 import { archiveDocument, getDownloadUrl, moveDocument, verifyDocument } from "../actions";
 import type { ExpiryStatus } from "../expiry";
 import { formatBytes } from "../files";
@@ -64,6 +65,7 @@ export function DocumentList({
   showAudience = false,
   emptyText = "No documents yet.",
   folders,
+  categorize,
 }: {
   rows: DocumentRow[];
   viewerIsHr: boolean;
@@ -71,6 +73,8 @@ export function DocumentList({
   emptyText?: string;
   /** When given, each open document gets a "Move to" choice with these folders. */
   folders?: FolderRow[];
+  /** When given, each open document gets a "Set type" / "Change type" button. */
+  categorize?: CategorizeOptions;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -147,6 +151,7 @@ export function DocumentList({
                       ))}
                     </select>
                   ) : null}
+                  {categorize && !r.archived && (viewerIsHr || !r.verified) ? <CategorizeDocument row={r} options={categorize} /> : null}
                   <DownloadButton documentId={r.id} label={r.title} />
                   {viewerIsHr && !showAudience && !r.archived ? (
                     <Button

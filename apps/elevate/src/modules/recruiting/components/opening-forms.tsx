@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useFormDialog } from "@/components/form-dialog";
 import { useWarnWhenEdited } from "@/components/unsaved-changes";
-import { saveOpening, saveRetention, setOpeningStatus } from "../actions";
+import { deleteOpening, saveOpening, saveRetention, setOpeningStatus } from "../actions";
 import type { OpeningStatus } from "../constants";
 import type { PersonChoice } from "../queries";
 import { useRun } from "./use-run";
@@ -107,6 +107,17 @@ export function OpeningStatusButtons({ id, status }: { id: string; status: Openi
         </Button>
       )}
     </div>
+  );
+}
+
+/** Removes the job ad. A job with applications is hidden instead of erased, and the message says which happened. */
+export function DeleteOpeningButton({ id, applications }: { id: string; applications: number }) {
+  const { run, pending, router } = useRun();
+  const warning = applications > 0 ? `Delete this job? It has ${applications} application${applications === 1 ? "" : "s"}, so it is hidden from every list and the applications are kept under the retention rules.` : "Delete this job for good? Nobody has applied to it.";
+  return (
+    <Button size="sm" variant="outline" className="text-destructive" disabled={pending} onClick={() => window.confirm(warning) && run(() => deleteOpening({ id }), (d) => (d?.erased ? "Job deleted." : "Job removed from the lists."), () => router.push("/recruiting"))}>
+      Delete job
+    </Button>
   );
 }
 

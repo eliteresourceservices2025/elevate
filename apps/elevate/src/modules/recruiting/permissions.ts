@@ -14,5 +14,8 @@ export const recruitingPermissions = definePermissions({
   "recruiting.connect_calendar": { roles: { super_admin: "own", hr_admin: "own", recruiter: "own" } },
   // The wording and banner of the public careers page.
   "recruiting.manage_careers_page": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
+  // Removing a job ad (HR) and erasing one application for good (Super Admin only, for test data).
+  "recruiting.delete_opening": { roles: { super_admin: "all", hr_admin: "all" } },
+  "recruiting.delete_application": { roles: { super_admin: "all" } },
   "recruiting.manage_retention": { roles: { super_admin: "all", hr_admin: "all" } },
 });

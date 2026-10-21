@@ -16,6 +16,7 @@ test("a person shares pronouns, gender and religion on their profile; colleagues
   const me = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(me, account);
   await me.goto("/people/me");
+  await me.getByRole("button", { name: "Edit about me" }).click();
   await expect(me.getByRole("heading", { name: "About me (optional)" })).toBeVisible(slow);
   await expect(me.getByText(/Only you can see your gender and religion/)).toBeVisible();
   await waitForHydration(me, "#me-gender");
@@ -32,6 +33,7 @@ test("a person shares pronouns, gender and religion on their profile; colleagues
 
   // It is still there after a reload
   await me.reload();
+  await me.getByRole("button", { name: "Edit about me" }).click();
   await waitForHydration(me, "#me-gender");
   await expect(me.getByLabel("Gender")).toHaveValue("woman");
   await expect(me.getByLabel("Religion")).toHaveValue("islam");
@@ -54,11 +56,14 @@ test("a person shares pronouns, gender and religion on their profile; colleagues
   expect(body).not.toMatch(/Islam|Agender|Religion/);
 
   // The person removes everything
+  await me.getByRole("button", { name: "Edit about me" }).click();
+  await waitForHydration(me, "#me-gender");
   me.once("dialog", (d) => d.accept());
   await me.getByRole("button", { name: "Remove all my answers" }).click();
   await expect(me.getByText("Removed.")).toBeVisible(slow);
   await expect(me.getByRole("heading", { level: 1 })).not.toContainText("(she/her)", slow);
   await me.reload();
+  await me.getByRole("button", { name: "Edit about me" }).click();
   await waitForHydration(me, "#me-gender");
   await expect(me.getByLabel("Gender")).toHaveValue("");
   await expect(me.getByLabel("Pronouns")).toHaveValue("");

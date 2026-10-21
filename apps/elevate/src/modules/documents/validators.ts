@@ -32,6 +32,16 @@ export const renameFolderSchema = z.object({ folderId: uuid, name: folderName })
 export const folderIdSchema = z.object({ folderId: uuid });
 export const moveDocumentSchema = z.object({ documentId: uuid, folderId: uuid.nullable() });
 
+export const changeDocumentTypeSchema = z.object({
+  documentId: uuid,
+  typeId: uuid,
+  title: name("a title"),
+  clientId: z.preprocess(blankToUndefined, uuid.optional()),
+  expiresOn: z.preprocess(blankToUndefined, isoDate.optional()),
+  /** Company files only: who may read it. */
+  audience: z.enum(["all_staff", "hr_only"]).optional(),
+});
+
 export const verifyDocumentSchema = z.object({ documentId: uuid, verified: z.boolean() });
 
 export const documentTypeSchema = z.object({

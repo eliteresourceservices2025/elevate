@@ -23,6 +23,9 @@ export const openingSchema = z.object({
 });
 export type OpeningInput = z.input<typeof openingSchema>;
 
+export const deleteOpeningSchema = z.object({ id: uuid });
+export const deleteApplicationSchema = z.object({ applicationId: uuid, confirm: z.literal("DELETE", { error: "Type DELETE to confirm." }) });
+
 export const setOpeningStatusSchema = z.object({ id: uuid, status: z.enum(OPENING_STATUSES) });
 
 /** The public apply form. The honeypot must be empty; consent must be ticked. */
