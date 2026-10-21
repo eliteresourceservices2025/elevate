@@ -12,9 +12,9 @@ import { removeProfilePhoto } from "../photo-actions";
 /** The big picture at the top of a profile: the photo, or the initials. */
 export function ProfilePicture({ initials, photo }: { initials: string; photo: { userId: string; version: number } | null }) {
   return (
-    <Avatar className="size-16 text-lg">
+    <Avatar className="size-16 text-lg md:size-20">
       {photo ? <AvatarImage src={`/api/profile-photo/${photo.userId}?v=${photo.version}`} alt="" /> : null}
-      <AvatarFallback className="bg-primary text-xl font-semibold text-primary-foreground">{initials}</AvatarFallback>
+      <AvatarFallback className="bg-primary text-xl font-semibold text-primary-foreground md:text-2xl">{initials}</AvatarFallback>
     </Avatar>
   );
 }

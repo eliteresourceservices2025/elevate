@@ -5,6 +5,25 @@ import { cn } from "@/lib/utils";
 
 export type Crumb = { label: string; href?: string };
 
+/** A breadcrumb trail. The last crumb is the current page and is not a link. */
+export function Breadcrumbs({ items }: { items: Crumb[] }) {
+  if (items.length === 0) return null;
+  return (
+    <Breadcrumb>
+      <BreadcrumbList>
+        {items.map((crumb, i) => (
+          <Fragment key={`${crumb.label}-${i}`}>
+            {i > 0 ? <BreadcrumbSeparator /> : null}
+            <BreadcrumbItem>
+              {crumb.href && i < items.length - 1 ? <BreadcrumbLink render={<Link href={crumb.href} />}>{crumb.label}</BreadcrumbLink> : <BreadcrumbPage>{crumb.label}</BreadcrumbPage>}
+            </BreadcrumbItem>
+          </Fragment>
+        ))}
+      </BreadcrumbList>
+    </Breadcrumb>
+  );
+}
+
 /**
  * The heading of a page: an optional breadcrumb trail, the title (the page's one h1), a short description and the page's actions.
  * The last crumb is the current page and is not a link. Actions wrap under the title on a phone.
@@ -12,20 +31,7 @@ export type Crumb = { label: string; href?: string };
 export function PageHeader({ title, description, actions, breadcrumbs, className }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; breadcrumbs?: Crumb[]; className?: string }) {
   return (
     <header className={cn("flex flex-col gap-2", className)}>
-      {breadcrumbs && breadcrumbs.length > 0 ? (
-        <Breadcrumb>
-          <BreadcrumbList>
-            {breadcrumbs.map((crumb, i) => (
-              <Fragment key={`${crumb.label}-${i}`}>
-                {i > 0 ? <BreadcrumbSeparator /> : null}
-                <BreadcrumbItem>
-                  {crumb.href && i < breadcrumbs.length - 1 ? <BreadcrumbLink render={<Link href={crumb.href} />}>{crumb.label}</BreadcrumbLink> : <BreadcrumbPage>{crumb.label}</BreadcrumbPage>}
-                </BreadcrumbItem>
-              </Fragment>
-            ))}
-          </BreadcrumbList>
-        </Breadcrumb>
-      ) : null}
+      {breadcrumbs ? <Breadcrumbs items={breadcrumbs} /> : null}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="min-w-[min(100%,18rem)] flex-1">
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{title}</h1>

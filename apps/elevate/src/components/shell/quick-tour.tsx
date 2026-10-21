@@ -64,13 +64,21 @@ export function QuickTour({ autoStart }: { autoStart: boolean }) {
     window.addEventListener(START_TOUR_EVENT, onStart);
     return () => window.removeEventListener(START_TOUR_EVENT, onStart);
   }, [start]);
+  // The start timer is not cleared by this effect's cleanup: taking ?tour=1 off the address (router.replace) changes `params`, which re-runs the
+  // effect, and on a fast connection that happened before the 500 ms were up and cancelled the start. The ref makes sure it starts once per visit.
+  const linkStarted = useRef(false);
   useEffect(() => {
-    if (params.get("tour") !== "1") return;
+    if (params.get("tour") !== "1") {
+      linkStarted.current = false;
+      return;
+    }
+    if (!linkStarted.current) {
+      linkStarted.current = true;
+      window.setTimeout(start, 500);
+    }
     const rest = new URLSearchParams(params.toString());
     rest.delete("tour");
     router.replace(rest.size > 0 ? `${pathname}?${rest}` : pathname, { scroll: false });
-    const t = window.setTimeout(start, 500);
-    return () => window.clearTimeout(t);
   }, [params, pathname, router, start]);
 
   // Follow the thing being pointed at (it can move: a scroll, a resized window, the menu opening).

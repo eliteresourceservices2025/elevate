@@ -72,7 +72,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
               Search
             </Label>
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-            <Input id="q" name="q" defaultValue={query.q ?? ""} placeholder="Search people" className="h-control-lg pl-9" />
+            <Input id="q" name="q" defaultValue={query.q ?? ""} placeholder="Search people" className="h-(--control-h-lg) pl-9" />
           </div>
           {/* A plain checkbox shows and hides the other filters below the tablet width, with no script. Not part of the search (no name). */}
           <input id="filters-toggle" type="checkbox" defaultChecked={activeFilters > 0} className="peer sr-only sm:hidden" />
@@ -85,7 +85,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
               <Label htmlFor="status" className="sr-only">
                 Status
               </Label>
-              <NativeSelect id="status" name="status" defaultValue={query.status ?? ""} className="h-control-lg w-full sm:w-36">
+              <NativeSelect id="status" name="status" defaultValue={query.status ?? ""} className="h-(--control-h-lg) w-full sm:w-36">
                 <option value="">All statuses</option>
                 {EMPLOYEE_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -98,7 +98,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
               <Label htmlFor="team" className="sr-only">
                 Team
               </Label>
-              <NativeSelect id="team" name="team" defaultValue={query.team ?? ""} className="h-control-lg w-full sm:w-40">
+              <NativeSelect id="team" name="team" defaultValue={query.team ?? ""} className="h-(--control-h-lg) w-full sm:w-40">
                 <option value="">All teams</option>
                 {teamOptions.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -112,7 +112,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
                 <Label htmlFor="client" className="sr-only">
                   Client
                 </Label>
-                <NativeSelect id="client" name="client" defaultValue={query.client ?? ""} className="h-control-lg w-full sm:w-44">
+                <NativeSelect id="client" name="client" defaultValue={query.client ?? ""} className="h-(--control-h-lg) w-full sm:w-44">
                   <option value="">All clients</option>
                   {clientOptions.map((c) => (
                     <option key={c.id} value={c.id}>

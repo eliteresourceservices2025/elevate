@@ -15,6 +15,7 @@ test("HR registers and assigns an item, the person sees it, and the analytics da
   await signInEnrollingMfa(hr, await createHrAccount());
 
   await hr.goto("/assets");
+  await hr.getByRole("button", { name: "Register an item" }).click();
   await waitForHydration(hr, "#asset-tag");
   await hr.getByLabel("Asset tag").fill(tag);
   await hr.getByLabel("Name", { exact: true }).fill(`E2E laptop ${stamp}`);

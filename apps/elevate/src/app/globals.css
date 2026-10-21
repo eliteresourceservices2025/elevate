@@ -45,10 +45,6 @@
   --color-info-foreground: var(--info-foreground);
   --color-info-surface: var(--info-surface);
 
-  /* One control-height scale: h-control-sm / h-control / h-control-lg. Buttons, inputs and selects use it so a row of them lines up. */
-  --spacing-control-sm: 1.75rem;
-  --spacing-control: 2rem;
-  --spacing-control-lg: 2.25rem;
 
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -77,6 +73,11 @@
 
 /* Light theme. Main color #6c1aba (the ERS website purple), gold as the accent. Text is a neutral deep ink, not violet. */
 :root {
+  /* One control-height scale: h-(--control-h-sm), h-(--control-h), h-(--control-h-lg). Buttons, inputs and selects use it so a row of them lines up.
+     The variable form (not a custom class name) is what lets cn() replace it when a component passes its own h-11. */
+  --control-h-sm: 1.75rem;
+  --control-h: 2rem;
+  --control-h-lg: 2.25rem;
   color-scheme: light;
   --background: #faf8ff;
   --foreground: #231a33;
