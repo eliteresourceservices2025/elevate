@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { authorize } from "@/lib/authz";
@@ -9,6 +8,8 @@ import { listOrgOptions } from "@/modules/org/queries";
 import { EmployeeForm } from "@/modules/people/components/employee-form";
 import { displayName } from "@/modules/people/format";
 import { getProfile } from "@/modules/people/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Edit person" };
 
@@ -22,14 +23,18 @@ export default async function EditPersonPage({ params }: PageProps<"/people/[id]
   const options = await orNotFound(listOrgOptions());
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <Link href={`/people/${id}`} className="text-sm text-primary underline-offset-4 hover:underline">
-          ← {displayName(e)}
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">Edit {displayName(e)}</h1>
-        <p className="mt-1 text-muted-foreground">Changes are written to the history and the audit log. IDs and bank details are edited on their own tabs.</p>
-      </div>
+    <PageContainer width="form">
+      <PageHeader
+        title={<>Edit {displayName(e)}</>}
+        description={
+          <>
+            <p className="mt-1 text-muted-foreground">
+              Changes are written to the history and the audit log. IDs and bank details are edited on their own tabs.
+            </p>
+          </>
+        }
+        breadcrumbs={[{ label: `${displayName(e)}`, href: `/people/${id}` }, { label: `Edit ${displayName(e)}` }]}
+      />
       <EmployeeForm
         mode="edit"
         employeeId={id}
@@ -56,6 +61,6 @@ export default async function EditPersonPage({ params }: PageProps<"/people/[id]
           endDate: e.endDate ?? "",
         }}
       />
-    </div>
+    </PageContainer>
   );
 }

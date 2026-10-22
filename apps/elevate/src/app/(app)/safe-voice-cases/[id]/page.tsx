@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
@@ -7,6 +6,8 @@ import { CaseControls } from "@/modules/safevoice/components/case-controls";
 import { CATEGORY_LABELS, OUTCOME_LABELS, STATUS_LABELS, caseReference } from "@/modules/safevoice/constants";
 import { SafevoiceNotConfigured } from "@/modules/safevoice/handler-db";
 import { getCase, type CaseDetail } from "@/modules/safevoice/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Safe Voice case" };
 
@@ -40,21 +41,25 @@ export default async function SafeVoiceCasePage({ params }: PageProps<"/safe-voi
   if (!c) notFound();
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/safe-voice-cases" className="text-sm text-primary underline-offset-2 hover:underline">
-          All cases
-        </Link>
-        <h1 className="mt-1 flex flex-wrap items-center gap-2 text-2xl font-bold tracking-tight md:text-3xl">
-          <span className="font-mono">{caseReference(c.id)}</span>
-          <Badge variant={c.status === "closed" ? "outline" : "secondary"}>{STATUS_LABELS[c.status]}</Badge>
-          {c.outcome ? <Badge variant="outline">{OUTCOME_LABELS[c.outcome]}</Badge> : null}
-        </h1>
-        <p className="text-muted-foreground">
-          {CATEGORY_LABELS[c.category]}. Received {c.createdDay}
-          {c.closedDay ? `, closed ${c.closedDay}` : ""}. Days are UTC dates: no time of day is kept.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-mono">{caseReference(c.id)}</span>
+            <Badge variant={c.status === "closed" ? "outline" : "secondary"}>{STATUS_LABELS[c.status]}</Badge>
+            {c.outcome ? <Badge variant="outline">{OUTCOME_LABELS[c.outcome]}</Badge> : null}
+          </span>
+        }
+        description={
+          <>
+            <p className="text-muted-foreground">
+              {CATEGORY_LABELS[c.category]}. Received {c.createdDay}
+              {c.closedDay ? `, closed ${c.closedDay}` : ""}. Days are UTC dates: no time of day is kept.
+            </p>
+          </>
+        }
+        breadcrumbs={[{ label: "All cases", href: "/safe-voice-cases" }, { label: caseReference(c.id) }]}
+      />
 
       <section className="rounded-xl border bg-card p-4" aria-label="The report">
         <h2 className="text-lg font-semibold">The report</h2>
@@ -75,6 +80,6 @@ export default async function SafeVoiceCasePage({ params }: PageProps<"/safe-voi
       </section>
 
       <CaseControls caseId={c.id} status={c.status} />
-    </div>
+    </PageContainer>
   );
 }

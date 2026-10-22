@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Label } from "@/components/ui/label";
+import { Alert } from "@/components/ui/alert";
 
 type Result = { state: "idle" } | { state: "checking" } | { state: "match"; reference: string; sealedAt: string } | { state: "nomatch" } | { state: "error"; message: string };
 
@@ -35,18 +36,18 @@ export function VerifyForm() {
       <div role="status" aria-live="polite">
         {result.state === "checking" ? <p className="text-sm text-muted-foreground">Checking...</p> : null}
         {result.state === "match" ? (
-          <div className="rounded-lg border border-success/40 bg-success-surface p-4 text-sm">
+          <Alert variant="success" role="note" className="rounded-lg p-4 text-sm">
             <p className="font-semibold">This is a genuine, unchanged ELEVATE Sign document.</p>
             <p className="mt-1">
               Reference {result.reference}, sealed on {new Date(result.sealedAt).toUTCString()}.
             </p>
-          </div>
+          </Alert>
         ) : null}
         {result.state === "nomatch" ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
+          <Alert variant="destructive" role="note" className="rounded-lg p-4 text-sm">
             <p className="font-semibold">This file does not match any sealed ELEVATE document.</p>
             <p className="mt-1">It may have been changed after signing, or it did not come from ELEVATE Sign. Ask for the original sealed copy.</p>
-          </div>
+          </Alert>
         ) : null}
         {result.state === "error" ? <p className="text-sm text-destructive">{result.message}</p> : null}
       </div>

@@ -14,6 +14,7 @@ import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import { replyIncident, reportIncident, setIncidentStatus, setPrivacyOfficer } from "../actions";
 import { INCIDENT_KINDS, LIMITS, NO_PATIENT_DATA_WARNING, kindLabel, statusLabel } from "../constants";
 import type { IncidentDetail, IncidentRow } from "../queries";
+import { Alert } from "@/components/ui/alert";
 
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -77,9 +78,9 @@ export function IncidentForm({ clients }: { clients: { id: string; name: string 
         });
       }}
     >
-      <div role="note" className="rounded-lg border border-warning/40 bg-warning-surface p-3 text-sm">
+      <Alert variant="warning" role="note" className="rounded-lg p-3 text-sm">
         <strong>No patient information.</strong> {NO_PATIENT_DATA_WARNING}
-      </div>
+      </Alert>
       <SelectField id="in-kind" label="What happened?" value={v.kind} onChange={(e) => set("kind", e.target.value)}>
         {INCIDENT_KINDS.map((k) => (
           <option key={k.value} value={k.value}>

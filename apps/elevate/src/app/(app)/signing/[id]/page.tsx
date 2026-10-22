@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { scopeFor } from "@/lib/authz";
@@ -10,6 +9,9 @@ import { ManageButtons } from "@/modules/signing/components/envelope-forms";
 import { EnvelopeDocument, SignPanel } from "@/modules/signing/components/sign-panel";
 import { SIGNER_STATUS_LABELS, STATUS_LABELS } from "@/modules/signing/constants";
 import { getEnvelopeDetail } from "@/modules/signing/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
+import { Alert } from "@/components/ui/alert";
 
 export const metadata: Metadata = { title: "Document" };
 
@@ -25,29 +27,33 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
   const manager = d.viewer === "manager";
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/signing" className="text-sm text-primary underline-offset-4 hover:underline">
-          ← Signing
-        </Link>
-        <h1 className="mt-2 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight md:text-3xl">
-          {e.title}
-          <Badge variant={STATUS_VARIANT[e.status]}>{STATUS_LABELS[e.status]}</Badge>
-          {e.isTest ? <Badge variant="outline">Test</Badge> : null}
-          {e.archived ? <Badge variant="outline">Archived</Badge> : null}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {e.reference} · {e.pages} {e.pages === 1 ? "page" : "pages"} · sent by {e.createdBy}
-          {e.sentAt ? ` on ${formatInZone(e.sentAt, undefined, "MMM d, yyyy")}` : ""}
-          {e.status === "out" && e.expiresAt ? ` · expires ${formatInZone(e.expiresAt, undefined, "MMM d, yyyy")}` : ""}
-        </p>
-        {e.endReason && e.status !== "completed" ? <p className="mt-1 text-sm">Reason: {e.endReason}</p> : null}
-      </div>
+    <PageContainer>
+      <PageHeader
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {e.title}
+            <Badge variant={STATUS_VARIANT[e.status]}>{STATUS_LABELS[e.status]}</Badge>
+            {e.isTest ? <Badge variant="outline">Test</Badge> : null}
+            {e.archived ? <Badge variant="outline">Archived</Badge> : null}
+          </span>
+        }
+        description={
+          <>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {e.reference} · {e.pages} {e.pages === 1 ? "page" : "pages"} · sent by {e.createdBy}
+              {e.sentAt ? ` on ${formatInZone(e.sentAt, undefined, "MMM d, yyyy")}` : ""}
+              {e.status === "out" && e.expiresAt ? ` · expires ${formatInZone(e.expiresAt, undefined, "MMM d, yyyy")}` : ""}
+            </p>
+            {e.endReason && e.status !== "completed" ? <p className="mt-1 text-sm">Reason: {e.endReason}</p> : null}
+          </>
+        }
+        breadcrumbs={[{ label: "Signing", href: "/signing" }, { label: e.title }]}
+      />
 
       {e.sealing ? <p role="status" className="rounded-lg border bg-muted/40 p-3 text-sm">Everyone has signed. The document is being sealed and will be ready in a moment. Refresh this page.</p> : null}
 
       {e.status === "completed" ? (
-        <section aria-label="Signed copy" className="space-y-2 rounded-xl border border-success/40 bg-success-surface p-4">
+        <Alert variant="success" role="region" aria-label="Signed copy" className="space-y-2 rounded-xl p-4">
           <h2 className="text-lg font-semibold">Everyone has signed</h2>
           <p className="text-sm">Sealed {e.sealedAt ? `${formatInZone(e.sealedAt, undefined, "MMM d, yyyy h:mm a")} (${formatInZone(e.sealedAt, SECONDARY_TIMEZONE, "h:mm a")} Manila)` : ""}. The signed copy includes a certificate of completion.</p>
           {e.canOpenSealed ? (
@@ -56,7 +62,7 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
             <p className="text-sm">This signed copy has the contractor&apos;s personal details, so only the contractor and HR can open it.</p>
           )}
           {e.sealedSha256 ? <p className="break-all font-mono text-xs text-muted-foreground">SHA-256: {e.sealedSha256}</p> : null}
-        </section>
+        </Alert>
       ) : null}
 
       {d.canSign && me ? (
@@ -121,6 +127,6 @@ export default async function EnvelopePage({ params }: PageProps<"/signing/[id]"
           ) : null}
         </>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }
