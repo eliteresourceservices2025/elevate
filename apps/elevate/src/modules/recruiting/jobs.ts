@@ -5,7 +5,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { deleteApplicantSelfId } from "@/modules/demographics/service";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { getEmailSender } from "@/modules/notifications/email";
-import { retentionMonths } from "./constants";
+import { retentionMonths, type CloseKind } from "./constants";
 import { applicationStageHistory, applications, candidateEmails, candidateNotes, candidates, scorecards } from "./schema";
 import { getRetentionSettings } from "./service";
 
@@ -87,7 +87,7 @@ export async function runRecruitingRetention(now = new Date()) {
     .where(and(eq(applications.stage, "rejected"), sql`${applications.closedAt} is not null`, isNull(candidates.anonymizedAt)));
   const expired = new Set<string>();
   for (const c of closed) {
-    const months = retentionMonths(c.closeKind as "rejected" | "withdrawn" | null, settings);
+    const months = retentionMonths(c.closeKind as CloseKind | null, settings);
     if (months !== null && c.closedAt && addMonths(c.closedAt, months) <= now) expired.add(c.candidateId);
   }
   if (expired.size === 0) return { enabled: true, candidates: 0 };
@@ -101,7 +101,7 @@ export async function runRecruitingRetention(now = new Date()) {
     keep
       .filter((a) => a.candidateId === id)
       .every((a) => {
-        const months = a.stage === "rejected" ? retentionMonths(a.closeKind as "rejected" | "withdrawn" | null, settings) : null;
+        const months = a.stage === "rejected" ? retentionMonths(a.closeKind as CloseKind | null, settings) : null;
         return months !== null && a.closedAt !== null && addMonths(a.closedAt, months) <= now;
       }),
   );

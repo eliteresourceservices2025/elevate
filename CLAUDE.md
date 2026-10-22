@@ -208,18 +208,25 @@ Settings > Import schedules and clients: upload the team's attendance sheet (CSV
 - Matches HR confirms (a sheet's spelling of a person or client) are remembered by normalized spelling and used on later sheets; column layouts are remembered by header row.
 - Apply re-checks everything under a lock and refuses a stale preview; a row that no longer fits is skipped with the reason; ending is only for assignments HR ticked; backdating needs the shown impact acknowledged.
 
-### Voluntary self-identification (gender, pronouns, religion) — `docs/modules/demographics.md`
+### Voluntary self-identification (gender, pronouns, sexual orientation, religion) — `docs/modules/demographics.md`
 Optional profile answers and the optional part of the apply form.
 
-- Everything is optional; nobody reads another person's gender or religion; HR sees combined counts of 5 or more only.
-- Separate tables, never joined into people or recruiting queries; religion and self-descriptions are encrypted.
-- Never used for hiring, pay, promotion or reviews; audit rows carry field names only. Pronouns are the only public part.
+- Everything is optional. Gender, sexual orientation and religion are private unless the person switches "Show on my profile to colleagues" on for that answer (owner decision 2026-10-22; off by default, per field); otherwise HR sees combined counts of 5 or more only. Applicant answers are never shown, only counted.
+- Separate tables, never joined into people or recruiting queries; sexual orientation, religion and self-descriptions are encrypted.
+- Never used for hiring, pay, promotion, reviews or any scoring; audit rows carry field names only. Pronouns are always public.
 
 ### Privacy incident reports — `docs/modules/incidents.md`
 Staff privacy incident reports and their handling.
 
 - Free text written by staff; the form forbids patient details; audit entries and notices never carry the text.
 - Only the reporter, HR, Super Admin and the Privacy Officer flag see a report; nobody handles their own report.
+
+### Help center and the screenshot tool — `docs/modules/help-center.md`
+Plain-English how-to guides (files in `apps/elevate/content/help`), role-aware, with pictures taken by `pnpm help:shots`.
+
+- Each guide has an `audience`; a guide a person may not read is a 404 everywhere (page, title, picture, video). Pictures and videos are served by a signed-in route, never `public/`.
+- Guides name real buttons: after changing a screen a guide shows, run `pnpm help:shots` and re-read the guide. Fake data only; never client or patient information.
+- The tool runs against the local database only; reset it first for clean pictures (see the note).
 
 ## Adding a permission or action
 

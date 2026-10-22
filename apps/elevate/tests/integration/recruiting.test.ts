@@ -241,6 +241,27 @@ describe("readable addresses and the careers page", () => {
 });
 
 describe("the pipeline", () => {
+  it("closes an application as not qualified, keeps the kind and history note, can email, and can reopen", async () => {
+    const opening = await openJob();
+    const email = `${uniq("nq")}@example.com`;
+    await apply(opening, { email });
+    const appId = (await appFor(opening, email))!;
+
+    as(recruiter);
+    expect((await actions.rejectApplication({ applicationId: appId, kind: "not_qualified", reason: "Missing required certification", notifyCandidate: true })).ok).toBe(true);
+    const [closed] = await rows<{ stage: string; close_kind: string; close_reason: string }>(sql`select stage, close_kind, close_reason from talent.applications where id = ${appId}`);
+    expect(closed).toEqual({ stage: "rejected", close_kind: "not_qualified", close_reason: "Missing required certification" });
+    const [note] = await rows<{ note: string }>(sql`select note from talent.application_stage_history where application_id = ${appId} and to_stage = 'rejected'`);
+    expect(note.note).toBe("Not qualified");
+    expect(await rows(sql`select 1 from talent.candidate_emails where application_id = ${appId} and kind = 'rejection'`)).toHaveLength(1);
+    expect((await actions.rejectApplication({ applicationId: appId, kind: "not_qualified", reason: "again" })).ok).toBe(false); // already closed
+    expect((await actions.moveApplication({ applicationId: appId, to: "screening" })).ok).toBe(true); // reopen
+    const [reopened] = await rows<{ close_kind: string | null }>(sql`select close_kind from talent.applications where id = ${appId}`);
+    expect(reopened.close_kind).toBeNull();
+    // The database refuses an unknown kind.
+    await expect(db.execute(sql`update talent.applications set stage = 'rejected', close_kind = 'nope' where id = ${appId}`)).rejects.toThrow();
+  });
+
   it("moves, closes and reopens an application, keeping every step in an append-only history", async () => {
     const opening = await openJob();
     const email = `${uniq("flow")}@example.com`;

@@ -25,7 +25,7 @@ import { ChangePhotoButton, ProfilePicture, RemovePhotoButton } from "@/modules/
 import { listOrgOptions } from "@/modules/org/queries";
 import { getProfile, listClientsForFilter } from "@/modules/people/queries";
 import { SelfIdCard } from "@/modules/demographics/components/self-id-card";
-import { getMySelfIdentification, getPronounsFor } from "@/modules/demographics/queries";
+import { getMySelfIdentification, getPronounsFor, getSharedIdentityFor } from "@/modules/demographics/queries";
 
 const TABS = [
   { key: "personal", label: "Personal" },
@@ -52,6 +52,13 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
   const today = formatInZone(new Date(), DEFAULT_TIMEZONE, "yyyy-MM-dd");
   const orgOptions = active.key === "employment" && access.canManageReporting ? await listOrgOptions() : undefined;
   const pronouns = await getPronounsFor(e.id);
+  // Only what this person switched on to share ("Show on my profile"); everything else stays private to them.
+  const shared = await getSharedIdentityFor(e.id);
+  const sharedFacts = [
+    shared.gender ? `Gender: ${shared.gender}` : null,
+    shared.orientation ? `Sexual orientation: ${shared.orientation}` : null,
+    shared.religion ? `Religion: ${shared.religion}` : null,
+  ].filter((x): x is string => x !== null);
   const mine = (own || access.isSelf) && active.key === "personal" ? await getMySelfIdentification() : null;
   const clients = active.key === "clients" && access.canManageAssignments ? await listClientsForFilter() : [];
 
@@ -89,6 +96,7 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
                 {e.archived ? <Badge variant="outline">Archived</Badge> : null}
                 {access.canEdit && !e.linked ? <Badge variant="info">Not signed in yet</Badge> : null}
               </p>
+              {sharedFacts.length > 0 ? <p className="mt-1 text-sm text-muted-foreground">{sharedFacts.join(" · ")}</p> : null}
             </div>
             {access.canEdit ? (
               <div className="flex items-center gap-2 print:hidden">

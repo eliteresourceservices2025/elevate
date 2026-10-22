@@ -15,6 +15,7 @@ const { db } = await import("@/lib/db");
 const actions = await import("@/modules/credentials/actions");
 const queries = await import("@/modules/credentials/queries");
 const jobs = await import("@/modules/credentials/jobs");
+const { todayInZone } = await import("@/modules/org/service");
 
 type Res = { ok: boolean; error?: string; data?: Record<string, unknown> };
 const act = actions as unknown as Record<string, (input: unknown) => Promise<Res>>;
@@ -27,7 +28,8 @@ const as = (u: TestUser) => {
   current.user = u;
 };
 const plus = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
-const TODAY = "2026-10-12";
+// The real day: adding a certificate silences reminders for windows already open on the real day (todayInZone), so the test must count from it.
+const TODAY = todayInZone();
 
 let hr: TestUser;
 let lead: TestUser;

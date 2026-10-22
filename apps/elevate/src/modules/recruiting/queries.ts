@@ -8,7 +8,7 @@ import { teams } from "@/modules/org/schema";
 import { users, userRoles } from "@/modules/core/schema";
 import { reportName } from "@/modules/org/service";
 import { getPrivacyNotice } from "@/modules/privacy/queries";
-import { BOARD_STAGES, STAGES, type CriterionKey, type Stage } from "./constants";
+import { BOARD_STAGES, STAGES, type CloseKind, type CriterionKey, type Stage } from "./constants";
 import { looksLikeId } from "./slug";
 import { applicationStageHistory, applications, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, scorecards } from "./schema";
 import { calendarStatus } from "./calendar";
@@ -143,7 +143,7 @@ export async function listInterviewerChoices(): Promise<PersonChoice[]> {
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export type BoardCard = { applicationId: string; name: string; appliedAt: Date; stageChangedAt: Date; nextInterview: Date | null; scorecards: number };
+export type BoardCard = { applicationId: string; name: string; appliedAt: Date; stageChangedAt: Date; nextInterview: Date | null; scorecards: number; closeKind?: CloseKind | null };
 
 export async function getOpeningBoard(openingId: string) {
   const user = await requireUser();
@@ -164,7 +164,7 @@ export async function getOpeningBoard(openingId: string) {
   const cardsBy = new Map(cards.map((c) => [c.applicationId, c.n]));
 
   const columns = Object.fromEntries(STAGES.map((s) => [s, [] as BoardCard[]])) as Record<Stage, BoardCard[]>;
-  for (const r of rows) columns[r.stage as Stage].push({ applicationId: r.applicationId, name: r.anonymized ? "Removed applicant" : r.name, appliedAt: r.appliedAt, stageChangedAt: r.stageChangedAt, nextInterview: nextBy.get(r.applicationId) ?? null, scorecards: cardsBy.get(r.applicationId) ?? 0 });
+  for (const r of rows) columns[r.stage as Stage].push({ applicationId: r.applicationId, name: r.anonymized ? "Removed applicant" : r.name, appliedAt: r.appliedAt, stageChangedAt: r.stageChangedAt, nextInterview: nextBy.get(r.applicationId) ?? null, scorecards: cardsBy.get(r.applicationId) ?? 0, closeKind: r.closeKind as CloseKind | null });
 
   const teamIds = await hiringTeamIds(db, openingId);
   const hiringTeam = teamIds.length ? (await listAllNames(teamIds)) : [];

@@ -34,6 +34,7 @@ describe("helpers", () => {
   it("picks the retention period by how the application ended", () => {
     const s = { rejectedMonths: 12, withdrawnMonths: 6 };
     expect(retentionMonths("rejected", s)).toBe(12);
+    expect(retentionMonths("not_qualified", s)).toBe(12);
     expect(retentionMonths("withdrawn", s)).toBe(6);
     expect(retentionMonths(null, s)).toBeNull();
   });

@@ -113,7 +113,7 @@ export const applications = talent
         .notNull()
         .references(() => candidates.id),
       stage: text("stage").notNull().default("applied"),
-      /** Set with stage = rejected: rejected (we said no) or withdrawn (they did). Different retention. */
+      /** Set with stage = rejected: rejected (we said no), not_qualified (they do not meet the requirements) or withdrawn (they did). Withdrawn has its own retention. */
       closeKind: text("close_kind"),
       closeReason: text("close_reason"),
       /** What the applicant wrote on the form. */
@@ -127,7 +127,7 @@ export const applications = talent
       uniqueIndex("applications_opening_candidate_idx").on(t.openingId, t.candidateId),
       index("applications_opening_stage_idx").on(t.openingId, t.stage),
       check("applications_stage_chk", sql`${t.stage} in ('applied','screening','interview','assessment','offer','hired','rejected')`),
-      check("applications_close_chk", sql`(${t.stage} = 'rejected') = (${t.closeKind} is not null) and (${t.closeKind} is null or ${t.closeKind} in ('rejected','withdrawn'))`),
+      check("applications_close_chk", sql`(${t.stage} = 'rejected') = (${t.closeKind} is not null) and (${t.closeKind} is null or ${t.closeKind} in ('rejected','not_qualified','withdrawn'))`),
     ],
   )
   .enableRLS();

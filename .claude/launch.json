@@ -13,6 +13,20 @@
       "autoPort": true
     },
     {
+      "name": "elevate-prod",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "elevate",
+        "exec",
+        "next",
+        "start",
+        "-p",
+        "3100"
+      ],
+      "port": 3100
+    },
+    {
       "name": "learn-dev",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 // tables or their columns; everything else goes through its service functions (save, clear, delete, summarize).
 
 const SRC = path.resolve(import.meta.dirname, "..", "..");
-const NAMES = /employee_demographics|employeeDemographics|candidate_self_identification|candidateSelfIdentification|religionEnc|religion_enc/;
+const NAMES = /employee_demographics|employeeDemographics|candidate_self_identification|candidateSelfIdentification|religionEnc|religion_enc|sexualOrientationEnc|sexual_orientation_enc/;
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -25,11 +25,11 @@ describe("self-identification tables stay inside the demographics module", () =>
     expect(offenders).toEqual([]);
   }, 30_000); // it reads every source file, which is slow when the whole suite runs at once
 
-  it("recruiting and review code never reads gender or religion", () => {
+  it("recruiting and review code never reads gender, sexual orientation or religion", () => {
     const offenders = ["recruiting", "reviews", "offers", "onboarding"]
       .flatMap((m) => files(path.join(SRC, "modules", m)))
       .filter((f) => !f.endsWith(`${path.sep}service.ts`) && !f.endsWith(`${path.sep}validators.ts`) && !f.endsWith(`${path.sep}route.ts`) && !f.endsWith(`${path.sep}apply-form.tsx`))
-      .filter((f) => /\b(gender|religion)\b/i.test(readFileSync(f, "utf8")))
+      .filter((f) => /\b(gender|religion|orientation)\b/i.test(readFileSync(f, "utf8")))
       .map((f) => path.relative(SRC, f));
     expect(offenders).toEqual([]);
   });

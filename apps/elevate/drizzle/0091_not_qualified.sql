@@ -1,0 +1,2 @@
+ALTER TABLE "talent"."applications" DROP CONSTRAINT "applications_close_chk";--> statement-breakpoint
+ALTER TABLE "talent"."applications" ADD CONSTRAINT "applications_close_chk" CHECK (("talent"."applications"."stage" = 'rejected') = ("talent"."applications"."close_kind" is not null) and ("talent"."applications"."close_kind" is null or "talent"."applications"."close_kind" in ('rejected','not_qualified','withdrawn')));

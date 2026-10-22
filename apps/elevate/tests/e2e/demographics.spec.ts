@@ -7,7 +7,7 @@ import { createEmployeeAccount, createHrAccount, signInEnrollingMfa, waitForHydr
 
 const PDF = Buffer.from("%PDF-1.4\n% e2e resume\n1 0 obj\n<<>>\nendobj\n");
 
-test("a person shares pronouns, gender and religion on their profile; colleagues see only the pronouns; they can remove it all", async ({ browser }) => {
+test("a person answers pronouns, gender, sexual orientation and religion; colleagues see the pronouns and only what is switched on; they can remove it all", async ({ browser }) => {
   test.setTimeout(240_000);
   const slow = { timeout: 30_000 };
   const stamp = Date.now();
@@ -18,7 +18,7 @@ test("a person shares pronouns, gender and religion on their profile; colleagues
   await me.goto("/people/me");
   await me.getByRole("button", { name: "Edit about me" }).click();
   await expect(me.getByRole("heading", { name: "About me (optional)" })).toBeVisible(slow);
-  await expect(me.getByText(/Only you can see your gender and religion/)).toBeVisible();
+  await expect(me.getByText(/private unless you switch on/)).toBeVisible();
   await waitForHydration(me, "#me-gender");
   // Every question starts on "Skip this question"
   await expect(me.getByLabel("Gender")).toHaveValue("");
@@ -27,6 +27,7 @@ test("a person shares pronouns, gender and religion on their profile; colleagues
   await me.getByLabel("Gender").selectOption("woman");
   await me.getByLabel("Pronouns").selectOption("she_her");
   await me.getByLabel("Religion").selectOption("islam");
+  await me.getByLabel("Sexual orientation").selectOption("bisexual");
   await me.getByRole("button", { name: "Save", exact: true }).click();
   await expect(me.getByText("Saved.")).toBeVisible(slow);
   await expect(me.getByRole("heading", { level: 1 })).toContainText("(she/her)", slow);
@@ -53,7 +54,19 @@ test("a person shares pronouns, gender and religion on their profile; colleagues
   await expect(hr.getByRole("heading", { level: 1 })).toContainText("(she/her)", slow);
   await expect(hr.getByRole("heading", { name: "About me (optional)" })).toHaveCount(0);
   const body = await hr.locator("body").innerText();
-  expect(body).not.toMatch(/Islam|Agender|Religion/);
+  expect(body).not.toMatch(/Islam|Agender|Religion|Bisexual|Sexual orientation/);
+
+  // The person switches on sharing for religion and sexual orientation: colleagues now read those two, but not the gender.
+  await me.getByRole("button", { name: "Edit about me" }).click();
+  await waitForHydration(me, "#me-gender");
+  await me.locator("#me-show-religion").check();
+  await me.locator("#me-show-orientation").check();
+  await me.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(me.getByText("Saved.")).toBeVisible(slow);
+  await hr.reload();
+  await expect(hr.getByText("Religion: Islam")).toBeVisible(slow);
+  await expect(hr.getByText("Sexual orientation: Bisexual")).toBeVisible(slow);
+  expect(await hr.locator("body").innerText()).not.toMatch(/Agender|Gender:/);
 
   // The person removes everything
   await me.getByRole("button", { name: "Edit about me" }).click();

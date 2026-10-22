@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { addNote, cancelInterview, deleteApplication, getResumeLink, moveApplication, rejectApplication, scheduleInterview, submitScorecard } from "../actions";
-import { BOARD_STAGES, CRITERIA, INTERVIEW_KINDS, INTERVIEW_KIND_LABELS, RECOMMENDATIONS, RECOMMENDATION_LABELS, STAGE_LABELS, type CriterionKey, type Stage } from "../constants";
+import { BOARD_STAGES, CRITERIA, INTERVIEW_KINDS, INTERVIEW_KIND_LABELS, RECOMMENDATIONS, RECOMMENDATION_LABELS, STAGE_LABELS, type CloseKind, type CriterionKey, type Stage } from "../constants";
 import type { PersonChoice } from "../queries";
 import { useRun } from "./use-run";
 
@@ -90,7 +90,7 @@ export function MoveControls({ applicationId, stage }: { applicationId: string; 
 
 export function RejectForm({ applicationId, sendRejection }: { applicationId: string; sendRejection: boolean }) {
   const { run, pending } = useRun();
-  const [kind, setKind] = useState<"rejected" | "withdrawn">("rejected");
+  const [kind, setKind] = useState<CloseKind>("rejected");
   const [reason, setReason] = useState("");
   const [notify, setNotify] = useState(false);
   return (
@@ -103,13 +103,14 @@ export function RejectForm({ applicationId, sendRejection }: { applicationId: st
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <SelectField id="rj-kind" label="Why is it closing" value={kind} onChange={(e) => setKind(e.target.value as "rejected" | "withdrawn")}>
+        <SelectField id="rj-kind" label="Why is it closing" value={kind} onChange={(e) => setKind(e.target.value as CloseKind)}>
           <option value="rejected">We are not moving forward</option>
+          <option value="not_qualified">Not qualified for the role</option>
           <option value="withdrawn">The applicant withdrew</option>
         </SelectField>
         <TextField id="rj-reason" label="Reason (internal only)" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required />
       </div>
-      {kind === "rejected" && sendRejection ? (
+      {kind !== "withdrawn" && sendRejection ? (
         <label htmlFor="rj-notify" className="flex items-center gap-2 text-sm">
           <input id="rj-notify" type="checkbox" className="size-4 accent-primary" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
           Send the applicant a short, polite rejection email

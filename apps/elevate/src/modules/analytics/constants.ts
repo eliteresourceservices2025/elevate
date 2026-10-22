@@ -27,7 +27,7 @@ export const FUNNEL_LABELS: Record<string, string> = {
   assessment: "Assessment",
   offer: "Offer",
   hired: "Hired",
-  rejected: "Rejected or withdrawn",
+  rejected: "Rejected, not qualified or withdrawn",
 };
 
 /** Attendance flags that count as "extra hours" (one per person and day, however many apply). */

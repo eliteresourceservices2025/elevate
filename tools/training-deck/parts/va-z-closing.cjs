@@ -1,0 +1,66 @@
+module.exports = {
+  id: "va-z",
+  letter: "",
+  title: "Wrap up",
+  blurb: "The mistakes to avoid, what to practise, and where to go next.",
+  slides: [
+    {
+      type: "dos",
+      title: "The mistakes we see most",
+      left: {
+        head: "Avoid",
+        items: [
+          "Forgetting to clock out",
+          "Putting client or patient details in a note, reason or screenshot",
+          "Working extra hours before asking",
+          "Using the clock without internet",
+          "Losing your Safe Voice case code",
+          "Marking an onboarding task done before you did it",
+        ],
+      },
+      right: {
+        head: "Do instead",
+        items: [
+          "Check the clock before you close your computer",
+          "Describe the situation, never the person or patient",
+          "Ask your client and your lead first",
+          "Wait until you are online and try again",
+          "Write the code and passphrase down at once",
+          "Do the task, then click Mark done",
+        ],
+      },
+      say: "These are the mistakes that cost the most time. The fix for almost all of them is to slow down for ten seconds at the moment of the action. Every one of them is also written in the Common mistakes section of the guide.",
+      ask: "Which of these have you already done?",
+      minutes: 3,
+    },
+    {
+      type: "checklist",
+      title: "Try it yourself: your practice list",
+      items: [
+        "Find the clock at the top right",
+        "Open My time and look at today's hours",
+        "Open Clock settings and check your time zone",
+        "Open Schedules and find your next shift",
+        "Open My prize days and read your history",
+        "Open My profile and click through the tabs",
+        "Open Announcements and check both tabs",
+        "Search the Help center for time off",
+      ],
+      say: "Now it is your turn. Work through this list. None of it changes anything, so you cannot break it. Every item matches a guide in the Help center. When you finish, tell me which step felt confusing, because that is the step we improve.",
+      ask: "Which item will you do first?",
+      minutes: 10,
+    },
+    {
+      type: "concept",
+      title: "Where to go next",
+      cards: [
+        { icon: "LuBookOpen", head: "Help center", text: "A guide for every task, and short videos for the long ones. Search first." },
+        { icon: "LuLifeBuoy", head: "Contact support", text: "Something not working? Tell us, with the page and what you saw." },
+        { icon: "LuShieldCheck", head: "Speak up", text: "A privacy mistake goes to Privacy incidents. A concern you want to keep anonymous goes to Safe Voice." },
+      ],
+      say: "Keep the Help center open in a tab for the first weeks. If something is not working, use Contact support. If you made a privacy mistake, report it at once. If you have a concern and want to stay anonymous, use Safe Voice. Thank you for your time.",
+      ask: "What would make the next session more useful?",
+      minutes: 3,
+    },
+  ],
+};

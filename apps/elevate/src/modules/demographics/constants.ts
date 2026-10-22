@@ -1,15 +1,39 @@
-// Voluntary self-identification: gender, pronouns and religion. Every answer is optional and every list has a
+// Voluntary self-identification: gender, pronouns, sexual orientation and religion. Every answer is optional and every list has a
 // "prefer not to say". The lists are plain constants so counsel and HR can reword them in one place.
 
-export const GENDERS = ["woman", "man", "non_binary", "self_described", "prefer_not_to_say"] as const;
+export const GENDERS = ["woman", "man", "trans_woman", "trans_man", "non_binary", "self_described", "prefer_not_to_say"] as const;
 export type Gender = (typeof GENDERS)[number];
 export const GENDER_LABELS: Record<Gender, string> = {
   woman: "Woman",
   man: "Man",
+  trans_woman: "Trans woman",
+  trans_man: "Trans man",
   non_binary: "Non-binary",
   self_described: "I describe it myself",
   prefer_not_to_say: "Prefer not to say",
 };
+
+export const SEXUAL_ORIENTATIONS = ["straight", "gay", "lesbian", "bisexual", "pansexual", "asexual", "queer", "questioning", "self_described", "prefer_not_to_say"] as const;
+export type SexualOrientation = (typeof SEXUAL_ORIENTATIONS)[number];
+export const SEXUAL_ORIENTATION_LABELS: Record<SexualOrientation, string> = {
+  straight: "Straight",
+  gay: "Gay",
+  lesbian: "Lesbian",
+  bisexual: "Bisexual",
+  pansexual: "Pansexual",
+  asexual: "Asexual",
+  queer: "Queer",
+  questioning: "Questioning",
+  self_described: "I describe it myself",
+  prefer_not_to_say: "Prefer not to say",
+};
+
+/** The words a colleague sees for a shared answer, or null when there is nothing to show ("prefer not to say" and no answer show nothing). */
+export function sharedAnswerText(value: string | null | undefined, other: string | null | undefined, labels: Record<string, string>): string | null {
+  if (!value || value === "prefer_not_to_say") return null;
+  if (value === "self_described") return other?.trim() || null;
+  return labels[value] ?? null;
+}
 
 export const PRONOUNS = ["she_her", "he_him", "they_them", "she_they", "he_they", "ask_me", "self_described", "prefer_not_to_say"] as const;
 export type Pronouns = (typeof PRONOUNS)[number];
@@ -39,6 +63,8 @@ export const RELIGIONS = [
   "hinduism",
   "judaism",
   "indigenous_folk",
+  "atheist",
+  "agnostic",
   "no_religion",
   "self_described",
   "prefer_not_to_say",
@@ -53,6 +79,8 @@ export const RELIGION_LABELS: Record<Religion, string> = {
   hinduism: "Hinduism",
   judaism: "Judaism",
   indigenous_folk: "Indigenous or folk belief",
+  atheist: "Atheist",
+  agnostic: "Agnostic",
   no_religion: "No religion",
   self_described: "Other (I describe it myself)",
   prefer_not_to_say: "Prefer not to say",
@@ -63,6 +91,6 @@ export const MIN_GROUP = 5;
 export const OTHER_TEXT_MAX = 60;
 
 export const DEMOGRAPHICS_NOTE =
-  "Optional. Only you can see your gender and religion. HR sees combined counts for groups of 5 or more, never a name. Choosing a pronoun shows it next to your name for colleagues. You can change or remove any of it at any time.";
+  "Optional. Choosing a pronoun shows it next to your name for colleagues. Your gender, sexual orientation and religion are private unless you switch on \"Show on my profile\" for that answer, which lets colleagues read it so they can address you and plan events with you in mind. HR also sees combined counts for groups of 5 or more, never a name. You can change or remove any of it at any time.";
 export const APPLICANT_NOTE =
-  "Optional and separate from your application. It is not used to decide whether to hire you and the hiring team never sees it. We use it only for combined counts of 5 or more people, to check that our hiring is fair.";
+  "Optional and separate from your application. It is not used to decide whether to hire you and the hiring team never sees it. We use it only for combined counts of 5 or more people, to check that our hiring is fair. Gender, sexual orientation and religion are never shown to anyone by name.";

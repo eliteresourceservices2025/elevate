@@ -37,8 +37,10 @@ export async function SelfIdSummary() {
       </div>
       <div className="grid gap-6 md:grid-cols-2">
         <Block title="People: gender" groups={s.employees.gender} minGroup={s.minGroup} />
+        <Block title="People: sexual orientation" groups={s.employees.orientation} minGroup={s.minGroup} />
         <Block title="People: religion" groups={s.employees.religion} minGroup={s.minGroup} />
         <Block title="Applicants: gender" groups={s.applicants.gender} minGroup={s.minGroup} />
+        <Block title="Applicants: sexual orientation" groups={s.applicants.orientation} minGroup={s.minGroup} />
         <Block title="Applicants: religion" groups={s.applicants.religion} minGroup={s.minGroup} />
       </div>
     </section>

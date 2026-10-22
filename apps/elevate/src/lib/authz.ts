@@ -5,6 +5,7 @@ import { credentialsPermissions } from "@/modules/credentials/permissions";
 import { attendancePermissions } from "@/modules/attendance/permissions";
 import { dashboardPermissions } from "@/modules/dashboard/permissions";
 import { documentsPermissions } from "@/modules/documents/permissions";
+import { helpPermissions } from "@/modules/help/permissions";
 import { importsPermissions } from "@/modules/imports/permissions";
 import { scheduleImportPermissions } from "@/modules/schedule-import/permissions";
 import { incidentsPermissions } from "@/modules/incidents/permissions";
@@ -53,6 +54,7 @@ export const PERMISSIONS = {
   ...assetsPermissions,
   ...credentialsPermissions,
   ...supportPermissions,
+  ...helpPermissions,
   ...incidentsPermissions,
   ...analyticsPermissions,
   ...dashboardPermissions,

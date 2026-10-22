@@ -10,7 +10,7 @@ import { DEMOGRAPHICS_NOTE } from "../constants";
 import type { SelfIdentification } from "../service";
 import { SelfIdFields } from "./self-id-fields";
 
-/** "About me": the person's own optional answers, in a pop-up opened from their Personal tab. Only they can see gender and religion; pronouns show next to the name. */
+/** "About me": the person's own optional answers, in a pop-up opened from their Personal tab. Pronouns show next to the name; gender, sexual orientation and religion only when the person switches "show on my profile" on. */
 export function SelfIdCard({ initial }: { initial: SelfIdentification }) {
   return (
     <FormDialog label="Edit about me" title="About me (optional)" description={DEMOGRAPHICS_NOTE} variant="outline" size="lg">
@@ -35,8 +35,13 @@ function SelfIdForm({ initial }: { initial: SelfIdentification }) {
         genderOther: get("genderOther"),
         pronouns: get("pronouns"),
         pronounsOther: get("pronounsOther"),
+        orientation: get("orientation"),
+        orientationOther: get("orientationOther"),
         religion: get("religion"),
         religionOther: get("religionOther"),
+        showGender: f.get("showGender") === "on",
+        showOrientation: f.get("showOrientation") === "on",
+        showReligion: f.get("showReligion") === "on",
       });
       if (!result.ok) return void toast.error(result.error);
       toast.success(result.data.answered > 0 ? "Saved." : "Nothing is saved.");
@@ -46,7 +51,7 @@ function SelfIdForm({ initial }: { initial: SelfIdentification }) {
   }
 
   function clear() {
-    if (!window.confirm("Remove your gender, pronouns and religion from ELEVATE?")) return;
+    if (!window.confirm("Remove your gender, pronouns, sexual orientation and religion from ELEVATE?")) return;
     startTransition(async () => {
       const result = await clearMySelfIdentification();
       if (!result.ok) return void toast.error(result.error);
@@ -59,7 +64,7 @@ function SelfIdForm({ initial }: { initial: SelfIdentification }) {
 
   return (
     <form key={formKey} onSubmit={save} className="space-y-4" noValidate>
-      <SelfIdFields idPrefix="me" initial={formKey === 0 ? initial : undefined} withPronouns />
+      <SelfIdFields idPrefix="me" initial={formKey === 0 ? initial : undefined} withPronouns withShare />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={pending}>
           Save

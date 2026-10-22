@@ -72,7 +72,7 @@ export function ApplyForm({ openingId, noticeTitle, noticeBody }: { openingId: s
         <SelfIdFields
           idPrefix="ap"
           withPronouns={false}
-          errors={{ gender: fieldError("gender"), genderOther: fieldError("genderOther"), religion: fieldError("religion"), religionOther: fieldError("religionOther") }}
+          errors={{ gender: fieldError("gender"), genderOther: fieldError("genderOther"), orientation: fieldError("orientation"), orientationOther: fieldError("orientationOther"), religion: fieldError("religion"), religionOther: fieldError("religionOther") }}
         />
       </fieldset>
 

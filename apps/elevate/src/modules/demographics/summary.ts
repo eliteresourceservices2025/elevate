@@ -1,9 +1,9 @@
-import { GENDERS, GENDER_LABELS, MIN_GROUP, RELIGIONS, RELIGION_LABELS } from "./constants";
+import { GENDERS, GENDER_LABELS, MIN_GROUP, RELIGIONS, RELIGION_LABELS, SEXUAL_ORIENTATIONS, SEXUAL_ORIENTATION_LABELS } from "./constants";
 
 // The combined counts HR may see. Pure (no database, no encryption) so the minimum-group rule is unit tested.
 
 export type Group = { key: string; label: string; count: number };
-export type SummaryBlock = { gender: Group[]; religion: Group[] };
+export type SummaryBlock = { gender: Group[]; religion: Group[]; orientation: Group[] };
 
 const tally = (keys: (string | null)[], labels: Record<string, string>, order: readonly string[]): Group[] => {
   const counts = new Map<string, number>();
@@ -12,6 +12,10 @@ const tally = (keys: (string | null)[], labels: Record<string, string>, order: r
   return order.filter((k) => (counts.get(k) ?? 0) >= MIN_GROUP).map((k) => ({ key: k, label: labels[k] ?? k, count: counts.get(k)! }));
 };
 
-export function summarizeAnswers(genders: (string | null)[], religions: (string | null)[]): SummaryBlock {
-  return { gender: tally(genders, GENDER_LABELS, GENDERS), religion: tally(religions, RELIGION_LABELS, RELIGIONS) };
+export function summarizeAnswers(genders: (string | null)[], religions: (string | null)[], orientations: (string | null)[] = []): SummaryBlock {
+  return {
+    gender: tally(genders, GENDER_LABELS, GENDERS),
+    religion: tally(religions, RELIGION_LABELS, RELIGIONS),
+    orientation: tally(orientations, SEXUAL_ORIENTATION_LABELS, SEXUAL_ORIENTATIONS),
+  };
 }

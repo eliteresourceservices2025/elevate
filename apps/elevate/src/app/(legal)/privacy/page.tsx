@@ -44,7 +44,7 @@ export default function PrivacyPage() {
           for payroll and HR.
         </li>
         <li>
-          <strong>Optional self-identification:</strong> your gender, pronouns and religion if you choose to share them in your profile, and your gender and religion in the optional part of the job application. Every question can be skipped and your answers can be changed or removed at any time. Religion and gender are stored encrypted; nobody can see another person&apos;s gender or religion. HR sees only combined counts of 5 or more people, never a name. These answers are never used to decide whether to hire, promote, pay or assess anyone.
+          <strong>Optional self-identification:</strong> your gender, pronouns, sexual orientation and religion if you choose to share them in your profile, and your gender, sexual orientation and religion in the optional part of the job application. Every question can be skipped and your answers can be changed or removed at any time. Gender, sexual orientation and religion are stored encrypted. Your pronouns show next to your name; your gender, sexual orientation and religion are visible to colleagues only if you switch on &quot;Show on my profile to colleagues&quot; for that answer, and answers given on a job application are never shown to anyone. HR sees only combined counts of 5 or more people, never a name. These answers are never used to decide whether to hire, promote, pay or assess anyone.
         </li>
         <li>
           <strong>Job applications:</strong> the information and resume you submit, and notes and scores from our hiring team.
