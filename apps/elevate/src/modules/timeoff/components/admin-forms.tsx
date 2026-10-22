@@ -213,7 +213,7 @@ export function NewHolidayForm({ defaultDate }: { defaultDate: string }) {
         });
       }}
     >
-      {dialog ? null : <h3 className="font-semibold">Add a holiday</h3>}
+      {dialog ? null : <h2 className="text-base font-semibold">Add a holiday</h2>}
       <HolidayFields id="nh" {...{ calendar, setCalendar, date, setDate, name, setName, kind, setKind, verified, setVerified }} />
       <Button type="submit" disabled={pending || !name.trim() || !date}>
         Add holiday

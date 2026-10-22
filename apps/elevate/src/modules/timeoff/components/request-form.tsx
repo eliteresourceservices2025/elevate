@@ -76,7 +76,7 @@ export function RequestForm({ types, today, people }: { types: LeaveOption[]; to
 
   return (
     <form onSubmit={submit} className={dialog ? "space-y-4" : "space-y-4 rounded-2xl border bg-card p-5 shadow-sm"}>
-      {dialog ? null : <h3 className="font-semibold">{forOther ? "File a request for someone" : "Request time off"}</h3>}
+      {dialog ? null : <h2 className="text-base font-semibold">{forOther ? "File a request for someone" : "Request time off"}</h2>}
       {forOther ? (
         <PersonPicker id="rq-person" label="Person" options={people!} value={employeeId} onChange={setEmployeeId} error={invalidPerson ? "Choose a person from the list" : undefined} hint="You can file for a past date. It still goes through approval." />
       ) : null}

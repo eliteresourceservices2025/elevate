@@ -24,7 +24,7 @@ export function Detail({ label, children }: { label: string; children: ReactNode
   return (
     <div className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
       <dt className="shrink-0 text-sm text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 text-sm sm:text-right">{empty ? <span className="text-muted-foreground/70">Not set</span> : children}</dd>
+      <dd className="min-w-0 text-sm sm:text-right">{empty ? <span className="text-muted-foreground">Not set</span> : children}</dd>
     </div>
   );
 }
