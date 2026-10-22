@@ -11,8 +11,9 @@ import { formatDateOnly } from "@/lib/time";
 import { CategorizeDocument, type CategorizeOptions } from "./categorize-document";
 import { archiveDocument, getDownloadUrl, moveDocument, verifyDocument } from "../actions";
 import type { ExpiryStatus } from "../expiry";
-import { formatBytes } from "../files";
+import { canPreview, formatBytes } from "../files";
 import type { DocumentRow, FolderRow } from "../queries";
+import { PreviewButton } from "./document-preview";
 import { TypeBadge } from "./type-badge";
 
 /** A small icon for the kind of file (PDF, picture, Word), so the file name line reads at a glance. */
@@ -152,6 +153,7 @@ export function DocumentList({
                     </select>
                   ) : null}
                   {categorize && !r.archived && (viewerIsHr || !r.verified) ? <CategorizeDocument row={r} options={categorize} /> : null}
+                  {canPreview(r.mimeType, r.fileName) ? <PreviewButton documentId={r.id} title={r.title} /> : null}
                   <DownloadButton documentId={r.id} label={r.title} />
                   {viewerIsHr && !showAudience && !r.archived ? (
                     <Button

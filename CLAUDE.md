@@ -154,7 +154,7 @@ Applicants, interviews, ELEVATE Sign, offers, hiring, onboarding and offboarding
 
 - Applicants are not employees; stage history, scorecards and signing events are append-only (signing events are hash-chained).
 - Pay is a free-text note only; letters say "independent contractor".
-- Documents are shown in the page through our own authenticated route, never a storage link.
+- Documents are shown in the page through our own authenticated route, never a storage link. **In-page preview** (`/api/documents/[documentId]/preview`, `/api/recruiting/resume/[applicationId]`): PDFs and pictures as they are, DOCX rebuilt as safe plain HTML in a CSP sandbox (`documents/docx.ts`; never put converter output in the page as raw HTML, and a Word file declaring an unreasonable unpacked size is refused before it is opened); DOC stays download-only. Access goes through `authorizeDocumentView` (`documents/service.ts`), the same check as the download link, audited as `document.preview`.
 - The ATS layer (applicants list, source and tags, bulk actions, resume keyword match, talent pool, duplicate merge, reports, email wording) is in the "ATS layer" section of the module notes. The keyword match is a reading aid only: no AI, resume text never stored, nothing about the person used, nobody rejected by it. Bulk actions never hire. Only applicants who ticked "keep my details" can be in the talent pool. Name no form field `id` (it shadows `form.id`).
 - Separation is a retryable step list; assets and final hours are tracked, never computed.
 

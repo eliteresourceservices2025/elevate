@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { sniffFileKind } from "@/modules/documents/files";
 import { makeDocx, makePdf } from "../../../tests/helpers/resume-files";
 import { scoreResume } from "./keywords";
-import { extractResumeText, MAX_DOCX_UNPACKED_BYTES, zipDeclaredSize } from "./resume-text";
+import { MAX_DOCX_UNPACKED_BYTES, zipDeclaredSize } from "@/modules/documents/docx";
+import { extractResumeText } from "./resume-text";
 
 describe("extractResumeText", () => {
   it("reads the text of a PDF", async () => {
