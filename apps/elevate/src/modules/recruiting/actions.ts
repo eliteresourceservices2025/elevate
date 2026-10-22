@@ -16,16 +16,17 @@ import { createInterviewEvent, deleteInterviewEvent, discardInterviewEvent, remo
 import { googleEventIdFor } from "./google";
 import { queueEmails } from "@/modules/notifications/email-queue";
 import { notify } from "@/modules/notifications/service";
-import { canMove } from "./constants";
-import { buildInterviewIcs, interviewMail, rejectionMail } from "./mail";
+import { buildInterviewIcs, interviewMail } from "./mail";
+import { closeInTx, moveInTx } from "./transitions";
 import { deleteApplicantSelfId } from "@/modules/demographics/service";
 import { offers } from "@/modules/offers/schema";
 import { onboardingCases } from "@/modules/onboarding/schema";
-import { applicationStageHistory, applications, candidateEmails, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
+import { applicationStageHistory, applicationTagLinks, applicationTags, applications, candidateEmails, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
 import { sendRecruitingEmailsNow } from "./immediate";
 import { authorizeForOpening, freeSlug, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
 import { clearBanner } from "./careers-banner";
-import { careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
+import { MAX_TAGS_PER_APPLICATION } from "./constants";
+import { archiveTagSchema, bulkSchema, createTagSchema, setSourceSchema, setTagsSchema, careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
 const MANILA = "Asia/Manila";
@@ -174,20 +175,7 @@ export async function moveApplication(input: unknown): Promise<ActionResult> {
     const parsed = moveSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
     const { applicationId, to, note } = parsed.data;
-    const openingId = await db.transaction(async (tx) => {
-      const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
-      if (!app) throw new ActionFailure("That application was not found.");
-      const rule = canMove(app.stage as never, to);
-      if (!rule.ok) throw new ActionFailure(rule.reason);
-      const reopening = app.stage === "rejected";
-      await tx
-        .update(applications)
-        .set({ stage: to, stageChangedAt: new Date(), ...(reopening ? { closeKind: null, closeReason: null, closedAt: null } : {}), ...(to === "hired" ? { closedAt: new Date() } : {}) })
-        .where(eq(applications.id, applicationId));
-      await tx.insert(applicationStageHistory).values({ applicationId, fromStage: app.stage, toStage: to, byUserId: actor.id, note: note ?? null });
-      await writeAudit({ actor, action: "recruiting.move", targetType: "application", targetId: applicationId, before: { stage: app.stage }, after: { stage: to } }, tx);
-      return app.openingId;
-    });
+    const openingId = await db.transaction((tx) => moveInTx(tx, actor, { applicationId, to, note }));
     refresh(openingId, applicationId);
     return { ok: true, data: undefined };
   });
@@ -221,6 +209,7 @@ export async function deleteApplication(input: unknown): Promise<ActionResult<{ 
       await tx.delete(interviews).where(eq(interviews.applicationId, applicationId));
       await tx.delete(candidateNotes).where(eq(candidateNotes.applicationId, applicationId));
       await tx.delete(candidateEmails).where(eq(candidateEmails.applicationId, applicationId));
+      await tx.delete(applicationTagLinks).where(eq(applicationTagLinks.applicationId, applicationId));
       await tx.delete(applicationStageHistory).where(eq(applicationStageHistory.applicationId, applicationId));
       await tx.delete(applications).where(eq(applications.id, applicationId));
       // The applicant goes too when this was their only application.
@@ -250,28 +239,7 @@ export async function rejectApplication(input: unknown): Promise<ActionResult> {
     const parsed = rejectSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
     const v = parsed.data;
-    const openingId = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .select({ app: applications, title: jobOpenings.title, sendRejection: jobOpenings.sendRejection, name: candidates.fullName, email: candidates.email, anonymized: candidates.anonymizedAt })
-        .from(applications)
-        .innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId))
-        .innerJoin(candidates, eq(candidates.id, applications.candidateId))
-        .where(eq(applications.id, v.applicationId));
-      if (!row) throw new ActionFailure("That application was not found.");
-      // Lock the application row itself, then work from the locked copy (FOR UPDATE cannot name a schema-qualified table in a join).
-      const [locked] = await tx.select().from(applications).where(eq(applications.id, v.applicationId)).for("update");
-      row.app = locked;
-      if (row.app.stage === "hired") throw new ActionFailure("A hired person cannot be rejected.");
-      if (row.app.stage === "rejected") throw new ActionFailure("They are already closed.");
-      await tx.update(applications).set({ stage: "rejected", closeKind: v.kind, closeReason: v.reason, closedAt: new Date(), stageChangedAt: new Date() }).where(eq(applications.id, v.applicationId));
-      await tx.insert(applicationStageHistory).values({ applicationId: v.applicationId, fromStage: row.app.stage, toStage: "rejected", byUserId: actor.id, note: v.kind === "withdrawn" ? "Withdrawn by the applicant" : v.kind === "not_qualified" ? "Not qualified" : "Rejected" });
-      await writeAudit({ actor, action: "recruiting.reject", targetType: "application", targetId: v.applicationId, before: { stage: row.app.stage }, after: { stage: "rejected", kind: v.kind } }, tx);
-      if (v.kind !== "withdrawn" && v.notifyCandidate && row.sendRejection && !row.anonymized) {
-        const mail = rejectionMail({ fullName: row.name, jobTitle: row.title });
-        await queueCandidateEmail(tx, { applicationId: v.applicationId, toEmail: row.email, kind: "rejection", subject: mail.subject, text: mail.text, html: mail.html, dedupeKey: `rejection:${v.applicationId}` });
-      }
-      return row.app.openingId;
-    });
+    const openingId = await db.transaction((tx) => closeInTx(tx, actor, v));
     await sendRecruitingEmailsNow();
     refresh(openingId, v.applicationId);
     return { ok: true, data: undefined };
@@ -495,5 +463,159 @@ export async function disconnectCalendar(): Promise<ActionResult> {
     await removeConnection(actor);
     revalidatePath("/recruiting");
     return { ok: true, data: undefined };
+  });
+}
+
+// ---- Tags, source and bulk actions ------------------------------------------------------------------------------------------
+
+const refreshApplicants = (applicationId?: string) => {
+  revalidatePath("/recruiting/applicants");
+  if (applicationId) revalidatePath(`/recruiting/applications/${applicationId}`);
+};
+
+/** Creates a tag, or returns the one that already has that name (ignoring case). */
+export async function createTag(input: unknown): Promise<ActionResult<{ id: string; name: string }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.tag");
+    const parsed = createTagSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { name } = parsed.data;
+    const tag = await db.transaction(async (tx) => {
+      const [existing] = await tx.select({ id: applicationTags.id, name: applicationTags.name }).from(applicationTags).where(and(sql`lower(${applicationTags.name}) = ${name.toLowerCase()}`, isNull(applicationTags.archivedAt)));
+      if (existing) return existing;
+      const [created] = await tx.insert(applicationTags).values({ name, createdBy: actor.id }).returning({ id: applicationTags.id, name: applicationTags.name });
+      await writeAudit({ actor, action: "recruiting.tag_create", targetType: "tag", targetId: created.id, after: { name } }, tx);
+      return created;
+    });
+    refreshApplicants();
+    return { ok: true, data: tag };
+  });
+}
+
+/** Removes a tag from the catalog and from every application (the tag row is archived, never erased). */
+export async function archiveTag(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.tag");
+    const parsed = archiveTagSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    await db.transaction(async (tx) => {
+      const [tag] = await tx.select().from(applicationTags).where(and(eq(applicationTags.id, parsed.data.tagId), isNull(applicationTags.archivedAt))).for("update");
+      if (!tag) throw new ActionFailure("That tag was not found.");
+      await tx.delete(applicationTagLinks).where(eq(applicationTagLinks.tagId, tag.id));
+      await tx.update(applicationTags).set({ archivedAt: new Date() }).where(eq(applicationTags.id, tag.id));
+      await writeAudit({ actor, action: "recruiting.tag_archive", targetType: "tag", targetId: tag.id, before: { name: tag.name } }, tx);
+    });
+    refreshApplicants();
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Replaces the tags on one application with exactly the ones given. */
+export async function setApplicationTags(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.tag");
+    const parsed = setTagsSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { applicationId } = parsed.data;
+    const tagIds = [...new Set(parsed.data.tagIds)];
+    await db.transaction(async (tx) => {
+      const [app] = await tx.select({ id: applications.id }).from(applications).where(eq(applications.id, applicationId)).for("update");
+      if (!app) throw new ActionFailure("That application was not found.");
+      if (tagIds.length) {
+        const live = await tx.select({ id: applicationTags.id }).from(applicationTags).where(and(inArray(applicationTags.id, tagIds), isNull(applicationTags.archivedAt)));
+        if (live.length !== tagIds.length) throw new ActionFailure("One of those tags no longer exists. Reload the page.");
+      }
+      const before = await tx.select({ tagId: applicationTagLinks.tagId }).from(applicationTagLinks).where(eq(applicationTagLinks.applicationId, applicationId));
+      await tx.delete(applicationTagLinks).where(eq(applicationTagLinks.applicationId, applicationId));
+      if (tagIds.length) await tx.insert(applicationTagLinks).values(tagIds.map((tagId) => ({ applicationId, tagId, addedBy: actor.id })));
+      await writeAudit({ actor, action: "recruiting.tags_set", targetType: "application", targetId: applicationId, before: { tags: before.map((b) => b.tagId) }, after: { tags: tagIds } }, tx);
+    });
+    refreshApplicants(applicationId);
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Sets where the applicant heard about the job (for example when a referral came by phone). Blank clears it. */
+export async function setApplicationSource(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.tag");
+    const parsed = setSourceSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { applicationId, source, sourceDetail } = parsed.data;
+    await db.transaction(async (tx) => {
+      const [app] = await tx.select({ source: applications.source }).from(applications).where(eq(applications.id, applicationId)).for("update");
+      if (!app) throw new ActionFailure("That application was not found.");
+      await tx.update(applications).set({ source: source ?? null, sourceDetail: source ? (sourceDetail ?? null) : null }).where(eq(applications.id, applicationId));
+      await writeAudit({ actor, action: "recruiting.source_set", targetType: "application", targetId: applicationId, before: { source: app.source }, after: { source: source ?? null } }, tx);
+    });
+    refreshApplicants(applicationId);
+    return { ok: true, data: undefined };
+  });
+}
+
+export type BulkResult = { requested: number; done: number; failed: { applicationId: string; reason: string }[] };
+
+/**
+ * One action for many applications (move, close, tag, untag). Each application runs in its own transaction, so one that cannot change
+ * (already closed, hired, gone) is reported and the rest still go through. Moves and closes write the same history and audit rows as
+ * doing them one by one; the whole run adds one summary audit row. Applicant emails go out once at the end.
+ */
+export async function bulkUpdateApplications(input: unknown): Promise<ActionResult<BulkResult>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.bulk");
+    const parsed = bulkSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const v = parsed.data;
+    const ids = [...new Set(v.applicationIds)];
+
+    if (v.action === "tag" || v.action === "untag") {
+      const [tag] = await db.select({ id: applicationTags.id }).from(applicationTags).where(and(eq(applicationTags.id, v.tagId), isNull(applicationTags.archivedAt)));
+      if (!tag) return fail("That tag no longer exists. Reload the page.");
+    }
+
+    const failed: BulkResult["failed"] = [];
+    let done = 0;
+    for (const applicationId of ids) {
+      try {
+        await db.transaction(async (tx) => {
+          if (v.action === "move") await moveInTx(tx, actor, { applicationId, to: v.to, note: v.note });
+          else if (v.action === "close") await closeInTx(tx, actor, { applicationId, kind: v.kind, reason: v.reason, notifyCandidate: v.notifyCandidate });
+          else if (v.action === "tag") {
+            const [app] = await tx.select({ id: applications.id }).from(applications).where(eq(applications.id, applicationId)).for("update");
+            if (!app) throw new ActionFailure("That application was not found.");
+            const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(applicationTagLinks).where(eq(applicationTagLinks.applicationId, applicationId));
+            const [already] = await tx.select({ tagId: applicationTagLinks.tagId }).from(applicationTagLinks).where(and(eq(applicationTagLinks.applicationId, applicationId), eq(applicationTagLinks.tagId, v.tagId)));
+            if (!already && n >= MAX_TAGS_PER_APPLICATION) throw new ActionFailure(`It already has ${MAX_TAGS_PER_APPLICATION} tags.`);
+            await tx.insert(applicationTagLinks).values({ applicationId, tagId: v.tagId, addedBy: actor.id }).onConflictDoNothing();
+          } else {
+            await tx.delete(applicationTagLinks).where(and(eq(applicationTagLinks.applicationId, applicationId), eq(applicationTagLinks.tagId, v.tagId)));
+          }
+        });
+        done += 1;
+      } catch (error) {
+        failed.push({ applicationId, reason: error instanceof ActionFailure ? error.message : "Something went wrong." });
+      }
+    }
+
+    await db.transaction((tx) =>
+      writeAudit(
+        {
+          actor,
+          action: "recruiting.bulk",
+          targetType: "application",
+          metadata: { action: v.action, requested: ids.length, done, failed: failed.length, ...(v.action === "move" ? { to: v.to } : {}), ...(v.action === "close" ? { kind: v.kind } : {}), ...(v.action === "tag" || v.action === "untag" ? { tagId: v.tagId } : {}) },
+        },
+        tx,
+      ),
+    );
+    if (v.action === "close" && v.notifyCandidate && done > 0) await sendRecruitingEmailsNow();
+    refresh();
+    refreshApplicants();
+    return { ok: true, data: { requested: ids.length, done, failed: failed.slice(0, 20) } };
   });
 }

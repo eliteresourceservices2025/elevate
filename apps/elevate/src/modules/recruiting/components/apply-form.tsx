@@ -2,18 +2,19 @@
 
 import { useState } from "react";
 import { Markdown } from "@/components/markdown";
-import { TextField } from "@/components/form-fields";
+import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { APPLICANT_NOTE } from "@/modules/demographics/constants";
 import { SelfIdFields } from "@/modules/demographics/components/self-id-fields";
-import { RESUME_MAX_BYTES } from "../constants";
+import { RESUME_MAX_BYTES, SOURCES, SOURCE_LABELS, type Source } from "../constants";
 import { Alert } from "@/components/ui/alert";
 
 /** The public application form. The hidden "website" field is a honeypot: people never see or fill it. */
-export function ApplyForm({ openingId, noticeTitle, noticeBody }: { openingId: string; noticeTitle: string | null; noticeBody: string | null }) {
+export function ApplyForm({ openingId, defaultSource = null, noticeTitle, noticeBody }: { openingId: string; defaultSource?: Source | null; noticeTitle: string | null; noticeBody: string | null }) {
   const [state, setState] = useState<"idle" | "sending" | "done">("idle");
   const [error, setError] = useState<{ message: string; field?: string } | null>(null);
+  const [source, setSource] = useState<string>(defaultSource ?? "");
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

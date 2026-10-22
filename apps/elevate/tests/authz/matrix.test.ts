@@ -88,6 +88,8 @@ const EXPECTED: Record<string, string> = {
   "recruiting.manage_openings": "A A - A - -",
   "recruiting.move": "A A - A - -",
   "recruiting.interview": "A A - A - -",
+  "recruiting.tag": "A A - A - -",
+  "recruiting.bulk": "A A - A - -",
   "recruiting.scorecard": "O O O O - -", // only your own, only as an interviewer on that interview
   "recruiting.download_resume": "A A T A - -",
   "recruiting.connect_calendar": "O O - O - -", // your own Google Calendar only

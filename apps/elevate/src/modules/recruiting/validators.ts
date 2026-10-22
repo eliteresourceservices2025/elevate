@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CLOSE_KINDS, CRITERIA, INTERVIEW_KINDS, OPENING_STATUSES, RECOMMENDATIONS, STAGES } from "./constants";
+import { BULK_MAX, CLOSE_KINDS, CRITERIA, INTERVIEW_KINDS, MAX_TAGS_PER_APPLICATION, OPENING_STATUSES, RECOMMENDATIONS, SOURCES, STAGES, TAG_NAME_MAX, TAG_NAME_PATTERN } from "./constants";
 import { SLUG_PATTERN } from "./slug";
 
 const uuid = z.string().uuid("Invalid id");
@@ -36,6 +36,9 @@ export const applySchema = z.object({
   phone: z.preprocess(blankToUndefined, text(40).optional()),
   country: z.preprocess(blankToUndefined, text(80).optional()),
   note: z.preprocess(blankToUndefined, text(2000).optional()),
+  /** Where they heard about the job. Optional; anything not on the list is ignored rather than refused. */
+  source: z.preprocess(blankToUndefined, z.enum(SOURCES).optional().catch(undefined)),
+  sourceDetail: z.preprocess(blankToUndefined, text(100).optional()),
   consent: z.literal(true, { message: "Please accept the privacy notice to apply" }),
   /** Real people leave this empty; bots fill every field they see. */
   website: z.string().max(0).default(""),
@@ -97,3 +100,30 @@ export const careersPageSchema = z.object({
   title: z.preprocess(blankToUndefined, text(120).optional()),
   intro: z.preprocess(blankToUndefined, text(2000).optional()),
 });
+
+// ---- Sources, tags and bulk actions -----------------------------------------------------------------------------------------
+
+export const tagNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Give the tag a name")
+  .max(TAG_NAME_MAX, `Use ${TAG_NAME_MAX} characters or fewer`)
+  .regex(TAG_NAME_PATTERN, "Use letters, numbers and spaces");
+export const createTagSchema = z.object({ name: tagNameSchema });
+export const archiveTagSchema = z.object({ tagId: uuid });
+export const setTagsSchema = z.object({ applicationId: uuid, tagIds: z.array(uuid).max(MAX_TAGS_PER_APPLICATION, `At most ${MAX_TAGS_PER_APPLICATION} tags on one application`) });
+export const setSourceSchema = z.object({
+  applicationId: uuid,
+  source: z.preprocess(blankToUndefined, z.enum(SOURCES).optional()),
+  sourceDetail: z.preprocess(blankToUndefined, text(100).optional()),
+});
+
+const bulkIds = z.array(uuid).min(1, "Choose at least one applicant").max(BULK_MAX, `Choose ${BULK_MAX} applicants or fewer at a time`);
+/** One action applied to many applications. Each application succeeds or fails on its own. */
+export const bulkSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("move"), applicationIds: bulkIds, to: z.enum(STAGES).refine((s) => s !== "rejected" && s !== "hired", "Use Close for that; hiring is done one person at a time"), note: z.preprocess(blankToUndefined, text(500).optional()) }),
+  z.object({ action: z.literal("close"), applicationIds: bulkIds, kind: z.enum(CLOSE_KINDS), reason: text(500).min(3, "Give a short reason (it stays internal)"), notifyCandidate: z.boolean().default(false) }),
+  z.object({ action: z.literal("tag"), applicationIds: bulkIds, tagId: uuid }),
+  z.object({ action: z.literal("untag"), applicationIds: bulkIds, tagId: uuid }),
+]);
+export type BulkInput = z.input<typeof bulkSchema>;

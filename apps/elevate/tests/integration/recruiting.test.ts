@@ -321,6 +321,127 @@ describe("the all-applicants list", () => {
   });
 });
 
+describe("sources, tags and bulk actions", () => {
+  const tagId = async (name: string) => {
+    as(recruiter);
+    const made = await actions.createTag({ name });
+    if (!made.ok) throw new Error(made.error);
+    return made.data.id;
+  };
+
+  it("keeps where the applicant heard about the job, ignores an unknown value, and lets staff change it", async () => {
+    const opening = await openJob();
+    const a = `${uniq("src")}@example.com`;
+    const b = `${uniq("src")}@example.com`;
+    expect(await apply(opening, { email: a, source: "referral", sourceDetail: "Maria Santos" })).toEqual({ ok: true });
+    expect(await apply(opening, { email: b, source: "not-a-source" })).toEqual({ ok: true });
+    const [rowA] = await rows<{ source: string | null; source_detail: string | null }>(sql`select source, source_detail from talent.applications where id = ${(await appFor(opening, a))!}`);
+    expect(rowA).toEqual({ source: "referral", source_detail: "Maria Santos" });
+    const idB = (await appFor(opening, b))!;
+    expect((await rows<{ source: string | null }>(sql`select source from talent.applications where id = ${idB}`))[0].source).toBeNull();
+
+    as(recruiter);
+    expect((await actions.setApplicationSource({ applicationId: idB, source: "linkedin" })).ok).toBe(true);
+    expect((await actions.setApplicationSource({ applicationId: idB, source: "nonsense" })).ok).toBe(false);
+    expect((await rows<{ source: string | null }>(sql`select source from talent.applications where id = ${idB}`))[0].source).toBe("linkedin");
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'recruiting.source_set' and target_id = ${idB}`)).toHaveLength(1);
+    // The list can filter on it
+    const listed = await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, source: "linkedin" }, { page: 1, pageSize: 50 });
+    expect(listed.rows.map((r) => r.applicationId)).toEqual([idB]);
+    expect((await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, source: "none" }, { page: 1, pageSize: 50 })).rows).toHaveLength(0);
+  });
+
+  it("creates a tag once per name (ignoring case), sets tags on an application, filters by tag, and archiving removes it everywhere", async () => {
+    const opening = await openJob();
+    const email = `${uniq("tag")}@example.com`;
+    await apply(opening, { email });
+    const appId = (await appFor(opening, email))!;
+    const name = uniq("Strong English ");
+    const t1 = await tagId(name);
+    expect(await tagId(name.toUpperCase())).toBe(t1); // same tag
+    const t2 = await tagId(uniq("Call back "));
+    as(recruiter);
+    expect((await actions.createTag({ name: "<script>" })).ok).toBe(false);
+    expect((await actions.setApplicationTags({ applicationId: appId, tagIds: [t1, t2] })).ok).toBe(true);
+    expect((await queries.getApplication(appId)).tags.map((t) => t.id).sort()).toEqual([t1, t2].sort());
+    expect((await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, tagId: t1 }, { page: 1, pageSize: 50 })).rows.map((r) => r.applicationId)).toEqual([appId]);
+    expect((await actions.setApplicationTags({ applicationId: appId, tagIds: Array.from({ length: 11 }, () => t1) })).ok).toBe(false); // more than 10 is refused
+    expect((await actions.setApplicationTags({ applicationId: appId, tagIds: ["11111111-1111-4111-8111-111111111111"] })).ok).toBe(false);
+
+    expect((await actions.archiveTag({ tagId: t1 })).ok).toBe(true);
+    expect((await queries.getApplication(appId)).tags.map((t) => t.id)).not.toContain(t1);
+    expect(await rows(sql`select 1 from talent.application_tags where tag_id = ${t1}`)).toHaveLength(0);
+    // the name is free to use again
+    expect(await tagId(name)).not.toBe(t1);
+  });
+
+  it("moves, closes and tags many at once, reports the ones that could not change, and writes the same history", async () => {
+    const opening = await openJob();
+    const emails = [1, 2, 3].map((n) => `${uniq(`bulk${n}-`)}@example.com`);
+    for (const e of emails) await apply(opening, { email: e });
+    const ids = await Promise.all(emails.map(async (e) => (await appFor(opening, e))!));
+    as(recruiter);
+
+    const moved = await actions.bulkUpdateApplications({ action: "move", applicationIds: ids, to: "screening", note: "Batch review" });
+    expect(moved).toMatchObject({ ok: true, data: { requested: 3, done: 3, failed: [] } });
+    expect(await rows(sql`select 1 from talent.application_stage_history where application_id in (${sql.join(ids.map((i) => sql`${i}`), sql`, `)}) and to_stage = 'screening'`)).toHaveLength(3);
+    // moving to the stage they are already in fails for each one, and says why
+    const again = await actions.bulkUpdateApplications({ action: "move", applicationIds: ids, to: "screening" });
+    expect(again).toMatchObject({ ok: true, data: { done: 0 } });
+    expect((again as { data: { failed: { reason: string }[] } }).data.failed.map((f) => f.reason)).toEqual(Array(3).fill("They are already in that stage."));
+    // hiring is never done in bulk
+    expect((await actions.bulkUpdateApplications({ action: "move", applicationIds: ids, to: "hired" })).ok).toBe(false);
+
+    const tag = await tagId(uniq("Batch "));
+    expect(await actions.bulkUpdateApplications({ action: "tag", applicationIds: ids, tagId: tag })).toMatchObject({ ok: true, data: { done: 3 } });
+    expect(await rows(sql`select 1 from talent.application_tags where tag_id = ${tag}`)).toHaveLength(3);
+    expect(await actions.bulkUpdateApplications({ action: "untag", applicationIds: [ids[0]], tagId: tag })).toMatchObject({ ok: true, data: { done: 1 } });
+    expect(await rows(sql`select 1 from talent.application_tags where tag_id = ${tag}`)).toHaveLength(2);
+
+    // close two (one is closed first, so it is reported), email only when asked
+    expect((await actions.rejectApplication({ applicationId: ids[2], reason: "Already closed" })).ok).toBe(true);
+    const closed = await actions.bulkUpdateApplications({ action: "close", applicationIds: ids.slice(1), kind: "not_qualified", reason: "Missing certification", notifyCandidate: true });
+    expect(closed).toMatchObject({ ok: true, data: { requested: 2, done: 1 } });
+    expect((closed as { data: { failed: { applicationId: string; reason: string }[] } }).data.failed).toEqual([{ applicationId: ids[2], reason: "They are already closed." }]);
+    const [c] = await rows<{ close_kind: string }>(sql`select close_kind from talent.applications where id = ${ids[1]}`);
+    expect(c.close_kind).toBe("not_qualified");
+    expect(await rows(sql`select 1 from talent.candidate_emails where application_id = ${ids[1]} and kind = 'rejection'`)).toHaveLength(1);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'recruiting.bulk' and metadata->>'action' = 'close'`)).not.toHaveLength(0);
+    // unknown ids are reported, not fatal; too many are refused
+    expect((await actions.bulkUpdateApplications({ action: "move", applicationIds: ["11111111-1111-4111-8111-111111111111"], to: "screening" })).ok).toBe(true);
+    expect((await actions.bulkUpdateApplications({ action: "move", applicationIds: Array.from({ length: 101 }, (_, i) => `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`), to: "screening" })).ok).toBe(false);
+  });
+
+  it("only HR, Super Admin and recruiters may tag or act in bulk; a team lead, executive and employee are refused", async () => {
+    const opening = await openJob();
+    const email = `${uniq("perm")}@example.com`;
+    await apply(opening, { email });
+    const appId = (await appFor(opening, email))!;
+    for (const u of [lead, exec, employee]) {
+      as(u);
+      expect(await actions.createTag({ name: "Nope" })).toEqual({ ok: false, error: NO_ACCESS });
+      expect(await actions.setApplicationTags({ applicationId: appId, tagIds: [] })).toEqual({ ok: false, error: NO_ACCESS });
+      expect(await actions.bulkUpdateApplications({ action: "move", applicationIds: [appId], to: "screening" })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+    as(hr);
+    expect((await actions.bulkUpdateApplications({ action: "move", applicationIds: [appId], to: "screening" })).ok).toBe(true);
+  });
+
+  it("erasing an application also removes its tags", async () => {
+    const opening = await openJob();
+    const email = `${uniq("erase")}@example.com`;
+    await apply(opening, { email });
+    const appId = (await appFor(opening, email))!;
+    const tag = await tagId(uniq("Erase "));
+    as(recruiter);
+    await actions.setApplicationTags({ applicationId: appId, tagIds: [tag] });
+    const superAdmin = await makeUser("sa", ["super_admin", "employee"]);
+    as(superAdmin);
+    expect((await actions.deleteApplication({ applicationId: appId, confirm: "DELETE" })).ok).toBe(true);
+    expect(await rows(sql`select 1 from talent.application_tags where application_id = ${appId}`)).toHaveLength(0);
+  });
+});
+
 describe("the pipeline", () => {
   it("closes an application as not qualified, keeps the kind and history note, can email, and can reopen", async () => {
     const opening = await openJob();

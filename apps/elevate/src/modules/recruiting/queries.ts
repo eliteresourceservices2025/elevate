@@ -8,12 +8,12 @@ import { teams } from "@/modules/org/schema";
 import { users, userRoles } from "@/modules/core/schema";
 import { reportName } from "@/modules/org/service";
 import { getPrivacyNotice } from "@/modules/privacy/queries";
-import { BOARD_STAGES, STAGES, type CloseKind, type CriterionKey, type Stage } from "./constants";
+import { BOARD_STAGES, STAGES, type CloseKind, type CriterionKey, type Source, type Stage } from "./constants";
 import { escapeLike, type ApplicantFilters } from "./applicant-filters";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { pageInfo } from "@/lib/pagination";
 import { looksLikeId } from "./slug";
-import { applicationStageHistory, applications, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, scorecards } from "./schema";
+import { applicationStageHistory, applicationTagLinks, applicationTags, applications, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, scorecards } from "./schema";
 import { calendarStatus } from "./calendar";
 import { authorizeForOpening, getRetentionSettings, hiringTeamIds } from "./service";
 
@@ -241,7 +241,10 @@ export async function getApplication(applicationId: string) {
 
   return {
     nowMs: Date.now(),
-    application: { id: app.id, openingId: app.openingId, stage: app.stage as Stage, closeKind: app.closeKind, closeReason: app.closeReason, note: app.note, appliedAt: app.appliedAt, stageChangedAt: app.stageChangedAt },
+    application: { id: app.id, openingId: app.openingId, stage: app.stage as Stage, closeKind: app.closeKind, closeReason: app.closeReason, note: app.note, appliedAt: app.appliedAt, stageChangedAt: app.stageChangedAt, source: app.source as Source | null, sourceDetail: app.sourceDetail },
+    tags: await tagsOfApplication(applicationId),
+    tagChoices: scopeFor(user, "recruiting.tag") !== null ? await listTagChoices() : [],
+    canTag: scopeFor(user, "recruiting.tag") !== null,
     opening,
     candidate: candidate.anonymizedAt ? { removed: true as const } : { removed: false as const, name: candidate.fullName, email: candidate.email, phone: candidate.phone, country: candidate.country, hasResume: Boolean(candidate.resumePath), resumeKind: candidate.resumeKind, resumeName: candidate.resumeName, consentAt: candidate.consentAt, consentVersion: candidate.consentNoticeVersion },
     history: history.map((h) => ({ ...h, byName: h.by ? (names.get(h.by) ?? "Unknown") : "Applicant" })),
@@ -289,6 +292,8 @@ export type ApplicantRow = {
   closeKind: CloseKind | null;
   appliedAt: Date;
   stageChangedAt: Date;
+  source: Source | null;
+  tags: TagChoice[];
 };
 
 /**
@@ -307,6 +312,9 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
   if (filters.stage === "open") conditions.push(notInArray(applications.stage, ["hired", "rejected"]));
   else if (filters.stage !== "all") conditions.push(eq(applications.stage, filters.stage));
   if (filters.closeKind !== "all") conditions.push(eq(applications.closeKind, filters.closeKind));
+  if (filters.source === "none") conditions.push(isNull(applications.source));
+  else if (filters.source !== "all") conditions.push(eq(applications.source, filters.source));
+  if (filters.tagId) conditions.push(inArray(applications.id, db.select({ id: applicationTagLinks.applicationId }).from(applicationTagLinks).where(eq(applicationTagLinks.tagId, filters.tagId))));
   if (filters.from) conditions.push(sql`(${applications.appliedAt} at time zone ${DEFAULT_TIMEZONE})::date >= ${filters.from}::date`);
   if (filters.to) conditions.push(sql`(${applications.appliedAt} at time zone ${DEFAULT_TIMEZONE})::date <= ${filters.to}::date`);
   if (filters.q) {
@@ -336,6 +344,7 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
       closeKind: applications.closeKind,
       appliedAt: applications.appliedAt,
       stageChangedAt: applications.stageChangedAt,
+      source: applications.source,
     })
     .from(applications)
     .innerJoin(candidates, eq(candidates.id, applications.candidateId))
@@ -351,6 +360,18 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
     .where(and(isNull(jobOpenings.archivedAt), teamOnly))
     .orderBy(asc(jobOpenings.title));
 
+  // Tags for just the rows on this page, in one query.
+  const tagRows = rows.length
+    ? await db
+        .select({ applicationId: applicationTagLinks.applicationId, id: applicationTags.id, name: applicationTags.name })
+        .from(applicationTagLinks)
+        .innerJoin(applicationTags, eq(applicationTags.id, applicationTagLinks.tagId))
+        .where(and(inArray(applicationTagLinks.applicationId, rows.map((r) => r.applicationId)), isNull(applicationTags.archivedAt)))
+        .orderBy(asc(sql`lower(${applicationTags.name})`))
+    : [];
+  const tagsBy = new Map<string, TagChoice[]>();
+  for (const t of tagRows) tagsBy.set(t.applicationId, [...(tagsBy.get(t.applicationId) ?? []), { id: t.id, name: t.name }]);
+
   const list: ApplicantRow[] = rows.map((r) => ({
     applicationId: r.applicationId,
     name: r.anonymized ? "Removed applicant" : r.name,
@@ -361,6 +382,26 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
     closeKind: r.closeKind as CloseKind | null,
     appliedAt: r.appliedAt,
     stageChangedAt: r.stageChangedAt,
+    source: r.source as Source | null,
+    tags: tagsBy.get(r.applicationId) ?? [],
   }));
-  return { scope, rows: list, info, openings };
+  return { scope, rows: list, info, openings, tagChoices: await listTagChoices(), canBulk: scopeFor(user, "recruiting.bulk") !== null };
+}
+
+// ---- Tags -----------------------------------------------------------------------------------------------------------------
+
+export type TagChoice = { id: string; name: string };
+
+/** Every live tag, A to Z (internal: callers authorize first). */
+async function listTagChoices(): Promise<TagChoice[]> {
+  return db.select({ id: applicationTags.id, name: applicationTags.name }).from(applicationTags).where(isNull(applicationTags.archivedAt)).orderBy(asc(sql`lower(${applicationTags.name})`));
+}
+
+async function tagsOfApplication(applicationId: string): Promise<TagChoice[]> {
+  return db
+    .select({ id: applicationTags.id, name: applicationTags.name })
+    .from(applicationTagLinks)
+    .innerJoin(applicationTags, eq(applicationTags.id, applicationTagLinks.tagId))
+    .where(and(eq(applicationTagLinks.applicationId, applicationId), isNull(applicationTags.archivedAt)))
+    .orderBy(asc(sql`lower(${applicationTags.name})`));
 }

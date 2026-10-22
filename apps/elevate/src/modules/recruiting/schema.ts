@@ -118,6 +118,9 @@ export const applications = talent
       closeReason: text("close_reason"),
       /** What the applicant wrote on the form. */
       note: text("note"),
+      /** Where they heard about the job (see SOURCES); null = not said. `sourceDetail` is an optional short note such as who referred them. */
+      source: text("source"),
+      sourceDetail: text("source_detail"),
       appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
       stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
       /** When the application was closed or hired: retention counts from here. */
@@ -127,6 +130,7 @@ export const applications = talent
       uniqueIndex("applications_opening_candidate_idx").on(t.openingId, t.candidateId),
       index("applications_opening_stage_idx").on(t.openingId, t.stage),
       check("applications_stage_chk", sql`${t.stage} in ('applied','screening','interview','assessment','offer','hired','rejected')`),
+      check("applications_source_chk", sql`${t.source} is null or ${t.source} in ('careers_page','referral','linkedin','facebook','job_board','agency','other')`),
       check("applications_close_chk", sql`(${t.stage} = 'rejected') = (${t.closeKind} is not null) and (${t.closeKind} is null or ${t.closeKind} in ('rejected','not_qualified','withdrawn'))`),
     ],
   )
@@ -302,5 +306,38 @@ export const recruitingSettings = talent
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [check("recruiting_settings_one_row", sql`${t.id} = 1`)],
+  )
+  .enableRLS();
+
+/** The catalog of tags recruiters can put on applications. A name is unique ignoring case; removing a tag archives it. */
+export const applicationTags = talent
+  .table(
+    "tags",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      name: text("name").notNull(),
+      createdBy: uuid("created_by").references(() => users.id),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+      archivedAt: timestamp("archived_at", { withTimezone: true }),
+    },
+    (t) => [uniqueIndex("tags_name_idx").on(sql`lower(${t.name})`).where(sql`${t.archivedAt} is null`)],
+  )
+  .enableRLS();
+
+/** Which tags are on which application. */
+export const applicationTagLinks = talent
+  .table(
+    "application_tags",
+    {
+      applicationId: uuid("application_id")
+        .notNull()
+        .references(() => applications.id),
+      tagId: uuid("tag_id")
+        .notNull()
+        .references(() => applicationTags.id),
+      addedBy: uuid("added_by").references(() => users.id),
+      addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [primaryKey({ columns: [t.applicationId, t.tagId] }), index("application_tags_tag_idx").on(t.tagId)],
   )
   .enableRLS();

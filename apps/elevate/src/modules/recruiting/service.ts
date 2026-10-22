@@ -121,7 +121,7 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
         candidateId = created.id;
       }
 
-      const [app] = await tx.insert(applications).values({ openingId: opening.id, candidateId, note: v.note ?? null }).onConflictDoNothing().returning({ id: applications.id });
+      const [app] = await tx.insert(applications).values({ openingId: opening.id, candidateId, note: v.note ?? null, source: v.source ?? null, sourceDetail: v.sourceDetail ?? null }).onConflictDoNothing().returning({ id: applications.id });
       if (!app) return { duplicate: true as const, oldResume: null };
 
       await saveApplicantSelfId(tx, candidateId, selfId.data);

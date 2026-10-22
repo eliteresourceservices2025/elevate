@@ -8,6 +8,9 @@ export const recruitingPermissions = definePermissions({
   "recruiting.summary": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all", team_lead: "team", executive: "all" } },
   "recruiting.manage_openings": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   "recruiting.move": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
+  // Tags and the source on an application, and one action for many applications at once.
+  "recruiting.tag": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
+  "recruiting.bulk": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   "recruiting.interview": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   "recruiting.scorecard": { roles: { super_admin: "own", hr_admin: "own", recruiter: "own", team_lead: "own" } },
   "recruiting.download_resume": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all", team_lead: "team" } },

@@ -6,6 +6,7 @@ import { ApplyForm } from "@/modules/recruiting/components/apply-form";
 import { getPublicOpening, getPublicPrivacyNotice } from "@/modules/recruiting/queries";
 import { baseUrl, jobPostingJsonLd, safeJsonLd } from "@/modules/recruiting/public-feed";
 import { looksLikeId } from "@/modules/recruiting/slug";
+import { sourceFromParam } from "@/modules/recruiting/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +15,14 @@ export async function generateMetadata({ params }: PageProps<"/careers/[id]">): 
   return { title: opening ? opening.title : "Careers" };
 }
 
-export default async function CareerDetailPage({ params }: PageProps<"/careers/[id]">) {
+export default async function CareerDetailPage({ params, searchParams }: PageProps<"/careers/[id]">) {
   const { id } = await params;
+  // A link such as ?src=linkedin pre-selects where the applicant heard about the job (they can change it).
+  const defaultSource = sourceFromParam((await searchParams).src);
   const opening = await getPublicOpening(id);
   if (!opening) notFound();
   // An old link by id goes to the readable address.
-  if (opening.slug && looksLikeId(id)) permanentRedirect(`/careers/${opening.slug}`);
+  if (opening.slug && looksLikeId(id)) permanentRedirect(`/careers/${opening.slug}${defaultSource ? `?src=${defaultSource}` : ""}`);
   const notice = await getPublicPrivacyNotice();
   return (
     <div className="space-y-8">
@@ -43,7 +46,7 @@ export default async function CareerDetailPage({ params }: PageProps<"/careers/[
         <h2 id="apply-heading" className="text-lg font-semibold">
           Apply
         </h2>
-        <ApplyForm openingId={opening.id} noticeTitle={notice?.title ?? null} noticeBody={notice?.body ?? null} />
+        <ApplyForm openingId={opening.id} defaultSource={defaultSource} noticeTitle={notice?.title ?? null} noticeBody={notice?.body ?? null} />
       </section>
     </div>
   );

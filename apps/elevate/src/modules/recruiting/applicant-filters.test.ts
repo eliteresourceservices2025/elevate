@@ -9,16 +9,22 @@ describe("parseApplicantFilters", () => {
   });
 
   it("keeps valid values and drops anything it does not recognise", () => {
-    expect(parseApplicantFilters({ q: "  ana   reyes ", stage: "screening", kind: "not_qualified", job: ID.toUpperCase(), from: "2026-01-05", to: "2026-02-30", sort: "name" })).toEqual({
+    expect(parseApplicantFilters({ q: "  ana   reyes ", stage: "screening", kind: "not_qualified", job: ID.toUpperCase(), source: "linkedin", tag: ID, from: "2026-01-05", to: "2026-02-30", sort: "name" })).toEqual({
       q: "ana reyes",
       stage: "screening",
       closeKind: "not_qualified",
       openingId: ID,
+      source: "linkedin",
+      tagId: ID,
       from: "2026-01-05",
       to: null, // not a real date
       sort: "name",
     });
-    expect(parseApplicantFilters({ stage: "nope", kind: "x", job: "1; drop table", from: "yesterday", sort: "random" })).toEqual(EMPTY_FILTERS);
+    expect(parseApplicantFilters({ stage: "nope", kind: "x", job: "1; drop table", source: "x", tag: "nope", from: "yesterday", sort: "random" })).toEqual(EMPTY_FILTERS);
+  });
+
+  it("accepts the not-said source", () => {
+    expect(parseApplicantFilters({ source: "none" }).source).toBe("none");
   });
 
   it("accepts the open-pipeline stage, takes the first of repeated values and caps the search length", () => {

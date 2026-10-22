@@ -120,7 +120,7 @@ export async function runRecruitingRetention(now = new Date()) {
         await tx.delete(candidateEmails).where(inArray(candidateEmails.applicationId, apps));
         await tx.update(scorecards).set({ comments: "[removed]" }).where(inArray(scorecards.applicationId, apps));
         await tx.update(applicationStageHistory).set({ note: null }).where(inArray(applicationStageHistory.applicationId, apps));
-        await tx.update(applications).set({ note: null, closeReason: null }).where(inArray(applications.id, apps));
+        await tx.update(applications).set({ note: null, closeReason: null, sourceDetail: null }).where(inArray(applications.id, apps));
       }
       await deleteApplicantSelfId(tx, candidateId); // the applicant's voluntary self-identification answers go too
       await tx
