@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { hidesVersion } from "@/modules/announcements/constants";
 import { SENSITIVE_FIELDS, SENSITIVE_LABELS, CHANGE_CATEGORY_LABELS, type ChangeCategory } from "@/modules/people/constants";
 import type { MyData } from "./types";
 
@@ -50,7 +51,7 @@ export async function collectMyData(userId: string, email: string): Promise<MyDa
     : [];
   const acknowledgments = await query(sql`
     select k.acknowledged_at, coalesce(a.title, p.title) as title,
-           case when k.announcement_id is not null then 'Announcement' else 'Policy' end as kind, pv.version
+           case when k.announcement_id is not null then 'Announcement' else 'Policy' end as kind, pv.version, p.kind as policy_kind
     from docs.acknowledgments k
     left join docs.announcements a on a.id = k.announcement_id
     left join docs.policy_versions pv on pv.id = k.policy_version_id
@@ -108,7 +109,7 @@ export async function collectMyData(userId: string, email: string): Promise<MyDa
     emergencyContacts: contacts.map((c) => ({ name: String(c.name), relationship: String(c.relationship), phone: String(c.phone), primary: Boolean(c.is_primary) })),
     clients: clients.map((c) => ({ client: String(c.name), startDate: dateOnly(c.start_date)!, endDate: dateOnly(c.end_date), hoursPerWeek: str(c.hours) })),
     documents: documents.map((d) => ({ title: String(d.title), type: String(d.type), expiresOn: dateOnly(d.expires_on), verified: d.verified_at !== null, uploadedAt: iso(d.created_at)! })),
-    acknowledgments: acknowledgments.map((a) => ({ title: String(a.title), kind: String(a.kind), version: a.version === null ? null : Number(a.version), at: iso(a.acknowledged_at)! })),
+    acknowledgments: acknowledgments.map((a) => ({ title: String(a.title), kind: String(a.kind), version: a.version === null || hidesVersion(a.policy_kind as string | null) ? null : Number(a.version), at: iso(a.acknowledged_at)! })),
     training: training.map((t) => ({ course: String(t.title), version: Number(t.version), track: String(t.track), status: String(t.status), assignedOn: dateOnly(t.assigned_on)!, dueOn: dateOnly(t.due_on)!, passedOn: dateOnly(t.passed_on), minutesSpent: Math.round(Number(t.seconds) / 60), certificate: str(t.reference), validUntil: dateOnly(t.ends_on) })),
     practice: practice.map((p) => ({ course: String(p.title), quarter: String(p.quarter), choseBetter: Boolean(p.correct) })),
     requests: requests.map((r) => ({ category: CHANGE_CATEGORY_LABELS[r.category as ChangeCategory] ?? String(r.category), status: String(r.status), createdAt: iso(r.created_at)! })),

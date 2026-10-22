@@ -646,7 +646,10 @@ describe("privacy notice gate (first login)", () => {
 
     // The acceptance shows on the person's own data page
     const { data } = await privacy.getMyData();
-    expect(data.acknowledgments.filter((a) => a.kind === "Policy").map((a) => a.version).sort()).toEqual([1, 2]);
+    // Both acceptances are listed, but the privacy notice shows no version number
+    const accepted = data.acknowledgments.filter((a) => a.kind === "Policy");
+    expect(accepted).toHaveLength(2);
+    expect(accepted.map((a) => a.version)).toEqual([null, null]);
 
     // The gate is UI-level only for the notice itself: other people's accounts are unaffected until they visit
     const other = await person("gate-other");
