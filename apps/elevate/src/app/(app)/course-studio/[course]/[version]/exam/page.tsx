@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { orNotFound } from "@/lib/or-not-found";
 import { sampleExam } from "@/modules/learn/studio-exam-preview";
 import { getStudioVersion } from "@/modules/learn/studio-queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Exam preview" };
 
@@ -34,19 +36,22 @@ export default async function StudioExamPreviewPage({
   const titles = new Map(loaded.content.modules.map((m) => [m.key, m.title]));
 
   return (
-    <div className="w-full max-w-6xl space-y-6">
+    <PageContainer width="wide">
       <p className="text-sm">
         <Link href={base} className="text-primary underline-offset-4 hover:underline">
           Back to version {version}
         </Link>
       </p>
-      <div>
-        <h1 className="text-2xl font-bold">Exam preview</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          A sample of what one learner would get on the {track ?? "chosen"} track. Questions are drawn across the track&apos;s modules and shown in a random order with the options
-          shuffled, as in the real exam. The key is shown here for editors only. Nothing is recorded, and a learner&apos;s exam will differ.
-        </p>
-      </div>
+      <PageHeader
+        title="Exam preview"
+        description={
+          <>
+            A sample of what one learner would get on the {track ?? "chosen"} track. Questions are drawn across the track&apos;s modules and
+            shown in a random order with the options shuffled, as in the real exam. The key is shown here for editors only. Nothing is recorded,
+            and a learner&apos;s exam will differ.
+          </>
+        }
+      />
 
       <section className="space-y-2 rounded-xl border bg-card p-4 text-sm" aria-label="Exam rules">
         <p>
@@ -92,6 +97,6 @@ export default async function StudioExamPreviewPage({
           </li>
         ))}
       </ol>
-    </div>
+    </PageContainer>
   );
 }

@@ -13,6 +13,7 @@ import { useRun } from "@/modules/recruiting/components/use-run";
 import { hireCandidate, makeOffer, previewOffer, resendOfferLink, sendOffer, withdrawOffer } from "../actions";
 import type { OfferRow } from "../queries";
 import type { OfferStatus } from "../service";
+import { Alert } from "@/components/ui/alert";
 
 type Panel = {
   stage: string;
@@ -215,14 +216,14 @@ export function OfferPanel({ applicationId, panel }: { applicationId: string; pa
       </ul>
 
       {panel.hiredEmployeeId ? (
-        <p className="rounded-lg border border-green-600/40 bg-green-600/10 p-3 text-sm">
+        <Alert variant="success" role="note" className="rounded-lg p-3 text-sm">
           Hired.{" "}
           {panel.canHire ? (
             <Link href={`/people/${panel.hiredEmployeeId}`} className="font-medium text-primary underline-offset-4 hover:underline">
               Open their people record
             </Link>
           ) : null}
-        </p>
+        </Alert>
       ) : null}
 
       {panel.canMake && open && panel.stage === "offer" && !panel.offers.some((o) => o.status === "draft" || o.status === "sent") ? (

@@ -1,22 +1,21 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { orNotFound } from "@/lib/or-not-found";
 import { EarlySettings, ReviewTemplateEditor } from "@/modules/reviews/components/template-forms";
 import { getReviewTemplates } from "@/modules/reviews/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Review templates" };
 
 export default async function ReviewTemplatesPage() {
   const data = await orNotFound(getReviewTemplates());
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/reviews" className="text-sm text-primary underline-offset-2 hover:underline">
-          All reviews
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">Review templates</h1>
-        <p className="mt-1 text-muted-foreground">A cycle keeps its own copy of the questions, so changing a template never changes a cycle that is already running.</p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Review templates"
+        description="A cycle keeps its own copy of the questions, so changing a template never changes a cycle that is already running."
+        breadcrumbs={[{ label: "All reviews", href: "/reviews" }, { label: "Review templates" }]}
+      />
       <EarlySettings enabled={data.early.enabled} templateId={data.early.templateId} templates={data.templates.map((t) => ({ id: t.id, name: t.name }))} />
       {data.templates.map((t) => (
         <details key={t.id} className="rounded-xl border">
@@ -34,6 +33,6 @@ export default async function ReviewTemplatesPage() {
           <ReviewTemplateEditor />
         </div>
       </details>
-    </div>
+    </PageContainer>
   );
 }

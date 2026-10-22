@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { orNotFound } from "@/lib/or-not-found";
 import { formatDateOnly } from "@/lib/time";
@@ -7,6 +6,8 @@ import { AcknowledgeForm, CalibrateForm, ReassignForm, RestoreButton, ReviewForm
 import { ReviewAnswers } from "@/modules/reviews/components/review-view";
 import { RATING_LABELS, STAGE_LABELS } from "@/modules/reviews/constants";
 import { getReview } from "@/modules/reviews/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Review" };
 
@@ -18,23 +19,24 @@ export default async function ReviewPage({ params }: PageProps<"/reviews/[id]">)
   const suggested = lead?.overallRating ?? null;
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/reviews" className="text-sm text-primary underline-offset-2 hover:underline">
-          All reviews
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">
-          {r.isPerson ? "Your review" : `Review: ${r.name}`}
-        </h1>
-        <p className="text-muted-foreground">
-          {r.cycleName}
-          {r.milestone ? ` (month ${r.milestone})` : ""}. {STAGE_LABELS[r.stage]}.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          Due: self review {formatDateOnly(r.dues.self)}, lead review {formatDateOnly(r.dues.lead)}, calibration {formatDateOnly(r.dues.calibrate)}.
-          {r.leadName && r.viewer !== "person" ? ` Lead: ${r.leadName}.` : ""} {r.cycleOpen ? "" : "This cycle is closed."}
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title={r.isPerson ? "Your review" : `Review: ${r.name}`}
+        description={
+          <>
+            <p className="text-muted-foreground">
+              {r.cycleName}
+              {r.milestone ? ` (month ${r.milestone})` : ""}. {STAGE_LABELS[r.stage]}.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Due: self review {formatDateOnly(r.dues.self)}, lead review {formatDateOnly(r.dues.lead)}, calibration{" "}
+              {formatDateOnly(r.dues.calibrate)}.{r.leadName && r.viewer !== "person" ? ` Lead: ${r.leadName}.` : ""}{" "}
+              {r.cycleOpen ? "" : "This cycle is closed."}
+            </p>
+          </>
+        }
+        breadcrumbs={[{ label: "All reviews", href: "/reviews" }, { label: r.isPerson ? "Your review" : `Review: ${r.name}` }]}
+      />
 
       {r.waived ? (
         <section aria-label="Waived" role="status" className="space-y-1 rounded-xl border bg-muted/40 p-4">
@@ -79,6 +81,6 @@ export default async function ReviewPage({ params }: PageProps<"/reviews/[id]">)
       {r.canReassign ? <ReassignForm reviewId={r.id} options={r.leadOptions} /> : null}
       {r.canWaive ? <WaiveForm reviewId={r.id} /> : null}
       {r.canRestore ? <RestoreButton reviewId={r.id} /> : null}
-    </div>
+    </PageContainer>
   );
 }

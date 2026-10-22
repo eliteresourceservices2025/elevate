@@ -127,7 +127,7 @@ function RequestForm({ data }: { data: MyExtraHours }) {
         );
       }}
     >
-      <h3 className="font-semibold">Ask to work extra hours</h3>
+      <h2 className="text-base font-semibold">Ask to work extra hours</h2>
       <p className="text-sm text-muted-foreground">
         Ask your client first. Then attach their approval here, and your team lead decides. Up to {maxHours} hours a day. Times are in {data.zone}. If the time has already passed, it is asked for after the fact and your lead sees that.
       </p>
@@ -187,7 +187,7 @@ function FileForm({ people, clients, zone }: { people: FilablePerson[]; clients:
         );
       }}
     >
-      <h3 className="font-semibold">File extra hours the client asked for</h3>
+      <h2 className="text-base font-semibold">File extra hours the client asked for</h2>
       <p className="text-sm text-muted-foreground">Your filing is the approval. The VA is told and confirms or declines; they can say no. Times are in {zone}.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <SelectField id="fe-who" label="Person" value={who} onChange={(e) => setWho(e.target.value)} required>

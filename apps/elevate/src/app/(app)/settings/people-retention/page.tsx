@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { PeopleRetentionForm } from "@/modules/people/components/retention-form";
 import { getPeopleRetentionSettings, peopleRetentionCounts } from "@/modules/people/retention";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "People records retention" };
 
@@ -18,16 +19,12 @@ async function load() {
 export default async function PeopleRetentionPage() {
   const { settings, counts } = await orNotFound(load());
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/settings" className="text-sm text-primary underline-offset-2 hover:underline">
-          Settings
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">People records retention</h1>
-        <p className="mt-1 text-muted-foreground">
-          After a person&apos;s engagement ends, their record is kept in full, then moved to an archive only HR can open, then anonymized. The job is off until you switch it on, and the periods need counsel&apos;s approval first. Put a legal hold on a person&apos;s profile to skip them.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="People records retention"
+        description="After a person's engagement ends, their record is kept in full, then moved to an archive only HR can open, then anonymized. The job is off until you switch it on, and the periods need counsel's approval first. Put a legal hold on a person's profile to skip them."
+        breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "People records retention" }]}
+      />
       <PeopleRetentionForm initial={{ enabled: settings.enabled, archiveAfterMonths: settings.archiveAfterMonths, anonymizeAfterMonths: settings.anonymizeAfterMonths }} />
       <section aria-label="What would happen next" className="space-y-2">
         <h2 className="text-lg font-semibold">What would move at the next run</h2>
@@ -38,6 +35,6 @@ export default async function PeopleRetentionPage() {
         </ul>
         <p className="text-xs text-muted-foreground">Counts only. {counts.enabled ? "The job is on." : "The job is off, so nothing moves."}</p>
       </section>
-    </div>
+    </PageContainer>
   );
 }

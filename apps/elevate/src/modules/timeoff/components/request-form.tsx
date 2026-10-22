@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { PersonPicker, type PickerOption } from "@/components/person-picker";
 import { SelectField, TextField } from "@/components/form-fields";
+import { useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { formatDateOnly } from "@/lib/time";
 import { formatDays } from "../ledger";
@@ -18,6 +19,7 @@ type LeaveOption = { id: string; name: string; tracksBalance: boolean };
  */
 export function RequestForm({ types, today, people }: { types: LeaveOption[]; today: string; people?: PickerOption[] }) {
   const router = useRouter();
+  const dialog = useFormDialog();
   const [pending, startTransition] = useTransition();
   const [employeeId, setEmployeeId] = useState<string | undefined>();
   const [leaveTypeId, setLeaveTypeId] = useState(types[0]?.id ?? "");
@@ -67,13 +69,14 @@ export function RequestForm({ types, today, people }: { types: LeaveOption[]; to
       setEndDate("");
       setNote("");
       setHalfDay(false);
+      dialog?.close(true);
       router.refresh();
     });
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-xl border bg-card p-4">
-      <h3 className="font-semibold">{forOther ? "File a request for someone" : "Request time off"}</h3>
+    <form onSubmit={submit} className={dialog ? "space-y-4" : "space-y-4 rounded-2xl border bg-card p-5 shadow-sm"}>
+      {dialog ? null : <h2 className="text-base font-semibold">{forOther ? "File a request for someone" : "Request time off"}</h2>}
       {forOther ? (
         <PersonPicker id="rq-person" label="Person" options={people!} value={employeeId} onChange={setEmployeeId} error={invalidPerson ? "Choose a person from the list" : undefined} hint="You can file for a past date. It still goes through approval." />
       ) : null}

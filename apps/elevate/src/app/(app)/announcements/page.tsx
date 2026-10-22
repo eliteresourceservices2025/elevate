@@ -17,6 +17,8 @@ import { PopupQueueAdmin } from "@/modules/announcements/components/popup-admin"
 import { listPopupQueue } from "@/modules/announcements/popup-queries";
 import { listAnnouncements, listPolicies } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Announcements" };
 
@@ -44,23 +46,30 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
   const policyPage = policies ? paginate(policies, paging.page, paging.pageSize) : null;
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Announcements</h1>
-          <p className="mt-1 text-muted-foreground">Company news and the policies everyone follows.</p>
-        </div>
-        {isHr && tab === "announcements" ? (
-          <Link href="/announcements/new" className={buttonVariants()}>
-            New announcement
-          </Link>
-        ) : null}
-        {isHr && tab === "policies" ? (
-          <FormDialog label="Add a policy" title="Add a policy" description="It is saved as a draft. Nobody sees it until you publish it." size="xl">
-            <NewPolicyForm today={today} />
-          </FormDialog>
-        ) : null}
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Announcements"
+        description="Company news and the policies everyone follows."
+        actions={
+          <>
+            {isHr && tab === "announcements" ? (
+              <Link href="/announcements/new" className={buttonVariants()}>
+                New announcement
+              </Link>
+            ) : null}
+            {isHr && tab === "policies" ? (
+              <FormDialog
+                label="Add a policy"
+                title="Add a policy"
+                description="It is saved as a draft. Nobody sees it until you publish it."
+                size="xl"
+              >
+                <NewPolicyForm today={today} />
+              </FormDialog>
+            ) : null}
+          </>
+        }
+      />
 
       <nav aria-label="Announcements sections" className="flex gap-1 border-b">
         {TABS.filter((t) => t.key !== "popups" || isHr).map((t) => (
@@ -134,6 +143,6 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
       <p className="text-sm text-muted-foreground">
         Choose which emails you get in <Link href="/settings/notifications" className="text-primary underline-offset-4 hover:underline">Settings, Email notifications</Link>.
       </p>
-    </div>
+    </PageContainer>
   );
 }

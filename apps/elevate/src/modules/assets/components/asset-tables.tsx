@@ -9,11 +9,11 @@ const th = "px-3 py-2 text-left font-medium";
 const td = "px-3 py-2 align-top";
 
 const STATUS_STYLE: Record<AssetStatus, string> = {
-  in_stock: "bg-emerald-100 text-emerald-900",
-  assigned: "bg-violet-100 text-violet-900",
-  repair: "bg-amber-100 text-amber-900",
-  lost: "bg-red-100 text-red-900",
-  retired: "bg-neutral-200 text-neutral-800",
+  in_stock: "bg-success-surface text-success",
+  assigned: "bg-info-surface text-info",
+  repair: "bg-warning-surface text-warning",
+  lost: "bg-destructive/10 text-destructive",
+  retired: "bg-muted text-muted-foreground",
 };
 
 export function StatusBadge({ status }: { status: AssetStatus }) {

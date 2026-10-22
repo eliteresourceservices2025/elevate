@@ -8,13 +8,13 @@ const th = "px-3 py-2 text-left font-medium";
 const td = "px-3 py-2 align-top";
 
 const STYLE: Record<CredentialStatus, string> = {
-  expired: "bg-red-100 text-red-900",
-  expiring: "bg-amber-100 text-amber-900",
-  valid: "bg-emerald-100 text-emerald-900",
+  expired: "bg-destructive/10 text-destructive",
+  expiring: "bg-warning-surface text-warning",
+  valid: "bg-success-surface text-success",
 };
 
 export function StatusBadge({ row }: { row: Pick<CredentialRow, "status" | "renewed"> }) {
-  if (row.renewed) return <span className="inline-block rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-medium text-neutral-800">Renewed</span>;
+  if (row.renewed) return <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Renewed</span>;
   return <span className={cn("inline-block rounded-full px-2 py-0.5 text-xs font-medium", STYLE[row.status])}>{STATUS_LABELS[row.status]}</span>;
 }
 

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
-import { createEmployeeAccount, createHrAccount, signInEnrollingMfa, waitForHydration } from "./helpers";
+import { createEmployeeAccount, createHrAccount, hydrated, signInEnrollingMfa, waitForHydration } from "./helpers";
 
 // Needs the local Supabase with migrations applied. An employee asks for a prize day; their lead approves, then HR;
 // the employee sees it approved, on the team calendar, and downloads the calendar file.
@@ -40,6 +40,7 @@ test("an employee asks for a day off, the lead and HR approve it, and it shows o
 
   // --- The employee asks; the form previews what it uses ---
   await empPage.goto("/time-off?tab=requests");
+  await (await hydrated(empPage.getByRole("button", { name: "Request time off" }))).click(); // the form opens in a modal
   await waitForHydration(empPage, "#rq-start");
   await empPage.getByLabel("First day").fill(day);
   await expect(empPage.getByText("This uses 1 day")).toBeVisible();

@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Badge } from "@/components/ui/badge";
+import { useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { archiveHoliday, archiveLeaveType, createHoliday, createLeaveType, importHolidays, updateHoliday, updateLeaveType, verifyAllHolidays } from "../actions";
 import type { HolidayRow, LeaveTypeRow } from "../queries";
@@ -39,7 +40,7 @@ export function NewLeaveTypeForm() {
   const [skipHr, setSkipHr] = useState(false);
   return (
     <form
-      className="space-y-3 rounded-xl border bg-card p-4"
+      className="space-y-3 rounded-2xl border bg-card p-5 shadow-sm"
       onSubmit={(e) => {
         e.preventDefault();
         run(() => createLeaveType({ name, tracksBalance, skipHr }), "Leave type added.", () => setName(""));
@@ -195,6 +196,7 @@ export function VerifyAllHolidaysButton({ year, count }: { year: number; count: 
 
 export function NewHolidayForm({ defaultDate }: { defaultDate: string }) {
   const { run, pending } = useRun();
+  const dialog = useFormDialog();
   const [calendar, setCalendar] = useState<"PH" | "US">("PH");
   const [date, setDate] = useState(defaultDate);
   const [name, setName] = useState("");
@@ -202,13 +204,16 @@ export function NewHolidayForm({ defaultDate }: { defaultDate: string }) {
   const [verified, setVerified] = useState(true);
   return (
     <form
-      className="space-y-3 rounded-xl border bg-card p-4"
+      className={dialog ? "space-y-3" : "space-y-3 rounded-2xl border bg-card p-5 shadow-sm"}
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => createHoliday({ calendar, date, name, kind, verified }), "Holiday added.", () => setName(""));
+        run(() => createHoliday({ calendar, date, name, kind, verified }), "Holiday added.", () => {
+          setName("");
+          dialog?.close(true);
+        });
       }}
     >
-      <h3 className="font-semibold">Add a holiday</h3>
+      {dialog ? null : <h2 className="text-base font-semibold">Add a holiday</h2>}
       <HolidayFields id="nh" {...{ calendar, setCalendar, date, setDate, name, setName, kind, setKind, verified, setVerified }} />
       <Button type="submit" disabled={pending || !name.trim() || !date}>
         Add holiday

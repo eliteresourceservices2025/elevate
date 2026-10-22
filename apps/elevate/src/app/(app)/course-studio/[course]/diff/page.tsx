@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { orNotFound } from "@/lib/or-not-found";
 import { getStudioDiff } from "@/modules/learn/studio-queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "What changed" };
 
@@ -23,15 +24,15 @@ export default async function StudioDiffPage({ params, searchParams }: PageProps
   const list = (items: string[]) => (items.length ? <ul className="list-disc pl-5">{items.map((t, i) => <li key={i}>{t}</li>)}</ul> : null);
 
   return (
-    <div className="w-full max-w-6xl space-y-6">
-      <p className="text-sm">
-        <Link href={`/course-studio/${course}`} className="text-primary underline-offset-4 hover:underline">
-          Back to the versions
-        </Link>
-      </p>
-      <h1 className="text-2xl font-bold">
-        What changed from version {from} to version {to}
-      </h1>
+    <PageContainer width="wide">
+      <PageHeader
+        title={
+          <>
+            What changed from version {from} to version {to}
+          </>
+        }
+        breadcrumbs={[{ label: "The versions", href: `/course-studio/${course}` }, { label: `What changed from version ${from} to version ${to}` }]}
+      />
       {diff.unchanged ? <p className="rounded-xl border p-4 text-sm text-muted-foreground">Nothing is different between these two versions.</p> : null}
 
       <div className="space-y-5 text-sm">
@@ -74,6 +75,6 @@ export default async function StudioDiffPage({ params, searchParams }: PageProps
           </section>
         ) : null}
       </div>
-    </div>
+    </PageContainer>
   );
 }

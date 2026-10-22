@@ -10,6 +10,8 @@ import { formatDateOnly } from "@/lib/time";
 import { CycleControls } from "@/modules/reviews/components/review-forms";
 import { CYCLE_LABELS, STAGE_LABELS, type CycleType } from "@/modules/reviews/constants";
 import { getCycle } from "@/modules/reviews/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Review cycle" };
 
@@ -23,16 +25,19 @@ export default async function CyclePage({ params, searchParams }: PageProps<"/re
   const { rows, info } = paginate(reviews, paging.page, paging.pageSize);
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/reviews" className="text-sm text-primary underline-offset-2 hover:underline">
-          All reviews
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">{cycle.name}</h1>
-        <p className="text-muted-foreground">
-          {CYCLE_LABELS[cycle.type as CycleType]}. Due: self {formatDateOnly(cycle.selfDueOn)}, lead {formatDateOnly(cycle.leadDueOn)}, calibration {formatDateOnly(cycle.calibrateDueOn)}. {cycle.status === "closed" ? "Closed." : ""}
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title={cycle.name}
+        description={
+          <>
+            <p className="text-muted-foreground">
+              {CYCLE_LABELS[cycle.type as CycleType]}. Due: self {formatDateOnly(cycle.selfDueOn)}, lead {formatDateOnly(cycle.leadDueOn)},
+              calibration {formatDateOnly(cycle.calibrateDueOn)}. {cycle.status === "closed" ? "Closed." : ""}
+            </p>
+          </>
+        }
+        breadcrumbs={[{ label: "All reviews", href: "/reviews" }, { label: cycle.name }]}
+      />
       <CycleControls cycleId={cycle.id} open={cycle.status === "open"} />
       <div className="space-y-2">
         <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
@@ -63,6 +68,6 @@ export default async function CyclePage({ params, searchParams }: PageProps<"/re
         </div>
         <PagerLinks info={info} basePath={`/reviews/cycles/${cycle.id}`} label="reviews" />
       </div>
-    </div>
+    </PageContainer>
   );
 }

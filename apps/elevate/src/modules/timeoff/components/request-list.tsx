@@ -13,10 +13,10 @@ import { formatDays } from "../ledger";
 import { cancelRequest, decideRequest, getLeaveInvite } from "../request-actions";
 import type { RequestItem } from "../request-queries";
 
-const STATUS: Record<RequestItem["status"], { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
-  pending_lead: { label: "Waiting for lead", variant: "secondary" },
-  pending_hr: { label: "Waiting for HR", variant: "secondary" },
-  approved: { label: "Approved", variant: "default" },
+const STATUS: Record<RequestItem["status"], { label: string; variant: "success" | "warning" | "outline" | "destructive" }> = {
+  pending_lead: { label: "Waiting for lead", variant: "warning" },
+  pending_hr: { label: "Waiting for HR", variant: "warning" },
+  approved: { label: "Approved", variant: "success" },
   declined: { label: "Declined", variant: "destructive" },
   cancelled: { label: "Cancelled", variant: "outline" },
 };
@@ -53,7 +53,7 @@ function RequestCard({ item, showPerson }: { item: RequestItem; showPerson: bool
   }
 
   return (
-    <li className="space-y-2 rounded-xl border bg-card p-4">
+    <li className="space-y-2 rounded-2xl border bg-card p-5 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
         {showPerson ? (
           <span className="font-semibold">
@@ -114,7 +114,7 @@ function RequestCard({ item, showPerson }: { item: RequestItem; showPerson: bool
 
 export function RequestList({ items, showPerson = false, empty }: { items: RequestItem[]; showPerson?: boolean; empty: string }) {
   const paged = usePaged(items, "", 10);
-  if (items.length === 0) return <p className="text-muted-foreground">{empty}</p>;
+  if (items.length === 0) return <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</p>;
   return (
     <div className="space-y-3">
       <ul className="space-y-3">

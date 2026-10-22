@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { listOrgOptions } from "@/modules/org/queries";
 import { EmployeeForm } from "@/modules/people/components/employee-form";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Add person" };
 
@@ -14,18 +15,13 @@ export default async function NewPersonPage() {
   const options = await orNotFound(listOrgOptions());
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <Link href="/people" className="text-sm text-primary underline-offset-4 hover:underline">
-          ← People
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold">Add person</h1>
-        <p className="mt-1 text-muted-foreground">
-          Government IDs and bank details are added afterwards on the profile, where they are encrypted. When this person signs
-          in with the email below, their account links to this record automatically.
-        </p>
-      </div>
+    <PageContainer width="form">
+      <PageHeader
+        title="Add person"
+        description="Government IDs and bank details are added afterwards on the profile, where they are encrypted. When this person signs in with the email below, their account links to this record automatically."
+        breadcrumbs={[{ label: "People", href: "/people" }, { label: "Add person" }]}
+      />
       <EmployeeForm mode="create" options={options} />
-    </div>
+    </PageContainer>
   );
 }

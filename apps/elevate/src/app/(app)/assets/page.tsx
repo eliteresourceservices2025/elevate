@@ -13,6 +13,8 @@ import { ASSET_STATUSES, CATEGORIES, CATEGORY_LABELS, STATUS_LABELS } from "@/mo
 import { HeldTable, InventoryTable } from "@/modules/assets/components/asset-tables";
 import { RegisterAssetForm } from "@/modules/assets/components/asset-forms";
 import { assetStatusCounts, getMyAssets, listAssets, listTeamAssets } from "@/modules/assets/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Assets" };
 
@@ -37,23 +39,25 @@ export default async function AssetsPage({ searchParams }: PageProps<"/assets">)
   const canManage = scopeFor(user, "assets.manage") === "all";
 
   return (
-    <div className="w-full space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold">Assets</h1>
-          <p className="mt-1 text-muted-foreground">Equipment inventory and who has what. No prices or values are kept here.</p>
-        </div>
-        {canManage ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/assets/labels" className="rounded-lg border px-3 py-1.5 text-sm hover:bg-secondary/50">
-              Print labels
-            </Link>
-            <FormDialog label="Register an item" title="Register an item" size="lg">
-              <RegisterAssetForm />
-            </FormDialog>
-          </div>
-        ) : null}
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Assets"
+        description="Equipment inventory and who has what. No prices or values are kept here."
+        actions={
+          <>
+            {canManage ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Link href="/assets/labels" className="rounded-lg border px-3 py-1.5 text-sm hover:bg-secondary/50">
+                  Print labels
+                </Link>
+                <FormDialog label="Register an item" title="Register an item" size="lg">
+                  <RegisterAssetForm />
+                </FormDialog>
+              </div>
+            ) : null}
+          </>
+        }
+      />
 
       <section aria-label="My assets" className="space-y-2">
         <h2 className="text-lg font-semibold">My assets</h2>
@@ -122,6 +126,6 @@ export default async function AssetsPage({ searchParams }: PageProps<"/assets">)
         </section>
       ) : null}
 
-    </div>
+    </PageContainer>
   );
 }

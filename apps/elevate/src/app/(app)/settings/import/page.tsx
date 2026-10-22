@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
 import { ImportUploader } from "@/modules/imports/components/import-uploader";
 import { listBatches } from "@/modules/imports/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Import from TalentHR" };
 
@@ -12,14 +14,12 @@ const LABEL: Record<string, string> = { preview: "Preview", committed: "Committe
 export default async function ImportPage() {
   const batches = await orNotFound(listBatches());
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/settings" className="text-sm text-primary underline-offset-2 hover:underline">
-          Settings
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">Import from TalentHR</h1>
-        <p className="mt-1 text-muted-foreground">Move people from TalentHR into ELEVATE in safe steps: upload, preview, commit, reconcile. Do real imports only in the production system, never in a test or development copy.</p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Import from TalentHR"
+        description="Move people from TalentHR into ELEVATE in safe steps: upload, preview, commit, reconcile. Do real imports only in the production system, never in a test or development copy."
+        breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Import from TalentHR" }]}
+      />
       <ImportUploader />
       <section aria-label="Earlier imports" className="space-y-2">
         <h2 className="text-lg font-semibold">Earlier imports</h2>
@@ -41,6 +41,6 @@ export default async function ImportPage() {
           </ul>
         )}
       </section>
-    </div>
+    </PageContainer>
   );
 }

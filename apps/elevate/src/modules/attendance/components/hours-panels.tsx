@@ -14,6 +14,7 @@ import { MINUTE, formatDuration } from "../clock";
 import { approveCleanWeeks, approveHoursWeek, clearTestDay, exportHours, markTestDay, savePayPeriod } from "../hours-actions";
 import type { HoursSettings, ReviewRow, TeamReview } from "../hours-queries";
 import { PAY_PERIOD_LABELS, type PayPeriodKind } from "../pay-periods";
+import { Alert } from "@/components/ui/alert";
 
 const STATE_TEXT: Record<ReviewRow["state"], string> = { approved: "Approved", partly: "Partly approved", changed: "Changed after approval", none: "Not approved", empty: "Nothing to approve yet" };
 const STATE_VARIANT: Record<ReviewRow["state"], "default" | "secondary" | "outline" | "destructive"> = { approved: "default", partly: "secondary", changed: "destructive", none: "outline", empty: "outline" };
@@ -243,7 +244,7 @@ function TestDayRow({ day, canClear }: { day: TeamReview["testDays"][number]; ca
 function ProgressBox({ progress }: { progress: HoursSettings["progress"][number] }) {
   const open = progress.teams.filter((t) => t.pendingDays > 0);
   return (
-    <div role="status" className={`rounded-lg border p-3 text-sm ${progress.pendingDays === 0 ? "border-success/40 bg-success-surface text-success" : "border-warning/40 bg-warning-surface text-warning"}`}>
+    <Alert variant={progress.pendingDays === 0 ? "success" : "warning"} role="status" className="p-3">
       {progress.totalDays === 0 ? (
         "No finished days in this period yet."
       ) : progress.pendingDays === 0 ? (
@@ -260,7 +261,7 @@ function ProgressBox({ progress }: { progress: HoursSettings["progress"][number]
           </ul>
         </>
       )}
-    </div>
+    </Alert>
   );
 }
 
@@ -325,7 +326,7 @@ export function ExportPanel({ settings }: { settings: HoursSettings }) {
           run(() => savePayPeriod({ kind, biweeklyAnchor: kind === "biweekly" ? anchor : undefined }), () => "Pay periods saved.");
         }}
       >
-        <h3 className="font-semibold">How pay periods are cut</h3>
+        <h2 className="text-base font-semibold">How pay periods are cut</h2>
         <SelectField id="pp-kind" label="Pay periods" value={kind} onChange={(e) => setKind(e.target.value as PayPeriodKind)}>
           {Object.entries(PAY_PERIOD_LABELS).map(([k, text]) => (
             <option key={k} value={k}>

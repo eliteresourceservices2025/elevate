@@ -8,11 +8,13 @@ const alertVariants = cva(
     variants: {
       variant: {
         default: "bg-card text-card-foreground",
-        destructive:
-          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
-        success: "border-success/30 bg-success-surface text-success",
-        warning: "border-warning/30 bg-warning-surface text-warning",
-        info: "border-info/30 bg-info-surface text-info",
+        // Tinted callouts keep the normal text colour (long sentences stay easy to read); only the border and the surface carry the status.
+        destructive: "border-destructive/40 bg-destructive/10 text-foreground *:[svg]:text-destructive",
+        success: "border-success/40 bg-success-surface text-foreground *:[svg]:text-success",
+        warning: "border-warning/40 bg-warning-surface text-foreground *:[svg]:text-warning",
+        info: "border-info/40 bg-info-surface text-foreground *:[svg]:text-info",
+        // A note that only becomes a callout when something is wrong (the "all fine" state is plain muted text).
+        muted: "border-transparent bg-transparent p-0 text-muted-foreground",
       },
     },
     defaultVariants: {

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { requireUser } from "@/lib/auth";
@@ -11,6 +10,8 @@ import { scopeFor } from "@/lib/authz";
 import { OfferPanel } from "@/modules/offers/components/offer-panel";
 import { getOfferPanel } from "@/modules/offers/queries";
 import { getApplication, getCalendarCard, listInterviewerChoices } from "@/modules/recruiting/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Applicant" };
 
@@ -30,20 +31,28 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
   const offerPanel = !candidate.removed && scopeFor(user, "offers.view") ? await orNotFound(getOfferPanel(app.id)) : null;
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href={`/recruiting/${opening.id}`} className="text-sm text-primary underline-offset-4 hover:underline">
-          ← {opening.title}
-        </Link>
-        <h1 className="mt-2 flex flex-wrap items-center gap-3 text-2xl font-bold">
-          {name}
-          <Badge variant={app.stage === "hired" ? "default" : app.stage === "rejected" ? "destructive" : "secondary"}>{STAGE_LABELS[app.stage]}</Badge>
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Applied {formatInZone(app.appliedAt, undefined, "MMM d, yyyy")} for {opening.title}.
-          {app.stage === "rejected" ? ` ${app.closeKind === "withdrawn" ? "The applicant withdrew." : "Not moving forward."}${app.closeReason ? ` Reason: ${app.closeReason}` : ""}` : ""}
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {name}
+            <Badge variant={app.stage === "hired" ? "default" : app.stage === "rejected" ? "destructive" : "secondary"}>
+              {STAGE_LABELS[app.stage]}
+            </Badge>
+          </span>
+        }
+        description={
+          <>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Applied {formatInZone(app.appliedAt, undefined, "MMM d, yyyy")} for {opening.title}.
+              {app.stage === "rejected"
+                ? ` ${app.closeKind === "withdrawn" ? "The applicant withdrew." : "Not moving forward."}${app.closeReason ? ` Reason: ${app.closeReason}` : ""}`
+                : ""}
+            </p>
+          </>
+        }
+        breadcrumbs={[{ label: `${opening.title}`, href: `/recruiting/${opening.id}` }, { label: name }]}
+      />
 
       <section aria-label="Applicant" className="space-y-2 rounded-xl border bg-card p-4">
         <h2 className="text-lg font-semibold">Applicant</h2>
@@ -195,6 +204,6 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
           ))}
         </ul>
       </section>
-    </div>
+    </PageContainer>
   );
 }

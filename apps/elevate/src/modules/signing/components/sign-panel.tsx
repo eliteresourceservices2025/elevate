@@ -65,13 +65,13 @@ export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <h3 className="font-semibold">{needInitials ? "1. Read and initial each page" : "1. Read the document"}</h3>
+        <h2 className="text-base font-semibold">{needInitials ? "1. Read and initial each page" : "1. Read the document"}</h2>
         {needInitials ? (
           <InitialsStepper envelopeId={envelopeId} pages={initialPages} viewed={viewed} initials={initials} onInitials={setInitials} done={initialed} onDone={setInitialed} />
         ) : (
           <EnvelopeDocument envelopeId={envelopeId} title="The document to sign" openLabel="Read the document" />
         )}
-        {needInitials ? null : viewed ? <p className="text-sm text-green-700">You opened it. You can sign now.</p> : <p className="text-sm text-muted-foreground">Open and read it first. Signing is available after you have opened it.</p>}
+        {needInitials ? null : viewed ? <p className="text-sm text-success">You opened it. You can sign now.</p> : <p className="text-sm text-muted-foreground">Open and read it first. Signing is available after you have opened it.</p>}
       </div>
 
       <form
@@ -84,7 +84,7 @@ export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null
       >
         {fields.length > 0 ? (
           <div className="space-y-3">
-            <h3 className="font-semibold">2. Your details</h3>
+            <h2 className="text-base font-semibold">2. Your details</h2>
             <p className="text-sm text-muted-foreground">These are part of the agreement. They are kept encrypted and printed on the signed copy, which only you, HR and the Company can open.</p>
             <div className="grid max-w-xl gap-3 sm:grid-cols-2">
               {fields.map((f) => (
@@ -96,7 +96,7 @@ export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null
             </div>
           </div>
         ) : null}
-        <h3 className="font-semibold">{fields.length > 0 ? "3. Sign" : "2. Sign"}</h3>
+        <h2 className="text-base font-semibold">{fields.length > 0 ? "3. Sign" : "2. Sign"}</h2>
         <div role="tablist" aria-label="How to sign" className="flex gap-2">
           {(["typed", "drawn"] as const).map((k) => (
             <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={`rounded-lg border px-3 py-1.5 text-sm ${kind === k ? "border-primary bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-secondary/50"}`}>

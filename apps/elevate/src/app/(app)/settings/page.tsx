@@ -4,6 +4,8 @@ import { Bell, Compass, FileText, FileUp, History, LifeBuoy, ListChecks, Mail, S
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -92,11 +94,11 @@ export default async function SettingsPage() {
   const visible = SECTIONS.filter((s) => s.action === null || can(user, s.action));
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="mt-1 text-muted-foreground">Your email notifications and the quick tour, and (for HR and admins) access, invitations, policies, the TalentHR move and the audit log.</p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Settings"
+        description="Your email notifications and the quick tour, and (for HR and admins) access, invitations, policies, the TalentHR move and the audit log."
+      />
       {visible.length === 0 ? (
         <p className="text-muted-foreground">There is nothing for you to change here.</p>
       ) : (
@@ -118,6 +120,6 @@ export default async function SettingsPage() {
           ))}
         </ul>
       )}
-    </div>
+    </PageContainer>
   );
 }

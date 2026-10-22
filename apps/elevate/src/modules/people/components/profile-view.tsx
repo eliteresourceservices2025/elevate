@@ -104,7 +104,7 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
             {facts.map((f) => (
               <li key={f.label} className="border-r border-b px-5 py-3 md:px-6">
                 <p className="text-xs text-muted-foreground">{f.label}</p>
-                <p className="mt-0.5 text-sm font-semibold">{f.value ?? <span className="font-normal text-muted-foreground/70">Not set</span>}</p>
+                <p className="mt-0.5 text-sm font-semibold">{f.value ?? <span className="font-normal text-muted-foreground">Not set</span>}</p>
               </li>
             ))}
           </ul>

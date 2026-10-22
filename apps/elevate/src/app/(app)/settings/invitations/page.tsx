@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import { orNotFound } from "@/lib/or-not-found";
 import { InvitationsPanel } from "@/modules/settings/components/invitations-panel";
 import { listInvitations } from "@/modules/settings/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Invitations" };
 
@@ -16,14 +17,9 @@ export default async function InvitationsPage() {
   const now = new Date().getTime();
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/settings" className="text-sm text-primary underline-offset-4 hover:underline">
-          ← Settings
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold">Invitations</h1>
-      </div>
+    <PageContainer>
+      <PageHeader title="Invitations" breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Invitations" }]} />
       <InvitationsPanel invitations={invitations} now={now} canAssign={canAssign} />
-    </div>
+    </PageContainer>
   );
 }

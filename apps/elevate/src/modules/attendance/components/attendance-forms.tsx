@@ -49,7 +49,7 @@ export function PreferencesForm({ shareLocation, timeZone, monitoringPublished }
         run(() => savePreferences({ shareLocation: share, timeZone: zone }), "Settings saved.", () => dialog?.close(true));
       }}
     >
-      {dialog ? null : <h3 className="font-semibold">Your clock settings</h3>}
+      {dialog ? null : <h2 className="text-base font-semibold">Your clock settings</h2>}
       <TextField id="pf-zone" label="Your time zone" list="pf-zones" value={zone} onChange={(e) => setZone(e.target.value)} placeholder={`Company zone (${DEFAULT_TIMEZONE})`} hint="Decides which calendar day a clock-in counts for. A night shift counts for the day it started." />
       <datalist id="pf-zones">
         {ZONES.map((z) => (
@@ -136,6 +136,8 @@ export function CorrectionForm({ zone }: { zone: string }) {
     >
       {dialog ? null : <h3 className="font-semibold">Ask for a time correction</h3>}
       <p className="text-sm text-muted-foreground">Your lead approves it, and a screenshot is needed as proof. Your original clock events are never changed; an approved correction adds new ones. If you already clocked out later than you really stopped, that later clock-out is marked as removed and replaced. Times are in {zone}.</p>
+      {dialog ? null : <h2 className="text-base font-semibold">Ask for a time correction</h2>}
+      <p className="text-sm text-muted-foreground">Your lead approves it, and a screenshot is needed as proof. Your original clock events are never changed; an approved correction adds new ones. Times are in {zone}.</p>
       <SelectField id="cr-kind" label="What do you need to add?" value={presetKey} onChange={(e) => setPresetKey(e.target.value)}>
         {PRESETS.map((p) => (
           <option key={p.key} value={p.key}>
@@ -191,7 +193,7 @@ export function FileForOthersForm({ people, zone }: { people: FilablePerson[]; z
         });
       }}
     >
-      <h3 className="font-semibold">File a correction for someone</h3>
+      <h2 className="text-base font-semibold">File a correction for someone</h2>
       <p className="text-sm text-muted-foreground">For when their device is down or they cannot sign in. They are told, and HR decides it (not you). Times are in {zone}.</p>
       <SelectField id="fo-who" label="Person" value={who} onChange={(e) => setWho(e.target.value)} required>
         <option value="">Choose a person</option>
@@ -370,7 +372,7 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
         );
       }}
     >
-      <h3 className="font-semibold">{row.teamName}</h3>
+      <h2 className="text-base font-semibold">{row.teamName}</h2>
       <div className="space-y-1.5">
         <Label htmlFor={`ranges-${row.teamId}`}>Allowed IP addresses or ranges (one per line)</Label>
         <Textarea id={`ranges-${row.teamId}`} rows={3} value={ranges} onChange={(e) => setRanges(e.target.value)} placeholder="203.0.113.0/24" />
@@ -413,7 +415,7 @@ export function SetupProfileForm({ records }: { records: { id: string; name: str
   const target = records.find((r) => r.id === mine);
   return (
     <div className="max-w-xl space-y-4 rounded-2xl border bg-card p-5 shadow-sm">
-      <h3 className="font-semibold">Set up your profile</h3>
+      <h2 className="text-base font-semibold">Set up your profile</h2>
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
           First check whether you are already in the directory. If you changed your email or name (or HR did), your record is probably there under the old one, and making a second one would put you in the directory and the org chart twice.

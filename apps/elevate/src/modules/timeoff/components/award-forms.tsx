@@ -37,7 +37,7 @@ export function AwardForm({ people, types, today, fixedEmployee }: { people: Pic
 
   return (
     <form
-      className="space-y-4 rounded-xl border bg-card p-4"
+      className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm"
       onSubmit={(e) => {
         e.preventDefault();
         run(() => awardDays({ employeeId, leaveTypeId, days, reason, expiresOn }), "Prize days awarded.", () => {
@@ -47,7 +47,7 @@ export function AwardForm({ people, types, today, fixedEmployee }: { people: Pic
         });
       }}
     >
-      <h3 className="font-semibold">Award prize days</h3>
+      <h2 className="text-base font-semibold">Award prize days</h2>
       <div className="grid gap-4 sm:grid-cols-2">
         {fixedEmployee ? null : (
           <PersonPicker id="aw-person" label="Person" options={people} value={employeeId} onChange={setEmployeeId} error={invalidPerson ? "Choose a person from the list" : undefined} />
@@ -86,13 +86,13 @@ export function AdjustForm({ people, types, fixedEmployee }: { people: PickerOpt
 
   return (
     <form
-      className="space-y-4 rounded-xl border bg-card p-4"
+      className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm"
       onSubmit={(e) => {
         e.preventDefault();
         run(() => adjustBalance({ employeeId, leaveTypeId, days, reason }), "Balance corrected.", () => setReason(""));
       }}
     >
-      <h3 className="font-semibold">Correct a balance</h3>
+      <h2 className="text-base font-semibold">Correct a balance</h2>
       <p className="text-sm text-muted-foreground">For mistakes only. Use a minus sign to remove days. The balance cannot go below zero.</p>
       <div className="grid gap-4 sm:grid-cols-2">
         {fixedEmployee ? null : (

@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { applyScheduleImport, discardScheduleImport, rememberScheduleImportMatch, type ApplyOutcome } from "../actions";
 import type { Decision, Plan, PlanRow } from "../plan";
 import { ImportOutcome, rememberOutcome } from "./import-outcome";
+import { Alert } from "@/components/ui/alert";
 
 export type Targets = { people: { id: string; label: string }[]; clients: { id: string; label: string }[] };
 
@@ -172,10 +173,10 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
 
   return (
     <div className="space-y-5">
-      <p role="note" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+      <Alert variant="warning" role="note" className="rounded-xl p-3 text-sm">
         Review before applying. Unpaid breaks are <strong>assumed</strong> from the shift length and hours per week are <strong>estimated</strong> from the schedule: the sheet does
         not say, so change them where you know better. Worked hours are never read from the sheet and clock events are never changed.
-      </p>
+      </Alert>
 
       <ul className="flex flex-wrap gap-2 text-sm" aria-label="Show">
         {tabs.map((t) => (
@@ -336,7 +337,7 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
                   {ASSIGNMENT[r.assignment]}; {SCHEDULE[r.schedule]}
                   {r.hoursNote === "fill" ? "; fill hours per week" : r.hoursNote === "differs" ? "; hours differ" : ""}
                   {r.attention.map((a) => (
-                    <span key={a} className="mt-1 block text-amber-700 dark:text-amber-400">
+                    <span key={a} className="mt-1 block text-warning">
                       {a}
                     </span>
                   ))}
@@ -349,7 +350,7 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
       <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="rows" />
 
       {backdatedChosen.length > 0 ? (
-        <section aria-label="Backdated changes" className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+        <Alert variant="warning" role="region" aria-label="Backdated changes" className="space-y-2 rounded-xl p-4 text-sm">
           <h2 className="font-semibold">{backdatedChosen.length} chosen {backdatedChosen.length === 1 ? "change starts" : "changes start"} more than 7 days back</h2>
           <p>
             From those dates there are already {impact.attendanceDays} attendance days, {impact.approvals} approved hours records, {impact.leaveRequests} leave requests and{" "}
@@ -361,7 +362,7 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
             <input id="ack-backdated" type="checkbox" className="mt-0.5 size-4 accent-primary" checked={ackBackdated} onChange={(e) => setAckBackdated(e.target.checked)} />
             <span>I have reviewed this and want to apply the backdated changes.</span>
           </label>
-        </section>
+        </Alert>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3 border-t pt-4">

@@ -5,6 +5,8 @@ import { orNotFound } from "@/lib/or-not-found";
 import { QuestionEditor } from "@/modules/learn/components/studio-editors";
 import { AddQuestionForm } from "@/modules/learn/components/studio-structure";
 import { getStudioVersion } from "@/modules/learn/studio-queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Exam question bank" };
 
@@ -16,19 +18,22 @@ export default async function StudioQuestionsPage({ params }: PageProps<"/course
   const draft = loaded.version.status === "draft";
 
   return (
-    <div className="w-full max-w-6xl space-y-6">
+    <PageContainer width="wide">
       <p className="text-sm">
         <Link href={`/course-studio/${course}/${version}`} className="text-primary underline-offset-4 hover:underline">
           Back to version {version}
         </Link>
       </p>
-      <div>
-        <h1 className="text-2xl font-bold">Exam question bank</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {loaded.questions.length} questions. The answer key and the reasons are shown here for editors only: they are never sent to learners except the reason after a pass.
-          {draft ? "" : " This version is frozen; this is a read-only view."}
-        </p>
-      </div>
+      <PageHeader
+        title="Exam question bank"
+        description={
+          <>
+            {loaded.questions.length} questions. The answer key and the reasons are shown here for editors only: they are never sent to learners
+            except the reason after a pass.
+            {draft ? "" : " This version is frozen; this is a read-only view."}
+          </>
+        }
+      />
       {loaded.content.modules.map((m) => {
         const list = loaded.questions.filter((q) => q.moduleKey === m.key);
         if (list.length === 0 && !draft) return null;
@@ -62,6 +67,6 @@ export default async function StudioQuestionsPage({ params }: PageProps<"/course
           </section>
         );
       })}
-    </div>
+    </PageContainer>
   );
 }
