@@ -46,7 +46,7 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
             <p className="mt-1 text-sm text-muted-foreground">
               Applied {formatInZone(app.appliedAt, undefined, "MMM d, yyyy")} for {opening.title}.
               {app.stage === "rejected"
-                ? ` ${app.closeKind === "withdrawn" ? "The applicant withdrew." : "Not moving forward."}${app.closeReason ? ` Reason: ${app.closeReason}` : ""}`
+                ? ` ${app.closeKind === "withdrawn" ? "The applicant withdrew." : app.closeKind === "not_qualified" ? "Not qualified for the role." : "Not moving forward."}${app.closeReason ? ` Reason: ${app.closeReason}` : ""}`
                 : ""}
             </p>
           </>

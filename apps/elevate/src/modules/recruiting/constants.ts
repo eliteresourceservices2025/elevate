@@ -19,8 +19,8 @@ export const BOARD_STAGES = STAGES.filter((s) => s !== "rejected");
 export const OPENING_STATUSES = ["draft", "open", "closed"] as const;
 export type OpeningStatus = (typeof OPENING_STATUSES)[number];
 
-/** How an application ended without a hire. Retention differs: rejected 12 months, withdrawn 6 (counsel to confirm). */
-export const CLOSE_KINDS = ["rejected", "withdrawn"] as const;
+/** How an application ended without a hire. Retention differs: rejected and not qualified 12 months, withdrawn 6 (counsel to confirm). */
+export const CLOSE_KINDS = ["rejected", "not_qualified", "withdrawn"] as const;
 export type CloseKind = (typeof CLOSE_KINDS)[number];
 
 export const RECOMMENDATIONS = ["strong_yes", "yes", "no", "strong_no"] as const;
@@ -48,6 +48,8 @@ export const RESUME_MAX_BYTES = 4 * 1024 * 1024; // Vercel functions accept abou
 export const RESUME_KINDS = ["pdf", "docx"] as const;
 
 /** Retention defaults, in months. Nothing is purged until HR switches the job on (settings). */
+export const CLOSE_KIND_LABELS: Record<CloseKind, string> = { rejected: "Rejected", not_qualified: "Not qualified", withdrawn: "Withdrew" };
+
 export const DEFAULT_RETENTION = { rejectedMonths: 12, withdrawnMonths: 6 } as const;
 
 /**
@@ -73,7 +75,7 @@ export function averageRating(ratings: Partial<Record<CriterionKey, number>>): n
 
 /** Months before a closed application's personal data is removed, or null if it is not closed that way. */
 export function retentionMonths(kind: CloseKind | null, settings: { rejectedMonths: number; withdrawnMonths: number }): number | null {
-  if (kind === "rejected") return settings.rejectedMonths;
+  if (kind === "rejected" || kind === "not_qualified") return settings.rejectedMonths;
   if (kind === "withdrawn") return settings.withdrawnMonths;
   return null;
 }

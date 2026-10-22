@@ -82,8 +82,40 @@ describe("a person's own answers", () => {
     // The audit trail names the fields, never a value.
     const audit = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where action = 'demographics.update' and target_id = ${ana.employeeId}`);
     expect(audit).toHaveLength(1);
-    expect(JSON.stringify(audit[0].metadata)).toBe(JSON.stringify({ fields: ["gender", "pronouns", "religion"] }));
+    expect(JSON.stringify(audit[0].metadata)).toBe(JSON.stringify({ fields: ["gender", "pronouns", "religion"], shared: [] }));
     expect(JSON.stringify(audit[0].metadata)).not.toMatch(/islam|woman|she_her/);
+
+    // Nothing was switched on, so a colleague reads none of it.
+    expect(await queries.getSharedIdentityFor(ana.employeeId)).toEqual({ gender: null, orientation: null, religion: null });
+  });
+
+  it("sexual orientation is ciphertext, and a colleague reads only the answers the person switched on", async () => {
+    const eli = await person("Eli");
+    const fay = await person("Fay");
+    as(eli.user);
+    expect((await actions.saveMySelfIdentification({ gender: "trans_woman", orientation: "lesbian", religion: "agnostic", showOrientation: true, showReligion: true })).ok).toBe(true);
+    const [row] = await rows<{ sexual_orientation_enc: string; show_gender: boolean; show_orientation: boolean; show_religion: boolean }>(sql`select sexual_orientation_enc, show_gender, show_orientation, show_religion from core.employee_demographics where employee_id = ${eli.employeeId}`);
+    expect(row.sexual_orientation_enc).not.toContain("lesbian");
+    expect(row).toMatchObject({ show_gender: false, show_orientation: true, show_religion: true });
+
+    // A colleague gets the two shared answers as words, but not the gender that stayed private.
+    as(fay.user);
+    expect(await queries.getSharedIdentityFor(eli.employeeId)).toEqual({ gender: null, orientation: "Lesbian", religion: "Agnostic" });
+    // ...and still cannot read anyone else's own record.
+    expect(await queries.getMySelfIdentification()).toMatchObject({ orientation: null, religion: null });
+
+    // The audit trail names which fields were shared, never a value.
+    const audit = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where action = 'demographics.update' and target_id = ${eli.employeeId}`);
+    expect(JSON.stringify(audit[0].metadata)).toBe(JSON.stringify({ fields: ["gender", "orientation", "religion"], shared: ["orientation", "religion"] }));
+    expect(JSON.stringify(audit[0].metadata)).not.toMatch(/lesbian|agnostic|trans/);
+
+    // Sharing "prefer not to say" shows nothing, and the switch is kept off; a self-description is shown in the person's words.
+    as(eli.user);
+    expect((await actions.saveMySelfIdentification({ orientation: "prefer_not_to_say", showOrientation: true, gender: "self_described", genderOther: "Agender", showGender: true })).ok).toBe(true);
+    as(fay.user);
+    expect(await queries.getSharedIdentityFor(eli.employeeId)).toEqual({ gender: "Agender", orientation: null, religion: null });
+    const [off] = await rows<{ show_orientation: boolean }>(sql`select show_orientation from core.employee_demographics where employee_id = ${eli.employeeId}`);
+    expect(off.show_orientation).toBe(false);
   });
 
   it("a self-description is kept encrypted, a later save replaces the old answers, and a blank save keeps nothing", async () => {

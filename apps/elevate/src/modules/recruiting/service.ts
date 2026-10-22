@@ -79,7 +79,7 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
   const v = parsed.data;
 
   // The optional self-identification answers are checked on their own. They never decide anything about the application.
-  const selfId = applicantSelfIdSchema.safeParse({ gender: v.gender, genderOther: v.genderOther, religion: v.religion, religionOther: v.religionOther });
+  const selfId = applicantSelfIdSchema.safeParse({ gender: v.gender, genderOther: v.genderOther, orientation: v.orientation, orientationOther: v.orientationOther, religion: v.religion, religionOther: v.religionOther });
   if (!selfId.success) return { ok: false, error: selfId.error.issues[0]?.message ?? "Check your answers and try again.", field: String(selfId.error.issues[0]?.path[0] ?? "gender") };
 
   if (!file || file.bytes.length === 0) return { ok: false, error: "Please attach your resume (PDF or DOCX).", field: "resume" };

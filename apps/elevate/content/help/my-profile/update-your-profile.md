@@ -19,7 +19,7 @@ Click **Add a photo** (or **Change photo** later) and choose a picture. You can 
 
 # Edit about me
 
-On the **Personal** tab, click **Edit about me**. The form is called **About me (optional)** and asks for your **Gender**, **Pronouns** and **Religion**. Every question is optional, and you can skip any of them. Your pronouns are the only part other people can see. Nobody else reads your gender or religion, and they are never used for hiring, pay, promotion or reviews.
+On the **Personal** tab, click **Edit about me**. The form is called **About me (optional)** and asks for your **Gender**, **Pronouns**, **Sexual orientation** and **Religion**. Every question is optional, and you can skip any of them. Your pronouns show next to your name. Under gender, sexual orientation and religion there is a **Show on my profile to colleagues** box, off unless you tick it; only the answers you tick are visible to colleagues, so they can address you properly and plan events with you in mind. They are never used for hiring, pay, promotion or reviews.
 
 # Change your contact details
 

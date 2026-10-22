@@ -208,12 +208,12 @@ Settings > Import schedules and clients: upload the team's attendance sheet (CSV
 - Matches HR confirms (a sheet's spelling of a person or client) are remembered by normalized spelling and used on later sheets; column layouts are remembered by header row.
 - Apply re-checks everything under a lock and refuses a stale preview; a row that no longer fits is skipped with the reason; ending is only for assignments HR ticked; backdating needs the shown impact acknowledged.
 
-### Voluntary self-identification (gender, pronouns, religion) — `docs/modules/demographics.md`
+### Voluntary self-identification (gender, pronouns, sexual orientation, religion) — `docs/modules/demographics.md`
 Optional profile answers and the optional part of the apply form.
 
-- Everything is optional; nobody reads another person's gender or religion; HR sees combined counts of 5 or more only.
-- Separate tables, never joined into people or recruiting queries; religion and self-descriptions are encrypted.
-- Never used for hiring, pay, promotion or reviews; audit rows carry field names only. Pronouns are the only public part.
+- Everything is optional. Gender, sexual orientation and religion are private unless the person switches "Show on my profile to colleagues" on for that answer (owner decision 2026-10-22; off by default, per field); otherwise HR sees combined counts of 5 or more only. Applicant answers are never shown, only counted.
+- Separate tables, never joined into people or recruiting queries; sexual orientation, religion and self-descriptions are encrypted.
+- Never used for hiring, pay, promotion, reviews or any scoring; audit rows carry field names only. Pronouns are always public.
 
 ### Privacy incident reports — `docs/modules/incidents.md`
 Staff privacy incident reports and their handling.

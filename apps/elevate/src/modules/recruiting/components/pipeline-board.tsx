@@ -8,7 +8,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { NativeSelect } from "@/components/ui/native-select";
 import { formatInZone } from "@/lib/time";
-import { BOARD_STAGES, STAGE_LABELS, canMove, type Stage } from "../constants";
+import { BOARD_STAGES, CLOSE_KIND_LABELS, STAGE_LABELS, canMove, type Stage } from "../constants";
 import { moveApplication } from "../actions";
 import type { BoardCard } from "../queries";
 import { useRun } from "./use-run";
@@ -140,13 +140,14 @@ export function PipelineBoard({ columns, canMoveCards, rejected }: { columns: Re
 
       {rejected.length > 0 ? (
         <details className="rounded-xl border bg-card p-3">
-          <summary className="cursor-pointer text-sm font-semibold">Rejected or withdrawn ({rejected.length})</summary>
+          <summary className="cursor-pointer text-sm font-semibold">Rejected, not qualified or withdrawn ({rejected.length})</summary>
           <ul className="mt-2 space-y-1 text-sm">
             {rejected.slice(0, 100).map((c) => (
               <li key={c.applicationId}>
                 <Link href={`/recruiting/applications/${c.applicationId}`} className="text-primary underline-offset-4 hover:underline">
                   {c.name}
                 </Link>{" "}
+                {c.closeKind ? <span className="text-xs font-medium">{CLOSE_KIND_LABELS[c.closeKind]} · </span> : null}
                 <span className="text-xs text-muted-foreground">applied {formatInZone(c.appliedAt, undefined, "MMM d, yyyy")}</span>
               </li>
             ))}

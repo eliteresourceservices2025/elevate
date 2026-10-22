@@ -264,9 +264,9 @@ export async function rejectApplication(input: unknown): Promise<ActionResult> {
       if (row.app.stage === "hired") throw new ActionFailure("A hired person cannot be rejected.");
       if (row.app.stage === "rejected") throw new ActionFailure("They are already closed.");
       await tx.update(applications).set({ stage: "rejected", closeKind: v.kind, closeReason: v.reason, closedAt: new Date(), stageChangedAt: new Date() }).where(eq(applications.id, v.applicationId));
-      await tx.insert(applicationStageHistory).values({ applicationId: v.applicationId, fromStage: row.app.stage, toStage: "rejected", byUserId: actor.id, note: v.kind === "withdrawn" ? "Withdrawn by the applicant" : "Rejected" });
+      await tx.insert(applicationStageHistory).values({ applicationId: v.applicationId, fromStage: row.app.stage, toStage: "rejected", byUserId: actor.id, note: v.kind === "withdrawn" ? "Withdrawn by the applicant" : v.kind === "not_qualified" ? "Not qualified" : "Rejected" });
       await writeAudit({ actor, action: "recruiting.reject", targetType: "application", targetId: v.applicationId, before: { stage: row.app.stage }, after: { stage: "rejected", kind: v.kind } }, tx);
-      if (v.kind === "rejected" && v.notifyCandidate && row.sendRejection && !row.anonymized) {
+      if (v.kind !== "withdrawn" && v.notifyCandidate && row.sendRejection && !row.anonymized) {
         const mail = rejectionMail({ fullName: row.name, jobTitle: row.title });
         await queueCandidateEmail(tx, { applicationId: v.applicationId, toEmail: row.email, kind: "rejection", subject: mail.subject, text: mail.text, html: mail.html, dedupeKey: `rejection:${v.applicationId}` });
       }

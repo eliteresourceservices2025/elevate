@@ -42,6 +42,8 @@ export const applySchema = z.object({
   /** The optional self-identification section. Checked on its own (demographics/validators.ts) and kept apart from the application. */
   gender: z.string().max(40).optional(),
   genderOther: z.string().max(200).optional(),
+  orientation: z.string().max(40).optional(),
+  orientationOther: z.string().max(200).optional(),
   religion: z.string().max(40).optional(),
   religionOther: z.string().max(200).optional(),
 });

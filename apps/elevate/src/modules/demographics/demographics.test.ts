@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { GENDERS, MIN_GROUP, PRONOUNS, RELIGIONS, pronounText } from "./constants";
+import { GENDERS, GENDER_LABELS, MIN_GROUP, PRONOUNS, RELIGIONS, RELIGION_LABELS, SEXUAL_ORIENTATIONS, SEXUAL_ORIENTATION_LABELS, pronounText, sharedAnswerText } from "./constants";
 import { summarizeAnswers } from "./summary";
 import { applicantSelfIdSchema, selfIdentificationSchema } from "./validators";
 
 describe("self-identification validators", () => {
   it("accepts nothing at all and treats blanks as not answered", () => {
     const parsed = selfIdentificationSchema.parse({ gender: "", pronouns: "", religion: "", genderOther: " " });
-    expect(parsed).toEqual({});
+    // Nothing answered, and nothing shared (the switches default to off).
+    expect(parsed).toEqual({ showGender: false, showOrientation: false, showReligion: false });
   });
 
   it("accepts every listed choice, including prefer not to say", () => {
@@ -17,6 +18,11 @@ describe("self-identification validators", () => {
     for (const religion of RELIGIONS) {
       const input = { religion, ...(religion === "self_described" ? { religionOther: "Pagan" } : {}) };
       expect(selfIdentificationSchema.safeParse(input).success).toBe(true);
+    }
+    for (const orientation of SEXUAL_ORIENTATIONS) {
+      const input = { orientation, ...(orientation === "self_described" ? { orientationOther: "Demisexual" } : {}) };
+      expect(selfIdentificationSchema.safeParse(input).success).toBe(true);
+      expect(applicantSelfIdSchema.safeParse(input).success).toBe(true);
     }
     for (const pronouns of PRONOUNS) {
       const input = { pronouns, ...(pronouns === "self_described" ? { pronounsOther: "xe/xem" } : {}) };
@@ -30,12 +36,34 @@ describe("self-identification validators", () => {
     expect(selfIdentificationSchema.safeParse({ gender: "self_described" }).success).toBe(false);
     expect(selfIdentificationSchema.safeParse({ religion: "self_described" }).success).toBe(false);
     expect(selfIdentificationSchema.safeParse({ pronouns: "self_described" }).success).toBe(false);
+    expect(selfIdentificationSchema.safeParse({ orientation: "self_described" }).success).toBe(false);
+    expect(selfIdentificationSchema.safeParse({ orientation: "made up" }).success).toBe(false);
     expect(selfIdentificationSchema.safeParse({ gender: "woman", genderOther: "x".repeat(61) }).success).toBe(false);
   });
 
   it("the applicant section has no pronouns and the same rules", () => {
     expect(applicantSelfIdSchema.parse({ gender: "man", religion: "islam", pronouns: "he_him" })).toEqual({ gender: "man", religion: "islam" });
     expect(applicantSelfIdSchema.safeParse({ gender: "self_described" }).success).toBe(false);
+  });
+});
+
+describe("the lists", () => {
+  it("offer trans, atheist and agnostic choices, each with a label", () => {
+    expect(GENDERS).toEqual(expect.arrayContaining(["trans_woman", "trans_man"]));
+    expect(RELIGIONS).toEqual(expect.arrayContaining(["atheist", "agnostic"]));
+    for (const g of GENDERS) expect(GENDER_LABELS[g]).toBeTruthy();
+    for (const o of SEXUAL_ORIENTATIONS) expect(SEXUAL_ORIENTATION_LABELS[o]).toBeTruthy();
+    for (const r of RELIGIONS) expect(RELIGION_LABELS[r]).toBeTruthy();
+  });
+});
+
+describe("shared answer text", () => {
+  it("shows a choice or the person's own words, and nothing for no answer or prefer not to say", () => {
+    expect(sharedAnswerText("lesbian", null, SEXUAL_ORIENTATION_LABELS)).toBe("Lesbian");
+    expect(sharedAnswerText("self_described", " Demisexual ", SEXUAL_ORIENTATION_LABELS)).toBe("Demisexual");
+    expect(sharedAnswerText("self_described", " ", SEXUAL_ORIENTATION_LABELS)).toBeNull();
+    expect(sharedAnswerText("prefer_not_to_say", null, GENDER_LABELS)).toBeNull();
+    expect(sharedAnswerText(null, null, GENDER_LABELS)).toBeNull();
   });
 });
 
@@ -57,6 +85,12 @@ describe("combined counts", () => {
     const out = summarizeAnswers([...many("woman", MIN_GROUP), ...many("man", MIN_GROUP - 1), ...many("non_binary", 1)], []);
     expect(out.gender).toEqual([{ key: "woman", label: "Woman", count: MIN_GROUP }]);
     expect(out.religion).toEqual([]);
+    expect(out.orientation).toEqual([]);
+  });
+
+  it("counts sexual orientation with the same minimum", () => {
+    const out = summarizeAnswers([], [], [...many("bisexual", MIN_GROUP), ...many("gay", MIN_GROUP - 1)]);
+    expect(out.orientation).toEqual([{ key: "bisexual", label: "Bisexual", count: MIN_GROUP }]);
   });
 
   it("shows every group at or above the minimum, in list order, and ignores blanks", () => {

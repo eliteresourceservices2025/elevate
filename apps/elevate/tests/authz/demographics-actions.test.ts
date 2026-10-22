@@ -58,6 +58,7 @@ describe("self-identification queries, every role", () => {
   const cases: { name: string; call: () => Promise<unknown>; allowed: RoleSlug[] }[] = [
     { name: "getMySelfIdentification", call: () => queries.getMySelfIdentification(), allowed: EVERYONE },
     { name: "getPronounsFor", call: () => queries.getPronounsFor(ID), allowed: EVERYONE },
+    { name: "getSharedIdentityFor", call: () => queries.getSharedIdentityFor(ID), allowed: EVERYONE },
     { name: "getSelfIdentificationSummary", call: () => queries.getSelfIdentificationSummary(), allowed: HR },
   ];
   for (const q of cases) {

@@ -33,9 +33,9 @@ export async function saveMySelfIdentification(input: unknown): Promise<ActionRe
     const me = await myEmployee(user.id);
     if (!me) return fail("Your people record was not found.");
     const fields = await db.transaction(async (tx) => {
-      const answered = await saveEmployeeSelfId(tx, me.id, parsed.data);
-      await writeAudit({ actor: user, action: "demographics.update", targetType: "employee", targetId: me.id, metadata: { fields: answered } }, tx);
-      return answered;
+      const saved = await saveEmployeeSelfId(tx, me.id, parsed.data);
+      await writeAudit({ actor: user, action: "demographics.update", targetType: "employee", targetId: me.id, metadata: { fields: saved.answered, shared: saved.shared } }, tx);
+      return saved.answered;
     });
     refresh(me.id);
     return { ok: true, data: { answered: fields.length } };

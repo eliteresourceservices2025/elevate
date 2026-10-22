@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await submitApplication(
-      { openingId: text("openingId"), fullName: text("fullName"), email: text("email"), phone: text("phone"), country: text("country"), note: text("note"), consent: text("consent") === "on" || text("consent") === "true" ? true : false, website: text("website") ?? "", gender: text("gender"), genderOther: text("genderOther"), religion: text("religion"), religionOther: text("religionOther") },
+      { openingId: text("openingId"), fullName: text("fullName"), email: text("email"), phone: text("phone"), country: text("country"), note: text("note"), consent: text("consent") === "on" || text("consent") === "true" ? true : false, website: text("website") ?? "", gender: text("gender"), genderOther: text("genderOther"), orientation: text("orientation"), orientationOther: text("orientationOther"), religion: text("religion"), religionOther: text("religionOther") },
       file,
     );
     return result.ok ? json({ ok: true }) : json({ ok: false, error: result.error, field: result.field }, 400);
