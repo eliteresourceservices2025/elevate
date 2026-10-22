@@ -1,0 +1,66 @@
+module.exports = {
+  id: "z",
+  letter: "",
+  title: "Wrap up",
+  blurb: "The mistakes to avoid, what to practise, and where to go next.",
+  slides: [
+    {
+      type: "dos",
+      title: "The mistakes we see most",
+      left: {
+        head: "Avoid",
+        items: [
+          "Typing a wrong work email",
+          "Putting client or patient details in a note, file or screenshot",
+          "Approving before you read the flags",
+          "Archiving a manager who still has reports",
+          "Using PTO or overtime wording",
+          "Switching on selfies before the monitoring policy",
+        ],
+      },
+      right: {
+        head: "Do instead",
+        items: [
+          "Check the email twice before you invite or save",
+          "Describe the situation, never the person or patient",
+          "Look at Late, Absent and Extra first",
+          "Move their reports, then archive or offboard",
+          "Say prize days off and extra hours",
+          "Publish the policy, get acknowledgments, then turn it on",
+        ],
+      },
+      say: "These are the mistakes that cost the most time. The fix for almost all of them is to slow down for ten seconds at the moment of the action. And every one of them is also written in the Common mistakes section of the relevant guide.",
+      ask: "Which of these have you already seen happen?",
+      minutes: 3,
+    },
+    {
+      type: "checklist",
+      title: "Try it yourself: your practice list",
+      items: [
+        "Invite a test address you own, then revoke it",
+        "Add a test person and change their manager",
+        "Start onboarding for a test person and tick a task",
+        "Create a draft job and look at the pipeline",
+        "Open Hours review for last week and read a flag",
+        "Look at Team attendance and the Rules tab",
+        "Post a test announcement to one team",
+        "Open Training status and filter by Overdue",
+      ],
+      say: "Now it is your turn. Use a practice system, never real people. Work through this list. Every item matches a guide in the Help center, so if you get stuck, search for it there. When you finish, tell me which step felt confusing, because that is the step we improve.",
+      ask: "Which item will you do first?",
+      minutes: 20,
+    },
+    {
+      type: "concept",
+      title: "Where to go next",
+      cards: [
+        { icon: "LuBookOpen", head: "Help center", text: "{{guides}} guides and {{videos}} videos. Search first." },
+        { icon: "LuLifeBuoy", head: "Contact support", text: "Something not working? Tell us, with the page and what you saw." },
+        { icon: "LuGraduationCap", head: "Teach the VAs next", text: "A shorter session covers the clock, time off, profile and privacy." },
+      ],
+      say: "You now know where everything is. Keep the Help center open in a tab for the first weeks. The next training is a shorter one for the VAs and contractors, covering how to clock in, ask for time off, update a profile and report a concern. Thank you for your time.",
+      ask: "What would make the VA session more useful?",
+      minutes: 3,
+    },
+  ],
+};

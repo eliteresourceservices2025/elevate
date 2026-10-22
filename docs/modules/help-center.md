@@ -37,5 +37,13 @@ Short how-to videos (one to two minutes) made from the screenshots, with a voice
 - The zoom positions come from `content/help/assets/_boxes.json`, written by `pnpm help:shots`. After a screen changes: run `pnpm help:shots`, then `node howto/build.cjs`, and re-read the storyboard text against the new screen. A step whose target is missing is shown without a ring (the build warns).
 - Keep the captions to what the screen says, and no client or patient information anywhere (the pictures are fake data).
 
+## The HR training deck (`tools/training-deck/`, output `docs/training/ELEVATE-HR-training.pptx`)
+One master deck in parts for teaching HR admins, team leads and recruiters: Welcome, then Part A (people, onboarding, offboarding), B (recruiting), C (time, attendance, time off), D (documents, training, reviews), E (reports, settings, speaking up), and a wrap-up with the common mistakes and a practice list. 60 slides, about 3.4 hours with discussion; each part opens with a divider so it can be taught in its own session.
+- Every slide has **speaker notes**: what to say, the clicks to demonstrate, a watch-out, a question for the group, the guide to point to and the time it takes. The slide text is short on purpose; the guides and videos carry the detail.
+- `parts/*.cjs` hold the slide content (plain data); `build.cjs` makes the deck with pptxgenjs, with the brand theme (purple and gold, Cambria and Calibri), one section per part, and the Help center pictures cropped and given rounded corners. A slide names its picture as `<guide>/<file>` (from `content/help/assets`) and may name a target to centre a tall picture on.
+- First time: `npm install` in `tools/training-deck` (not part of the pnpm workspace). Then `node build.cjs`. **After a screen changes:** run `pnpm help:shots`, then `node build.cjs`, then re-read the slide text against the new screen (the slide steps name real buttons).
+- To look at the result: open it in PowerPoint, or export the slides to PNG with PowerPoint and run `node sheets.cjs` for contact sheets of four slides each (`.build/sheets`).
+- It covers the HR side only. A shorter deck for VAs and contractors is a later step (the VA guides and videos already exist).
+
 ## Not built yet
-The PowerPoint, guides for VAs and contractors, links between guides (they refer to each other by title), videos for the other guides.
+A deck for VAs and contractors, links between guides (they refer to each other by title), videos for the other guides.
