@@ -61,6 +61,7 @@ export function NewPolicyForm({ today }: { today: string }) {
 export function DraftEditor({
   policyId,
   nextVersion,
+  showVersion = true,
   initial,
   hasPublished,
   canArchive,
@@ -68,6 +69,8 @@ export function DraftEditor({
 }: {
   policyId: string;
   nextVersion: number;
+  /** False for the privacy notice and monitoring policy: the wording says "draft" and "publish" without a number. */
+  showVersion?: boolean;
   initial: { body: string; changeNote: string | null; requiresAck: boolean; dueOn: string | null; files: ContentFileView[] };
   hasPublished: boolean;
   /** A never-published policy that is not the privacy notice or monitoring policy can be removed. */
@@ -95,7 +98,7 @@ export function DraftEditor({
 
   return (
     <form className="space-y-4 rounded-xl border bg-card p-4" onSubmit={(e) => { e.preventDefault(); run(save, "Draft saved."); }}>
-      <h3 className="font-semibold">Draft of version {nextVersion}</h3>
+      <h3 className="font-semibold">{showVersion ? `Draft of version ${nextVersion}` : "Draft"}</h3>
       <MarkdownField id="pd-body" label="Text" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={14} required />
       <ContentFilesEditor files={files} onFilesChange={setFiles} body={body} onBodyChange={setBody} />
       {hasPublished ? <TextField id="pd-note" label="What changed (shown to readers)" value={changeNote} onChange={(e) => setChangeNote(e.target.value)} maxLength={500} /> : null}
@@ -106,14 +109,14 @@ export function DraftEditor({
           type="button"
           disabled={pending}
           onClick={() =>
-            window.confirm(`Publish version ${nextVersion}? Nobody can change it afterwards, and everyone is notified${requiresAck ? " and asked to acknowledge it" : ""}.`) &&
+            window.confirm(`Publish ${showVersion ? `version ${nextVersion}` : "this update"}? Nobody can change it afterwards, and everyone is notified${requiresAck ? " and asked to acknowledge it" : ""}.`) &&
             run(async () => {
               const saved = await save();
               return saved.ok ? publishDraft({ policyId }) : saved;
-            }, `Version ${nextVersion} published.`)
+            }, showVersion ? `Version ${nextVersion} published.` : "Published.")
           }
         >
-          Publish version {nextVersion}
+          {showVersion ? `Publish version ${nextVersion}` : "Publish update"}
         </Button>
         {hasPublished ? (
           <Button type="button" variant="ghost" disabled={pending} onClick={() => window.confirm("Discard this draft?") && run(() => discardDraft({ policyId }), "Draft discarded.")}>

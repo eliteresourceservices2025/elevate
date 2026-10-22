@@ -16,7 +16,7 @@ import { notify, type NewNotification } from "@/modules/notifications/service";
 import { todayInZone } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
-import { PLACEHOLDER_MARK } from "./constants";
+import { PLACEHOLDER_MARK, hidesVersion } from "./constants";
 import { deleteUnusedPaths, listAnnouncementFiles, removeVersionFiles, syncContentFiles } from "./content-files";
 import { announcementRecipients, announcementTeams, announcements, acknowledgments, contentFiles, policies, policyVersions } from "./schema";
 import { ackStatus, activeUserIds, audienceEmployees, pendingAcknowledgments, queueAckEmails, remindPending } from "./service";
@@ -523,10 +523,11 @@ export async function publishDraft(input: unknown): Promise<ActionResult<{ versi
       await tx.update(policyVersions).set({ status: "published", requiresAck, publishedAt: new Date(), publishedBy: actor.id, updatedAt: new Date() }).where(eq(policyVersions.id, draft.id));
 
       const userIds = (await activeUserIds(tx)).filter((id) => id !== actor.id);
+      const versionText = hidesVersion(policy.kind) ? "" : ` (version ${draft.version})`;
       const notices: NewNotification[] = userIds.map((userId) => ({
         userId,
         kind: requiresAck ? "policy.ack_required" : "policy.published",
-        title: requiresAck ? `Please acknowledge: ${policy.title} (version ${draft.version})` : `${policy.title} was updated (version ${draft.version})`,
+        title: requiresAck ? `Please acknowledge: ${policy.title}${versionText}` : `${policy.title} was updated${versionText}`,
         body: draft.changeNote ?? undefined,
         link: `/announcements/policies/${policy.id}`,
       }));

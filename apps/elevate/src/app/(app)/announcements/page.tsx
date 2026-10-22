@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { DueBadge } from "@/modules/announcements/components/ack-display";
 import { FormDialog } from "@/components/form-dialog";
 import { NewPolicyForm } from "@/modules/announcements/components/policy-editor";
+import { hidesVersion } from "@/modules/announcements/constants";
 import { PopupQueueAdmin } from "@/modules/announcements/components/popup-admin";
 import { listPopupQueue } from "@/modules/announcements/popup-queries";
 import { listAnnouncements, listPolicies } from "@/modules/announcements/queries";
@@ -130,7 +131,7 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
                     {p.hasDraft && p.version !== null ? <Badge variant="secondary">Draft in progress</Badge> : null}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {p.version !== null && p.publishedAt ? `Version ${p.version}, published ${formatInZone(p.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}` : "Nobody can see this yet."}
+                    {p.version !== null && p.publishedAt ? `${hidesVersion(p.kind) ? "Published" : `Version ${p.version}, published`} ${formatInZone(p.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}` : "Nobody can see this yet."}
                   </p>
                 </Link>
               </li>

@@ -12,14 +12,12 @@ import { signOut } from "@/modules/auth/actions";
 export function PrivacyGate({
   versionId,
   title,
-  version,
   updated,
   changeNote,
   children,
 }: {
   versionId: string;
   title: string;
-  version: number;
   updated: boolean;
   changeNote: string | null;
   children: ReactNode;
@@ -33,7 +31,7 @@ export function PrivacyGate({
         <p className="text-sm font-medium text-primary">ELEVATE</p>
         <h1 className="text-2xl font-bold">{title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {updated ? `The privacy notice was updated (version ${version}). Please read it again to continue.` : "Before you continue, please read how ELEVATE handles your personal data."}
+          {updated ? `The privacy notice was updated. Please read it again to continue.` : "Before you continue, please read how ELEVATE handles your personal data."}
         </p>
       </div>
       {updated && changeNote ? (
@@ -65,7 +63,7 @@ export function PrivacyGate({
           </Button>
         </form>
       </div>
-      <p className="text-xs text-muted-foreground">This records your name, the version and the time. Nothing else.</p>
+      <p className="text-xs text-muted-foreground">This records your name and the time. Nothing else.</p>
     </main>
   );
 }

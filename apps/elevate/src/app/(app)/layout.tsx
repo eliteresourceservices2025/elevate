@@ -38,7 +38,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const [gate, unread, pending, clock, accountName, tourAutoStart, photoVersion, queued] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null), optional(tourStartsByItself(), false), optional(getMyPhotoVersion(), null), optional(listMyPopups(), [])]);
   if (gate) {
     return (
-      <PrivacyGate versionId={gate.versionId} title={gate.title} version={gate.version} updated={gate.updated} changeNote={gate.changeNote}>
+      <PrivacyGate versionId={gate.versionId} title={gate.title} updated={gate.updated} changeNote={gate.changeNote}>
         <Markdown source={gate.body} />
       </PrivacyGate>
     );

@@ -9,6 +9,7 @@ import { AckedBadge, DueBadge, StatusTable } from "@/modules/announcements/compo
 import { AcknowledgeButton, ArchivePolicyButton, StatusActions } from "@/modules/announcements/components/ack-controls";
 import { DraftEditor, StartDraftButton } from "@/modules/announcements/components/policy-editor";
 import { PopupControl } from "@/modules/announcements/components/popup-admin";
+import { hidesVersion } from "@/modules/announcements/constants";
 import { getPopupFor } from "@/modules/announcements/popup-queries";
 import { getAckStatus, getPolicy } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
@@ -23,6 +24,7 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
   const { id } = await params;
   const p = await orNotFound(getPolicy(id));
   if (!p) notFound();
+  const showVersion = !hidesVersion(p.kind);
   const today = todayInZone();
   const popup = p.canManage && p.kind === "general" && p.current ? await orNotFound(getPopupFor("policy", p.id)) : null;
   const status = p.canSeeStatus && p.current ? await orNotFound(getAckStatus({ kind: "policy_version", id: p.current.id })) : null;
@@ -39,7 +41,7 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
           <>
             {p.current?.publishedAt ? (
               <p className="mt-1 text-sm text-muted-foreground">
-                Version {p.current.version}, published {formatInZone(p.current.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}
+                {showVersion ? `Version ${p.current.version}, published` : "Published"} {formatInZone(p.current.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}
               </p>
             ) : (
               <p className="mt-1 text-sm text-muted-foreground">Not published yet. Only HR can see this.</p>
@@ -82,7 +84,7 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
                   <AcknowledgeButton subject={{ kind: "policy_version", id: p.current.id }} />
                 </>
               ) : p.acknowledgedAt ? (
-                <p className="text-sm text-muted-foreground">You acknowledged version {p.current.version} on {formatInZone(p.acknowledgedAt, DEFAULT_TIMEZONE, "MMM d, yyyy 'at' h:mm a")}.</p>
+                <p className="text-sm text-muted-foreground">You acknowledged {showVersion ? `version ${p.current.version}` : "this"} on {formatInZone(p.acknowledgedAt, DEFAULT_TIMEZONE, "MMM d, yyyy 'at' h:mm a")}.</p>
               ) : (
                 <p className="text-sm text-muted-foreground">Only people with an active ELEVATE profile acknowledge policies.</p>
               )}
@@ -103,6 +105,7 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
             <DraftEditor
               policyId={p.id}
               nextVersion={p.draft.version}
+              showVersion={showVersion}
               initial={{ body: p.draft.body, changeNote: p.draft.changeNote, requiresAck: p.draft.requiresAck, dueOn: p.draft.dueOn, files: p.draft.files }}
               hasPublished={p.current !== null}
               canArchive={p.current === null && p.history.length === 0 && p.kind === "general"}
@@ -117,7 +120,7 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
       {status && p.current ? (
         <section aria-label="Who has acknowledged" className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Who has acknowledged version {p.current.version}</h2>
+            <h2 className="text-lg font-semibold">{showVersion ? `Who has acknowledged version ${p.current.version}` : "Who has acknowledged the current text"}</h2>
             <StatusActions
               subject={{ kind: "policy_version", id: p.current.id }}
               canRemind={p.canRemind}
@@ -135,8 +138,8 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
           <ul className="divide-y rounded-xl border bg-card px-4">
             {p.history.map((v) => (
               <li key={v.id} className="py-3 text-sm">
-                <span className="font-medium">Version {v.version}</span>
-                {v.publishedAt ? <span className="text-muted-foreground"> · published {formatInZone(v.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}</span> : null}
+                {showVersion ? <span className="font-medium">Version {v.version}</span> : null}
+                {v.publishedAt ? <span className={showVersion ? "text-muted-foreground" : "font-medium"}>{showVersion ? " · " : ""}Published {formatInZone(v.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}</span> : null}
                 <span className="text-muted-foreground"> · {v.requiresAck ? `${v.acknowledgedCount ?? 0} acknowledged` : "no acknowledgment required"}</span>
                 {v.changeNote ? <p className="mt-1 text-muted-foreground">{v.changeNote}</p> : null}
               </li>
