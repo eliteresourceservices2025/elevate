@@ -14,7 +14,7 @@ import { todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { ALLOWED_TYPES_TEXT, MAX_FILE_BYTES, extensionOf, kindFromMime, mimeOf, sanitizeFileName, sniffFileKind } from "./files";
 import { documentFolders, documentTypes, documents } from "./schema";
-import { clientChoices } from "./service";
+import { authorizeDocumentView, clientChoices } from "./service";
 import { BUCKETS, getDocumentStorage, type Bucket } from "./storage";
 import {
   archiveDocumentTypeSchema,
@@ -248,16 +248,7 @@ export async function getDownloadUrl(input: unknown): Promise<ActionResult<{ url
     const parsed = documentIdSchema.safeParse(input);
     if (!parsed.success) return fail(BAD);
 
-    const found = await loadDocument(parsed.data.documentId);
-    const isHr = can(actor, "documents.verify");
-    if (found?.doc.employeeId) await authorize(actor, "documents.view", { ownerUserId: found.ownerUserId });
-    else await authorize(actor, "documents.view_company");
-    if (!found) return fail("That document was not found.");
-    const { doc } = found;
-
-    if (!doc.employeeId && doc.audience === "hr_only" && !can(actor, "documents.manage_company")) return fail("You do not have access to do that.");
-    if (doc.archivedAt && !isHr) return fail("That document was not found.");
-    if (!(await allowRequest("download", actor.id))) return fail("Too many downloads. Wait a few minutes and try again.");
+    const doc = await authorizeDocumentView(actor, parsed.data.documentId);
 
     const url = await getDocumentStorage().createSignedDownload(doc.storageBucket as Bucket, doc.storagePath, 60, doc.originalName);
     await writeAudit({

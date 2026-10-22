@@ -1232,3 +1232,37 @@ describe("recruiting report", () => {
     }
   });
 });
+
+describe("resume preview route", () => {
+  const getResume = async (user: TestUser, appId: string) => {
+    as(user);
+    const { GET } = await import("@/app/api/recruiting/resume/[applicationId]/route");
+    return GET(new Request("http://localhost/api/recruiting/resume/x"), { params: Promise.resolve({ applicationId: appId }) });
+  };
+
+  it("shows a Word resume as a sandboxed plain preview and a PDF as it is, to the hiring team and HR only", async () => {
+    const opening = await openJob();
+    const w = `${uniq("doc")}@example.com`;
+    const p = `${uniq("pdf")}@example.com`;
+    await apply(opening, { email: w }, { bytes: makeDocx(["Virtual assistant", "<img src=x onerror=alert(1)>"]), name: "cv.docx" });
+    await apply(opening, { email: p }, { bytes: await makePdf(["Plain PDF"]), name: "cv.pdf" });
+    const [appW, appP] = [(await appFor(opening, w))!, (await appFor(opening, p))!];
+
+    for (const user of [recruiter, hr, lead]) {
+      const res = await getResume(user, appW);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/html");
+      expect(res.headers.get("content-security-policy")).toMatch(/^sandbox;/);
+      expect(res.headers.get("cache-control")).toBe("private, no-store");
+      const html = await res.text();
+      expect(html).toContain("Virtual assistant");
+      expect(html).not.toMatch(/<img/i);
+      expect(html).toContain("&lt;img");
+    }
+    const pdf = await getResume(recruiter, appP);
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get("content-type")).toBe("application/pdf");
+    // a lead on another job's hiring team, an executive and an employee do not get it
+    for (const user of [otherLead, exec, employee]) expect((await getResume(user, appW)).status).toBe(404);
+  });
+});

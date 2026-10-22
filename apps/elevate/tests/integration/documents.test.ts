@@ -629,3 +629,58 @@ describe("bulk upload into Unsorted, then categorize later", () => {
     expect((await rows<{ audience: string }>(sql`select audience from docs.documents where id = ${id}`))[0].audience).toBe("hr_only");
   });
 });
+
+describe("in-page preview", () => {
+  const docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const idOf = (r: Awaited<ReturnType<typeof upload>>) => (r.ticket.ok ? r.ticket.data.documentId : "");
+  const preview = async (u: TestUser, id: string) => {
+    const { openDocumentPreview } = await import("@/modules/documents/service");
+    return openDocumentPreview(u as never, id);
+  };
+
+  it("shows a PDF, a picture and a Word file to the owner and to HR, records each view, and rebuilds Word as safe HTML", async () => {
+    const { makeDocx } = await import("../helpers/resume-files");
+    const p = await person();
+    const pdf = await upload({ actor: hr, employeeId: p.id });
+    const png = await upload({ actor: hr, employeeId: p.id, bytes: PNG_BYTES, mime: "image/png" });
+    const docx = await upload({ actor: hr, employeeId: p.id, bytes: makeDocx(["Service agreement", "<script>alert(1)</script>"]), mime: docxMime });
+
+    for (const viewer of [p.user, hr]) {
+      expect(await preview(viewer, idOf(pdf))).toMatchObject({ kind: "pdf", contentType: "application/pdf" });
+      expect(await preview(viewer, idOf(png))).toMatchObject({ kind: "image", contentType: "image/png" });
+      const word = await preview(viewer, idOf(docx));
+      expect(word).toMatchObject({ kind: "html", contentType: "text/html; charset=utf-8" });
+      expect(String(word.body)).toContain("Service agreement");
+      expect(String(word.body)).not.toMatch(/<script/i);
+      expect(String(word.body)).toContain("&lt;script&gt;");
+    }
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'document.preview' and metadata->>'documentId' = ${idOf(docx)}`)).toHaveLength(2);
+  });
+
+  it("refuses everyone who may not see the document, exactly like the download link", async () => {
+    const owner = await person();
+    const stranger = await person("Stranger");
+    const r = await upload({ actor: hr, employeeId: owner.id });
+    await expect(preview(stranger.user, idOf(r))).rejects.toThrow();
+    await expect(preview(lead, idOf(r))).rejects.toThrow();
+    // a company file for HR only: other staff are refused, HR is not
+    const secret = await upload({ actor: hr, audience: "hr_only" });
+    await expect(preview(stranger.user, idOf(secret))).rejects.toThrow();
+    expect((await preview(hr, idOf(secret))).kind).toBe("pdf");
+    // archived: only HR still sees it
+    as(hr);
+    expect((await docs.archiveDocument({ documentId: idOf(r) })).ok).toBe(true);
+    await expect(preview(owner.user, idOf(r))).rejects.toThrow(/not found/i);
+    expect((await preview(hr, idOf(r))).kind).toBe("pdf");
+    await expect(preview(hr, "11111111-1111-4111-8111-111111111111")).rejects.toThrow(/not found/i);
+  });
+
+  it("says a Word file with nothing readable cannot be shown, and shows nothing for it", async () => {
+    const { makeDocx } = await import("../helpers/resume-files");
+    const { NOT_PREVIEWABLE } = await import("@/modules/documents/service");
+    const p = await person();
+    const empty = await upload({ actor: hr, employeeId: p.id, bytes: makeDocx([]), mime: docxMime });
+    await expect(preview(hr, idOf(empty))).rejects.toThrow(NOT_PREVIEWABLE);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'document.preview' and metadata->>'documentId' = ${idOf(empty)}`)).toHaveLength(0);
+  });
+});

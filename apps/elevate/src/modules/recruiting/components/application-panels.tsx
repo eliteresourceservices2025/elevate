@@ -14,9 +14,9 @@ import { BOARD_STAGES, CRITERIA, INTERVIEW_KINDS, INTERVIEW_KIND_LABELS, RECOMME
 import type { PersonChoice } from "../queries";
 import { useRun } from "./use-run";
 
-/** The resume inside the page when it is a PDF; a Word file cannot be shown by a browser, so it only offers the download. */
+/** The resume inside the page: a PDF as it is, a Word (DOCX) file as a plain preview; both also offer the download. */
 export function ResumeViewer({ applicationId, kind }: { applicationId: string; kind: string | null }) {
-  if (kind === "pdf" || kind === null) {
+  if (kind === "pdf" || kind === "docx" || kind === null) {
     return (
       <DocumentViewer src={`/api/recruiting/resume/${applicationId}`} title="Resume" openLabel="View resume">
         <ResumeButton applicationId={applicationId} />
@@ -26,7 +26,7 @@ export function ResumeViewer({ applicationId, kind }: { applicationId: string; k
   return (
     <div className="flex flex-wrap items-center gap-3">
       <ResumeButton applicationId={applicationId} />
-      <p className="text-xs text-muted-foreground">This is a Word file, which cannot be shown in the page. Download it to read it.</p>
+      <p className="text-xs text-muted-foreground">This file cannot be shown in the page. Download it to read it.</p>
     </div>
   );
 }

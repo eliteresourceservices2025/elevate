@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALLOWED_MIME_TYPES, FILE_TYPES, formatBytes, kindFromMime, sanitizeFileName, sniffFileKind, titleFromFileName } from "./files";
+import { ALLOWED_MIME_TYPES, FILE_TYPES, canPreview, formatBytes, kindFromMime, sanitizeFileName, sniffFileKind, titleFromFileName } from "./files";
 
 const bytes = (...b: number[]) => new Uint8Array([...b, 0, 0, 0, 0, 0, 0, 0, 0]);
 const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0));
@@ -93,5 +93,17 @@ describe("titleFromFileName", () => {
     expect(titleFromFileName("  NBI   clearance .jpg")).toBe("NBI clearance");
     expect(titleFromFileName("a.png")).toBe("Document");
     expect(titleFromFileName("x".repeat(300) + ".pdf")).toHaveLength(120);
+  });
+});
+
+describe("canPreview", () => {
+  it("is true for PDF, pictures and DOCX, and false for the old DOC format and unknown files", () => {
+    expect(canPreview("application/pdf", "a.pdf")).toBe(true);
+    expect(canPreview("image/png", "a.png")).toBe(true);
+    expect(canPreview("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "a.docx")).toBe(true);
+    expect(canPreview("application/msword", "a.doc")).toBe(false);
+    expect(canPreview(null, "scan.JPEG")).toBe(true);
+    expect(canPreview(null, "notes.doc")).toBe(false);
+    expect(canPreview(null, "noextension")).toBe(false);
   });
 });

@@ -1,15 +1,19 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { and, count, eq, inArray, isNull } from "drizzle-orm";
-import { can, type AuthzUser } from "@/lib/authz";
+import { authorize, can, type AuthzUser } from "@/lib/authz";
+import type { AuthUser } from "@/lib/auth";
+import { allowRequest } from "@/lib/rate-limit";
+import { ActionFailure } from "@/lib/run-action";
 import { db } from "@/lib/db";
 import { isUniqueViolation } from "@/lib/db-errors";
 import { writeAudit } from "@/modules/audit/write";
 import { employees } from "@/modules/people/schema";
 import { clientAssignments, clients } from "@/modules/people/schema";
-import { MAX_FILE_BYTES, sanitizeFileName, sniffFileKind } from "./files";
+import { docxToPreviewBody, previewPage } from "./docx";
+import { MAX_FILE_BYTES, mimeOf, sanitizeFileName, sniffFileKind } from "./files";
 import { documentTypes, documents, systemDocuments, SYSTEM_SOURCE_KINDS } from "./schema";
-import { BUCKETS, getDocumentStorage } from "./storage";
+import { BUCKETS, getDocumentStorage, type Bucket } from "./storage";
 
 // Server-only helpers. They are NOT server actions (they live outside the "use server" files), so the
 // browser cannot call them and they may take the acting user as an argument.
@@ -115,4 +119,61 @@ export async function archiveSystemDocuments(sourceKind: FileSystemDocumentInput
     .returning({ id: documents.id });
   if (archived.length > 0) await writeAudit({ actor: null, action: "document.filed_archived", targetType: "document", targetId: archived[0].id, metadata: { count: archived.length, source: sourceKind } });
   return archived.length;
+}
+
+// ---- Looking at a stored document ----------------------------------------------------------------------------------------------
+
+const NO_ACCESS = "You do not have access to do that.";
+export const NOT_PREVIEWABLE = "This file cannot be shown in the page. Download it instead.";
+
+/**
+ * The one check for opening a stored document (a person's file or a company file), shared by the download link and the in-page preview:
+ * who may see it (the owner, HR, or whoever the company-document rules allow), archived files for HR only, and a rate limit.
+ * Throws ForbiddenError without access and ActionFailure for a missing file or too many requests.
+ */
+export async function authorizeDocumentView(actor: AuthUser, documentId: string) {
+  const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+  const found = doc && doc.status === "active" ? doc : null;
+  let ownerUserId: string | undefined;
+  if (found?.employeeId) {
+    const [owner] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, found.employeeId)).limit(1);
+    ownerUserId = owner?.userId ?? undefined;
+  }
+  if (found?.employeeId) await authorize(actor, "documents.view", { ownerUserId });
+  else await authorize(actor, "documents.view_company");
+  if (!found) throw new ActionFailure("That document was not found.");
+  if (!found.employeeId && found.audience === "hr_only" && !can(actor, "documents.manage_company")) throw new ActionFailure(NO_ACCESS);
+  if (found.archivedAt && !can(actor, "documents.verify")) throw new ActionFailure("That document was not found.");
+  if (!(await allowRequest("download", actor.id))) throw new ActionFailure("Too many downloads. Wait a few minutes and try again.");
+  return found;
+}
+
+export type DocumentPreview = { kind: "pdf" | "image" | "html"; contentType: string; body: Uint8Array | string };
+
+/**
+ * What the in-page viewer shows for a document: a PDF or a picture as it is (judged by the file's bytes, never its name), a Word
+ * (DOCX) file rebuilt as safe plain HTML. An old-format Word file or anything else is NOT_PREVIEWABLE (download it). Every preview is
+ * audited like a download, with the document id only.
+ */
+export async function openDocumentPreview(actor: AuthUser, documentId: string): Promise<DocumentPreview> {
+  const doc = await authorizeDocumentView(actor, documentId);
+  const bytes = await getDocumentStorage().read(doc.storageBucket as Bucket, doc.storagePath);
+  if (!bytes) throw new ActionFailure("That document was not found.");
+  const kind = sniffFileKind(bytes);
+  let preview: DocumentPreview;
+  if (kind === "pdf") preview = { kind: "pdf", contentType: mimeOf("pdf"), body: bytes };
+  else if (kind === "jpg" || kind === "png" || kind === "webp") preview = { kind: "image", contentType: mimeOf(kind), body: bytes };
+  else if (kind === "docx") {
+    const body = await docxToPreviewBody(bytes);
+    if (body === null) throw new ActionFailure(NOT_PREVIEWABLE);
+    preview = { kind: "html", contentType: "text/html; charset=utf-8", body: previewPage(doc.title, body) };
+  } else throw new ActionFailure(NOT_PREVIEWABLE);
+  await writeAudit({
+    actor,
+    action: "document.preview",
+    targetType: doc.employeeId ? "employee" : "company",
+    targetId: doc.employeeId ?? "company",
+    metadata: { documentId: doc.id },
+  });
+  return preview;
 }

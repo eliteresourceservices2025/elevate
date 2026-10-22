@@ -103,3 +103,14 @@ export function titleFromFileName(fileName: string): string {
   const base = fileName.replace(/\.[^.]+$/, "").replace(/_+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
   return base.length >= 2 ? base : "Document";
 }
+
+/**
+ * Whether the in-page viewer can show a file (by its stored type, with the name as a fallback): a PDF, a picture or a Word (DOCX) file.
+ * The old Word format (DOC) cannot be shown and is download-only. The server decides again from the file's bytes before it shows anything.
+ */
+export function canPreview(mimeType: string | null, fileName: string): boolean {
+  const kind = mimeType ? kindFromMime(mimeType) : null;
+  if (kind) return kind !== "doc";
+  const ext = fileName.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  return ext === "pdf" || ext === "docx" || ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp";
+}

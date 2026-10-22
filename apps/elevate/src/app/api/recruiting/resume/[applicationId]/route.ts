@@ -1,10 +1,11 @@
 import { ForbiddenError } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { ActionFailure } from "@/lib/run-action";
+import { PREVIEW_HTML_CSP, docxToPreviewBody, previewPage } from "@/modules/documents/docx";
 import { openResume } from "@/modules/recruiting/resume";
 
-// An applicant's resume shown inside the page (an iframe). Only PDFs are shown this way; a Word file is downloaded instead (a browser
-// cannot display it). Same checks as the download link: the hiring team and HR, audited, never cached.
+// An applicant's resume shown inside the page (an iframe): a PDF as it is, a Word (DOCX) file rebuilt as safe plain HTML. Same checks as
+// the download link: the hiring team and HR, audited, never cached.
 
 export async function GET(_request: Request, { params }: { params: Promise<{ applicationId: string }> }) {
   const actor = await requireUser();
@@ -12,6 +13,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ app
   if (!/^[0-9a-f-]{36}$/i.test(applicationId)) return new Response("Not found", { status: 404 });
   try {
     const resume = await openResume(actor, applicationId);
+    const common = { "Content-Disposition": "inline", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN" };
+    if (resume.kind === "docx") {
+      // A Word resume is rebuilt as safe plain HTML (no pictures, links or scripts) in a sandbox.
+      const body = await docxToPreviewBody(resume.bytes);
+      if (body === null) return new Response("This file cannot be shown in the page. Download it instead.", { status: 415 });
+      return new Response(previewPage("Resume", body), { headers: { ...common, "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": PREVIEW_HTML_CSP } });
+    }
     if (resume.kind !== "pdf") return new Response("This file type cannot be shown in the page. Download it instead.", { status: 415 });
     return new Response(Buffer.from(resume.bytes), {
       headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="resume.pdf"`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN" },
