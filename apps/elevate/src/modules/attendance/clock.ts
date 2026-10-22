@@ -24,6 +24,8 @@ export type Session = {
   endAt: number | null;
   breaks: Break[];
   startEventId?: string;
+  /** The clock-out that closed the session (undefined while it is open). */
+  endEventId?: string;
 };
 
 export type Replay = { state: ClockState; sessions: Session[]; invalid: ClockEventLite[] };
@@ -43,7 +45,10 @@ export function replayClock(events: readonly ClockEventLite[]): Replay {
     if (e.type === "clock_in") sessions.push({ startAt: e.at, endAt: null, breaks: [], startEventId: e.id });
     else if (e.type === "break_start") current.breaks.push({ startAt: e.at, endAt: null, plannedMinutes: e.plannedBreakMinutes ?? null, startEventId: e.id });
     else if (e.type === "break_end") current.breaks[current.breaks.length - 1].endAt = e.at;
-    else current.endAt = e.at;
+    else {
+      current.endAt = e.at;
+      current.endEventId = e.id;
+    }
     state = next;
   }
   return { state, sessions, invalid };

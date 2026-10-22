@@ -135,7 +135,7 @@ export function CorrectionForm({ zone }: { zone: string }) {
       }}
     >
       {dialog ? null : <h2 className="text-base font-semibold">Ask for a time correction</h2>}
-      <p className="text-sm text-muted-foreground">Your lead approves it, and a screenshot is needed as proof. Your original clock events are never changed; an approved correction adds new ones. Times are in {zone}.</p>
+      <p className="text-sm text-muted-foreground">Your lead approves it, and a screenshot is needed as proof. Your original clock events are never changed; an approved correction adds new ones. If you already clocked out later than you really stopped, that later clock-out is marked as removed and replaced. Times are in {zone}.</p>
       <SelectField id="cr-kind" label="What do you need to add?" value={presetKey} onChange={(e) => setPresetKey(e.target.value)}>
         {PRESETS.map((p) => (
           <option key={p.key} value={p.key}>

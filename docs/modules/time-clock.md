@@ -43,6 +43,8 @@ Extra hours are worked time beyond the scheduled hours. The scheduled hours have
 
 `requestCorrection` refuses an appeal with no screenshot, whatever it adds (before, only one that added a clock-in needed it). Corrections a lead or HR file for someone else and HR's bulk corrections are unchanged. The daily evidence purge now keeps screenshots attached to extra hours requests and issue reports (it used to treat anything not attached to a correction as an orphan after a day).
 
+**"I forgot to clock out" after the person already clocked out late** (reported 2026-10-21): a clock-out proposed at a time that falls inside a session that already ends with a later clock-out used to be refused ("do not fit": in, out, out). `lateClockOutsReplacedBy` (service.ts) finds that later clock-out; `requestCorrection` and `fileCorrectionForOthers` store it in `void_event_ids`, so the reviewer sees "Remove clock out at ..." and approving replaces it (removed by a void row, never deleted). The lead or HR may approve it (decision 2026-10-21); one HR files for someone else or older than a week is HR only, as before. The bulk import does the same. The closing clock-out is found through `Session.endEventId` from `replayClock`, not by comparing times. Only the single-clock-out case does this; any other proposal that does not fit is still refused.
+
 ## Changing someone's recorded time (HR, Super Admin, Team Lead)
 
 `attendance.edit_hours` (Super Admin and HR all, Team Lead team; migration 0088). On Team attendance, "Change someone's time" shows a person's events for a day: tick the ones recorded wrongly to **remove** them and add the right ones, with a reason (`edit-actions.ts`, `editAttendance`).

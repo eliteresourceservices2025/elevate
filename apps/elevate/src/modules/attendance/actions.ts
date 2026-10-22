@@ -19,7 +19,7 @@ import { groupByPerson, parseCorrectionsCsv } from "./bulk-corrections";
 import { EOD_EDIT_WINDOW_MS, needsHrDecision, replayClock } from "./clock";
 import { clockCorrections, clockEvents, clockEventVoids, clockPrefs, clockRules, correctionEvidence, idlePrompts, shiftNotes } from "./schema";
 import { rebuildAfterChange } from "./edit-service";
-import { MAX_APPEAL_AGE_MS, MAX_EDIT_AGE_MS, checkProposal, evidencePath, loadRecentEvents, lockEmployeeClock, monitoringPolicyPublished, performClock, personForUser, rulesFor, selfiePath, verifyEvidence, type ClockResult } from "./service";
+import { MAX_APPEAL_AGE_MS, MAX_EDIT_AGE_MS, checkProposal, evidencePath, lateClockOutsReplacedBy, loadRecentEvents, lockEmployeeClock, monitoringPolicyPublished, performClock, personForUser, rulesFor, selfiePath, verifyEvidence, type ClockResult } from "./service";
 import {
   EVIDENCE_MAX_BYTES,
   bulkCorrectionsSchema,
@@ -157,7 +157,8 @@ export async function requestCorrection(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return fail(first(parsed.error));
     const person = await personForUser(db, actor.id);
     const { events, evidenceIds, kind, reason } = parsed.data;
-    const problem = await checkProposal(person.id, events, Date.now());
+    const voidEventIds = await lateClockOutsReplacedBy(person.id, events);
+    const problem = await checkProposal(person.id, events, Date.now(), undefined, { voidIds: voidEventIds });
     if (problem) return fail(problem);
     // Every appeal carries proof: at least one screenshot (for example your browser history, or the error you saw).
     if (evidenceIds.length === 0) {
@@ -171,7 +172,7 @@ export async function requestCorrection(input: unknown): Promise<ActionResult> {
       if (n >= 3) throw new ActionFailure("You already have 3 corrections waiting. Wait for them to be decided.");
       const [row] = await tx
         .insert(clockCorrections)
-        .values({ employeeId: person.id, requestedBy: actor.id, reason, kind, proposed: events.map((e) => ({ type: e.type, at: new Date(e.at).toISOString() })) })
+        .values({ employeeId: person.id, requestedBy: actor.id, reason, kind, proposed: events.map((e) => ({ type: e.type, at: new Date(e.at).toISOString() })), voidEventIds })
         .returning({ id: clockCorrections.id });
       const attached = await verifyEvidence(tx, person.id, evidenceIds, EVIDENCE_MAX_BYTES, actor.id);
       if (attached.length > 0) await tx.update(correctionEvidence).set({ correctionId: row.id }).where(inArray(correctionEvidence.id, attached));
@@ -199,7 +200,8 @@ export async function fileCorrectionForOthers(input: unknown): Promise<ActionRes
     if (!target) return fail("That person was not found.");
     await authorize(actor, "attendance.file_for_others", { ownerUserId: target.userId ?? undefined, managerChainUserIds: await timeChainUserIds(db, employeeId) });
     if (target.userId === actor.id) return fail("File your own corrections from My time.");
-    const problem = await checkProposal(employeeId, events, Date.now());
+    const voidEventIds = await lateClockOutsReplacedBy(employeeId, events);
+    const problem = await checkProposal(employeeId, events, Date.now(), undefined, { voidIds: voidEventIds });
     if (problem) return fail(problem);
 
     const hrIds = await hrUserIds();
@@ -208,7 +210,7 @@ export async function fileCorrectionForOthers(input: unknown): Promise<ActionRes
       if (n >= 3) throw new ActionFailure("They already have 3 corrections waiting.");
       const [row] = await tx
         .insert(clockCorrections)
-        .values({ employeeId, requestedBy: actor.id, reason, kind, proposed: events.map((e) => ({ type: e.type, at: new Date(e.at).toISOString() })) })
+        .values({ employeeId, requestedBy: actor.id, reason, kind, proposed: events.map((e) => ({ type: e.type, at: new Date(e.at).toISOString() })), voidEventIds })
         .returning({ id: clockCorrections.id });
       if (target.userId) await notify(tx, { userId: target.userId, kind: "attendance.correction_filed_for_you", title: "A time correction was filed for you", body: reason, link: "/attendance" });
       const reviewers = hrIds.filter((id) => id !== actor.id && id !== target.userId);
@@ -382,12 +384,13 @@ export async function fileBulkCorrections(input: unknown): Promise<ActionResult<
         if (!target) throw new ActionFailure("No active person has that email.");
         if (target.userId === actor.id) throw new ActionFailure("You cannot file your own corrections.");
         const events = list.map((r) => ({ type: r.type, at: fromZonedTime(`${r.time}:00`, timeZone).toISOString() }));
-        const problem = await checkProposal(target.id, events, Date.now());
+        const voidEventIds = await lateClockOutsReplacedBy(target.id, events);
+        const problem = await checkProposal(target.id, events, Date.now(), undefined, { voidIds: voidEventIds });
         if (problem) throw new ActionFailure(problem);
         await db.transaction(async (tx) => {
           const [{ n }] = (await tx.execute(sql`select count(*)::int as n from time.clock_corrections where employee_id = ${target.id} and status = 'pending'`)) as unknown as { n: number }[];
           if (n >= 3) throw new ActionFailure("They already have 3 corrections waiting.");
-          const [row] = await tx.insert(clockCorrections).values({ employeeId: target.id, requestedBy: actor.id, reason, kind, batchId, proposed: events }).returning({ id: clockCorrections.id });
+          const [row] = await tx.insert(clockCorrections).values({ employeeId: target.id, requestedBy: actor.id, reason, kind, batchId, proposed: events, voidEventIds }).returning({ id: clockCorrections.id });
           if (target.userId) await notify(tx, { userId: target.userId, kind: "attendance.correction_filed_for_you", title: "A time correction was filed for you", body: reason, link: "/attendance" });
           await writeAudit({ actor, action: "clock.correction_filed_for", targetType: "employee", targetId: target.id, metadata: { correctionId: row.id, events: events.length, kind, batchId } }, tx);
         });
