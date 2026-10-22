@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Markdown } from "@/components/markdown";
 import { ContentFileList } from "@/modules/announcements/components/content-file-list";
@@ -13,6 +12,8 @@ import { PopupControl } from "@/modules/announcements/components/popup-admin";
 import { getPopupFor } from "@/modules/announcements/popup-queries";
 import { getAckStatus, getPolicy } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Policy" };
 
@@ -27,26 +28,33 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
   const status = p.canSeeStatus && p.current ? await orNotFound(getAckStatus({ kind: "policy_version", id: p.current.id })) : null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <Link href="/announcements?tab=policies" className="text-sm text-primary underline-offset-4 hover:underline">
-          All policies
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{p.title}</h1>
-            {KIND_LABEL[p.kind] ? <Badge variant="outline">{KIND_LABEL[p.kind]}</Badge> : null}
-          </div>
-          {p.canManage && p.kind === "general" && p.current ? <PopupControl kind="policy" itemId={p.id} current={popup} today={today} /> : null}
-        </div>
-        {p.current?.publishedAt ? (
-          <p className="mt-1 text-sm text-muted-foreground">
-            Version {p.current.version}, published {formatInZone(p.current.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}
-          </p>
-        ) : (
-          <p className="mt-1 text-sm text-muted-foreground">Not published yet. Only HR can see this.</p>
-        )}
-      </div>
+    <PageContainer width="form">
+      <PageHeader
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {p.title} {KIND_LABEL[p.kind] ? <Badge variant="outline">{KIND_LABEL[p.kind]}</Badge> : null}
+          </span>
+        }
+        description={
+          <>
+            {p.current?.publishedAt ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Version {p.current.version}, published {formatInZone(p.current.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-muted-foreground">Not published yet. Only HR can see this.</p>
+            )}
+          </>
+        }
+        breadcrumbs={[{ label: "All policies", href: "/announcements?tab=policies" }, { label: p.title }]}
+        actions={
+          <>
+            {p.canManage && p.kind === "general" && p.current ? (
+              <PopupControl kind="policy" itemId={p.id} current={popup} today={today} />
+            ) : null}
+          </>
+        }
+      />
 
       {p.current ? (
         <>
@@ -136,6 +144,6 @@ export default async function PolicyPage({ params }: PageProps<"/announcements/p
           </ul>
         </section>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

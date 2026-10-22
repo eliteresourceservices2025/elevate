@@ -16,6 +16,7 @@ import { getAutoAssign, getInstructionFacts, listEvidenceClients, listTrainingSt
 import { todayInZone } from "@/modules/org/service";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
+import { Alert } from "@/components/ui/alert";
 
 export const metadata: Metadata = { title: "Training status" };
 
@@ -73,17 +74,17 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         </p>
       ) : null}
       {!published ? (
-        <p role="note" className="rounded-xl border border-warning/40 bg-warning-surface p-3 text-sm">
+        <Alert variant="warning" role="note" className="rounded-xl p-3 text-sm">
           This course is not published yet, so nobody is assigned and people cannot be added. Publishing needs a reviewer and the date counsel approved it.
-        </p>
+        </Alert>
       ) : null}
 
       {auto ? (
         <>
           {auto.rule.mode === "paused" && published ? (
-            <p role="note" className="rounded-xl border border-warning/40 bg-warning-surface p-3 text-sm">
+            <Alert variant="warning" role="note" className="rounded-xl p-3 text-sm">
               Automatic assignment is <strong>paused</strong> for this course: nobody is assigned until you choose a pilot or everyone below.
-            </p>
+            </Alert>
           ) : null}
           <AutoAssignCard
             key={`${course}-${auto.rule.mode}-${auto.rule.teamIds.join(",")}`}

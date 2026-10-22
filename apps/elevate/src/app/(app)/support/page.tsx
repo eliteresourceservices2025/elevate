@@ -6,6 +6,8 @@ import { FormDialog } from "@/components/form-dialog";
 import { SupportForm, SupportList } from "@/modules/support/components/support-panels";
 import { listMySupportRequests, listSupportInbox } from "@/modules/support/queries";
 import { supportEmail } from "@/modules/support/service";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Contact support" };
 
@@ -19,23 +21,27 @@ export default async function SupportPage({ searchParams }: PageProps<"/support"
   const handled = inbox?.filter((r) => r.status === "closed") ?? [];
 
   return (
-    <div className="w-full max-w-3xl space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="max-w-2xl">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Contact support</h1>
-          <p className="mt-1 text-muted-foreground">
+    <PageContainer width="form">
+      <PageHeader
+        title="Contact support"
+        description={
+          <p>
             Something not working, or you cannot sign in? Tell us here. You can also email{" "}
             <a href={`mailto:${supportEmail()}`} className="text-primary underline-offset-4 hover:underline">
               {supportEmail()}
             </a>
             .
           </p>
-        </div>
-        {/* A link that asks for support from another page (it carries ?from=) opens the form straight away */}
-        <FormDialog label="Send a request to support" title="Contact support" defaultOpen={Boolean(from)} size="lg">
-          <SupportForm page={from} email={user.email} />
-        </FormDialog>
-      </div>
+        }
+        actions={
+          <>
+            {/* A link that asks for support from another page (it carries ?from=) opens the form straight away */}
+            <FormDialog label="Send a request to support" title="Contact support" defaultOpen={Boolean(from)} size="lg">
+              <SupportForm page={from} email={user.email} />
+            </FormDialog>
+          </>
+        }
+      />
 
       <section aria-label="Your requests" className="space-y-3">
         <h2 className="text-lg font-semibold">Your requests</h2>
@@ -56,6 +62,6 @@ export default async function SupportPage({ searchParams }: PageProps<"/support"
           ) : null}
         </section>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

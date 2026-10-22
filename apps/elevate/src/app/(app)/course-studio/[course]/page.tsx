@@ -5,6 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
 import { NewDraftForm, RemoveAddonButton } from "@/modules/learn/components/studio-editors";
 import { getStudioCourses } from "@/modules/learn/studio-queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
+import { Alert } from "@/components/ui/alert";
 
 export const metadata: Metadata = { title: "Course versions" };
 
@@ -21,28 +24,30 @@ export default async function CourseVersionsPage({ params }: PageProps<"/course-
   const removable = c.kind === "client_addon" && c.versions.every((v) => v.status === "draft");
 
   return (
-    <div className="w-full space-y-6">
-      <p className="text-sm">
-        <Link href="/course-studio" className="text-primary underline-offset-4 hover:underline">
-          Back to the course studio
-        </Link>
-      </p>
-      <div className="max-w-3xl">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{c.title}</h1>
-          {c.kind === "client_addon" ? (
-            <Badge variant="outline">Client add-on{c.clientName ? `: ${c.clientName}` : ""}</Badge>
-          ) : (
-            <Badge variant="outline">Core course</Badge>
-          )}
-        </div>
-        <p className="mt-1 text-muted-foreground">
-          Course code <code>{c.slug}</code>.{" "}
-          {c.studioManaged
-            ? "This course is edited here: the publish command no longer loads it from code."
-            : "Not edited in the studio yet: starting a draft makes the studio its working copy."}
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {c.title}{" "}
+            {c.kind === "client_addon" ? (
+              <Badge variant="outline">Client add-on{c.clientName ? `: ${c.clientName}` : ""}</Badge>
+            ) : (
+              <Badge variant="outline">Core course</Badge>
+            )}
+          </span>
+        }
+        description={
+          <>
+            <p className="mt-1 text-muted-foreground">
+              Course code <code>{c.slug}</code>.{" "}
+              {c.studioManaged
+                ? "This course is edited here: the publish command no longer loads it from code."
+                : "Not edited in the studio yet: starting a draft makes the studio its working copy."}
+            </p>
+          </>
+        }
+        breadcrumbs={[{ label: "The course studio", href: "/course-studio" }, { label: c.title }]}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section aria-label="Versions" className="space-y-3">
@@ -75,7 +80,7 @@ export default async function CourseVersionsPage({ params }: PageProps<"/course-
 
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
           {draft ? (
-            <section className="space-y-3 rounded-xl border border-warning/40 bg-warning-surface p-5 text-sm">
+            <Alert variant="warning" role="note" className="space-y-3 rounded-xl p-5 text-sm">
               <h2 className="text-base font-semibold">There is a draft</h2>
               <p>Version {draft.version} is being edited.</p>
               <Link
@@ -84,7 +89,7 @@ export default async function CourseVersionsPage({ params }: PageProps<"/course-
               >
                 Open the draft
               </Link>
-            </section>
+            </Alert>
           ) : (
             <section className="space-y-3 rounded-xl border bg-card p-5">
               <h2 className="text-base font-semibold">Start a new draft</h2>
@@ -157,6 +162,6 @@ export default async function CourseVersionsPage({ params }: PageProps<"/course-
           ) : null}
         </aside>
       </div>
-    </div>
+    </PageContainer>
   );
 }

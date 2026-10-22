@@ -1,5 +1,6 @@
 import type { Block } from "../../../../../learn/src/content/schema";
 import type { LintIssue } from "../studio-lint";
+import { Alert } from "@/components/ui/alert";
 
 /** A block as plain, readable text (the studio's read-only view and the diff pages). Never HTML: everything is a React element. */
 export function BlockView({ block }: { block: Block }) {
@@ -125,16 +126,16 @@ export function LintList({ issues }: { issues: LintIssue[] }) {
   return (
     <div className="space-y-2 text-sm">
       {errors.length > 0 ? (
-        <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+        <Alert variant="destructive" role="alert" className="rounded-lg p-3">
           <p className="font-medium">{errors.length} to fix before it can be saved or published</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">{errors.map((i, n) => <li key={n}>{i.where}: {i.message}</li>)}</ul>
-        </div>
+        </Alert>
       ) : null}
       {warnings.length > 0 ? (
-        <div className="rounded-lg border border-warning/40 bg-warning-surface p-3">
+        <Alert variant="warning" role="note" className="rounded-lg p-3">
           <p className="font-medium">{warnings.length} to consider</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">{warnings.map((i, n) => <li key={n}>{i.where}: {i.message}</li>)}</ul>
-        </div>
+        </Alert>
       ) : null}
     </div>
   );

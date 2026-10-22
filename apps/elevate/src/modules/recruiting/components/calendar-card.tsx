@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { disconnectCalendar } from "../actions";
 import type { CalendarStatus } from "../calendar";
 import { useRun } from "./use-run";
+import { Alert } from "@/components/ui/alert";
 
 const FLASH: Record<string, { tone: "ok" | "bad"; text: string }> = {
   connected: { tone: "ok", text: "Google Calendar is connected. New interviews you schedule will be created on it with a Meet link." },
@@ -21,9 +22,9 @@ export function CalendarCard({ status, flash }: { status: CalendarStatus; flash?
     <section aria-label="Google Calendar" className="space-y-3 rounded-xl border bg-card p-4">
       <h2 className="text-lg font-semibold">Google Calendar</h2>
       {note ? (
-        <p role="status" className={`rounded-lg border p-3 text-sm ${note.tone === "ok" ? "border-success/40 bg-success-surface" : "border-warning/40 bg-warning-surface"}`}>
+        <Alert variant={note.tone === "ok" ? "success" : "warning"} role="status" className="p-3">
           {note.text}
-        </p>
+        </Alert>
       ) : null}
       <p className="text-sm text-muted-foreground">
         Connect your own Google Calendar so interviews you schedule are created there with a Google Meet link, and Google sends the invites to the interviewers and the applicant. Without it, invites go out as calendar files by email. ELEVATE only asks to create and remove calendar events, and only uses the connection for interviews you schedule.

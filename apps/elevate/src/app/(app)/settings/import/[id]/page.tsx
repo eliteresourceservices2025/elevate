@@ -8,6 +8,8 @@ import { orNotFound } from "@/lib/or-not-found";
 import { pageInfo, parsePaging } from "@/lib/pagination";
 import { BatchActions } from "@/modules/imports/components/batch-actions";
 import { ROW_FILTERS, getBatch, getReconciliation, listBatchRows, type RowFilter } from "@/modules/imports/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Import" };
 
@@ -27,16 +29,25 @@ export default async function ImportBatchPage({ params, searchParams }: PageProp
   const s = batch.summary;
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/settings/import" className="text-sm text-primary underline-offset-2 hover:underline">
-          All imports
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">{batch.fileName}</h1>
-        <p className="text-muted-foreground">
-          {batch.rowCount} rows. {batch.status === "preview" ? "Nothing has been created yet." : batch.status === "committed" ? "Committed." : batch.status === "rolled_back" ? "Rolled back." : "Discarded."}
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title={batch.fileName}
+        description={
+          <>
+            <p className="text-muted-foreground">
+              {batch.rowCount} rows.{" "}
+              {batch.status === "preview"
+                ? "Nothing has been created yet."
+                : batch.status === "committed"
+                  ? "Committed."
+                  : batch.status === "rolled_back"
+                    ? "Rolled back."
+                    : "Discarded."}
+            </p>
+          </>
+        }
+        breadcrumbs={[{ label: "All imports", href: "/settings/import" }, { label: batch.fileName }]}
+      />
 
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {(
@@ -130,6 +141,6 @@ export default async function ImportBatchPage({ params, searchParams }: PageProp
         )}
         <PagerLinks info={info} basePath={`/settings/import/${id}`} query={{ filter: filter === "all" ? undefined : filter }} label="rows" />
       </section>
-    </div>
+    </PageContainer>
   );
 }

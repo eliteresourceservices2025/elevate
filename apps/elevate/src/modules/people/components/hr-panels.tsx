@@ -157,7 +157,7 @@ export function AssignClientForm({
         Assign
       </Button>
       {handlesPhi && readiness ? (
-        <p role="status" className={`text-sm sm:col-span-4 ${readiness.state === "passed" ? "text-muted-foreground" : "rounded-lg border border-warning/40 bg-warning-surface p-2"}`}>
+        <Alert variant={readiness.state === "passed" ? "muted" : "warning"} role="status" className={readiness.state === "passed" ? "sm:col-span-4" : "p-2 sm:col-span-4"}>
           {readiness.state === "passed"
             ? `HIPAA training: passed, valid until ${readiness.validUntil}.`
             : readiness.state === "open"
@@ -166,10 +166,10 @@ export function AssignClientForm({
                 ? `HIPAA training: the certificate ended on ${readiness.endedOn}. `
                 : "HIPAA training: nothing on record yet. "}
           {readiness.state !== "passed" ? "This client works with patient information. You can still assign; this is a reminder only." : null}
-        </p>
+        </Alert>
       ) : null}
       {addons.map((addon) => (
-        <p key={addon.label} role="status" className={`text-sm sm:col-span-4 ${addon.readiness.state === "passed" ? "text-muted-foreground" : "rounded-lg border border-warning/40 bg-warning-surface p-2"}`}>
+        <Alert key={addon.label} variant={addon.readiness.state === "passed" ? "muted" : "warning"} role="status" className={addon.readiness.state === "passed" ? "sm:col-span-4" : "p-2 sm:col-span-4"}>
           {addon.readiness.state === "passed"
             ? `${addon.label}: passed, valid until ${addon.readiness.validUntil}.`
             : addon.readiness.state === "open"
@@ -178,7 +178,7 @@ export function AssignClientForm({
                 ? `${addon.label}: the certificate ended on ${addon.readiness.endedOn}. `
                 : `${addon.label}: nothing on record yet. This course is assigned automatically once the person is on the client. `}
           {addon.readiness.state !== "passed" ? "A reminder only." : null}
-        </p>
+        </Alert>
       ))}
     </form>
   );

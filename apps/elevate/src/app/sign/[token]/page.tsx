@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { formatInZone } from "@/lib/time";
 import { ExternalFlow } from "@/modules/signing/components/external-flow";
 import { SESSION_COOKIE, resolveToken, sessionValid } from "@/modules/signing/external";
+import { Alert } from "@/components/ui/alert";
 
 export const metadata: Metadata = { title: "Sign a document" };
 export const dynamic = "force-dynamic";
@@ -48,9 +49,9 @@ export default async function SignPage({ params }: PageProps<"/sign/[token]">) {
           Someone else signs before you. We will email you when it is your turn.
         </p>
       ) : state === "signed" ? (
-        <p role="status" className="rounded-xl border border-success/40 bg-success-surface p-5 text-sm">
+        <Alert variant="success" role="status" className="rounded-xl p-5 text-sm">
           Thank you, you have signed. The others still need to sign. We will email you a link to the signed copy when everyone has.
-        </p>
+        </Alert>
       ) : !session ? (
         <>
           {state === "done" ? <p className="text-sm text-muted-foreground">This document has been signed by everyone. To open your signed copy, first confirm it is you.</p> : null}
@@ -60,9 +61,9 @@ export default async function SignPage({ params }: PageProps<"/sign/[token]">) {
         <ExternalFlow token={token} step="sign" email="" name={signer.externalName ?? ""} />
       ) : (
         <>
-          <p role="status" className="rounded-xl border border-success/40 bg-success-surface p-5 text-sm">
+          <Alert variant="success" role="status" className="rounded-xl p-5 text-sm">
             Thank you. Everyone has signed. Below is your signed copy, with its certificate of completion.
-          </p>
+          </Alert>
           <ExternalFlow token={token} step="view" email="" name={signer.externalName ?? ""} />
         </>
       )}

@@ -15,6 +15,7 @@ import { ArchiveTemplateButton, NewTemplateForm } from "@/modules/signing/compon
 import { listEnvelopes, listMySigning, listTemplates, type EnvelopeFilter } from "@/modules/signing/queries";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
+import { Alert } from "@/components/ui/alert";
 
 export const metadata: Metadata = { title: "Signing" };
 
@@ -73,7 +74,7 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
 
       {minePage && mine ? (
         <section aria-label="Documents to sign" className="space-y-2">
-          {waiting > 0 ? <p role="status" className="rounded-lg border border-warning/40 bg-warning-surface p-3 text-sm">You have {waiting} {waiting === 1 ? "document" : "documents"} waiting for your signature.</p> : null}
+          {waiting > 0 ? <Alert variant="warning" role="status" className="rounded-lg p-3 text-sm">You have {waiting} {waiting === 1 ? "document" : "documents"} waiting for your signature.</Alert> : null}
           {mine.length === 0 ? (
             <p className="text-muted-foreground">Nothing has been sent to you to sign.</p>
           ) : (
