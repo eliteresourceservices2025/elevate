@@ -150,6 +150,7 @@ const EXPECTED: Record<string, string> = {
   "learn.export_evidence": "A A - - - -",
   "learn.manage_content": "A A - - - -", // plus the Privacy Officer flag
   "support.create": "O O O O O O",
+  "help.view": "A A A A A A",
   "support.manage": "A A - - - -",
   "incidents.report": "O O O O O O",
   "incidents.handle": "A A - - - -", // plus the Privacy Officer flag

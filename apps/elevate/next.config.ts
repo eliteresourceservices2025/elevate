@@ -9,6 +9,11 @@ const embedOrigins = (process.env.CAREERS_EMBED_ORIGINS ?? "")
   .filter((part) => /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(part) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(part));
 
 const nextConfig: NextConfig = {
+  // The Help center reads its articles, pictures and videos from content/help at run time, so the host must ship those files.
+  outputFileTracingIncludes: {
+    "/help/**": ["./content/help/**/*"],
+    "/api/help/**": ["./content/help/**/*"],
+  },
   async headers() {
     return [{ source: "/careers/:path*", headers: [{ key: "Content-Security-Policy", value: `frame-ancestors 'self' ${embedOrigins.join(" ")}`.trim() }] }];
   },
