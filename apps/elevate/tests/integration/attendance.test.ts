@@ -360,6 +360,26 @@ describe("corrections", () => {
     expect(await actions.decideCorrection({ correctionId: id, decision: "approve" })).toEqual({ ok: false, error: "That request was already handled." });
   });
 
+  it("replaces a late clock-out when the person asks to be clocked out at the earlier time they really stopped", async () => {
+    const { lead, worker } = await setup();
+    await event(worker.employeeId, "clock_in", iso(9 * HOUR));
+    await event(worker.employeeId, "clock_out", iso(HOUR)); // clocked out only after a lead noticed the clock running
+    as(worker.user);
+    expect((await propose([{ type: "clock_out", at: iso(4 * HOUR) }])).ok).toBe(true);
+    const id = await pending(worker.employeeId);
+    const [row] = await rows<{ n: number }>(sql`select cardinality(void_event_ids)::int as n from time.clock_corrections where id = ${id}`);
+    expect(row.n).toBe(1);
+
+    as(lead.user);
+    expect((await actions.decideCorrection({ correctionId: id, decision: "approve" })).ok).toBe(true);
+    const events = await rows<{ type: string; source: string }>(sql`select type, source from time.v_clock_events where employee_id = ${worker.employeeId} order by occurred_at`);
+    expect(events).toEqual([{ type: "clock_in", source: "web" }, { type: "clock_out", source: "admin_correction" }]);
+    // the late clock-out is marked removed, not deleted
+    expect(await rows(sql`select 1 from time.clock_events where employee_id = ${worker.employeeId} and type = 'clock_out'`)).toHaveLength(2);
+    as(worker.user);
+    expect((await queries.getClockStatus())?.state).toBe("out");
+  });
+
   it("refuses corrections that cannot be true", async () => {
     const { worker } = await setup();
     await event(worker.employeeId, "clock_in", iso(5 * HOUR));
@@ -971,6 +991,25 @@ describe("filing a correction for someone else", () => {
     as(hr);
     expect((await queries.listCorrectionQueue()).items.find((i) => i.id === c.id)?.filedBy).toContain("FileLead");
     expect((await actions.decideCorrection({ correctionId: c.id, decision: "approve" })).ok).toBe(true);
+  });
+
+  it("lets a lead file the earlier clock-out for someone who clocked out late; HR approval replaces the late one", async () => {
+    const lead = await person("FileLead3", ["team_lead", "employee"]);
+    const worker = await person("LateOut", ["employee"], { managerId: lead.employeeId });
+    await event(worker.employeeId, "clock_in", iso(9 * HOUR));
+    await event(worker.employeeId, "clock_out", iso(HOUR));
+    as(lead.user);
+    const late = (at: string) => actions.fileCorrectionForOthers({ employeeId: worker.employeeId, reason: "Forgot to clock out", kind: "forgot", events: [{ type: "clock_out", at }] });
+    expect((await late(iso(4 * HOUR))).ok).toBe(true);
+    const [c] = await rows<{ id: string; n: number }>(sql`select id, cardinality(void_event_ids)::int as n from time.clock_corrections where employee_id = ${worker.employeeId} and status = 'pending'`);
+    expect(c.n).toBe(1);
+    // A time outside the session is still refused, and a refused one files nothing
+    expect(await late(iso(0.5 * HOUR))).toMatchObject({ ok: false });
+
+    as(hr);
+    expect((await actions.decideCorrection({ correctionId: c.id, decision: "approve" })).ok).toBe(true);
+    const events = await rows<{ type: string; source: string }>(sql`select type, source from time.v_clock_events where employee_id = ${worker.employeeId} order by occurred_at`);
+    expect(events).toEqual([{ type: "clock_in", source: "web" }, { type: "clock_out", source: "admin_correction" }]);
   });
 
   it("refuses a lead filing outside their downline or for themselves, and everyone below lead", async () => {

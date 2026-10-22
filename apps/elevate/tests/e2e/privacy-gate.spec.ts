@@ -20,7 +20,7 @@ test("a person must accept the published privacy notice before using ELEVATE", a
   const stamp = Date.now();
   const employee = await createEmployeeAccount("Gia", `Gate${stamp}`);
   await signInEnrollingMfa(page, employee); // no notice is published yet: straight to the dashboard
-  await expect(page.getByRole("heading", { name: "Welcome to ELEVATE" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^Good (morning|afternoon|evening), Gia/ })).toBeVisible();
 
   try {
     await withSql(async (sql) => {

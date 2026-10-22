@@ -360,3 +360,18 @@ export async function checkProposal(
   if (replay.sessions.some((s) => (s.endAt ?? nowMs) - s.startAt > MAX_SESSION_MS)) return "That would make a session longer than 16 hours.";
   return null;
 }
+
+/**
+ * "I forgot to clock out" asks for ONE clock-out at the time the person really stopped. When they only clocked out later (for example
+ * after a lead noticed the clock still running), that earlier time falls inside a session that already ends with a later clock-out, and
+ * adding it would leave two clock-outs in a row. The later clock-out was recorded in the wrong place, so it is the one to replace:
+ * returns its id (to be removed together with the correction, once approved), or [] when this is not that case.
+ */
+export async function lateClockOutsReplacedBy(employeeId: string, proposed: ProposedEvents): Promise<string[]> {
+  if (proposed.length !== 1 || proposed[0].type !== "clock_out") return [];
+  const at = Date.parse(proposed[0].at);
+  if (Number.isNaN(at)) return [];
+  const existing = await loadEventsBetween(db, employeeId, at - DAY_MS, at + DAY_MS);
+  const session = replayClock(existing).sessions.find((s) => s.startAt < at && s.endAt !== null && s.endAt > at);
+  return session?.endEventId ? [session.endEventId] : [];
+}
