@@ -373,6 +373,8 @@ describe("resume keyword match", () => {
     expect(await actions.rescoreOpening({ openingId: opening })).toMatchObject({ ok: true, data: { looked: 1, scored: 1, unreadable: 0 } });
     expect((await scoreOf(appId)).keyword_score).toBe(100);
     expect((await queries.getApplication(appId)).keyword.stale).toBe(false);
+    // nothing is left to score with these keywords, so a second press has no work
+    expect(await actions.rescoreOpening({ openingId: opening })).toMatchObject({ ok: true, data: { looked: 0, scored: 0, remaining: 0 } });
 
     const high = await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, minScore: 75, sort: "score" }, { page: 1, pageSize: 20 });
     expect(high.rows.map((r) => [r.applicationId, r.keywordScore])).toEqual([[appId, 100]]);
@@ -423,6 +425,11 @@ describe("sources, tags and bulk actions", () => {
     const name = uniq("Strong English ");
     const t1 = await tagId(name);
     expect(await tagId(name.toUpperCase())).toBe(t1); // same tag
+    // two people creating the same new name at the same moment both get the one tag
+    const race = uniq("Race ");
+    const both = await Promise.all([actions.createTag({ name: race }), actions.createTag({ name: race.toLowerCase() })]);
+    expect(both.every((r) => r.ok)).toBe(true);
+    expect(new Set(both.map((r) => (r as { data: { id: string } }).data.id)).size).toBe(1);
     const t2 = await tagId(uniq("Call back "));
     as(recruiter);
     expect((await actions.createTag({ name: "<script>" })).ok).toBe(false);
@@ -471,6 +478,9 @@ describe("sources, tags and bulk actions", () => {
     expect(c.close_kind).toBe("not_qualified");
     expect(await rows(sql`select 1 from talent.candidate_emails where application_id = ${ids[1]} and kind = 'rejection'`)).toHaveLength(1);
     expect(await rows(sql`select 1 from ops.audit_log where action = 'recruiting.bulk' and metadata->>'action' = 'close'`)).not.toHaveLength(0);
+    // the summary row names which applications it covered
+    const [bulkAudit] = await rows<{ ids: string[] }>(sql`select metadata->'applicationIds' as ids from ops.audit_log where action = 'recruiting.bulk' and metadata->>'action' = 'tag' order by occurred_at desc limit 1`);
+    expect(bulkAudit.ids.sort()).toEqual([...ids].sort());
     // unknown ids are reported, not fatal; too many are refused
     expect((await actions.bulkUpdateApplications({ action: "move", applicationIds: ["11111111-1111-4111-8111-111111111111"], to: "screening" })).ok).toBe(true);
     expect((await actions.bulkUpdateApplications({ action: "move", applicationIds: Array.from({ length: 101 }, (_, i) => `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`), to: "screening" })).ok).toBe(false);
@@ -1046,6 +1056,8 @@ describe("talent pool and duplicate merge", () => {
     const added = await actions.addPoolMemberToOpening({ applicationId: appId, openingId: second });
     expect(added.ok).toBe(true);
     const newApp = (added as { data: { applicationId: string } }).data.applicationId;
+    // the hiring team of that job (the lead) is told, like for any new application
+    expect(await rows(sql`select 1 from ops.notifications where user_id = ${lead.id} and kind = 'recruiting.new_application' and body like '%from the talent pool%' and link = ${`/recruiting/${second}`}`)).toHaveLength(1);
     const [hist] = await rows<{ to_stage: string; note: string | null }>(sql`select to_stage, note from talent.application_stage_history where application_id = ${newApp}`);
     expect(hist).toEqual({ to_stage: "applied", note: "Added from the talent pool" });
     expect(await actions.addPoolMemberToOpening({ applicationId: appId, openingId: second })).toMatchObject({ ok: false, error: "They already have an application for that job." });

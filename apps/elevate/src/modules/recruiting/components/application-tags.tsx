@@ -27,6 +27,7 @@ export function TagsAndSource({
   canEdit: boolean;
 }) {
   const { run, pending } = useRun();
+  const [options, setOptions] = useState<TagChoice[]>(choices);
   const [picked, setPicked] = useState<Set<string>>(new Set(tags.map((t) => t.id)));
   const [newName, setNewName] = useState("");
   const [src, setSrc] = useState<string>(source ?? "");
@@ -65,7 +66,7 @@ export function TagsAndSource({
     setNewName("");
     setPicked((prev) => new Set(prev).add(made.data.id));
     // The new tag is saved to the list now; it is put on this application when "Save tags" is pressed.
-    if (!choices.some((c) => c.id === made.data.id)) choices.push(made.data);
+    setOptions((list) => (list.some((c) => c.id === made.data.id) ? list : [...list, made.data]));
     toast.success(`Tag "${made.data.name}" is ready. Press Save tags to put it on this applicant.`);
   }
 
@@ -105,9 +106,9 @@ export function TagsAndSource({
       >
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">Tags (up to {MAX_TAGS_PER_APPLICATION})</legend>
-          {choices.length === 0 ? <p className="text-sm text-muted-foreground">No tags yet. Make the first one below.</p> : null}
+          {options.length === 0 ? <p className="text-sm text-muted-foreground">No tags yet. Make the first one below.</p> : null}
           <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {choices.map((c) => (
+            {options.map((c) => (
               <label key={c.id} htmlFor={`at-tag-${c.id}`} className="flex items-center gap-2 text-sm">
                 <input id={`at-tag-${c.id}`} type="checkbox" className="size-4 accent-primary" checked={picked.has(c.id)} onChange={() => toggle(c.id)} />
                 {c.name}

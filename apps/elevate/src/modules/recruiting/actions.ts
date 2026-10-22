@@ -23,10 +23,10 @@ import { offers } from "@/modules/offers/schema";
 import { onboardingCases } from "@/modules/onboarding/schema";
 import { applicationStageHistory, applicationTagLinks, emailTemplates, applicationTags, applications, candidateEmails, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
 import { sendRecruitingEmailsNow } from "./immediate";
-import { authorizeForOpening, freeSlug, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
+import { authorizeForOpening, freeSlug, hiringTeamIds, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
 import { clearBanner } from "./careers-banner";
 import { MAX_TAGS_PER_APPLICATION, isApplyable, type OpeningStatus } from "./constants";
-import { keywordColumns, parseKeywordList } from "./keywords";
+import { keywordColumns, keywordSetKey, parseKeywordList } from "./keywords";
 import { extractResumeText } from "./resume-text";
 import { resetTemplateSchema, saveTemplateSchema, mergeSchema, poolSchema, poolToOpeningSchema, rescoreSchema, archiveTagSchema, bulkSchema, createTagSchema, setSourceSchema, setTagsSchema, careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
 
@@ -484,11 +484,15 @@ export async function createTag(input: unknown): Promise<ActionResult<{ id: stri
     if (!parsed.success) return fail(first(parsed.error));
     const { name } = parsed.data;
     const tag = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(applicationTags).values({ name, createdBy: actor.id }).onConflictDoNothing().returning({ id: applicationTags.id, name: applicationTags.name });
+      if (created) {
+        await writeAudit({ actor, action: "recruiting.tag_create", targetType: "tag", targetId: created.id, after: { name } }, tx);
+        return created;
+      }
+      // The name is taken (maybe a moment ago by someone else): use that tag.
       const [existing] = await tx.select({ id: applicationTags.id, name: applicationTags.name }).from(applicationTags).where(and(sql`lower(${applicationTags.name}) = ${name.toLowerCase()}`, isNull(applicationTags.archivedAt)));
-      if (existing) return existing;
-      const [created] = await tx.insert(applicationTags).values({ name, createdBy: actor.id }).returning({ id: applicationTags.id, name: applicationTags.name });
-      await writeAudit({ actor, action: "recruiting.tag_create", targetType: "tag", targetId: created.id, after: { name } }, tx);
-      return created;
+      if (!existing) throw new ActionFailure("Could not create that tag. Try again.");
+      return existing;
     });
     refreshApplicants();
     return { ok: true, data: tag };
@@ -611,7 +615,7 @@ export async function bulkUpdateApplications(input: unknown): Promise<ActionResu
           actor,
           action: "recruiting.bulk",
           targetType: "application",
-          metadata: { action: v.action, requested: ids.length, done, failed: failed.length, ...(v.action === "move" ? { to: v.to } : {}), ...(v.action === "close" ? { kind: v.kind } : {}), ...(v.action === "tag" || v.action === "untag" ? { tagId: v.tagId } : {}) },
+          metadata: { action: v.action, requested: ids.length, applicationIds: ids, done, failed: failed.length, ...(v.action === "move" ? { to: v.to } : {}), ...(v.action === "close" ? { kind: v.kind } : {}), ...(v.action === "tag" || v.action === "untag" ? { tagId: v.tagId } : {}) },
         },
         tx,
       ),
@@ -625,8 +629,9 @@ export async function bulkUpdateApplications(input: unknown): Promise<ActionResu
 
 // ---- Resume keyword match -----------------------------------------------------------------------------------------------------
 
-export type RescoreResult = { looked: number; scored: number; unreadable: number };
-const RESCORE_MAX = 300;
+export type RescoreResult = { looked: number; scored: number; unreadable: number; remaining: number };
+/** One run stops after this long (a request has a time limit) and reports what is left; run it again to continue. */
+const RESCORE_BUDGET_MS = 25_000;
 
 /**
  * Scores every application of a job again with the job's current keywords (after the recruiter changed them). The resume files are read
@@ -648,14 +653,18 @@ export async function rescoreOpening(input: unknown): Promise<ActionResult<Resco
       .select({ id: applications.id, resumePath: candidates.resumePath, resumeKind: candidates.resumeKind })
       .from(applications)
       .innerJoin(candidates, eq(candidates.id, applications.candidateId))
-      .where(and(eq(applications.openingId, openingId), isNull(candidates.anonymizedAt)))
-      .orderBy(desc(applications.appliedAt))
-      .limit(RESCORE_MAX);
+      // Only applications not yet scored with these exact keywords, so each run continues where the last one stopped.
+      .where(and(eq(applications.openingId, openingId), isNull(candidates.anonymizedAt), sql`${applications.keywordSetKey} is distinct from ${keywordSetKey(sets)}`))
+      .orderBy(desc(applications.appliedAt));
 
     const storage = getDocumentStorage();
     let scored = 0;
     let unreadable = 0;
+    let looked = 0;
+    const startedAt = Date.now();
     for (const t of targets) {
+      if (Date.now() - startedAt > RESCORE_BUDGET_MS) break;
+      looked += 1;
       const bytes = t.resumePath ? await storage.read(BUCKETS.recruiting, t.resumePath).catch(() => null) : null;
       const text = bytes ? await extractResumeText(bytes, t.resumeKind) : null;
       const columns = keywordColumns(text, sets);
@@ -664,10 +673,10 @@ export async function rescoreOpening(input: unknown): Promise<ActionResult<Resco
       if (columns.keywordScore === null) unreadable += 1;
       else scored += 1;
     }
-    await db.transaction((tx) => writeAudit({ actor, action: "recruiting.rescore", targetType: "job_opening", targetId: openingId, metadata: { looked: targets.length, scored, unreadable } }, tx));
+    await db.transaction((tx) => writeAudit({ actor, action: "recruiting.rescore", targetType: "job_opening", targetId: openingId, metadata: { looked, scored, unreadable, remaining: targets.length - looked } }, tx));
     refresh(openingId);
     revalidatePath("/recruiting/applicants");
-    return { ok: true, data: { looked: targets.length, scored, unreadable } };
+    return { ok: true, data: { looked, scored, unreadable, remaining: targets.length - looked } };
   });
 }
 
@@ -714,6 +723,9 @@ export async function addPoolMemberToOpening(input: unknown): Promise<ActionResu
       if (!created) throw new ActionFailure("They already have an application for that job.");
       await tx.insert(applicationStageHistory).values({ applicationId: created.id, fromStage: null, toStage: "applied", byUserId: actor.id, note: "Added from the talent pool" });
       await writeAudit({ actor, action: "recruiting.pool_to_opening", targetType: "application", targetId: created.id, after: { openingId, candidateId: c.id } }, tx);
+      const team = new Set([...(opening.createdBy ? [opening.createdBy] : []), ...(await hiringTeamIds(tx, openingId))]);
+      team.delete(actor.id);
+      if (team.size > 0) await notify(tx, [...team].map((userId) => ({ userId, kind: "recruiting.new_application", title: "New application", body: `For ${opening.title}, from the talent pool.`, link: `/recruiting/${openingId}` })));
       return created.id;
     });
     refresh(openingId, id);

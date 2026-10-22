@@ -14,7 +14,7 @@ export function RescoreButton({ openingId }: { openingId: string }) {
       size="sm"
       disabled={pending}
       title="Read the resumes again and update every keyword match with the job's current keywords"
-      onClick={() => run<RescoreResult>(() => rescoreOpening({ openingId }), (d) => (d ? `Scored ${d.scored} of ${d.looked}.${d.unreadable ? ` ${d.unreadable} resumes could not be read (for example scans).` : ""}` : "Done."))}
+      onClick={() => run<RescoreResult>(() => rescoreOpening({ openingId }), (d) => (d ? `Scored ${d.scored} of ${d.looked}.${d.unreadable ? ` ${d.unreadable} resumes could not be read (for example scans).` : ""}${d.remaining ? ` ${d.remaining} more are waiting: press the button again.` : ""}` : "Done."))}
     >
       {pending ? "Scoring..." : "Re-score resumes"}
     </Button>
