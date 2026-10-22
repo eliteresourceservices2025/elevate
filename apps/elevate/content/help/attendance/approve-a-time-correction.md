@@ -16,6 +16,8 @@ Clock events are never edited. A mistake is fixed with a **correction**: a reque
 
 A Team Lead sees corrections from their team. HR sees every pending correction. HR decides when nobody above the person can. Corrections that only HR can decide show the label **HR decides**.
 
+![The Corrections tab on the Attendance page.](help:approve-a-time-correction/01-corrections.png)
+
 # Decide a correction
 
 1. Read the request: the reason, the proposed events and any screenshot.

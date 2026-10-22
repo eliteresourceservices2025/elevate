@@ -12,16 +12,18 @@ updated: 2026-10-21
 Only HR, Super Admin and recruiters can schedule.
 
 1. Open the applicant's page from the job pipeline.
-2. Find the interview section and click **Schedule interview**.
+2. Find the section **Schedule an interview** and open it. The button at the bottom of the form is **Schedule interview**.
 3. Choose the **Type**: *Screening call*, *Interview*, *Assessment review* or *Final interview*.
 4. Set the **Date and time**. It uses your computer's time zone.
 5. Set the **Length** and the **Meeting link or place**.
 6. Pick the **Interviewers**. They can be HR, recruiters or Team Leads.
-7. Add a **Note for the interviewers and the applicant (optional)**. Leave the box ticked if the applicant should get the invitation.
+7. Add a **Note for the interviewers and the applicant (optional)**. Leave **Email the applicant the invite** ticked if the applicant should get the invitation.
 
 The interviewers get a calendar invite by email and a notification in ELEVATE. If you connected your Google Calendar, ELEVATE also creates the event on your calendar.
 
 To cancel, cancel the interview. A message says **Interview cancelled.** A cancellation is sent.
+
+![Schedule an interview: type, date and time, length, place and interviewers.](help:interviews-and-scorecards/01-schedule.png)
 
 # Fill in a scorecard
 

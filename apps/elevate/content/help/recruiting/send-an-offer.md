@@ -23,6 +23,8 @@ An offer is a letter the applicant signs online. They do not need an ELEVATE acc
 
 An unknown field name cannot be saved. Counsel should review the wording before real use.
 
+![Offer templates: the letter and the fields that fill in by themselves.](help:send-an-offer/01-offer-templates.png)
+
 # Make the offer
 
 1. Open the applicant's page and find **Offer and hiring**.
@@ -39,6 +41,8 @@ An unknown field name cannot be saved. Counsel should review the wording before 
 5. Either **Send offer**, or save it as a draft to send later. A message says **Saved as a draft.**
 
 The applicant gets an email with a link. They ask for a 6-digit code sent to the same email address, then read and sign the letter.
+
+![On an applicant at the Offer stage, open Make an offer.](help:send-an-offer/02-offer-panel.png)
 
 # Track the status
 

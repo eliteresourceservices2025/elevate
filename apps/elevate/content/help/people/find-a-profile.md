@@ -17,6 +17,8 @@ Click **People** in the left menu. The page shows how many people there are.
 
 Type a name in **Search people** and search. You can also use the filters. When filters are on, a link lets you clear them to see everyone again.
 
+![The People list. Search by name, then click a person.](help:find-a-profile/01-people-list.png)
+
 # Step 3: Open a profile
 
 Click the person's name. Their profile has tabs:
@@ -30,6 +32,8 @@ Click the person's name. Their profile has tabs:
 - **History** shows what changed and when.
 
 You only see the tabs your role allows.
+
+![A profile has tabs: Personal, Employment, Documents and more.](help:find-a-profile/02-profile-tabs.png)
 
 # What a Team Lead sees
 

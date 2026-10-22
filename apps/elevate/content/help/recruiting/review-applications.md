@@ -18,12 +18,16 @@ The stages are **Applied**, **Screening**, **Interview**, **Assessment**, **Offe
 
 A Team Lead sees only the jobs they are on the hiring team for. The Executive sees counts only.
 
+![The pipeline. Drag a card to another column, or use Move to.](help:review-applications/01-pipeline.png)
+
 # Read an application
 
 Click an applicant's card. Their page shows their details, the resume, notes, interviews, scorecards and history.
 
 - Click **View resume** to read it in the page. A Word resume cannot be shown, so download it instead.
 - Opening a resume is recorded.
+
+![An applicant's page: resume, notes, interviews and history.](help:review-applications/02-applicant.png)
 
 # Move an applicant to another stage
 

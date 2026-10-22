@@ -21,6 +21,8 @@ A **template** is the list of steps used when you start onboarding or offboardin
 1. Click **Onboarding** in the left menu.
 2. Click **Checklist templates**.
 
+![Checklist templates: one default list, and one per position if you want.](help:edit-checklist-templates/01-templates.png)
+
 # Change a template
 
 1. Open the template you want, or start a new one.

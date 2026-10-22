@@ -13,6 +13,8 @@ Our workers are independent contractors, so there is no accrued paid leave. Days
 
 Click **Time off** in the left menu. The tabs you see depend on your role. They include **My prize days**, **Requests**, **Approvals**, **Calendar** and, for HR, **Balances**, **Types**, **Holidays** and **Award**.
 
+![The Time off page with its tabs. Approvals holds the requests waiting for you.](help:decide-a-time-off-request/01-time-off.png)
+
 # Decide a request
 
 1. Open the **Approvals** tab.
@@ -25,6 +27,8 @@ How it moves:
 - Then HR gives the final decision.
 - HR can only decline at the lead step, not approve. If the lead step waits 4 working days, HR is asked to step in.
 - Nobody decides their own request.
+
+![The Approvals tab: read the request, then Approve or Decline.](help:decide-a-time-off-request/02-approvals.png)
 
 # Days counted
 

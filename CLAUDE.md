@@ -221,6 +221,13 @@ Staff privacy incident reports and their handling.
 - Free text written by staff; the form forbids patient details; audit entries and notices never carry the text.
 - Only the reporter, HR, Super Admin and the Privacy Officer flag see a report; nobody handles their own report.
 
+### Help center and the screenshot tool — `docs/modules/help-center.md`
+Plain-English how-to guides (files in `apps/elevate/content/help`), role-aware, with pictures taken by `pnpm help:shots`.
+
+- Each guide has an `audience`; a guide a person may not read is a 404 everywhere (page, title, picture, video). Pictures and videos are served by a signed-in route, never `public/`.
+- Guides name real buttons: after changing a screen a guide shows, run `pnpm help:shots` and re-read the guide. Fake data only; never client or patient information.
+- The tool runs against the local database only; reset it first for clean pictures (see the note).
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.

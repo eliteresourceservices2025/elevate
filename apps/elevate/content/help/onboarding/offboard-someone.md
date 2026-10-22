@@ -22,6 +22,10 @@ Offboarding is the checklist for someone who is leaving: handover, equipment, fi
 
 Task due dates count from the last working day. The checklist comes from the template for their position, or the default one.
 
+![The Offboarding page, where you start an offboarding.](help:offboard-someone/01-offboarding-page.png)
+
+![Start an offboarding: tick the person, then set the last working day and the reason.](help:offboard-someone/02-start-dialog.png)
+
 # Step 2: Follow the checklist
 
 Open the case from the **Offboarding cases** list. The default tasks are:
@@ -33,6 +37,8 @@ Open the case from the **Offboarding cases** list. The default tasks are:
 - Access removed at the end of the last working day. This is automatic.
 - Final hours are approved and exported. See "Approve weekly hours" and "Export hours for payroll".
 - Certificate of engagement, if they ask for one.
+
+![An offboarding case: the checklist, and the HR actions such as Remove access now.](help:offboard-someone/03-case.png)
 
 # The exit interview
 

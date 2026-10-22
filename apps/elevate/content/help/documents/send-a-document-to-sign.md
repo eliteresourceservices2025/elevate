@@ -13,6 +13,8 @@ updated: 2026-10-21
 
 Click **Signing** in the left menu. HR sees the tabs **To sign**, **All documents** and **Templates**.
 
+![The Signing page: documents to sign, all documents and templates.](help:send-a-document-to-sign/01-signing.png)
+
 # Send a document
 
 1. Click to send a document. The page is **Send a document**.
@@ -28,6 +30,8 @@ Click **Signing** in the left menu. HR sees the tabs **To sign**, **All document
 For a group of more than 10 people, each person signs their own copy, so there is no signing order.
 
 Do not include client or patient information. Signatures are added on a page at the end.
+
+![Send a document: choose the file, who signs and the order.](help:send-a-document-to-sign/02-send-a-document.png)
 
 # If you are practicing
 

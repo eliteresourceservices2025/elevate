@@ -16,6 +16,8 @@ Click **Contact support** in the left menu. As HR you see two lists:
 - **Your requests**, the ones you sent yourself.
 - **Inbox**, with the number of open requests.
 
+![The support inbox, with the open requests.](help:handle-support-requests/01-support-inbox.png)
+
 # Read a request
 
 Each request shows the topic (*Signing in or my account*, *The time clock or my hours*, *Jibble or screenshots*, *My information or a record is wrong*, or *Something else*), a short title, the details and the page the person was on.

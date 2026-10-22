@@ -24,6 +24,8 @@ HR exports the approved hours for each pay period. The file shows hours only. EL
    - **Download per-person summary (CSV)**, totals per person, with absent and late days and approved leave days.
 6. A message tells you how many rows were downloaded.
 
+![The Hours export tab: choose the pay period and download.](help:export-hours-for-payroll/01-hours-export.png)
+
 # Include days that are not approved
 
 Tick **Also include days that are not approved yet (they are labelled)** if you need them. Be careful: those numbers are not final.

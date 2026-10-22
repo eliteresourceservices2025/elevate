@@ -18,6 +18,8 @@ The menu groups the pages by topic. You only see the pages that belong to your r
 - **Time and attendance** has the time clock, time off and schedules.
 - **Learning** has this Help center and your assigned training.
 
+![The left menu groups the pages by topic.](help:find-your-way-around/01-menu.png)
+
 # The search box
 
 Press **Ctrl+K** (on a Mac, **Cmd+K**) to search for a person or a page. Type a few letters and pick a result.

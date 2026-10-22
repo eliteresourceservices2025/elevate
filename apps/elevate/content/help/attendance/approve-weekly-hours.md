@@ -11,9 +11,11 @@ ELEVATE is the time clock and the only source of hours. Each week, a lead checks
 
 # Open Hours review
 
-Click **Hours review** in the left menu. It starts on last week. Use **Previous week** and **Next week** to move.
+Click **Hours review** in the left menu. It starts on last week. Use **Previous** and **Next** to move between weeks.
 
 A Team Lead sees their own team. HR sees everyone.
+
+![Hours review: check each week and approve it.](help:approve-weekly-hours/01-hours-review.png)
 
 # Read a person's week
 
@@ -33,6 +35,8 @@ Open **Days** on a row to see each day.
 - Or click **Approve everyone without flags** to approve all the clean weeks at once. People with flags are left for you to check.
 
 You approve only the days that have finished. A day still running (**Day not over**) waits.
+
+![Open Days to see each day, then click Approve week.](help:approve-weekly-hours/02-approve-week.png)
 
 # Rules
 

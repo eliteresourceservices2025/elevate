@@ -21,6 +21,8 @@ updated: 2026-10-21
 
 You cannot award days to yourself. Another admin must do it.
 
+![The Award tab: choose the person, the days and the reason.](help:award-prize-days/01-award.png)
+
 # Correct a balance
 
 Use **Correct a balance** only for mistakes.

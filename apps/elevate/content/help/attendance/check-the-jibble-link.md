@@ -13,6 +13,8 @@ ELEVATE is the time clock and the only source of hours. **Jibble is used only fo
 
 Click **Jibble** in the left menu.
 
+![The Jibble page shows the connection and the people who are not matched.](help:check-the-jibble-link/01-jibble.png)
+
 # Connection
 
 The **Connection** section shows whether ELEVATE is connected. You may see:

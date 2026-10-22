@@ -24,6 +24,8 @@ If ELEVATE shows **Possible duplicate**, check the People list first. The person
 
 Government IDs and bank details are not on this form. Add them afterwards on the person's profile, where they are stored encrypted.
 
+![The Add person form.](help:add-or-edit-a-person/01-add-person.png)
+
 # Edit a person
 
 1. Open the person's profile from **People**.

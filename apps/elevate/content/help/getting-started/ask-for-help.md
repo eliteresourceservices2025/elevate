@@ -17,6 +17,8 @@ Open **Help center** in the left menu. Type a few words in the search box, such 
 
 Click **Contact support** in the left menu. Click **Send a request to support**.
 
+![Open Contact support, then click Send a request to support.](help:ask-for-help/01-contact-support.png)
+
 # Step 3: Fill in the form
 
 - **What is it about?** Choose the closest topic, for example *Signing in or my account* or *The time clock or my hours*.
@@ -24,6 +26,8 @@ Click **Contact support** in the left menu. Click **Send a request to support**.
 - **Details.** Say what you did, what you expected and what happened. Write the page you were on if you can.
 
 Send the request. HR is told, and you see your request in the list **Your requests**.
+
+![The support form: choose a topic, add a short title and the details.](help:ask-for-help/02-support-form.png)
 
 # Do not write private information
 

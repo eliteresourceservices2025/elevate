@@ -19,6 +19,8 @@ Who someone reports to decides who sees their profile, reviews and requests.
 
 ELEVATE keeps the old assignment in the person's history. It will not allow loops (two people who report to each other).
 
+![The Employment tab, where the manager, team and attendance lead are set.](help:set-who-reports-to-whom/01-employment-tab.png)
+
 # Set an attendance lead (optional)
 
 Some people report their time to a lead who is not their manager.

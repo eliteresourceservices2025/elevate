@@ -21,6 +21,8 @@ Only the person who reported it, HR, Super Admin and a **Privacy Officer** can s
 
 The form forbids patient names or details. Reports and notices never carry the text of the report.
 
+![Privacy incidents: report one, or handle the ones in the inbox.](help:handle-privacy-incidents/01-incidents.png)
+
 # Handle a report (HR, Super Admin, Privacy Officer)
 
 1. Open **Privacy incidents**. The **Inbox** lists reports by status, such as **In review** and **Ongoing**.

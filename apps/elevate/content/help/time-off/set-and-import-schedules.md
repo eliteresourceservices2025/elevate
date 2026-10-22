@@ -32,6 +32,8 @@ A shift belongs to the day it **starts** in the person's own time zone.
 
 Times show in the schedule's zone and also in Manila time (**In Manila**).
 
+![The Schedules page: tick people, then set a schedule.](help:set-and-import-schedules/01-schedules.png)
+
 # Fix a recent mistake
 
 Use **Correct** on a schedule and write **Why is this being corrected?** It changes entries from the last 7 days on. A message says **Schedule corrected.** Older schedules are never rewritten: set a new one from a date instead. A person on two clients in one day needs one shift, from the earliest start to the latest end.
@@ -57,6 +59,8 @@ HR and Super Admin can import the team's attendance sheet.
 Changes more than 7 days back are **Backdated changes**. You must read the impact and tick **I have reviewed this and want to apply the backdated changes.**
 
 The import never reads worked hours from the sheet. ELEVATE is the only source of hours. You can discard a preview. It is removed after 14 days.
+
+![Import schedules and clients from the attendance sheet.](help:set-and-import-schedules/02-import-schedules.png)
 
 # Common mistakes
 

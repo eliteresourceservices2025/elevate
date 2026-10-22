@@ -1,0 +1,262 @@
+[
+  {
+    "article": "find-your-way-around",
+    "file": "01-menu.png",
+    "alt": "The left menu groups the pages by topic."
+  },
+  {
+    "article": "ask-for-help",
+    "file": "01-contact-support.png",
+    "alt": "Open Contact support, then click Send a request to support."
+  },
+  {
+    "article": "ask-for-help",
+    "file": "02-support-form.png",
+    "alt": "The support form: choose a topic, add a short title and the details."
+  },
+  {
+    "article": "invite-a-person",
+    "file": "01-invitations.png",
+    "alt": "Settings, Invitations: type the email and click Invite."
+  },
+  {
+    "article": "find-a-profile",
+    "file": "01-people-list.png",
+    "alt": "The People list. Search by name, then click a person."
+  },
+  {
+    "article": "find-a-profile",
+    "file": "02-profile-tabs.png",
+    "alt": "A profile has tabs: Personal, Employment, Documents and more."
+  },
+  {
+    "article": "add-or-edit-a-person",
+    "file": "01-add-person.png",
+    "alt": "The Add person form."
+  },
+  {
+    "article": "set-who-reports-to-whom",
+    "file": "01-employment-tab.png",
+    "alt": "The Employment tab, where the manager, team and attendance lead are set."
+  },
+  {
+    "article": "archive-someone",
+    "file": "01-more-actions.png",
+    "alt": "On the profile, open More actions and choose Archive."
+  },
+  {
+    "article": "start-onboarding",
+    "file": "01-onboarding-page.png",
+    "alt": "The Onboarding page lists people in onboarding and lets HR start a checklist."
+  },
+  {
+    "article": "edit-checklist-templates",
+    "file": "01-templates.png",
+    "alt": "Checklist templates: one default list, and one per position if you want."
+  },
+  {
+    "article": "offboard-someone",
+    "file": "01-offboarding-page.png",
+    "alt": "The Offboarding page, where you start an offboarding."
+  },
+  {
+    "article": "post-a-job",
+    "file": "01-recruiting-page.png",
+    "alt": "The Recruiting page lists your jobs and applicants."
+  },
+  {
+    "article": "post-a-job",
+    "file": "02-new-job.png",
+    "alt": "The New job form. A job starts as a draft."
+  },
+  {
+    "article": "post-a-job",
+    "file": "03-careers-page.png",
+    "alt": "Edit the careers page title, introduction and banner."
+  },
+  {
+    "article": "send-an-offer",
+    "file": "01-offer-templates.png",
+    "alt": "Offer templates: the letter and the fields that fill in by themselves."
+  },
+  {
+    "article": "team-attendance",
+    "file": "01-team-attendance.png",
+    "alt": "Team attendance: who is working now, flags and end-of-day reports."
+  },
+  {
+    "article": "approve-weekly-hours",
+    "file": "01-hours-review.png",
+    "alt": "Hours review: check each week and approve it."
+  },
+  {
+    "article": "approve-a-time-correction",
+    "file": "01-corrections.png",
+    "alt": "The Corrections tab on the Attendance page."
+  },
+  {
+    "article": "decide-extra-hours",
+    "file": "01-extra-hours.png",
+    "alt": "The Extra hours page, with the requests to review."
+  },
+  {
+    "article": "export-hours-for-payroll",
+    "file": "01-hours-export.png",
+    "alt": "The Hours export tab: choose the pay period and download."
+  },
+  {
+    "article": "check-the-jibble-link",
+    "file": "01-jibble.png",
+    "alt": "The Jibble page shows the connection and the people who are not matched."
+  },
+  {
+    "article": "decide-a-time-off-request",
+    "file": "01-time-off.png",
+    "alt": "The Time off page with its tabs. Approvals holds the requests waiting for you."
+  },
+  {
+    "article": "award-prize-days",
+    "file": "01-award.png",
+    "alt": "The Award tab: choose the person, the days and the reason."
+  },
+  {
+    "article": "set-and-import-schedules",
+    "file": "01-schedules.png",
+    "alt": "The Schedules page: tick people, then set a schedule."
+  },
+  {
+    "article": "set-and-import-schedules",
+    "file": "02-import-schedules.png",
+    "alt": "Import schedules and clients from the attendance sheet."
+  },
+  {
+    "article": "upload-and-sort-documents",
+    "file": "01-documents.png",
+    "alt": "The Documents page: files that are missing, to verify, or expiring."
+  },
+  {
+    "article": "post-announcements-and-policies",
+    "file": "01-announcements.png",
+    "alt": "Announcements, with the Policies and Pop-up queue tabs."
+  },
+  {
+    "article": "send-a-document-to-sign",
+    "file": "01-signing.png",
+    "alt": "The Signing page: documents to sign, all documents and templates."
+  },
+  {
+    "article": "send-a-document-to-sign",
+    "file": "02-send-a-document.png",
+    "alt": "Send a document: choose the file, who signs and the order."
+  },
+  {
+    "article": "read-the-analytics-page",
+    "file": "01-analytics.png",
+    "alt": "Analytics shows totals only, and hides groups under 5 people."
+  },
+  {
+    "article": "assets-and-certificates",
+    "file": "01-assets.png",
+    "alt": "Assets: the inventory and who has what."
+  },
+  {
+    "article": "assets-and-certificates",
+    "file": "02-certificates.png",
+    "alt": "Certificates that expire, with reminders."
+  },
+  {
+    "article": "roles-and-access",
+    "file": "01-roles.png",
+    "alt": "Roles and access: choose a person's roles and save."
+  },
+  {
+    "article": "handle-support-requests",
+    "file": "01-support-inbox.png",
+    "alt": "The support inbox, with the open requests."
+  },
+  {
+    "article": "handle-privacy-incidents",
+    "file": "01-incidents.png",
+    "alt": "Privacy incidents: report one, or handle the ones in the inbox."
+  },
+  {
+    "article": "start-onboarding",
+    "file": "02-start-dialog.png",
+    "alt": "Start onboarding: tick the people and choose the start date."
+  },
+  {
+    "article": "start-onboarding",
+    "file": "03-case.png",
+    "alt": "A person's onboarding checklist: who owns each task and what is done."
+  },
+  {
+    "article": "offboard-someone",
+    "file": "02-start-dialog.png",
+    "alt": "Start an offboarding: tick the person, then set the last working day and the reason."
+  },
+  {
+    "article": "offboard-someone",
+    "file": "03-case.png",
+    "alt": "An offboarding case: the checklist, and the HR actions such as Remove access now."
+  },
+  {
+    "article": "post-a-job",
+    "file": "04-job-pipeline.png",
+    "alt": "A job's pipeline: one column for each stage."
+  },
+  {
+    "article": "review-applications",
+    "file": "01-pipeline.png",
+    "alt": "The pipeline. Drag a card to another column, or use Move to."
+  },
+  {
+    "article": "review-applications",
+    "file": "02-applicant.png",
+    "alt": "An applicant's page: resume, notes, interviews and history."
+  },
+  {
+    "article": "interviews-and-scorecards",
+    "file": "01-schedule.png",
+    "alt": "Schedule an interview: type, date and time, length, place and interviewers."
+  },
+  {
+    "article": "send-an-offer",
+    "file": "02-offer-panel.png",
+    "alt": "On an applicant at the Offer stage, open Make an offer."
+  },
+  {
+    "article": "decide-a-time-off-request",
+    "file": "02-approvals.png",
+    "alt": "The Approvals tab: read the request, then Approve or Decline."
+  },
+  {
+    "article": "decide-extra-hours",
+    "file": "02-requests-to-review.png",
+    "alt": "Requests to review: the client, the time window, the reason and the proof."
+  },
+  {
+    "article": "approve-weekly-hours",
+    "file": "02-approve-week.png",
+    "alt": "Open Days to see each day, then click Approve week."
+  },
+  {
+    "article": "upload-and-sort-documents",
+    "file": "02-person-documents.png",
+    "alt": "A person's Documents tab: folders, the list of files and the upload buttons."
+  },
+  {
+    "article": "bulk-upload-documents",
+    "file": "01-bulk-upload.png",
+    "alt": "Upload many files: drag them into the box, then click Upload files."
+  },
+  {
+    "article": "post-announcements-and-policies",
+    "file": "02-new-announcement.png",
+    "alt": "The New announcement form: title, message and who it is for."
+  },
+  {
+    "article": "assets-and-certificates",
+    "file": "03-register-item.png",
+    "alt": "Register an item: tag, name, category and serial number."
+  }
+]

@@ -13,6 +13,8 @@ updated: 2026-10-21
 
 Click **Team attendance** in the left menu.
 
+![Team attendance: who is working now, flags and end-of-day reports.](help:team-attendance/01-team-attendance.png)
+
 # Working now
 
 The **Working now** list shows each person who is clocked in, their team, status and the time they started (**Since**). If nobody is clocked in, it says so.

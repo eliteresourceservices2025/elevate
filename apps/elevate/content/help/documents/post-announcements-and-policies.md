@@ -22,6 +22,10 @@ Do not include client or patient information.
 
 Once people have acknowledged it, the title and text are locked. You can still change the due date, pinning and attachment.
 
+![Announcements, with the Policies and Pop-up queue tabs.](help:post-announcements-and-policies/01-announcements.png)
+
+![The New announcement form: title, message and who it is for.](help:post-announcements-and-policies/02-new-announcement.png)
+
 # Add a policy
 
 A policy has versions. Each version is frozen once published, and people acknowledge a version.

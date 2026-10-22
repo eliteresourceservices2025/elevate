@@ -14,6 +14,8 @@ If you have many files to add, bulk upload saves time. It works on one person's 
 - For a person: open their profile, click the **Documents** tab and use **Upload many files**.
 - For company documents: click **Documents** in the left menu, open **Company documents** and use **Upload many files**.
 
+![Upload many files: drag them into the box, then click Upload files.](help:bulk-upload-documents/01-bulk-upload.png)
+
 # Steps
 
 1. Drag the files into the box. It says **Drag and drop files here, or** choose them with the button.

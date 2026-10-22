@@ -24,6 +24,8 @@ Type the person's email in the box called **Invite by email**. Click the **Invit
 
 A green message appears at the bottom of the screen. It says **Invited** and the email address. ELEVATE emails them the sign-up link.
 
+![Settings, Invitations: type the email and click Invite.](help:invite-a-person/01-invitations.png)
+
 # Step 3: Check that it worked
 
 The person now shows in the list below with the status **Pending**. When they finish signing up, the status changes to **Accepted**.

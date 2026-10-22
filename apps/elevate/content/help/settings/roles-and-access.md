@@ -29,6 +29,8 @@ Only a **Super Admin** can give roles.
 
 Changing a role signs the person out, so the change applies right away. Every change is written to the audit log.
 
+![Roles and access: choose a person's roles and save.](help:roles-and-access/01-roles.png)
+
 # Reset someone's authenticator
 
 If a person got a new phone, a Super Admin opens **Roles and access** and clicks **Reset authenticator** on their row, then confirms **Reset**. They set up the authenticator again at their next sign-in.

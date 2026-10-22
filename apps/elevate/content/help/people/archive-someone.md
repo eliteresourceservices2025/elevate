@@ -22,6 +22,8 @@ Normally you do this through **Offboarding**, which also handles equipment and f
 3. Click **Archive**.
 4. A box asks **Archive this person?** and says they disappear from the directory but their history is kept. Confirm.
 
+![On the profile, open More actions and choose Archive.](help:archive-someone/01-more-actions.png)
+
 # Bring someone back
 
 Open the archived person's profile, click **More actions** and choose **Restore record**.

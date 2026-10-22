@@ -17,12 +17,16 @@ Onboarding is a checklist of steps a new person must finish: sign agreements, re
 # Start onboarding for someone already added
 
 1. Click **Onboarding** in the left menu.
-2. Find the card **Start onboarding**. It is for people added under People who have no checklist.
-3. Tick one person or many people.
-4. Set the **Start date**. Task due dates count from this day.
-5. Click **Start onboarding**. A message says **Onboarding started.**
+2. Click **Start onboarding** at the top right. It is for people added under People who have no checklist.
+3. Tick one person or many people. Use the search box to find them.
+4. Set the **Start date**. Task due dates count from this day. If the people you ticked already have their own start date, the box **Use each person's own start date when they have one** is ticked. Untick it to use the date you typed for everyone.
+5. Click the start button at the bottom of the box. A message says **Onboarding started.**
 
 The checklist comes from the template for their position. If there is none, the default list is used. If everyone already has a checklist, the page says so.
+
+![The Onboarding page lists people in onboarding and lets HR start a checklist.](help:start-onboarding/01-onboarding-page.png)
+
+![Start onboarding: tick the people and choose the start date.](help:start-onboarding/02-start-dialog.png)
 
 # Follow the checklist
 
@@ -34,6 +38,8 @@ The checklist comes from the template for their position. If there is none, the 
 6. Tasks marked **Late** are past their due date. **Optional** tasks do not block completion.
 
 For the agreement task, click **Send agreement** to send it for signature.
+
+![A person's onboarding checklist: who owns each task and what is done.](help:start-onboarding/03-case.png)
 
 # Finish onboarding
 

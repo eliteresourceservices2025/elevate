@@ -20,6 +20,10 @@ Every hand-over is recorded and cannot be edited. A Team Lead sees an item only 
 
 You can print QR labels. Scanning a label only opens the item's page.
 
+![Assets: the inventory and who has what.](help:assets-and-certificates/01-assets.png)
+
+![Register an item: tag, name, category and serial number.](help:assets-and-certificates/03-register-item.png)
+
 # Certificates
 
 **Certificates** are training certificates that expire, such as HIPAA awareness. ELEVATE reminds the person and HR 30 days and 7 days before, and on the end date.
@@ -29,6 +33,8 @@ You can print QR labels. Scanning a label only opens the item's page.
 3. Search with **Person or certificate**, and filter by **Status**.
 4. HR can use **Add a certificate**. A certificate is a name and dates only: no file, number or score. A renewal is a new row.
 5. HR can use **Load from TalentHR** to bring in older certificates.
+
+![Certificates that expire, with reminders.](help:assets-and-certificates/02-certificates.png)
 
 # Who sees what
 

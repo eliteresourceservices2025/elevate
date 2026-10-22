@@ -20,6 +20,8 @@ updated: 2026-10-21
 
 Click **Analytics** in the left menu.
 
+![Analytics shows totals only, and hides groups under 5 people.](help:read-the-analytics-page/01-analytics.png)
+
 # What the page shows
 
 - **Headcount**, with **Headcount by team** and **Headcount by client**.

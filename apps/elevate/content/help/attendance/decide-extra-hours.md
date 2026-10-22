@@ -13,12 +13,16 @@ Work beyond a person's schedule needs the client's OK and a lead's approval befo
 
 Click **Extra hours** in the left menu. A Team Lead and HR also see **Requests to review**.
 
+![The Extra hours page, with the requests to review.](help:decide-extra-hours/01-extra-hours.png)
+
 # Decide a request
 
 1. Open **Requests to review** and read the request: the client, the time window, the reason and the screenshot of the client's approval.
 2. Click **Approve**, or **Decline**. You may change the time window when you approve.
 
 Nobody decides their own request or one they filed. HR decides when nobody is above the person. HR also decides a request made after the fact (the work had already started) when it is more than 7 days old.
+
+![Requests to review: the client, the time window, the reason and the proof.](help:decide-extra-hours/02-requests-to-review.png)
 
 # When the client asked
 

@@ -26,6 +26,8 @@ PDF, JPG, PNG, WEBP, DOC and DOCX, up to 10 MB each. ELEVATE checks the real typ
 5. Choose a **Folder (optional)**.
 6. Pick the file and save. A message says **Document saved.**
 
+![A person's Documents tab: folders, the list of files and the upload buttons.](help:upload-and-sort-documents/02-person-documents.png)
+
 # Sort into folders
 
 Folders keep a person's documents tidy.
@@ -47,6 +49,8 @@ Use the archive action. A message says **Document archived.** The file is kept u
 # See what is missing or expiring
 
 Click **Documents** in the left menu. The tabs **Missing**, **To verify** and **Expiring and expired** show what needs attention across all people. **All files** lists everything.
+
+![The Documents page: files that are missing, to verify, or expiring.](help:upload-and-sort-documents/01-documents.png)
 
 # Downloads
 
