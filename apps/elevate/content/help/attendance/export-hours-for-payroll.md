@@ -4,6 +4,7 @@ summary: Download approved hours for a pay period as a CSV file. HR only.
 category: attendance
 audience: super_admin, hr_admin
 order: 5
+video: export-hours-for-payroll
 updated: 2026-10-21
 ---
 

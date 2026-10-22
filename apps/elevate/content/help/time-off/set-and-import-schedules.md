@@ -4,6 +4,7 @@ summary: Give people shift schedules one by one, or import many from the attenda
 category: time-off
 audience: super_admin, hr_admin, team_lead
 order: 3
+video: set-and-import-schedules
 updated: 2026-10-21
 ---
 

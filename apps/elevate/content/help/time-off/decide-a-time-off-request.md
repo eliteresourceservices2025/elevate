@@ -4,6 +4,7 @@ summary: Approve or decline a request for a day off, and see who is away on the 
 category: time-off
 audience: super_admin, hr_admin, team_lead, executive
 order: 1
+video: decide-a-time-off-request
 updated: 2026-10-21
 ---
 

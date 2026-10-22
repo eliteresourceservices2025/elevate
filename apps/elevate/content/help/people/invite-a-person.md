@@ -4,6 +4,7 @@ summary: Send an invitation so a new VA or staff member can create their account
 category: people
 audience: super_admin, hr_admin
 order: 1
+video: invite-a-person
 updated: 2026-10-21
 ---
 

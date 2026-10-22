@@ -1,0 +1,721 @@
+{
+  "invite-a-person/01-invitations": {
+    "email box": {
+      "x": 296,
+      "y": 188,
+      "w": 506,
+      "h": 32
+    },
+    "Invite button": {
+      "x": 814,
+      "y": 190,
+      "w": 58,
+      "h": 32
+    },
+    "list": {
+      "x": 297,
+      "y": 311,
+      "w": 942,
+      "h": 382
+    }
+  },
+  "add-or-edit-a-person/01-add-person": {
+    "name": {
+      "x": 317,
+      "y": 308,
+      "w": 355,
+      "h": 32
+    },
+    "work email": {
+      "x": 317,
+      "y": 724,
+      "w": 355,
+      "h": 32
+    },
+    "employment": {
+      "x": 317,
+      "y": 1121,
+      "w": 355,
+      "h": 32
+    },
+    "manager": {
+      "x": 688,
+      "y": 1366,
+      "w": 355,
+      "h": 32
+    },
+    "Add person button": {
+      "x": 296,
+      "y": 1445,
+      "w": 100,
+      "h": 32
+    }
+  },
+  "set-who-reports-to-whom/01-employment-tab": {
+    "employment card": {
+      "x": 297,
+      "y": 408,
+      "w": 766,
+      "h": 44
+    },
+    "reporting": {
+      "x": 296,
+      "y": 764,
+      "w": 944,
+      "h": 28
+    },
+    "team and manager": {
+      "x": 313,
+      "y": 821,
+      "w": 910,
+      "h": 20
+    },
+    "attendance lead": {
+      "x": 313,
+      "y": 1029,
+      "w": 910,
+      "h": 20
+    }
+  },
+  "start-onboarding/01-onboarding-page": {
+    "Start onboarding button": {
+      "x": 1106,
+      "y": 80,
+      "w": 134,
+      "h": 32
+    },
+    "list": {
+      "x": 297,
+      "y": 201,
+      "w": 942,
+      "h": 146
+    },
+    "Checklist templates": {
+      "x": 968,
+      "y": 86,
+      "w": 130,
+      "h": 20
+    }
+  },
+  "offboard-someone/01-offboarding-page": {},
+  "post-a-job/01-recruiting-page": {},
+  "post-a-job/02-new-job": {
+    "job title": {
+      "x": 317,
+      "y": 233,
+      "w": 726,
+      "h": 32
+    },
+    "description": {
+      "x": 317,
+      "y": 407,
+      "w": 726,
+      "h": 64
+    },
+    "pay note": {
+      "x": 688,
+      "y": 545,
+      "w": 355,
+      "h": 32
+    },
+    "hiring team": {
+      "x": 317,
+      "y": 683,
+      "w": 77,
+      "h": 20
+    },
+    "create button": {
+      "x": 317,
+      "y": 879,
+      "w": 136,
+      "h": 32
+    }
+  },
+  "post-a-job/03-careers-page": {
+    "page title": {
+      "x": 317,
+      "y": 253,
+      "w": 854,
+      "h": 32
+    },
+    "introduction": {
+      "x": 317,
+      "y": 357,
+      "w": 854,
+      "h": 64
+    },
+    "banner": {
+      "x": 317,
+      "y": 611,
+      "w": 854,
+      "h": 28
+    }
+  },
+  "send-an-offer/01-offer-templates": {
+    "merge fields": {
+      "x": 313,
+      "y": 1303,
+      "w": 910,
+      "h": 20
+    },
+    "letter": {
+      "x": 313,
+      "y": 455,
+      "w": 447,
+      "h": 14
+    },
+    "template name": {
+      "x": 313,
+      "y": 407,
+      "w": 449,
+      "h": 32
+    },
+    "save": {
+      "x": 313,
+      "y": 1339,
+      "w": 129,
+      "h": 32
+    }
+  },
+  "approve-weekly-hours/01-hours-review": {
+    "week": {
+      "x": 296,
+      "y": 165,
+      "w": 249,
+      "h": 28
+    },
+    "Approve everyone": {
+      "x": 1023,
+      "y": 164,
+      "w": 217,
+      "h": 28
+    },
+    "table": {
+      "x": 297,
+      "y": 267,
+      "w": 942,
+      "h": 742
+    },
+    "flags": {
+      "x": 706,
+      "y": 267,
+      "w": 279,
+      "h": 40
+    },
+    "first row": {
+      "x": 297,
+      "y": 385,
+      "w": 136,
+      "h": 53
+    }
+  },
+  "decide-extra-hours/01-extra-hours": {},
+  "export-hours-for-payroll/01-hours-export": {
+    "progress note": {
+      "x": 330,
+      "y": 348,
+      "w": 876,
+      "h": 20
+    },
+    "pay period": {
+      "x": 317,
+      "y": 541,
+      "w": 902,
+      "h": 32
+    },
+    "include box": {
+      "x": 317,
+      "y": 587,
+      "w": 16,
+      "h": 16
+    },
+    "daily": {
+      "x": 317,
+      "y": 617,
+      "w": 208,
+      "h": 32
+    },
+    "summary": {
+      "x": 533,
+      "y": 617,
+      "w": 277,
+      "h": 32
+    },
+    "pay periods": {
+      "x": 317,
+      "y": 715,
+      "w": 902,
+      "h": 24
+    }
+  },
+  "decide-a-time-off-request/01-time-off": {
+    "Approvals tab": {
+      "x": 500,
+      "y": 156,
+      "w": 68,
+      "h": 42
+    },
+    "Calendar tab": {
+      "x": 592,
+      "y": 156,
+      "w": 60,
+      "h": 42
+    },
+    "Request time off": {
+      "x": 1108,
+      "y": 80,
+      "w": 132,
+      "h": 32
+    }
+  },
+  "set-and-import-schedules/01-schedules": {
+    "people": {
+      "x": 297,
+      "y": 399,
+      "w": 942,
+      "h": 990
+    },
+    "Set a schedule": {
+      "x": 762,
+      "y": 358,
+      "w": 121,
+      "h": 32
+    },
+    "in Manila": {
+      "x": 296,
+      "y": 120,
+      "w": 574,
+      "h": 40
+    }
+  },
+  "set-and-import-schedules/02-import-schedules": {
+    "upload": {
+      "x": 313,
+      "y": 249,
+      "w": 910,
+      "h": 28
+    },
+    "file types": {
+      "x": 313,
+      "y": 293,
+      "w": 910,
+      "h": 60
+    },
+    "earlier uploads": {
+      "x": 296,
+      "y": 508,
+      "w": 944,
+      "h": 28
+    }
+  },
+  "send-a-document-to-sign/01-signing": {
+    "tabs": {
+      "x": 372,
+      "y": 184,
+      "w": 118,
+      "h": 38
+    },
+    "to sign": {
+      "x": 296,
+      "y": 184,
+      "w": 72,
+      "h": 38
+    },
+    "Templates": {
+      "x": 495,
+      "y": 184,
+      "w": 92,
+      "h": 38
+    },
+    "send button": {
+      "x": 1101,
+      "y": 80,
+      "w": 139,
+      "h": 32
+    }
+  },
+  "send-a-document-to-sign/02-send-a-document": {
+    "title": {
+      "x": 317,
+      "y": 253,
+      "w": 558,
+      "h": 32
+    },
+    "the document": {
+      "x": 317,
+      "y": 305,
+      "w": 97,
+      "h": 20
+    },
+    "ready-made": {
+      "x": 317,
+      "y": 381,
+      "w": 558,
+      "h": 32
+    },
+    "who signs": {
+      "x": 317,
+      "y": 789,
+      "w": 70,
+      "h": 20
+    },
+    "signing order": {
+      "x": 317,
+      "y": 1103,
+      "w": 271,
+      "h": 14
+    },
+    "send button": {
+      "x": 317,
+      "y": 1319,
+      "w": 145,
+      "h": 32
+    }
+  },
+  "start-onboarding/02-start-dialog": {
+    "people list": {
+      "x": 320,
+      "y": 285,
+      "w": 640,
+      "h": 256
+    },
+    "search": {
+      "x": 320,
+      "y": 245,
+      "w": 320,
+      "h": 32
+    },
+    "start date": {
+      "x": 320,
+      "y": 575,
+      "w": 640,
+      "h": 32
+    },
+    "start button": {
+      "x": 320,
+      "y": 643,
+      "w": 134,
+      "h": 32
+    }
+  },
+  "start-onboarding/03-case": {
+    "first task": {
+      "x": 313,
+      "y": 233,
+      "w": 299,
+      "h": 24
+    },
+    "Mark done": {
+      "x": 1079,
+      "y": 233,
+      "w": 88,
+      "h": 28
+    },
+    "Skip": {
+      "x": 1174,
+      "y": 233,
+      "w": 49,
+      "h": 28
+    },
+    "late tag": {
+      "x": 444,
+      "y": 281,
+      "w": 43,
+      "h": 20
+    },
+    "automatic": {
+      "x": 494,
+      "y": 362,
+      "w": 197,
+      "h": 16
+    }
+  },
+  "offboard-someone/02-start-dialog": {
+    "people list": {
+      "x": 320,
+      "y": 216,
+      "w": 640,
+      "h": 256
+    },
+    "search": {
+      "x": 320,
+      "y": 176,
+      "w": 320,
+      "h": 32
+    }
+  },
+  "offboard-someone/03-case": {
+    "HR actions": {
+      "x": 313,
+      "y": 273,
+      "w": 910,
+      "h": 28
+    },
+    "Remove access now": {
+      "x": 313,
+      "y": 313,
+      "w": 159,
+      "h": 32
+    },
+    "Cancel offboarding": {
+      "x": 480,
+      "y": 313,
+      "w": 150,
+      "h": 32
+    },
+    "certificate": {
+      "x": 638,
+      "y": 313,
+      "w": 235,
+      "h": 32
+    },
+    "first task": {
+      "x": 313,
+      "y": 403,
+      "w": 653,
+      "h": 24
+    },
+    "exit interview": {
+      "x": 313,
+      "y": 500,
+      "w": 453,
+      "h": 24
+    }
+  },
+  "post-a-job/04-job-pipeline": {
+    "status": {
+      "x": 296,
+      "y": 148,
+      "w": 49,
+      "h": 20
+    },
+    "Close job": {
+      "x": 873,
+      "y": 108,
+      "w": 79,
+      "h": 28
+    },
+    "View job ad": {
+      "x": 960,
+      "y": 108,
+      "w": 113,
+      "h": 28
+    },
+    "Applied column": {
+      "x": 296,
+      "y": 192,
+      "w": 256,
+      "h": 344
+    }
+  },
+  "review-applications/01-pipeline": {
+    "Applied column": {
+      "x": 296,
+      "y": 192,
+      "w": 256,
+      "h": 344
+    },
+    "Screening column": {
+      "x": 564,
+      "y": 192,
+      "w": 256,
+      "h": 344
+    },
+    "Interview column": {
+      "x": 832,
+      "y": 192,
+      "w": 256,
+      "h": 344
+    },
+    "first card": {
+      "x": 316,
+      "y": 240,
+      "w": 117,
+      "h": 20
+    },
+    "Move to menu": {
+      "x": 316,
+      "y": 284,
+      "w": 216,
+      "h": 28
+    }
+  },
+  "review-applications/02-applicant": {
+    "applicant details": {
+      "x": 313,
+      "y": 209,
+      "w": 910,
+      "h": 28
+    },
+    "stage card": {
+      "x": 313,
+      "y": 347,
+      "w": 910,
+      "h": 28
+    },
+    "Move to": {
+      "x": 313,
+      "y": 407,
+      "w": 192,
+      "h": 32
+    },
+    "Close this application": {
+      "x": 313,
+      "y": 451,
+      "w": 910,
+      "h": 20
+    }
+  },
+  "send-an-offer/02-offer-panel": {
+    "stage": {
+      "x": 313,
+      "y": 347,
+      "w": 910,
+      "h": 28
+    },
+    "Make an offer": {
+      "x": 313,
+      "y": 609,
+      "w": 910,
+      "h": 20
+    },
+    "template": {
+      "x": 313,
+      "y": 661,
+      "w": 449,
+      "h": 32
+    },
+    "start date": {
+      "x": 313,
+      "y": 725,
+      "w": 449,
+      "h": 32
+    },
+    "pay note": {
+      "x": 313,
+      "y": 789,
+      "w": 449,
+      "h": 32
+    },
+    "countersigner": {
+      "x": 774,
+      "y": 789,
+      "w": 449,
+      "h": 32
+    }
+  },
+  "decide-a-time-off-request/02-approvals": {
+    "Approvals tab": {
+      "x": 500,
+      "y": 156,
+      "w": 68,
+      "h": 42
+    },
+    "first request": {
+      "x": 317,
+      "y": 275,
+      "w": 214,
+      "h": 24
+    },
+    "status": {
+      "x": 802,
+      "y": 277,
+      "w": 100,
+      "h": 20
+    },
+    "note box": {
+      "x": 317,
+      "y": 355,
+      "w": 256,
+      "h": 32
+    },
+    "Approve": {
+      "x": 581,
+      "y": 359,
+      "w": 74,
+      "h": 28
+    },
+    "Decline": {
+      "x": 663,
+      "y": 359,
+      "w": 68,
+      "h": 28
+    }
+  },
+  "decide-extra-hours/02-requests-to-review": {
+    "Requests to review": {
+      "x": 296,
+      "y": 184,
+      "w": 944,
+      "h": 28
+    },
+    "file form": {
+      "x": 313,
+      "y": 273,
+      "w": 910,
+      "h": 24
+    },
+    "client": {
+      "x": 774,
+      "y": 361,
+      "w": 449,
+      "h": 32
+    },
+    "from": {
+      "x": 313,
+      "y": 425,
+      "w": 449,
+      "h": 32
+    },
+    "reason": {
+      "x": 313,
+      "y": 553,
+      "w": 910,
+      "h": 32
+    },
+    "Approve": {
+      "x": 577,
+      "y": 957,
+      "w": 74,
+      "h": 28
+    },
+    "Decline": {
+      "x": 659,
+      "y": 957,
+      "w": 68,
+      "h": 28
+    },
+    "queue request": {
+      "x": 313,
+      "y": 869,
+      "w": 910,
+      "h": 20
+    }
+  },
+  "approve-weekly-hours/02-approve-week": {
+    "second row": {
+      "x": 297,
+      "y": 631,
+      "w": 136,
+      "h": 53
+    },
+    "late flag": {
+      "x": 714,
+      "y": 402,
+      "w": 43,
+      "h": 20
+    },
+    "Approve week": {
+      "x": 1112,
+      "y": 398,
+      "w": 110,
+      "h": 28
+    },
+    "days": {
+      "x": 305,
+      "y": 443,
+      "w": 926,
+      "h": 16
+    }
+  }
+}

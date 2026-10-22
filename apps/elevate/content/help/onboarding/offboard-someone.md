@@ -4,6 +4,7 @@ summary: Start a leaver's checklist, collect the exit interview and remove their
 category: onboarding
 audience: super_admin, hr_admin, team_lead
 order: 3
+video: offboard-someone
 updated: 2026-10-21
 ---
 

@@ -4,6 +4,7 @@ summary: Use ELEVATE Sign to send a contract or policy for online signature and 
 category: documents
 audience: super_admin, hr_admin
 order: 4
+video: send-a-document-to-sign
 updated: 2026-10-21
 ---
 

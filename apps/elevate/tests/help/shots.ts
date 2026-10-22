@@ -25,6 +25,8 @@ export type Shot = {
   ready?: (page: Page) => Locator;
   /** Steps to take after the page opens: open a menu, a dialog, type into a box. */
   prepare?: (page: Page) => Promise<void>;
+  /** Named parts of the page whose position is saved (content/help/assets/_boxes.json) so a video can zoom to them: "Invite button": (p) => p.getByRole(...). A part that is not on the screen is reported, not an error. */
+  targets?: Record<string, (page: Page) => Locator>;
   /** Parts of the page to draw a gold frame around, so the reader sees where to click. */
   highlight?: (page: Page) => Locator[];
 };
@@ -109,6 +111,7 @@ export const SHOTS: Shot[] = [
   {
     article: "invite-a-person",
     file: "01-invitations",
+    targets: { "email box": (p) => p.getByLabel("Invite by email"), "Invite button": (p) => p.getByRole("button", { name: "Invite", exact: true }), "list": (p) => p.getByRole("table") },
     alt: "Settings, Invitations: type the email and click Invite.",
     role: "hr_admin",
     path: "/settings/invitations",
@@ -136,6 +139,8 @@ export const SHOTS: Shot[] = [
   {
     article: "add-or-edit-a-person",
     file: "01-add-person",
+    viewport: { width: 1280, height: 1250 },
+    targets: { "name": (p) => p.getByLabel("Legal first name"), "work email": (p) => p.getByLabel("Work email"), "employment": (p) => p.getByLabel("Position"), "manager": (p) => p.getByLabel("Manager"), "Add person button": (p) => p.getByRole("button", { name: "Add person" }) },
     alt: "The Add person form.",
     role: "hr_admin",
     path: "/people/new",
@@ -144,6 +149,8 @@ export const SHOTS: Shot[] = [
   {
     article: "set-who-reports-to-whom",
     file: "01-employment-tab",
+    viewport: { width: 1280, height: 1300 },
+    targets: { "employment card": (p) => p.getByText("Employment", { exact: true }).nth(1), "reporting": (p) => p.getByText("Reporting", { exact: true }).first(), "team and manager": (p) => p.getByText("Team and manager").first(), "attendance lead": (p) => p.getByText("Attendance lead").first() },
     alt: "The Employment tab, where the manager, team and attendance lead are set.",
     role: "hr_admin",
     path: async (p) => `${await firstPersonPath(p)}?tab=employment`,
@@ -166,6 +173,7 @@ export const SHOTS: Shot[] = [
   {
     article: "start-onboarding",
     file: "01-onboarding-page",
+    targets: { "Start onboarding button": (p) => p.getByRole("button", { name: "Start onboarding", exact: true }).first(), "list": (p) => p.getByRole("table"), "Checklist templates": (p) => p.getByRole("link", { name: "Checklist templates" }) },
     alt: "The Onboarding page lists people in onboarding and lets HR start a checklist.",
     role: "hr_admin",
     path: "/onboarding",
@@ -200,6 +208,8 @@ export const SHOTS: Shot[] = [
   {
     article: "post-a-job",
     file: "02-new-job",
+    viewport: { width: 1280, height: 1500 },
+    targets: { "job title": (p) => p.getByLabel("Job title"), "description": (p) => p.getByLabel(/^Description/), "pay note": (p) => p.getByLabel(/^Pay note/), "hiring team": (p) => p.getByText("Hiring team").first(), "create button": (p) => p.getByRole("button", { name: "Create job (draft)" }) },
     alt: "The New job form. A job starts as a draft.",
     role: "hr_admin",
     path: "/recruiting/new",
@@ -208,6 +218,7 @@ export const SHOTS: Shot[] = [
   {
     article: "post-a-job",
     file: "03-careers-page",
+    targets: { "page title": (p) => p.getByLabel("Page title"), "introduction": (p) => p.getByLabel("Introduction"), "banner": (p) => p.getByText("Banner", { exact: true }).first() },
     alt: "Edit the careers page title, introduction and banner.",
     role: "hr_admin",
     path: "/recruiting/careers-page",
@@ -216,6 +227,7 @@ export const SHOTS: Shot[] = [
   {
     article: "send-an-offer",
     file: "01-offer-templates",
+    targets: { "merge fields": (p) => p.getByText("Merge fields you can use").first(), "letter": (p) => p.getByText("Letter", { exact: true }).first(), "template name": (p) => p.getByLabel("Template name"), "save": (p) => p.getByRole("button", { name: /template$/ }).first() },
     alt: "Offer templates: the letter and the fields that fill in by themselves.",
     role: "hr_admin",
     path: "/recruiting/offer-templates",
@@ -234,6 +246,7 @@ export const SHOTS: Shot[] = [
   {
     article: "approve-weekly-hours",
     file: "01-hours-review",
+    targets: { "week": (p) => p.getByText(/^Week of/).first(), "Previous": (p) => p.getByRole("button", { name: "Previous" }), "Next": (p) => p.getByRole("button", { name: "Next" }), "Approve everyone": (p) => p.getByRole("button", { name: "Approve everyone without flags" }), "table": (p) => p.getByRole("table").first(), "flags": (p) => p.getByText("Flags", { exact: true }).first(), "first row": (p) => p.getByText("Andrea Bell").first() },
     alt: "Hours review: check each week and approve it.",
     role: "hr_admin",
     path: "/hours-review",
@@ -258,6 +271,7 @@ export const SHOTS: Shot[] = [
   {
     article: "export-hours-for-payroll",
     file: "01-hours-export",
+    targets: { "progress note": (p) => p.getByText(/finished days are not approved yet/).first(), "pay period": (p) => p.getByLabel("Pay period"), "include box": (p) => p.getByLabel(/Also include days that are not approved/), "daily": (p) => p.getByRole("button", { name: "Download daily detail (CSV)" }), "summary": (p) => p.getByRole("button", { name: "Download per-person summary (CSV)" }), "pay periods": (p) => p.getByText("How pay periods are cut").first() },
     alt: "The Hours export tab: choose the pay period and download.",
     role: "hr_admin",
     path: "/attendance?tab=export",
@@ -276,6 +290,7 @@ export const SHOTS: Shot[] = [
   {
     article: "decide-a-time-off-request",
     file: "01-time-off",
+    targets: { "Approvals tab": (p) => p.getByRole("link", { name: "Approvals" }), "Calendar tab": (p) => p.getByRole("link", { name: "Calendar" }), "Request time off": (p) => p.getByRole("button", { name: "Request time off" }).or(p.getByRole("link", { name: "Request time off" })).first() },
     alt: "The Time off page with its tabs. Approvals holds the requests waiting for you.",
     role: "hr_admin",
     path: "/time-off",
@@ -292,6 +307,8 @@ export const SHOTS: Shot[] = [
   {
     article: "set-and-import-schedules",
     file: "01-schedules",
+    viewport: { width: 1280, height: 1000 },
+    targets: { "people": (p) => p.getByRole("table").first(), "Set a schedule": (p) => p.getByText("Set a schedule").first(), "in Manila": (p) => p.getByText("In Manila").first() },
     alt: "The Schedules page: tick people, then set a schedule.",
     role: "hr_admin",
     path: "/schedules",
@@ -300,6 +317,7 @@ export const SHOTS: Shot[] = [
   {
     article: "set-and-import-schedules",
     file: "02-import-schedules",
+    targets: { "upload": (p) => p.getByText("Upload an attendance sheet").first(), "file types": (p) => p.getByText(/CSV or Excel/).first(), "earlier uploads": (p) => p.getByText("Earlier uploads").first() },
     alt: "Import schedules and clients from the attendance sheet.",
     role: "hr_admin",
     path: "/settings/import-schedules",
@@ -326,6 +344,7 @@ export const SHOTS: Shot[] = [
   {
     article: "send-a-document-to-sign",
     file: "01-signing",
+    targets: { "tabs": (p) => p.getByRole("link", { name: "All documents" }), "to sign": (p) => p.getByRole("link", { name: "To sign" }), "Templates": (p) => p.getByRole("link", { name: "Templates" }), "send button": (p) => p.getByRole("link", { name: /Send a document|New document/ }).first() },
     alt: "The Signing page: documents to sign, all documents and templates.",
     role: "hr_admin",
     path: "/signing",
@@ -334,6 +353,8 @@ export const SHOTS: Shot[] = [
   {
     article: "send-a-document-to-sign",
     file: "02-send-a-document",
+    viewport: { width: 1280, height: 1700 },
+    targets: { "title": (p) => p.getByLabel("Document title"), "the document": (p) => p.getByText("The document", { exact: true }).first(), "ready-made": (p) => p.getByLabel("Start from a ready-made document (optional)"), "who signs": (p) => p.getByText("Who signs", { exact: true }).first(), "signing order": (p) => p.getByText("Signing order").first(), "send button": (p) => p.getByRole("button", { name: "Send for signature" }) },
     alt: "Send a document: choose the file, who signs and the order.",
     role: "hr_admin",
     path: "/signing/new",
@@ -396,6 +417,7 @@ export const SHOTS: Shot[] = [
   {
     article: "start-onboarding",
     file: "02-start-dialog",
+    targets: { "people list": (p) => p.getByRole("list", { name: "People to choose from" }), "search": (p) => p.getByLabel("Search people"), "start date": (p) => p.locator("#on-start"), "start button": (p) => p.getByRole("dialog").getByRole("button", { name: /^Start onboarding/ }) },
     alt: "Start onboarding: tick the people and choose the start date.",
     role: "hr_admin",
     path: "/onboarding",
@@ -408,6 +430,7 @@ export const SHOTS: Shot[] = [
   {
     article: "start-onboarding",
     file: "03-case",
+    targets: { "first task": (p) => p.getByText("Equipment is ready and issued").first(), "Mark done": (p) => p.getByRole("button", { name: "Mark done" }).first(), "Skip": (p) => p.getByRole("button", { name: "Skip" }).first(), "late tag": (p) => p.getByText("Late").first(), "automatic": (p) => p.getByText("ELEVATE ticks this when it is done.").first() },
     alt: "A person's onboarding checklist: who owns each task and what is done.",
     role: "hr_admin",
     path: firstLinkTo("/onboarding", /^\/onboarding\/[0-9a-f-]{36}$/),
@@ -416,6 +439,7 @@ export const SHOTS: Shot[] = [
   {
     article: "offboard-someone",
     file: "02-start-dialog",
+    targets: { "people list": (p) => p.getByRole("list", { name: "People to choose from" }), "search": (p) => p.getByLabel("Search people") },
     alt: "Start an offboarding: tick the person, then set the last working day and the reason.",
     role: "hr_admin",
     path: "/offboarding",
@@ -428,6 +452,7 @@ export const SHOTS: Shot[] = [
   {
     article: "offboard-someone",
     file: "03-case",
+    targets: { "HR actions": (p) => p.getByText("HR actions").first(), "Remove access now": (p) => p.getByRole("button", { name: "Remove access now" }), "Cancel offboarding": (p) => p.getByRole("button", { name: "Cancel offboarding" }), "certificate": (p) => p.getByRole("button", { name: "Issue certificate of engagement" }), "first task": (p) => p.getByText("Write and hand over turnover notes").first(), "exit interview": (p) => p.getByText("Exit interview").first() },
     alt: "An offboarding case: the checklist, and the HR actions such as Remove access now.",
     role: "hr_admin",
     path: firstLinkTo("/offboarding", /^\/offboarding\/[0-9a-f-]{36}$/),
@@ -436,6 +461,7 @@ export const SHOTS: Shot[] = [
   {
     article: "post-a-job",
     file: "04-job-pipeline",
+    targets: { "status": (p) => p.getByText("Open", { exact: true }).first(), "Close job": (p) => p.getByRole("button", { name: "Close job" }), "View job ad": (p) => p.getByRole("link", { name: /View job ad/ }), "Applied column": (p) => p.locator("section[data-stage='applied']").first() },
     alt: "A job's pipeline: one column for each stage.",
     role: "hr_admin",
     path: jobPath("Virtual Assistant, Medical Billing"),
@@ -444,6 +470,7 @@ export const SHOTS: Shot[] = [
   {
     article: "review-applications",
     file: "01-pipeline",
+    targets: { "Applied column": (p) => p.locator("section[data-stage='applied']").first(), "Screening column": (p) => p.locator("section[data-stage='screening']").first(), "Interview column": (p) => p.locator("section[data-stage='interview']").first(), "first card": (p) => p.locator("section[data-stage='applied']").first().getByRole("link").first(), "Move to menu": (p) => p.locator("section[data-stage='applied']").first().getByRole("combobox").first() },
     alt: "The pipeline. Drag a card to another column, or use Move to.",
     role: "hr_admin",
     path: jobPath("Virtual Assistant, Medical Billing"),
@@ -452,6 +479,7 @@ export const SHOTS: Shot[] = [
   {
     article: "review-applications",
     file: "02-applicant",
+    targets: { "applicant details": (p) => p.getByText("Applicant", { exact: true }).first(), "stage card": (p) => p.getByText("Stage", { exact: true }).first(), "Move to": (p) => p.getByLabel("Move to"), "Close this application": (p) => p.getByText("Close this application") },
     alt: "An applicant's page: resume, notes, interviews and history.",
     role: "hr_admin",
     path: applicantPath("Mark Anthony Ramos"),
@@ -472,6 +500,8 @@ export const SHOTS: Shot[] = [
   {
     article: "send-an-offer",
     file: "02-offer-panel",
+    viewport: { width: 1280, height: 1250 },
+    targets: { "stage": (p) => p.getByText("Stage", { exact: true }).first(), "Make an offer": (p) => p.getByText("Make an offer").first(), "template": (p) => p.getByLabel("Template"), "start date": (p) => p.getByLabel("Start date"), "pay note": (p) => p.getByLabel("Pay note (free text, shown in the letter)"), "countersigner": (p) => p.getByLabel(/^Countersigner/) },
     alt: "On an applicant at the Offer stage, open Make an offer.",
     role: "hr_admin",
     path: applicantPath("Carla Fernandez"),
@@ -484,6 +514,7 @@ export const SHOTS: Shot[] = [
   {
     article: "decide-a-time-off-request",
     file: "02-approvals",
+    targets: { "Approvals tab": (p) => p.getByRole("link", { name: "Approvals" }), "first request": (p) => p.getByText("John Paul Wright").first(), "status": (p) => p.getByText("Waiting for HR").first(), "note box": (p) => p.getByLabel("Note (needed to decline)").first(), "Approve": (p) => p.getByRole("button", { name: "Approve" }).first(), "Decline": (p) => p.getByRole("button", { name: "Decline" }).first() },
     alt: "The Approvals tab: read the request, then Approve or Decline.",
     role: "hr_admin",
     path: "/time-off?tab=approvals",
@@ -492,6 +523,8 @@ export const SHOTS: Shot[] = [
   {
     article: "decide-extra-hours",
     file: "02-requests-to-review",
+    viewport: { width: 1280, height: 1900 },
+    targets: { "Requests to review": (p) => p.getByText("Requests to review").first(), "file form": (p) => p.getByText("File extra hours the client asked for").first(), "client": (p) => p.getByLabel("Client").first(), "from": (p) => p.getByLabel("From").first(), "reason": (p) => p.getByLabel("Reason").first(), "Approve": (p) => p.getByRole("button", { name: "Approve" }).first(), "Decline": (p) => p.getByRole("button", { name: "Decline" }).first(), "queue request": (p) => p.getByText("The client asked us to finish the month-end billing").first() },
     alt: "Requests to review: the client, the time window, the reason and the proof.",
     role: "hr_admin",
     path: "/extra-hours",
@@ -500,6 +533,7 @@ export const SHOTS: Shot[] = [
   {
     article: "approve-weekly-hours",
     file: "02-approve-week",
+    targets: { "second row": (p) => p.getByText("Bianca Mendoza").first(), "late flag": (p) => p.getByText("Late", { exact: true }).first(), "Approve week": (p) => p.getByRole("button", { name: "Approve week" }).nth(1), "days": (p) => p.getByText("Days (5)").nth(1) },
     alt: "Open Days to see each day, then click Approve week.",
     role: "hr_admin",
     path: "/hours-review",

@@ -4,6 +4,7 @@ summary: Read an application, move it between stages and close it with a reason.
 category: recruiting
 audience: super_admin, hr_admin, recruiter, team_lead
 order: 2
+video: review-applications
 updated: 2026-10-21
 ---
 

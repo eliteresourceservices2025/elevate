@@ -4,6 +4,7 @@ summary: Create a job, publish it on the public careers page and close it when i
 category: recruiting
 audience: super_admin, hr_admin, recruiter
 order: 1
+video: post-a-job
 updated: 2026-10-21
 ---
 

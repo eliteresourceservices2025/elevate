@@ -4,6 +4,7 @@ summary: Create a person's record and change their details later.
 category: people
 audience: super_admin, hr_admin
 order: 3
+video: add-or-edit-a-person
 updated: 2026-10-21
 ---
 

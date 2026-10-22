@@ -4,6 +4,7 @@ summary: Check each person's week and approve it so HR can export it for payroll
 category: attendance
 audience: super_admin, hr_admin, team_lead
 order: 2
+video: approve-weekly-hours
 updated: 2026-10-21
 ---
 

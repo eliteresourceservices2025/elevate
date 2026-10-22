@@ -26,5 +26,13 @@ Takes every picture the guides use, as the right role would see the screen, from
 - `HELP_ONLY=invite-a-person,post-a-job pnpm help:shots` takes only those guides' pictures. If your dev server already runs, `E2E_BASE_URL=http://localhost:3000`.
 - **After any change to a screen a guide shows, run the tool again and read the guide.** The guide text names real buttons: when a label changes, the guide must change with it.
 
+## Narrated videos (`tools/recap-video/howto/`)
+Short how-to videos (one to two minutes) made from the screenshots, with a voice-over and on-screen captions. Self-contained: it shares no code with the Learn recap videos.
+- `storyboards.cjs` is the script: for each video a list of steps, each with the picture, the part of it to zoom to (a target name from `tests/help/shots.ts`), a short caption and the words the voice says. The guide's header carries `video: <id>` and the file is `content/help/videos/<id>.mp4`, served by the signed-in route with the guide's audience.
+- First time: `npm install` in `tools/recap-video` (it is not part of the pnpm workspace). A video that already exists is only rebuilt when you run it without `--skip-existing`: nothing checks whether the pictures or the storyboard changed since.
+- `node howto/build.cjs [ids]` (from `tools/recap-video`) speaks the text (Windows voice "Microsoft Zira Desktop", offline; only changed lines are spoken again), then renders MP4s with Remotion and Chrome. `--stills` writes one picture per scene to `howto/.build/stills` to check the look; `--no-render` only makes the voice. Windows only.
+- The zoom positions come from `content/help/assets/_boxes.json`, written by `pnpm help:shots`. After a screen changes: run `pnpm help:shots`, then `node howto/build.cjs`, and re-read the storyboard text against the new screen. A step whose target is missing is shown without a ring (the build warns).
+- Keep the captions to what the screen says, and no client or patient information anywhere (the pictures are fake data).
+
 ## Not built yet
-Videos (planned: narrated walkthroughs with `tools/recap-video`), the PowerPoint, guides for VAs and contractors, links between guides (they refer to each other by title).
+The PowerPoint, guides for VAs and contractors, links between guides (they refer to each other by title), videos for the other guides.

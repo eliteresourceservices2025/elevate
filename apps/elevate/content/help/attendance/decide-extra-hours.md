@@ -4,6 +4,7 @@ summary: Review a request to work beyond the schedule, and file one for a client
 category: attendance
 audience: super_admin, hr_admin, team_lead
 order: 4
+video: decide-extra-hours
 updated: 2026-10-21
 ---
 

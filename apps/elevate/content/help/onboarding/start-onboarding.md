@@ -4,6 +4,7 @@ summary: Give a new person their checklist and follow it until they are active.
 category: onboarding
 audience: super_admin, hr_admin, team_lead
 order: 1
+video: start-onboarding
 updated: 2026-10-21
 ---
 

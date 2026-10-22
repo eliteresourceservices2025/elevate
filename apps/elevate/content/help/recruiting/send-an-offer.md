@@ -4,6 +4,7 @@ summary: Prepare an offer letter from a template, send it for signature and foll
 category: recruiting
 audience: super_admin, hr_admin, recruiter
 order: 4
+video: send-an-offer
 updated: 2026-10-21
 ---
 

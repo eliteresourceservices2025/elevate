@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { test, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { signInEnrollingMfa } from "../e2e/helpers";
@@ -61,6 +61,9 @@ test("take the Help center screenshots", async ({ browser }) => {
     await page.close();
   }
 
+  // Where named parts of each picture are (x, y, width, height in picture pixels): the narrated videos zoom to them
+  const boxFile = path.join(ASSETS, "_boxes.json");
+  const boxes: Record<string, Record<string, { x: number; y: number; w: number; h: number }>> = existsSync(boxFile) ? JSON.parse(readFileSync(boxFile, "utf8")) : {};
   const failures: string[] = [];
   const taken: { article: string; file: string; alt: string }[] = [];
   for (const shot of shots) {
@@ -74,6 +77,14 @@ test("take the Help center screenshots", async ({ browser }) => {
       await page.waitForLoadState("networkidle").catch(() => {});
       await dress(page, shot.highlight?.(page) ?? []);
       await page.waitForTimeout(400);
+      const found: Record<string, { x: number; y: number; w: number; h: number }> = {};
+      for (const [name, locate] of Object.entries(shot.targets ?? {})) {
+        const box = (await locate(page).count()) ? await locate(page).first().boundingBox() : null;
+        if (box && (box.width < 4 || box.height < 4)) console.log(`  note  ${shot.article}/${shot.file}: target "${name}" has no size (hidden?)`);
+        else if (box) found[name] = { x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.width), h: Math.round(box.height) };
+        else console.log(`  note  ${shot.article}/${shot.file}: target "${name}" not found`);
+      }
+      boxes[`${shot.article}/${shot.file}`] = found;
       mkdirSync(path.join(ASSETS, shot.article), { recursive: true });
       await page.screenshot({ path: path.join(ASSETS, shot.article, `${shot.file}.png`) });
       taken.push({ article: shot.article, file: `${shot.file}.png`, alt: shot.alt });
@@ -87,6 +98,8 @@ test("take the Help center screenshots", async ({ browser }) => {
   }
   for (const context of contexts.values()) await context.close();
 
+  writeFileSync(boxFile, `${JSON.stringify(boxes, null, 2)}
+`);
   if (!only.length) writeFileSync(path.join(ASSETS, "_shots.json"), `${JSON.stringify(taken, null, 2)}\n`);
   if (failures.length) throw new Error(`${failures.length} screenshot(s) failed:\n${failures.join("\n")}`);
 });

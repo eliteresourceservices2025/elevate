@@ -4,6 +4,7 @@ summary: Change a person's manager, team and attendance lead, and move a manager
 category: people
 audience: super_admin, hr_admin
 order: 4
+video: set-who-reports-to-whom
 updated: 2026-10-21
 ---
 
