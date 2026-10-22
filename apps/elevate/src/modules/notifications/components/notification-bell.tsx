@@ -66,7 +66,7 @@ export function NotificationBell({ unread: initialUnread }: { unread: number }) 
   }
 
   return (
-    <div ref={root} data-tour="bell" className="relative">
+    <div ref={root} data-tour="bell" className="relative shrink-0">
       <Button
         type="button"
         variant="ghost"
@@ -85,7 +85,7 @@ export function NotificationBell({ unread: initialUnread }: { unread: number }) 
         ) : null}
       </Button>
       {open ? (
-        <div role="region" aria-label="Notifications" className="absolute right-0 z-50 mt-2 w-80 max-w-[90vw] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg">
+        <div role="region" aria-label="Notifications" className="fixed inset-x-2 top-14 z-50 mt-1 overflow-hidden sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 rounded-xl border bg-popover text-popover-foreground shadow-lg">
           <div className="flex items-center justify-between border-b px-3 py-2">
             <p className="text-sm font-semibold">Notifications</p>
             {unread > 0 ? (

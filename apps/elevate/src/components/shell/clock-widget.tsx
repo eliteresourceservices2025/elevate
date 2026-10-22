@@ -453,7 +453,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
         </Button>
       ) : waitingOnClockOut ? (
         <>
-          <span className="max-w-56 text-xs leading-tight text-muted-foreground" role="status">
+          <span className="max-w-56 text-xs leading-tight text-muted-foreground max-sm:sr-only" role="status">
             Waiting for approval of your clock-out at {formatInZone(waitingOnClockOut.atMs, status.zone, "h:mm a")}
           </span>
           <Button variant="outline" size="sm" disabled={blocked} onClick={() => run(() => cancelCorrection({ correctionId: waitingOnClockOut.id }), "Request cancelled. You are still clocked in.")}>
@@ -463,15 +463,15 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
       ) : (
         <>
           {onBreak ? (
-            <Button variant="default" size="lg" className="h-10 gap-2 px-4 font-semibold" disabled={blocked} onClick={() => run(() => endBreak(), "Break ended.")}>
+            <Button variant="default" size="lg" className="h-10 gap-2 px-3 font-semibold sm:px-4" disabled={blocked} aria-label="End break" onClick={() => run(() => endBreak(), "Break ended.")}>
               <Play aria-hidden />
-              End break
+              <span className="max-sm:sr-only">End break</span>
             </Button>
           ) : (
             <div className="relative">
-              <Button variant="ghost" size="lg" className="h-10 gap-1 px-3" disabled={blocked} aria-haspopup="menu" aria-expanded={breakMenu} onClick={() => setBreakMenu((v) => !v)}>
+              <Button variant="ghost" size="lg" className="h-10 gap-1 px-2 sm:px-3" disabled={blocked} aria-label="Break" aria-haspopup="menu" aria-expanded={breakMenu} onClick={() => setBreakMenu((v) => !v)}>
                 <Coffee aria-hidden />
-                Break
+                <span className="max-sm:sr-only">Break</span>
                 <ChevronDown aria-hidden />
               </Button>
               {breakMenu ? (
@@ -497,8 +497,9 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
           <Button
             variant="outline"
             size="lg"
-            className="h-10 gap-2 px-4 font-semibold"
+            className="h-10 gap-2 px-3 font-semibold sm:px-4"
             disabled={blocked}
+            aria-label="Clock out"
             onClick={() =>
               run(
                 () => clockOut(),
@@ -510,7 +511,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
             }
           >
             <LogOut aria-hidden />
-            Clock out
+            <span className="max-sm:sr-only">Clock out</span>
           </Button>
         </>
       )}
