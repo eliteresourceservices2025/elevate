@@ -6,6 +6,9 @@ import type { Locator, Page } from "@playwright/test";
 //
 // Everything is captured against the LOCAL database with fake people (see playwright.help.config.ts). Never run it against production.
 
+/** Where the Safe Voice site runs (apps/safe-voice; port 3100 with its dev server). Start it before taking its pictures. */
+export const SAFE_VOICE_URL = process.env.SAFEVOICE_URL ?? "http://localhost:3100";
+
 export type RoleKey = "super_admin" | "hr_admin" | "team_lead" | "recruiter" | "employee";
 
 export type Shot = {
@@ -17,6 +20,8 @@ export type Shot = {
   alt: string;
   /** Whose view: the page is opened as a signed-in person holding this role. */
   role: RoleKey;
+  /** For another site (Safe Voice): open it in a clean browser with no sign-in and no cookies, so nothing from ELEVATE is sent to it. */
+  anonymous?: boolean;
   /** The address to open. A function gets the page, for addresses that depend on the data (for example the first person in the list). */
   path: string | ((page: Page) => Promise<string>);
   /** A taller or wider window for pictures that need more of the screen (the whole left menu, for example). Default 1280x800. */
@@ -579,5 +584,428 @@ export const SHOTS: Shot[] = [
       await p.getByRole("button", { name: "Register an item" }).first().click();
       await p.getByLabel("Asset tag").waitFor();
     },
+  },
+
+  // ---- Batch 2: what a person does for themselves (Employee view) ----
+  {
+    article: "clock-in-and-out",
+    file: "01-clock",
+    alt: "The time clock is at the top right of every page.",
+    role: "employee",
+    path: "/dashboard",
+    ready: (p) => p.getByRole("button", { name: /Clock in/ }).first(),
+    highlight: (p) => [p.getByRole("button", { name: /Clock in/ }).first()],
+    targets: { "clock button": (p) => p.getByRole("button", { name: /Clock in/ }).first() },
+  },
+  {
+    article: "clock-in-and-out",
+    file: "02-my-time",
+    alt: "My time, under Attendance, shows today and your week.",
+    role: "employee",
+    path: "/attendance",
+    ready: (p) => p.getByRole("heading", { name: "Attendance", level: 1 }),
+    targets: { "week": (p) => p.getByLabel("Week summary").first(), "tabs": (p) => p.getByRole("link", { name: "My time" }) },
+  },
+  {
+    article: "set-up-your-clock",
+    file: "01-clock-settings",
+    alt: "Your clock settings: your time zone and the location option.",
+    role: "employee",
+    path: "/attendance",
+    ready: (p) => p.getByRole("heading", { name: "Attendance", level: 1 }),
+    prepare: async (p) => {
+      await p.getByRole("button", { name: /clock settings/i }).first().click();
+      await p.getByLabel("Your time zone").waitFor();
+    },
+    targets: { "time zone": (p) => p.getByLabel("Your time zone"), "location": (p) => p.getByLabel(/Record my approximate location/) },
+  },
+  {
+    article: "ask-for-a-time-correction",
+    file: "01-ask-correction",
+    alt: "Ask for a time correction: choose what happened, say why and add a screenshot.",
+    role: "employee",
+    path: "/attendance",
+    viewport: { width: 1280, height: 1100 },
+    ready: (p) => p.getByRole("heading", { name: "Attendance", level: 1 }),
+    prepare: async (p) => {
+      await p.getByRole("button", { name: "Ask for a correction" }).first().click();
+      await p.getByLabel("Reason").first().waitFor();
+    },
+    targets: { "reason": (p) => p.getByLabel("Reason").first(), "proof": (p) => p.getByLabel(/Screenshots as proof/).first() },
+  },
+  {
+    article: "report-a-clock-problem",
+    file: "01-report-issue",
+    alt: "Report a technical issue: what went wrong, and a screenshot.",
+    role: "employee",
+    path: "/attendance",
+    viewport: { width: 1280, height: 1100 },
+    ready: (p) => p.getByRole("heading", { name: "Attendance", level: 1 }),
+    prepare: async (p) => {
+      await p.getByRole("button", { name: "Report a technical issue" }).first().click();
+      await p.getByLabel("What went wrong?").waitFor();
+    },
+    targets: { "what went wrong": (p) => p.getByLabel("What went wrong?"), "screenshot": (p) => p.getByLabel(/Screenshot of the problem/) },
+  },
+  {
+    article: "ask-for-extra-hours",
+    file: "01-ask-extra-hours",
+    alt: "Ask to work extra hours: the client, the time, who approved it, and a screenshot.",
+    role: "employee",
+    path: "/extra-hours",
+    viewport: { width: 1280, height: 1300 },
+    ready: (p) => p.getByRole("heading", { name: "Extra hours", level: 1 }),
+    prepare: async (p) => {
+      await p.getByText("Ask to work extra hours").first().click();
+    },
+    targets: { "client": (p) => p.getByLabel("Client").first(), "approved by": (p) => p.getByLabel("Who at the client approved it?"), "proof": (p) => p.getByLabel(/Screenshot of the client/).first() },
+  },
+  {
+    article: "request-time-off",
+    file: "01-prize-days",
+    alt: "Time off: your prize days and your requests.",
+    role: "employee",
+    path: "/time-off",
+    ready: (p) => p.getByRole("heading", { name: "Time off", level: 1 }),
+    targets: { "tabs": (p) => p.getByRole("link", { name: "My prize days" }), "Request time off": (p) => p.getByRole("button", { name: "Request time off" }).or(p.getByRole("link", { name: "Request time off" })).first() },
+  },
+  {
+    article: "request-time-off",
+    file: "02-request-form",
+    alt: "Request time off: leave type, first and last day, and a note.",
+    role: "employee",
+    path: "/time-off",
+    viewport: { width: 1280, height: 1000 },
+    ready: (p) => p.getByRole("heading", { name: "Time off", level: 1 }),
+    prepare: async (p) => {
+      await p.getByRole("button", { name: "Request time off" }).or(p.getByRole("link", { name: "Request time off" })).first().click();
+      await p.getByLabel("First day").waitFor();
+    },
+    targets: { "leave type": (p) => p.getByLabel("Leave type"), "first day": (p) => p.getByLabel("First day"), "send": (p) => p.getByRole("button", { name: "Send request" }) },
+  },
+  {
+    article: "see-your-schedule",
+    file: "01-schedule",
+    alt: "Your schedule, in your client's time and in Manila time.",
+    role: "employee",
+    path: "/schedules",
+    ready: (p) => p.getByRole("heading", { name: "Schedules", level: 1 }),
+    targets: { "my schedule": (p) => p.getByText("My schedule").first(), "in Manila": (p) => p.getByText("In Manila").first() },
+  },
+  {
+    article: "update-your-profile",
+    file: "01-profile",
+    alt: "My profile: your photo, your details and the request links.",
+    role: "employee",
+    path: "/people/me",
+    viewport: { width: 1280, height: 950 },
+    ready: (p) => p.getByText("Add a photo").first(),
+    targets: { "photo": (p) => p.getByText("Add a photo").first(), "contact request": (p) => p.getByText("Request a change to my contact details"), "about me": (p) => p.getByText("Edit about me").first(), "tabs": (p) => p.getByRole("navigation", { name: "Profile sections" }) },
+  },
+  {
+    article: "update-your-profile",
+    file: "02-contact-request",
+    alt: "Request a change to your contact details. HR reviews it before it applies.",
+    role: "employee",
+    path: "/people/me",
+    viewport: { width: 1280, height: 1150 },
+    ready: (p) => p.getByText("Request a change to my contact details"),
+    prepare: async (p) => {
+      await p.getByText("Request a change to my contact details").click();
+      await p.getByLabel("Mobile").waitFor();
+    },
+    targets: { "personal email": (p) => p.getByLabel("Personal email").last(), "mobile": (p) => p.getByLabel("Mobile").last() },
+  },
+  {
+    article: "upload-your-documents",
+    file: "01-documents",
+    alt: "Your Documents tab: choose the type, add a title and the file, then Upload.",
+    role: "employee",
+    path: "/people/me?tab=documents",
+    viewport: { width: 1280, height: 1300 },
+    ready: (p) => p.getByText("Upload a document").first(),
+    targets: { "document type": (p) => p.getByLabel("Document type"), "file": (p) => p.getByLabel("File").first(), "Upload many files": (p) => p.getByText("Upload many files").first(), "folder": (p) => p.getByRole("button", { name: "New folder" }) },
+  },
+  {
+    article: "finish-your-onboarding",
+    file: "01-onboarding",
+    alt: "Your onboarding checklist: who owns each task and what is due.",
+    role: "employee",
+    path: "/onboarding",
+    ready: (p) => p.getByText("Your tasks").first(),
+    targets: { "your tasks": (p) => p.getByText("Your tasks").first(), "first task": (p) => p.getByText("Acknowledge the privacy notice").first(), "open link": (p) => p.getByRole("link", { name: "Open" }).first(), "your onboarding": (p) => p.getByText("Your onboarding").first(), "late tag": (p) => p.getByText(/late/).first() },
+  },
+  {
+    article: "acknowledge-announcements-and-policies",
+    file: "01-announcements",
+    alt: "Announcements: the ones that need your acknowledgment are marked.",
+    role: "employee",
+    path: "/announcements",
+    ready: (p) => p.getByRole("heading", { name: "Announcements", level: 1 }),
+    targets: { "needs ack": (p) => p.getByText(/needs? your acknowledgment|Acknowledgment needed/).first(), "tabs": (p) => p.getByRole("link", { name: "Policies" }) },
+  },
+  {
+    article: "acknowledge-announcements-and-policies",
+    file: "02-acknowledge",
+    alt: "Read it, then click I have read and understand.",
+    role: "employee",
+    path: firstLinkTo("/announcements", /^\/announcements\/[0-9a-f-]{36}$/),
+    ready: (p) => p.getByRole("button", { name: "I have read and understand" }),
+    targets: { "button": (p) => p.getByRole("button", { name: "I have read and understand" }) },
+  },
+  {
+    article: "take-your-training",
+    file: "01-my-training",
+    alt: "My training: open your assigned course.",
+    role: "employee",
+    path: "/learn",
+    ready: (p) => p.getByRole("heading", { name: "My training", level: 1 }),
+    targets: { "open button": (p) => p.getByRole("link", { name: /Open HIPAA training/ }).or(p.getByRole("button", { name: /Open HIPAA training/ })).first() },
+  },
+  {
+    article: "your-certificates-and-equipment",
+    file: "01-certificates",
+    alt: "My certificates, with the dates they end.",
+    role: "employee",
+    path: "/credentials",
+    ready: (p) => p.getByRole("heading", { name: "Certificates", level: 1 }),
+    targets: { "my certificates": (p) => p.getByText("My certificates").first() },
+  },
+  {
+    article: "your-certificates-and-equipment",
+    file: "02-assets",
+    alt: "My assets: the equipment assigned to you.",
+    role: "employee",
+    path: "/assets",
+    ready: (p) => p.getByRole("heading", { name: "Assets", level: 1 }),
+    targets: { "my assets": (p) => p.getByText("My assets").first() },
+  },
+  {
+    article: "your-reviews-and-goals",
+    file: "01-reviews",
+    alt: "Reviews: your reviews and your goals.",
+    role: "employee",
+    path: "/reviews",
+    ready: (p) => p.getByRole("heading", { name: "Reviews", level: 1 }),
+    targets: { "goals": (p) => p.getByRole("link", { name: "Goals" }), "your reviews": (p) => p.getByText("Your reviews").first() },
+  },
+  {
+    article: "see-what-elevate-holds-about-you",
+    file: "01-my-data",
+    alt: "My data: everything ELEVATE holds about you, with downloads and a way to ask HR.",
+    role: "employee",
+    path: "/my-data",
+    ready: (p) => p.getByRole("heading", { name: "My data", level: 1 }),
+    targets: { "ask HR": (p) => p.getByText("Ask HR about your data").first(), "download": (p) => p.getByText("Download PDF").first(), "profile": (p) => p.getByText("Profile", { exact: true }).first() },
+  },
+  {
+    article: "report-a-privacy-concern",
+    file: "01-incidents",
+    alt: "Privacy incidents: click Report an incident.",
+    role: "employee",
+    path: "/incidents",
+    ready: (p) => p.getByRole("heading", { name: "Privacy incidents", level: 1 }),
+    highlight: (p) => [p.getByText("Report an incident").first()],
+    targets: { "report button": (p) => p.getByText("Report an incident").first() },
+  },
+  {
+    article: "report-a-privacy-concern",
+    file: "02-report-form",
+    alt: "Say what happened, when, and what you have done. No patient details.",
+    role: "employee",
+    path: "/incidents",
+    viewport: { width: 1280, height: 1400 },
+    ready: (p) => p.getByText("Report an incident").first(),
+    prepare: async (p) => {
+      await p.getByText("Report an incident").first().click();
+      await p.getByLabel("What happened?").waitFor();
+    },
+    targets: { "what happened": (p) => p.getByLabel("What happened?"), "send": (p) => p.getByRole("button", { name: "Send the report" }) },
+  },
+  {
+    article: "read-the-org-chart",
+    file: "01-org-chart",
+    alt: "The org chart: the chart view and the list view.",
+    role: "employee",
+    path: "/org-chart",
+    ready: (p) => p.getByRole("heading", { name: "Org chart", level: 1 }),
+  },
+
+  // ---- Batch 2: HR and leads ----
+  {
+    article: "merge-duplicate-records",
+    file: "01-duplicates",
+    alt: "Duplicate people: choose the record that stays, and merge by hand.",
+    role: "hr_admin",
+    path: "/people/duplicates",
+    viewport: { width: 1280, height: 1000 },
+    ready: (p) => p.getByText("Merge two records by hand").first(),
+    targets: { "found": (p) => p.getByText("People who may be in the directory twice").first(), "by hand": (p) => p.getByText("Merge two records by hand").first(), "keep": (p) => p.getByText("Keep this record").first(), "merge into": (p) => p.getByText("Merge this one into it (it is archived)").first() },
+  },
+  {
+    article: "review-a-change-request",
+    file: "01-requests",
+    alt: "Change requests: Pending, Approved and Rejected.",
+    role: "hr_admin",
+    path: "/people/requests",
+    ready: (p) => p.getByRole("heading", { name: "Change requests", level: 1 }),
+    targets: { "lists": (p) => p.getByText(/^Pending/).first() },
+  },
+  {
+    article: "add-custom-fields",
+    file: "01-fields",
+    alt: "Custom fields: label, key, type, who can see it.",
+    role: "hr_admin",
+    path: "/people/fields",
+    viewport: { width: 1280, height: 1000 },
+    ready: (p) => p.getByRole("heading", { name: "Custom fields", level: 1 }),
+    targets: { "label": (p) => p.getByLabel("Label"), "key": (p) => p.getByLabel("Key"), "type": (p) => p.getByLabel("Type"), "who sees": (p) => p.getByLabel("Who can see it"), "Add field": (p) => p.getByRole("button", { name: "Add field" }) },
+  },
+  {
+    article: "set-up-departments-teams-and-positions",
+    file: "01-structure",
+    alt: "Structure: departments, teams and positions.",
+    role: "hr_admin",
+    path: "/people/structure",
+    viewport: { width: 1280, height: 1500 },
+    ready: (p) => p.getByRole("heading", { name: "Structure", level: 1 }),
+    targets: { "departments": (p) => p.getByText("Departments", { exact: true }).first(), "teams": (p) => p.getByText("Teams", { exact: true }).first(), "positions": (p) => p.getByText("Positions", { exact: true }).first() },
+  },
+  {
+    article: "manage-clients",
+    file: "01-clients",
+    alt: "Clients: name, time zone, holidays and whether they work with patient information.",
+    role: "hr_admin",
+    path: "/people/clients",
+    viewport: { width: 1280, height: 1000 },
+    ready: (p) => p.getByRole("heading", { name: "Clients", level: 1 }),
+    targets: { "client name": (p) => p.getByLabel("Client name").first(), "patient info": (p) => p.getByLabel(/Works with patient information/).first(), "Add client": (p) => p.getByRole("button", { name: "Add client" }) },
+  },
+  {
+    article: "set-team-clock-rules",
+    file: "01-rules",
+    alt: "Rules, per team: allowed IPs, idle prompt, grace and selfie.",
+    role: "hr_admin",
+    path: "/attendance?tab=rules",
+    viewport: { width: 1280, height: 1250 },
+    ready: (p) => p.getByText("Rules apply per team").first(),
+    targets: { "allowed IPs": (p) => p.getByLabel("Allowed IP addresses or ranges (one per line)").first(), "idle prompt": (p) => p.getByLabel("Idle prompt after (minutes)").first(), "late grace": (p) => p.getByLabel("Late and early-leave grace (minutes)").first(), "selfie": (p) => p.getByLabel(/Require a selfie/).first(), "Save rules": (p) => p.getByRole("button", { name: "Save rules" }).first() },
+  },
+  {
+    article: "handle-technical-issue-reports",
+    file: "01-issues",
+    alt: "Technical issues: your reports and all reports.",
+    role: "hr_admin",
+    path: "/attendance?tab=issues",
+    ready: (p) => p.getByRole("heading", { name: "Attendance", level: 1 }),
+    targets: { "all reports": (p) => p.getByText("All reports").first() },
+  },
+  {
+    article: "check-training-status",
+    file: "01-training-status",
+    alt: "Training status: who passed, who has not, and who is overdue.",
+    role: "hr_admin",
+    path: "/training",
+    viewport: { width: 1280, height: 1400 },
+    ready: (p) => p.getByRole("heading", { name: "Training status", level: 1 }),
+    targets: { "automatic": (p) => p.getByText(/Automatic assignment/).first(), "evidence": (p) => p.getByText("Client evidence report").first(), "counts": (p) => p.getByText(/^Everyone: /).first(), "filter": (p) => p.getByRole("button", { name: "Filter" }) },
+  },
+  {
+    article: "edit-training-courses",
+    file: "01-course-studio",
+    alt: "Course studio: read, compare and edit the courses.",
+    role: "hr_admin",
+    path: "/course-studio",
+    ready: (p) => p.getByRole("heading", { name: "Course studio", level: 1 }),
+    targets: { "intro": (p) => p.getByText(/A published version never changes/).first() },
+  },
+  {
+    article: "run-a-review-cycle",
+    file: "01-reviews-hr",
+    alt: "Reviews: Templates, Launch a cycle and the list of cycles.",
+    role: "hr_admin",
+    path: "/reviews",
+    ready: (p) => p.getByRole("heading", { name: "Reviews", level: 1 }),
+    targets: { "Launch a cycle": (p) => p.getByRole("link", { name: "Launch a cycle" }), "Templates": (p) => p.getByRole("link", { name: "Templates" }), "cycles": (p) => p.getByText("Cycles", { exact: true }).first() },
+  },
+  {
+    article: "run-a-review-cycle",
+    file: "02-launch",
+    alt: "Launch a review cycle: name, type, template, who is reviewed and due dates.",
+    role: "hr_admin",
+    path: "/reviews/cycles/new",
+    viewport: { width: 1280, height: 1300 },
+    ready: (p) => p.getByRole("heading", { name: "Launch a review cycle", level: 1 }),
+    targets: { "cycle name": (p) => p.getByLabel("Cycle name"), "template": (p) => p.getByLabel("Template"), "who": (p) => p.getByText("Who is reviewed").first(), "launch": (p) => p.getByRole("button", { name: "Launch cycle" }) },
+  },
+  {
+    article: "write-a-team-review",
+    file: "01-reviews-lead",
+    alt: "Reviews, as a lead: the reviews you write and your team's reviews.",
+    role: "team_lead",
+    path: "/reviews",
+    ready: (p) => p.getByRole("heading", { name: "Reviews", level: 1 }),
+    targets: { "goals": (p) => p.getByRole("link", { name: "Goals" }) },
+  },
+  {
+    article: "import-people-from-talenthr",
+    file: "01-import",
+    alt: "Import from TalentHR: upload, preview, commit, reconcile.",
+    role: "hr_admin",
+    path: "/settings/import",
+    ready: (p) => p.getByRole("heading", { name: "Import from TalentHR", level: 1 }),
+    targets: { "upload": (p) => p.getByText("Upload a TalentHR export").first(), "file types": (p) => p.getByText(/CSV or Excel/).first() },
+  },
+  {
+    article: "import-people-from-talenthr",
+    file: "02-go-live",
+    alt: "The go-live checklist: some rows check themselves, the rest you tick.",
+    role: "hr_admin",
+    path: "/settings/go-live",
+    viewport: { width: 1280, height: 1300 },
+    ready: (p) => p.getByRole("heading", { name: "Go-live checklist", level: 1 }),
+    targets: { "first rows": (p) => p.getByText("Production settings are in place").first(), "privacy notice": (p) => p.getByText(/The privacy notice is published/).first(), "mark done": (p) => p.getByRole("button", { name: "Mark done" }).first() },
+  },
+  {
+    article: "read-the-audit-log",
+    file: "01-audit-log",
+    alt: "The audit log: who did what, and when.",
+    role: "super_admin",
+    path: "/settings/audit-log",
+    ready: (p) => p.getByRole("heading", { name: "Audit log", level: 1 }),
+    targets: { "filter": (p) => p.getByLabel("Action starts with"), "table": (p) => p.getByRole("table").first() },
+  },
+  {
+    article: "set-people-records-retention",
+    file: "01-retention",
+    alt: "People records retention: periods, counts and the nightly job.",
+    role: "hr_admin",
+    path: "/settings/people-retention",
+    viewport: { width: 1280, height: 950 },
+    ready: (p) => p.getByRole("heading", { name: "People records retention", level: 1 }),
+    targets: { "archive months": (p) => p.getByLabel(/until the HR-only archive/), "anonymize months": (p) => p.getByLabel(/until personal data is anonymized/), "would move": (p) => p.getByText("What would move at the next run").first() },
+  },
+
+  // Safe Voice is its own site (apps/safe-voice, port 3100 here): start it with the dev server before taking these
+  {
+    article: "report-something-anonymously",
+    file: "01-send-a-report",
+    alt: "Safe Voice: say what this is about and what happened. No name is asked.",
+    role: "employee",
+    anonymous: true,
+    path: `${SAFE_VOICE_URL}/`,
+    viewport: { width: 1280, height: 1150 },
+    ready: (p) => p.getByRole("button", { name: "Send report" }),
+    targets: { "about": (p) => p.getByLabel("What is this about?"), "what happened": (p) => p.getByLabel("What happened?"), "attach": (p) => p.getByText("Attach files (optional)").first(), "privacy": (p) => p.getByText("How your privacy is protected").first(), "send": (p) => p.getByRole("button", { name: "Send report" }) },
+  },
+  {
+    article: "report-something-anonymously",
+    file: "02-check-a-case",
+    alt: "To read a reply, type your case code and passphrase.",
+    role: "employee",
+    anonymous: true,
+    path: `${SAFE_VOICE_URL}/follow-up`,
+    ready: (p) => p.getByPlaceholder("SV-XXXX-XXXX-XXXX"),
+    targets: { "case code": (p) => p.getByPlaceholder("SV-XXXX-XXXX-XXXX"), "passphrase": (p) => p.getByLabel("Passphrase") },
   },
 ];

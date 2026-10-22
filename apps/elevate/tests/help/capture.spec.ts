@@ -67,7 +67,9 @@ test("take the Help center screenshots", async ({ browser }) => {
   const failures: string[] = [];
   const taken: { article: string; file: string; alt: string }[] = [];
   for (const shot of shots) {
-    const page = await (await contextFor(shot.role)).newPage();
+    // Another site (Safe Voice) gets a clean browser: no sign-in, so no ELEVATE cookie can reach it
+    const clean = shot.anonymous ? await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: "light" }) : null;
+    const page = await (clean ?? (await contextFor(shot.role))).newPage();
     try {
       if (shot.viewport) await page.setViewportSize(shot.viewport);
       const url = typeof shot.path === "string" ? shot.path : await shot.path(page);
@@ -94,12 +96,17 @@ test("take the Help center screenshots", async ({ browser }) => {
       console.log(`  FAILED  ${shot.article}/${shot.file}`);
     } finally {
       await page.close();
+      await clean?.close();
     }
   }
   for (const context of contexts.values()) await context.close();
 
   writeFileSync(boxFile, `${JSON.stringify(boxes, null, 2)}
 `);
-  if (!only.length) writeFileSync(path.join(ASSETS, "_shots.json"), `${JSON.stringify(taken, null, 2)}\n`);
+  // The list of pictures taken (with their captions): a partial run updates only its own entries
+  const listFile = path.join(ASSETS, "_shots.json");
+  const earlier: typeof taken = existsSync(listFile) && only.length ? JSON.parse(readFileSync(listFile, "utf8")) : [];
+  const merged = [...earlier.filter((e) => !taken.some((t) => t.article === e.article && t.file === e.file)), ...taken];
+  writeFileSync(listFile, `${JSON.stringify(merged, null, 2)}\n`);
   if (failures.length) throw new Error(`${failures.length} screenshot(s) failed:\n${failures.join("\n")}`);
 });

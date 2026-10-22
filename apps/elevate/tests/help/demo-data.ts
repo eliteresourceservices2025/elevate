@@ -128,6 +128,33 @@ export async function seedDemoData(): Promise<void> {
         values (${requesters[0].user_id}, ${who[0].email}, 'time_clock', 'I forgot to clock out yesterday', 'I closed my laptop without clocking out. My shift ended at 5:00 PM Phoenix time.', '/attendance'),
                (${requesters[0].user_id}, ${who[0].email}, 'sign_in', 'New phone, cannot get my code', 'I changed phones and my old authenticator is gone.', null)`;
     }
+    // Joy (the Employee account the screenshots use) gets a client, a schedule, prize days, a certificate, equipment and an announcement to read
+    const [joy] = await sql<{ id: string; user_id: string }[]>`select id, user_id from core.employees where lower(work_email) = 'joy.villanueva@example.com'`;
+    const [maria] = await sql<{ id: string }[]>`select id from core.users where lower(email) = 'maria.santos@example.com'`;
+    if (joy && client) {
+      const [assigned] = await sql`select 1 from core.client_assignments where employee_id = ${joy.id}`;
+      if (!assigned) await sql`insert into core.client_assignments (employee_id, client_id, start_date, hours_per_week) values (${joy.id}, ${client.id}, ${iso(new Date(Date.now() - 90 * 86_400_000))}, 40)`;
+      const [shift] = await sql`select 1 from time.schedules where employee_id = ${joy.id}`;
+      if (!shift) await sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone) values (${joy.id}, ${iso(new Date(Date.now() - 60 * 86_400_000))}, '08:00', '17:00', ${[1, 2, 3, 4, 5]}, 60, 'America/Phoenix')`;
+      const [awarded] = await sql`select 1 from time.leave_ledger where employee_id = ${joy.id}`;
+      if (!awarded && prize) await sql`insert into time.leave_ledger (employee_id, leave_type_id, entry_type, days, reason, effective_on, expires_on, created_by) values (${joy.id}, ${prize.id}, 'award', 2, 'Team game winner', ${iso(new Date(Date.now() - 10 * 86_400_000))}, ${iso(new Date(Date.now() + 170 * 86_400_000))}, ${maria?.id ?? null})`;
+      const [cert] = await sql`select 1 from talent.credentials where employee_id = ${joy.id}`;
+      if (!cert) await sql`insert into talent.credentials (employee_id, name, issued_on, expires_on, source, created_by) values (${joy.id}, 'HIPAA awareness', ${iso(new Date(Date.now() - 200 * 86_400_000))}, ${iso(new Date(Date.now() + 165 * 86_400_000))}, 'manual', ${maria?.id ?? null})`;
+    }
+    if (joy && maria) {
+      const [item] = await sql`select 1 from talent.assets where tag = 'ERS-LT-0001'`;
+      if (!item) {
+        const [laptop] = await sql<{ id: string }[]>`insert into talent.assets (tag, name, category, serial_number, status, created_by) values ('ERS-LT-0001', 'Dell Latitude 5440', 'laptop', 'SN-DEMO-0001', 'assigned', ${maria.id}) returning id`;
+        await sql`insert into talent.assets (tag, name, category, serial_number, status, created_by) values ('ERS-HS-0001', 'Logitech H390 headset', 'headset', 'SN-DEMO-0002', 'in_stock', ${maria.id})`;
+        await sql`insert into talent.asset_assignments (asset_id, employee_id, condition_out, assigned_by) values (${laptop.id}, ${joy.id}, 'good', ${maria.id})`;
+      }
+    }
+    // An announcement made by SQL has no recipients, so remove one an earlier run left; the screen makes it properly (startDemoCases)
+    await sql`
+      delete from docs.announcements a
+      where a.title = 'Welcome to ELEVATE'
+        and not exists (select 1 from docs.announcement_recipients r where r.announcement_id = a.id)`;
+
   } finally {
     await sql.end();
   }
@@ -149,6 +176,41 @@ export async function startDemoCases(page: Page): Promise<void> {
     await page.locator("#on-start").fill(iso(new Date()));
     await page.getByRole("button", { name: /^Start onboarding for 2 people/ }).click();
     await page.getByText(/Onboarding started/).first().waitFor({ timeout: 30_000 });
+  }
+
+  // Joy's own checklist, so the person's view of Onboarding has something in it
+  await page.goto("/onboarding");
+  if ((await page.getByText("Villanueva").count()) === 0) {
+    await page.getByRole("button", { name: "Start onboarding", exact: true }).first().click();
+    await page.getByLabel("Search people").fill("Villanueva");
+    await page.getByRole("list", { name: "People to choose from" }).getByRole("checkbox").first().check();
+    const own = page.getByRole("checkbox", { name: /own start date/ });
+    if (await own.count()) await own.uncheck();
+    await page.locator("#on-start").fill(iso(new Date()));
+    await page.getByRole("dialog").getByRole("button", { name: "Start onboarding", exact: true }).click();
+    // One person: the page goes straight to their case
+    await page.waitForURL(/\/onboarding\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+  }
+
+  // An announcement everyone has to acknowledge (made on the screen so every person is asked)
+  await page.goto("/announcements");
+  if ((await page.getByText("Welcome to ELEVATE").count()) === 0) {
+    await page.goto("/announcements/new");
+    await page.getByLabel("Title").fill("Welcome to ELEVATE");
+    await page.getByLabel("Message").fill("ELEVATE is where you clock in, ask for time off and see your documents. Please read this note and confirm below.");
+    await page.getByLabel("Require acknowledgment").check();
+    await page.getByRole("button", { name: "Post announcement" }).click();
+    await page.getByText("Announcement posted.").first().waitFor({ timeout: 30_000 });
+  }
+
+  // A review template, so Launch a cycle shows its form
+  await page.goto("/reviews/templates");
+  if ((await page.getByText("Quarterly check-in").count()) === 0) {
+    await page.getByLabel("Template name").first().fill("Quarterly check-in");
+    await page.getByLabel("Section").first().fill("The work");
+    await page.getByLabel("Question 1").first().fill("How did the work go this quarter?");
+    await page.getByRole("button", { name: "Save template" }).first().click();
+    await page.getByText("Template saved.").first().waitFor({ timeout: 30_000 });
   }
 
   // One offer template, so Make an offer shows the form

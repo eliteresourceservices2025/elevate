@@ -9,6 +9,11 @@ export const HELP_CATEGORIES = [
   { slug: "documents", title: "Documents and signing", description: "Files, folders, policies and ELEVATE Sign." },
   { slug: "reports", title: "Reports and analytics", description: "Headcount, attendance and hiring numbers." },
   { slug: "settings", title: "Settings and support", description: "Roles and access, support requests and privacy incident reports." },
+  // For everyone: what a person does for themselves
+  { slug: "my-time", title: "Your time and clock", description: "Clock in and out, corrections, extra hours, time off and your schedule." },
+  { slug: "my-profile", title: "Your profile and documents", description: "Your details, your files, your onboarding checklist and what you read and acknowledge." },
+  { slug: "growth", title: "Training and growth", description: "Your training, certificates, equipment, reviews and goals." },
+  { slug: "speaking-up", title: "Privacy and speaking up", description: "See what ELEVATE holds about you, report a concern, or report something anonymously." },
 ] as const;
 
 export type HelpCategorySlug = (typeof HELP_CATEGORIES)[number]["slug"];

@@ -717,5 +717,679 @@
       "w": 926,
       "h": 16
     }
+  },
+  "clock-in-and-out/01-clock": {
+    "clock button": {
+      "x": 1076,
+      "y": 6,
+      "w": 144,
+      "h": 44
+    }
+  },
+  "clock-in-and-out/02-my-time": {
+    "week": {
+      "x": 616,
+      "y": 222,
+      "w": 304,
+      "h": 225
+    },
+    "tabs": {
+      "x": 296,
+      "y": 156,
+      "w": 54,
+      "h": 42
+    }
+  },
+  "set-up-your-clock/01-clock-settings": {
+    "time zone": {
+      "x": 368,
+      "y": 359,
+      "w": 544,
+      "h": 32
+    },
+    "location": {
+      "x": 368,
+      "y": 427,
+      "w": 16,
+      "h": 16
+    }
+  },
+  "ask-for-a-time-correction/01-ask-correction": {
+    "reason": {
+      "x": 320,
+      "y": 617,
+      "w": 640,
+      "h": 32
+    },
+    "proof": {
+      "x": 320,
+      "y": 681,
+      "w": 640,
+      "h": 32
+    }
+  },
+  "report-a-clock-problem/01-report-issue": {
+    "what went wrong": {
+      "x": 368,
+      "y": 438,
+      "w": 544,
+      "h": 32
+    },
+    "screenshot": {
+      "x": 368,
+      "y": 700,
+      "w": 544,
+      "h": 32
+    }
+  },
+  "ask-for-extra-hours/01-ask-extra-hours": {
+    "client": {
+      "x": 313,
+      "y": 309,
+      "w": 910,
+      "h": 32
+    },
+    "approved by": {
+      "x": 313,
+      "y": 437,
+      "w": 910,
+      "h": 32
+    },
+    "proof": {
+      "x": 313,
+      "y": 565,
+      "w": 910,
+      "h": 32
+    }
+  },
+  "request-time-off/01-prize-days": {
+    "tabs": {
+      "x": 296,
+      "y": 156,
+      "w": 94,
+      "h": 42
+    },
+    "Request time off": {
+      "x": 1108,
+      "y": 80,
+      "w": 132,
+      "h": 32
+    }
+  },
+  "request-time-off/02-request-form": {
+    "leave type": {
+      "x": 320,
+      "y": 440,
+      "w": 203,
+      "h": 32
+    },
+    "first day": {
+      "x": 539,
+      "y": 440,
+      "w": 203,
+      "h": 32
+    },
+    "send": {
+      "x": 320,
+      "y": 592,
+      "w": 111,
+      "h": 32
+    }
+  },
+  "see-your-schedule/01-schedule": {
+    "my schedule": {
+      "x": 313,
+      "y": 201,
+      "w": 910,
+      "h": 28
+    },
+    "in Manila": {
+      "x": 296,
+      "y": 120,
+      "w": 574,
+      "h": 40
+    }
+  },
+  "update-your-profile/02-contact-request": {
+    "personal email": {
+      "x": 776,
+      "y": 816,
+      "w": 447,
+      "h": 32
+    },
+    "mobile": {
+      "x": 313,
+      "y": 816,
+      "w": 447,
+      "h": 32
+    }
+  },
+  "upload-your-documents/01-documents": {
+    "document type": {
+      "x": 313,
+      "y": 694,
+      "w": 447,
+      "h": 32
+    },
+    "file": {
+      "x": 296,
+      "y": 112,
+      "w": 944,
+      "h": 247
+    },
+    "Upload many files": {
+      "x": 313,
+      "y": 1042,
+      "w": 910,
+      "h": 24
+    },
+    "folder": {
+      "x": 372,
+      "y": 442,
+      "w": 107,
+      "h": 28
+    }
+  },
+  "finish-your-onboarding/01-onboarding": {
+    "your tasks": {
+      "x": 296,
+      "y": 201,
+      "w": 944,
+      "h": 28
+    },
+    "first task": {
+      "x": 309,
+      "y": 252,
+      "w": 246,
+      "h": 20
+    },
+    "open link": {
+      "x": 12,
+      "y": 1212,
+      "w": 232,
+      "h": 36
+    },
+    "your onboarding": {
+      "x": 296,
+      "y": 522,
+      "w": 944,
+      "h": 28
+    },
+    "late tag": {
+      "x": 830,
+      "y": 609,
+      "w": 47,
+      "h": 20
+    }
+  },
+  "acknowledge-announcements-and-policies/01-announcements": {
+    "needs ack": {
+      "x": 296,
+      "y": 64,
+      "w": 258,
+      "h": 20
+    },
+    "tabs": {
+      "x": 434,
+      "y": 201,
+      "w": 75,
+      "h": 38
+    }
+  },
+  "take-your-training/01-my-training": {
+    "open button": {
+      "x": 296,
+      "y": 204,
+      "w": 180,
+      "h": 32
+    }
+  },
+  "your-certificates-and-equipment/01-certificates": {
+    "my certificates": {
+      "x": 296,
+      "y": 184,
+      "w": 944,
+      "h": 28
+    }
+  },
+  "your-certificates-and-equipment/02-assets": {
+    "my assets": {
+      "x": 296,
+      "y": 164,
+      "w": 944,
+      "h": 28
+    }
+  },
+  "your-reviews-and-goals/01-reviews": {
+    "goals": {
+      "x": 1197,
+      "y": 80,
+      "w": 43,
+      "h": 24
+    },
+    "your reviews": {
+      "x": 296,
+      "y": 184,
+      "w": 944,
+      "h": 28
+    }
+  },
+  "see-what-elevate-holds-about-you/01-my-data": {
+    "ask HR": {
+      "x": 885,
+      "y": 80,
+      "w": 179,
+      "h": 32
+    },
+    "download": {
+      "x": 296,
+      "y": 164,
+      "w": 120,
+      "h": 32
+    },
+    "profile": {
+      "x": 313,
+      "y": 237,
+      "w": 734,
+      "h": 24
+    }
+  },
+  "report-a-privacy-concern/01-incidents": {
+    "report button": {
+      "x": 1048,
+      "y": 80,
+      "w": 144,
+      "h": 32
+    }
+  },
+  "report-a-privacy-concern/02-report-form": {
+    "what happened": {
+      "x": 320,
+      "y": 457,
+      "w": 640,
+      "h": 32
+    },
+    "send": {
+      "x": 320,
+      "y": 1119,
+      "w": 126,
+      "h": 32
+    }
+  },
+  "read-the-org-chart/01-org-chart": {},
+  "merge-duplicate-records/01-duplicates": {
+    "found": {
+      "x": 296,
+      "y": 232,
+      "w": 896,
+      "h": 28
+    },
+    "by hand": {
+      "x": 296,
+      "y": 328,
+      "w": 896,
+      "h": 28
+    },
+    "keep": {
+      "x": 313,
+      "y": 437,
+      "w": 425,
+      "h": 14
+    },
+    "merge into": {
+      "x": 750,
+      "y": 437,
+      "w": 425,
+      "h": 14
+    }
+  },
+  "review-a-change-request/01-requests": {},
+  "add-custom-fields/01-fields": {
+    "label": {
+      "x": 272,
+      "y": 12,
+      "w": 32,
+      "h": 32
+    },
+    "key": {
+      "x": 776,
+      "y": 265,
+      "w": 447,
+      "h": 32
+    },
+    "type": {
+      "x": 313,
+      "y": 355,
+      "w": 447,
+      "h": 32
+    },
+    "who sees": {
+      "x": 776,
+      "y": 355,
+      "w": 447,
+      "h": 32
+    },
+    "Add field": {
+      "x": 313,
+      "y": 439,
+      "w": 82,
+      "h": 32
+    }
+  },
+  "set-up-departments-teams-and-positions/01-structure": {
+    "departments": {
+      "x": 296,
+      "y": 212,
+      "w": 349,
+      "h": 28
+    },
+    "teams": {
+      "x": 296,
+      "y": 483,
+      "w": 491,
+      "h": 28
+    },
+    "positions": {
+      "x": 296,
+      "y": 902,
+      "w": 524,
+      "h": 28
+    }
+  },
+  "manage-clients/01-clients": {
+    "client name": {
+      "x": 313,
+      "y": 249,
+      "w": 295,
+      "h": 32
+    },
+    "patient info": {
+      "x": 313,
+      "y": 325,
+      "w": 13,
+      "h": 13
+    },
+    "Add client": {
+      "x": 928,
+      "y": 321,
+      "w": 89,
+      "h": 32
+    }
+  },
+  "set-team-clock-rules/01-rules": {
+    "allowed IPs": {
+      "x": 317,
+      "y": 355,
+      "w": 902,
+      "h": 64
+    },
+    "idle prompt": {
+      "x": 317,
+      "y": 473,
+      "w": 445,
+      "h": 32
+    },
+    "late grace": {
+      "x": 317,
+      "y": 575,
+      "w": 445,
+      "h": 32
+    },
+    "selfie": {
+      "x": 317,
+      "y": 643,
+      "w": 16,
+      "h": 16
+    },
+    "Save rules": {
+      "x": 317,
+      "y": 753,
+      "w": 92,
+      "h": 32
+    }
+  },
+  "handle-technical-issue-reports/01-issues": {
+    "all reports": {
+      "x": 296,
+      "y": 356,
+      "w": 944,
+      "h": 28
+    }
+  },
+  "check-training-status/01-training-status": {
+    "automatic": {
+      "x": 313,
+      "y": 349,
+      "w": 910,
+      "h": 28
+    },
+    "evidence": {
+      "x": 313,
+      "y": 647,
+      "w": 910,
+      "h": 28
+    },
+    "counts": {
+      "x": 296,
+      "y": 814,
+      "w": 114,
+      "h": 27
+    },
+    "filter": {
+      "x": 703,
+      "y": 889,
+      "w": 59,
+      "h": 36
+    }
+  },
+  "edit-training-courses/01-course-studio": {
+    "intro": {
+      "x": 296,
+      "y": 120,
+      "w": 574,
+      "h": 60
+    }
+  },
+  "run-a-review-cycle/01-reviews-hr": {
+    "Launch a cycle": {
+      "x": 1103,
+      "y": 80,
+      "w": 137,
+      "h": 36
+    },
+    "Templates": {
+      "x": 1017,
+      "y": 86,
+      "w": 78,
+      "h": 24
+    },
+    "cycles": {
+      "x": 296,
+      "y": 264,
+      "w": 944,
+      "h": 28
+    }
+  },
+  "run-a-review-cycle/02-launch": {
+    "cycle name": {
+      "x": 313,
+      "y": 227,
+      "w": 313,
+      "h": 32
+    },
+    "template": {
+      "x": 313,
+      "y": 293,
+      "w": 638,
+      "h": 32
+    },
+    "who": {
+      "x": 313,
+      "y": 407,
+      "w": 110,
+      "h": 20
+    },
+    "launch": {
+      "x": 313,
+      "y": 471,
+      "w": 110,
+      "h": 32
+    }
+  },
+  "write-a-team-review/01-reviews-lead": {
+    "goals": {
+      "x": 1197,
+      "y": 80,
+      "w": 43,
+      "h": 24
+    }
+  },
+  "import-people-from-talenthr/01-import": {
+    "upload": {
+      "x": 313,
+      "y": 249,
+      "w": 910,
+      "h": 28
+    },
+    "file types": {
+      "x": 313,
+      "y": 293,
+      "w": 910,
+      "h": 40
+    }
+  },
+  "import-people-from-talenthr/02-go-live": {
+    "first rows": {
+      "x": 313,
+      "y": 303,
+      "w": 910,
+      "h": 24
+    },
+    "privacy notice": {
+      "x": 313,
+      "y": 452,
+      "w": 514,
+      "h": 24
+    },
+    "mark done": {
+      "x": 1135,
+      "y": 837,
+      "w": 88,
+      "h": 28
+    }
+  },
+  "read-the-audit-log/01-audit-log": {
+    "filter": {
+      "x": 296,
+      "y": 232,
+      "w": 213,
+      "h": 32
+    },
+    "table": {
+      "x": 297,
+      "y": 289,
+      "w": 942,
+      "h": 1761
+    }
+  },
+  "set-people-records-retention/01-retention": {
+    "archive months": {
+      "x": 317,
+      "y": 293,
+      "w": 445,
+      "h": 32
+    },
+    "anonymize months": {
+      "x": 774,
+      "y": 293,
+      "w": 445,
+      "h": 32
+    },
+    "would move": {
+      "x": 296,
+      "y": 442,
+      "w": 944,
+      "h": 28
+    }
+  },
+  "update-your-profile/01-profile": {
+    "photo": {
+      "x": 321,
+      "y": 260,
+      "w": 114,
+      "h": 28
+    },
+    "contact request": {
+      "x": 296,
+      "y": 711,
+      "w": 944,
+      "h": 20
+    },
+    "about me": {
+      "x": 296,
+      "y": 755,
+      "w": 114,
+      "h": 32
+    },
+    "tabs": {
+      "x": 296,
+      "y": 412,
+      "w": 944,
+      "h": 42
+    }
+  },
+  "acknowledge-announcements-and-policies/02-acknowledge": {
+    "button": {
+      "x": 317,
+      "y": 430,
+      "w": 205,
+      "h": 32
+    }
+  },
+  "report-something-anonymously/02-check-a-case": {
+    "case code": {
+      "x": 320,
+      "y": 236,
+      "w": 640,
+      "h": 46
+    },
+    "passphrase": {
+      "x": 320,
+      "y": 327,
+      "w": 640,
+      "h": 46
+    }
+  },
+  "report-something-anonymously/01-send-a-report": {
+    "about": {
+      "x": 320,
+      "y": 697,
+      "w": 640,
+      "h": 44
+    },
+    "what happened": {
+      "x": 320,
+      "y": 786,
+      "w": 640,
+      "h": 176
+    },
+    "attach": {
+      "x": 320,
+      "y": 1039,
+      "w": 640,
+      "h": 25
+    },
+    "privacy": {
+      "x": 339,
+      "y": 224,
+      "w": 603,
+      "h": 30
+    },
+    "send": {
+      "x": 320,
+      "y": 1170,
+      "w": 125,
+      "h": 46
+    }
   }
 }

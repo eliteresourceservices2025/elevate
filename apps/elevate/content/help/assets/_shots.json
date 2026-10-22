@@ -258,5 +258,210 @@
     "article": "assets-and-certificates",
     "file": "03-register-item.png",
     "alt": "Register an item: tag, name, category and serial number."
+  },
+  {
+    "article": "clock-in-and-out",
+    "file": "01-clock.png",
+    "alt": "The time clock is at the top right of every page."
+  },
+  {
+    "article": "clock-in-and-out",
+    "file": "02-my-time.png",
+    "alt": "My time, under Attendance, shows today and your week."
+  },
+  {
+    "article": "set-up-your-clock",
+    "file": "01-clock-settings.png",
+    "alt": "Your clock settings: your time zone and the location option."
+  },
+  {
+    "article": "ask-for-a-time-correction",
+    "file": "01-ask-correction.png",
+    "alt": "Ask for a time correction: choose what happened, say why and add a screenshot."
+  },
+  {
+    "article": "report-a-clock-problem",
+    "file": "01-report-issue.png",
+    "alt": "Report a technical issue: what went wrong, and a screenshot."
+  },
+  {
+    "article": "ask-for-extra-hours",
+    "file": "01-ask-extra-hours.png",
+    "alt": "Ask to work extra hours: the client, the time, who approved it, and a screenshot."
+  },
+  {
+    "article": "request-time-off",
+    "file": "01-prize-days.png",
+    "alt": "Time off: your prize days and your requests."
+  },
+  {
+    "article": "request-time-off",
+    "file": "02-request-form.png",
+    "alt": "Request time off: leave type, first and last day, and a note."
+  },
+  {
+    "article": "see-your-schedule",
+    "file": "01-schedule.png",
+    "alt": "Your schedule, in your client's time and in Manila time."
+  },
+  {
+    "article": "update-your-profile",
+    "file": "01-profile.png",
+    "alt": "My profile: your photo, your details and the request links."
+  },
+  {
+    "article": "update-your-profile",
+    "file": "02-contact-request.png",
+    "alt": "Request a change to your contact details. HR reviews it before it applies."
+  },
+  {
+    "article": "upload-your-documents",
+    "file": "01-documents.png",
+    "alt": "Your Documents tab: choose the type, add a title and the file, then Upload."
+  },
+  {
+    "article": "finish-your-onboarding",
+    "file": "01-onboarding.png",
+    "alt": "Your onboarding checklist: who owns each task and what is due."
+  },
+  {
+    "article": "acknowledge-announcements-and-policies",
+    "file": "01-announcements.png",
+    "alt": "Announcements: the ones that need your acknowledgment are marked."
+  },
+  {
+    "article": "acknowledge-announcements-and-policies",
+    "file": "02-acknowledge.png",
+    "alt": "Read it, then click I have read and understand."
+  },
+  {
+    "article": "take-your-training",
+    "file": "01-my-training.png",
+    "alt": "My training: open your assigned course."
+  },
+  {
+    "article": "your-certificates-and-equipment",
+    "file": "01-certificates.png",
+    "alt": "My certificates, with the dates they end."
+  },
+  {
+    "article": "your-certificates-and-equipment",
+    "file": "02-assets.png",
+    "alt": "My assets: the equipment assigned to you."
+  },
+  {
+    "article": "your-reviews-and-goals",
+    "file": "01-reviews.png",
+    "alt": "Reviews: your reviews and your goals."
+  },
+  {
+    "article": "see-what-elevate-holds-about-you",
+    "file": "01-my-data.png",
+    "alt": "My data: everything ELEVATE holds about you, with downloads and a way to ask HR."
+  },
+  {
+    "article": "report-a-privacy-concern",
+    "file": "01-incidents.png",
+    "alt": "Privacy incidents: click Report an incident."
+  },
+  {
+    "article": "report-a-privacy-concern",
+    "file": "02-report-form.png",
+    "alt": "Say what happened, when, and what you have done. No patient details."
+  },
+  {
+    "article": "read-the-org-chart",
+    "file": "01-org-chart.png",
+    "alt": "The org chart: the chart view and the list view."
+  },
+  {
+    "article": "merge-duplicate-records",
+    "file": "01-duplicates.png",
+    "alt": "Duplicate people: choose the record that stays, and merge by hand."
+  },
+  {
+    "article": "review-a-change-request",
+    "file": "01-requests.png",
+    "alt": "Change requests: Pending, Approved and Rejected."
+  },
+  {
+    "article": "add-custom-fields",
+    "file": "01-fields.png",
+    "alt": "Custom fields: label, key, type, who can see it."
+  },
+  {
+    "article": "set-up-departments-teams-and-positions",
+    "file": "01-structure.png",
+    "alt": "Structure: departments, teams and positions."
+  },
+  {
+    "article": "manage-clients",
+    "file": "01-clients.png",
+    "alt": "Clients: name, time zone, holidays and whether they work with patient information."
+  },
+  {
+    "article": "set-team-clock-rules",
+    "file": "01-rules.png",
+    "alt": "Rules, per team: allowed IPs, idle prompt, grace and selfie."
+  },
+  {
+    "article": "handle-technical-issue-reports",
+    "file": "01-issues.png",
+    "alt": "Technical issues: your reports and all reports."
+  },
+  {
+    "article": "check-training-status",
+    "file": "01-training-status.png",
+    "alt": "Training status: who passed, who has not, and who is overdue."
+  },
+  {
+    "article": "edit-training-courses",
+    "file": "01-course-studio.png",
+    "alt": "Course studio: read, compare and edit the courses."
+  },
+  {
+    "article": "run-a-review-cycle",
+    "file": "01-reviews-hr.png",
+    "alt": "Reviews: Templates, Launch a cycle and the list of cycles."
+  },
+  {
+    "article": "run-a-review-cycle",
+    "file": "02-launch.png",
+    "alt": "Launch a review cycle: name, type, template, who is reviewed and due dates."
+  },
+  {
+    "article": "write-a-team-review",
+    "file": "01-reviews-lead.png",
+    "alt": "Reviews, as a lead: the reviews you write and your team's reviews."
+  },
+  {
+    "article": "import-people-from-talenthr",
+    "file": "01-import.png",
+    "alt": "Import from TalentHR: upload, preview, commit, reconcile."
+  },
+  {
+    "article": "import-people-from-talenthr",
+    "file": "02-go-live.png",
+    "alt": "The go-live checklist: some rows check themselves, the rest you tick."
+  },
+  {
+    "article": "read-the-audit-log",
+    "file": "01-audit-log.png",
+    "alt": "The audit log: who did what, and when."
+  },
+  {
+    "article": "set-people-records-retention",
+    "file": "01-retention.png",
+    "alt": "People records retention: periods, counts and the nightly job."
+  },
+  {
+    "article": "report-something-anonymously",
+    "file": "01-send-a-report.png",
+    "alt": "Safe Voice: say what this is about and what happened. No name is asked."
+  },
+  {
+    "article": "report-something-anonymously",
+    "file": "02-check-a-case.png",
+    "alt": "To read a reply, type your case code and passphrase."
   }
 ]

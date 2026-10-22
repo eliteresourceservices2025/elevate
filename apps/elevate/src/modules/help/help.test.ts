@@ -80,6 +80,9 @@ describe("the real articles", () => {
     expect(meta.category).toBe(category);
     for (const image of referencedImages(body)) expect(existsSync(path.join(ROOT, "assets", image)), `${image} is missing`).toBe(true);
     if (meta.video) expect(existsSync(path.join(ROOT, "videos", `${meta.video}.mp4`)), `video ${meta.video} is missing`).toBe(true);
+    // The Markdown renderer has no checkboxes (a "- [ ]" shows its brackets) and renders ## as h3, which would skip a heading level.
+    expect(body, "use plain bullets, not - [ ]").not.toMatch(/^- \[ \] /m);
+    expect(body, "use # for section headings").not.toMatch(/^#{2,} /m);
     // Guides are for people who are not technical: no real email addresses in the text, apart from the example domain.
     const emails = body.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? [];
     for (const email of emails) expect(email.endsWith("@example.com"), `${email} is not an example address`).toBe(true);
