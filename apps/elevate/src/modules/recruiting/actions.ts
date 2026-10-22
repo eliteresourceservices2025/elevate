@@ -16,19 +16,19 @@ import { createInterviewEvent, deleteInterviewEvent, discardInterviewEvent, remo
 import { googleEventIdFor } from "./google";
 import { queueEmails } from "@/modules/notifications/email-queue";
 import { notify } from "@/modules/notifications/service";
-import { buildInterviewIcs, interviewMail } from "./mail";
+import { buildInterviewIcs, interviewMail, validateTemplate } from "./mail";
 import { POOL_REFUSED, closeInTx, moveInTx, poolInTx } from "./transitions";
 import { deleteApplicantSelfId } from "@/modules/demographics/service";
 import { offers } from "@/modules/offers/schema";
 import { onboardingCases } from "@/modules/onboarding/schema";
-import { applicationStageHistory, applicationTagLinks, applicationTags, applications, candidateEmails, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
+import { applicationStageHistory, applicationTagLinks, emailTemplates, applicationTags, applications, candidateEmails, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
 import { sendRecruitingEmailsNow } from "./immediate";
 import { authorizeForOpening, freeSlug, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
 import { clearBanner } from "./careers-banner";
 import { MAX_TAGS_PER_APPLICATION, isApplyable, type OpeningStatus } from "./constants";
 import { keywordColumns, parseKeywordList } from "./keywords";
 import { extractResumeText } from "./resume-text";
-import { mergeSchema, poolSchema, poolToOpeningSchema, rescoreSchema, archiveTagSchema, bulkSchema, createTagSchema, setSourceSchema, setTagsSchema, careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
+import { resetTemplateSchema, saveTemplateSchema, mergeSchema, poolSchema, poolToOpeningSchema, rescoreSchema, archiveTagSchema, bulkSchema, createTagSchema, setSourceSchema, setTagsSchema, careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
 const MANILA = "Asia/Manila";
@@ -776,5 +776,44 @@ export async function mergeCandidates(input: unknown): Promise<ActionResult<{ mo
     refreshApplicants();
     revalidatePath("/recruiting/applicants/duplicates");
     return { ok: true, data: { moved: done.moved } };
+  });
+}
+
+// ---- Applicant email wording --------------------------------------------------------------------------------------------------
+
+/** Saves HR's own wording for one applicant email. The text is plain and may use only {{first_name}} and {{job_title}}. */
+export async function saveEmailTemplate(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.manage_email_templates");
+    const parsed = saveTemplateSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { kind } = parsed.data;
+    const template = { subject: parsed.data.subject.trim(), body: parsed.data.body.replace(/\r\n/g, "\n").trim() };
+    const problem = validateTemplate(template);
+    if (problem) return fail(problem);
+    await db.transaction(async (tx) => {
+      await tx.insert(emailTemplates).values({ kind, ...template, updatedBy: actor.id }).onConflictDoUpdate({ target: emailTemplates.kind, set: { ...template, updatedBy: actor.id, updatedAt: new Date() } });
+      // The audit row names the email, never its words.
+      await writeAudit({ actor, action: "recruiting.email_template_save", targetType: "email_template", targetId: undefined, metadata: { kind } }, tx);
+    });
+    revalidatePath("/recruiting/email-templates");
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Goes back to the built-in wording for one applicant email. */
+export async function resetEmailTemplate(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.manage_email_templates");
+    const parsed = resetTemplateSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    await db.transaction(async (tx) => {
+      await tx.delete(emailTemplates).where(eq(emailTemplates.kind, parsed.data.kind));
+      await writeAudit({ actor, action: "recruiting.email_template_reset", targetType: "email_template", targetId: undefined, metadata: { kind: parsed.data.kind } }, tx);
+    });
+    revalidatePath("/recruiting/email-templates");
+    return { ok: true, data: undefined };
   });
 }

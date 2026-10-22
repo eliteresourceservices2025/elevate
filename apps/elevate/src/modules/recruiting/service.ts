@@ -12,10 +12,10 @@ import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { notify } from "@/modules/notifications/service";
 import { POOL_MONTHS, RESUME_KINDS, RESUME_MAX_BYTES, addMonthsUtc, isApplyable, type OpeningStatus } from "./constants";
 import { keywordColumns } from "./keywords";
-import { receivedMail } from "./mail";
+import { BUILT_IN_TEMPLATES, receivedMail, type MailTemplate, type TemplateKind } from "./mail";
 import { extractResumeText } from "./resume-text";
 import { slugify, uniqueSlug } from "./slug";
-import { applicationStageHistory, applications, candidateEmails, candidates, jobOpenings, openingHiringTeam, recruitingSettings } from "./schema";
+import { applicationStageHistory, applications, candidateEmails, candidates, emailTemplates, jobOpenings, openingHiringTeam, recruitingSettings } from "./schema";
 import { applySchema } from "./validators";
 
 // Internals that take the acting user as an argument: not a "use server" file, so they are not public endpoints.
@@ -35,6 +35,11 @@ export async function authorizeForOpening(user: AuthzUser, action: ActionName, o
 export async function openingIdOfApplication(executor: Executor, applicationId: string): Promise<string | null> {
   const [row] = await executor.select({ openingId: applications.openingId }).from(applications).where(eq(applications.id, applicationId));
   return row?.openingId ?? null;
+}
+
+export async function loadTemplate(executor: Executor, kind: TemplateKind): Promise<MailTemplate> {
+  const [row] = await executor.select({ subject: emailTemplates.subject, body: emailTemplates.body }).from(emailTemplates).where(eq(emailTemplates.kind, kind));
+  return row ?? BUILT_IN_TEMPLATES[kind];
 }
 
 export async function getRetentionSettings(executor: Executor = db) {
@@ -138,7 +143,7 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
       await writeAudit({ actor: null, action: "recruiting.apply", targetType: "application", targetId: app.id, after: { openingId: opening.id, noticeVersion } }, tx);
 
       if (opening.sendAck) {
-        const mail = receivedMail({ fullName: v.fullName, jobTitle: opening.title });
+        const mail = receivedMail({ fullName: v.fullName, jobTitle: opening.title }, await loadTemplate(tx, "received"));
         await queueCandidateEmail(tx, { applicationId: app.id, toEmail: v.email, kind: "received", subject: mail.subject, text: mail.text, html: mail.html, dedupeKey: `received:${app.id}` });
       }
       const team = new Set([...(opening.createdBy ? [opening.createdBy] : []), ...(await hiringTeamIds(tx, opening.id))]);

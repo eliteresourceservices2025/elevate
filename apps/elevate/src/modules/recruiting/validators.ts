@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BULK_MAX, CLOSE_KINDS, CRITERIA, INTERVIEW_KINDS, MAX_TAGS_PER_APPLICATION, OPENING_STATUSES, RECOMMENDATIONS, SOURCES, STAGES, TAG_NAME_MAX, TAG_NAME_PATTERN } from "./constants";
 import { SLUG_PATTERN } from "./slug";
+import { BODY_MAX, SUBJECT_MAX, TEMPLATE_KINDS } from "./mail";
 
 const uuid = z.string().uuid("Invalid id");
 const text = (max: number) => z.string().trim().max(max);
@@ -140,3 +141,8 @@ export const rescoreSchema = z.object({ openingId: uuid });
 export const poolSchema = z.object({ applicationId: uuid, inPool: z.boolean() });
 export const poolToOpeningSchema = z.object({ applicationId: uuid, openingId: uuid });
 export const mergeSchema = z.object({ keepCandidateId: uuid, mergeCandidateId: uuid });
+
+// ---- Applicant email wording ---------------------------------------------------------------------------------------------------
+
+export const saveTemplateSchema = z.object({ kind: z.enum(TEMPLATE_KINDS), subject: z.string().max(SUBJECT_MAX + 200), body: z.string().max(BODY_MAX + 2000) });
+export const resetTemplateSchema = z.object({ kind: z.enum(TEMPLATE_KINDS) });

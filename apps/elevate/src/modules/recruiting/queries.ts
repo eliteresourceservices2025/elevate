@@ -11,11 +11,14 @@ import { getPrivacyNotice } from "@/modules/privacy/queries";
 import { BOARD_STAGES, STAGES, type CloseKind, type CriterionKey, type Source, type Stage } from "./constants";
 import { escapeLike, type ApplicantFilters } from "./applicant-filters";
 import { groupDuplicates } from "./duplicates";
+import { BUILT_IN_TEMPLATES, TEMPLATE_KINDS, TEMPLATE_LABELS, TEMPLATE_WHEN, type MailTemplate, type TemplateKind } from "./mail";
+import { FUNNEL_STAGES, percent, reachedCounts, type FunnelStage } from "./report-math";
+import { todayInZone } from "@/modules/org/service";
 import { keywordSetKey } from "./keywords";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { pageInfo } from "@/lib/pagination";
 import { looksLikeId } from "./slug";
-import { applicationStageHistory, applicationTagLinks, applicationTags, applications, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, scorecards } from "./schema";
+import { applicationStageHistory, applicationTagLinks, emailTemplates, applicationTags, applications, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, scorecards } from "./schema";
 import { calendarStatus } from "./calendar";
 import { authorizeForOpening, getRetentionSettings, hiringTeamIds } from "./service";
 
@@ -484,4 +487,91 @@ export async function listDuplicateGroups(): Promise<DuplicateGroupView[]> {
       return { id, name: c.fullName, email: c.email, phone: c.phone, inPool: c.inPool, appliedFor: apps.filter((a) => a.candidateId === id).map((a) => ({ title: a.title, stage: a.stage as Stage })) };
     }),
   }));
+}
+
+// ---- Reports and email wording --------------------------------------------------------------------------------------------
+
+export type ReportFilters = { from: string | null; to: string | null; openingId: string | null };
+export type RecruitingReport = {
+  range: { from: string; to: string };
+  total: number;
+  funnel: { stage: FunnelStage; reached: number; ofApplied: number | null; ofPrevious: number | null }[];
+  closed: { kind: CloseKind | null; n: number }[];
+  timeInStage: { stage: Stage; medianDays: number | null; n: number }[];
+  sources: { source: Source | null; total: number; interviews: number; hired: number }[];
+  stale: { openingId: string; title: string; n: number }[];
+  openings: { id: string; title: string }[];
+};
+
+const REPORT_DEFAULT_DAYS = 90;
+const STALE_DAYS = 14;
+const isoPlusDays = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * Counts only, never names: how far applications got, how long they sit in each stage, which sources turn into interviews and hires, how
+ * applications ended, and where open applications have been waiting. For applications that came in within the date range (default: the
+ * last 90 days), optionally for one job.
+ */
+export async function getRecruitingReport(f: ReportFilters): Promise<RecruitingReport> {
+  const user = await requireUser();
+  await authorize(user, "recruiting.reports");
+  const today = todayInZone();
+  const to = f.to ?? today;
+  const from = f.from ?? isoPlusDays(to, -REPORT_DEFAULT_DAYS);
+  const range = from <= to ? { from, to } : { from: to, to: from };
+  const job = f.openingId ? sql`and a.opening_id = ${f.openingId}` : sql``;
+  const inRange = sql`(a.applied_at at time zone ${DEFAULT_TIMEZONE})::date between ${range.from}::date and ${range.to}::date ${job}`;
+  // How far each application got: 0 applied, 1 screening, 2 interview, 3 assessment, 4 offer, 5 hired (closed ones count where they stopped).
+  const furthest = sql`(select application_id, max(case to_stage when 'screening' then 1 when 'interview' then 2 when 'assessment' then 3 when 'offer' then 4 when 'hired' then 5 else 0 end) as idx from talent.application_stage_history group by application_id)`;
+  const q = async <T>(query: ReturnType<typeof sql>) => (await db.execute(query)) as unknown as T[];
+
+  const reach = await q<{ idx: number; n: number }>(sql`select coalesce(m.idx, 0)::int as idx, count(*)::int as n from talent.applications a left join ${furthest} m on m.application_id = a.id where ${inRange} group by 1`);
+  const reached = reachedCounts(Object.fromEntries(reach.map((r) => [r.idx, r.n])));
+  const total = reached[0];
+
+  const closed = await q<{ kind: string | null; n: number }>(sql`select a.close_kind as kind, count(*)::int as n from talent.applications a where ${inRange} and a.stage = 'rejected' group by a.close_kind order by n desc`);
+  const timing = await q<{ stage: string; n: number; median_days: number | null }>(sql`
+    with s as (
+      select h.application_id, h.to_stage as stage, h.at, lead(h.at) over (partition by h.application_id order by h.at, h.id) as next_at
+      from talent.application_stage_history h join talent.applications a on a.id = h.application_id where ${inRange}
+    )
+    select stage, count(*)::int as n, percentile_cont(0.5) within group (order by extract(epoch from (coalesce(next_at, now()) - at)) / 86400.0) as median_days
+    from s where stage in ('applied','screening','interview','assessment','offer') group by stage`);
+  const sources = await q<{ source: string | null; total: number; interviews: number; hired: number }>(sql`
+    select a.source, count(*)::int as total, count(*) filter (where coalesce(m.idx, 0) >= 2)::int as interviews, count(*) filter (where a.stage = 'hired')::int as hired
+    from talent.applications a left join ${furthest} m on m.application_id = a.id where ${inRange} group by a.source order by total desc`);
+  const stale = await q<{ opening_id: string; title: string; n: number }>(sql`
+    select j.id as opening_id, j.title, count(*)::int as n from talent.applications a join talent.job_openings j on j.id = a.opening_id
+    where a.stage not in ('hired','rejected') and a.stage_changed_at < now() - ${`${STALE_DAYS} days`}::interval and j.archived_at is null ${job}
+    group by j.id, j.title order by n desc, j.title limit 10`);
+  const openings = await db.select({ id: jobOpenings.id, title: jobOpenings.title }).from(jobOpenings).where(isNull(jobOpenings.archivedAt)).orderBy(asc(jobOpenings.title));
+
+  return {
+    range,
+    total,
+    funnel: FUNNEL_STAGES.map((stage, i) => ({ stage, reached: reached[i], ofApplied: percent(reached[i], total), ofPrevious: i === 0 ? null : percent(reached[i], reached[i - 1]) })),
+    closed: closed.map((c) => ({ kind: c.kind as CloseKind | null, n: c.n })),
+    timeInStage: (["applied", "screening", "interview", "assessment", "offer"] as const).map((stage) => {
+      const row = timing.find((t) => t.stage === stage);
+      return { stage, medianDays: row?.median_days === null || row?.median_days === undefined ? null : Number(row.median_days), n: row?.n ?? 0 };
+    }),
+    sources: sources.map((s) => ({ source: s.source as Source | null, total: s.total, interviews: s.interviews, hired: s.hired })),
+    stale: stale.map((s) => ({ openingId: s.opening_id, title: s.title, n: s.n })),
+    openings,
+  };
+}
+
+export const REPORT_STALE_DAYS = STALE_DAYS;
+
+export type EmailTemplateView = { kind: TemplateKind; label: string; when: string; subject: string; body: string; custom: boolean; builtIn: MailTemplate };
+
+/** The wording of each applicant email: HR's own if they saved one, else the built-in. */
+export async function listEmailTemplates(): Promise<EmailTemplateView[]> {
+  const user = await requireUser();
+  await authorize(user, "recruiting.manage_email_templates");
+  const saved = await db.select().from(emailTemplates);
+  return TEMPLATE_KINDS.map((kind) => {
+    const row = saved.find((s) => s.kind === kind);
+    return { kind, label: TEMPLATE_LABELS[kind], when: TEMPLATE_WHEN[kind], subject: row?.subject ?? BUILT_IN_TEMPLATES[kind].subject, body: row?.body ?? BUILT_IN_TEMPLATES[kind].body, custom: Boolean(row), builtIn: BUILT_IN_TEMPLATES[kind] };
+  });
 }

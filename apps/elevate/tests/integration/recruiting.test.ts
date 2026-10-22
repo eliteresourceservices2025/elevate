@@ -1128,3 +1128,95 @@ describe("talent pool and duplicate merge", () => {
     expect((await queries.listDuplicateGroups()).some((g) => g.candidates.some((c) => c.id === c2))).toBe(false);
   });
 });
+
+describe("applicant email wording", () => {
+  const bodyOf = async (appId: string, kind: string) => (await rows<{ body: string }>(sql`select body::text as body from talent.candidate_emails where application_id = ${appId} and kind = ${kind}`))[0]?.body ?? "";
+
+  it("uses HR's own wording once saved (names filled in, nothing else), the built-in until then, and goes back on reset", async () => {
+    const opening = await openJob(uniq("Wording "));
+    const before = `${uniq("tpl")}@example.com`;
+    await apply(opening, { email: before, fullName: "Ana Reyes" });
+    expect(await bodyOf((await appFor(opening, before))!, "received")).toContain("a member of our team will review it");
+
+    as(hr);
+    try {
+      expect(await actions.saveEmailTemplate({ kind: "received", subject: "Salamat, {{first_name}}!", body: "Hi {{first_name}}, we got your application for {{job_title}}.\n\nWe will reply soon." })).toEqual({ ok: true, data: undefined });
+      const after = `${uniq("tpl")}@example.com`;
+      await apply(opening, { email: after, fullName: "Ben <Tan>" });
+      const afterApp = (await appFor(opening, after))!;
+      const text = await bodyOf(afterApp, "received");
+      expect(text).toContain("we got your application for");
+      expect(text).toContain("Hi Ben");
+      expect(text).not.toContain("a member of our team will review it");
+      expect((await rows<{ subject: string }>(sql`select subject from talent.candidate_emails where application_id = ${afterApp}`))[0].subject).toBe("Salamat, Ben!");
+      expect((await queries.listEmailTemplates()).find((t) => t.kind === "received")).toMatchObject({ custom: true, subject: "Salamat, {{first_name}}!" });
+      // refused: unknown field, empty message; the audit trail names the email, never the words
+      expect(await actions.saveEmailTemplate({ kind: "received", subject: "Hi", body: "Your score is {{score}}" })).toMatchObject({ ok: false });
+      expect(await actions.saveEmailTemplate({ kind: "received", subject: "Hi", body: "  " })).toMatchObject({ ok: false });
+      const audit = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where action = 'recruiting.email_template_save' order by occurred_at desc limit 1`);
+      expect(JSON.stringify(audit[0].metadata)).toBe(JSON.stringify({ kind: "received" }));
+
+      expect(await actions.resetEmailTemplate({ kind: "received" })).toEqual({ ok: true, data: undefined });
+      const again = `${uniq("tpl")}@example.com`;
+      await apply(opening, { email: again });
+      expect(await bodyOf((await appFor(opening, again))!, "received")).toContain("a member of our team will review it");
+    } finally {
+      await actions.resetEmailTemplate({ kind: "received" });
+    }
+    // only HR and Super Admin
+    for (const u of [recruiter, lead, exec, employee]) {
+      as(u);
+      expect(await actions.saveEmailTemplate({ kind: "received", subject: "Hi", body: "Hello" })).toEqual({ ok: false, error: NO_ACCESS });
+      await expect(queries.listEmailTemplates()).rejects.toThrow();
+    }
+  });
+
+  it("sends the not-qualified wording when an application is closed as not qualified, and the rejection wording otherwise", async () => {
+    const opening = await openJob(uniq("Close "));
+    const a = `${uniq("nq")}@example.com`;
+    const b = `${uniq("rj")}@example.com`;
+    await apply(opening, { email: a });
+    await apply(opening, { email: b });
+    const [appA, appB] = [(await appFor(opening, a))!, (await appFor(opening, b))!];
+    as(recruiter);
+    await actions.rejectApplication({ applicationId: appA, kind: "not_qualified", reason: "Missing certification", notifyCandidate: true });
+    await actions.rejectApplication({ applicationId: appB, kind: "rejected", reason: "Another candidate", notifyCandidate: true });
+    expect(await bodyOf(appA, "rejection")).toContain("requirements for this role");
+    expect(await bodyOf(appB, "rejection")).toContain("will not be moving forward");
+    expect(await bodyOf(appA, "rejection")).not.toContain("Missing certification"); // the reason is internal only
+  });
+});
+
+describe("recruiting report", () => {
+  it("counts how far applications got, where they came from, how they ended and how long they waited, for one job", async () => {
+    const opening = await openJob(uniq("Report "));
+    const mails = [1, 2, 3].map((n) => `${uniq(`rep${n}-`)}@example.com`);
+    await apply(opening, { email: mails[0], source: "linkedin" });
+    await apply(opening, { email: mails[1], source: "linkedin" });
+    await apply(opening, { email: mails[2] });
+    const [a1, a2, a3] = await Promise.all(mails.map(async (m) => (await appFor(opening, m))!));
+    as(recruiter);
+    await actions.moveApplication({ applicationId: a2, to: "screening" });
+    await actions.moveApplication({ applicationId: a2, to: "interview" });
+    await actions.moveApplication({ applicationId: a3, to: "screening" });
+    await actions.rejectApplication({ applicationId: a3, kind: "not_qualified", reason: "Missing certification" });
+    // a1 has waited more than two weeks with no change
+    await db.execute(sql`update talent.applications set stage_changed_at = now() - interval '20 days' where id = ${a1}`);
+
+    const report = await queries.getRecruitingReport({ from: null, to: null, openingId: opening });
+    expect(report.total).toBe(3);
+    expect(report.funnel.map((f) => f.reached)).toEqual([3, 2, 1, 0, 0, 0]); // applied, screening (a2, a3), interview (a2)
+    expect(report.funnel[1]).toMatchObject({ ofApplied: 67, ofPrevious: 67 });
+    expect(report.closed).toEqual([{ kind: "not_qualified", n: 1 }]);
+    expect(report.sources.find((s) => s.source === "linkedin")).toMatchObject({ total: 2, interviews: 1, hired: 0 });
+    expect(report.sources.find((s) => s.source === null)).toMatchObject({ total: 1 });
+    expect(report.timeInStage.find((t) => t.stage === "applied")).toMatchObject({ n: 3 });
+    expect(report.stale).toEqual([expect.objectContaining({ openingId: opening, n: 1 })]);
+    // a range with no applications is empty, and only HR, Super Admin and recruiters may read reports
+    expect((await queries.getRecruitingReport({ from: "2000-01-01", to: "2000-01-31", openingId: opening })).total).toBe(0);
+    for (const u of [lead, exec, employee]) {
+      as(u);
+      await expect(queries.getRecruitingReport({ from: null, to: null, openingId: null })).rejects.toThrow();
+    }
+  });
+});

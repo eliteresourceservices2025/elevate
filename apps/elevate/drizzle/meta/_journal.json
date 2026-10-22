@@ -673,6 +673,13 @@
       "when": 1792706264831,
       "tag": "0095_ats_talent_pool",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1792707190616,
+      "tag": "0096_ats_email_templates",
+      "breakpoints": true
     }
   ]
 }

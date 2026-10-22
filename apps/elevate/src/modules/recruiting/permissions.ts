@@ -13,6 +13,9 @@ export const recruitingPermissions = definePermissions({
   // The talent pool (applicants who agreed to be kept for future roles) and merging two records of the same person (HR only).
   "recruiting.pool": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   "recruiting.merge": { roles: { super_admin: "all", hr_admin: "all" } },
+  // Recruiting reports (counts only, no names) and the wording of the emails applicants get (HR).
+  "recruiting.reports": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
+  "recruiting.manage_email_templates": { roles: { super_admin: "all", hr_admin: "all" } },
   "recruiting.bulk": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   "recruiting.interview": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   "recruiting.scorecard": { roles: { super_admin: "own", hr_admin: "own", recruiter: "own", team_lead: "own" } },

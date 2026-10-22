@@ -363,3 +363,18 @@ export const applicationTagLinks = talent
     (t) => [primaryKey({ columns: [t.applicationId, t.tagId] }), index("application_tags_tag_idx").on(t.tagId)],
   )
   .enableRLS();
+
+/** HR's own wording for the applicant emails (one row per kind: received, rejection, not_qualified). No row = the built-in wording. */
+export const emailTemplates = talent
+  .table(
+    "email_templates",
+    {
+      kind: text("kind").primaryKey(),
+      subject: text("subject").notNull(),
+      body: text("body").notNull(),
+      updatedBy: uuid("updated_by").references(() => users.id),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [check("email_templates_kind_chk", sql`${t.kind} in ('received','rejection','not_qualified')`)],
+  )
+  .enableRLS();

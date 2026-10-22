@@ -5,9 +5,9 @@ import type { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { canMove, type CloseKind, type Stage } from "./constants";
-import { rejectionMail } from "./mail";
+import { notQualifiedMail, rejectionMail } from "./mail";
 import { applicationStageHistory, applications, candidates, jobOpenings } from "./schema";
-import { queueCandidateEmail } from "./service";
+import { loadTemplate, queueCandidateEmail } from "./service";
 
 // The two ways an application changes stage, used by the single actions (actions.ts) and by bulk actions. They run inside the
 // caller's transaction and assume the caller has already authorized. Not a "use server" file, so these are not public endpoints.
@@ -55,7 +55,8 @@ export async function closeInTx(tx: Tx, actor: Actor, v: { applicationId: string
   });
   await writeAudit({ actor, action: "recruiting.reject", targetType: "application", targetId: v.applicationId, before: { stage: row.app.stage }, after: { stage: "rejected", kind: v.kind } }, tx);
   if (v.kind !== "withdrawn" && v.notifyCandidate && row.sendRejection && !row.anonymized) {
-    const mail = rejectionMail({ fullName: row.name, jobTitle: row.title });
+    const person = { fullName: row.name, jobTitle: row.title };
+    const mail = v.kind === "not_qualified" ? notQualifiedMail(person, await loadTemplate(tx, "not_qualified")) : rejectionMail(person, await loadTemplate(tx, "rejection"));
     await queueCandidateEmail(tx, { applicationId: v.applicationId, toEmail: row.email, kind: "rejection", subject: mail.subject, text: mail.text, html: mail.html, dedupeKey: `rejection:${v.applicationId}` });
   }
   return row.app.openingId;

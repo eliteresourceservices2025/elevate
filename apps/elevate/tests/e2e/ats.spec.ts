@@ -164,3 +164,50 @@ test("HR puts a consenting applicant in the talent pool, then merges two records
   await expect(hr.getByText(/Merged\. 1 application moved\./)).toBeVisible(slow);
   await expect(hr.locator("fieldset", { hasText: person })).toHaveCount(0, slow);
 });
+
+test("HR rewords an applicant email, then reads the recruiting report for a job", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const slow = { timeout: 30_000 };
+  const stamp = Date.now();
+  const hr = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hr, await createHrAccount());
+
+  // The wording: edit, see the preview, save, go back to the built-in text
+  await hr.getByRole("link", { name: "Recruiting", exact: true }).click();
+  await hr.waitForURL("**/recruiting", slow);
+  await hr.getByRole("link", { name: "Applicant emails" }).click();
+  await hr.waitForURL("**/recruiting/email-templates", slow);
+  await waitForHydration(hr, "#tpl-subject-received");
+  await hr.locator("#tpl-subject-received").fill(`Salamat, {{first_name}}! ${stamp}`);
+  await expect(hr.getByText(`Salamat, Ana! ${stamp}`).first()).toBeVisible(); // the preview fills the sample applicant in
+  await hr.locator("#tpl-body-received").fill("Hi {{first_name}}, we got your application for {{job_title}}.");
+  await hr.locator("section[aria-label='We received your application']").getByRole("button", { name: "Save" }).click();
+  await expect(hr.getByText("Saved.")).toBeVisible(slow);
+  await hr.reload();
+  await expect(hr.locator("section[aria-label='We received your application']").getByText("Your wording")).toBeVisible(slow);
+  await waitForHydration(hr, "#tpl-subject-received");
+  hr.once("dialog", (d) => d.accept());
+  await hr.locator("section[aria-label='We received your application']").getByRole("button", { name: "Use the built-in wording" }).click();
+  await expect(hr.getByText("Back to the built-in wording.")).toBeVisible(slow);
+
+  // A job with one applicant, and the report for it
+  await hr.goto("/recruiting/new");
+  await waitForHydration(hr, "#op-title");
+  await hr.getByLabel("Job title").fill(`E2E Report ${stamp}`);
+  await hr.getByLabel(/^Description/).fill("Support our clients with scheduling, inbox care and light data entry.");
+  await hr.getByRole("button", { name: "Create job (draft)" }).click();
+  await hr.waitForURL(/\/recruiting\/[0-9a-f-]{36}$/, slow);
+  const openingId = hr.url().split("/").pop()!;
+  await hr.getByRole("button", { name: "Publish job" }).click();
+  await expect(hr.getByText("Open", { exact: true }).first()).toBeVisible(slow);
+  const res = await hr.request.post("/api/careers/apply", {
+    multipart: { openingId, fullName: `Rita Report${stamp}`, email: `rita.report${stamp}@example.com`, consent: "on", website: "", source: "facebook", resume: { name: "cv.pdf", mimeType: "application/pdf", buffer: Buffer.from(await makePdf(["Assistant"])) } },
+  });
+  expect(res.ok()).toBe(true);
+
+  await hr.goto(`/recruiting/reports?job=${openingId}`);
+  await expect(hr.getByRole("heading", { name: "Recruiting reports" })).toBeVisible(slow);
+  await expect(hr.getByText("1 applications.")).toBeVisible();
+  await expect(hr.getByRole("cell", { name: "Facebook" })).toBeVisible();
+  await expect(hr.getByRole("heading", { name: "How far applications got" })).toBeVisible();
+});

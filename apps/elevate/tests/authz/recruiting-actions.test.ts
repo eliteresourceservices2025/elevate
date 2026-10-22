@@ -46,6 +46,8 @@ const cases: { name: string; allowed: RoleSlug[]; call: () => Promise<{ ok: bool
   { name: "setTalentPool", allowed: MANAGERS, call: () => actions.setTalentPool({ applicationId: ID, inPool: true }) },
   { name: "addPoolMemberToOpening", allowed: MANAGERS, call: () => actions.addPoolMemberToOpening({ applicationId: ID, openingId: ID }) },
   { name: "mergeCandidates", allowed: HR, call: () => actions.mergeCandidates({ keepCandidateId: ID, mergeCandidateId: "22222222-2222-4222-8222-222222222222" }) },
+  { name: "saveEmailTemplate", allowed: HR, call: () => actions.saveEmailTemplate({ kind: "received", subject: "Hi", body: "Hello {{first_name}}" }) },
+  { name: "resetEmailTemplate", allowed: HR, call: () => actions.resetEmailTemplate({ kind: "received" }) },
   { name: "rescoreOpening", allowed: MANAGERS, call: () => actions.rescoreOpening({ openingId: ID }) },
   { name: "saveRetention", allowed: HR, call: () => actions.saveRetention({ enabled: false, rejectedMonths: 12, withdrawnMonths: 6 }) },
   { name: "deleteOpening", allowed: HR, call: () => actions.deleteOpening({ id: ID }) },
@@ -74,6 +76,8 @@ describe("Recruiting actions, every role", () => {
 const queryCases: { name: string; allowed: RoleSlug[]; call: () => Promise<unknown> }[] = [
   { name: "listOpenings", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead"], call: () => queries.listOpenings() },
   { name: "listApplicants", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead"], call: () => queries.listApplicants(EMPTY_FILTERS, { page: 1, pageSize: 25 }) },
+  { name: "listEmailTemplates", allowed: HR, call: () => queries.listEmailTemplates() },
+  { name: "getRecruitingReport", allowed: MANAGERS, call: () => queries.getRecruitingReport({ from: null, to: null, openingId: null }) },
   { name: "getRecruitingSummary", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead", "executive"], call: () => queries.getRecruitingSummary() },
   { name: "getCalendarCard", allowed: MANAGERS, call: () => queries.getCalendarCard() },
   { name: "getRetentionView", allowed: HR, call: () => queries.getRetentionView() },
