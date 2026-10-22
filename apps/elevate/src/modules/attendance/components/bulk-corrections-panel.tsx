@@ -54,7 +54,7 @@ export function BulkCorrectionsPanel({ batches }: { batches: CorrectionBatch[] }
           );
         }}
       >
-        <h3 className="font-semibold">File many corrections from a spreadsheet</h3>
+        <h2 className="text-base font-semibold">File many corrections from a spreadsheet</h2>
         <p className="text-sm text-muted-foreground">
           For an outage or when many people are missing events. One row per event with the columns <code>email</code>, <code>type</code> (clock_in, clock_out, break_start, break_end) and <code>time</code> (like 2026-10-05 21:00, in the time zone you choose). Each person gets an ordinary correction request with the same checks. A different HR admin approves
           the whole batch, never the one who filed it. Jibble&apos;s timesheet can be the source of the times.
@@ -116,7 +116,7 @@ export function BulkCorrectionsPanel({ batches }: { batches: CorrectionBatch[] }
       ) : null}
 
       <section aria-label="Batches waiting" className="space-y-2">
-        <h3 className="font-semibold">Batches waiting for a decision</h3>
+        <h2 className="text-base font-semibold">Batches waiting for a decision</h2>
         {batches.length === 0 ? (
           <p className="text-sm text-muted-foreground">No batches are waiting.</p>
         ) : (

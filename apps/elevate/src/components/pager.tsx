@@ -3,7 +3,7 @@ import { PAGE_SIZES, type PageInfo } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 
 const linkClass = "rounded-lg border px-3 py-1 text-sm hover:bg-secondary/50";
-const off = "pointer-events-none rounded-lg border px-3 py-1 text-sm text-muted-foreground opacity-50";
+const off = "pointer-events-none rounded-lg border px-3 py-1 text-sm bg-muted/40 text-muted-foreground";
 
 /**
  * Pager for server-rendered lists. Page and size live in the address, under names that can be changed

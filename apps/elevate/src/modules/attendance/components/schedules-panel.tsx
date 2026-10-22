@@ -218,12 +218,16 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10" />
+                <TableHead className="w-10">
+                  <span className="sr-only">Select</span>
+                </TableHead>
                 <TableHead>Person</TableHead>
                 <TableHead>Team</TableHead>
                 <TableHead>Schedule</TableHead>
                 <TableHead>In Manila</TableHead>
-                <TableHead />
+                <TableHead>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

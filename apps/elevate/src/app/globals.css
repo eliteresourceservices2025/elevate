@@ -202,6 +202,10 @@
 }
 
 @layer base {
+  /* A link inside a sentence must not rely on colour alone (WCAG 1.4.1): the in-text links are underlined all the time. */
+  a.text-primary[class*="underline-offset"] {
+    text-decoration-line: underline;
+  }
   * {
     @apply border-border outline-ring/50;
   }

@@ -21,6 +21,7 @@ export function CalendarMonth({ view, today }: { view: CalendarView; today: stri
   const offset = (new Date(`${firstDate}T00:00:00Z`).getUTCDay() + 6) % 7; // Monday = 0
   const cells: (string | null)[] = [...Array<null>(offset).fill(null), ...view.dates];
   while (cells.length % 7 !== 0) cells.push(null);
+  const weeks = Array.from({ length: cells.length / 7 }, (_, w) => cells.slice(w * 7, w * 7 + 7));
 
   const offOn = (date: string) => view.entries.filter((e) => e.startDate <= date && e.endDate >= date);
   const holidaysOn = (date: string) => view.holidays.filter((h) => h.date === date);
@@ -109,13 +110,19 @@ export function CalendarMonth({ view, today }: { view: CalendarView; today: stri
 
       {/* Tablet and up: the month grid. */}
       <div role="grid" aria-label="Time off calendar" className="hidden grid-cols-7 overflow-clip rounded-2xl border bg-card text-sm shadow-sm md:grid">
-        {WEEKDAYS.map((d) => (
-          <div key={d} role="columnheader" className="border-b bg-secondary/40 px-3 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            {d}
-          </div>
-        ))}
-        {cells.map((date, i) => {
-          if (!date) return <div key={`blank-${i}`} className="min-h-28 border-r border-b bg-muted/20" />;
+        {/* Rows are display:contents, so the seven columns still come from the grid, but the roles form a valid grid (rows hold cells). */}
+        <div role="row" className="contents">
+          {WEEKDAYS.map((d) => (
+            <div key={d} role="columnheader" className="border-b bg-secondary/40 px-3 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              {d}
+            </div>
+          ))}
+        </div>
+        {weeks.map((week, w) => (
+          <div key={w} role="row" className="contents">
+            {week.map((date, j) => {
+              const i = w * 7 + j;
+              if (!date) return <div key={`blank-${i}`} role="gridcell" aria-label="No day" className="min-h-28 border-r border-b bg-muted/20" />;
           const off = offOn(date);
           const holidays = holidaysOn(date);
           const count = countOn(date);
@@ -138,8 +145,10 @@ export function CalendarMonth({ view, today }: { view: CalendarView; today: stri
               ))}
               {off.length > 3 ? <div className="text-xs text-muted-foreground">+{off.length - 3} more</div> : null}
             </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );

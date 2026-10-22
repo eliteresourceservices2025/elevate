@@ -326,7 +326,7 @@ export function ExportPanel({ settings }: { settings: HoursSettings }) {
           run(() => savePayPeriod({ kind, biweeklyAnchor: kind === "biweekly" ? anchor : undefined }), () => "Pay periods saved.");
         }}
       >
-        <h3 className="font-semibold">How pay periods are cut</h3>
+        <h2 className="text-base font-semibold">How pay periods are cut</h2>
         <SelectField id="pp-kind" label="Pay periods" value={kind} onChange={(e) => setKind(e.target.value as PayPeriodKind)}>
           {Object.entries(PAY_PERIOD_LABELS).map(([k, text]) => (
             <option key={k} value={k}>
