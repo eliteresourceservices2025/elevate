@@ -11,7 +11,9 @@ import { sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { notify } from "@/modules/notifications/service";
 import { RESUME_KINDS, RESUME_MAX_BYTES, isApplyable, type OpeningStatus } from "./constants";
+import { keywordColumns } from "./keywords";
 import { receivedMail } from "./mail";
+import { extractResumeText } from "./resume-text";
 import { slugify, uniqueSlug } from "./slug";
 import { applicationStageHistory, applications, candidateEmails, candidates, jobOpenings, openingHiringTeam, recruitingSettings } from "./schema";
 import { applySchema } from "./validators";
@@ -91,6 +93,10 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
   const [opening] = await db.select().from(jobOpenings).where(eq(jobOpenings.id, v.openingId));
   if (!opening || !isApplyable(opening.status as OpeningStatus, opening.archivedAt !== null)) return { ok: false, error: "This job is no longer accepting applications." };
 
+  // Keyword match: the resume is read here, on our server, once; only the percentage and the found/missing words are kept.
+  const sets = { required: opening.keywordsRequired, nice: opening.keywordsNice };
+  const keyword = keywordColumns(sets.required.length + sets.nice.length > 0 ? await extractResumeText(file.bytes, kind) : null, sets);
+
   const path = `resumes/${randomUUID()}.${kind}`;
   const sha = createHash("sha256").update(file.bytes).digest("hex");
   const storage = getDocumentStorage();
@@ -121,7 +127,7 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
         candidateId = created.id;
       }
 
-      const [app] = await tx.insert(applications).values({ openingId: opening.id, candidateId, note: v.note ?? null, source: v.source ?? null, sourceDetail: v.sourceDetail ?? null }).onConflictDoNothing().returning({ id: applications.id });
+      const [app] = await tx.insert(applications).values({ openingId: opening.id, candidateId, note: v.note ?? null, source: v.source ?? null, sourceDetail: v.sourceDetail ?? null, ...(keyword ?? {}) }).onConflictDoNothing().returning({ id: applications.id });
       if (!app) return { duplicate: true as const, oldResume: null };
 
       await saveApplicantSelfId(tx, candidateId, selfId.data);

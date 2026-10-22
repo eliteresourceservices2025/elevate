@@ -43,6 +43,7 @@ const cases: { name: string; allowed: RoleSlug[]; call: () => Promise<{ ok: bool
   { name: "setApplicationTags", allowed: MANAGERS, call: () => actions.setApplicationTags({ applicationId: ID, tagIds: [] }) },
   { name: "setApplicationSource", allowed: MANAGERS, call: () => actions.setApplicationSource({ applicationId: ID, source: "linkedin" }) },
   { name: "bulkUpdateApplications", allowed: MANAGERS, call: () => actions.bulkUpdateApplications({ action: "move", applicationIds: [ID], to: "screening" }) },
+  { name: "rescoreOpening", allowed: MANAGERS, call: () => actions.rescoreOpening({ openingId: ID }) },
   { name: "saveRetention", allowed: HR, call: () => actions.saveRetention({ enabled: false, rejectedMonths: 12, withdrawnMonths: 6 }) },
   { name: "deleteOpening", allowed: HR, call: () => actions.deleteOpening({ id: ID }) },
   { name: "deleteApplication", allowed: ["super_admin"], call: () => actions.deleteApplication({ applicationId: ID, confirm: "DELETE" }) },

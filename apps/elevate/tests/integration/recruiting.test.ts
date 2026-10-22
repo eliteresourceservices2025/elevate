@@ -18,6 +18,7 @@ const { setEmailSender } = await import("@/modules/notifications/email");
 const actions = await import("@/modules/recruiting/actions");
 const queries = await import("@/modules/recruiting/queries");
 const applicantFilters = await import("@/modules/recruiting/applicant-filters");
+const { makeDocx, makePdf } = await import("../helpers/resume-files");
 const service = await import("@/modules/recruiting/service");
 const jobs = await import("@/modules/recruiting/jobs");
 
@@ -318,6 +319,69 @@ describe("the all-applicants list", () => {
     expect(all.rows).toHaveLength(1);
     expect(all.rows[0]).toMatchObject({ name: "Removed applicant", email: null });
     expect((await list(recruiter, { openingId: opening, q: "gone" })).rows).toHaveLength(0);
+  });
+});
+
+describe("resume keyword match", () => {
+  const keywords = { keywordsRequired: "medical billing, excel", keywordsNice: "hipaa, spanish" };
+  async function keywordJob() {
+    as(recruiter);
+    const id = idOf(await actions.saveOpening({ title: uniq("Keyword "), description: "Support our clients with billing and inbox care.", hiringTeamUserIds: [lead.id], ...keywords }));
+    await actions.setOpeningStatus({ id, status: "open" });
+    return id;
+  }
+  const scoreOf = async (appId: string) => (await rows<{ keyword_score: number | null; keyword_matched: string[] | null; keyword_missed: string[] | null }>(sql`select keyword_score, keyword_matched, keyword_missed from talent.applications where id = ${appId}`))[0];
+
+  it("scores a PDF and a Word resume when the person applies, and keeps only the percentage and the words, never the text", async () => {
+    const opening = await keywordJob();
+    const a = `${uniq("kw")}@example.com`;
+    const b = `${uniq("kw")}@example.com`;
+    expect(await apply(opening, { email: a }, { bytes: await makePdf(["Medical billing specialist", "Skills: Excel and HIPAA"]), name: "cv.pdf" })).toEqual({ ok: true });
+    expect(await apply(opening, { email: b }, { bytes: makeDocx(["Virtual assistant", "Fluent in Spanish"]), name: "cv.docx" })).toEqual({ ok: true });
+    const first = await scoreOf((await appFor(opening, a))!);
+    expect(first.keyword_score).toBe(85); // both required (70) and one of two nice (15)
+    expect(first.keyword_matched).toEqual(["medical billing", "excel", "hipaa"]);
+    expect(first.keyword_missed).toEqual(["spanish"]);
+    const second = await scoreOf((await appFor(opening, b))!);
+    expect(second.keyword_score).toBe(15);
+    // nothing in the application row holds the resume text
+    const [raw] = await rows<{ doc: string }>(sql`select row_to_json(a)::text as doc from talent.applications a where a.id = ${(await appFor(opening, a))!}`);
+    expect(raw.doc).not.toContain("Medical billing specialist");
+  });
+
+  it("gives no score for a job with no keywords or a resume with no readable text, and never blocks the application", async () => {
+    const plain = await openJob();
+    const email = `${uniq("kw")}@example.com`;
+    expect(await apply(plain, { email })).toEqual({ ok: true });
+    expect((await scoreOf((await appFor(plain, email))!)).keyword_score).toBeNull();
+    const opening = await keywordJob();
+    const scan = `${uniq("kw")}@example.com`;
+    expect(await apply(opening, { email: scan }, { bytes: await makePdf([]), name: "scan.pdf" })).toEqual({ ok: true });
+    expect((await scoreOf((await appFor(opening, scan))!)).keyword_score).toBeNull();
+  });
+
+  it("scores everyone again after the keywords change, shows it is out of date until then, and lists by score", async () => {
+    const opening = await keywordJob();
+    const email = `${uniq("kw")}@example.com`;
+    await apply(opening, { email }, { bytes: await makePdf(["Excel and HIPAA experience"]), name: "cv.pdf" });
+    const appId = (await appFor(opening, email))!;
+    expect((await queries.getApplication(appId)).keyword.stale).toBe(false);
+
+    as(recruiter);
+    expect((await actions.saveOpening({ id: opening, title: uniq("Keyword "), description: "Support our clients with billing and inbox care.", hiringTeamUserIds: [lead.id], keywordsRequired: "excel", keywordsNice: "" })).ok).toBe(true);
+    expect((await queries.getApplication(appId)).keyword.stale).toBe(true);
+    expect(await actions.rescoreOpening({ openingId: opening })).toMatchObject({ ok: true, data: { looked: 1, scored: 1, unreadable: 0 } });
+    expect((await scoreOf(appId)).keyword_score).toBe(100);
+    expect((await queries.getApplication(appId)).keyword.stale).toBe(false);
+
+    const high = await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, minScore: 75, sort: "score" }, { page: 1, pageSize: 20 });
+    expect(high.rows.map((r) => [r.applicationId, r.keywordScore])).toEqual([[appId, 100]]);
+    expect((await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, minScore: 75 }, { page: 1, pageSize: 20 })).rows).toHaveLength(1);
+    // refuses a job with no keywords, and anyone who may not manage jobs
+    const plain = await openJob();
+    expect((await actions.rescoreOpening({ openingId: plain })).ok).toBe(false);
+    as(lead);
+    expect(await actions.rescoreOpening({ openingId: opening })).toEqual({ ok: false, error: NO_ACCESS });
   });
 });
 

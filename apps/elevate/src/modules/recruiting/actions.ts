@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -26,7 +26,9 @@ import { sendRecruitingEmailsNow } from "./immediate";
 import { authorizeForOpening, freeSlug, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
 import { clearBanner } from "./careers-banner";
 import { MAX_TAGS_PER_APPLICATION } from "./constants";
-import { archiveTagSchema, bulkSchema, createTagSchema, setSourceSchema, setTagsSchema, careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
+import { keywordColumns, parseKeywordList } from "./keywords";
+import { extractResumeText } from "./resume-text";
+import { rescoreSchema, archiveTagSchema, bulkSchema, createTagSchema, setSourceSchema, setTagsSchema, careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
 const MANILA = "Asia/Manila";
@@ -52,7 +54,7 @@ export async function saveOpening(input: unknown): Promise<ActionResult<{ id: st
         const eligible = await tx.select({ userId: userRoles.userId }).from(userRoles).where(and(inArray(userRoles.userId, v.hiringTeamUserIds), inArray(userRoles.roleSlug, ELIGIBLE_INTERVIEWER_ROLES)));
         if (new Set(eligible.map((e) => e.userId)).size !== new Set(v.hiringTeamUserIds).size) throw new ActionFailure("One of the hiring team members cannot take part in hiring.");
       }
-      const fields = { title: v.title, description: v.description, location: v.location || "Remote", payNote: v.payNote ?? null, teamId: v.teamId ?? null, clientId: v.clientId ?? null, sendAck: v.sendAck, sendRejection: v.sendRejection, updatedAt: new Date() };
+      const fields = { title: v.title, description: v.description, location: v.location || "Remote", payNote: v.payNote ?? null, teamId: v.teamId ?? null, clientId: v.clientId ?? null, sendAck: v.sendAck, sendRejection: v.sendRejection, keywordsRequired: parseKeywordList(v.keywordsRequired), keywordsNice: parseKeywordList(v.keywordsNice), updatedAt: new Date() };
       let openingId = v.id;
       if (openingId) {
         const [before] = await tx.select().from(jobOpenings).where(and(eq(jobOpenings.id, openingId), isNull(jobOpenings.archivedAt)));
@@ -617,5 +619,53 @@ export async function bulkUpdateApplications(input: unknown): Promise<ActionResu
     refresh();
     refreshApplicants();
     return { ok: true, data: { requested: ids.length, done, failed: failed.slice(0, 20) } };
+  });
+}
+
+// ---- Resume keyword match -----------------------------------------------------------------------------------------------------
+
+export type RescoreResult = { looked: number; scored: number; unreadable: number };
+const RESCORE_MAX = 300;
+
+/**
+ * Scores every application of a job again with the job's current keywords (after the recruiter changed them). The resume files are read
+ * from private storage one at a time on our server; only the percentage and the found/missing words are stored, never the text.
+ */
+export async function rescoreOpening(input: unknown): Promise<ActionResult<RescoreResult>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.manage_openings");
+    const parsed = rescoreSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { openingId } = parsed.data;
+    const [opening] = await db.select().from(jobOpenings).where(and(eq(jobOpenings.id, openingId), isNull(jobOpenings.archivedAt)));
+    if (!opening) return fail("That job was not found.");
+    const sets = { required: opening.keywordsRequired, nice: opening.keywordsNice };
+    if (sets.required.length + sets.nice.length === 0) return fail("Add some keywords to the job first.");
+
+    const targets = await db
+      .select({ id: applications.id, resumePath: candidates.resumePath, resumeKind: candidates.resumeKind })
+      .from(applications)
+      .innerJoin(candidates, eq(candidates.id, applications.candidateId))
+      .where(and(eq(applications.openingId, openingId), isNull(candidates.anonymizedAt)))
+      .orderBy(desc(applications.appliedAt))
+      .limit(RESCORE_MAX);
+
+    const storage = getDocumentStorage();
+    let scored = 0;
+    let unreadable = 0;
+    for (const t of targets) {
+      const bytes = t.resumePath ? await storage.read(BUCKETS.recruiting, t.resumePath).catch(() => null) : null;
+      const text = bytes ? await extractResumeText(bytes, t.resumeKind) : null;
+      const columns = keywordColumns(text, sets);
+      if (!columns) continue;
+      await db.update(applications).set(columns).where(eq(applications.id, t.id));
+      if (columns.keywordScore === null) unreadable += 1;
+      else scored += 1;
+    }
+    await db.transaction((tx) => writeAudit({ actor, action: "recruiting.rescore", targetType: "job_opening", targetId: openingId, metadata: { looked: targets.length, scored, unreadable } }, tx));
+    refresh(openingId);
+    revalidatePath("/recruiting/applicants");
+    return { ok: true, data: { looked: targets.length, scored, unreadable } };
   });
 }

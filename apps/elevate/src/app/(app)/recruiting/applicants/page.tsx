@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
 import { formatInZone } from "@/lib/time";
-import { APPLICANT_SORTS, APPLICANT_SORT_LABELS, filtersToQuery, parseApplicantFilters } from "@/modules/recruiting/applicant-filters";
+import { APPLICANT_SORTS, APPLICANT_SORT_LABELS, MIN_SCORES, filtersToQuery, parseApplicantFilters } from "@/modules/recruiting/applicant-filters";
 import { CLOSE_KIND_LABELS, CLOSE_KINDS, SOURCE_LABELS, SOURCES, STAGE_LABELS, STAGES } from "@/modules/recruiting/constants";
 import { BulkBar } from "@/modules/recruiting/components/bulk-bar";
 import { listApplicants, type ApplicantRow } from "@/modules/recruiting/queries";
@@ -28,9 +28,10 @@ function StageBadge({ row }: { row: ApplicantRow }) {
 }
 
 function SourceAndTags({ row }: { row: ApplicantRow }) {
-  if (!row.source && row.tags.length === 0) return <span className="text-xs text-muted-foreground">-</span>;
+  if (!row.source && row.tags.length === 0 && row.keywordScore === null) return <span className="text-xs text-muted-foreground">-</span>;
   return (
     <div className="flex flex-wrap gap-1">
+      {row.keywordScore !== null ? <Badge variant={row.keywordScore >= 75 ? "default" : "outline"}>Match {row.keywordScore}%</Badge> : null}
       {row.source ? <Badge variant="secondary">{SOURCE_LABELS[row.source]}</Badge> : null}
       {row.tags.map((t) => (
         <Badge key={t.id} variant="outline">
@@ -48,6 +49,8 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
   const data = await orNotFound(listApplicants(filters, paging));
   const query = filtersToQuery(filters);
   const filtering = Object.values(query).some((v) => v !== undefined);
+  const { q: _q, job: _job, stage: _stage, ...rest } = query;
+  const moreInUse = Object.values(rest).some((v) => v !== undefined);
 
   return (
     <PageContainer width="wide">
@@ -61,67 +64,83 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
         }
       />
 
-      <form method="get" action={BASE} className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Filter applicants">
-        <TextField id="ap-q" name="q" label="Name or email" defaultValue={filters.q} maxLength={100} placeholder="Search" />
-        <SelectField id="ap-job" name="job" label="Job" defaultValue={filters.openingId ?? ""}>
-          <option value="">All jobs</option>
-          {data.openings.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.title}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField id="ap-stage" name="stage" label="Stage" defaultValue={filters.stage}>
-          <option value="all">Any stage</option>
-          <option value="open">Still in the pipeline</option>
-          {STAGES.map((s) => (
-            <option key={s} value={s}>
-              {STAGE_LABELS[s]}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField id="ap-kind" name="kind" label="How it closed" defaultValue={filters.closeKind}>
-          <option value="all">Any</option>
-          {CLOSE_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {CLOSE_KIND_LABELS[k]}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField id="ap-source" name="source" label="Source" defaultValue={filters.source}>
-          <option value="all">Any source</option>
-          <option value="none">Not said</option>
-          {SOURCES.map((s) => (
-            <option key={s} value={s}>
-              {SOURCE_LABELS[s]}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField id="ap-tag" name="tag" label="Tag" defaultValue={filters.tagId ?? ""}>
-          <option value="">Any tag</option>
-          {data.tagChoices.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </SelectField>
-        <TextField id="ap-from" name="from" label="Applied from" type="date" defaultValue={filters.from ?? ""} />
-        <TextField id="ap-to" name="to" label="Applied to" type="date" defaultValue={filters.to ?? ""} />
-        <SelectField id="ap-sort" name="sort" label="Sort by" defaultValue={filters.sort}>
-          {APPLICANT_SORTS.map((s) => (
-            <option key={s} value={s}>
-              {APPLICANT_SORT_LABELS[s]}
-            </option>
-          ))}
-        </SelectField>
-        <div className="flex items-end gap-2">
-          <Button type="submit">Apply filters</Button>
-          {filtering ? (
-            <Link href={BASE} className={buttonVariants({ variant: "ghost" })}>
-              Reset
-            </Link>
-          ) : null}
+      <form method="get" action={BASE} className="space-y-3 rounded-xl border bg-card p-4" aria-label="Filter applicants">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <TextField id="ap-q" name="q" label="Name or email" defaultValue={filters.q} maxLength={100} placeholder="Search" />
+          <SelectField id="ap-job" name="job" label="Job" defaultValue={filters.openingId ?? ""}>
+            <option value="">All jobs</option>
+            {data.openings.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.title}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField id="ap-stage" name="stage" label="Stage" defaultValue={filters.stage}>
+            <option value="all">Any stage</option>
+            <option value="open">Still in the pipeline</option>
+            {STAGES.map((s) => (
+              <option key={s} value={s}>
+                {STAGE_LABELS[s]}
+              </option>
+            ))}
+          </SelectField>
+          <div className="flex items-end gap-2">
+            <Button type="submit">Apply filters</Button>
+            {filtering ? (
+              <Link href={BASE} className={buttonVariants({ variant: "ghost" })}>
+                Reset
+              </Link>
+            ) : null}
+          </div>
         </div>
+        {/* The rest of the filters fold away (and open by themselves when one is in use), so a phone screen is not all filters. */}
+        <details open={moreInUse} className="group">
+          <summary className="cursor-pointer text-sm font-medium text-primary">More filters</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <SelectField id="ap-kind" name="kind" label="How it closed" defaultValue={filters.closeKind}>
+              <option value="all">Any</option>
+              {CLOSE_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {CLOSE_KIND_LABELS[k]}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField id="ap-source" name="source" label="Source" defaultValue={filters.source}>
+              <option value="all">Any source</option>
+              <option value="none">Not said</option>
+              {SOURCES.map((s) => (
+                <option key={s} value={s}>
+                  {SOURCE_LABELS[s]}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField id="ap-tag" name="tag" label="Tag" defaultValue={filters.tagId ?? ""}>
+              <option value="">Any tag</option>
+              {data.tagChoices.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField id="ap-score" name="score" label="Keyword match" defaultValue={filters.minScore === null ? "" : String(filters.minScore)}>
+              <option value="">Any</option>
+              {MIN_SCORES.map((n) => (
+                <option key={n} value={n}>
+                  {n}% or more
+                </option>
+              ))}
+            </SelectField>
+            <TextField id="ap-from" name="from" label="Applied from" type="date" defaultValue={filters.from ?? ""} />
+            <TextField id="ap-to" name="to" label="Applied to" type="date" defaultValue={filters.to ?? ""} />
+            <SelectField id="ap-sort" name="sort" label="Sort by" defaultValue={filters.sort}>
+              {APPLICANT_SORTS.map((s) => (
+                <option key={s} value={s}>
+                  {APPLICANT_SORT_LABELS[s]}
+                </option>
+              ))}
+            </SelectField>
+          </div>
+        </details>
       </form>
 
       {data.canBulk && data.rows.length > 0 ? (
@@ -147,7 +166,7 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
       ) : (
         <>
           {/* A table from the tablet width up; below it, one card per applicant (no sideways scrolling). */}
-          <div className="hidden overflow-clip rounded-xl border bg-card shadow-sm md:block">
+          <div className="scroll-shadow-x hidden overflow-x-auto rounded-xl border bg-card shadow-sm md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -157,7 +176,6 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
                   <TableHead>Stage</TableHead>
                   <TableHead>Source and tags</TableHead>
                   <TableHead>Applied</TableHead>
-                  <TableHead>Last change</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -165,7 +183,7 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
                   <TableRow key={r.applicationId}>
                     {data.canBulk ? (
                       <TableCell>
-                        <input type="checkbox" form={BULK_FORM} name="id" value={r.applicationId} aria-label={`Select ${r.name}`} className="size-4 accent-primary" />
+                        <input type="checkbox" form={BULK_FORM} name="applicant" value={r.applicationId} aria-label={`Select ${r.name}`} className="size-4 accent-primary" />
                       </TableCell>
                     ) : null}
                     <TableCell className="font-medium">
@@ -185,8 +203,10 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
                     <TableCell>
                       <SourceAndTags row={r} />
                     </TableCell>
-                    <TableCell>{formatInZone(r.appliedAt, undefined, "MMM d, yyyy")}</TableCell>
-                    <TableCell>{formatInZone(r.stageChangedAt, undefined, "MMM d, yyyy")}</TableCell>
+                    <TableCell>
+                      {formatInZone(r.appliedAt, undefined, "MMM d, yyyy")}
+                      <span className="block text-xs text-muted-foreground">changed {formatInZone(r.stageChangedAt, undefined, "MMM d")}</span>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -197,7 +217,7 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
               <li key={r.applicationId} className="rounded-xl border bg-card p-3">
                 <div className="flex items-start justify-between gap-2">
                   <label className="flex items-start gap-2">
-                    {data.canBulk ? <input type="checkbox" form={BULK_FORM} name="id" value={r.applicationId} aria-label={`Select ${r.name}`} className="mt-1 size-4 accent-primary" /> : null}
+                    {data.canBulk ? <input type="checkbox" form={BULK_FORM} name="applicant" value={r.applicationId} aria-label={`Select ${r.name}`} className="mt-1 size-4 accent-primary" /> : null}
                     <Link href={`/recruiting/applications/${r.applicationId}`} className="font-medium text-primary underline-offset-4 hover:underline">
                       {r.name}
                     </Link>

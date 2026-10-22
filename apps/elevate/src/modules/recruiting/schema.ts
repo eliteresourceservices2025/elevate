@@ -26,6 +26,9 @@ export const jobOpenings = talent
       status: text("status").notNull().default("draft"),
       sendAck: boolean("send_ack").notNull().default(true),
       sendRejection: boolean("send_rejection").notNull().default(true),
+      /** Words recruiters look for in a resume (see keywords.ts): lists of strings. Used only to show a keyword-match percentage. */
+      keywordsRequired: jsonb("keywords_required").$type<string[]>().notNull().default([]),
+      keywordsNice: jsonb("keywords_nice").$type<string[]>().notNull().default([]),
       createdBy: uuid("created_by").references(() => users.id),
       openedAt: timestamp("opened_at", { withTimezone: true }),
       closedAt: timestamp("closed_at", { withTimezone: true }),
@@ -121,6 +124,12 @@ export const applications = talent
       /** Where they heard about the job (see SOURCES); null = not said. `sourceDetail` is an optional short note such as who referred them. */
       source: text("source"),
       sourceDetail: text("source_detail"),
+      /** Keyword match against the job (0 to 100), which keywords were found or missing, when, and which keyword lists it was scored with. The resume text itself is never stored. */
+      keywordScore: smallint("keyword_score"),
+      keywordMatched: jsonb("keyword_matched").$type<string[]>(),
+      keywordMissed: jsonb("keyword_missed").$type<string[]>(),
+      keywordScoredAt: timestamp("keyword_scored_at", { withTimezone: true }),
+      keywordSetKey: text("keyword_set_key"),
       appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
       stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
       /** When the application was closed or hired: retention counts from here. */
@@ -130,6 +139,7 @@ export const applications = talent
       uniqueIndex("applications_opening_candidate_idx").on(t.openingId, t.candidateId),
       index("applications_opening_stage_idx").on(t.openingId, t.stage),
       check("applications_stage_chk", sql`${t.stage} in ('applied','screening','interview','assessment','offer','hired','rejected')`),
+      check("applications_keyword_score_chk", sql`${t.keywordScore} is null or ${t.keywordScore} between 0 and 100`),
       check("applications_source_chk", sql`${t.source} is null or ${t.source} in ('careers_page','referral','linkedin','facebook','job_board','agency','other')`),
       check("applications_close_chk", sql`(${t.stage} = 'rejected') = (${t.closeKind} is not null) and (${t.closeKind} is null or ${t.closeKind} in ('rejected','not_qualified','withdrawn'))`),
     ],

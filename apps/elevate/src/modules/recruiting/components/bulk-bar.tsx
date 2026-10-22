@@ -30,13 +30,15 @@ export function BulkBar({ formId, tags }: { formId: string; tags: TagChoice[] })
   const [tagId, setTagId] = useState("");
   const [result, setResult] = useState<BulkResult | null>(null);
 
-  const boxes = () => Array.from(document.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][form="${formId}"][name="id"]`));
-  const count = () => boxes().filter((b) => b.checked).length;
+  const boxes = () => Array.from(document.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][form="${formId}"][name="applicant"]`));
+  // Each applicant is in the page twice (table and phone card, one of them hidden), so count and send each id once.
+  const checkedIds = () => [...new Set(boxes().filter((b) => b.checked).map((b) => b.value))];
+  const count = () => checkedIds().length;
 
   useEffect(() => {
     const onChange = (e: Event) => {
       const t = e.target as HTMLInputElement | null;
-      if (t?.form?.id === formId) setSelected(count());
+      if (t?.form?.getAttribute("id") === formId) setSelected(count());
     };
     document.addEventListener("change", onChange);
     return () => document.removeEventListener("change", onChange);
@@ -45,14 +47,15 @@ export function BulkBar({ formId, tags }: { formId: string; tags: TagChoice[] })
 
   function toggleAll() {
     const all = boxes();
-    const next = !all.every((b) => b.checked);
+    const visible = all.filter((b) => b.offsetParent !== null);
+    const next = !visible.every((b) => b.checked);
     for (const b of all) b.checked = next;
-    setSelected(next ? all.length : 0);
+    setSelected(next ? new Set(all.map((b) => b.value)).size : 0);
   }
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    const ids = boxes().filter((b) => b.checked).map((b) => b.value);
+    const ids = checkedIds();
     if (ids.length === 0 || action === "") return;
     const base = { applicationIds: ids };
     const input =

@@ -10,6 +10,7 @@ import { reportName } from "@/modules/org/service";
 import { getPrivacyNotice } from "@/modules/privacy/queries";
 import { BOARD_STAGES, STAGES, type CloseKind, type CriterionKey, type Source, type Stage } from "./constants";
 import { escapeLike, type ApplicantFilters } from "./applicant-filters";
+import { keywordSetKey } from "./keywords";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { pageInfo } from "@/lib/pagination";
 import { looksLikeId } from "./slug";
@@ -199,7 +200,7 @@ export async function getApplication(applicationId: string) {
   if (!app) throw new ForbiddenError("recruiting.view"); // same answer as "no access": the page shows not found
   await authorizeForOpening(user, "recruiting.view", app.openingId);
 
-  const [opening] = await db.select({ id: jobOpenings.id, title: jobOpenings.title, status: jobOpenings.status, sendRejection: jobOpenings.sendRejection }).from(jobOpenings).where(eq(jobOpenings.id, app.openingId));
+  const [opening] = await db.select({ id: jobOpenings.id, title: jobOpenings.title, status: jobOpenings.status, sendRejection: jobOpenings.sendRejection, keywordsRequired: jobOpenings.keywordsRequired, keywordsNice: jobOpenings.keywordsNice }).from(jobOpenings).where(eq(jobOpenings.id, app.openingId));
   const [candidate] = await db.select().from(candidates).where(eq(candidates.id, app.candidateId));
 
   const history = await db.select({ id: applicationStageHistory.id, fromStage: applicationStageHistory.fromStage, toStage: applicationStageHistory.toStage, note: applicationStageHistory.note, at: applicationStageHistory.at, by: applicationStageHistory.byUserId }).from(applicationStageHistory).where(eq(applicationStageHistory.applicationId, applicationId)).orderBy(asc(applicationStageHistory.at));
@@ -243,6 +244,15 @@ export async function getApplication(applicationId: string) {
     nowMs: Date.now(),
     application: { id: app.id, openingId: app.openingId, stage: app.stage as Stage, closeKind: app.closeKind, closeReason: app.closeReason, note: app.note, appliedAt: app.appliedAt, stageChangedAt: app.stageChangedAt, source: app.source as Source | null, sourceDetail: app.sourceDetail },
     tags: await tagsOfApplication(applicationId),
+    keyword: {
+      configured: opening.keywordsRequired.length + opening.keywordsNice.length > 0,
+      score: app.keywordScore,
+      matched: app.keywordMatched ?? [],
+      missed: app.keywordMissed ?? [],
+      scoredAt: app.keywordScoredAt,
+      // True when the job's keywords were changed after this application was scored.
+      stale: app.keywordScoredAt !== null && app.keywordSetKey !== keywordSetKey({ required: opening.keywordsRequired, nice: opening.keywordsNice }),
+    },
     tagChoices: scopeFor(user, "recruiting.tag") !== null ? await listTagChoices() : [],
     canTag: scopeFor(user, "recruiting.tag") !== null,
     opening,
@@ -293,6 +303,8 @@ export type ApplicantRow = {
   appliedAt: Date;
   stageChangedAt: Date;
   source: Source | null;
+  /** Keyword match, 0 to 100, or null when the job has no keywords or the resume could not be read. */
+  keywordScore: number | null;
   tags: TagChoice[];
 };
 
@@ -321,6 +333,7 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
     const like = `%${escapeLike(filters.q.toLowerCase())}%`;
     conditions.push(and(isNull(candidates.anonymizedAt), or(sql`lower(${candidates.fullName}) like ${like}`, sql`lower(${candidates.email}) like ${like}`)));
   }
+  if (filters.minScore !== null) conditions.push(sql`${applications.keywordScore} >= ${filters.minScore}`);
   const where = and(...conditions);
 
   const [{ total }] = await db
@@ -331,7 +344,7 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
     .where(where);
   const info = pageInfo(total, paging.page, paging.pageSize);
 
-  const order = filters.sort === "name" ? [asc(sql`lower(${candidates.fullName})`), desc(applications.appliedAt)] : filters.sort === "updated" ? [desc(applications.stageChangedAt)] : [desc(applications.appliedAt)];
+  const order = filters.sort === "name" ? [asc(sql`lower(${candidates.fullName})`), desc(applications.appliedAt)] : filters.sort === "updated" ? [desc(applications.stageChangedAt)] : filters.sort === "score" ? [sql`${applications.keywordScore} desc nulls last`, desc(applications.appliedAt)] : [desc(applications.appliedAt)];
   const rows = await db
     .select({
       applicationId: applications.id,
@@ -345,6 +358,7 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
       appliedAt: applications.appliedAt,
       stageChangedAt: applications.stageChangedAt,
       source: applications.source,
+      keywordScore: applications.keywordScore,
     })
     .from(applications)
     .innerJoin(candidates, eq(candidates.id, applications.candidateId))
@@ -383,6 +397,7 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
     appliedAt: r.appliedAt,
     stageChangedAt: r.stageChangedAt,
     source: r.source as Source | null,
+    keywordScore: r.keywordScore,
     tags: tagsBy.get(r.applicationId) ?? [],
   }));
   return { scope, rows: list, info, openings, tagChoices: await listTagChoices(), canBulk: scopeFor(user, "recruiting.bulk") !== null };

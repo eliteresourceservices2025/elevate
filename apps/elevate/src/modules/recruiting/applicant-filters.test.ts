@@ -9,18 +9,19 @@ describe("parseApplicantFilters", () => {
   });
 
   it("keeps valid values and drops anything it does not recognise", () => {
-    expect(parseApplicantFilters({ q: "  ana   reyes ", stage: "screening", kind: "not_qualified", job: ID.toUpperCase(), source: "linkedin", tag: ID, from: "2026-01-05", to: "2026-02-30", sort: "name" })).toEqual({
+    expect(parseApplicantFilters({ q: "  ana   reyes ", stage: "screening", kind: "not_qualified", job: ID.toUpperCase(), source: "linkedin", tag: ID, score: "50", from: "2026-01-05", to: "2026-02-30", sort: "score" })).toEqual({
       q: "ana reyes",
       stage: "screening",
       closeKind: "not_qualified",
       openingId: ID,
       source: "linkedin",
       tagId: ID,
+      minScore: 50,
       from: "2026-01-05",
       to: null, // not a real date
-      sort: "name",
+      sort: "score",
     });
-    expect(parseApplicantFilters({ stage: "nope", kind: "x", job: "1; drop table", source: "x", tag: "nope", from: "yesterday", sort: "random" })).toEqual(EMPTY_FILTERS);
+    expect(parseApplicantFilters({ stage: "nope", kind: "x", job: "1; drop table", source: "x", tag: "nope", score: "60", from: "yesterday", sort: "random" })).toEqual(EMPTY_FILTERS);
   });
 
   it("accepts the not-said source", () => {

@@ -18,6 +18,9 @@ export const openingSchema = z.object({
   clientId: z.preprocess(blankToUndefined, uuid.optional()),
   sendAck: z.boolean().default(true),
   sendRejection: z.boolean().default(true),
+  /** Words to look for in resumes (commas or one per line). Parsed by parseKeywordList; used only for the keyword-match percentage. */
+  keywordsRequired: z.string().max(2000).default(""),
+  keywordsNice: z.string().max(2000).default(""),
   /** Users on the hiring team: leads who may see this opening and fill scorecards. */
   hiringTeamUserIds: z.array(uuid).max(20).default([]),
 });
@@ -127,3 +130,5 @@ export const bulkSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("untag"), applicationIds: bulkIds, tagId: uuid }),
 ]);
 export type BulkInput = z.input<typeof bulkSchema>;
+
+export const rescoreSchema = z.object({ openingId: uuid });
