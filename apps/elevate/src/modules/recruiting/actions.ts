@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -17,7 +17,7 @@ import { googleEventIdFor } from "./google";
 import { queueEmails } from "@/modules/notifications/email-queue";
 import { notify } from "@/modules/notifications/service";
 import { buildInterviewIcs, interviewMail } from "./mail";
-import { closeInTx, moveInTx } from "./transitions";
+import { POOL_REFUSED, closeInTx, moveInTx, poolInTx } from "./transitions";
 import { deleteApplicantSelfId } from "@/modules/demographics/service";
 import { offers } from "@/modules/offers/schema";
 import { onboardingCases } from "@/modules/onboarding/schema";
@@ -25,10 +25,10 @@ import { applicationStageHistory, applicationTagLinks, applicationTags, applicat
 import { sendRecruitingEmailsNow } from "./immediate";
 import { authorizeForOpening, freeSlug, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
 import { clearBanner } from "./careers-banner";
-import { MAX_TAGS_PER_APPLICATION } from "./constants";
+import { MAX_TAGS_PER_APPLICATION, isApplyable, type OpeningStatus } from "./constants";
 import { keywordColumns, parseKeywordList } from "./keywords";
 import { extractResumeText } from "./resume-text";
-import { rescoreSchema, archiveTagSchema, bulkSchema, createTagSchema, setSourceSchema, setTagsSchema, careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
+import { mergeSchema, poolSchema, poolToOpeningSchema, rescoreSchema, archiveTagSchema, bulkSchema, createTagSchema, setSourceSchema, setTagsSchema, careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
 const MANILA = "Asia/Manila";
@@ -587,6 +587,7 @@ export async function bulkUpdateApplications(input: unknown): Promise<ActionResu
         await db.transaction(async (tx) => {
           if (v.action === "move") await moveInTx(tx, actor, { applicationId, to: v.to, note: v.note });
           else if (v.action === "close") await closeInTx(tx, actor, { applicationId, kind: v.kind, reason: v.reason, notifyCandidate: v.notifyCandidate });
+          else if (v.action === "pool_add" || v.action === "pool_remove") await poolInTx(tx, actor, applicationId, v.action === "pool_add");
           else if (v.action === "tag") {
             const [app] = await tx.select({ id: applications.id }).from(applications).where(eq(applications.id, applicationId)).for("update");
             if (!app) throw new ActionFailure("That application was not found.");
@@ -667,5 +668,113 @@ export async function rescoreOpening(input: unknown): Promise<ActionResult<Resco
     refresh(openingId);
     revalidatePath("/recruiting/applicants");
     return { ok: true, data: { looked: targets.length, scored, unreadable } };
+  });
+}
+
+// ---- Talent pool and merging duplicates ------------------------------------------------------------------------------------
+
+/** Puts an applicant in the talent pool, or takes them out. Only someone who agreed to be kept (and whose agreement has not run out) can go in. */
+export async function setTalentPool(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.pool");
+    const parsed = poolSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { applicationId, inPool } = parsed.data;
+    await db.transaction((tx) => poolInTx(tx, actor, applicationId, inPool));
+    refreshApplicants(applicationId);
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Starts a new application for someone in the talent pool, for another open job. It begins at "Applied" like any other. */
+export async function addPoolMemberToOpening(input: unknown): Promise<ActionResult<{ applicationId: string }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.pool");
+    const parsed = poolToOpeningSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { applicationId, openingId } = parsed.data;
+
+    const [source] = await db.select({ candidateId: applications.candidateId }).from(applications).where(eq(applications.id, applicationId));
+    if (!source) return fail("That application was not found.");
+    const [c] = await db.select().from(candidates).where(eq(candidates.id, source.candidateId));
+    if (!c || c.anonymizedAt) return fail("Their personal data was removed.");
+    if (!c.inPool || !c.poolExpiresAt || c.poolExpiresAt <= new Date()) return fail(POOL_REFUSED);
+    const [opening] = await db.select().from(jobOpenings).where(eq(jobOpenings.id, openingId));
+    if (!opening || !isApplyable(opening.status as OpeningStatus, opening.archivedAt !== null)) return fail("That job is not open.");
+
+    // Read their resume on our server once to score it against this job's keywords (only the percentage is kept).
+    const sets = { required: opening.keywordsRequired, nice: opening.keywordsNice };
+    const bytes = sets.required.length + sets.nice.length > 0 && c.resumePath ? await getDocumentStorage().read(BUCKETS.recruiting, c.resumePath).catch(() => null) : null;
+    const keyword = keywordColumns(bytes ? await extractResumeText(bytes, c.resumeKind) : null, sets);
+
+    const id = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(applications).values({ openingId, candidateId: c.id, sourceDetail: "From the talent pool", ...(keyword ?? {}) }).onConflictDoNothing().returning({ id: applications.id });
+      if (!created) throw new ActionFailure("They already have an application for that job.");
+      await tx.insert(applicationStageHistory).values({ applicationId: created.id, fromStage: null, toStage: "applied", byUserId: actor.id, note: "Added from the talent pool" });
+      await writeAudit({ actor, action: "recruiting.pool_to_opening", targetType: "application", targetId: created.id, after: { openingId, candidateId: c.id } }, tx);
+      return created.id;
+    });
+    refresh(openingId, id);
+    refreshApplicants(applicationId);
+    return { ok: true, data: { applicationId: id } };
+  });
+}
+
+/**
+ * Merges two records of the same person: the second one's applications move to the first, blanks are filled from it, and the second
+ * is left as an emptied "Merged duplicate" row that points at the first (so counts and history still add up). Refused when both
+ * applied to the same job (close one first), and for a removed applicant. HR and Super Admin only; HR has looked at the pair first.
+ */
+export async function mergeCandidates(input: unknown): Promise<ActionResult<{ moved: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.merge");
+    const parsed = mergeSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { keepCandidateId, mergeCandidateId } = parsed.data;
+    if (keepCandidateId === mergeCandidateId) return fail("Choose two different records.");
+
+    const done = await db.transaction(async (tx) => {
+      // Lock both in a fixed order so two merges at once cannot deadlock.
+      const locked = await tx.select().from(candidates).where(inArray(candidates.id, [keepCandidateId, mergeCandidateId])).orderBy(asc(candidates.id)).for("update");
+      const keep = locked.find((c) => c.id === keepCandidateId);
+      const gone = locked.find((c) => c.id === mergeCandidateId);
+      if (!keep || !gone) throw new ActionFailure("One of those applicants was not found.");
+      if (keep.anonymizedAt || gone.anonymizedAt) throw new ActionFailure("An applicant whose data was removed cannot be merged.");
+
+      const mine = await tx.select({ id: applications.id, openingId: applications.openingId, title: jobOpenings.title }).from(applications).innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId)).where(eq(applications.candidateId, keep.id));
+      const theirs = await tx.select({ id: applications.id, openingId: applications.openingId, title: jobOpenings.title }).from(applications).innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId)).where(eq(applications.candidateId, gone.id));
+      const both = theirs.filter((t) => mine.some((m) => m.openingId === t.openingId));
+      if (both.length > 0) throw new ActionFailure(`Both records applied for ${[...new Set(both.map((b) => b.title))].join(", ")}. Close one of those applications first.`);
+
+      if (theirs.length) await tx.update(applications).set({ candidateId: keep.id }).where(eq(applications.candidateId, gone.id));
+
+      const takesResume = !keep.resumePath && gone.resumePath;
+      const carryPool = gone.poolConsentAt && gone.poolExpiresAt && (!keep.poolConsentAt || (keep.poolExpiresAt ?? new Date(0)) < gone.poolExpiresAt);
+      await tx
+        .update(candidates)
+        .set({
+          phone: keep.phone ?? gone.phone,
+          country: keep.country ?? gone.country,
+          ...(takesResume ? { resumePath: gone.resumePath, resumeName: gone.resumeName, resumeKind: gone.resumeKind, resumeSha256: gone.resumeSha256 } : {}),
+          ...(carryPool ? { poolConsentAt: gone.poolConsentAt, poolExpiresAt: gone.poolExpiresAt, inPool: keep.inPool || gone.inPool } : {}),
+        })
+        .where(eq(candidates.id, keep.id));
+      await deleteApplicantSelfId(tx, gone.id); // voluntary answers are not carried over; the kept record's own stay
+      await tx
+        .update(candidates)
+        .set({ email: `merged-${gone.id}@removed.invalid`, fullName: "Merged duplicate", phone: null, country: null, resumePath: null, resumeName: null, resumeKind: null, resumeSha256: null, inPool: false, mergedInto: keep.id, anonymizedAt: new Date() })
+        .where(eq(candidates.id, gone.id));
+      await writeAudit({ actor, action: "recruiting.merge", targetType: "candidate", targetId: keep.id, metadata: { merged: gone.id, applicationsMoved: theirs.length } }, tx);
+      return { moved: theirs.length, orphanResume: takesResume ? null : gone.resumePath };
+    });
+    // The file of the emptied record is removed only after the merge has committed (the kept record already has its own resume).
+    if (done.orphanResume) await getDocumentStorage().remove(BUCKETS.recruiting, [done.orphanResume]).catch(() => undefined);
+    refresh();
+    refreshApplicants();
+    revalidatePath("/recruiting/applicants/duplicates");
+    return { ok: true, data: { moved: done.moved } };
   });
 }

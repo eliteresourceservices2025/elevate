@@ -10,7 +10,7 @@ import { saveApplicantSelfId } from "@/modules/demographics/service";
 import { sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { notify } from "@/modules/notifications/service";
-import { RESUME_KINDS, RESUME_MAX_BYTES, isApplyable, type OpeningStatus } from "./constants";
+import { POOL_MONTHS, RESUME_KINDS, RESUME_MAX_BYTES, addMonthsUtc, isApplyable, type OpeningStatus } from "./constants";
 import { keywordColumns } from "./keywords";
 import { receivedMail } from "./mail";
 import { extractResumeText } from "./resume-text";
@@ -97,6 +97,9 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
   const sets = { required: opening.keywordsRequired, nice: opening.keywordsNice };
   const keyword = keywordColumns(sets.required.length + sets.nice.length > 0 ? await extractResumeText(file.bytes, kind) : null, sets);
 
+  // Optional consent to keep their details for future roles; it only starts the clock, staff still choose who goes in the pool.
+  const poolColumns = v.poolConsent ? { poolConsentAt: new Date(), poolExpiresAt: addMonthsUtc(new Date(), POOL_MONTHS) } : {};
+
   const path = `resumes/${randomUUID()}.${kind}`;
   const sha = createHash("sha256").update(file.bytes).digest("hex");
   const storage = getDocumentStorage();
@@ -118,11 +121,11 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
         if (again) return { duplicate: true as const, oldResume: null };
         candidateId = existing.id;
         oldResume = existing.resumePath;
-        await tx.update(candidates).set({ fullName: v.fullName, phone: v.phone ?? existing.phone, country: v.country ?? existing.country, resumePath: path, resumeName: displayName, resumeKind: kind, resumeSha256: sha, consentNoticeVersion: noticeVersion, consentAt: new Date() }).where(eq(candidates.id, candidateId));
+        await tx.update(candidates).set({ fullName: v.fullName, phone: v.phone ?? existing.phone, country: v.country ?? existing.country, resumePath: path, resumeName: displayName, resumeKind: kind, resumeSha256: sha, consentNoticeVersion: noticeVersion, consentAt: new Date(), ...poolColumns }).where(eq(candidates.id, candidateId));
       } else {
         const [created] = await tx
           .insert(candidates)
-          .values({ email: v.email, fullName: v.fullName, phone: v.phone ?? null, country: v.country ?? null, consentNoticeVersion: noticeVersion, resumePath: path, resumeName: displayName, resumeKind: kind, resumeSha256: sha })
+          .values({ email: v.email, fullName: v.fullName, phone: v.phone ?? null, country: v.country ?? null, consentNoticeVersion: noticeVersion, resumePath: path, resumeName: displayName, resumeKind: kind, resumeSha256: sha, ...poolColumns })
           .returning({ id: candidates.id });
         candidateId = created.id;
       }

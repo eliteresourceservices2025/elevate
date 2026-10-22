@@ -60,3 +60,17 @@ export async function closeInTx(tx: Tx, actor: Actor, v: { applicationId: string
   }
   return row.app.openingId;
 }
+
+export const POOL_REFUSED = "They did not agree to be kept for future roles, or that agreement has run out.";
+
+/** Puts one applicant in the talent pool, or takes them out. Only someone who agreed to be kept (and whose agreement has not run out) can go in. */
+export async function poolInTx(tx: Tx, actor: Actor, applicationId: string, inPool: boolean): Promise<void> {
+  const [app] = await tx.select({ candidateId: applications.candidateId }).from(applications).where(eq(applications.id, applicationId));
+  if (!app) throw new ActionFailure("That application was not found.");
+  const [c] = await tx.select().from(candidates).where(eq(candidates.id, app.candidateId)).for("update");
+  if (!c || c.anonymizedAt) throw new ActionFailure("Their personal data was removed.");
+  if (inPool && (!c.poolConsentAt || !c.poolExpiresAt || c.poolExpiresAt <= new Date())) throw new ActionFailure(POOL_REFUSED);
+  if (c.inPool === inPool) return;
+  await tx.update(candidates).set({ inPool, inPoolBy: inPool ? actor.id : null, inPoolAt: inPool ? new Date() : null }).where(eq(candidates.id, c.id));
+  await writeAudit({ actor, action: inPool ? "recruiting.pool_add" : "recruiting.pool_remove", targetType: "candidate", targetId: c.id }, tx);
+}

@@ -995,3 +995,136 @@ describe("deleting a job ad and erasing an application", () => {
     expect(await actions.deleteApplication({ applicationId: hiredApp, confirm: "DELETE" })).toEqual({ ok: false, error: "This applicant has an offer or was hired, so it cannot be erased." });
   });
 });
+
+describe("talent pool and duplicate merge", () => {
+  const candidateOf = async (appId: string) => (await rows<{ id: string }>(sql`select candidate_id as id from talent.applications where id = ${appId}`))[0].id;
+  const phoneNo = () => `09${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 10)}`;
+
+  it("starts the 12-month clock only when the applicant ticks the box, and only a consenting applicant can go in the pool", async () => {
+    const opening = await openJob();
+    const yes = `${uniq("pool")}@example.com`;
+    const no = `${uniq("pool")}@example.com`;
+    await apply(opening, { email: yes, poolConsent: true });
+    await apply(opening, { email: no });
+    const [row] = await rows<{ pool_consent_at: Date | null; months: number }>(sql`select pool_consent_at, round(extract(epoch from (pool_expires_at - pool_consent_at)) / 2629800)::int as months from talent.candidates where lower(email) = ${yes}`);
+    expect(row.pool_consent_at).not.toBeNull();
+    expect(row.months).toBe(12);
+    expect((await rows<{ pool_consent_at: Date | null }>(sql`select pool_consent_at from talent.candidates where lower(email) = ${no}`))[0].pool_consent_at).toBeNull();
+
+    const appYes = (await appFor(opening, yes))!;
+    const appNo = (await appFor(opening, no))!;
+    as(recruiter);
+    expect(await actions.setTalentPool({ applicationId: appNo, inPool: true })).toMatchObject({ ok: false, error: expect.stringContaining("did not agree") });
+    expect((await actions.setTalentPool({ applicationId: appYes, inPool: true })).ok).toBe(true);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'recruiting.pool_add' and target_id = ${await candidateOf(appYes)}`)).toHaveLength(1);
+
+    const pooled = await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, poolOnly: true }, { page: 1, pageSize: 20 });
+    expect(pooled.rows.map((r) => [r.applicationId, r.inPool])).toEqual([[appYes, true]]);
+    expect((await queries.getApplication(appYes)).pool).toMatchObject({ consented: true, inPool: true, canManage: true });
+    expect((await queries.getApplication(appNo)).pool).toMatchObject({ consented: false, inPool: false });
+
+    // in bulk, the one who did not agree is reported, not forced in
+    const bulk = await actions.bulkUpdateApplications({ action: "pool_add", applicationIds: [appYes, appNo] });
+    expect(bulk).toMatchObject({ ok: true, data: { requested: 2, done: 1 } });
+    expect((await actions.setTalentPool({ applicationId: appYes, inPool: false })).ok).toBe(true);
+    for (const u of [lead, exec, employee]) {
+      as(u);
+      expect(await actions.setTalentPool({ applicationId: appYes, inPool: true })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+  });
+
+  it("puts a pool member forward for another open job, once, and never someone who is not in the pool", async () => {
+    const first = await openJob();
+    const second = await openJob();
+    const email = `${uniq("fwd")}@example.com`;
+    await apply(first, { email, poolConsent: true });
+    const appId = (await appFor(first, email))!;
+    as(recruiter);
+    expect(await actions.addPoolMemberToOpening({ applicationId: appId, openingId: second })).toMatchObject({ ok: false, error: expect.stringContaining("did not agree") }); // not in the pool yet
+    await actions.setTalentPool({ applicationId: appId, inPool: true });
+    expect((await queries.getApplication(appId)).pool.openings.map((o) => o.id)).toEqual(expect.arrayContaining([second]));
+    const added = await actions.addPoolMemberToOpening({ applicationId: appId, openingId: second });
+    expect(added.ok).toBe(true);
+    const newApp = (added as { data: { applicationId: string } }).data.applicationId;
+    const [hist] = await rows<{ to_stage: string; note: string | null }>(sql`select to_stage, note from talent.application_stage_history where application_id = ${newApp}`);
+    expect(hist).toEqual({ to_stage: "applied", note: "Added from the talent pool" });
+    expect(await actions.addPoolMemberToOpening({ applicationId: appId, openingId: second })).toMatchObject({ ok: false, error: "They already have an application for that job." });
+    expect((await queries.getApplication(appId)).pool.openings.map((o) => o.id)).not.toContain(second);
+    as(recruiter);
+    const draft = idOf(await actions.saveOpening({ title: uniq("Draft "), description: "A job that is not open yet, for the pool test.", hiringTeamUserIds: [] }));
+    expect(await actions.addPoolMemberToOpening({ applicationId: appId, openingId: draft })).toEqual({ ok: false, error: "That job is not open." });
+  });
+
+  it("keeps a pool member's data past the retention period while the consent runs, then the normal period applies again", async () => {
+    as(hr);
+    await actions.saveRetention({ enabled: true, rejectedMonths: 12, withdrawnMonths: 6 });
+    try {
+      const opening = await openJob();
+      const email = `${uniq("keep")}@example.com`;
+      await apply(opening, { email, fullName: "Pool Keeper", poolConsent: true });
+      const appId = (await appFor(opening, email))!;
+      const candidateId = await candidateOf(appId);
+      as(recruiter);
+      await actions.setTalentPool({ applicationId: appId, inPool: true });
+      await actions.rejectApplication({ applicationId: appId, reason: "Not this role", notifyCandidate: false });
+      await db.execute(sql`update talent.applications set closed_at = now() - interval '20 months' where id = ${appId}`);
+
+      await jobs.runRecruitingRetention();
+      expect((await rows<{ anonymized_at: Date | null }>(sql`select anonymized_at from talent.candidates where id = ${candidateId}`))[0].anonymized_at).toBeNull();
+
+      // the consent runs out: they leave the pool and the normal period (already over) applies
+      await db.execute(sql`update talent.candidates set pool_expires_at = now() - interval '1 day' where id = ${candidateId}`);
+      await jobs.runRecruitingRetention();
+      const [after] = await rows<{ anonymized_at: Date | null; in_pool: boolean }>(sql`select anonymized_at, in_pool from talent.candidates where id = ${candidateId}`);
+      expect(after.in_pool).toBe(false);
+      expect(after.anonymized_at).not.toBeNull();
+    } finally {
+      as(hr);
+      await actions.saveRetention({ enabled: false, rejectedMonths: 12, withdrawnMonths: 6 });
+    }
+  });
+
+  it("finds likely duplicates, merges them into one record, and refuses when both applied for the same job", async () => {
+    const jobX = await openJob();
+    const jobY = await openJob();
+    const phone = phoneNo();
+    const name = uniq("Mia Tester ").replace(/[0-9]/g, "x");
+    const e1 = `${uniq("dup")}@example.com`;
+    const e2 = `${uniq("dup")}@example.com`;
+    const e3 = `${uniq("dup")}@example.com`;
+    await apply(jobY, { email: e1, fullName: name, phone });
+    await apply(jobX, { email: e2, fullName: `${name} Jr`, phone, poolConsent: true });
+    await apply(jobY, { email: e3, fullName: `${name} Sr`, phone });
+    const [app1, app2, app3] = [(await appFor(jobY, e1))!, (await appFor(jobX, e2))!, (await appFor(jobY, e3))!];
+    const [c1, c2, c3] = await Promise.all([candidateOf(app1), candidateOf(app2), candidateOf(app3)]);
+
+    as(hr);
+    const groups = await queries.listDuplicateGroups();
+    const mine = groups.find((g) => g.candidates.some((c) => c.id === c1));
+    expect(mine?.reasons).toContain("phone");
+    expect(mine?.candidates.map((c) => c.id).sort()).toEqual([c1, c2, c3].sort());
+
+    // a recruiter may not merge; HR may
+    as(recruiter);
+    expect(await actions.mergeCandidates({ keepCandidateId: c1, mergeCandidateId: c2 })).toEqual({ ok: false, error: NO_ACCESS });
+    as(hr);
+    expect(await actions.mergeCandidates({ keepCandidateId: c1, mergeCandidateId: c1 })).toMatchObject({ ok: false });
+    expect(await actions.mergeCandidates({ keepCandidateId: c1, mergeCandidateId: c2 })).toEqual({ ok: true, data: { moved: 1 } });
+    const [left] = await rows<{ full_name: string; anonymized_at: Date | null; merged_into: string | null; email: string }>(sql`select full_name, anonymized_at, merged_into, email from talent.candidates where id = ${c2}`);
+    expect(left).toMatchObject({ full_name: "Merged duplicate", merged_into: c1 });
+    expect(left.anonymized_at).not.toBeNull();
+    expect(left.email).not.toContain("example.com");
+    expect(await candidateOf(app2)).toBe(c1); // the application moved
+    // the pool agreement came along with the application
+    expect((await rows<{ pool_consent_at: Date | null }>(sql`select pool_consent_at from talent.candidates where id = ${c1}`))[0].pool_consent_at).not.toBeNull();
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'recruiting.merge' and target_id = ${c1}`)).toHaveLength(1);
+
+    // c3 and c1 both applied for job Y: refused, and nothing changed
+    const refused = await actions.mergeCandidates({ keepCandidateId: c1, mergeCandidateId: c3 });
+    expect(refused).toMatchObject({ ok: false, error: expect.stringContaining("Both records applied") });
+    expect((await rows<{ anonymized_at: Date | null }>(sql`select anonymized_at from talent.candidates where id = ${c3}`))[0].anonymized_at).toBeNull();
+    // an emptied record cannot be merged again, and no longer shows up as a duplicate
+    expect(await actions.mergeCandidates({ keepCandidateId: c1, mergeCandidateId: c2 })).toMatchObject({ ok: false });
+    expect((await queries.listDuplicateGroups()).some((g) => g.candidates.some((c) => c.id === c2))).toBe(false);
+  });
+});

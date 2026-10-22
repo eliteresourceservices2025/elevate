@@ -666,6 +666,13 @@
       "when": 1792704407283,
       "tag": "0094_ats_keyword_score",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1792706264831,
+      "tag": "0095_ats_talent_pool",
+      "breakpoints": true
     }
   ]
 }

@@ -104,3 +104,63 @@ test("HR finds applicants across jobs, reads the keyword match, tags one, and cl
   await expect(hr.getByRole("row", { name: new RegExp(strong) }).getByText("Not qualified")).toBeVisible(slow);
   await expect(hr.getByRole("row", { name: new RegExp(weak) }).getByText("Not qualified")).toBeVisible();
 });
+
+test("HR puts a consenting applicant in the talent pool, then merges two records of the same person", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const slow = { timeout: 30_000 };
+  const stamp = Date.now();
+  const phone = `09${String(stamp).slice(-9)}`;
+  const person = `Pia Pool${stamp}`;
+
+  const hr = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(hr, await createHrAccount());
+
+  const openJob = async (title: string) => {
+    await hr.goto("/recruiting/new");
+    await waitForHydration(hr, "#op-title");
+    await hr.getByLabel("Job title").fill(title);
+    await hr.getByLabel(/^Description/).fill("Support our clients with scheduling, inbox care and light data entry.");
+    await hr.getByRole("button", { name: "Create job (draft)" }).click();
+    await hr.waitForURL(/\/recruiting\/[0-9a-f-]{36}$/, slow);
+    const id = hr.url().split("/").pop()!;
+    await hr.getByRole("button", { name: "Publish job" }).click();
+    await expect(hr.getByText("Open", { exact: true }).first()).toBeVisible(slow);
+    return id;
+  };
+  const jobA = await openJob(`E2E Pool A ${stamp}`);
+  const jobB = await openJob(`E2E Pool B ${stamp}`);
+
+  const apply = async (openingId: string, name: string, extra: Record<string, string> = {}) => {
+    const res = await hr.request.post("/api/careers/apply", {
+      multipart: { openingId, fullName: name, email: `${name.toLowerCase().replace(/\s+/g, ".")}@example.com`, phone, consent: "on", website: "", ...extra, resume: { name: "cv.pdf", mimeType: "application/pdf", buffer: Buffer.from(await makePdf(["Virtual assistant"])) } },
+    });
+    expect(res.ok()).toBe(true);
+  };
+  await apply(jobA, person, { poolConsent: "on" });
+  await apply(jobB, `${person} Again`);
+
+  // The applicant who agreed to be kept goes in the talent pool
+  await hr.goto(`/recruiting/applicants?q=${encodeURIComponent(person)}`);
+  await hr.getByRole("link", { name: person, exact: true }).click();
+  await hr.waitForURL(/\/recruiting\/applications\//, slow);
+  await waitForHydration(hr, "#at-new");
+  await expect(hr.getByText("They agreed to be kept for future roles")).toBeVisible(slow);
+  await hr.getByRole("button", { name: "Add to the talent pool" }).click();
+  await expect(hr.getByText("Added to the pool.")).toBeVisible(slow);
+  await hr.goto(`/recruiting/applicants?pool=1&q=${encodeURIComponent(person)}`);
+  await expect(hr.getByRole("link", { name: person, exact: true })).toBeVisible(slow);
+  await expect(hr.getByRole("link", { name: `${person} Again` })).toHaveCount(0);
+
+  // Two records with the same phone number: HR merges them
+  await hr.goto("/recruiting/applicants");
+  await hr.getByRole("link", { name: "Possible duplicates" }).click();
+  await hr.waitForURL("**/recruiting/applicants/duplicates", slow);
+  const group = hr.locator("fieldset", { hasText: person }).first();
+  await expect(group.getByText("Possible duplicate: same phone number")).toBeVisible(slow);
+  await waitForHydration(hr, "input[type=radio]");
+  await group.getByRole("radio").first().check();
+  hr.once("dialog", (d) => d.accept());
+  await group.getByRole("button", { name: /merge the rest/ }).click();
+  await expect(hr.getByText(/Merged\. 1 application moved\./)).toBeVisible(slow);
+  await expect(hr.locator("fieldset", { hasText: person })).toHaveCount(0, slow);
+});

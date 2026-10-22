@@ -28,9 +28,10 @@ function StageBadge({ row }: { row: ApplicantRow }) {
 }
 
 function SourceAndTags({ row }: { row: ApplicantRow }) {
-  if (!row.source && row.tags.length === 0 && row.keywordScore === null) return <span className="text-xs text-muted-foreground">-</span>;
+  if (!row.source && row.tags.length === 0 && row.keywordScore === null && !row.inPool) return <span className="text-xs text-muted-foreground">-</span>;
   return (
     <div className="flex flex-wrap gap-1">
+      {row.inPool ? <Badge>Talent pool</Badge> : null}
       {row.keywordScore !== null ? <Badge variant={row.keywordScore >= 75 ? "default" : "outline"}>Match {row.keywordScore}%</Badge> : null}
       {row.source ? <Badge variant="secondary">{SOURCE_LABELS[row.source]}</Badge> : null}
       {row.tags.map((t) => (
@@ -58,9 +59,16 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
         title="Applicants"
         description={data.scope === "team" ? "Everyone who applied to the jobs you are on the hiring team for." : "Everyone who applied, across all jobs. Open a name for the full record."}
         actions={
-          <Link href="/recruiting" className={buttonVariants({ variant: "outline" })}>
-            Jobs and boards
-          </Link>
+          <>
+            {data.canMerge ? (
+              <Link href="/recruiting/applicants/duplicates" className={buttonVariants({ variant: "outline" })}>
+                Possible duplicates
+              </Link>
+            ) : null}
+            <Link href="/recruiting" className={buttonVariants({ variant: "outline" })}>
+              Jobs and boards
+            </Link>
+          </>
         }
       />
 
@@ -130,6 +138,10 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
                 </option>
               ))}
             </SelectField>
+            <label htmlFor="ap-pool" className="flex items-center gap-2 self-end pb-2 text-sm">
+              <input id="ap-pool" name="pool" type="checkbox" value="1" defaultChecked={filters.poolOnly} className="size-4 accent-primary" />
+              Only the talent pool
+            </label>
             <TextField id="ap-from" name="from" label="Applied from" type="date" defaultValue={filters.from ?? ""} />
             <TextField id="ap-to" name="to" label="Applied to" type="date" defaultValue={filters.to ?? ""} />
             <SelectField id="ap-sort" name="sort" label="Sort by" defaultValue={filters.sort}>

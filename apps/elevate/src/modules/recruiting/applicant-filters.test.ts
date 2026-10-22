@@ -9,13 +9,14 @@ describe("parseApplicantFilters", () => {
   });
 
   it("keeps valid values and drops anything it does not recognise", () => {
-    expect(parseApplicantFilters({ q: "  ana   reyes ", stage: "screening", kind: "not_qualified", job: ID.toUpperCase(), source: "linkedin", tag: ID, score: "50", from: "2026-01-05", to: "2026-02-30", sort: "score" })).toEqual({
+    expect(parseApplicantFilters({ q: "  ana   reyes ", stage: "screening", kind: "not_qualified", job: ID.toUpperCase(), source: "linkedin", tag: ID, pool: "1", score: "50", from: "2026-01-05", to: "2026-02-30", sort: "score" })).toEqual({
       q: "ana reyes",
       stage: "screening",
       closeKind: "not_qualified",
       openingId: ID,
       source: "linkedin",
       tagId: ID,
+      poolOnly: true,
       minScore: 50,
       from: "2026-01-05",
       to: null, // not a real date

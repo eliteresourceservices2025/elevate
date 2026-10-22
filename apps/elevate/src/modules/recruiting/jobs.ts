@@ -64,6 +64,19 @@ export async function sendCandidateEmails(now = new Date()) {
   return { configured: true, sent, failed, skipped };
 }
 
+/**
+ * Takes people out of the talent pool when the consent they gave to be kept has run out, so the normal retention periods apply to
+ * them again. Safe to repeat. Returns how many were taken out.
+ */
+export async function expireTalentPool(now = new Date()): Promise<number> {
+  const rows = await db
+    .update(candidates)
+    .set({ inPool: false })
+    .where(and(eq(candidates.inPool, true), sql`${candidates.poolExpiresAt} <= ${now.toISOString()}::timestamptz`))
+    .returning({ id: candidates.id });
+  return rows.length;
+}
+
 const addMonths = (d: Date, n: number) => {
   const out = new Date(d);
   out.setUTCMonth(out.getUTCMonth() + n);
@@ -77,6 +90,7 @@ const addMonths = (d: Date, n: number) => {
  * of scorecards are erased. Someone who was hired is never touched here.
  */
 export async function runRecruitingRetention(now = new Date()) {
+  await expireTalentPool(now); // runs even when retention is off: a consent that has run out must stop holding the person's data
   const settings = await getRetentionSettings();
   if (!settings.retentionEnabled) return { enabled: false, candidates: 0 };
 
@@ -84,7 +98,15 @@ export async function runRecruitingRetention(now = new Date()) {
     .select({ candidateId: applications.candidateId, closeKind: applications.closeKind, closedAt: applications.closedAt })
     .from(applications)
     .innerJoin(candidates, eq(candidates.id, applications.candidateId))
-    .where(and(eq(applications.stage, "rejected"), sql`${applications.closedAt} is not null`, isNull(candidates.anonymizedAt)));
+    .where(
+      and(
+        eq(applications.stage, "rejected"),
+        sql`${applications.closedAt} is not null`,
+        isNull(candidates.anonymizedAt),
+        // Someone in the talent pool, whose consent to keep their details has not run out, is kept.
+        sql`not (${candidates.inPool} and ${candidates.poolExpiresAt} > ${now.toISOString()}::timestamptz)`,
+      ),
+    );
   const expired = new Set<string>();
   for (const c of closed) {
     const months = retentionMonths(c.closeKind as CloseKind | null, settings);

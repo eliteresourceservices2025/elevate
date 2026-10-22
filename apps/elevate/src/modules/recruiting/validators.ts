@@ -43,6 +43,8 @@ export const applySchema = z.object({
   source: z.preprocess(blankToUndefined, z.enum(SOURCES).optional().catch(undefined)),
   sourceDetail: z.preprocess(blankToUndefined, text(100).optional()),
   consent: z.literal(true, { message: "Please accept the privacy notice to apply" }),
+  /** Optional: keep their details for POOL_MONTHS months so the team can contact them about other roles. */
+  poolConsent: z.boolean().default(false),
   /** Real people leave this empty; bots fill every field they see. */
   website: z.string().max(0).default(""),
   /** The optional self-identification section. Checked on its own (demographics/validators.ts) and kept apart from the application. */
@@ -128,7 +130,13 @@ export const bulkSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("close"), applicationIds: bulkIds, kind: z.enum(CLOSE_KINDS), reason: text(500).min(3, "Give a short reason (it stays internal)"), notifyCandidate: z.boolean().default(false) }),
   z.object({ action: z.literal("tag"), applicationIds: bulkIds, tagId: uuid }),
   z.object({ action: z.literal("untag"), applicationIds: bulkIds, tagId: uuid }),
+  z.object({ action: z.literal("pool_add"), applicationIds: bulkIds }),
+  z.object({ action: z.literal("pool_remove"), applicationIds: bulkIds }),
 ]);
 export type BulkInput = z.input<typeof bulkSchema>;
 
 export const rescoreSchema = z.object({ openingId: uuid });
+
+export const poolSchema = z.object({ applicationId: uuid, inPool: z.boolean() });
+export const poolToOpeningSchema = z.object({ applicationId: uuid, openingId: uuid });
+export const mergeSchema = z.object({ keepCandidateId: uuid, mergeCandidateId: uuid });

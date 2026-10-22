@@ -115,3 +115,13 @@ export const TAG_NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} '&+/.-]*$/u;
 export const MAX_TAGS_PER_APPLICATION = 10;
 /** A bulk action touches at most this many applications at once. */
 export const BULK_MAX = 100;
+
+/** How long an applicant's "keep my details for future roles" consent lasts (counsel to confirm). */
+export const POOL_MONTHS = 12;
+
+/** Adds calendar months in UTC (the end of a month rolls over the way Date does). */
+export function addMonthsUtc(d: Date, n: number): Date {
+  const out = new Date(d);
+  out.setUTCMonth(out.getUTCMonth() + n);
+  return out;
+}

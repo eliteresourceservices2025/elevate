@@ -15,6 +15,8 @@ const ACTIONS = [
   { value: "close", label: "Close applications" },
   { value: "tag", label: "Add a tag" },
   { value: "untag", label: "Remove a tag" },
+  { value: "pool_add", label: "Add to the talent pool" },
+  { value: "pool_remove", label: "Take out of the talent pool" },
 ] as const;
 type ActionValue = (typeof ACTIONS)[number]["value"];
 
@@ -63,8 +65,10 @@ export function BulkBar({ formId, tags }: { formId: string; tags: TagChoice[] })
         ? { ...base, action, to: stage as Stage }
         : action === "close"
           ? { ...base, action, kind, reason, notifyCandidate: notify }
-          : { ...base, action, tagId };
-    const what = action === "move" ? `Move ${ids.length} to ${STAGE_LABELS[stage as Stage]}` : action === "close" ? `Close ${ids.length} as ${CLOSE_KIND_LABELS[kind].toLowerCase()}` : action === "tag" ? `Add the tag to ${ids.length}` : `Remove the tag from ${ids.length}`;
+          : action === "pool_add" || action === "pool_remove"
+            ? { ...base, action }
+            : { ...base, action, tagId };
+    const what = action === "move" ? `Move ${ids.length} to ${STAGE_LABELS[stage as Stage]}` : action === "close" ? `Close ${ids.length} as ${CLOSE_KIND_LABELS[kind].toLowerCase()}` : action === "tag" ? `Add the tag to ${ids.length}` : action === "untag" ? `Remove the tag from ${ids.length}` : action === "pool_add" ? `Add ${ids.length} to the talent pool (only those who agreed to be kept)` : `Take ${ids.length} out of the talent pool`;
     if (!window.confirm(`${what}? Each one is recorded in its history.`)) return;
     setResult(null);
     run<BulkResult>(

@@ -20,6 +20,8 @@ export type ApplicantFilters = {
   /** A source, "none" (not said) or "all". */
   source: Source | "none" | "all";
   tagId: string | null;
+  /** Only people in the talent pool. */
+  poolOnly: boolean;
   /** Only applications whose keyword match is at least this percentage (null = no limit). */
   minScore: number | null;
   from: string | null;
@@ -27,7 +29,7 @@ export type ApplicantFilters = {
   sort: ApplicantSort;
 };
 
-export const EMPTY_FILTERS: ApplicantFilters = { q: "", stage: "all", closeKind: "all", openingId: null, source: "all", tagId: null, minScore: null, from: null, to: null, sort: "applied" };
+export const EMPTY_FILTERS: ApplicantFilters = { q: "", stage: "all", closeKind: "all", openingId: null, source: "all", tagId: null, poolOnly: false, minScore: null, from: null, to: null, sort: "applied" };
 
 export const SEARCH_MAX = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -55,6 +57,7 @@ export function parseApplicantFilters(raw: Record<string, unknown>): ApplicantFi
     openingId: UUID.test(job) ? job.toLowerCase() : null,
     source: source === "none" || (SOURCES as readonly string[]).includes(source) ? (source as Source | "none") : "all",
     tagId: UUID.test(tag) ? tag.toLowerCase() : null,
+    poolOnly: first(raw.pool) === "1",
     minScore: (MIN_SCORES as readonly number[]).includes(score) ? score : null,
     from: isoDate(first(raw.from)),
     to: isoDate(first(raw.to)),
@@ -71,6 +74,7 @@ export function filtersToQuery(f: ApplicantFilters): Record<string, string | und
     job: f.openingId ?? undefined,
     source: f.source === "all" ? undefined : f.source,
     tag: f.tagId ?? undefined,
+    pool: f.poolOnly ? "1" : undefined,
     score: f.minScore === null ? undefined : String(f.minScore),
     from: f.from ?? undefined,
     to: f.to ?? undefined,

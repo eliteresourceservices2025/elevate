@@ -10,6 +10,7 @@ import { reportName } from "@/modules/org/service";
 import { getPrivacyNotice } from "@/modules/privacy/queries";
 import { BOARD_STAGES, STAGES, type CloseKind, type CriterionKey, type Source, type Stage } from "./constants";
 import { escapeLike, type ApplicantFilters } from "./applicant-filters";
+import { groupDuplicates } from "./duplicates";
 import { keywordSetKey } from "./keywords";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { pageInfo } from "@/lib/pagination";
@@ -244,6 +245,7 @@ export async function getApplication(applicationId: string) {
     nowMs: Date.now(),
     application: { id: app.id, openingId: app.openingId, stage: app.stage as Stage, closeKind: app.closeKind, closeReason: app.closeReason, note: app.note, appliedAt: app.appliedAt, stageChangedAt: app.stageChangedAt, source: app.source as Source | null, sourceDetail: app.sourceDetail },
     tags: await tagsOfApplication(applicationId),
+    pool: await poolOf(candidate, app.candidateId, applicationId, scopeFor(user, "recruiting.pool") !== null),
     keyword: {
       configured: opening.keywordsRequired.length + opening.keywordsNice.length > 0,
       score: app.keywordScore,
@@ -305,6 +307,8 @@ export type ApplicantRow = {
   source: Source | null;
   /** Keyword match, 0 to 100, or null when the job has no keywords or the resume could not be read. */
   keywordScore: number | null;
+  /** In the talent pool, with their agreement to be kept still running. */
+  inPool: boolean;
   tags: TagChoice[];
 };
 
@@ -333,6 +337,7 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
     const like = `%${escapeLike(filters.q.toLowerCase())}%`;
     conditions.push(and(isNull(candidates.anonymizedAt), or(sql`lower(${candidates.fullName}) like ${like}`, sql`lower(${candidates.email}) like ${like}`)));
   }
+  if (filters.poolOnly) conditions.push(sql`${candidates.inPool} and ${candidates.poolExpiresAt} > now()`);
   if (filters.minScore !== null) conditions.push(sql`${applications.keywordScore} >= ${filters.minScore}`);
   const where = and(...conditions);
 
@@ -359,6 +364,8 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
       stageChangedAt: applications.stageChangedAt,
       source: applications.source,
       keywordScore: applications.keywordScore,
+      inPool: candidates.inPool,
+      poolExpiresAt: candidates.poolExpiresAt,
     })
     .from(applications)
     .innerJoin(candidates, eq(candidates.id, applications.candidateId))
@@ -398,9 +405,10 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
     stageChangedAt: r.stageChangedAt,
     source: r.source as Source | null,
     keywordScore: r.keywordScore,
+    inPool: r.inPool && r.poolExpiresAt !== null && r.poolExpiresAt > new Date(),
     tags: tagsBy.get(r.applicationId) ?? [],
   }));
-  return { scope, rows: list, info, openings, tagChoices: await listTagChoices(), canBulk: scopeFor(user, "recruiting.bulk") !== null };
+  return { scope, rows: list, info, openings, tagChoices: await listTagChoices(), canBulk: scopeFor(user, "recruiting.bulk") !== null, canMerge: scopeFor(user, "recruiting.merge") !== null };
 }
 
 // ---- Tags -----------------------------------------------------------------------------------------------------------------
@@ -419,4 +427,61 @@ async function tagsOfApplication(applicationId: string): Promise<TagChoice[]> {
     .innerJoin(applicationTags, eq(applicationTags.id, applicationTagLinks.tagId))
     .where(and(eq(applicationTagLinks.applicationId, applicationId), isNull(applicationTags.archivedAt)))
     .orderBy(asc(sql`lower(${applicationTags.name})`));
+}
+
+// ---- Talent pool and duplicates ---------------------------------------------------------------------------------------------
+
+export type PoolView = {
+  /** They ticked "keep my details" and it has not run out. */
+  consented: boolean;
+  inPool: boolean;
+  expiresAt: Date | null;
+  canManage: boolean;
+  /** Open jobs they have not applied for yet (only filled for someone who is in the pool and may be moved). */
+  openings: { id: string; title: string }[];
+};
+
+async function poolOf(candidate: { anonymizedAt: Date | null; inPool: boolean; poolConsentAt: Date | null; poolExpiresAt: Date | null }, candidateId: string, _applicationId: string, canManage: boolean): Promise<PoolView> {
+  const live = Boolean(candidate.poolConsentAt && candidate.poolExpiresAt && candidate.poolExpiresAt > new Date());
+  const inPool = candidate.inPool && live;
+  let openings: PoolView["openings"] = [];
+  if (canManage && inPool && !candidate.anonymizedAt) {
+    openings = await db
+      .select({ id: jobOpenings.id, title: jobOpenings.title })
+      .from(jobOpenings)
+      .where(and(eq(jobOpenings.status, "open"), isNull(jobOpenings.archivedAt), sql`not exists (select 1 from talent.applications a where a.opening_id = ${jobOpenings.id} and a.candidate_id = ${candidateId})`))
+      .orderBy(asc(jobOpenings.title));
+  }
+  return { consented: live, inPool, expiresAt: candidate.poolExpiresAt, canManage, openings };
+}
+
+export type DuplicateCandidate = { id: string; name: string; email: string; phone: string | null; appliedFor: { title: string; stage: Stage }[]; inPool: boolean };
+export type DuplicateGroupView = { reasons: ("phone" | "name")[]; candidates: DuplicateCandidate[] };
+
+/** Applicants who look like the same person (same phone or same name, different email). HR reviews each group and decides; nothing is merged for them. */
+export async function listDuplicateGroups(): Promise<DuplicateGroupView[]> {
+  const user = await requireUser();
+  await authorize(user, "recruiting.merge");
+  const all = await db
+    .select({ id: candidates.id, fullName: candidates.fullName, email: candidates.email, phone: candidates.phone, inPool: candidates.inPool })
+    .from(candidates)
+    .where(isNull(candidates.anonymizedAt))
+    .limit(20_000);
+  const groups = groupDuplicates(all).slice(0, 100);
+  if (groups.length === 0) return [];
+  const ids = groups.flatMap((g) => g.ids);
+  const apps = await db
+    .select({ candidateId: applications.candidateId, title: jobOpenings.title, stage: applications.stage })
+    .from(applications)
+    .innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId))
+    .where(inArray(applications.candidateId, ids))
+    .orderBy(desc(applications.appliedAt));
+  const byId = new Map(all.map((c) => [c.id, c]));
+  return groups.map((g) => ({
+    reasons: g.reasons,
+    candidates: g.ids.map((id) => {
+      const c = byId.get(id)!;
+      return { id, name: c.fullName, email: c.email, phone: c.phone, inPool: c.inPool, appliedFor: apps.filter((a) => a.candidateId === id).map((a) => ({ title: a.title, stage: a.stage as Stage })) };
+    }),
+  }));
 }

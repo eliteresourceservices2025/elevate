@@ -10,6 +10,9 @@ export const recruitingPermissions = definePermissions({
   "recruiting.move": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   // Tags and the source on an application, and one action for many applications at once.
   "recruiting.tag": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
+  // The talent pool (applicants who agreed to be kept for future roles) and merging two records of the same person (HR only).
+  "recruiting.pool": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
+  "recruiting.merge": { roles: { super_admin: "all", hr_admin: "all" } },
   "recruiting.bulk": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   "recruiting.interview": { roles: { super_admin: "all", hr_admin: "all", recruiter: "all" } },
   "recruiting.scorecard": { roles: { super_admin: "own", hr_admin: "own", recruiter: "own", team_lead: "own" } },

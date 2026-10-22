@@ -96,11 +96,23 @@ export const candidates = talent
       resumeName: text("resume_name"),
       resumeKind: text("resume_kind"),
       resumeSha256: text("resume_sha256"),
+      /** The applicant ticked "keep my details for future roles" and until when that lasts (see POOL_MONTHS). Only a consenting applicant can be put in the talent pool. */
+      poolConsentAt: timestamp("pool_consent_at", { withTimezone: true }),
+      poolExpiresAt: timestamp("pool_expires_at", { withTimezone: true }),
+      /** Staff put this person in the talent pool (a good candidate for another job). Pool members keep their data until the consent expires. */
+      inPool: boolean("in_pool").notNull().default(false),
+      inPoolBy: uuid("in_pool_by").references(() => users.id),
+      inPoolAt: timestamp("in_pool_at", { withTimezone: true }),
+      /** Set on the row left behind when two records of the same person were merged: the record that was kept. */
+      mergedInto: uuid("merged_into"),
       /** Set when the retention job removed the personal data. The row stays so counts and history still add up. */
       anonymizedAt: timestamp("anonymized_at", { withTimezone: true }),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
-    (t) => [uniqueIndex("candidates_email_idx").on(sql`lower(${t.email})`).where(sql`${t.anonymizedAt} is null`)],
+    (t) => [
+      uniqueIndex("candidates_email_idx").on(sql`lower(${t.email})`).where(sql`${t.anonymizedAt} is null`),
+      check("candidates_pool_chk", sql`not ${t.inPool} or (${t.poolConsentAt} is not null and ${t.poolExpiresAt} is not null)`),
+    ],
   )
   .enableRLS();
 
