@@ -8,6 +8,8 @@ import { CaseFilters, CaseList, StatsCard } from "@/modules/safevoice/components
 import { SafevoiceNotConfigured } from "@/modules/safevoice/handler-db";
 import { getStats, listCases } from "@/modules/safevoice/queries";
 import { listFilterSchema } from "@/modules/safevoice/validators";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Safe Voice cases" };
 
@@ -37,13 +39,17 @@ export default async function SafeVoiceCasesPage({ searchParams }: PageProps<"/s
   const loaded = await load(handler, filter, paging);
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Safe Voice cases</h1>
-        <p className="mt-1 text-muted-foreground">
-          {handler ? "Anonymous reports. Only designated handlers can read them. Never try to find out who a reporter is." : "Counts only. Individual reports are visible to designated handlers alone."}
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Safe Voice cases"
+        description={
+          <>
+            {handler
+              ? "Anonymous reports. Only designated handlers can read them. Never try to find out who a reporter is."
+              : "Counts only. Individual reports are visible to designated handlers alone."}
+          </>
+        }
+      />
       {loaded === null ? (
         <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
           Safe Voice is not connected to this copy of ELEVATE yet (the handler database connection is not set). See the Safe Voice section of docs/SETUP.md.
@@ -62,6 +68,6 @@ export default async function SafeVoiceCasesPage({ searchParams }: PageProps<"/s
           <StatsCard stats={loaded.stats} />
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }

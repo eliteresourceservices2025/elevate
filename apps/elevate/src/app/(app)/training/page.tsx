@@ -14,6 +14,9 @@ import { LearnerInstructions } from "@/modules/learn/components/learner-instruct
 import { buildLearnerInstructions } from "@/modules/learn/instructions";
 import { getAutoAssign, getInstructionFacts, listEvidenceClients, listTrainingStatus } from "@/modules/learn/queries";
 import { todayInZone } from "@/modules/org/service";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
+import { Alert } from "@/components/ui/alert";
 
 export const metadata: Metadata = { title: "Training status" };
 
@@ -45,16 +48,17 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
   ];
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-        <h1 className="text-2xl font-bold">Training status</h1>
-        <p className="mt-1 max-w-3xl text-muted-foreground">
-          {courseLabel} training for each person: passed, not yet, or overdue. {canSeeResults ? "As HR you also see tries and the latest score." : "Scores stay with the person and HR."}
-        </p>
-        </div>
-        {facts ? <LearnerInstructions courseLabel={courseLabel} text={buildLearnerInstructions(facts)} /> : null}
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Training status"
+        description={
+          <>
+            {courseLabel} training for each person: passed, not yet, or overdue.{" "}
+            {canSeeResults ? "As HR you also see tries and the latest score." : "Scores stay with the person and HR."}
+          </>
+        }
+        actions={<>{facts ? <LearnerInstructions courseLabel={courseLabel} text={buildLearnerInstructions(facts)} /> : null}</>}
+      />
 
       <nav aria-label="Course" className="flex flex-wrap gap-2 text-sm">
         {courses.map((c) => (
@@ -70,17 +74,17 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         </p>
       ) : null}
       {!published ? (
-        <p role="note" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+        <Alert variant="warning" role="note" className="rounded-xl p-3 text-sm">
           This course is not published yet, so nobody is assigned and people cannot be added. Publishing needs a reviewer and the date counsel approved it.
-        </p>
+        </Alert>
       ) : null}
 
       {auto ? (
         <>
           {auto.rule.mode === "paused" && published ? (
-            <p role="note" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <Alert variant="warning" role="note" className="rounded-xl p-3 text-sm">
               Automatic assignment is <strong>paused</strong> for this course: nobody is assigned until you choose a pilot or everyone below.
-            </p>
+            </Alert>
           ) : null}
           <AutoAssignCard
             key={`${course}-${auto.rule.mode}-${auto.rule.teamIds.join(",")}`}
@@ -167,6 +171,6 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         </Table>
       )}
       <PagerLinks info={info} basePath="/training" query={{ state: filters.state, q: filters.q, course: course !== "hipaa" ? course : undefined }} label="people" />
-    </div>
+    </PageContainer>
   );
 }

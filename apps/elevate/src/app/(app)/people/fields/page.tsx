@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
 import { ArchiveFieldButton, NewCustomFieldForm } from "@/modules/people/components/admin-forms";
 import { listCustomFieldDefs } from "@/modules/people/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Custom fields" };
 
@@ -11,14 +12,12 @@ export default async function CustomFieldsPage() {
   const defs = await orNotFound(listCustomFieldDefs());
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/people" className="text-sm text-primary underline-offset-4 hover:underline">
-          ← People
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold">Custom fields</h1>
-        <p className="mt-1 text-muted-foreground">Extra details HR wants on every profile, for example shirt size or preferred shift.</p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Custom fields"
+        description="Extra details HR wants on every profile, for example shirt size or preferred shift."
+        breadcrumbs={[{ label: "People", href: "/people" }, { label: "Custom fields" }]}
+      />
       <NewCustomFieldForm />
       <ul className="divide-y rounded-xl border bg-card px-4">
         {defs.length === 0 ? <li className="py-3 text-sm text-muted-foreground">No custom fields yet.</li> : null}
@@ -37,6 +36,6 @@ export default async function CustomFieldsPage() {
           </li>
         ))}
       </ul>
-    </div>
+    </PageContainer>
   );
 }

@@ -10,6 +10,8 @@ import { AddPrivacyOfficerForm, IncidentForm, IncidentList, PrivacyOfficerCard }
 import { listClientChoices, listIncidentInbox, listMyIncidents, listPrivacyOfficers } from "@/modules/incidents/queries";
 import { STATUSES, type IncidentStatus } from "@/modules/incidents/constants";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Privacy incidents" };
 
@@ -36,25 +38,28 @@ export default async function IncidentsPage({ searchParams }: PageProps<"/incide
   const activeTab = raw ?? "open";
 
   return (
-    <div className="w-full max-w-4xl space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="max-w-3xl">
-          <h1 className="text-2xl font-bold">Privacy incidents</h1>
-          <p className="mt-1 text-muted-foreground">
-            Sent something to the wrong person, lost a device, clicked a suspicious link, or seen information you should not have? Tell us as soon as you notice. It does not matter whether you are sure it is a problem, and nobody is punished for reporting in good faith.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <FormDialog label="Report an incident" title="Report an incident" size="lg">
-            <IncidentForm clients={clients} />
-          </FormDialog>
-          {canDesignate ? (
-            <FormDialog label="Add a Privacy Officer" title="Add a Privacy Officer" description="HR and Super Admin always see reports. A Privacy Officer is someone else you name who reads and handles them too." variant="outline">
-              <AddPrivacyOfficerForm />
+    <PageContainer width="medium">
+      <PageHeader
+        title="Privacy incidents"
+        description="Sent something to the wrong person, lost a device, clicked a suspicious link, or seen information you should not have? Tell us as soon as you notice. It does not matter whether you are sure it is a problem, and nobody is punished for reporting in good faith."
+        actions={
+          <>
+            <FormDialog label="Report an incident" title="Report an incident" size="lg">
+              <IncidentForm clients={clients} />
             </FormDialog>
-          ) : null}
-        </div>
-      </div>
+            {canDesignate ? (
+              <FormDialog
+                label="Add a Privacy Officer"
+                title="Add a Privacy Officer"
+                description="HR and Super Admin always see reports. A Privacy Officer is someone else you name who reads and handles them too."
+                variant="outline"
+              >
+                <AddPrivacyOfficerForm />
+              </FormDialog>
+            ) : null}
+          </>
+        }
+      />
 
       <section aria-label="Your reports" className="space-y-3">
         <h2 className="text-lg font-semibold">Your reports</h2>
@@ -82,6 +87,6 @@ export default async function IncidentsPage({ searchParams }: PageProps<"/incide
       ) : null}
 
       {officers ? <PrivacyOfficerCard officers={officers} /> : null}
-    </div>
+    </PageContainer>
   );
 }

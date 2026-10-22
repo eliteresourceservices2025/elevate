@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatInZone } from "@/lib/time";
 import type { SystemHealth } from "../queries";
+import { Alert } from "@/components/ui/alert";
 
 const STATE_TEXT = { ok: "Running", late: "Stopped", failing: "Last run failed", waiting: "Not run yet" } as const;
 const STATE_VARIANT = { ok: "default", late: "destructive", failing: "destructive", waiting: "outline" } as const;
@@ -13,7 +14,7 @@ export function HealthPanel({ health }: { health: SystemHealth }) {
   const j = health.jibble;
   return (
     <div className="space-y-6">
-      <div role="status" className={`rounded-xl border p-4 text-sm ${bad.length === 0 && (j.oldestMinutes ?? 0) < 15 ? "border-success/40 bg-success-surface text-success" : "border-destructive/40 bg-destructive/10 text-destructive"}`}>
+      <Alert variant={bad.length === 0 && (j.oldestMinutes ?? 0) < 15 ? "success" : "destructive"} role="status" className="p-4">
         {bad.length === 0 && (j.oldestMinutes ?? 0) < 15 ? (
           <>Everything is running. Checked {formatInZone(health.checkedAt, undefined, "h:mm a")}.</>
         ) : (
@@ -22,7 +23,7 @@ export function HealthPanel({ health }: { health: SystemHealth }) {
             {(j.oldestMinutes ?? 0) >= 15 ? `A call to Jibble has waited ${j.oldestMinutes} minutes.` : ""} The clock itself keeps working; background tasks (alerts, nightly flags, Jibble) may be behind.
           </>
         )}
-      </div>
+      </Alert>
 
       <section aria-label="Clock activity" className="grid gap-3 sm:grid-cols-4">
         {[

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { orNotFound } from "@/lib/or-not-found";
 import { TemplateEditor } from "@/modules/onboarding/components/template-editor";
 import { getTemplates } from "@/modules/onboarding/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Checklist templates" };
 
@@ -14,14 +15,12 @@ export default async function ChecklistTemplatesPage() {
     { kind: "offboarding" as const, title: "Offboarding templates" },
   ];
   return (
-    <div className="w-full space-y-8">
-      <div>
-        <Link href="/onboarding" className="text-sm text-primary underline-offset-2 hover:underline">
-          Onboarding
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">Checklist templates</h1>
-        <p className="mt-1 text-muted-foreground">A template for a position is used for people in that position; otherwise the default template applies. With no template, ELEVATE&apos;s built-in list is used. Changes affect new cases only.</p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Checklist templates"
+        description="A template for a position is used for people in that position; otherwise the default template applies. With no template, ELEVATE's built-in list is used. Changes affect new cases only."
+        breadcrumbs={[{ label: "Onboarding", href: "/onboarding" }, { label: "Checklist templates" }]}
+      />
       {kinds.map(({ kind, title }) => (
         <section key={kind} aria-label={title} className="space-y-3">
           <h2 className="text-xl font-semibold">{title}</h2>
@@ -45,6 +44,6 @@ export default async function ChecklistTemplatesPage() {
           </details>
         </section>
       ))}
-    </div>
+    </PageContainer>
   );
 }

@@ -87,6 +87,15 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 **A menu item opens its own page, at its own address, with its own item highlighted. Never redirect a menu item to a tab of another page** (it reads as "the menu took me somewhere else"). If two things belong together, link between them inside the pages instead. "My profile" (`/people/me`) renders the profile itself (`ProfileView`, shared with `/people/[id]`) rather than redirecting to the People list, and Schedules (`/schedules`) is its own page. A new module gets a page at the menu's address; the sidebar highlights the longest matching link.
 
+## UI conventions (enforced by `src/ui-conventions.test.ts`)
+
+- **Every page starts with `PageHeader`** (title = the page's only h1, description, actions, breadcrumbs instead of a "back" link) inside **`PageContainer`** (widths `full`, `wide`, `medium`, `form`, `narrow`). Never write an `<h1>` or a `max-w-*` root wrapper in a page.
+- **Tabs that are addresses use `TabNav`**; a long form opens in a `FormDialog` from a header button; an empty list uses `EmptyState`; a tinted note uses `Alert` (variants `success`, `warning`, `info`, `destructive`, `muted`).
+- **Status colours are tokens**: `success`, `warning`, `info`, `destructive` (with `-surface`). Never raw `red/amber/green-*` classes (document categories, the label sheet and the signing paper preview are the only exceptions). New colour pairs must reach 4.5:1 (`src/app/status-tokens.test.ts`).
+- **Control heights** are `h-(--control-h)`, `h-(--control-h-sm)`, `h-(--control-h-lg)` (the variable form, so `cn()` lets a component's own `h-11` win). Fonts are Inter (text) and Source Sans 3 (headings) only; the monospace font is for codes and IDs.
+- **Never add `loading.tsx` to a route that can call `notFound()`** (it turns the 404 into a 200); use a `Suspense` fallback inside the page. Long lists get a card list below the tablet width, not a sideways-scrolling table.
+- Details and the component list: `docs/modules/app-shell-and-dashboard.md`.
+
 ## Module notes (read the file before changing that area)
 
 The detailed working notes for each module live in `docs/modules/`. They are not loaded automatically: **open the matching file before you change, extend or test that area**, then follow it. The hard rules are repeated here so they are never missed.

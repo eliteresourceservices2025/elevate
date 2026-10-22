@@ -10,6 +10,8 @@ import { formatDateOnly } from "@/lib/time";
 import { SchedulesPanel } from "@/modules/attendance/components/schedules-panel";
 import { getMySchedule, listSchedules, listTeamSchedules, type ScheduleLine } from "@/modules/attendance/queries";
 import { todayInZone } from "@/modules/org/service";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Schedules" };
 
@@ -39,11 +41,11 @@ export default async function SchedulesPage({ searchParams }: PageProps<"/schedu
   const teamPage = team ? paginate(team.rows, paging.page, paging.pageSize) : null;
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Schedules</h1>
-        <p className="mt-1 text-muted-foreground">Shifts in the client&apos;s time zone, also shown in Manila time. Your time clock uses them to flag late arrivals, early leaves, absences and extra hours.</p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Schedules"
+        description="Shifts in the client's time zone, also shown in Manila time. Your time clock uses them to flag late arrivals, early leaves, absences and extra hours."
+      />
 
       <section aria-label="My schedule" className="space-y-2 rounded-xl border bg-card p-4">
         <h2 className="text-lg font-semibold">My schedule</h2>
@@ -113,6 +115,6 @@ export default async function SchedulesPage({ searchParams }: PageProps<"/schedu
           <p className="text-sm text-muted-foreground">HR changes schedules. Ask HR if one is wrong.</p>
         </section>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

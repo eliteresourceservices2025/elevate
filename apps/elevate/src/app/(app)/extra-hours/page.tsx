@@ -5,6 +5,8 @@ import { orNotFound } from "@/lib/or-not-found";
 import { ExtraHoursPanel } from "@/modules/attendance/components/extra-hours-panel";
 import { getMyExtraHours, listActiveClients, listExtraHoursQueue } from "@/modules/attendance/extra-hours-queries";
 import { listFilablePeople } from "@/modules/attendance/queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Extra hours" };
 
@@ -19,12 +21,12 @@ export default async function ExtraHoursPage() {
   const people = canFile ? await orNotFound(listFilablePeople()) : null;
   const clients = canFile ? await orNotFound(listActiveClients()) : null;
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Extra hours</h1>
-        <p className="mt-1 text-muted-foreground">Work beyond your schedule needs your client&apos;s OK and your lead&apos;s approval before it counts.</p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Extra hours"
+        description="Work beyond your schedule needs your client's OK and your lead's approval before it counts."
+      />
       <ExtraHoursPanel mine={mine} queue={queue} filable={people} clients={clients} queueZone="America/Phoenix" />
-    </div>
+    </PageContainer>
   );
 }

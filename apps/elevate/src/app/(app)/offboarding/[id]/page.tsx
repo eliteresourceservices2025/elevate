@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { orNotFound } from "@/lib/or-not-found";
 import { formatDateOnly } from "@/lib/time";
@@ -8,6 +7,8 @@ import { TaskList } from "@/modules/onboarding/components/task-list";
 import { LEAVING_LABELS, type LeavingReason } from "@/modules/onboarding/constants";
 import { getOffboardingCase } from "@/modules/onboarding/queries";
 import { syncCase } from "@/modules/onboarding/service";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Offboarding" };
 
@@ -20,22 +21,27 @@ export default async function OffboardingCasePage({ params }: PageProps<"/offboa
   const open = c.status === "open";
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <Link href="/offboarding" className="text-sm text-primary underline-offset-2 hover:underline">
-          All offboarding
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">Offboarding: {c.name}</h1>
-        <p className="text-muted-foreground">
-          {c.position ? `${c.position}. ` : ""}Last working day {formatDateOnly(c.date)}
-          {c.reason && c.canManage ? ` (${LEAVING_LABELS[c.reason as LeavingReason]})` : ""}. {c.progress.done} of {c.progress.total} tasks done.
-          {c.status !== "open" ? ` This offboarding is ${c.status}.` : ""}
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {c.accessRemovedAt ? `Access was removed on ${c.accessRemovedAt.toISOString().slice(0, 10)}.` : "Access is removed automatically when the last working day ends in their own time zone."}
-        </p>
-        {c.note && c.canManage ? <p className="mt-1 text-sm">Note: {c.note}</p> : null}
-      </div>
+    <PageContainer>
+      <PageHeader
+        title={<>Offboarding: {c.name}</>}
+        description={
+          <>
+            <p className="text-muted-foreground">
+              {c.position ? `${c.position}. ` : ""}Last working day {formatDateOnly(c.date)}
+              {c.reason && c.canManage ? ` (${LEAVING_LABELS[c.reason as LeavingReason]})` : ""}. {c.progress.done} of {c.progress.total} tasks
+              done.
+              {c.status !== "open" ? ` This offboarding is ${c.status}.` : ""}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {c.accessRemovedAt
+                ? `Access was removed on ${c.accessRemovedAt.toISOString().slice(0, 10)}.`
+                : "Access is removed automatically when the last working day ends in their own time zone."}
+            </p>
+            {c.note && c.canManage ? <p className="mt-1 text-sm">Note: {c.note}</p> : null}
+          </>
+        }
+        breadcrumbs={[{ label: "All offboarding", href: "/offboarding" }, { label: `Offboarding: ${c.name}` }]}
+      />
 
       {c.canManage ? <OffboardingControls caseId={c.id} employeeId={c.employeeId} accessRemoved={Boolean(c.accessRemovedAt)} open={open} ready={c.progress.ready} /> : null}
       <TaskList tasks={c.tasks} canManage={c.canManage} open={open} />
@@ -68,6 +74,6 @@ export default async function OffboardingCasePage({ params }: PageProps<"/offboa
           </ul>
         </section>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

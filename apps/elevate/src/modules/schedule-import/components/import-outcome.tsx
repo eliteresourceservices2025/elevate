@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import type { ApplyOutcome } from "../actions";
+import { Alert } from "@/components/ui/alert";
 
 const key = (batchId: string) => `schedule-import-outcome:${batchId}`;
 
@@ -21,7 +22,7 @@ export function ImportOutcome({ outcome }: { outcome: ApplyOutcome }) {
   const router = useRouter();
   return (
     <div className="space-y-4">
-      <div role="status" className="rounded-xl border border-green-600/40 bg-green-600/10 p-4 text-sm">
+      <Alert variant="success" role="status" className="rounded-xl p-4 text-sm">
         <p className="font-medium">The import was applied.</p>
         <ul className="mt-2 list-disc space-y-1 pl-5">
           <li>{outcome.assignmentsAdded} client assignments added</li>
@@ -31,7 +32,7 @@ export function ImportOutcome({ outcome }: { outcome: ApplyOutcome }) {
           <li>{outcome.skipped.length} skipped</li>
         </ul>
         <p className="mt-2 text-muted-foreground">Attendance days for these people are being recalculated from their clock events. Days already approved that now differ will show &ldquo;changed after approval&rdquo; and need approving again.</p>
-      </div>
+      </Alert>
       {outcome.skipped.length > 0 ? (
         <div className="space-y-2">
           <h2 className="text-lg font-semibold">Skipped: fix these on the person&apos;s profile</h2>

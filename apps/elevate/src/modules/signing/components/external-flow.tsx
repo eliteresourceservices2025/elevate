@@ -120,7 +120,7 @@ function SignStep({ token, defaultName }: { token: string; defaultName: string }
             Download
           </a>
         </DocumentViewer>
-        <p className={`text-sm ${opened ? "text-green-700" : "text-muted-foreground"}`}>{opened ? "You opened it. You can sign now." : "Open and read it first. Signing is available after you have opened it."}</p>
+        <p className={`text-sm ${opened ? "text-success" : "text-muted-foreground"}`}>{opened ? "You opened it. You can sign now." : "Open and read it first. Signing is available after you have opened it."}</p>
       </section>
 
       <form onSubmit={sign} className="space-y-4 rounded-xl border bg-card p-5">

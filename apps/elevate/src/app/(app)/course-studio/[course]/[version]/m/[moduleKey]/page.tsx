@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { orNotFound } from "@/lib/or-not-found";
 import { ModuleMetaForm, ScreenEditor } from "@/modules/learn/components/studio-editors";
 import { AddScreenForm } from "@/modules/learn/components/studio-structure";
 import { BlockView } from "@/modules/learn/components/studio-view";
 import { getStudioVersion } from "@/modules/learn/studio-queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Course module" };
 
@@ -20,13 +21,11 @@ export default async function StudioModulePage({ params }: PageProps<"/course-st
   const stamp = loaded.version.editStamp;
 
   return (
-    <div className="w-full max-w-6xl space-y-6">
-      <p className="text-sm">
-        <Link href={`/course-studio/${course}/${version}`} className="text-primary underline-offset-4 hover:underline">
-          Back to version {version}
-        </Link>
-      </p>
-      <h1 className="text-2xl font-bold">{m.title}</h1>
+    <PageContainer width="wide">
+      <PageHeader
+        title={m.title}
+        breadcrumbs={[{ label: `Version ${version}`, href: `/course-studio/${course}/${version}` }, { label: m.title }]}
+      />
       <p className="text-sm text-muted-foreground">
         {draft ? "Editing a draft. Each screen and the module settings are saved separately." : "This version is frozen; this is a read-only view."}
       </p>
@@ -61,6 +60,6 @@ export default async function StudioModulePage({ params }: PageProps<"/course-st
           ))}
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }

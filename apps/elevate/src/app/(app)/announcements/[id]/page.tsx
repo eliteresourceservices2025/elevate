@@ -17,6 +17,8 @@ import { PopupControl } from "@/modules/announcements/components/popup-admin";
 import { getPopupFor } from "@/modules/announcements/popup-queries";
 import { getAckStatus, getAnnouncement } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Announcement" };
 
@@ -31,23 +33,24 @@ export default async function AnnouncementPage({ params }: PageProps<"/announcem
   const status = a.canSeeStatus ? await orNotFound(getAckStatus({ kind: "announcement", id: a.id })) : null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <Link href="/announcements" className="text-sm text-primary underline-offset-4 hover:underline">
-          All announcements
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {a.pinned ? <Pin className="size-5 text-primary" aria-label="Pinned" /> : null}
-            <h1 className="text-2xl font-bold">{a.title}</h1>
-          </div>
-          {a.canManage ? <PopupControl kind="announcement" itemId={a.id} current={popup} today={today} /> : null}
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Posted {formatInZone(a.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}
-          {a.audience === "teams" ? ` for ${a.teamNames.join(", ")}` : ""}
-        </p>
-      </div>
+    <PageContainer width="form">
+      <PageHeader
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {a.pinned ? <Pin className="size-5 text-primary" aria-label="Pinned" /> : null} {a.title}
+          </span>
+        }
+        description={
+          <>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Posted {formatInZone(a.publishedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}
+              {a.audience === "teams" ? ` for ${a.teamNames.join(", ")}` : ""}
+            </p>
+          </>
+        }
+        breadcrumbs={[{ label: "All announcements", href: "/announcements" }, { label: a.title }]}
+        actions={<>{a.canManage ? <PopupControl kind="announcement" itemId={a.id} current={popup} today={today} /> : null}</>}
+      />
 
       <article className="rounded-xl border bg-card p-5">
         <Markdown source={a.body} />
@@ -107,6 +110,6 @@ export default async function AnnouncementPage({ params }: PageProps<"/announcem
           <StatusTable rows={status.rows} />
         </section>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

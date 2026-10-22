@@ -4,6 +4,8 @@ import { orNotFound } from "@/lib/or-not-found";
 import { AnnouncementForm } from "@/modules/announcements/components/announcement-form";
 import { getAnnouncementForEdit } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Edit announcement" };
 
@@ -13,8 +15,8 @@ export default async function EditAnnouncementPage({ params }: PageProps<"/annou
   if (!data) notFound();
   const { announcement: a } = data;
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold">Edit announcement</h1>
+    <PageContainer width="form">
+      <PageHeader title="Edit announcement" />
       <AnnouncementForm
         today={todayInZone()}
         teams={[]}
@@ -32,6 +34,6 @@ export default async function EditAnnouncementPage({ params }: PageProps<"/annou
           files: data.files,
         }}
       />
-    </div>
+    </PageContainer>
   );
 }

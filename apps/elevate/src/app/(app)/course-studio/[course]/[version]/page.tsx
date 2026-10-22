@@ -18,6 +18,8 @@ import { StudioComments } from "@/modules/learn/components/studio-comments";
 import { canPublish, publishChecklist } from "@/modules/learn/studio-checklist";
 import { learnBaseUrl } from "@/modules/learn/token";
 import { getStudioComments, getStudioVersion } from "@/modules/learn/studio-queries";
+import { PageHeader } from "@/components/page-header";
+import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Course version" };
 
@@ -49,29 +51,28 @@ export default async function StudioVersionPage({
   const learnUrl = learnBaseUrl();
 
   return (
-    <div className="w-full space-y-6">
-      <p className="text-sm">
-        <Link
-          href={`/course-studio/${course}`}
-          className="text-primary underline-offset-4 hover:underline"
-        >
-          Back to the versions of {loaded.course.title}
-        </Link>
-      </p>
-      <div>
-        <h1 className="flex flex-wrap items-center gap-2 text-2xl font-bold">
-          {loaded.content.title}, version {v.version}
-          <Badge variant={v.status === "published" ? "default" : "outline"}>
-            {v.status === "published" ? "Live" : v.status === "draft" ? "Draft" : "Retired"}
-          </Badge>
-        </h1>
-        {v.changeNote ? <p className="mt-1 text-muted-foreground">{v.changeNote}</p> : null}
-        <p className="mt-1 text-sm text-muted-foreground">
-          {draft
-            ? "You can edit this draft. Other versions are frozen."
-            : "A published or retired version is frozen. To change it, start a new draft from the versions page."}
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {loaded.content.title}, version {v.version}
+            <Badge variant={v.status === "published" ? "default" : "outline"}>
+              {v.status === "published" ? "Live" : v.status === "draft" ? "Draft" : "Retired"}
+            </Badge>
+          </span>
+        }
+        description={
+          <>
+            {v.changeNote ? <p className="mt-1 text-muted-foreground">{v.changeNote}</p> : null}
+            <p className="mt-1 text-sm text-muted-foreground">
+              {draft
+                ? "You can edit this draft. Other versions are frozen."
+                : "A published or retired version is frozen. To change it, start a new draft from the versions page."}
+            </p>
+          </>
+        }
+        breadcrumbs={[{ label: `The versions of ${loaded.course.title}`, href: `/course-studio/${course}` }, { label: `${loaded.content.title}, version ${v.version}` }]}
+      />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="min-w-0 space-y-6">
@@ -245,6 +246,6 @@ export default async function StudioVersionPage({
           </aside>
         ) : null}
       </div>
-    </div>
+    </PageContainer>
   );
 }
