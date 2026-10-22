@@ -43,7 +43,7 @@ One master deck in parts for teaching HR admins, team leads and recruiters: Welc
 - `parts/*.cjs` hold the slide content (plain data); `build.cjs` makes the deck with pptxgenjs, with the brand theme (purple and gold, Cambria and Calibri), one section per part, and the Help center pictures cropped and given rounded corners. A slide names its picture as `<guide>/<file>` (from `content/help/assets`) and may name a target to centre a tall picture on.
 - First time: `npm install` in `tools/training-deck` (not part of the pnpm workspace). Then `node build.cjs`. **After a screen changes:** run `pnpm help:shots`, then `node build.cjs`, then re-read the slide text against the new screen (the slide steps name real buttons).
 - To look at the result: open it in PowerPoint, or export the slides to PNG with PowerPoint and run `node sheets.cjs` for contact sheets of four slides each (`.build/sheets`).
-- It covers the HR side only. A shorter deck for VAs and contractors is a later step (the VA guides and videos already exist).
+- **VA and contractor deck:** `node build.cjs va` writes `docs/training/ELEVATE-VA-training.pptx` (31 slides, about 1.7 hours): Welcome (two-step sign-in, menu, three rules), A Your time, B Your profile, C Training and growth, D Privacy and speaking up, wrap-up. It uses only the guides whose audience is `all`. `node build.cjs` (or `hr`) writes the HR deck. Decks are listed in `DECKS` in `build.cjs`; a new deck is a new entry plus its `parts/` files. Both `.pptx` files are git-ignored (`docs/**/*.pptx`): rebuild them, do not look for them in git.
 
 ## Not built yet
-A deck for VAs and contractors, links between guides (they refer to each other by title), videos for the other guides.
+Links between guides (they refer to each other by title), videos for the other guides.

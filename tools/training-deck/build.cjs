@@ -14,7 +14,15 @@ const lu = require("react-icons/lu");
 
 const JSZip = require("jszip");
 const ASSETS = path.resolve(__dirname, "../../apps/elevate/content/help/assets");
-const OUT_FILE = path.resolve(__dirname, "../../docs/training/ELEVATE-HR-training.pptx");
+// Which deck: node build.cjs [hr|va]   (default hr)
+const DECKS = {
+  hr: { out: "ELEVATE-HR-training.pptx", title: "ELEVATE for the HR team", subject: "HR training: how to use ELEVATE", tag: "HR TEAM TRAINING", footer: "ELEVATE HR training", parts: ["00-welcome", "a-people", "b-recruiting", "c-time", "d-docs-learning", "e-reports-settings", "z-closing"] },
+  va: { out: "ELEVATE-VA-training.pptx", title: "ELEVATE for VAs and contractors", subject: "VA and contractor training: how to use ELEVATE", tag: "VA AND CONTRACTOR TRAINING", footer: "ELEVATE VA training", parts: ["va-00-welcome", "va-a-time", "va-b-profile", "va-c-growth", "va-d-speaking-up", "va-z-closing"] },
+};
+const DECK_ID = process.argv[2] || "hr";
+const DECK = DECKS[DECK_ID];
+if (!DECK) throw new Error(`Unknown deck "${DECK_ID}" (use ${Object.keys(DECKS).join(" or ")})`);
+const OUT_FILE = path.resolve(__dirname, "../../docs/training", DECK.out);
 const BUILD = path.join(__dirname, ".build");
 const BOXES = JSON.parse(fs.readFileSync(path.join(ASSETS, "_boxes.json"), "utf8"));
 const HELP = path.resolve(__dirname, "../../apps/elevate/content/help");
@@ -28,7 +36,7 @@ const fillAll = (v) =>
   : Array.isArray(v) ? v.map(fillAll)
   : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fillAll(x)]))
   : v;
-const PARTS = ["00-welcome", "a-people", "b-recruiting", "c-time", "d-docs-learning", "e-reports-settings", "z-closing"].map((f) => fillAll(require(`./parts/${f}.cjs`)));
+const PARTS = DECK.parts.map((f) => fillAll(require(`./parts/${f}.cjs`)));
 
 /** A slide's guide titles and video must exist in the Help center now (a renamed guide or a removed video fails the build). */
 function checkReferences(s) {
@@ -116,9 +124,9 @@ function notes(s, partTitle) {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   const pres = new pptxgen();
   pres.layout = "LAYOUT_WIDE";
-  pres.title = "ELEVATE for the HR team";
+  pres.title = DECK.title;
   pres.author = "Elite Resource Services";
-  pres.subject = "HR training: how to use ELEVATE";
+  pres.subject = DECK.subject;
   pres.theme = { headFontFace: THEME.headFontFace, bodyFontFace: THEME.bodyFontFace };
   const C = pres.SchemeColor;
 
@@ -129,7 +137,7 @@ function notes(s, partTitle) {
     background: { color: C.background1 },
     objects: [
       titlePlaceholder({ x: 0.6, y: 0.55, w: 12.1, h: 0.85, fontSize: 32, color: C.text1, valign: "middle" }),
-      { text: { text: "ELEVATE HR training", options: { x: 0.6, y: 7.05, w: 4, h: 0.3, fontFace: FONT_B, fontSize: 10, color: C.text2, isTextBox: true, margin: 0 } } },
+      { text: { text: DECK.footer, options: { x: 0.6, y: 7.05, w: 4, h: 0.3, fontFace: FONT_B, fontSize: 10, color: C.text2, isTextBox: true, margin: 0 } } },
     ],
     slideNumber: { x: 12.2, y: 7.05, w: 0.6, h: 0.3, fontFace: FONT_B, fontSize: 10, color: C.text2, align: "right" },
   });
@@ -159,7 +167,7 @@ function notes(s, partTitle) {
     slide.addShape(pres.ShapeType.ellipse, { x: 8.3, y: -1.6, w: 7.2, h: 7.2, fill: { color: C.accent1, transparency: 35 }, line: { type: "none" }, objectName: "Decoration circle" });
     slide.addShape(pres.ShapeType.ellipse, { x: 10.6, y: 4.4, w: 4.2, h: 4.2, fill: { color: C.accent2, transparency: 80 }, line: { type: "none" }, objectName: "Decoration circle 2" });
     slide.addText("ELEVATE.", { x: 0.9, y: 0.8, w: 5, h: 0.6, fontFace: FONT_H, fontSize: 28, bold: true, color: C.background1, charSpacing: 6, margin: 0, isTextBox: true });
-    slide.addText("HR TEAM TRAINING", { x: 0.9, y: 2.2, w: 3.2, h: 0.5, fontFace: FONT_B, fontSize: 14, bold: true, color: C.text1, align: "center", valign: "middle", isTextBox: true, margin: 0, shape: pres.ShapeType.roundRect, rectRadius: 0.25, fill: { color: C.accent2 } });
+    slide.addText(DECK.tag, { x: 0.9, y: 2.2, w: Math.max(3.2, DECK.tag.length * 0.16 + 0.6), h: 0.5, fontFace: FONT_B, fontSize: 14, bold: true, color: C.text1, align: "center", valign: "middle", isTextBox: true, margin: 0, shape: pres.ShapeType.roundRect, rectRadius: 0.25, fill: { color: C.accent2 } });
     addTitle(slide, s.title);
     slide.addText(s.sub, { x: 0.9, y: 4.9, w: 7.6, h: 1.0, fontFace: FONT_B, fontSize: 22, color: C.accent6, margin: 0, isTextBox: true, valign: "top" });
     slide.addText("Elite Resource Services", { x: 0.9, y: 6.7, w: 6, h: 0.4, fontFace: FONT_B, fontSize: 14, color: C.accent6, margin: 0, isTextBox: true });

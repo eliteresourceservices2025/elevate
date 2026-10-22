@@ -1,0 +1,73 @@
+// VA and contractor deck: welcome. Slide types are described in build.cjs.
+module.exports = {
+  id: "va-welcome",
+  letter: "",
+  title: "Welcome",
+  blurb: "What ELEVATE is for you, how to sign in safely and where to find things.",
+  slides: [
+    {
+      type: "title",
+      title: "ELEVATE for VAs and contractors",
+      sub: "Your clock, your time off, your profile and where to speak up, step by step",
+      say: "Welcome. ELEVATE is where you clock in and out, ask for time off, keep your profile and documents, take your training and ask for help. You do not need to be technical. If you can use email, you can use ELEVATE. This session is short, and everything we cover is also in the Help center with pictures.",
+      ask: "What do you hope to find easier after today?",
+      minutes: 3,
+    },
+    {
+      type: "concept",
+      title: "What you will learn",
+      cards: [
+        { icon: "LuClock", head: "Part A: Your time", text: "Clock in and out, your schedule, time off, corrections and extra hours." },
+        { icon: "LuUser", head: "Part B: Your profile", text: "Details, documents, onboarding and policies." },
+        { icon: "LuGraduationCap", head: "Part C: Growth", text: "Training, certificates, equipment, reviews and goals." },
+        { icon: "LuShieldCheck", head: "Part D: Speaking up", text: "Your data, privacy concerns, Safe Voice and getting help." },
+        { icon: "LuLock", head: "Always: stay private", text: "Never put client or patient information anywhere in ELEVATE." },
+        { icon: "LuLifeBuoy", head: "Always: the Help center", text: "Every task has a guide. Search first." },
+      ],
+      say: "We have four short parts. Part A is the one you will use every day. The others you will use now and then. Whenever you forget a step, the Help center has a guide for it.",
+      ask: "Which part will you use most?",
+      minutes: 3,
+    },
+    {
+      type: "concept",
+      title: "Set up two-step sign-in",
+      cards: [
+        { icon: "LuSmartphone", head: "1. Get an authenticator app", text: "Google Authenticator, Microsoft Authenticator or 1Password. Put it on your phone." },
+        { icon: "LuQrCode", head: "2. Scan the square picture", text: "Sign in, then scan the picture on Set up two-step verification. Cannot scan? Type the key shown under it." },
+        { icon: "LuKeyRound", head: "3. Type the 6-digit code", text: "Type it and click Verify. Next time you sign in, type the current code from the app." },
+      ],
+      guide: "Set up two-step sign-in",
+      say: "ELEVATE asks for a 6-digit code every time you sign in. It comes from an app on your phone. This protects you and the information we hold. You set it up once. The code changes every 30 seconds. If it is rejected, wait for the next one and check that your phone is on automatic time. Got a new phone? Ask a Super Admin to reset your authenticator, and you set it up again.",
+      ask: "Which authenticator app do you already have on your phone?",
+      minutes: 4,
+    },
+    {
+      type: "task",
+      title: "Find your way around",
+      steps: [
+        "The menu on the left groups pages by topic",
+        "You only see the pages your role allows",
+        "Press Ctrl+K to search for a person or a page",
+        "Help center and Contact support are always there",
+      ],
+      watch: "The clock is at the top right of every page.",
+      pic: "find-your-way-around/01-menu",
+      guide: "Find your way around ELEVATE",
+      say: "This is the left menu. The pages you will use most are Attendance, Time off, My profile, Onboarding and Help center. The clock is always at the top right. Ctrl K is the fastest way to jump to anything.",
+      ask: "Find My profile in your menu. Click it.",
+      minutes: 3,
+    },
+    {
+      type: "concept",
+      title: "Three rules that never change",
+      cards: [
+        { icon: "LuClock", head: "ELEVATE is your time clock", text: "Your hours come only from the ELEVATE clock. Jibble is for screenshots." },
+        { icon: "LuLock", head: "No client or patient information", text: "Not in notes, files, screenshots, reasons or reports." },
+        { icon: "LuShieldCheck", head: "Your private details are hidden", text: "IDs and bank details show masked. Every reveal is recorded." },
+      ],
+      say: "Three rules sit under everything. One: your hours come only from the ELEVATE clock. Two: never put client or patient information anywhere in ELEVATE, including notes, screenshots and file names. Three: your private details, such as government IDs and bank details, are hidden by default, and every time they are shown it is recorded.",
+      ask: "Where might a screenshot show a patient name by mistake?",
+      minutes: 3,
+    },
+  ],
+};
