@@ -42,3 +42,12 @@
 - **Control heights:** one scale, `h-(--control-h-sm)` (28px), `h-(--control-h)` (32px), `h-(--control-h-lg)` (36px), variables in `:root` (the variable form, not a custom class name, so `cn()` lets a component's own `h-11` replace it); buttons, inputs and selects use it.
 - **Tables:** the global `#main table` styling (tinted header, stripes, hover) still applies by default; `<Table plain>` sets `data-plain` and opts that table out.
 - Components added with the shadcn CLI in the `base-nova` style (Base UI, not Radix): breadcrumb, empty, pagination, progress, scroll-area, alert, spinner, radio-group, calendar, chart. UI files import `cn` from `@/lib/utils`.
+
+## UI conventions in practice (page patterns)
+
+- **Page pattern:** `PageContainer` > `PageHeader` (actions on the right; a primary action first) > `TabNav` (when there are tabs) > content in cards (`rounded-2xl border bg-card shadow-sm`). Detail pages put the list page in the breadcrumbs ("All reviews" > the item).
+- **Summary then detail:** a page that is about a person or a period opens with summary cards or a facts strip (Dashboard KPI strip, Profile facts, Attendance Today / Week / Schedule), then the list or tabs.
+- **Forms:** short ones inline, long ones in a `FormDialog` opened from a header button; inside a dialog a form drops its own card and heading (`useFormDialog()`), and closes itself after saving.
+- **Phones:** a table that matters on a phone becomes a card list below `md` (People, Balances, Holidays, History); the Time off calendar becomes an agenda; filters fold behind a "Filters" button; tabs scroll sideways in one row.
+- **Callouts:** `Alert` with a variant; text keeps the normal colour, the status is in the border and background. `muted` is plain text that becomes a warning only when something is wrong.
+- **Guards:** `src/ui-conventions.test.ts` fails on a hand-written h1 in `app/(app)`, a raw palette colour class, or a page root that is not `PageContainer`.
