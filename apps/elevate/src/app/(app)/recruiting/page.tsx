@@ -47,6 +47,16 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
             <a href="/careers" target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline" })}>
               View careers page <ExternalLink aria-hidden /> <span className="sr-only">(opens in a new tab)</span>
             </a>
+            {scopeFor(user, "recruiting.reports") ? (
+              <Link href="/recruiting/reports" className={buttonVariants({ variant: "outline" })}>
+                Reports
+              </Link>
+            ) : null}
+            {scopeFor(user, "recruiting.manage_email_templates") ? (
+              <Link href="/recruiting/email-templates" className={buttonVariants({ variant: "outline" })}>
+                Applicant emails
+              </Link>
+            ) : null}
             {scopeFor(user, "recruiting.manage_careers_page") ? (
               <Link href="/recruiting/careers-page" className={buttonVariants({ variant: "outline" })}>
                 Edit careers page

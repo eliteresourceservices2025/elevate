@@ -652,6 +652,34 @@
       "when": 1792669692532,
       "tag": "0092_identity_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1792703524424,
+      "tag": "0093_ats_sources_and_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1792704407283,
+      "tag": "0094_ats_keyword_score",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1792706264831,
+      "tag": "0095_ats_talent_pool",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1792707190616,
+      "tag": "0096_ats_email_templates",
+      "breakpoints": true
     }
   ]
 }

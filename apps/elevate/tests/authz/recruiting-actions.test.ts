@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ForbiddenError } from "@/lib/authz";
 import { ROLE_SLUGS, type RoleSlug } from "@/lib/roles";
+import { EMPTY_FILTERS } from "@/modules/recruiting/applicant-filters";
 
 // Recruiting actions and queries run as each of the six roles with the database mocked to throw: a role without access is refused
 // before anything touches data. What the actions do after that, and the per-opening checks for team leads (which need the
@@ -37,6 +38,17 @@ const cases: { name: string; allowed: RoleSlug[]; call: () => Promise<{ ok: bool
   { name: "disconnectCalendar", allowed: MANAGERS, call: () => actions.disconnectCalendar() },
   { name: "saveCareersPage", allowed: MANAGERS, call: () => actions.saveCareersPage({ title: "Join us", intro: "Hello" }) },
   { name: "removeCareersBanner", allowed: MANAGERS, call: () => actions.removeCareersBanner() },
+  { name: "createTag", allowed: MANAGERS, call: () => actions.createTag({ name: "Strong English" }) },
+  { name: "archiveTag", allowed: MANAGERS, call: () => actions.archiveTag({ tagId: ID }) },
+  { name: "setApplicationTags", allowed: MANAGERS, call: () => actions.setApplicationTags({ applicationId: ID, tagIds: [] }) },
+  { name: "setApplicationSource", allowed: MANAGERS, call: () => actions.setApplicationSource({ applicationId: ID, source: "linkedin" }) },
+  { name: "bulkUpdateApplications", allowed: MANAGERS, call: () => actions.bulkUpdateApplications({ action: "move", applicationIds: [ID], to: "screening" }) },
+  { name: "setTalentPool", allowed: MANAGERS, call: () => actions.setTalentPool({ applicationId: ID, inPool: true }) },
+  { name: "addPoolMemberToOpening", allowed: MANAGERS, call: () => actions.addPoolMemberToOpening({ applicationId: ID, openingId: ID }) },
+  { name: "mergeCandidates", allowed: HR, call: () => actions.mergeCandidates({ keepCandidateId: ID, mergeCandidateId: "22222222-2222-4222-8222-222222222222" }) },
+  { name: "saveEmailTemplate", allowed: HR, call: () => actions.saveEmailTemplate({ kind: "received", subject: "Hi", body: "Hello {{first_name}}" }) },
+  { name: "resetEmailTemplate", allowed: HR, call: () => actions.resetEmailTemplate({ kind: "received" }) },
+  { name: "rescoreOpening", allowed: MANAGERS, call: () => actions.rescoreOpening({ openingId: ID }) },
   { name: "saveRetention", allowed: HR, call: () => actions.saveRetention({ enabled: false, rejectedMonths: 12, withdrawnMonths: 6 }) },
   { name: "deleteOpening", allowed: HR, call: () => actions.deleteOpening({ id: ID }) },
   { name: "deleteApplication", allowed: ["super_admin"], call: () => actions.deleteApplication({ applicationId: ID, confirm: "DELETE" }) },
@@ -63,6 +75,9 @@ describe("Recruiting actions, every role", () => {
 
 const queryCases: { name: string; allowed: RoleSlug[]; call: () => Promise<unknown> }[] = [
   { name: "listOpenings", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead"], call: () => queries.listOpenings() },
+  { name: "listApplicants", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead"], call: () => queries.listApplicants(EMPTY_FILTERS, { page: 1, pageSize: 25 }) },
+  { name: "listEmailTemplates", allowed: HR, call: () => queries.listEmailTemplates() },
+  { name: "getRecruitingReport", allowed: MANAGERS, call: () => queries.getRecruitingReport({ from: null, to: null, openingId: null }) },
   { name: "getRecruitingSummary", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead", "executive"], call: () => queries.getRecruitingSummary() },
   { name: "getCalendarCard", allowed: MANAGERS, call: () => queries.getCalendarCard() },
   { name: "getRetentionView", allowed: HR, call: () => queries.getRetentionView() },

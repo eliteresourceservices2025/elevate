@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { DeleteOpeningButton, OpeningStatusButtons } from "@/modules/recruiting/components/opening-forms";
 import { PipelineBoard } from "@/modules/recruiting/components/pipeline-board";
+import { RescoreButton } from "@/modules/recruiting/components/rescore-button";
 import type { OpeningStatus } from "@/modules/recruiting/constants";
 import { getOpeningBoard } from "@/modules/recruiting/queries";
 import { PageHeader } from "@/components/page-header";
@@ -43,6 +44,7 @@ export default async function OpeningPage({ params }: PageProps<"/recruiting/[id
                   View job ad <ExternalLink aria-hidden /> <span className="sr-only">(opens in a new tab)</span>
                 </a>
               ) : null}
+              {opening.keywordsRequired.length + opening.keywordsNice.length > 0 ? <RescoreButton openingId={opening.id} /> : null}
               <Link href={`/recruiting/${opening.id}/edit`} className={buttonVariants({ variant: "outline", size: "sm" })}>
                 Edit job
               </Link>

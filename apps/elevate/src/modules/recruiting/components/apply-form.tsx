@@ -2,18 +2,19 @@
 
 import { useState } from "react";
 import { Markdown } from "@/components/markdown";
-import { TextField } from "@/components/form-fields";
+import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { APPLICANT_NOTE } from "@/modules/demographics/constants";
 import { SelfIdFields } from "@/modules/demographics/components/self-id-fields";
-import { RESUME_MAX_BYTES } from "../constants";
+import { POOL_MONTHS, RESUME_MAX_BYTES, SOURCES, SOURCE_LABELS, type Source } from "../constants";
 import { Alert } from "@/components/ui/alert";
 
 /** The public application form. The hidden "website" field is a honeypot: people never see or fill it. */
-export function ApplyForm({ openingId, noticeTitle, noticeBody }: { openingId: string; noticeTitle: string | null; noticeBody: string | null }) {
+export function ApplyForm({ openingId, defaultSource = null, noticeTitle, noticeBody }: { openingId: string; defaultSource?: Source | null; noticeTitle: string | null; noticeBody: string | null }) {
   const [state, setState] = useState<"idle" | "sending" | "done">("idle");
   const [error, setError] = useState<{ message: string; field?: string } | null>(null);
+  const [source, setSource] = useState<string>(defaultSource ?? "");
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,6 +56,10 @@ export function ApplyForm({ openingId, noticeTitle, noticeBody }: { openingId: s
         <TextField id="ap-phone" name="phone" label="Phone (optional)" autoComplete="tel" maxLength={40} />
         <TextField id="ap-country" name="country" label="Country (optional)" autoComplete="country-name" maxLength={80} />
       </div>
+      <label htmlFor="ap-pool" className="flex items-start gap-2 text-sm">
+        <input id="ap-pool" name="poolConsent" type="checkbox" className="mt-0.5 size-4 accent-primary" />
+        <span>Keep my details for {POOL_MONTHS} months so the team can contact me about other roles that may suit me (optional). I can ask for them to be removed at any time.</span>
+      </label>
       <div className="space-y-1.5">
         <Label htmlFor="ap-resume">Resume (PDF or DOCX, up to 4 MB)</Label>
         <input id="ap-resume" name="resume" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:bg-secondary file:px-3 file:py-1.5" />

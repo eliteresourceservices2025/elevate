@@ -26,6 +26,9 @@ export const jobOpenings = talent
       status: text("status").notNull().default("draft"),
       sendAck: boolean("send_ack").notNull().default(true),
       sendRejection: boolean("send_rejection").notNull().default(true),
+      /** Words recruiters look for in a resume (see keywords.ts): lists of strings. Used only to show a keyword-match percentage. */
+      keywordsRequired: jsonb("keywords_required").$type<string[]>().notNull().default([]),
+      keywordsNice: jsonb("keywords_nice").$type<string[]>().notNull().default([]),
       createdBy: uuid("created_by").references(() => users.id),
       openedAt: timestamp("opened_at", { withTimezone: true }),
       closedAt: timestamp("closed_at", { withTimezone: true }),
@@ -93,11 +96,23 @@ export const candidates = talent
       resumeName: text("resume_name"),
       resumeKind: text("resume_kind"),
       resumeSha256: text("resume_sha256"),
+      /** The applicant ticked "keep my details for future roles" and until when that lasts (see POOL_MONTHS). Only a consenting applicant can be put in the talent pool. */
+      poolConsentAt: timestamp("pool_consent_at", { withTimezone: true }),
+      poolExpiresAt: timestamp("pool_expires_at", { withTimezone: true }),
+      /** Staff put this person in the talent pool (a good candidate for another job). Pool members keep their data until the consent expires. */
+      inPool: boolean("in_pool").notNull().default(false),
+      inPoolBy: uuid("in_pool_by").references(() => users.id),
+      inPoolAt: timestamp("in_pool_at", { withTimezone: true }),
+      /** Set on the row left behind when two records of the same person were merged: the record that was kept. */
+      mergedInto: uuid("merged_into"),
       /** Set when the retention job removed the personal data. The row stays so counts and history still add up. */
       anonymizedAt: timestamp("anonymized_at", { withTimezone: true }),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
-    (t) => [uniqueIndex("candidates_email_idx").on(sql`lower(${t.email})`).where(sql`${t.anonymizedAt} is null`)],
+    (t) => [
+      uniqueIndex("candidates_email_idx").on(sql`lower(${t.email})`).where(sql`${t.anonymizedAt} is null`),
+      check("candidates_pool_chk", sql`not ${t.inPool} or (${t.poolConsentAt} is not null and ${t.poolExpiresAt} is not null)`),
+    ],
   )
   .enableRLS();
 
@@ -118,6 +133,15 @@ export const applications = talent
       closeReason: text("close_reason"),
       /** What the applicant wrote on the form. */
       note: text("note"),
+      /** Where they heard about the job (see SOURCES); null = not said. `sourceDetail` is an optional short note such as who referred them. */
+      source: text("source"),
+      sourceDetail: text("source_detail"),
+      /** Keyword match against the job (0 to 100), which keywords were found or missing, when, and which keyword lists it was scored with. The resume text itself is never stored. */
+      keywordScore: smallint("keyword_score"),
+      keywordMatched: jsonb("keyword_matched").$type<string[]>(),
+      keywordMissed: jsonb("keyword_missed").$type<string[]>(),
+      keywordScoredAt: timestamp("keyword_scored_at", { withTimezone: true }),
+      keywordSetKey: text("keyword_set_key"),
       appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
       stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
       /** When the application was closed or hired: retention counts from here. */
@@ -127,6 +151,8 @@ export const applications = talent
       uniqueIndex("applications_opening_candidate_idx").on(t.openingId, t.candidateId),
       index("applications_opening_stage_idx").on(t.openingId, t.stage),
       check("applications_stage_chk", sql`${t.stage} in ('applied','screening','interview','assessment','offer','hired','rejected')`),
+      check("applications_keyword_score_chk", sql`${t.keywordScore} is null or ${t.keywordScore} between 0 and 100`),
+      check("applications_source_chk", sql`${t.source} is null or ${t.source} in ('careers_page','referral','linkedin','facebook','job_board','agency','other')`),
       check("applications_close_chk", sql`(${t.stage} = 'rejected') = (${t.closeKind} is not null) and (${t.closeKind} is null or ${t.closeKind} in ('rejected','not_qualified','withdrawn'))`),
     ],
   )
@@ -302,5 +328,53 @@ export const recruitingSettings = talent
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [check("recruiting_settings_one_row", sql`${t.id} = 1`)],
+  )
+  .enableRLS();
+
+/** The catalog of tags recruiters can put on applications. A name is unique ignoring case; removing a tag archives it. */
+export const applicationTags = talent
+  .table(
+    "tags",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      name: text("name").notNull(),
+      createdBy: uuid("created_by").references(() => users.id),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+      archivedAt: timestamp("archived_at", { withTimezone: true }),
+    },
+    (t) => [uniqueIndex("tags_name_idx").on(sql`lower(${t.name})`).where(sql`${t.archivedAt} is null`)],
+  )
+  .enableRLS();
+
+/** Which tags are on which application. */
+export const applicationTagLinks = talent
+  .table(
+    "application_tags",
+    {
+      applicationId: uuid("application_id")
+        .notNull()
+        .references(() => applications.id),
+      tagId: uuid("tag_id")
+        .notNull()
+        .references(() => applicationTags.id),
+      addedBy: uuid("added_by").references(() => users.id),
+      addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [primaryKey({ columns: [t.applicationId, t.tagId] }), index("application_tags_tag_idx").on(t.tagId)],
+  )
+  .enableRLS();
+
+/** HR's own wording for the applicant emails (one row per kind: received, rejection, not_qualified). No row = the built-in wording. */
+export const emailTemplates = talent
+  .table(
+    "email_templates",
+    {
+      kind: text("kind").primaryKey(),
+      subject: text("subject").notNull(),
+      body: text("body").notNull(),
+      updatedBy: uuid("updated_by").references(() => users.id),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [check("email_templates_kind_chk", sql`${t.kind} in ('received','rejection','not_qualified')`)],
   )
   .enableRLS();

@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -16,16 +16,19 @@ import { createInterviewEvent, deleteInterviewEvent, discardInterviewEvent, remo
 import { googleEventIdFor } from "./google";
 import { queueEmails } from "@/modules/notifications/email-queue";
 import { notify } from "@/modules/notifications/service";
-import { canMove } from "./constants";
-import { buildInterviewIcs, interviewMail, rejectionMail } from "./mail";
+import { buildInterviewIcs, interviewMail, validateTemplate } from "./mail";
+import { POOL_REFUSED, closeInTx, moveInTx, poolInTx } from "./transitions";
 import { deleteApplicantSelfId } from "@/modules/demographics/service";
 import { offers } from "@/modules/offers/schema";
 import { onboardingCases } from "@/modules/onboarding/schema";
-import { applicationStageHistory, applications, candidateEmails, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
+import { applicationStageHistory, applicationTagLinks, emailTemplates, applicationTags, applications, candidateEmails, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, recruitingSettings, scorecards } from "./schema";
 import { sendRecruitingEmailsNow } from "./immediate";
-import { authorizeForOpening, freeSlug, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
+import { authorizeForOpening, freeSlug, hiringTeamIds, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
 import { clearBanner } from "./careers-banner";
-import { careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
+import { MAX_TAGS_PER_APPLICATION, isApplyable, type OpeningStatus } from "./constants";
+import { keywordColumns, keywordSetKey, parseKeywordList } from "./keywords";
+import { extractResumeText } from "./resume-text";
+import { resetTemplateSchema, saveTemplateSchema, mergeSchema, poolSchema, poolToOpeningSchema, rescoreSchema, archiveTagSchema, bulkSchema, createTagSchema, setSourceSchema, setTagsSchema, careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
 
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? "Check the form and try again.";
 const MANILA = "Asia/Manila";
@@ -51,7 +54,7 @@ export async function saveOpening(input: unknown): Promise<ActionResult<{ id: st
         const eligible = await tx.select({ userId: userRoles.userId }).from(userRoles).where(and(inArray(userRoles.userId, v.hiringTeamUserIds), inArray(userRoles.roleSlug, ELIGIBLE_INTERVIEWER_ROLES)));
         if (new Set(eligible.map((e) => e.userId)).size !== new Set(v.hiringTeamUserIds).size) throw new ActionFailure("One of the hiring team members cannot take part in hiring.");
       }
-      const fields = { title: v.title, description: v.description, location: v.location || "Remote", payNote: v.payNote ?? null, teamId: v.teamId ?? null, clientId: v.clientId ?? null, sendAck: v.sendAck, sendRejection: v.sendRejection, updatedAt: new Date() };
+      const fields = { title: v.title, description: v.description, location: v.location || "Remote", payNote: v.payNote ?? null, teamId: v.teamId ?? null, clientId: v.clientId ?? null, sendAck: v.sendAck, sendRejection: v.sendRejection, keywordsRequired: parseKeywordList(v.keywordsRequired), keywordsNice: parseKeywordList(v.keywordsNice), updatedAt: new Date() };
       let openingId = v.id;
       if (openingId) {
         const [before] = await tx.select().from(jobOpenings).where(and(eq(jobOpenings.id, openingId), isNull(jobOpenings.archivedAt)));
@@ -174,20 +177,7 @@ export async function moveApplication(input: unknown): Promise<ActionResult> {
     const parsed = moveSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
     const { applicationId, to, note } = parsed.data;
-    const openingId = await db.transaction(async (tx) => {
-      const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
-      if (!app) throw new ActionFailure("That application was not found.");
-      const rule = canMove(app.stage as never, to);
-      if (!rule.ok) throw new ActionFailure(rule.reason);
-      const reopening = app.stage === "rejected";
-      await tx
-        .update(applications)
-        .set({ stage: to, stageChangedAt: new Date(), ...(reopening ? { closeKind: null, closeReason: null, closedAt: null } : {}), ...(to === "hired" ? { closedAt: new Date() } : {}) })
-        .where(eq(applications.id, applicationId));
-      await tx.insert(applicationStageHistory).values({ applicationId, fromStage: app.stage, toStage: to, byUserId: actor.id, note: note ?? null });
-      await writeAudit({ actor, action: "recruiting.move", targetType: "application", targetId: applicationId, before: { stage: app.stage }, after: { stage: to } }, tx);
-      return app.openingId;
-    });
+    const openingId = await db.transaction((tx) => moveInTx(tx, actor, { applicationId, to, note }));
     refresh(openingId, applicationId);
     return { ok: true, data: undefined };
   });
@@ -221,6 +211,7 @@ export async function deleteApplication(input: unknown): Promise<ActionResult<{ 
       await tx.delete(interviews).where(eq(interviews.applicationId, applicationId));
       await tx.delete(candidateNotes).where(eq(candidateNotes.applicationId, applicationId));
       await tx.delete(candidateEmails).where(eq(candidateEmails.applicationId, applicationId));
+      await tx.delete(applicationTagLinks).where(eq(applicationTagLinks.applicationId, applicationId));
       await tx.delete(applicationStageHistory).where(eq(applicationStageHistory.applicationId, applicationId));
       await tx.delete(applications).where(eq(applications.id, applicationId));
       // The applicant goes too when this was their only application.
@@ -250,28 +241,7 @@ export async function rejectApplication(input: unknown): Promise<ActionResult> {
     const parsed = rejectSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
     const v = parsed.data;
-    const openingId = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .select({ app: applications, title: jobOpenings.title, sendRejection: jobOpenings.sendRejection, name: candidates.fullName, email: candidates.email, anonymized: candidates.anonymizedAt })
-        .from(applications)
-        .innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId))
-        .innerJoin(candidates, eq(candidates.id, applications.candidateId))
-        .where(eq(applications.id, v.applicationId));
-      if (!row) throw new ActionFailure("That application was not found.");
-      // Lock the application row itself, then work from the locked copy (FOR UPDATE cannot name a schema-qualified table in a join).
-      const [locked] = await tx.select().from(applications).where(eq(applications.id, v.applicationId)).for("update");
-      row.app = locked;
-      if (row.app.stage === "hired") throw new ActionFailure("A hired person cannot be rejected.");
-      if (row.app.stage === "rejected") throw new ActionFailure("They are already closed.");
-      await tx.update(applications).set({ stage: "rejected", closeKind: v.kind, closeReason: v.reason, closedAt: new Date(), stageChangedAt: new Date() }).where(eq(applications.id, v.applicationId));
-      await tx.insert(applicationStageHistory).values({ applicationId: v.applicationId, fromStage: row.app.stage, toStage: "rejected", byUserId: actor.id, note: v.kind === "withdrawn" ? "Withdrawn by the applicant" : v.kind === "not_qualified" ? "Not qualified" : "Rejected" });
-      await writeAudit({ actor, action: "recruiting.reject", targetType: "application", targetId: v.applicationId, before: { stage: row.app.stage }, after: { stage: "rejected", kind: v.kind } }, tx);
-      if (v.kind !== "withdrawn" && v.notifyCandidate && row.sendRejection && !row.anonymized) {
-        const mail = rejectionMail({ fullName: row.name, jobTitle: row.title });
-        await queueCandidateEmail(tx, { applicationId: v.applicationId, toEmail: row.email, kind: "rejection", subject: mail.subject, text: mail.text, html: mail.html, dedupeKey: `rejection:${v.applicationId}` });
-      }
-      return row.app.openingId;
-    });
+    const openingId = await db.transaction((tx) => closeInTx(tx, actor, v));
     await sendRecruitingEmailsNow();
     refresh(openingId, v.applicationId);
     return { ok: true, data: undefined };
@@ -494,6 +464,368 @@ export async function disconnectCalendar(): Promise<ActionResult> {
   return runAction(async () => {
     await removeConnection(actor);
     revalidatePath("/recruiting");
+    return { ok: true, data: undefined };
+  });
+}
+
+// ---- Tags, source and bulk actions ------------------------------------------------------------------------------------------
+
+const refreshApplicants = (applicationId?: string) => {
+  revalidatePath("/recruiting/applicants");
+  if (applicationId) revalidatePath(`/recruiting/applications/${applicationId}`);
+};
+
+/** Creates a tag, or returns the one that already has that name (ignoring case). */
+export async function createTag(input: unknown): Promise<ActionResult<{ id: string; name: string }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.tag");
+    const parsed = createTagSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { name } = parsed.data;
+    const tag = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(applicationTags).values({ name, createdBy: actor.id }).onConflictDoNothing().returning({ id: applicationTags.id, name: applicationTags.name });
+      if (created) {
+        await writeAudit({ actor, action: "recruiting.tag_create", targetType: "tag", targetId: created.id, after: { name } }, tx);
+        return created;
+      }
+      // The name is taken (maybe a moment ago by someone else): use that tag.
+      const [existing] = await tx.select({ id: applicationTags.id, name: applicationTags.name }).from(applicationTags).where(and(sql`lower(${applicationTags.name}) = ${name.toLowerCase()}`, isNull(applicationTags.archivedAt)));
+      if (!existing) throw new ActionFailure("Could not create that tag. Try again.");
+      return existing;
+    });
+    refreshApplicants();
+    return { ok: true, data: tag };
+  });
+}
+
+/** Removes a tag from the catalog and from every application (the tag row is archived, never erased). */
+export async function archiveTag(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.tag");
+    const parsed = archiveTagSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    await db.transaction(async (tx) => {
+      const [tag] = await tx.select().from(applicationTags).where(and(eq(applicationTags.id, parsed.data.tagId), isNull(applicationTags.archivedAt))).for("update");
+      if (!tag) throw new ActionFailure("That tag was not found.");
+      await tx.delete(applicationTagLinks).where(eq(applicationTagLinks.tagId, tag.id));
+      await tx.update(applicationTags).set({ archivedAt: new Date() }).where(eq(applicationTags.id, tag.id));
+      await writeAudit({ actor, action: "recruiting.tag_archive", targetType: "tag", targetId: tag.id, before: { name: tag.name } }, tx);
+    });
+    refreshApplicants();
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Replaces the tags on one application with exactly the ones given. */
+export async function setApplicationTags(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.tag");
+    const parsed = setTagsSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { applicationId } = parsed.data;
+    const tagIds = [...new Set(parsed.data.tagIds)];
+    await db.transaction(async (tx) => {
+      const [app] = await tx.select({ id: applications.id }).from(applications).where(eq(applications.id, applicationId)).for("update");
+      if (!app) throw new ActionFailure("That application was not found.");
+      if (tagIds.length) {
+        const live = await tx.select({ id: applicationTags.id }).from(applicationTags).where(and(inArray(applicationTags.id, tagIds), isNull(applicationTags.archivedAt)));
+        if (live.length !== tagIds.length) throw new ActionFailure("One of those tags no longer exists. Reload the page.");
+      }
+      const before = await tx.select({ tagId: applicationTagLinks.tagId }).from(applicationTagLinks).where(eq(applicationTagLinks.applicationId, applicationId));
+      await tx.delete(applicationTagLinks).where(eq(applicationTagLinks.applicationId, applicationId));
+      if (tagIds.length) await tx.insert(applicationTagLinks).values(tagIds.map((tagId) => ({ applicationId, tagId, addedBy: actor.id })));
+      await writeAudit({ actor, action: "recruiting.tags_set", targetType: "application", targetId: applicationId, before: { tags: before.map((b) => b.tagId) }, after: { tags: tagIds } }, tx);
+    });
+    refreshApplicants(applicationId);
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Sets where the applicant heard about the job (for example when a referral came by phone). Blank clears it. */
+export async function setApplicationSource(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.tag");
+    const parsed = setSourceSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { applicationId, source, sourceDetail } = parsed.data;
+    await db.transaction(async (tx) => {
+      const [app] = await tx.select({ source: applications.source }).from(applications).where(eq(applications.id, applicationId)).for("update");
+      if (!app) throw new ActionFailure("That application was not found.");
+      await tx.update(applications).set({ source: source ?? null, sourceDetail: source ? (sourceDetail ?? null) : null }).where(eq(applications.id, applicationId));
+      await writeAudit({ actor, action: "recruiting.source_set", targetType: "application", targetId: applicationId, before: { source: app.source }, after: { source: source ?? null } }, tx);
+    });
+    refreshApplicants(applicationId);
+    return { ok: true, data: undefined };
+  });
+}
+
+export type BulkResult = { requested: number; done: number; failed: { applicationId: string; reason: string }[] };
+
+/**
+ * One action for many applications (move, close, tag, untag). Each application runs in its own transaction, so one that cannot change
+ * (already closed, hired, gone) is reported and the rest still go through. Moves and closes write the same history and audit rows as
+ * doing them one by one; the whole run adds one summary audit row. Applicant emails go out once at the end.
+ */
+export async function bulkUpdateApplications(input: unknown): Promise<ActionResult<BulkResult>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.bulk");
+    const parsed = bulkSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const v = parsed.data;
+    const ids = [...new Set(v.applicationIds)];
+
+    if (v.action === "tag" || v.action === "untag") {
+      const [tag] = await db.select({ id: applicationTags.id }).from(applicationTags).where(and(eq(applicationTags.id, v.tagId), isNull(applicationTags.archivedAt)));
+      if (!tag) return fail("That tag no longer exists. Reload the page.");
+    }
+
+    const failed: BulkResult["failed"] = [];
+    let done = 0;
+    for (const applicationId of ids) {
+      try {
+        await db.transaction(async (tx) => {
+          if (v.action === "move") await moveInTx(tx, actor, { applicationId, to: v.to, note: v.note });
+          else if (v.action === "close") await closeInTx(tx, actor, { applicationId, kind: v.kind, reason: v.reason, notifyCandidate: v.notifyCandidate });
+          else if (v.action === "pool_add" || v.action === "pool_remove") await poolInTx(tx, actor, applicationId, v.action === "pool_add");
+          else if (v.action === "tag") {
+            const [app] = await tx.select({ id: applications.id }).from(applications).where(eq(applications.id, applicationId)).for("update");
+            if (!app) throw new ActionFailure("That application was not found.");
+            const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(applicationTagLinks).where(eq(applicationTagLinks.applicationId, applicationId));
+            const [already] = await tx.select({ tagId: applicationTagLinks.tagId }).from(applicationTagLinks).where(and(eq(applicationTagLinks.applicationId, applicationId), eq(applicationTagLinks.tagId, v.tagId)));
+            if (!already && n >= MAX_TAGS_PER_APPLICATION) throw new ActionFailure(`It already has ${MAX_TAGS_PER_APPLICATION} tags.`);
+            await tx.insert(applicationTagLinks).values({ applicationId, tagId: v.tagId, addedBy: actor.id }).onConflictDoNothing();
+          } else {
+            await tx.delete(applicationTagLinks).where(and(eq(applicationTagLinks.applicationId, applicationId), eq(applicationTagLinks.tagId, v.tagId)));
+          }
+        });
+        done += 1;
+      } catch (error) {
+        failed.push({ applicationId, reason: error instanceof ActionFailure ? error.message : "Something went wrong." });
+      }
+    }
+
+    await db.transaction((tx) =>
+      writeAudit(
+        {
+          actor,
+          action: "recruiting.bulk",
+          targetType: "application",
+          metadata: { action: v.action, requested: ids.length, applicationIds: ids, done, failed: failed.length, ...(v.action === "move" ? { to: v.to } : {}), ...(v.action === "close" ? { kind: v.kind } : {}), ...(v.action === "tag" || v.action === "untag" ? { tagId: v.tagId } : {}) },
+        },
+        tx,
+      ),
+    );
+    if (v.action === "close" && v.notifyCandidate && done > 0) await sendRecruitingEmailsNow();
+    refresh();
+    refreshApplicants();
+    return { ok: true, data: { requested: ids.length, done, failed: failed.slice(0, 20) } };
+  });
+}
+
+// ---- Resume keyword match -----------------------------------------------------------------------------------------------------
+
+export type RescoreResult = { looked: number; scored: number; unreadable: number; remaining: number };
+/** One run stops after this long (a request has a time limit) and reports what is left; run it again to continue. */
+const RESCORE_BUDGET_MS = 25_000;
+
+/**
+ * Scores every application of a job again with the job's current keywords (after the recruiter changed them). The resume files are read
+ * from private storage one at a time on our server; only the percentage and the found/missing words are stored, never the text.
+ */
+export async function rescoreOpening(input: unknown): Promise<ActionResult<RescoreResult>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.manage_openings");
+    const parsed = rescoreSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { openingId } = parsed.data;
+    const [opening] = await db.select().from(jobOpenings).where(and(eq(jobOpenings.id, openingId), isNull(jobOpenings.archivedAt)));
+    if (!opening) return fail("That job was not found.");
+    const sets = { required: opening.keywordsRequired, nice: opening.keywordsNice };
+    if (sets.required.length + sets.nice.length === 0) return fail("Add some keywords to the job first.");
+
+    const targets = await db
+      .select({ id: applications.id, resumePath: candidates.resumePath, resumeKind: candidates.resumeKind })
+      .from(applications)
+      .innerJoin(candidates, eq(candidates.id, applications.candidateId))
+      // Only applications not yet scored with these exact keywords, so each run continues where the last one stopped.
+      .where(and(eq(applications.openingId, openingId), isNull(candidates.anonymizedAt), sql`${applications.keywordSetKey} is distinct from ${keywordSetKey(sets)}`))
+      .orderBy(desc(applications.appliedAt));
+
+    const storage = getDocumentStorage();
+    let scored = 0;
+    let unreadable = 0;
+    let looked = 0;
+    const startedAt = Date.now();
+    for (const t of targets) {
+      if (Date.now() - startedAt > RESCORE_BUDGET_MS) break;
+      looked += 1;
+      const bytes = t.resumePath ? await storage.read(BUCKETS.recruiting, t.resumePath).catch(() => null) : null;
+      const text = bytes ? await extractResumeText(bytes, t.resumeKind) : null;
+      const columns = keywordColumns(text, sets);
+      if (!columns) continue;
+      await db.update(applications).set(columns).where(eq(applications.id, t.id));
+      if (columns.keywordScore === null) unreadable += 1;
+      else scored += 1;
+    }
+    await db.transaction((tx) => writeAudit({ actor, action: "recruiting.rescore", targetType: "job_opening", targetId: openingId, metadata: { looked, scored, unreadable, remaining: targets.length - looked } }, tx));
+    refresh(openingId);
+    revalidatePath("/recruiting/applicants");
+    return { ok: true, data: { looked, scored, unreadable, remaining: targets.length - looked } };
+  });
+}
+
+// ---- Talent pool and merging duplicates ------------------------------------------------------------------------------------
+
+/** Puts an applicant in the talent pool, or takes them out. Only someone who agreed to be kept (and whose agreement has not run out) can go in. */
+export async function setTalentPool(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.pool");
+    const parsed = poolSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { applicationId, inPool } = parsed.data;
+    await db.transaction((tx) => poolInTx(tx, actor, applicationId, inPool));
+    refreshApplicants(applicationId);
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Starts a new application for someone in the talent pool, for another open job. It begins at "Applied" like any other. */
+export async function addPoolMemberToOpening(input: unknown): Promise<ActionResult<{ applicationId: string }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.pool");
+    const parsed = poolToOpeningSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { applicationId, openingId } = parsed.data;
+
+    const [source] = await db.select({ candidateId: applications.candidateId }).from(applications).where(eq(applications.id, applicationId));
+    if (!source) return fail("That application was not found.");
+    const [c] = await db.select().from(candidates).where(eq(candidates.id, source.candidateId));
+    if (!c || c.anonymizedAt) return fail("Their personal data was removed.");
+    if (!c.inPool || !c.poolExpiresAt || c.poolExpiresAt <= new Date()) return fail(POOL_REFUSED);
+    const [opening] = await db.select().from(jobOpenings).where(eq(jobOpenings.id, openingId));
+    if (!opening || !isApplyable(opening.status as OpeningStatus, opening.archivedAt !== null)) return fail("That job is not open.");
+
+    // Read their resume on our server once to score it against this job's keywords (only the percentage is kept).
+    const sets = { required: opening.keywordsRequired, nice: opening.keywordsNice };
+    const bytes = sets.required.length + sets.nice.length > 0 && c.resumePath ? await getDocumentStorage().read(BUCKETS.recruiting, c.resumePath).catch(() => null) : null;
+    const keyword = keywordColumns(bytes ? await extractResumeText(bytes, c.resumeKind) : null, sets);
+
+    const id = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(applications).values({ openingId, candidateId: c.id, sourceDetail: "From the talent pool", ...(keyword ?? {}) }).onConflictDoNothing().returning({ id: applications.id });
+      if (!created) throw new ActionFailure("They already have an application for that job.");
+      await tx.insert(applicationStageHistory).values({ applicationId: created.id, fromStage: null, toStage: "applied", byUserId: actor.id, note: "Added from the talent pool" });
+      await writeAudit({ actor, action: "recruiting.pool_to_opening", targetType: "application", targetId: created.id, after: { openingId, candidateId: c.id } }, tx);
+      const team = new Set([...(opening.createdBy ? [opening.createdBy] : []), ...(await hiringTeamIds(tx, openingId))]);
+      team.delete(actor.id);
+      if (team.size > 0) await notify(tx, [...team].map((userId) => ({ userId, kind: "recruiting.new_application", title: "New application", body: `For ${opening.title}, from the talent pool.`, link: `/recruiting/${openingId}` })));
+      return created.id;
+    });
+    refresh(openingId, id);
+    refreshApplicants(applicationId);
+    return { ok: true, data: { applicationId: id } };
+  });
+}
+
+/**
+ * Merges two records of the same person: the second one's applications move to the first, blanks are filled from it, and the second
+ * is left as an emptied "Merged duplicate" row that points at the first (so counts and history still add up). Refused when both
+ * applied to the same job (close one first), and for a removed applicant. HR and Super Admin only; HR has looked at the pair first.
+ */
+export async function mergeCandidates(input: unknown): Promise<ActionResult<{ moved: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.merge");
+    const parsed = mergeSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { keepCandidateId, mergeCandidateId } = parsed.data;
+    if (keepCandidateId === mergeCandidateId) return fail("Choose two different records.");
+
+    const done = await db.transaction(async (tx) => {
+      // Lock both in a fixed order so two merges at once cannot deadlock.
+      const locked = await tx.select().from(candidates).where(inArray(candidates.id, [keepCandidateId, mergeCandidateId])).orderBy(asc(candidates.id)).for("update");
+      const keep = locked.find((c) => c.id === keepCandidateId);
+      const gone = locked.find((c) => c.id === mergeCandidateId);
+      if (!keep || !gone) throw new ActionFailure("One of those applicants was not found.");
+      if (keep.anonymizedAt || gone.anonymizedAt) throw new ActionFailure("An applicant whose data was removed cannot be merged.");
+
+      const mine = await tx.select({ id: applications.id, openingId: applications.openingId, title: jobOpenings.title }).from(applications).innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId)).where(eq(applications.candidateId, keep.id));
+      const theirs = await tx.select({ id: applications.id, openingId: applications.openingId, title: jobOpenings.title }).from(applications).innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId)).where(eq(applications.candidateId, gone.id));
+      const both = theirs.filter((t) => mine.some((m) => m.openingId === t.openingId));
+      if (both.length > 0) throw new ActionFailure(`Both records applied for ${[...new Set(both.map((b) => b.title))].join(", ")}. Close one of those applications first.`);
+
+      if (theirs.length) await tx.update(applications).set({ candidateId: keep.id }).where(eq(applications.candidateId, gone.id));
+
+      const takesResume = !keep.resumePath && gone.resumePath;
+      const carryPool = gone.poolConsentAt && gone.poolExpiresAt && (!keep.poolConsentAt || (keep.poolExpiresAt ?? new Date(0)) < gone.poolExpiresAt);
+      await tx
+        .update(candidates)
+        .set({
+          phone: keep.phone ?? gone.phone,
+          country: keep.country ?? gone.country,
+          ...(takesResume ? { resumePath: gone.resumePath, resumeName: gone.resumeName, resumeKind: gone.resumeKind, resumeSha256: gone.resumeSha256 } : {}),
+          ...(carryPool ? { poolConsentAt: gone.poolConsentAt, poolExpiresAt: gone.poolExpiresAt, inPool: keep.inPool || gone.inPool } : {}),
+        })
+        .where(eq(candidates.id, keep.id));
+      await deleteApplicantSelfId(tx, gone.id); // voluntary answers are not carried over; the kept record's own stay
+      await tx
+        .update(candidates)
+        .set({ email: `merged-${gone.id}@removed.invalid`, fullName: "Merged duplicate", phone: null, country: null, resumePath: null, resumeName: null, resumeKind: null, resumeSha256: null, inPool: false, mergedInto: keep.id, anonymizedAt: new Date() })
+        .where(eq(candidates.id, gone.id));
+      await writeAudit({ actor, action: "recruiting.merge", targetType: "candidate", targetId: keep.id, metadata: { merged: gone.id, applicationsMoved: theirs.length } }, tx);
+      return { moved: theirs.length, orphanResume: takesResume ? null : gone.resumePath };
+    });
+    // The file of the emptied record is removed only after the merge has committed (the kept record already has its own resume).
+    if (done.orphanResume) await getDocumentStorage().remove(BUCKETS.recruiting, [done.orphanResume]).catch(() => undefined);
+    refresh();
+    refreshApplicants();
+    revalidatePath("/recruiting/applicants/duplicates");
+    return { ok: true, data: { moved: done.moved } };
+  });
+}
+
+// ---- Applicant email wording --------------------------------------------------------------------------------------------------
+
+/** Saves HR's own wording for one applicant email. The text is plain and may use only {{first_name}} and {{job_title}}. */
+export async function saveEmailTemplate(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.manage_email_templates");
+    const parsed = saveTemplateSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { kind } = parsed.data;
+    const template = { subject: parsed.data.subject.trim(), body: parsed.data.body.replace(/\r\n/g, "\n").trim() };
+    const problem = validateTemplate(template);
+    if (problem) return fail(problem);
+    await db.transaction(async (tx) => {
+      await tx.insert(emailTemplates).values({ kind, ...template, updatedBy: actor.id }).onConflictDoUpdate({ target: emailTemplates.kind, set: { ...template, updatedBy: actor.id, updatedAt: new Date() } });
+      // The audit row names the email, never its words.
+      await writeAudit({ actor, action: "recruiting.email_template_save", targetType: "email_template", targetId: undefined, metadata: { kind } }, tx);
+    });
+    revalidatePath("/recruiting/email-templates");
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Goes back to the built-in wording for one applicant email. */
+export async function resetEmailTemplate(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "recruiting.manage_email_templates");
+    const parsed = resetTemplateSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    await db.transaction(async (tx) => {
+      await tx.delete(emailTemplates).where(eq(emailTemplates.kind, parsed.data.kind));
+      await writeAudit({ actor, action: "recruiting.email_template_reset", targetType: "email_template", targetId: undefined, metadata: { kind: parsed.data.kind } }, tx);
+    });
+    revalidatePath("/recruiting/email-templates");
     return { ok: true, data: undefined };
   });
 }

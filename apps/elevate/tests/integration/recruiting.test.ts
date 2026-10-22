@@ -17,6 +17,8 @@ const { setDocumentStorage } = await import("@/modules/documents/storage");
 const { setEmailSender } = await import("@/modules/notifications/email");
 const actions = await import("@/modules/recruiting/actions");
 const queries = await import("@/modules/recruiting/queries");
+const applicantFilters = await import("@/modules/recruiting/applicant-filters");
+const { makeDocx, makePdf } = await import("../helpers/resume-files");
 const service = await import("@/modules/recruiting/service");
 const jobs = await import("@/modules/recruiting/jobs");
 
@@ -237,6 +239,280 @@ describe("readable addresses and the careers page", () => {
       expect(await actions.saveCareersPage({ title: "No", intro: "No" })).toEqual({ ok: false, error: NO_ACCESS });
       await expect(banner.saveBanner(u as never, jpeg(1600, 400))).rejects.toThrow();
     }
+  });
+});
+
+describe("the all-applicants list", () => {
+  const { EMPTY_FILTERS } = applicantFilters;
+  const list = async (user: TestUser, over: Partial<typeof EMPTY_FILTERS> = {}, paging = { page: 1, pageSize: 100 }) => {
+    as(user);
+    return queries.listApplicants({ ...EMPTY_FILTERS, ...over }, paging);
+  };
+
+  it("searches by name or email as plain text, filters by job, stage, close kind and date, and sorts", async () => {
+    const opening = await openJob(uniq("Billing "));
+    const other = await openJob(uniq("Scheduler "));
+    const tag = uniq("zq").toLowerCase();
+    const a = `${tag}-a@example.com`;
+    const b = `${tag}-b@example.com`;
+    await apply(opening, { email: a, fullName: "Zed Alvarez" });
+    await apply(opening, { email: b, fullName: "Zoe 100%_Cruz" });
+    await apply(other, { email: `${tag}-c@example.com`, fullName: "Zack Tan" });
+    const appA = (await appFor(opening, a))!;
+    const appB = (await appFor(opening, b))!;
+    as(recruiter);
+    expect((await actions.moveApplication({ applicationId: appA, to: "screening" })).ok).toBe(true);
+    expect((await actions.rejectApplication({ applicationId: appB, kind: "not_qualified", reason: "Missing certification" })).ok).toBe(true);
+
+    expect((await list(recruiter, { q: tag })).rows).toHaveLength(3);
+    expect((await list(recruiter, { q: "alvarez" })).rows.map((r) => r.applicationId)).toEqual([appA]);
+    // % and _ are matched as the characters they are, not as wildcards
+    expect((await list(recruiter, { q: "100%_" })).rows.map((r) => r.applicationId)).toEqual([appB]);
+    expect((await list(recruiter, { q: "z%" })).rows).toHaveLength(0);
+    expect((await list(recruiter, { q: tag, openingId: other })).rows.map((r) => r.name)).toEqual(["Zack Tan"]);
+    expect((await list(recruiter, { q: tag, stage: "screening" })).rows.map((r) => r.applicationId)).toEqual([appA]);
+    expect((await list(recruiter, { q: tag, stage: "open" })).rows).toHaveLength(2);
+    expect((await list(recruiter, { q: tag, closeKind: "not_qualified" })).rows.map((r) => r.applicationId)).toEqual([appB]);
+    expect((await list(recruiter, { q: tag, from: "2999-01-01" })).rows).toHaveLength(0);
+    expect((await list(recruiter, { q: tag, to: "2999-01-01" })).rows).toHaveLength(3);
+    expect((await list(recruiter, { q: tag, sort: "name" })).rows.map((r) => r.name)).toEqual(["Zack Tan", "Zed Alvarez", "Zoe 100%_Cruz"]);
+  });
+
+  it("pages in the database and reports the total", async () => {
+    const opening = await openJob(uniq("Paged "));
+    for (let i = 0; i < 5; i++) await apply(opening, { fullName: `Page Person ${i}` });
+    const first = await list(recruiter, { openingId: opening }, { page: 1, pageSize: 2 });
+    expect(first.rows).toHaveLength(2);
+    expect(first.info).toMatchObject({ total: 5, pages: 3, page: 1 });
+    const last = await list(recruiter, { openingId: opening }, { page: 9, pageSize: 2 }); // past the end snaps to the last page
+    expect(last.rows).toHaveLength(1);
+    expect(last.info.page).toBe(3);
+  });
+
+  it("shows a team lead only the jobs they are on the hiring team for, and refuses an executive and an employee", async () => {
+    const mine = await openJob(uniq("Mine ")); // hiring team: lead
+    as(recruiter);
+    const notMine = idOf(await actions.saveOpening({ title: uniq("Not mine "), description: "Other team's job for another lead.", hiringTeamUserIds: [otherLead.id] }));
+    await actions.setOpeningStatus({ id: notMine, status: "open" });
+    const tag = uniq("tl").toLowerCase();
+    await apply(mine, { email: `${tag}-1@example.com`, fullName: "Visible Person" });
+    await apply(notMine, { email: `${tag}-2@example.com`, fullName: "Hidden Person" });
+
+    const seen = await list(lead, { q: tag });
+    expect(seen.scope).toBe("team");
+    expect(seen.rows.map((r) => r.name)).toEqual(["Visible Person"]);
+    expect(seen.openings.map((o) => o.id)).toContain(mine);
+    expect(seen.openings.map((o) => o.id)).not.toContain(notMine);
+    // asking for the other job directly still returns nothing for this lead
+    expect((await list(lead, { q: tag, openingId: notMine })).rows).toHaveLength(0);
+    await expect(list(exec)).rejects.toThrow();
+    await expect(list(employee)).rejects.toThrow();
+  });
+
+  it("lists a removed applicant without a name or email, and a search never finds them", async () => {
+    const opening = await openJob(uniq("Removed "));
+    const email = `${uniq("gone")}@example.com`;
+    await apply(opening, { email, fullName: "Gone Person" });
+    const appId = (await appFor(opening, email))!;
+    await db.execute(sql`update talent.candidates set anonymized_at = now() where id = (select candidate_id from talent.applications where id = ${appId})`);
+    const all = await list(recruiter, { openingId: opening });
+    expect(all.rows).toHaveLength(1);
+    expect(all.rows[0]).toMatchObject({ name: "Removed applicant", email: null });
+    expect((await list(recruiter, { openingId: opening, q: "gone" })).rows).toHaveLength(0);
+  });
+});
+
+describe("resume keyword match", () => {
+  const keywords = { keywordsRequired: "medical billing, excel", keywordsNice: "hipaa, spanish" };
+  async function keywordJob() {
+    as(recruiter);
+    const id = idOf(await actions.saveOpening({ title: uniq("Keyword "), description: "Support our clients with billing and inbox care.", hiringTeamUserIds: [lead.id], ...keywords }));
+    await actions.setOpeningStatus({ id, status: "open" });
+    return id;
+  }
+  const scoreOf = async (appId: string) => (await rows<{ keyword_score: number | null; keyword_matched: string[] | null; keyword_missed: string[] | null }>(sql`select keyword_score, keyword_matched, keyword_missed from talent.applications where id = ${appId}`))[0];
+
+  it("scores a PDF and a Word resume when the person applies, and keeps only the percentage and the words, never the text", async () => {
+    const opening = await keywordJob();
+    const a = `${uniq("kw")}@example.com`;
+    const b = `${uniq("kw")}@example.com`;
+    expect(await apply(opening, { email: a }, { bytes: await makePdf(["Medical billing specialist", "Skills: Excel and HIPAA"]), name: "cv.pdf" })).toEqual({ ok: true });
+    expect(await apply(opening, { email: b }, { bytes: makeDocx(["Virtual assistant", "Fluent in Spanish"]), name: "cv.docx" })).toEqual({ ok: true });
+    const first = await scoreOf((await appFor(opening, a))!);
+    expect(first.keyword_score).toBe(85); // both required (70) and one of two nice (15)
+    expect(first.keyword_matched).toEqual(["medical billing", "excel", "hipaa"]);
+    expect(first.keyword_missed).toEqual(["spanish"]);
+    const second = await scoreOf((await appFor(opening, b))!);
+    expect(second.keyword_score).toBe(15);
+    // nothing in the application row holds the resume text
+    const [raw] = await rows<{ doc: string }>(sql`select row_to_json(a)::text as doc from talent.applications a where a.id = ${(await appFor(opening, a))!}`);
+    expect(raw.doc).not.toContain("Medical billing specialist");
+  });
+
+  it("gives no score for a job with no keywords or a resume with no readable text, and never blocks the application", async () => {
+    const plain = await openJob();
+    const email = `${uniq("kw")}@example.com`;
+    expect(await apply(plain, { email })).toEqual({ ok: true });
+    expect((await scoreOf((await appFor(plain, email))!)).keyword_score).toBeNull();
+    const opening = await keywordJob();
+    const scan = `${uniq("kw")}@example.com`;
+    expect(await apply(opening, { email: scan }, { bytes: await makePdf([]), name: "scan.pdf" })).toEqual({ ok: true });
+    expect((await scoreOf((await appFor(opening, scan))!)).keyword_score).toBeNull();
+  });
+
+  it("scores everyone again after the keywords change, shows it is out of date until then, and lists by score", async () => {
+    const opening = await keywordJob();
+    const email = `${uniq("kw")}@example.com`;
+    await apply(opening, { email }, { bytes: await makePdf(["Excel and HIPAA experience"]), name: "cv.pdf" });
+    const appId = (await appFor(opening, email))!;
+    expect((await queries.getApplication(appId)).keyword.stale).toBe(false);
+
+    as(recruiter);
+    expect((await actions.saveOpening({ id: opening, title: uniq("Keyword "), description: "Support our clients with billing and inbox care.", hiringTeamUserIds: [lead.id], keywordsRequired: "excel", keywordsNice: "" })).ok).toBe(true);
+    expect((await queries.getApplication(appId)).keyword.stale).toBe(true);
+    expect(await actions.rescoreOpening({ openingId: opening })).toMatchObject({ ok: true, data: { looked: 1, scored: 1, unreadable: 0 } });
+    expect((await scoreOf(appId)).keyword_score).toBe(100);
+    expect((await queries.getApplication(appId)).keyword.stale).toBe(false);
+    // nothing is left to score with these keywords, so a second press has no work
+    expect(await actions.rescoreOpening({ openingId: opening })).toMatchObject({ ok: true, data: { looked: 0, scored: 0, remaining: 0 } });
+
+    const high = await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, minScore: 75, sort: "score" }, { page: 1, pageSize: 20 });
+    expect(high.rows.map((r) => [r.applicationId, r.keywordScore])).toEqual([[appId, 100]]);
+    expect((await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, minScore: 75 }, { page: 1, pageSize: 20 })).rows).toHaveLength(1);
+    // refuses a job with no keywords, and anyone who may not manage jobs
+    const plain = await openJob();
+    expect((await actions.rescoreOpening({ openingId: plain })).ok).toBe(false);
+    as(lead);
+    expect(await actions.rescoreOpening({ openingId: opening })).toEqual({ ok: false, error: NO_ACCESS });
+  });
+});
+
+describe("sources, tags and bulk actions", () => {
+  const tagId = async (name: string) => {
+    as(recruiter);
+    const made = await actions.createTag({ name });
+    if (!made.ok) throw new Error(made.error);
+    return made.data.id;
+  };
+
+  it("keeps where the applicant heard about the job, ignores an unknown value, and lets staff change it", async () => {
+    const opening = await openJob();
+    const a = `${uniq("src")}@example.com`;
+    const b = `${uniq("src")}@example.com`;
+    expect(await apply(opening, { email: a, source: "referral", sourceDetail: "Maria Santos" })).toEqual({ ok: true });
+    expect(await apply(opening, { email: b, source: "not-a-source" })).toEqual({ ok: true });
+    const [rowA] = await rows<{ source: string | null; source_detail: string | null }>(sql`select source, source_detail from talent.applications where id = ${(await appFor(opening, a))!}`);
+    expect(rowA).toEqual({ source: "referral", source_detail: "Maria Santos" });
+    const idB = (await appFor(opening, b))!;
+    expect((await rows<{ source: string | null }>(sql`select source from talent.applications where id = ${idB}`))[0].source).toBeNull();
+
+    as(recruiter);
+    expect((await actions.setApplicationSource({ applicationId: idB, source: "linkedin" })).ok).toBe(true);
+    expect((await actions.setApplicationSource({ applicationId: idB, source: "nonsense" })).ok).toBe(false);
+    expect((await rows<{ source: string | null }>(sql`select source from talent.applications where id = ${idB}`))[0].source).toBe("linkedin");
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'recruiting.source_set' and target_id = ${idB}`)).toHaveLength(1);
+    // The list can filter on it
+    const listed = await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, source: "linkedin" }, { page: 1, pageSize: 50 });
+    expect(listed.rows.map((r) => r.applicationId)).toEqual([idB]);
+    expect((await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, source: "none" }, { page: 1, pageSize: 50 })).rows).toHaveLength(0);
+  });
+
+  it("creates a tag once per name (ignoring case), sets tags on an application, filters by tag, and archiving removes it everywhere", async () => {
+    const opening = await openJob();
+    const email = `${uniq("tag")}@example.com`;
+    await apply(opening, { email });
+    const appId = (await appFor(opening, email))!;
+    const name = uniq("Strong English ");
+    const t1 = await tagId(name);
+    expect(await tagId(name.toUpperCase())).toBe(t1); // same tag
+    // two people creating the same new name at the same moment both get the one tag
+    const race = uniq("Race ");
+    const both = await Promise.all([actions.createTag({ name: race }), actions.createTag({ name: race.toLowerCase() })]);
+    expect(both.every((r) => r.ok)).toBe(true);
+    expect(new Set(both.map((r) => (r as { data: { id: string } }).data.id)).size).toBe(1);
+    const t2 = await tagId(uniq("Call back "));
+    as(recruiter);
+    expect((await actions.createTag({ name: "<script>" })).ok).toBe(false);
+    expect((await actions.setApplicationTags({ applicationId: appId, tagIds: [t1, t2] })).ok).toBe(true);
+    expect((await queries.getApplication(appId)).tags.map((t) => t.id).sort()).toEqual([t1, t2].sort());
+    expect((await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, tagId: t1 }, { page: 1, pageSize: 50 })).rows.map((r) => r.applicationId)).toEqual([appId]);
+    expect((await actions.setApplicationTags({ applicationId: appId, tagIds: Array.from({ length: 11 }, () => t1) })).ok).toBe(false); // more than 10 is refused
+    expect((await actions.setApplicationTags({ applicationId: appId, tagIds: ["11111111-1111-4111-8111-111111111111"] })).ok).toBe(false);
+
+    expect((await actions.archiveTag({ tagId: t1 })).ok).toBe(true);
+    expect((await queries.getApplication(appId)).tags.map((t) => t.id)).not.toContain(t1);
+    expect(await rows(sql`select 1 from talent.application_tags where tag_id = ${t1}`)).toHaveLength(0);
+    // the name is free to use again
+    expect(await tagId(name)).not.toBe(t1);
+  });
+
+  it("moves, closes and tags many at once, reports the ones that could not change, and writes the same history", async () => {
+    const opening = await openJob();
+    const emails = [1, 2, 3].map((n) => `${uniq(`bulk${n}-`)}@example.com`);
+    for (const e of emails) await apply(opening, { email: e });
+    const ids = await Promise.all(emails.map(async (e) => (await appFor(opening, e))!));
+    as(recruiter);
+
+    const moved = await actions.bulkUpdateApplications({ action: "move", applicationIds: ids, to: "screening", note: "Batch review" });
+    expect(moved).toMatchObject({ ok: true, data: { requested: 3, done: 3, failed: [] } });
+    expect(await rows(sql`select 1 from talent.application_stage_history where application_id in (${sql.join(ids.map((i) => sql`${i}`), sql`, `)}) and to_stage = 'screening'`)).toHaveLength(3);
+    // moving to the stage they are already in fails for each one, and says why
+    const again = await actions.bulkUpdateApplications({ action: "move", applicationIds: ids, to: "screening" });
+    expect(again).toMatchObject({ ok: true, data: { done: 0 } });
+    expect((again as { data: { failed: { reason: string }[] } }).data.failed.map((f) => f.reason)).toEqual(Array(3).fill("They are already in that stage."));
+    // hiring is never done in bulk
+    expect((await actions.bulkUpdateApplications({ action: "move", applicationIds: ids, to: "hired" })).ok).toBe(false);
+
+    const tag = await tagId(uniq("Batch "));
+    expect(await actions.bulkUpdateApplications({ action: "tag", applicationIds: ids, tagId: tag })).toMatchObject({ ok: true, data: { done: 3 } });
+    expect(await rows(sql`select 1 from talent.application_tags where tag_id = ${tag}`)).toHaveLength(3);
+    expect(await actions.bulkUpdateApplications({ action: "untag", applicationIds: [ids[0]], tagId: tag })).toMatchObject({ ok: true, data: { done: 1 } });
+    expect(await rows(sql`select 1 from talent.application_tags where tag_id = ${tag}`)).toHaveLength(2);
+
+    // close two (one is closed first, so it is reported), email only when asked
+    expect((await actions.rejectApplication({ applicationId: ids[2], reason: "Already closed" })).ok).toBe(true);
+    const closed = await actions.bulkUpdateApplications({ action: "close", applicationIds: ids.slice(1), kind: "not_qualified", reason: "Missing certification", notifyCandidate: true });
+    expect(closed).toMatchObject({ ok: true, data: { requested: 2, done: 1 } });
+    expect((closed as { data: { failed: { applicationId: string; reason: string }[] } }).data.failed).toEqual([{ applicationId: ids[2], reason: "They are already closed." }]);
+    const [c] = await rows<{ close_kind: string }>(sql`select close_kind from talent.applications where id = ${ids[1]}`);
+    expect(c.close_kind).toBe("not_qualified");
+    expect(await rows(sql`select 1 from talent.candidate_emails where application_id = ${ids[1]} and kind = 'rejection'`)).toHaveLength(1);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'recruiting.bulk' and metadata->>'action' = 'close'`)).not.toHaveLength(0);
+    // the summary row names which applications it covered
+    const [bulkAudit] = await rows<{ ids: string[] }>(sql`select metadata->'applicationIds' as ids from ops.audit_log where action = 'recruiting.bulk' and metadata->>'action' = 'tag' order by occurred_at desc limit 1`);
+    expect(bulkAudit.ids.sort()).toEqual([...ids].sort());
+    // unknown ids are reported, not fatal; too many are refused
+    expect((await actions.bulkUpdateApplications({ action: "move", applicationIds: ["11111111-1111-4111-8111-111111111111"], to: "screening" })).ok).toBe(true);
+    expect((await actions.bulkUpdateApplications({ action: "move", applicationIds: Array.from({ length: 101 }, (_, i) => `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`), to: "screening" })).ok).toBe(false);
+  });
+
+  it("only HR, Super Admin and recruiters may tag or act in bulk; a team lead, executive and employee are refused", async () => {
+    const opening = await openJob();
+    const email = `${uniq("perm")}@example.com`;
+    await apply(opening, { email });
+    const appId = (await appFor(opening, email))!;
+    for (const u of [lead, exec, employee]) {
+      as(u);
+      expect(await actions.createTag({ name: "Nope" })).toEqual({ ok: false, error: NO_ACCESS });
+      expect(await actions.setApplicationTags({ applicationId: appId, tagIds: [] })).toEqual({ ok: false, error: NO_ACCESS });
+      expect(await actions.bulkUpdateApplications({ action: "move", applicationIds: [appId], to: "screening" })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+    as(hr);
+    expect((await actions.bulkUpdateApplications({ action: "move", applicationIds: [appId], to: "screening" })).ok).toBe(true);
+  });
+
+  it("erasing an application also removes its tags", async () => {
+    const opening = await openJob();
+    const email = `${uniq("erase")}@example.com`;
+    await apply(opening, { email });
+    const appId = (await appFor(opening, email))!;
+    const tag = await tagId(uniq("Erase "));
+    as(recruiter);
+    await actions.setApplicationTags({ applicationId: appId, tagIds: [tag] });
+    const superAdmin = await makeUser("sa", ["super_admin", "employee"]);
+    as(superAdmin);
+    expect((await actions.deleteApplication({ applicationId: appId, confirm: "DELETE" })).ok).toBe(true);
+    expect(await rows(sql`select 1 from talent.application_tags where application_id = ${appId}`)).toHaveLength(0);
   });
 });
 
@@ -727,5 +1003,232 @@ describe("deleting a job ad and erasing an application", () => {
     const hiredApp = (await appFor(two, hired))!;
     await db.execute(sql`update talent.applications set stage = 'hired', closed_at = now() where id = ${hiredApp}`);
     expect(await actions.deleteApplication({ applicationId: hiredApp, confirm: "DELETE" })).toEqual({ ok: false, error: "This applicant has an offer or was hired, so it cannot be erased." });
+  });
+});
+
+describe("talent pool and duplicate merge", () => {
+  const candidateOf = async (appId: string) => (await rows<{ id: string }>(sql`select candidate_id as id from talent.applications where id = ${appId}`))[0].id;
+  const phoneNo = () => `09${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 10)}`;
+
+  it("starts the 12-month clock only when the applicant ticks the box, and only a consenting applicant can go in the pool", async () => {
+    const opening = await openJob();
+    const yes = `${uniq("pool")}@example.com`;
+    const no = `${uniq("pool")}@example.com`;
+    await apply(opening, { email: yes, poolConsent: true });
+    await apply(opening, { email: no });
+    const [row] = await rows<{ pool_consent_at: Date | null; months: number }>(sql`select pool_consent_at, round(extract(epoch from (pool_expires_at - pool_consent_at)) / 2629800)::int as months from talent.candidates where lower(email) = ${yes}`);
+    expect(row.pool_consent_at).not.toBeNull();
+    expect(row.months).toBe(12);
+    expect((await rows<{ pool_consent_at: Date | null }>(sql`select pool_consent_at from talent.candidates where lower(email) = ${no}`))[0].pool_consent_at).toBeNull();
+
+    const appYes = (await appFor(opening, yes))!;
+    const appNo = (await appFor(opening, no))!;
+    as(recruiter);
+    expect(await actions.setTalentPool({ applicationId: appNo, inPool: true })).toMatchObject({ ok: false, error: expect.stringContaining("did not agree") });
+    expect((await actions.setTalentPool({ applicationId: appYes, inPool: true })).ok).toBe(true);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'recruiting.pool_add' and target_id = ${await candidateOf(appYes)}`)).toHaveLength(1);
+
+    const pooled = await queries.listApplicants({ ...applicantFilters.EMPTY_FILTERS, openingId: opening, poolOnly: true }, { page: 1, pageSize: 20 });
+    expect(pooled.rows.map((r) => [r.applicationId, r.inPool])).toEqual([[appYes, true]]);
+    expect((await queries.getApplication(appYes)).pool).toMatchObject({ consented: true, inPool: true, canManage: true });
+    expect((await queries.getApplication(appNo)).pool).toMatchObject({ consented: false, inPool: false });
+
+    // in bulk, the one who did not agree is reported, not forced in
+    const bulk = await actions.bulkUpdateApplications({ action: "pool_add", applicationIds: [appYes, appNo] });
+    expect(bulk).toMatchObject({ ok: true, data: { requested: 2, done: 1 } });
+    expect((await actions.setTalentPool({ applicationId: appYes, inPool: false })).ok).toBe(true);
+    for (const u of [lead, exec, employee]) {
+      as(u);
+      expect(await actions.setTalentPool({ applicationId: appYes, inPool: true })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+  });
+
+  it("puts a pool member forward for another open job, once, and never someone who is not in the pool", async () => {
+    const first = await openJob();
+    const second = await openJob();
+    const email = `${uniq("fwd")}@example.com`;
+    await apply(first, { email, poolConsent: true });
+    const appId = (await appFor(first, email))!;
+    as(recruiter);
+    expect(await actions.addPoolMemberToOpening({ applicationId: appId, openingId: second })).toMatchObject({ ok: false, error: expect.stringContaining("did not agree") }); // not in the pool yet
+    await actions.setTalentPool({ applicationId: appId, inPool: true });
+    expect((await queries.getApplication(appId)).pool.openings.map((o) => o.id)).toEqual(expect.arrayContaining([second]));
+    const added = await actions.addPoolMemberToOpening({ applicationId: appId, openingId: second });
+    expect(added.ok).toBe(true);
+    const newApp = (added as { data: { applicationId: string } }).data.applicationId;
+    // the hiring team of that job (the lead) is told, like for any new application
+    expect(await rows(sql`select 1 from ops.notifications where user_id = ${lead.id} and kind = 'recruiting.new_application' and body like '%from the talent pool%' and link = ${`/recruiting/${second}`}`)).toHaveLength(1);
+    const [hist] = await rows<{ to_stage: string; note: string | null }>(sql`select to_stage, note from talent.application_stage_history where application_id = ${newApp}`);
+    expect(hist).toEqual({ to_stage: "applied", note: "Added from the talent pool" });
+    expect(await actions.addPoolMemberToOpening({ applicationId: appId, openingId: second })).toMatchObject({ ok: false, error: "They already have an application for that job." });
+    expect((await queries.getApplication(appId)).pool.openings.map((o) => o.id)).not.toContain(second);
+    as(recruiter);
+    const draft = idOf(await actions.saveOpening({ title: uniq("Draft "), description: "A job that is not open yet, for the pool test.", hiringTeamUserIds: [] }));
+    expect(await actions.addPoolMemberToOpening({ applicationId: appId, openingId: draft })).toEqual({ ok: false, error: "That job is not open." });
+  });
+
+  it("keeps a pool member's data past the retention period while the consent runs, then the normal period applies again", async () => {
+    as(hr);
+    await actions.saveRetention({ enabled: true, rejectedMonths: 12, withdrawnMonths: 6 });
+    try {
+      const opening = await openJob();
+      const email = `${uniq("keep")}@example.com`;
+      await apply(opening, { email, fullName: "Pool Keeper", poolConsent: true });
+      const appId = (await appFor(opening, email))!;
+      const candidateId = await candidateOf(appId);
+      as(recruiter);
+      await actions.setTalentPool({ applicationId: appId, inPool: true });
+      await actions.rejectApplication({ applicationId: appId, reason: "Not this role", notifyCandidate: false });
+      await db.execute(sql`update talent.applications set closed_at = now() - interval '20 months' where id = ${appId}`);
+
+      await jobs.runRecruitingRetention();
+      expect((await rows<{ anonymized_at: Date | null }>(sql`select anonymized_at from talent.candidates where id = ${candidateId}`))[0].anonymized_at).toBeNull();
+
+      // the consent runs out: they leave the pool and the normal period (already over) applies
+      await db.execute(sql`update talent.candidates set pool_expires_at = now() - interval '1 day' where id = ${candidateId}`);
+      await jobs.runRecruitingRetention();
+      const [after] = await rows<{ anonymized_at: Date | null; in_pool: boolean }>(sql`select anonymized_at, in_pool from talent.candidates where id = ${candidateId}`);
+      expect(after.in_pool).toBe(false);
+      expect(after.anonymized_at).not.toBeNull();
+    } finally {
+      as(hr);
+      await actions.saveRetention({ enabled: false, rejectedMonths: 12, withdrawnMonths: 6 });
+    }
+  });
+
+  it("finds likely duplicates, merges them into one record, and refuses when both applied for the same job", async () => {
+    const jobX = await openJob();
+    const jobY = await openJob();
+    const phone = phoneNo();
+    const name = uniq("Mia Tester ").replace(/[0-9]/g, "x");
+    const e1 = `${uniq("dup")}@example.com`;
+    const e2 = `${uniq("dup")}@example.com`;
+    const e3 = `${uniq("dup")}@example.com`;
+    await apply(jobY, { email: e1, fullName: name, phone });
+    await apply(jobX, { email: e2, fullName: `${name} Jr`, phone, poolConsent: true });
+    await apply(jobY, { email: e3, fullName: `${name} Sr`, phone });
+    const [app1, app2, app3] = [(await appFor(jobY, e1))!, (await appFor(jobX, e2))!, (await appFor(jobY, e3))!];
+    const [c1, c2, c3] = await Promise.all([candidateOf(app1), candidateOf(app2), candidateOf(app3)]);
+
+    as(hr);
+    const groups = await queries.listDuplicateGroups();
+    const mine = groups.find((g) => g.candidates.some((c) => c.id === c1));
+    expect(mine?.reasons).toContain("phone");
+    expect(mine?.candidates.map((c) => c.id).sort()).toEqual([c1, c2, c3].sort());
+
+    // a recruiter may not merge; HR may
+    as(recruiter);
+    expect(await actions.mergeCandidates({ keepCandidateId: c1, mergeCandidateId: c2 })).toEqual({ ok: false, error: NO_ACCESS });
+    as(hr);
+    expect(await actions.mergeCandidates({ keepCandidateId: c1, mergeCandidateId: c1 })).toMatchObject({ ok: false });
+    expect(await actions.mergeCandidates({ keepCandidateId: c1, mergeCandidateId: c2 })).toEqual({ ok: true, data: { moved: 1 } });
+    const [left] = await rows<{ full_name: string; anonymized_at: Date | null; merged_into: string | null; email: string }>(sql`select full_name, anonymized_at, merged_into, email from talent.candidates where id = ${c2}`);
+    expect(left).toMatchObject({ full_name: "Merged duplicate", merged_into: c1 });
+    expect(left.anonymized_at).not.toBeNull();
+    expect(left.email).not.toContain("example.com");
+    expect(await candidateOf(app2)).toBe(c1); // the application moved
+    // the pool agreement came along with the application
+    expect((await rows<{ pool_consent_at: Date | null }>(sql`select pool_consent_at from talent.candidates where id = ${c1}`))[0].pool_consent_at).not.toBeNull();
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'recruiting.merge' and target_id = ${c1}`)).toHaveLength(1);
+
+    // c3 and c1 both applied for job Y: refused, and nothing changed
+    const refused = await actions.mergeCandidates({ keepCandidateId: c1, mergeCandidateId: c3 });
+    expect(refused).toMatchObject({ ok: false, error: expect.stringContaining("Both records applied") });
+    expect((await rows<{ anonymized_at: Date | null }>(sql`select anonymized_at from talent.candidates where id = ${c3}`))[0].anonymized_at).toBeNull();
+    // an emptied record cannot be merged again, and no longer shows up as a duplicate
+    expect(await actions.mergeCandidates({ keepCandidateId: c1, mergeCandidateId: c2 })).toMatchObject({ ok: false });
+    expect((await queries.listDuplicateGroups()).some((g) => g.candidates.some((c) => c.id === c2))).toBe(false);
+  });
+});
+
+describe("applicant email wording", () => {
+  const bodyOf = async (appId: string, kind: string) => (await rows<{ body: string }>(sql`select body::text as body from talent.candidate_emails where application_id = ${appId} and kind = ${kind}`))[0]?.body ?? "";
+
+  it("uses HR's own wording once saved (names filled in, nothing else), the built-in until then, and goes back on reset", async () => {
+    const opening = await openJob(uniq("Wording "));
+    const before = `${uniq("tpl")}@example.com`;
+    await apply(opening, { email: before, fullName: "Ana Reyes" });
+    expect(await bodyOf((await appFor(opening, before))!, "received")).toContain("a member of our team will review it");
+
+    as(hr);
+    try {
+      expect(await actions.saveEmailTemplate({ kind: "received", subject: "Salamat, {{first_name}}!", body: "Hi {{first_name}}, we got your application for {{job_title}}.\n\nWe will reply soon." })).toEqual({ ok: true, data: undefined });
+      const after = `${uniq("tpl")}@example.com`;
+      await apply(opening, { email: after, fullName: "Ben <Tan>" });
+      const afterApp = (await appFor(opening, after))!;
+      const text = await bodyOf(afterApp, "received");
+      expect(text).toContain("we got your application for");
+      expect(text).toContain("Hi Ben");
+      expect(text).not.toContain("a member of our team will review it");
+      expect((await rows<{ subject: string }>(sql`select subject from talent.candidate_emails where application_id = ${afterApp}`))[0].subject).toBe("Salamat, Ben!");
+      expect((await queries.listEmailTemplates()).find((t) => t.kind === "received")).toMatchObject({ custom: true, subject: "Salamat, {{first_name}}!" });
+      // refused: unknown field, empty message; the audit trail names the email, never the words
+      expect(await actions.saveEmailTemplate({ kind: "received", subject: "Hi", body: "Your score is {{score}}" })).toMatchObject({ ok: false });
+      expect(await actions.saveEmailTemplate({ kind: "received", subject: "Hi", body: "  " })).toMatchObject({ ok: false });
+      const audit = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where action = 'recruiting.email_template_save' order by occurred_at desc limit 1`);
+      expect(JSON.stringify(audit[0].metadata)).toBe(JSON.stringify({ kind: "received" }));
+
+      expect(await actions.resetEmailTemplate({ kind: "received" })).toEqual({ ok: true, data: undefined });
+      const again = `${uniq("tpl")}@example.com`;
+      await apply(opening, { email: again });
+      expect(await bodyOf((await appFor(opening, again))!, "received")).toContain("a member of our team will review it");
+    } finally {
+      await actions.resetEmailTemplate({ kind: "received" });
+    }
+    // only HR and Super Admin
+    for (const u of [recruiter, lead, exec, employee]) {
+      as(u);
+      expect(await actions.saveEmailTemplate({ kind: "received", subject: "Hi", body: "Hello" })).toEqual({ ok: false, error: NO_ACCESS });
+      await expect(queries.listEmailTemplates()).rejects.toThrow();
+    }
+  });
+
+  it("sends the not-qualified wording when an application is closed as not qualified, and the rejection wording otherwise", async () => {
+    const opening = await openJob(uniq("Close "));
+    const a = `${uniq("nq")}@example.com`;
+    const b = `${uniq("rj")}@example.com`;
+    await apply(opening, { email: a });
+    await apply(opening, { email: b });
+    const [appA, appB] = [(await appFor(opening, a))!, (await appFor(opening, b))!];
+    as(recruiter);
+    await actions.rejectApplication({ applicationId: appA, kind: "not_qualified", reason: "Missing certification", notifyCandidate: true });
+    await actions.rejectApplication({ applicationId: appB, kind: "rejected", reason: "Another candidate", notifyCandidate: true });
+    expect(await bodyOf(appA, "rejection")).toContain("requirements for this role");
+    expect(await bodyOf(appB, "rejection")).toContain("will not be moving forward");
+    expect(await bodyOf(appA, "rejection")).not.toContain("Missing certification"); // the reason is internal only
+  });
+});
+
+describe("recruiting report", () => {
+  it("counts how far applications got, where they came from, how they ended and how long they waited, for one job", async () => {
+    const opening = await openJob(uniq("Report "));
+    const mails = [1, 2, 3].map((n) => `${uniq(`rep${n}-`)}@example.com`);
+    await apply(opening, { email: mails[0], source: "linkedin" });
+    await apply(opening, { email: mails[1], source: "linkedin" });
+    await apply(opening, { email: mails[2] });
+    const [a1, a2, a3] = await Promise.all(mails.map(async (m) => (await appFor(opening, m))!));
+    as(recruiter);
+    await actions.moveApplication({ applicationId: a2, to: "screening" });
+    await actions.moveApplication({ applicationId: a2, to: "interview" });
+    await actions.moveApplication({ applicationId: a3, to: "screening" });
+    await actions.rejectApplication({ applicationId: a3, kind: "not_qualified", reason: "Missing certification" });
+    // a1 has waited more than two weeks with no change
+    await db.execute(sql`update talent.applications set stage_changed_at = now() - interval '20 days' where id = ${a1}`);
+
+    const report = await queries.getRecruitingReport({ from: null, to: null, openingId: opening });
+    expect(report.total).toBe(3);
+    expect(report.funnel.map((f) => f.reached)).toEqual([3, 2, 1, 0, 0, 0]); // applied, screening (a2, a3), interview (a2)
+    expect(report.funnel[1]).toMatchObject({ ofApplied: 67, ofPrevious: 67 });
+    expect(report.closed).toEqual([{ kind: "not_qualified", n: 1 }]);
+    expect(report.sources.find((s) => s.source === "linkedin")).toMatchObject({ total: 2, interviews: 1, hired: 0 });
+    expect(report.sources.find((s) => s.source === null)).toMatchObject({ total: 1 });
+    expect(report.timeInStage.find((t) => t.stage === "applied")).toMatchObject({ n: 3 });
+    expect(report.stale).toEqual([expect.objectContaining({ openingId: opening, n: 1 })]);
+    // a range with no applications is empty, and only HR, Super Admin and recruiters may read reports
+    expect((await queries.getRecruitingReport({ from: "2000-01-01", to: "2000-01-31", openingId: opening })).total).toBe(0);
+    for (const u of [lead, exec, employee]) {
+      as(u);
+      await expect(queries.getRecruitingReport({ from: null, to: null, openingId: null })).rejects.toThrow();
+    }
   });
 });

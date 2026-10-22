@@ -18,21 +18,77 @@ function wrap(heading: string, lines: string[]): { text: string; html: string } 
   return { text, html };
 }
 
-export function receivedMail(input: { fullName: string; jobTitle: string }): CandidateMail {
-  const { text, html } = wrap("We received your application", [
-    `Hi ${firstName(input.fullName)},`,
-    `Thank you for applying for ${input.jobTitle}. We have your application and a member of our team will review it. You do not need to do anything else for now.`,
-  ]);
-  return { subject: "We received your application", text, html };
+// ---- Editable wording ------------------------------------------------------------------------------------------------------
+// HR can reword the three emails applicants get without a person writing to them. The text is plain (no formatting, no links) and can use
+// only the merge fields below; the built-in wording is used until HR saves their own. They never carry scores, notes or reasons.
+
+export const TEMPLATE_KINDS = ["received", "rejection", "not_qualified"] as const;
+export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
+export const TEMPLATE_LABELS: Record<TemplateKind, string> = {
+  received: "We received your application",
+  rejection: "Not moving forward",
+  not_qualified: "Not qualified for the role",
+};
+export const TEMPLATE_WHEN: Record<TemplateKind, string> = {
+  received: "Sent right after someone applies (when the job has this switched on).",
+  rejection: "Sent when a recruiter closes an application as \"We are not moving forward\" and ticks the email box.",
+  not_qualified: "Sent when a recruiter closes an application as \"Not qualified for the role\" and ticks the email box.",
+};
+export const MERGE_FIELDS = ["first_name", "job_title"] as const;
+export const SUBJECT_MAX = 150;
+export const BODY_MAX = 2000;
+
+export type MailTemplate = { subject: string; body: string };
+export const BUILT_IN_TEMPLATES: Record<TemplateKind, MailTemplate> = {
+  received: {
+    subject: "We received your application",
+    body: "Hi {{first_name}},\n\nThank you for applying for {{job_title}}. We have your application and a member of our team will review it. You do not need to do anything else for now.",
+  },
+  rejection: {
+    subject: "About your application",
+    body: "Hi {{first_name}},\n\nThank you for your interest in {{job_title}} and for the time you took to apply. We will not be moving forward with your application this time. We wish you the very best in your search.",
+  },
+  not_qualified: {
+    subject: "About your application",
+    body: "Hi {{first_name}},\n\nThank you for applying for {{job_title}}. After reading your application, it does not match the requirements for this role at this time. You are welcome to apply again if your experience changes, and we wish you the very best in your search.",
+  },
+};
+
+const FIELD = /\{\{\s*([a-z_]+)\s*\}\}/g;
+
+/** An error message for a template that cannot be saved (an unknown or unclosed merge field, too long, empty), or null. */
+export function validateTemplate(t: MailTemplate): string | null {
+  const subject = t.subject.trim();
+  const body = t.body.trim();
+  if (!subject) return "Write a subject.";
+  if (!body) return "Write the message.";
+  if (subject.length > SUBJECT_MAX) return `The subject can be ${SUBJECT_MAX} characters at most.`;
+  if (body.length > BODY_MAX) return `The message can be ${BODY_MAX} characters at most.`;
+  for (const text of [subject, body]) {
+    for (const m of text.matchAll(FIELD)) if (!(MERGE_FIELDS as readonly string[]).includes(m[1])) return `Unknown field {{${m[1]}}}. You can use ${MERGE_FIELDS.map((f) => `{{${f}}}`).join(" and ")}.`;
+    const stripped = text.replace(FIELD, "");
+    if (stripped.includes("{{") || stripped.includes("}}")) return "A { { field } } is not closed. Write it like {{first_name}}.";
+  }
+  return null;
 }
 
-export function rejectionMail(input: { fullName: string; jobTitle: string }): CandidateMail {
-  const { text, html } = wrap("About your application", [
-    `Hi ${firstName(input.fullName)},`,
-    `Thank you for your interest in ${input.jobTitle} and for the time you took to apply. We will not be moving forward with your application this time. We wish you the very best in your search.`,
-  ]);
-  return { subject: "About your application", text, html };
+const fill = (text: string, vars: Record<(typeof MERGE_FIELDS)[number], string>) => text.replace(FIELD, (_, name: string) => (vars as Record<string, string>)[name] ?? "");
+
+/** Fills the merge fields and builds the email. The words are escaped for the HTML part, so a name or job title can never become markup. */
+export function renderTemplate(template: MailTemplate, input: { fullName: string; jobTitle: string }): CandidateMail {
+  const vars = { first_name: firstName(input.fullName), job_title: input.jobTitle };
+  const subject = fill(template.subject, vars).replace(/\s+/g, " ").trim();
+  const paragraphs = fill(template.body, vars)
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const { text, html } = wrap(subject, paragraphs);
+  return { subject, text, html };
 }
+
+export const receivedMail = (input: { fullName: string; jobTitle: string }, template: MailTemplate = BUILT_IN_TEMPLATES.received): CandidateMail => renderTemplate(template, input);
+export const rejectionMail = (input: { fullName: string; jobTitle: string }, template: MailTemplate = BUILT_IN_TEMPLATES.rejection): CandidateMail => renderTemplate(template, input);
+export const notQualifiedMail = (input: { fullName: string; jobTitle: string }, template: MailTemplate = BUILT_IN_TEMPLATES.not_qualified): CandidateMail => renderTemplate(template, input);
 
 export function interviewMail(input: { fullName: string; jobTitle: string; when: string; location: string; note?: string | null }): CandidateMail {
   const { text, html } = wrap("Your interview", [

@@ -10,10 +10,12 @@ import { saveApplicantSelfId } from "@/modules/demographics/service";
 import { sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { notify } from "@/modules/notifications/service";
-import { RESUME_KINDS, RESUME_MAX_BYTES, isApplyable, type OpeningStatus } from "./constants";
-import { receivedMail } from "./mail";
+import { POOL_MONTHS, RESUME_KINDS, RESUME_MAX_BYTES, addMonthsUtc, isApplyable, type OpeningStatus } from "./constants";
+import { keywordColumns } from "./keywords";
+import { BUILT_IN_TEMPLATES, receivedMail, type MailTemplate, type TemplateKind } from "./mail";
+import { extractResumeText } from "./resume-text";
 import { slugify, uniqueSlug } from "./slug";
-import { applicationStageHistory, applications, candidateEmails, candidates, jobOpenings, openingHiringTeam, recruitingSettings } from "./schema";
+import { applicationStageHistory, applications, candidateEmails, candidates, emailTemplates, jobOpenings, openingHiringTeam, recruitingSettings } from "./schema";
 import { applySchema } from "./validators";
 
 // Internals that take the acting user as an argument: not a "use server" file, so they are not public endpoints.
@@ -33,6 +35,11 @@ export async function authorizeForOpening(user: AuthzUser, action: ActionName, o
 export async function openingIdOfApplication(executor: Executor, applicationId: string): Promise<string | null> {
   const [row] = await executor.select({ openingId: applications.openingId }).from(applications).where(eq(applications.id, applicationId));
   return row?.openingId ?? null;
+}
+
+export async function loadTemplate(executor: Executor, kind: TemplateKind): Promise<MailTemplate> {
+  const [row] = await executor.select({ subject: emailTemplates.subject, body: emailTemplates.body }).from(emailTemplates).where(eq(emailTemplates.kind, kind));
+  return row ?? BUILT_IN_TEMPLATES[kind];
 }
 
 export async function getRetentionSettings(executor: Executor = db) {
@@ -91,6 +98,13 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
   const [opening] = await db.select().from(jobOpenings).where(eq(jobOpenings.id, v.openingId));
   if (!opening || !isApplyable(opening.status as OpeningStatus, opening.archivedAt !== null)) return { ok: false, error: "This job is no longer accepting applications." };
 
+  // Keyword match: the resume is read here, on our server, once; only the percentage and the found/missing words are kept.
+  const sets = { required: opening.keywordsRequired, nice: opening.keywordsNice };
+  const keyword = keywordColumns(sets.required.length + sets.nice.length > 0 ? await extractResumeText(file.bytes, kind) : null, sets);
+
+  // Optional consent to keep their details for future roles; it only starts the clock, staff still choose who goes in the pool.
+  const poolColumns = v.poolConsent ? { poolConsentAt: new Date(), poolExpiresAt: addMonthsUtc(new Date(), POOL_MONTHS) } : {};
+
   const path = `resumes/${randomUUID()}.${kind}`;
   const sha = createHash("sha256").update(file.bytes).digest("hex");
   const storage = getDocumentStorage();
@@ -112,16 +126,16 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
         if (again) return { duplicate: true as const, oldResume: null };
         candidateId = existing.id;
         oldResume = existing.resumePath;
-        await tx.update(candidates).set({ fullName: v.fullName, phone: v.phone ?? existing.phone, country: v.country ?? existing.country, resumePath: path, resumeName: displayName, resumeKind: kind, resumeSha256: sha, consentNoticeVersion: noticeVersion, consentAt: new Date() }).where(eq(candidates.id, candidateId));
+        await tx.update(candidates).set({ fullName: v.fullName, phone: v.phone ?? existing.phone, country: v.country ?? existing.country, resumePath: path, resumeName: displayName, resumeKind: kind, resumeSha256: sha, consentNoticeVersion: noticeVersion, consentAt: new Date(), ...poolColumns }).where(eq(candidates.id, candidateId));
       } else {
         const [created] = await tx
           .insert(candidates)
-          .values({ email: v.email, fullName: v.fullName, phone: v.phone ?? null, country: v.country ?? null, consentNoticeVersion: noticeVersion, resumePath: path, resumeName: displayName, resumeKind: kind, resumeSha256: sha })
+          .values({ email: v.email, fullName: v.fullName, phone: v.phone ?? null, country: v.country ?? null, consentNoticeVersion: noticeVersion, resumePath: path, resumeName: displayName, resumeKind: kind, resumeSha256: sha, ...poolColumns })
           .returning({ id: candidates.id });
         candidateId = created.id;
       }
 
-      const [app] = await tx.insert(applications).values({ openingId: opening.id, candidateId, note: v.note ?? null }).onConflictDoNothing().returning({ id: applications.id });
+      const [app] = await tx.insert(applications).values({ openingId: opening.id, candidateId, note: v.note ?? null, source: v.source ?? null, sourceDetail: v.sourceDetail ?? null, ...(keyword ?? {}) }).onConflictDoNothing().returning({ id: applications.id });
       if (!app) return { duplicate: true as const, oldResume: null };
 
       await saveApplicantSelfId(tx, candidateId, selfId.data);
@@ -129,7 +143,7 @@ export async function submitApplication(raw: Record<string, unknown>, file: { by
       await writeAudit({ actor: null, action: "recruiting.apply", targetType: "application", targetId: app.id, after: { openingId: opening.id, noticeVersion } }, tx);
 
       if (opening.sendAck) {
-        const mail = receivedMail({ fullName: v.fullName, jobTitle: opening.title });
+        const mail = receivedMail({ fullName: v.fullName, jobTitle: opening.title }, await loadTemplate(tx, "received"));
         await queueCandidateEmail(tx, { applicationId: app.id, toEmail: v.email, kind: "received", subject: mail.subject, text: mail.text, html: mail.html, dedupeKey: `received:${app.id}` });
       }
       const team = new Set([...(opening.createdBy ? [opening.createdBy] : []), ...(await hiringTeamIds(tx, opening.id))]);

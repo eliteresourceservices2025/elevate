@@ -155,6 +155,7 @@ Applicants, interviews, ELEVATE Sign, offers, hiring, onboarding and offboarding
 - Applicants are not employees; stage history, scorecards and signing events are append-only (signing events are hash-chained).
 - Pay is a free-text note only; letters say "independent contractor".
 - Documents are shown in the page through our own authenticated route, never a storage link.
+- The ATS layer (applicants list, source and tags, bulk actions, resume keyword match, talent pool, duplicate merge, reports, email wording) is in the "ATS layer" section of the module notes. The keyword match is a reading aid only: no AI, resume text never stored, nothing about the person used, nobody rejected by it. Bulk actions never hire. Only applicants who ticked "keep my details" can be in the talent pool. Name no form field `id` (it shadows `form.id`).
 - Separation is a retryable step list; assets and final hours are tracked, never computed.
 
 ### Performance reviews and goals — `docs/modules/reviews.md`

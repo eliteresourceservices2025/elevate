@@ -90,3 +90,38 @@ export const careersAddress = (): string => process.env.CAREERS_EMAIL?.trim() ||
 /** The careers page's built-in wording, used while HR has not written their own. */
 export const DEFAULT_CAREERS_TITLE = "Careers at Elite Resource Services";
 export const DEFAULT_CAREERS_INTRO = "We place skilled virtual assistants with clients, many in healthcare. These roles are independent contractor engagements.";
+
+/** Where an applicant says they heard about the job. Optional on the form; staff can also set it. Blank = not said. */
+export const SOURCES = ["careers_page", "referral", "linkedin", "facebook", "job_board", "agency", "other"] as const;
+export type Source = (typeof SOURCES)[number];
+export const SOURCE_LABELS: Record<Source, string> = {
+  careers_page: "Our careers page",
+  referral: "Someone referred me",
+  linkedin: "LinkedIn",
+  facebook: "Facebook",
+  job_board: "A job board",
+  agency: "An agency or school",
+  other: "Somewhere else",
+};
+/** A link such as /careers/<job>?src=linkedin pre-selects that source (anything unknown is ignored). */
+export const sourceFromParam = (value: unknown): Source | null => {
+  const v = (Array.isArray(value) ? value[0] : value) as unknown;
+  return typeof v === "string" && (SOURCES as readonly string[]).includes(v) ? (v as Source) : null;
+};
+
+/** Tags are short plain labels HR and recruiters put on applications (for example "Strong English", "Call back in March"). */
+export const TAG_NAME_MAX = 30;
+export const TAG_NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} '&+/.-]*$/u;
+export const MAX_TAGS_PER_APPLICATION = 10;
+/** A bulk action touches at most this many applications at once. */
+export const BULK_MAX = 100;
+
+/** How long an applicant's "keep my details for future roles" consent lasts (counsel to confirm). */
+export const POOL_MONTHS = 12;
+
+/** Adds calendar months in UTC (the end of a month rolls over the way Date does). */
+export function addMonthsUtc(d: Date, n: number): Date {
+  const out = new Date(d);
+  out.setUTCMonth(out.getUTCMonth() + n);
+  return out;
+}

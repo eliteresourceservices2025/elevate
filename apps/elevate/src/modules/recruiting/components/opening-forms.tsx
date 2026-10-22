@@ -12,11 +12,11 @@ import type { OpeningStatus } from "../constants";
 import type { PersonChoice } from "../queries";
 import { useRun } from "./use-run";
 
-type OpeningValues = { id?: string; title: string; slug: string; description: string; location: string; payNote: string; teamId: string; sendAck: boolean; sendRejection: boolean; hiringTeamUserIds: string[] };
+type OpeningValues = { id?: string; title: string; slug: string; description: string; location: string; payNote: string; teamId: string; sendAck: boolean; sendRejection: boolean; keywordsRequired: string; keywordsNice: string; hiringTeamUserIds: string[] };
 
 export function OpeningForm({ initial, teams, people, status }: { initial?: Partial<OpeningValues>; teams: { id: string; name: string }[]; people: PersonChoice[]; /** The job's status; its web address can only change while it is a draft. */ status?: OpeningStatus }) {
   const { run, pending, router } = useRun();
-  const [v, setV] = useState<OpeningValues>({ title: "", slug: "", description: "", location: "Remote", payNote: "", teamId: "", sendAck: true, sendRejection: true, hiringTeamUserIds: [], ...initial });
+  const [v, setV] = useState<OpeningValues>({ title: "", slug: "", description: "", location: "Remote", payNote: "", teamId: "", sendAck: true, sendRejection: true, keywordsRequired: "", keywordsNice: "", hiringTeamUserIds: [], ...initial });
   useWarnWhenEdited(v);
   const set = <K extends keyof OpeningValues>(k: K, value: OpeningValues[K]) => setV((s) => ({ ...s, [k]: value }));
 
@@ -57,6 +57,22 @@ export function OpeningForm({ initial, teams, people, status }: { initial?: Part
           ))}
         </SelectField>
       </div>
+      <fieldset className="space-y-3 rounded-lg border p-3">
+        <legend className="px-1 text-sm font-medium">Resume keywords (optional)</legend>
+        <p className="text-xs text-muted-foreground">
+          List words to look for in resumes, separated by commas or on separate lines. Each applicant then shows a &quot;keyword match&quot; percentage with the words found and missing. It is only a reading aid: people always decide, and it never rejects anyone. Resume text is read on our own server and is not kept.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="op-kw-req">Must have</Label>
+            <Textarea id="op-kw-req" value={v.keywordsRequired} onChange={(e) => set("keywordsRequired", e.target.value)} rows={4} maxLength={2000} placeholder="Medical billing, Excel" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="op-kw-nice">Nice to have</Label>
+            <Textarea id="op-kw-nice" value={v.keywordsNice} onChange={(e) => set("keywordsNice", e.target.value)} rows={4} maxLength={2000} placeholder="HIPAA, Spanish" />
+          </div>
+        </div>
+      </fieldset>
       <fieldset className="space-y-1.5">
         <legend className="text-sm font-medium">Hiring team</legend>
         <p className="text-xs text-muted-foreground">Team leads added here can see this job&apos;s candidates and fill in scorecards. HR and recruiters always see everything.</p>

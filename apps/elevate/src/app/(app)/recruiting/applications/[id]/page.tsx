@@ -1,3 +1,6 @@
+import { TagsAndSource } from "@/modules/recruiting/components/application-tags";
+import { KeywordPanel } from "@/modules/recruiting/components/keyword-panel";
+import { PoolPanel } from "@/modules/recruiting/components/pool-panel";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -77,7 +80,6 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
                 <dt className="inline text-muted-foreground">Agreed to the privacy notice: </dt>
                 <dd className="inline">
                   {formatInZone(candidate.consentAt, undefined, "MMM d, yyyy")}
-                  {candidate.consentVersion ? ` (${candidate.consentVersion})` : ""}
                 </dd>
               </div>
             </dl>
@@ -86,6 +88,12 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
           </>
         )}
       </section>
+
+      <KeywordPanel keyword={data.keyword} />
+
+      <PoolPanel applicationId={app.id} pool={data.pool} />
+
+      <TagsAndSource applicationId={app.id} tags={data.tags} choices={data.tagChoices} source={app.source} sourceDetail={app.sourceDetail} canEdit={data.canTag} />
 
       {data.canMove ? (
         <section aria-label="Stage" className="space-y-3 rounded-xl border bg-card p-4">
