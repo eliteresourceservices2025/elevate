@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { authorize, ForbiddenError, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -9,6 +9,9 @@ import { users, userRoles } from "@/modules/core/schema";
 import { reportName } from "@/modules/org/service";
 import { getPrivacyNotice } from "@/modules/privacy/queries";
 import { BOARD_STAGES, STAGES, type CloseKind, type CriterionKey, type Stage } from "./constants";
+import { escapeLike, type ApplicantFilters } from "./applicant-filters";
+import { DEFAULT_TIMEZONE } from "@/lib/time";
+import { pageInfo } from "@/lib/pagination";
 import { looksLikeId } from "./slug";
 import { applicationStageHistory, applications, candidateNotes, candidates, careersPage, interviewers, interviews, jobOpenings, openingHiringTeam, scorecards } from "./schema";
 import { calendarStatus } from "./calendar";
@@ -272,4 +275,92 @@ export async function getOpeningFormOptions(openingId?: string) {
   const opening = openingId ? (await db.select().from(jobOpenings).where(eq(jobOpenings.id, openingId)))[0] : undefined;
   const hiringTeamUserIds = openingId ? await hiringTeamIds(db, openingId) : [];
   return { teams: teamRows, people: choices, opening: opening ?? null, hiringTeamUserIds };
+}
+
+// ---- All applicants (across jobs) ----------------------------------------------------------------------------------------
+
+export type ApplicantRow = {
+  applicationId: string;
+  name: string;
+  email: string | null;
+  openingId: string;
+  openingTitle: string;
+  stage: Stage;
+  closeKind: CloseKind | null;
+  appliedAt: Date;
+  stageChangedAt: Date;
+};
+
+/**
+ * Every application the person may see, one row each, filtered, sorted and cut to one page in the database. HR, Super Admin and
+ * recruiters see everything; a team lead only the jobs they are on the hiring team for. Removed (anonymized) applicants are listed
+ * without a name or email and are never matched by a search.
+ */
+export async function listApplicants(filters: ApplicantFilters, paging: { page: number; pageSize: number }) {
+  const user = await requireUser();
+  const scope = scopeFor(user, "recruiting.view");
+  if (scope !== "all" && scope !== "team") throw new ForbiddenError("recruiting.view");
+
+  const teamOnly = scope === "team" ? inArray(jobOpenings.id, db.select({ id: openingHiringTeam.openingId }).from(openingHiringTeam).where(eq(openingHiringTeam.userId, user.id))) : undefined;
+  const conditions = [isNull(jobOpenings.archivedAt), teamOnly];
+  if (filters.openingId) conditions.push(eq(applications.openingId, filters.openingId));
+  if (filters.stage === "open") conditions.push(notInArray(applications.stage, ["hired", "rejected"]));
+  else if (filters.stage !== "all") conditions.push(eq(applications.stage, filters.stage));
+  if (filters.closeKind !== "all") conditions.push(eq(applications.closeKind, filters.closeKind));
+  if (filters.from) conditions.push(sql`(${applications.appliedAt} at time zone ${DEFAULT_TIMEZONE})::date >= ${filters.from}::date`);
+  if (filters.to) conditions.push(sql`(${applications.appliedAt} at time zone ${DEFAULT_TIMEZONE})::date <= ${filters.to}::date`);
+  if (filters.q) {
+    const like = `%${escapeLike(filters.q.toLowerCase())}%`;
+    conditions.push(and(isNull(candidates.anonymizedAt), or(sql`lower(${candidates.fullName}) like ${like}`, sql`lower(${candidates.email}) like ${like}`)));
+  }
+  const where = and(...conditions);
+
+  const [{ total }] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(applications)
+    .innerJoin(candidates, eq(candidates.id, applications.candidateId))
+    .innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId))
+    .where(where);
+  const info = pageInfo(total, paging.page, paging.pageSize);
+
+  const order = filters.sort === "name" ? [asc(sql`lower(${candidates.fullName})`), desc(applications.appliedAt)] : filters.sort === "updated" ? [desc(applications.stageChangedAt)] : [desc(applications.appliedAt)];
+  const rows = await db
+    .select({
+      applicationId: applications.id,
+      name: candidates.fullName,
+      email: candidates.email,
+      anonymized: candidates.anonymizedAt,
+      openingId: applications.openingId,
+      openingTitle: jobOpenings.title,
+      stage: applications.stage,
+      closeKind: applications.closeKind,
+      appliedAt: applications.appliedAt,
+      stageChangedAt: applications.stageChangedAt,
+    })
+    .from(applications)
+    .innerJoin(candidates, eq(candidates.id, applications.candidateId))
+    .innerJoin(jobOpenings, eq(jobOpenings.id, applications.openingId))
+    .where(where)
+    .orderBy(...order, asc(applications.id))
+    .limit(info.pageSize)
+    .offset(info.offset);
+
+  const openings = await db
+    .select({ id: jobOpenings.id, title: jobOpenings.title })
+    .from(jobOpenings)
+    .where(and(isNull(jobOpenings.archivedAt), teamOnly))
+    .orderBy(asc(jobOpenings.title));
+
+  const list: ApplicantRow[] = rows.map((r) => ({
+    applicationId: r.applicationId,
+    name: r.anonymized ? "Removed applicant" : r.name,
+    email: r.anonymized ? null : r.email,
+    openingId: r.openingId,
+    openingTitle: r.openingTitle,
+    stage: r.stage as Stage,
+    closeKind: r.closeKind as CloseKind | null,
+    appliedAt: r.appliedAt,
+    stageChangedAt: r.stageChangedAt,
+  }));
+  return { scope, rows: list, info, openings };
 }

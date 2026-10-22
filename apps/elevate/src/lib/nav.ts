@@ -72,6 +72,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Talent",
     items: [
       { href: "/recruiting", label: "Recruiting", icon: UserPlus, description: "Job openings, pipeline and interviews.", access: { action: "recruiting.summary", scopes: ["all", "team"] } },
+      { href: "/recruiting/applicants", label: "Applicants", icon: Users, description: "Everyone who applied, across all jobs, with search and filters.", access: { action: "recruiting.view", scopes: ["all", "team"] } },
       { href: "/onboarding", label: "Onboarding", icon: ClipboardCheck, description: "New-hire checklists and tasks." },
       { href: "/offboarding", label: "Offboarding", icon: LogOut, description: "Clearance, asset return and access removal." },
       { href: "/signing", label: "Signing", icon: PenLine, description: "ELEVATE Sign: contracts and policy signatures." },

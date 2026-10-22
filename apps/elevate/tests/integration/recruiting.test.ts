@@ -17,6 +17,7 @@ const { setDocumentStorage } = await import("@/modules/documents/storage");
 const { setEmailSender } = await import("@/modules/notifications/email");
 const actions = await import("@/modules/recruiting/actions");
 const queries = await import("@/modules/recruiting/queries");
+const applicantFilters = await import("@/modules/recruiting/applicant-filters");
 const service = await import("@/modules/recruiting/service");
 const jobs = await import("@/modules/recruiting/jobs");
 
@@ -237,6 +238,86 @@ describe("readable addresses and the careers page", () => {
       expect(await actions.saveCareersPage({ title: "No", intro: "No" })).toEqual({ ok: false, error: NO_ACCESS });
       await expect(banner.saveBanner(u as never, jpeg(1600, 400))).rejects.toThrow();
     }
+  });
+});
+
+describe("the all-applicants list", () => {
+  const { EMPTY_FILTERS } = applicantFilters;
+  const list = async (user: TestUser, over: Partial<typeof EMPTY_FILTERS> = {}, paging = { page: 1, pageSize: 100 }) => {
+    as(user);
+    return queries.listApplicants({ ...EMPTY_FILTERS, ...over }, paging);
+  };
+
+  it("searches by name or email as plain text, filters by job, stage, close kind and date, and sorts", async () => {
+    const opening = await openJob(uniq("Billing "));
+    const other = await openJob(uniq("Scheduler "));
+    const tag = uniq("zq").toLowerCase();
+    const a = `${tag}-a@example.com`;
+    const b = `${tag}-b@example.com`;
+    await apply(opening, { email: a, fullName: "Zed Alvarez" });
+    await apply(opening, { email: b, fullName: "Zoe 100%_Cruz" });
+    await apply(other, { email: `${tag}-c@example.com`, fullName: "Zack Tan" });
+    const appA = (await appFor(opening, a))!;
+    const appB = (await appFor(opening, b))!;
+    as(recruiter);
+    expect((await actions.moveApplication({ applicationId: appA, to: "screening" })).ok).toBe(true);
+    expect((await actions.rejectApplication({ applicationId: appB, kind: "not_qualified", reason: "Missing certification" })).ok).toBe(true);
+
+    expect((await list(recruiter, { q: tag })).rows).toHaveLength(3);
+    expect((await list(recruiter, { q: "alvarez" })).rows.map((r) => r.applicationId)).toEqual([appA]);
+    // % and _ are matched as the characters they are, not as wildcards
+    expect((await list(recruiter, { q: "100%_" })).rows.map((r) => r.applicationId)).toEqual([appB]);
+    expect((await list(recruiter, { q: "z%" })).rows).toHaveLength(0);
+    expect((await list(recruiter, { q: tag, openingId: other })).rows.map((r) => r.name)).toEqual(["Zack Tan"]);
+    expect((await list(recruiter, { q: tag, stage: "screening" })).rows.map((r) => r.applicationId)).toEqual([appA]);
+    expect((await list(recruiter, { q: tag, stage: "open" })).rows).toHaveLength(2);
+    expect((await list(recruiter, { q: tag, closeKind: "not_qualified" })).rows.map((r) => r.applicationId)).toEqual([appB]);
+    expect((await list(recruiter, { q: tag, from: "2999-01-01" })).rows).toHaveLength(0);
+    expect((await list(recruiter, { q: tag, to: "2999-01-01" })).rows).toHaveLength(3);
+    expect((await list(recruiter, { q: tag, sort: "name" })).rows.map((r) => r.name)).toEqual(["Zack Tan", "Zed Alvarez", "Zoe 100%_Cruz"]);
+  });
+
+  it("pages in the database and reports the total", async () => {
+    const opening = await openJob(uniq("Paged "));
+    for (let i = 0; i < 5; i++) await apply(opening, { fullName: `Page Person ${i}` });
+    const first = await list(recruiter, { openingId: opening }, { page: 1, pageSize: 2 });
+    expect(first.rows).toHaveLength(2);
+    expect(first.info).toMatchObject({ total: 5, pages: 3, page: 1 });
+    const last = await list(recruiter, { openingId: opening }, { page: 9, pageSize: 2 }); // past the end snaps to the last page
+    expect(last.rows).toHaveLength(1);
+    expect(last.info.page).toBe(3);
+  });
+
+  it("shows a team lead only the jobs they are on the hiring team for, and refuses an executive and an employee", async () => {
+    const mine = await openJob(uniq("Mine ")); // hiring team: lead
+    as(recruiter);
+    const notMine = idOf(await actions.saveOpening({ title: uniq("Not mine "), description: "Other team's job for another lead.", hiringTeamUserIds: [otherLead.id] }));
+    await actions.setOpeningStatus({ id: notMine, status: "open" });
+    const tag = uniq("tl").toLowerCase();
+    await apply(mine, { email: `${tag}-1@example.com`, fullName: "Visible Person" });
+    await apply(notMine, { email: `${tag}-2@example.com`, fullName: "Hidden Person" });
+
+    const seen = await list(lead, { q: tag });
+    expect(seen.scope).toBe("team");
+    expect(seen.rows.map((r) => r.name)).toEqual(["Visible Person"]);
+    expect(seen.openings.map((o) => o.id)).toContain(mine);
+    expect(seen.openings.map((o) => o.id)).not.toContain(notMine);
+    // asking for the other job directly still returns nothing for this lead
+    expect((await list(lead, { q: tag, openingId: notMine })).rows).toHaveLength(0);
+    await expect(list(exec)).rejects.toThrow();
+    await expect(list(employee)).rejects.toThrow();
+  });
+
+  it("lists a removed applicant without a name or email, and a search never finds them", async () => {
+    const opening = await openJob(uniq("Removed "));
+    const email = `${uniq("gone")}@example.com`;
+    await apply(opening, { email, fullName: "Gone Person" });
+    const appId = (await appFor(opening, email))!;
+    await db.execute(sql`update talent.candidates set anonymized_at = now() where id = (select candidate_id from talent.applications where id = ${appId})`);
+    const all = await list(recruiter, { openingId: opening });
+    expect(all.rows).toHaveLength(1);
+    expect(all.rows[0]).toMatchObject({ name: "Removed applicant", email: null });
+    expect((await list(recruiter, { openingId: opening, q: "gone" })).rows).toHaveLength(0);
   });
 });
 

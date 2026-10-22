@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ForbiddenError } from "@/lib/authz";
 import { ROLE_SLUGS, type RoleSlug } from "@/lib/roles";
+import { EMPTY_FILTERS } from "@/modules/recruiting/applicant-filters";
 
 // Recruiting actions and queries run as each of the six roles with the database mocked to throw: a role without access is refused
 // before anything touches data. What the actions do after that, and the per-opening checks for team leads (which need the
@@ -63,6 +64,7 @@ describe("Recruiting actions, every role", () => {
 
 const queryCases: { name: string; allowed: RoleSlug[]; call: () => Promise<unknown> }[] = [
   { name: "listOpenings", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead"], call: () => queries.listOpenings() },
+  { name: "listApplicants", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead"], call: () => queries.listApplicants(EMPTY_FILTERS, { page: 1, pageSize: 25 }) },
   { name: "getRecruitingSummary", allowed: ["super_admin", "hr_admin", "recruiter", "team_lead", "executive"], call: () => queries.getRecruitingSummary() },
   { name: "getCalendarCard", allowed: MANAGERS, call: () => queries.getCalendarCard() },
   { name: "getRetentionView", allowed: HR, call: () => queries.getRetentionView() },
