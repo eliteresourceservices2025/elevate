@@ -549,6 +549,32 @@ describe("clean-up", () => {
     // the result stays
     expect((await rows<{ score_percent: string; passed: boolean }>(sql`select score_percent::text, passed from learn.exam_attempts where id = ${oldAttempt}`))[0]).toMatchObject({ passed: true });
   });
+
+  it("removes the mock call picks 12 months after the call, only through the job, and keeps the result", async () => {
+    const p = await makePerson();
+    const [a] = await rows<{ id: string }>(sql`insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${p.id}, ${courseId}, ${versionId}, 'full', 'manual', ${plus(TODAY, 30)}) returning id`);
+    const [course] = await rows<{ id: string }>(sql`insert into learn.courses (slug, title) values (${`cs-${randomUUID().slice(0, 8)}`}, 'Customer service') returning id`);
+    const [draft] = await rows<{ id: string }>(sql`insert into learn.course_versions (course_id, version, exam_config) values (${course.id}, 1, '{}'::jsonb) returning id`);
+    const [scenario] = await rows<{ id: string }>(sql`insert into learn.call_scenarios (version_id, key, title, module_key, intro, start_mood, steps) values (${draft.id}, 'k', 'A call', 'm1', 'An invented caller.', 40, '[]'::jsonb) returning id`);
+    const attempt = async (n: number, monthsAgo: number, passed: boolean) => {
+      const [x] = await rows<{ id: string }>(sql`insert into learn.call_attempts (assignment_id, user_id, attempt_no, status, scenario_ids, submitted_at, score_percent, passed, category_scores)
+        values (${a.id}, ${p.id}, ${n}, 'submitted', ${`{${scenario.id}}`}::uuid[], now() - make_interval(months => ${monthsAgo}), ${passed ? 100 : 0}, ${passed}, '{"listening": 100}'::jsonb) returning id`);
+      await db.execute(sql`insert into learn.call_attempt_steps (attempt_id, scenario_id, step_id, option_id, points, mood_after) values (${x.id}, ${scenario.id}, 's1', 'a', 3, 50)`);
+      return x.id;
+    };
+    const old = await attempt(1, 13, true);
+    const recent = await attempt(2, 2, false);
+
+    // nothing but the job may delete a pick
+    await expect(db.execute(sql`delete from learn.call_attempt_steps where attempt_id = ${old}`)).rejects.toThrow();
+
+    const run = await jobs.runLearnPurge();
+    expect(run.callSteps).toBeGreaterThanOrEqual(1);
+    expect((await rows(sql`select 1 from learn.call_attempt_steps where attempt_id = ${old}`)).length).toBe(0);
+    expect((await rows(sql`select 1 from learn.call_attempt_steps where attempt_id = ${recent}`)).length).toBe(1);
+    // the result stays (six years)
+    expect((await rows<{ passed: boolean }>(sql`select passed from learn.call_attempts where id = ${old}`))[0]).toMatchObject({ passed: true });
+  });
 });
 
 describe("the Training status page and HR's actions", () => {

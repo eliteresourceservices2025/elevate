@@ -144,3 +144,12 @@ describe("discarding and removing a client add-on", () => {
     await expect(tx((t) => svc.removeAddon(t, { slug: "hipaa" }))).rejects.toThrow();
   });
 });
+
+describe("a course with a graded mock call", () => {
+  it("cannot be copied into a studio draft, because the studio would drop its calls", async () => {
+    const editor = await makeUser("ed");
+    const slug = uniq("cs-call-").toLowerCase();
+    await db.execute(sql`insert into learn.courses (slug, title, requires_call) values (${slug}, 'Customer service', true)`);
+    await expect(tx((t) => svc.createDraft(t, { courseSlug: slug, note: "Trying", actorId: editor }))).rejects.toThrow(/mock call/i);
+  });
+});

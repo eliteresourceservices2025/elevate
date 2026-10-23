@@ -5,7 +5,8 @@ import { withUser, type Sql } from "./db";
 // What the pages read. Every query runs as the signed-in person (row-level security keyed on learn.user_id), so even a mistake here
 // cannot return another person's rows. Nothing here can read the exam answer key: the app role has no grant on it.
 
-export type ExamConfig = { passPercent: number; maxTries: number; waitMinutesAfterFail: number; renewalMonths: number; tracks: Record<string, { questions: number; minutes?: number }> };
+export type CallConfig = { passPercent: number; scenarios: number; maxTries: number; waitMinutesAfterFail: number };
+export type ExamConfig = { passPercent: number; maxTries: number; waitMinutesAfterFail: number; renewalMonths: number; tracks: Record<string, { questions: number; minutes?: number }>; call?: CallConfig };
 
 export type AssignmentSummary = { id: string; title: string; track: string; status: string; dueOn: string };
 
@@ -41,6 +42,8 @@ export type Overview = {
   modules: ModuleState[];
   allModulesDone: boolean;
   exam: { questions: number; minutes: number | null; passPercent: number; triesAllowed: number; attempts: AttemptSummary[]; openAttemptId: string | null; waitUntil: string | null; waitMinutes: number };
+  /** The graded mock call, only for a course that requires one (docs/learn/14-mock-call.md). */
+  call: CallOverview | null;
   certificate: { reference: string; holderName: string; issuedOn: string; endsOn: string; revoked: boolean } | null;
   attestation: { version: string; text: string };
   /** False for an acknowledgment-only course: every module read and the statement accepted finishes it. */
@@ -51,7 +54,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
   if (!/^[0-9a-f-]{36}$/i.test(assignmentId)) return null;
   return withUser(sql, userId, async (tx) => {
     const [a] = await tx`
-      select a.id, a.track, a.status, a.reason, a.due_on::text as due_on, a.version_id, c.title as course_title, c.requires_exam, v.exam_config, v.content
+      select a.id, a.track, a.status, a.reason, a.due_on::text as due_on, a.version_id, c.title as course_title, c.requires_exam, c.requires_call, v.exam_config, v.content
       from learn.assignments a join learn.courses c on c.id = a.course_id join learn.course_versions v on v.id = a.version_id
       where a.id = ${assignmentId}`;
     if (!a) return null;
@@ -108,6 +111,8 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
              exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id) as revoked
       from learn.certificates c where c.assignment_id = ${assignmentId}`;
 
+    const call = a.requires_call && a.reason !== "update" && config.call ? await callOverview(tx, assignmentId, config.call) : null;
+
     return {
       assignment: { id: a.id as string, courseTitle: a.course_title as string, track: a.track as string, status: a.status as string, dueOn: a.due_on as string, isUpdate: a.reason === "update", accepted: acc.accepted as boolean },
       modules,
@@ -123,9 +128,122 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
         waitMinutes: waitUntil && waitUntil.getTime() > Date.now() ? Math.ceil((waitUntil.getTime() - Date.now()) / 60000) : 0,
       },
       certificate: cert ? { reference: cert.reference as string, holderName: cert.holder_name as string, issuedOn: cert.issued_on as string, endsOn: cert.ends_on as string, revoked: cert.revoked as boolean } : null,
+      call,
       attestation: content.attestation,
       requiresExam: a.requires_exam as boolean,
     } satisfies Overview;
+  });
+}
+
+export type CallAttemptSummary = { id: string; attemptNo: number; status: string; submittedAt: string | null; scorePercent: number | null; passed: boolean | null };
+export type CallOverview = {
+  scenarios: number;
+  passPercent: number;
+  triesAllowed: number;
+  attempts: CallAttemptSummary[];
+  openAttemptId: string | null;
+  waitUntil: string | null;
+  waitMinutes: number;
+};
+
+async function callOverview(tx: Sql, assignmentId: string, config: CallConfig): Promise<CallOverview> {
+  const attempts = (await tx`
+    select id, attempt_no, status, submitted_at, score_percent::float as score, passed
+    from learn.call_attempts where assignment_id = ${assignmentId} order by attempt_no`).map((r) => ({
+    id: r.id as string,
+    attemptNo: r.attempt_no as number,
+    status: r.status as string,
+    submittedAt: r.submitted_at ? (r.submitted_at as Date).toISOString() : null,
+    scorePercent: r.score as number | null,
+    passed: r.passed as boolean | null,
+  }));
+  const [grants] = await tx`select coalesce(sum(extra_tries), 0)::int as tries from learn.retry_grants where assignment_id = ${assignmentId} and kind = 'tries'`;
+  const lastFail = attempts.filter((x) => x.status === "submitted" && x.passed !== true).at(-1);
+  const waitUntil = lastFail?.submittedAt ? new Date(Date.parse(lastFail.submittedAt) + (config.waitMinutesAfterFail ?? 60) * 60_000) : null;
+  const waiting = waitUntil !== null && waitUntil.getTime() > Date.now();
+  return {
+    scenarios: config.scenarios ?? 3,
+    passPercent: config.passPercent,
+    triesAllowed: (config.maxTries ?? 3) + (grants.tries as number),
+    attempts,
+    openAttemptId: attempts.find((x) => x.status === "in_progress")?.id ?? null,
+    waitUntil: waiting ? waitUntil.toISOString() : null,
+    waitMinutes: waiting ? Math.ceil((waitUntil.getTime() - Date.now()) / 60000) : 0,
+  };
+}
+
+export type CallStepView = { kind: "caller" | "note"; id: string; text: string; choices: { id: string; text: string }[] };
+export type CallScenarioView = {
+  id: string;
+  title: string;
+  intro: string;
+  record: { title: string; rows: { label: string; value: string }[] } | null;
+  startMood: number;
+  steps: CallStepView[];
+  /** What the person picked so far and the mood after it (never the points). */
+  answered: { stepId: string; optionId: string; moodAfter: number }[];
+};
+export type CallView = {
+  id: string;
+  assignmentId: string;
+  status: string;
+  scenarios: CallScenarioView[];
+  result: { scorePercent: number; passed: boolean; categories: Record<string, number> } | null;
+  /** After a PASSED attempt only: every step with the pick, the best reply and the reason. */
+  review: { scenarioId: string; stepId: string; chosen: string; best: string; points: number; maxPoints: number; why: string }[];
+  config: { passPercent: number; maxTries: number };
+};
+
+/** One mock-call attempt for the runner and the result page, or null when it is not the person's. The key is never read. */
+export async function getCallView(sql: Sql, userId: string, attemptId: string): Promise<CallView | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(attemptId)) return null;
+  return withUser(sql, userId, async (tx) => {
+    const [x] = await tx`
+      select c.id, c.assignment_id, c.status, c.scenario_ids, c.score_percent::float as score, c.passed, c.category_scores, v.exam_config
+      from learn.call_attempts c join learn.assignments a on a.id = c.assignment_id join learn.course_versions v on v.id = a.version_id
+      where c.id = ${attemptId}`;
+    if (!x) return null;
+    const config = (x.exam_config as ExamConfig).call ?? { passPercent: 85, scenarios: 3, maxTries: 3, waitMinutesAfterFail: 60 };
+    const ids = x.scenario_ids as string[];
+    const rows = await tx`select id, title, intro, start_mood, record, steps from learn.call_scenarios where id = any(${ids}::uuid[])`;
+    const picks = await tx`select scenario_id, step_id, option_id, mood_after from learn.call_attempt_steps where attempt_id = ${attemptId} order by answered_at, step_id`;
+    const byId = new Map(rows.map((r) => [r.id as string, r]));
+    const scenarios: CallScenarioView[] = ids.flatMap((id) => {
+      const r = byId.get(id);
+      if (!r) return [];
+      const steps = (r.steps as { kind: "caller" | "note"; id: string; caller?: string; label?: string; choices: { id: string; text: string }[] }[]).map((s) => ({
+        kind: s.kind,
+        id: s.id,
+        text: (s.kind === "caller" ? s.caller : s.label) ?? "",
+        choices: s.choices.map((c) => ({ id: c.id, text: c.text })),
+      }));
+      return [
+        {
+          id,
+          title: r.title as string,
+          intro: r.intro as string,
+          record: (r.record as CallScenarioView["record"]) ?? null,
+          startMood: r.start_mood as number,
+          steps,
+          answered: picks.filter((p) => p.scenario_id === id).map((p) => ({ stepId: p.step_id as string, optionId: p.option_id as string, moodAfter: p.mood_after as number })),
+        },
+      ];
+    });
+
+    let review: CallView["review"] = [];
+    if (x.status === "submitted" && x.passed === true) {
+      const r = await tx`select * from learn.call_review(${userId}::uuid, ${attemptId}::uuid)`;
+      review = r.map((row) => ({ scenarioId: row.scenario_id as string, stepId: row.step_id as string, chosen: row.chosen as string, best: row.best as string, points: row.points as number, maxPoints: row.max_points as number, why: row.why as string }));
+    }
+    return {
+      id: x.id as string,
+      assignmentId: x.assignment_id as string,
+      status: x.status as string,
+      scenarios,
+      result: x.status === "submitted" ? { scorePercent: x.score as number, passed: x.passed as boolean, categories: (x.category_scores as Record<string, number>) ?? {} } : null,
+      review,
+      config: { passPercent: config.passPercent, maxTries: config.maxTries },
+    } satisfies CallView;
   });
 }
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CallCard } from "@/components/call-card";
 import { StartExamButton } from "@/components/forms";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
@@ -112,6 +113,8 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
               Accept and get my certificate
             </Link>
           </p>
+        ) : exam.attempts.some((a) => a.passed) ? (
+          <p className="feedback good">{overview.call ? "You passed the exam. Pass the mock call too, to get your certificate." : "You passed the exam."}</p>
         ) : exam.openAttemptId ? (
           <p>
             <Link className="button" href={`/exam/${exam.openAttemptId}`}>
@@ -133,6 +136,7 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
         )}
       </section>
       )}
+      {overview.call ? <CallCard assignmentId={assignment.id} call={overview.call} allModulesDone={overview.allModulesDone} finished={finished} /> : null}
     </>
   );
 }

@@ -165,6 +165,8 @@ const failIfErrors = (issues: LintIssue[]) => {
 export async function createDraft(tx: Tx, p: { courseSlug: string; fromVersion?: number; note: string; actorId: string }): Promise<{ versionId: string; version: number }> {
   const [course] = await tx.select().from(courses).where(eq(courses.slug, p.courseSlug)).for("update");
   if (!course) throw new ActionFailure("That course has not been loaded yet.");
+  // The studio does not hold the mock-call pool (docs/learn/14-mock-call.md): a copy would drop it and nobody could earn the certificate.
+  if (course.requiresCall) throw new ActionFailure("This course has a graded mock call, which the studio cannot edit yet. Change it in the course files and publish it from there.");
   const versions = await tx.select().from(courseVersions).where(eq(courseVersions.courseId, course.id)).orderBy(desc(courseVersions.version));
   if (versions.some((v) => v.status === "draft")) throw new ActionFailure("There is already a draft of this course. Edit or discard it first.");
   const source = p.fromVersion ? versions.find((v) => v.version === p.fromVersion) : (versions.find((v) => v.status === "published") ?? versions[0]);

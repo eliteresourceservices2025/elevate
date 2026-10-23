@@ -1,6 +1,6 @@
 import { CYBERSECURITY_COURSE_SLUG, cybersecurityCourse, cybersecurityExamConfig, cybersecurityQuestions } from "./cybersecurity";
 import { HIPAA_COURSE_SLUG, hipaaCourse, hipaaExamConfig, hipaaQuestions } from "./hipaa";
-import type { CourseContent, QuestionSeed } from "./schema";
+import type { CallSeed, CourseContent, QuestionSeed } from "./schema";
 
 export { MIN_TIME_SHARE } from "./hipaa";
 
@@ -8,6 +8,8 @@ export type CourseDefinition = {
   slug: string;
   content: CourseContent;
   questions: QuestionSeed[];
+  /** The mock-call pool, when the course has a graded call (docs/learn/14-mock-call.md). */
+  calls?: CallSeed[];
   examConfig: unknown;
   /** The exam must be drawn from a bank at least this many times its size (so attempts differ). */
   minPoolFactor: number;

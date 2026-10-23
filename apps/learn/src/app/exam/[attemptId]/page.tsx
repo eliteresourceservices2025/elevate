@@ -4,7 +4,7 @@ import { ExamRunner } from "@/components/exam-runner";
 import { StartExamButton } from "@/components/forms";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
-import { getAttemptView } from "@/lib/queries";
+import { getAttemptView, getOverview } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,9 @@ export default async function ExamPage({ params }: { params: Promise<{ attemptId
   }
 
   const result = view.result!;
+  // a course with a mock call needs it passed too before the statement and the certificate
+  const overview = result.passed ? await getOverview(getSql(), session.userId, view.assignmentId) : null;
+  const callPending = Boolean(overview?.call) && overview?.assignment.status !== "passed";
   const missed = view.review.filter((r) => !r.isCorrect);
   const modules = [...new Map(missed.map((r) => [r.moduleKey, r.moduleTitle])).entries()];
 
@@ -34,11 +37,17 @@ export default async function ExamPage({ params }: { params: Promise<{ attemptId
 
       {result.passed ? (
         <>
-          <p>
-            <Link className="button" href={`/certificate/${view.assignmentId}`}>
-              Accept the statement and get your certificate
-            </Link>
-          </p>
+          {callPending ? (
+            <p className="feedback good">
+              The exam is done. Pass the mock call too, to get your certificate. <Link href={`/course/${view.assignmentId}`}>Go to the course</Link>
+            </p>
+          ) : (
+            <p>
+              <Link className="button" href={`/certificate/${view.assignmentId}`}>
+                Accept the statement and get your certificate
+              </Link>
+            </p>
+          )}
           <h2>Review</h2>
           <ol className="plain">
             {view.review.map((r) => (

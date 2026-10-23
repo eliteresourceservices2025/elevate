@@ -42,6 +42,8 @@ export const courses = learn
       fixedTrack: text("fixed_track"),
       /** False for an acknowledgment-only add-on: reading every module and accepting the statement finishes it (no exam). */
       requiresExam: boolean("requires_exam").notNull().default(true),
+      /** True when the course has a graded mock call that must be passed as well as the exam (docs/learn/14-mock-call.md). */
+      requiresCall: boolean("requires_call").notNull().default(false),
       createdAt: stamp("created_at"),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
     },
@@ -618,5 +620,102 @@ export const studioComments = learn
       check("studio_comments_body_chk", sql`char_length(${t.body}) between 3 and 1000`),
       check("studio_comments_resolved_chk", sql`(${t.resolvedAt} is null) = (${t.resolvedBy} is null)`),
     ],
+  )
+  .enableRLS();
+
+// ---- The graded mock call (migration 0098; docs/learn/14-mock-call.md). Built like the exam: the app reads the scenario text, never the key. ----
+
+/** The public part of a call: who calls, the record beside it, and the steps with caller text and reply texts. No points, no reasons. */
+export const callScenarios = learn
+  .table(
+    "call_scenarios",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      versionId: uuid("version_id")
+        .notNull()
+        .references(() => courseVersions.id),
+      key: text("key").notNull(),
+      title: text("title").notNull(),
+      moduleKey: text("module_key").notNull(),
+      medical: boolean("medical").notNull().default(false),
+      intro: text("intro").notNull(),
+      /** Where the caller's mood starts (0 to 100). Shown by the call screen, so it is public. */
+      startMood: smallint("start_mood").notNull(),
+      /** { title, rows: [{ label, value }] } or null */
+      record: jsonb("record"),
+      /** [{ kind: "caller"|"note", id, caller?|label?, choices: [{ id, text }] }] */
+      steps: jsonb("steps").notNull(),
+      createdAt: stamp("created_at"),
+    },
+    (t) => [
+      uniqueIndex("call_scenarios_key_idx").on(t.versionId, t.key),
+      index("call_scenarios_version_idx").on(t.versionId),
+      check("call_scenarios_mood_chk", sql`${t.startMood} between 0 and 100`),
+    ],
+  )
+  .enableRLS();
+
+/** The scoring key. No grant to the app role. [{ id, category, choices: [{ id, points, mood, reply, why }] }] */
+export const callScenarioKeys = learn
+  .table(
+    "call_scenario_keys",
+    {
+      scenarioId: uuid("scenario_id")
+        .primaryKey()
+        .references(() => callScenarios.id),
+      steps: jsonb("steps").notNull(),
+    },
+  )
+  .enableRLS();
+
+export const callAttempts = learn
+  .table(
+    "call_attempts",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      assignmentId: uuid("assignment_id")
+        .notNull()
+        .references(() => assignments.id),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      attemptNo: smallint("attempt_no").notNull(),
+      status: text("status").notNull().default("in_progress"),
+      /** The calls of this attempt, in order, fixed at the start. */
+      scenarioIds: uuid("scenario_ids").array().notNull(),
+      startedAt: stamp("started_at"),
+      submittedAt: timestamp("submitted_at", { withTimezone: true }),
+      scorePercent: numeric("score_percent", { precision: 5, scale: 2 }),
+      passed: boolean("passed"),
+      /** { "<category>": percent } for the person and HR; never shown to leads. */
+      categoryScores: jsonb("category_scores"),
+    },
+    (t) => [
+      uniqueIndex("call_attempts_number_idx").on(t.assignmentId, t.attemptNo),
+      uniqueIndex("call_attempts_open_idx").on(t.assignmentId).where(sql`${t.status} = 'in_progress'`),
+      check("call_attempts_status_chk", sql`${t.status} in (${list(ATTEMPT_STATUSES)})`),
+      check("call_attempts_done_chk", sql`(${t.status} = 'submitted') = (${t.submittedAt} is not null and ${t.passed} is not null)`),
+    ],
+  )
+  .enableRLS();
+
+/** What the person picked at each step. Insert-only: a pick is final. */
+export const callAttemptSteps = learn
+  .table(
+    "call_attempt_steps",
+    {
+      attemptId: uuid("attempt_id")
+        .notNull()
+        .references(() => callAttempts.id),
+      scenarioId: uuid("scenario_id")
+        .notNull()
+        .references(() => callScenarios.id),
+      stepId: text("step_id").notNull(),
+      optionId: text("option_id").notNull(),
+      points: smallint("points").notNull(),
+      moodAfter: smallint("mood_after").notNull(),
+      answeredAt: stamp("answered_at"),
+    },
+    (t) => [primaryKey({ columns: [t.attemptId, t.scenarioId, t.stepId] })],
   )
   .enableRLS();

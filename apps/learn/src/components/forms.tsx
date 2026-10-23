@@ -35,6 +35,36 @@ export function StartExamButton({ assignmentId, label }: { assignmentId: string;
   );
 }
 
+/** Starts (or resumes) the graded mock call and opens it. The server enforces the order, the tries and the wait. */
+export function StartCallButton({ assignmentId, label }: { assignmentId: string; label: string }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const start = async () => {
+    setBusy(true);
+    setMessage(null);
+    const r = await post("startCall", { assignmentId });
+    if (r.ok && typeof r.attemptId === "string") {
+      window.location.assign(`/call/${r.attemptId}`);
+      return;
+    }
+    setBusy(false);
+    const when = typeof r.retryAt === "string" ? ` You can try again at ${new Date(r.retryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.` : "";
+    setMessage(`${r.error ?? "Please try again."}${when}`);
+  };
+  return (
+    <div>
+      <button type="button" onClick={() => void start()} disabled={busy}>
+        {busy ? "Opening the call..." : label}
+      </button>
+      {message ? (
+        <p className="feedback bad" role="alert">
+          {message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** The responsibility statement, accepted by typing the person's full name. Issues the certificate once. */
 export function AcceptForm({ assignmentId, statementVersion, statement }: { assignmentId: string; statementVersion: string; statement: string }) {
   const router = useRouter();

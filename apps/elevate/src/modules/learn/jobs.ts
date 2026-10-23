@@ -503,10 +503,10 @@ async function fileCertificateCopies(scope?: Scope): Promise<number> {
 
 // ---- Clean-up -----------------------------------------------------------------------------------------------------------------
 
-export type PurgeRun = { tokens: number; sessions: number; answers: number };
+export type PurgeRun = { tokens: number; sessions: number; answers: number; callSteps: number };
 
 /**
- * Daily: removes finished sign-in tokens and sessions, and per-question exam answers 12 months after the exam was submitted. The
+ * Daily: removes finished sign-in tokens and sessions, and per-question exam answers and mock-call picks 12 months after the exam or call was submitted. The
  * score, the pass result, the attestation and the certificate stay (six years). Answers can only be deleted by this job: it sets
  * learn.purge for its own transaction, which the database's guard checks.
  */
@@ -518,6 +518,10 @@ export async function runLearnPurge(): Promise<PurgeRun> {
     const answers = (await tx.execute(sql`
       delete from learn.exam_answers where attempt_id in (select id from learn.exam_attempts where status = 'submitted' and submitted_at < now() - interval '12 months')
       returning 1`)) as unknown as unknown[];
-    return { tokens: tokens.length, sessions: sessions.length, answers: answers.length };
+    // the mock call's picks follow the same rule (the attempt, its score and category percentages stay six years)
+    const callSteps = (await tx.execute(sql`
+      delete from learn.call_attempt_steps where attempt_id in (select id from learn.call_attempts where status = 'submitted' and submitted_at < now() - interval '12 months')
+      returning 1`)) as unknown as unknown[];
+    return { tokens: tokens.length, sessions: sessions.length, answers: answers.length, callSteps: callSteps.length };
   });
 }
