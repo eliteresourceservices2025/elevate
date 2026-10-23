@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ModulePlayer } from "@/components/module-player";
 import { findRecap, recapCaptions, recapFile, recapSeconds, recapTranscript } from "@/content/recaps";
+import { videosForModule } from "@/content/customer-service/videos";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { getModuleView } from "@/lib/queries";
@@ -25,6 +26,7 @@ export default async function ModulePage({ params }: { params: Promise<{ assignm
       completed={view.completed}
       nextModule={view.nextModule}
       recap={recap}
+      videos={videosForModule(view.courseSlug, view.module.key)}
     />
   );
 }

@@ -101,3 +101,15 @@ The HIPAA recaps are animated (icons, chains, count-up numbers, timelines, stack
 - **Music:** `audio/cs/bgm.mp3` (git-ignored; keep the licensed file safe) mixed at 0.12.
 - **Version:** `RECAP_FROM_VERSION` for HIPAA is 3.
 - This section supersedes the Zira and generated-music notes above for the Customer Service videos too: they now use the same voice and track.
+
+## Customer Service lesson videos (where they play, how to make them)
+
+- **Where they play:** `apps/learn/src/content/customer-service/videos.ts` (welcome on the course page, lesson videos at the top of each module, three worked
+  example calls above the mock call). They are optional; reading stays the required part. Served only to a signed-in person from
+  `apps/learn/media/recaps`, with no download button (`protected-video.tsx`).
+- **Make them** (VoiceStudio open): storyboards are `tools/recap-video/customer-service/{storyboards,welcome-storyboard,modules-storyboard,demos-storyboard}.cjs`.
+  `node customer-service/narrate-welcome.cjs --set modules --speed 1.35` (or `--set demos`), then `CS_SET=modules node customer-service/render-welcome.cjs`
+  (the deck videos use `narrate-cs.cjs` and `render-cs.cjs`), then `node customer-service/export-to-learn.cjs` copies the MP4s and writes `videos.json`.
+- **Subtitles are burned into the picture** (`captions.cjs`, from the same words and timings as the voice); no separate subtitle track is offered.
+- **Held back:** the three deck mock calls (cs-11 to cs-13) sat too close to the graded mock call (one repeats a graded caller line), so the worked examples
+  (cs-d1 to cs-d3, different callers and situations) replace them. Do not show a model answer to a graded scenario.

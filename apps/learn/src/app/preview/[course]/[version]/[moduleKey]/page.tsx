@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ContentBlocks } from "@/components/content-blocks";
-import { RecapPanel } from "@/components/recap-panel";
+import { RecapPanel, VideoGroup } from "@/components/recap-panel";
+import { videosForModule } from "@/content/customer-service/videos";
 import { findRecap, recapCaptions, recapFile, recapSeconds, recapTranscript } from "@/content/recaps";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
@@ -30,6 +31,7 @@ export default async function PreviewModulePage({ params }: { params: Promise<{ 
       <h1>{m.title}</h1>
       <p className="muted">{m.summary}</p>
       {found ? <RecapPanel recap={{ file: recapFile(found), seconds: recapSeconds(found), transcript: recapTranscript(found), captions: recapCaptions(found) }} title={m.title} /> : null}
+      {videosForModule(course, m.key).length ? <VideoGroup videos={videosForModule(course, m.key)} title={m.title} /> : null}
       {m.screens.map((s, i) => (
         <section key={s.id} aria-label={s.title}>
           <h2>

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CourseModule } from "@/content/schema";
 import { HEARTBEAT_SECONDS, ACTIVITY_PROMPT_SECONDS } from "@/lib/constants";
 import { clock, post } from "./api-client";
-import { RecapPanel, type RecapView } from "./recap-panel";
+import { RecapPanel, VideoGroup, type RecapView } from "./recap-panel";
 import { LessonStage } from "./lesson-stage";
 import { celebrate } from "@/lib/celebrate";
 import { ChevronRight } from "lucide-react";
@@ -28,6 +28,8 @@ export function ModulePlayer(props: {
   nextModule: { key: string; title: string } | null;
   /** The optional recap video for this module, when one exists. */
   recap?: RecapView | null;
+  /** Lesson videos for this module (the Customer Service course), each optional. */
+  videos?: RecapView[];
 }) {
   const { assignmentId, module, minSeconds } = props;
   const router = useRouter();
@@ -151,7 +153,14 @@ export function ModulePlayer(props: {
         backHref={`/course/${assignmentId}`}
         finalAction={finalAction}
         keyPoints={module.keyPoints}
-        topExtra={props.recap ? <RecapPanel recap={props.recap} title={module.title} /> : null}
+        topExtra={
+          props.recap || props.videos?.length ? (
+            <>
+              {props.recap ? <RecapPanel recap={props.recap} title={module.title} /> : null}
+              {props.videos?.length ? <VideoGroup videos={props.videos} title={module.title} /> : null}
+            </>
+          ) : null
+        }
         notes={
           <>
             {!props.completed ? (
