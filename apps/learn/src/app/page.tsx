@@ -1,13 +1,10 @@
-import Link from "next/link";
+import { BookOpenCheck, ClipboardList, LogOut, Zap } from "lucide-react";
+import { CourseCard, HomeTile } from "@/components/course-card";
 import { requireSession } from "@/lib/auth";
 import { getSql, withUser } from "@/lib/db";
 import { getPractice, listAssignments } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
-
-const TRACK_LABEL: Record<string, string> = { full: "Full course", essentials: "Essentials", refresher: "Refresher" };
-const STATUS_LABEL: Record<string, string> = { assigned: "Not started", in_progress: "In progress", passed: "Passed", expired: "Expired", cancelled: "Cancelled" };
-const ACTION_LABEL: Record<string, string> = { assigned: "Start", in_progress: "Continue", passed: "View", expired: "View", cancelled: "View" };
 
 export default async function Home() {
   const session = await requireSession();
@@ -20,44 +17,25 @@ export default async function Home() {
   return (
     <>
       <h1>Hello{person ? `, ${person.display_name}` : ""}</h1>
+      <p className="muted">Pick up where you left off, or start something new.</p>
       {assignments.length === 0 ? (
         <p>You have no training assigned yet. If you expected something here, please ask HR.</p>
       ) : (
-        <ul className="plain">
+        <ul className="mod-grid home-grid" aria-label="My training">
           {assignments.map((a) => (
-            <li key={a.id} className="card">
-              <strong>{a.title}</strong>
-              <div className="muted">
-                {TRACK_LABEL[a.track] ?? a.track} · due {a.dueOn} · {STATUS_LABEL[a.status] ?? a.status}
-              </div>
-              <p>
-                <Link className="button" href={`/course/${a.id}`}>
-                  {ACTION_LABEL[a.status] ?? "Open"}
-                </Link>
-              </p>
-            </li>
+            <CourseCard key={a.id} slug={a.slug} title={a.title} track={a.track} status={a.status} dueOn={a.dueOn} isUpdate={a.isUpdate} href={`/course/${a.id}`} />
           ))}
         </ul>
       )}
-      {practiceOpen > 0 ? (
-        <section className="card">
-          <strong>Quarterly practice</strong>
-          <p className="muted">A two-minute scenario is ready. It is not a test.</p>
-          <p>
-            <Link className="button" href="/practice">
-              Try it
-            </Link>
-          </p>
-        </section>
-      ) : null}
-      <p>
-        <Link href="/record">My training record</Link>
-        ·{" "}
-        <Link href="/cards">Quick-reference cards</Link>
-      </p>
-      <form method="post" action="/auth/signout">
-        <button type="submit" className="secondary">
-          Sign out of training
+      <h2 className="home-more">More for you</h2>
+      <ul className="mod-grid home-grid" aria-label="More for you">
+        {practiceOpen > 0 ? <HomeTile art="practice" title="Quarterly practice" text="A two-minute scenario is ready. It is not a test." action="Try it" href="/practice" icon={<Zap size={15} aria-hidden="true" />} /> : null}
+        <HomeTile art="record" title="My training record" text="Your courses, dates and certificates in one place, with a PDF you can keep." action="Open my record" href="/record" icon={<ClipboardList size={15} aria-hidden="true" />} />
+        <HomeTile art="cards" title="Quick-reference cards" text="The key points of every module on one page, for when you need a reminder." action="Open the cards" href="/cards" icon={<BookOpenCheck size={15} aria-hidden="true" />} />
+      </ul>
+      <form method="post" action="/auth/signout" className="home-signout">
+        <button type="submit" className="secondary signout-btn">
+          <LogOut size={16} aria-hidden="true" /> Sign out of training
         </button>
       </form>
     </>
