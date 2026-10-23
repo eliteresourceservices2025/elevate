@@ -13,8 +13,7 @@ import { orNotFound } from "@/lib/or-not-found";
 import { paginate, parsePaging } from "@/lib/pagination";
 import { formatInZone } from "@/lib/time";
 import { CalendarCard } from "@/modules/recruiting/components/calendar-card";
-import { FormDialog } from "@/components/form-dialog";
-import { RetentionForm } from "@/modules/recruiting/components/opening-forms";
+import { RecruitingMenu } from "@/modules/recruiting/components/recruiting-menu";
 import { STAGE_LABELS, STAGES } from "@/modules/recruiting/constants";
 import { getCalendarCard, getRecruitingSummary, getRetentionView, listOpenings } from "@/modules/recruiting/queries";
 import { PageHeader } from "@/components/page-header";
@@ -47,32 +46,22 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
             <a href="/careers" target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline" })}>
               View careers page <ExternalLink aria-hidden /> <span className="sr-only">(opens in a new tab)</span>
             </a>
-            {scopeFor(user, "recruiting.reports") ? (
-              <Link href="/recruiting/reports" className={buttonVariants({ variant: "outline" })}>
-                Reports
-              </Link>
-            ) : null}
-            {scopeFor(user, "recruiting.manage_email_templates") ? (
-              <Link href="/recruiting/email-templates" className={buttonVariants({ variant: "outline" })}>
-                Applicant emails
-              </Link>
-            ) : null}
-            {scopeFor(user, "recruiting.manage_careers_page") ? (
-              <Link href="/recruiting/careers-page" className={buttonVariants({ variant: "outline" })}>
-                Edit careers page
-              </Link>
-            ) : null}
-            {retention ? (
-              <FormDialog label="Applicant data retention" title="Applicant data retention" variant="outline" size="lg">
-                <RetentionForm
-                  initial={{
-                    enabled: retention.retentionEnabled,
-                    rejectedMonths: retention.rejectedMonths,
-                    withdrawnMonths: retention.withdrawnMonths,
-                  }}
-                />
-              </FormDialog>
-            ) : null}
+            <RecruitingMenu
+              links={[
+                ...(scopeFor(user, "recruiting.reports") ? [{ href: "/recruiting/reports", label: "Reports" }] : []),
+                ...(scopeFor(user, "recruiting.manage_email_templates") ? [{ href: "/recruiting/email-templates", label: "Applicant emails" }] : []),
+                ...(scopeFor(user, "recruiting.manage_careers_page") ? [{ href: "/recruiting/careers-page", label: "Edit careers page" }] : []),
+              ]}
+              retention={
+                retention
+                  ? {
+                      enabled: retention.retentionEnabled,
+                      rejectedMonths: retention.rejectedMonths,
+                      withdrawnMonths: retention.withdrawnMonths,
+                    }
+                  : null
+              }
+            />
             {canManage ? (
               <Link href="/recruiting/new" className={buttonVariants()}>
                 New job

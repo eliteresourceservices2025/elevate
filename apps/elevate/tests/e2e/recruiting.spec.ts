@@ -213,7 +213,8 @@ test("HR edits the careers page wording and banner, and the public page shows th
   // The public page link opens in a new tab
   const publicLink = hrPage.getByRole("link", { name: /View careers page/ });
   await expect(publicLink).toHaveAttribute("target", "_blank");
-  await hrPage.getByRole("link", { name: "Edit careers page" }).click();
+  await hrPage.getByRole("button", { name: "More" }).click();
+  await hrPage.getByRole("menuitem", { name: "Edit careers page" }).click();
   await hrPage.waitForURL("**/recruiting/careers-page", slow);
   await waitForHydration(hrPage, "#cp-title");
 

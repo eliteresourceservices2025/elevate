@@ -25,7 +25,7 @@ export default async function RecruitingReportsPage({ searchParams }: PageProps<
   const maxFunnel = Math.max(1, ...report.funnel.map((f) => f.reached));
 
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <PageHeader
         title="Recruiting reports"
         description="Counts only, no names. For applications that came in between the dates below."

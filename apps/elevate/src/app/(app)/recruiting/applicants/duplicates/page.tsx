@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Possible duplicate applicants" };
 export default async function DuplicatesPage() {
   const groups = await orNotFound(listDuplicateGroups());
   return (
-    <PageContainer width="medium">
+    <PageContainer>
       <PageHeader
         title="Possible duplicate applicants"
         description="Records with the same phone number or the same name but different emails. You decide: merging moves everything to the record you keep."
