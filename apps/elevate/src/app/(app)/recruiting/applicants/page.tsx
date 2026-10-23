@@ -54,7 +54,7 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
   const moreInUse = Object.values(rest).some((v) => v !== undefined);
 
   return (
-    <PageContainer width="wide">
+    <PageContainer>
       <PageHeader
         title="Applicants"
         description={data.scope === "team" ? "Everyone who applied to the jobs you are on the hiring team for." : "Everyone who applied, across all jobs. Open a name for the full record."}

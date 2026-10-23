@@ -35,6 +35,9 @@ export function FormDialog({
   icon,
   disabled = false,
   hint,
+  open: openProp,
+  onOpenChange,
+  hideTrigger = false,
 }: {
   label: string;
   title: string;
@@ -47,8 +50,20 @@ export function FormDialog({
   /** The button is greyed out (it says why in `hint`, shown as its tooltip). */
   disabled?: boolean;
   hint?: string;
+  /** Controlled mode: the caller decides when it is open (for example a menu item opens it) and usually sets `hideTrigger`. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [openState, setOpenState] = useState(defaultOpen);
+  const open = openProp ?? openState;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setOpenState(next);
+      onOpenChange?.(next);
+    },
+    [onOpenChange],
+  );
   const dirty = useRef(false);
   const reduce = useReducedMotion();
 
@@ -56,7 +71,7 @@ export function FormDialog({
     if (!force && dirty.current && !window.confirm("Discard what you wrote?")) return;
     dirty.current = false;
     setOpen(false);
-  }, []);
+  }, [setOpen]);
 
   const markClean = useCallback(() => {
     dirty.current = false;
@@ -64,10 +79,12 @@ export function FormDialog({
 
   return (
     <>
-      <Button type="button" variant={variant} disabled={disabled} title={disabled ? hint : undefined} onClick={() => setOpen(true)}>
-        {icon}
-        {label}
-      </Button>
+      {hideTrigger ? null : (
+        <Button type="button" variant={variant} disabled={disabled} title={disabled ? hint : undefined} onClick={() => setOpen(true)}>
+          {icon}
+          {label}
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
         <DialogContent className={`max-h-[90dvh] overflow-y-auto ${WIDTH[size]}`}>
           <DialogHeader>

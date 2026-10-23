@@ -175,7 +175,14 @@ test("HR rewords an applicant email, then reads the recruiting report for a job"
   // The wording: edit, see the preview, save, go back to the built-in text
   await hr.getByRole("link", { name: "Recruiting", exact: true }).click();
   await hr.waitForURL("**/recruiting", slow);
-  await hr.getByRole("link", { name: "Applicant emails" }).click();
+  // The secondary actions are in one "More" menu; the retention settings open in a dialog from it
+  await hr.getByRole("button", { name: "More" }).click();
+  await hr.getByRole("menuitem", { name: "Applicant data retention" }).click();
+  await expect(hr.getByRole("dialog", { name: "Applicant data retention" })).toBeVisible(slow);
+  await hr.getByRole("dialog", { name: "Applicant data retention" }).getByRole("button", { name: "Close" }).click();
+  await expect(hr.getByRole("dialog", { name: "Applicant data retention" })).toHaveCount(0);
+  await hr.getByRole("button", { name: "More" }).click();
+  await hr.getByRole("menuitem", { name: "Applicant emails" }).click();
   await hr.waitForURL("**/recruiting/email-templates", slow);
   await waitForHydration(hr, "#tpl-subject-received");
   await hr.locator("#tpl-subject-received").fill(`Salamat, {{first_name}}! ${stamp}`);
