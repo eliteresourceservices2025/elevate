@@ -53,6 +53,11 @@ test("HR publishes a job, an applicant applies on the public page, HR moves them
   await expect(privacy).toHaveAttribute("target", "_blank");
   await expect(privacy).toHaveAttribute("rel", /noopener/);
   await waitForHydration(anon, "#ap-name");
+  // "How did you hear about this job?" is on the form; a link with ?src= pre-selects it, and the applicant can change it
+  await anon.goto(`${readable}?src=facebook`);
+  await waitForHydration(anon, "#ap-name");
+  await expect(anon.getByLabel("How did you hear about this job? (optional)")).toHaveValue("facebook");
+  await anon.getByLabel("How did you hear about this job? (optional)").selectOption("linkedin");
   await anon.getByLabel("Full name").fill(`Pia Applicant${stamp}`);
   await anon.getByLabel("Email", { exact: true }).fill(`pia.${stamp}@example.com`);
   await anon.locator("#ap-resume").setInputFiles({ name: "cv.pdf", mimeType: "application/pdf", buffer: PDF });
@@ -73,6 +78,7 @@ test("HR publishes a job, an applicant applies on the public page, HR moves them
 
   await hrPage.locator("section[data-stage='screening']").getByRole("link", { name: `Pia Applicant${stamp}` }).click();
   await hrPage.waitForURL(/\/recruiting\/applications\//, slow);
+  await expect(hrPage.getByLabel("Heard about the job")).toHaveValue("linkedin"); // what the applicant chose on the form was kept
   await expect(hrPage.getByRole("heading", { name: `Pia Applicant${stamp}` })).toBeVisible(slow);
   await expect(hrPage.getByRole("link", { name: "Recruiting", exact: true })).toHaveAttribute("aria-current", "page");
   // The resume is viewed inside the page (PDF), with a separate download button

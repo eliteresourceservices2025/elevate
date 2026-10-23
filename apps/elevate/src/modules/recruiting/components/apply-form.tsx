@@ -56,6 +56,19 @@ export function ApplyForm({ openingId, defaultSource = null, noticeTitle, notice
         <TextField id="ap-phone" name="phone" label="Phone (optional)" autoComplete="tel" maxLength={40} />
         <TextField id="ap-country" name="country" label="Country (optional)" autoComplete="country-name" maxLength={80} />
       </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SelectField id="ap-source" name="source" label="How did you hear about this job? (optional)" value={source} onChange={(e) => setSource(e.target.value)}>
+          <option value="">Skip this question</option>
+          {SOURCES.map((s) => (
+            <option key={s} value={s}>
+              {SOURCE_LABELS[s]}
+            </option>
+          ))}
+        </SelectField>
+        {source === "referral" || source === "agency" || source === "other" ? (
+          <TextField id="ap-source-detail" name="sourceDetail" label={source === "referral" ? "Who referred you? (optional)" : "Tell us more (optional)"} maxLength={100} />
+        ) : null}
+      </div>
       <label htmlFor="ap-pool" className="flex items-start gap-2 text-sm">
         <input id="ap-pool" name="poolConsent" type="checkbox" className="mt-0.5 size-4 accent-primary" />
         <span>Keep my details for {POOL_MONTHS} months so the team can contact me about other roles that may suit me (optional). I can ask for them to be removed at any time.</span>
