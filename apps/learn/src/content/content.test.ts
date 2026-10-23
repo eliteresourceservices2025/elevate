@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COURSES } from "./index";
+import { callsLint } from "./calls";
 import { courseContentSchema, INTERACTIVE_BLOCK_TYPES, questionSeedSchema } from "./schema";
 
 // Content lint (docs/learn/06-testing-and-review.md): every course and its exam bank are checked like code, so a typo in the key,
@@ -14,7 +15,7 @@ const allText = (value: unknown): string[] => {
 
 describe("the course registry", () => {
   it("holds the HIPAA course and the separate cybersecurity course", () => {
-    expect(Object.keys(COURSES).sort()).toEqual(["cybersecurity", "hipaa"]);
+    expect(Object.keys(COURSES).sort()).toEqual(["customer-service", "cybersecurity", "hipaa"]);
   });
 
   it("keeps the HIPAA course about HIPAA: general cybersecurity modules live in their own course", () => {
@@ -144,5 +145,42 @@ describe("the Cybersecurity course specifically", () => {
     expect(config.passPercent).toBe(80);
     for (const t of Object.values(config.tracks)) expect(t.questions).toBe(15);
     expect(questions.length).toBeGreaterThanOrEqual(100);
+  });
+});
+
+describe("the Customer Service & Family Support course specifically", () => {
+  const { content, questions, examConfig, calls } = COURSES["customer-service"];
+
+  it("has 11 modules in teaching order, with healthcare calls added at HR's request", () => {
+    expect(content.modules.map((m) => m.key)).toEqual(["excellence", "communication", "channels", "listening", "confidentiality", "healthcare", "difficult", "personalities", "bad_news", "resolution", "resilience"]);
+    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(178);
+  });
+
+  it("asks 25 questions at 85% from a bank of 88, with 8 for every module", () => {
+    const config = examConfig as { passPercent: number; renewalMonths: number; tracks: Record<string, { questions: number }> };
+    expect(config.passPercent).toBe(85);
+    expect(config.renewalMonths).toBe(24);
+    expect(config.tracks.full.questions).toBe(25);
+    expect(questions.length).toBe(88);
+    for (const m of content.modules) expect(questions.filter((x) => x.moduleKey === m.key).length, m.key).toBe(8);
+  });
+
+  it("has a mock-call pool of five (two medical) that passes the call lint, and the call rules", () => {
+    expect(calls).toBeDefined();
+    expect(calls!.length).toBe(5);
+    expect(calls!.filter((c) => c.medical).length).toBe(2);
+    expect(callsLint(calls!, content.modules.map((m) => m.key))).toEqual([]);
+    const config = examConfig as { call: { passPercent: number; scenarios: number; maxTries: number } };
+    expect(config.call).toMatchObject({ passPercent: 85, scenarios: 3, maxTries: 3 });
+  });
+
+  it("puts the best reply in different positions, so the pattern cannot be learned", () => {
+    const positions = new Set(calls!.flatMap((c) => c.steps.map((s) => s.choices.findIndex((x) => x.points === 3))));
+    expect(positions.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("avoids employee-style wording (the team are independent contractors)", () => {
+    const text = JSON.stringify(content).toLowerCase();
+    expect(text).not.toMatch(/\bpto\b|paid time off|\bovertime\b|\bemployee\b/);
   });
 });

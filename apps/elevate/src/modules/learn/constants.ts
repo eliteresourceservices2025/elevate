@@ -1,6 +1,7 @@
 /** The HIPAA course: the one the nightly jobs assign first and the Training page reports by default. */
 export const HIPAA_SLUG = "hipaa";
 export const CYBERSECURITY_SLUG = "cybersecurity";
+export const CUSTOMER_SERVICE_SLUG = "customer-service";
 
 export type LearnCourseInfo = {
   slug: string;
@@ -23,6 +24,7 @@ export type LearnCourseInfo = {
 export const CORE_COURSES: readonly LearnCourseInfo[] = [
   { slug: HIPAA_SLUG, label: "HIPAA", noun: "HIPAA training", fixedTrack: null, kind: "core", clientId: null },
   { slug: CYBERSECURITY_SLUG, label: "Cybersecurity basics", noun: "Cybersecurity basics training", fixedTrack: "full", kind: "core", clientId: null },
+  { slug: CUSTOMER_SERVICE_SLUG, label: "Customer service", noun: "Customer service certification", fixedTrack: "full", kind: "core", clientId: null },
 ];
 
 /** A course address: lower case words joined by dashes (the same rule the database enforces). */

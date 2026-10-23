@@ -106,3 +106,12 @@ describe("the lesson stage has no page scroll", () => {
     expect(warned.map((i) => i.where)).toContain(`${content.modules[0].title}: A very long slide`);
   });
 });
+
+describe("the Customer Service course", () => {
+  it("passes the same checks the studio and publishing apply (no errors, no unfinished text)", () => {
+    const cs = COURSES["customer-service"];
+    const issues = lintCourse(cs.content, cs.questions, cs.examConfig as ExamConfigLike);
+    expect(issues.filter((i) => i.level === "error"), JSON.stringify(issues.filter((i) => i.level === "error").slice(0, 3))).toEqual([]);
+    expect(hasPlaceholders(issues)).toBe(false);
+  });
+});

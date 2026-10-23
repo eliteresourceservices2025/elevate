@@ -18,7 +18,7 @@ function roleUrl(role: string, password: string) {
 const admin = postgres(testDatabaseUrl(adminUrl), { max: 2, onnotice: () => {} });
 await admin.unsafe(`alter role learn_app login password '${APP_PASSWORD}'`);
 const app = postgres(roleUrl("learn_app", APP_PASSWORD), { max: 2, onnotice: () => {} });
-const { loadCourse } = await import("@/modules/learn/publish");
+const { loadCourse, assignCourse } = await import("@/modules/learn/publish");
 const { handleApi } = await import("../../../learn/src/lib/api");
 const { getCallView, getOverview } = await import("../../../learn/src/lib/queries");
 const { sessionCookie } = await import("../../../learn/src/lib/cookie");
@@ -540,5 +540,47 @@ describe("the call endpoints and views", () => {
     expect(o.call).toMatchObject({ scenarios: 3, passPercent: 85, triesAllowed: 3, attempts: [], openAttemptId: null, waitMinutes: 0 });
     const plain = await setup({ requiresCall: false });
     expect((await getOverview(app, plain.user, plain.asg))!.call).toBeNull();
+  });
+});
+
+describe("the real Customer Service course", () => {
+  it("publishes with its modules, exam bank and five calls, and can be taken from start to certificate-ready", async () => {
+    const reviewer = await makePerson();
+    const r = await loadCourse(admin as never, { courseSlug: "customer-service", publish: true, reviewerUserId: reviewer, counselApprovedOn: "2026-11-01", actorUserId: reviewer });
+    expect(r).toMatchObject({ modules: 11, questions: 88, calls: 5, status: "published" });
+    expect((await admin`select requires_call from learn.courses where id = ${r.courseId}`)[0].requires_call).toBe(true);
+
+    const user = await makePerson();
+    const { assignmentId } = await assignCourse(admin as never, { userId: user, track: "full", courseSlug: "customer-service" });
+    for (const m of ["excellence", "communication", "channels", "listening", "confidentiality", "healthcare", "difficult", "personalities", "bad_news", "resolution", "resilience"]) {
+      await admin`insert into learn.module_completions (assignment_id, user_id, module_key) values (${assignmentId}, ${user}, ${m})`;
+    }
+
+    await admin`update learn.assignments set status = 'in_progress' where id = ${assignmentId}`; // what finishing a module does in the real flow
+    // the exam: 25 questions from the bank of 88
+    const [{ id: examId }] = await app`select learn.start_exam(${user}::uuid, ${assignmentId}::uuid) as id`;
+    expect((await admin`select count(*)::int as n from learn.exam_attempt_items where attempt_id = ${examId}`)[0].n).toBe(25);
+    const items = await admin`select i.question_id, q.correct_ids from learn.exam_attempt_items i join learn.questions q on q.id = i.question_id where i.attempt_id = ${examId}`;
+    for (const it of items) await app`select learn.save_answer(${user}::uuid, ${examId}::uuid, ${it.question_id}::uuid, ${it.correct_ids}::text[])`;
+    expect((await app`select * from learn.grade_attempt(${user}::uuid, ${examId}::uuid)`)[0].passed).toBe(true);
+    expect(await statusOf(assignmentId)).not.toBe("passed"); // the call is still to do
+
+    // the call: three of the five, at least one medical, best replies pass at 100%
+    const attempt = await startCall(user, assignmentId);
+    const [row] = await admin`select a.scenario_ids, (select count(*) from learn.call_scenarios s where s.id = any (a.scenario_ids) and s.medical)::int as med from learn.call_attempts a where a.id = ${attempt}`;
+    expect((row.scenario_ids as string[]).length).toBe(3);
+    expect(row.med).toBeGreaterThanOrEqual(1);
+    for (const sid of row.scenario_ids as string[]) {
+      const [k] = await admin`select steps from learn.call_scenario_keys where scenario_id = ${sid}`;
+      for (const st of k.steps as { id: string; choices: { id: string; points: number }[] }[]) {
+        const best = st.choices.find((c) => c.points === 3)!.id;
+        await answer(user, attempt, sid, st.id, best);
+      }
+    }
+    const g = await gradeCall(user, attempt);
+    expect(Number(g.score_percent)).toBe(100);
+    expect(g.passed).toBe(true);
+    expect(Object.keys(g.categories as object).sort()).toEqual(expect.arrayContaining(["accuracy", "documentation", "resolution"]));
+    expect(await statusOf(assignmentId)).toBe("passed");
   });
 });
