@@ -4,7 +4,7 @@ export const passwordsModule: CourseModule = {
   key: "passwords",
   title: "Passwords and signing in safely",
   summary: "Strong passphrases, password managers, the second sign-in step, and what to do when a prompt or a code is not yours.",
-  estimatedMinutes: 12,
+  estimatedMinutes: 16,
   tracks: ["full"],
   keyPoints: [
     "A long passphrase beats a short complicated password.",
@@ -165,6 +165,128 @@ export const passwordsModule: CourseModule = {
         },
       ],
     },
+    {
+      id: "stronger-weaker",
+      title: "Quick sort: stronger or weaker second step?",
+      blocks: [
+        {
+          type: "cards",
+          title: "Stronger or weaker?",
+          prompt: "Sort each sign-in choice by how well it protects you.",
+          groups: ["Stronger", "Weaker"],
+          cards: [
+            { text: "A passkey or a security key", group: 0, feedback: "The strongest: it cannot be typed into a fake page." },
+            { text: "A text message code", group: 1, feedback: "Better than nothing, but easier to attack." },
+            { text: "An authenticator app code", group: 0, feedback: "A code that changes every half minute is a solid choice." },
+            { text: "A simple \"approve\" tap", group: 1, feedback: "Easy to approve by mistake, or to wear down with repeated prompts." },
+            { text: "A prompt that asks you to match a number", group: 0, feedback: "Number-matching prompts are stronger than a plain approve tap." },
+            { text: "No second step at all", group: 1, feedback: "Any second step is far better than none." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "it-desk-call",
+      title: "Practice: the call from \"IT\"",
+      blocks: [
+        {
+          type: "branch",
+          title: "A caller who wants your code",
+          intro: "Your phone rings. A man says he is from the IT desk and that your account was flagged. Pick what you say, and watch how the caller reacts.",
+          startMood: 50,
+          turns: [
+            {
+              caller: "This is the IT desk. Your account was flagged. I am sending a code to your phone. Read it back to me so I can fix it.",
+              choices: [
+                { text: "Read the code. He knows my name.", mood: -30, reply: "Thanks, that is all I needed. (He now has the code that lets him into your account.)" },
+                { text: "I will not share a code. I am hanging up and reporting this call to my lead.", mood: 25, reply: "Wait, I am only trying to help... (The call ends. You did exactly the right thing.)" },
+                { text: "Prove you are IT by telling me my last login time.", mood: -10, reply: "Of course, it was this morning. (He may well know that. Testing him does not make him safe.)" },
+              ],
+            },
+            {
+              caller: "If you hang up now, your account will be locked within ten minutes and you will not be able to work.",
+              choices: [
+                { text: "Give in, just this once.", mood: -30, reply: "Good. Now read me the code. (Pressure and a deadline are how it works.)" },
+                { text: "End the call and tell my lead what was said.", mood: 25, reply: "(The line goes dead. A real IT desk never asks for a code, and a deadline is a warning sign.)" },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "setup-check",
+      title: "Check the setup: what puts accounts at risk?",
+      blocks: [
+        {
+          type: "hotspot",
+          title: "A teammate's sign-in habits",
+          prompt: "A teammate describes how they handle sign-ins. Tap every habit that puts an account at risk, then check.",
+          items: [
+            { label: "Passwords", text: "Kept in a password manager with a long passphrase and a second step" },
+            { label: "Reuse", text: "The same password for the work account and a personal shopping site", problem: true, why: "If one site leaks the password, every account that shares it is exposed." },
+            { label: "Storage", text: "Client logins saved in a spreadsheet on the desktop", problem: true, why: "A notes file or spreadsheet is the first place an attacker looks." },
+            { label: "Second step", text: "An authenticator app on every work account" },
+            { label: "Team tool", text: "One login for the whole team \"to keep it simple\"", problem: true, why: "Nobody can tell who did what, and one person's access cannot be closed on its own." },
+            { label: "Prompts", text: "Unexpected approval prompts are denied and reported to the lead" },
+          ],
+          explanation: "Strong sign-in habits are a password manager, a second step, one account per person and a quick report of anything unexpected.",
+        },
+      ],
+    },
+    {
+      id: "quick-round-passwords",
+      title: "Quick round: passwords and signing in",
+      blocks: [
+        {
+          type: "game",
+          title: "Sign-in sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "Which is the better password?",
+              options: [
+                { text: "A long passphrase of several unrelated words", correct: true, feedback: "Length beats complexity." },
+                { text: "Your birth date", correct: false, feedback: "Easy to guess." },
+                { text: "The word Password1!", correct: false, feedback: "Short and predictable." },
+              ],
+            },
+            {
+              question: "A caller from \"IT\" asks you to read back a code. What do you do?",
+              options: [
+                { text: "Hang up and report it to your lead", correct: true, feedback: "No real IT person asks for a code." },
+                { text: "Read it quickly", correct: false, feedback: "The code lets him into your account." },
+                { text: "Ask him to prove it", correct: false, feedback: "He may well know the details. Do not test him." },
+              ],
+            },
+            {
+              question: "Twelve approval prompts arrive and you did not start any. What now?",
+              options: [
+                { text: "Deny them and report it", correct: true, feedback: "Someone may already have your password." },
+                { text: "Approve one to make them stop", correct: false, feedback: "That lets the attacker in." },
+                { text: "Ignore them", correct: false, feedback: "It should be reported so the account can be protected." },
+              ],
+            },
+            {
+              question: "You think a password leaked. What is the first thing to do?",
+              options: [
+                { text: "Change it through the official site or app", correct: true, feedback: "Then change it anywhere you reused it, and tell your lead." },
+                { text: "Wait and see", correct: false, feedback: "Speed matters." },
+                { text: "Change it through a link in a message", correct: false, feedback: "Always use the official site or app." },
+              ],
+            },
+            {
+              question: "Why are passkeys hard to phish?",
+              options: [
+                { text: "There is no password to type into a fake page", correct: true, feedback: "The proof stays on your device or key." },
+                { text: "They are very long", correct: false, feedback: "Length is not the reason." },
+                { text: "They are shared with the team", correct: false, feedback: "Never share them." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -186,4 +308,8 @@ export const passwordsQuestions: QuestionSeed[] = [
   q("passwords", "Shared accounts", "single", "A tool has only one login, and your team wants to share it. What is the best response?", ["Ask your lead how to give each person their own access", "Share the password in a team chat", "Put it on a sticky note", "Use it only at night"], [0], "Each person needs their own access so actions can be traced and access can end when work ends."),
   q("passwords", "Shared accounts", "multiple", "Which problems come from a shared login? Select all that apply.", ["Nobody can tell who did what", "One person's access cannot be closed on its own", "A leaked password affects everyone who shares it", "It makes the login stronger"], [0, 1, 2], "A shared login removes accountability and makes access hard to control."),
   q("passwords", "Codes", "single", "A caller says they are from IT and asks you to read out the code that just arrived on your phone. What do you do?", ["Refuse, end the call, and report it", "Read it quickly so they can fix the issue", "Read only the first three digits", "Text it to them instead"], [0], "A code is a password. No legitimate caller needs you to read it out."),
+  q("passwords", "Weaker steps", "multiple", "Which of these are weaker second sign-in steps? Select all that apply.", ["A text message code", "A simple approve tap", "A passkey", "A security key"], [0, 1], "A text code is easier to attack, and a plain approve tap is easy to approve by mistake. Passkeys and security keys are the stronger choices."),
+  q("passwords", "Managers", "single", "A password manager will not fill in your password on a page. What might that tell you?", ["The page may be fake, so stop and check", "The manager is broken and you should type it", "The password has expired", "Nothing at all"], [0], "A manager fills in passwords only on the real website, so a refusal is a useful warning."),
+  q("passwords", "Shared accounts", "true_false", "True or false: Sharing one login across a team makes it easier to tell who did what.", ["True", "False"], [1], "A shared login breaks the most basic control: nobody can tell who did what."),
+  q("passwords", "Reuse", "single", "After a password may have leaked, what should you do about other accounts that use the same one?", ["Change it there too, because reuse turns one leak into many", "Leave them, since only one site leaked", "Add a number to the end", "Wait a month"], [0], "Reuse is how one leak becomes many, so change it everywhere it was used and tell your lead."),
 ];

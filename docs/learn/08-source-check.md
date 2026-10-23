@@ -391,3 +391,11 @@ Counsel (the owner) asked that every statement be a checked fact. Each one below
 Left out on purpose (not needed, and not independently checked): Texas's ban on selling health information, Texas notice and authorization for electronic disclosure, California's separate authorization for sensitive information. The proposed Security Rule update is still only a proposal; re-check its status on the day of publication.
 
 Second source for California, read on 23 October 2026: california.public.law carries the same §1280.15 text (15 business days; "unauthorized" means inappropriate access, review or viewing without a direct need; page shows "verified 19 October 2026") and the same §1798.82 text (30 calendar days; (e) deemed compliance for notice content only; (f) sample copy within 15 calendar days of notifying consumers; page shows "updated 1 January 2026"). Both independent copies agree with the FindLaw text. Only the Legislature's own site was unreachable.
+
+### Cybersecurity version 3 (checked 23 October 2026)
+
+| Statement | Source | Result |
+|---|---|---|
+| Attackers use AI to make convincing deepfake audio and video; confirm requests for sensitive information through a secondary channel when possible; use phishing-resistant multi-factor authentication | FBI and CISA public service announcement I-101626-PSA, 16 October 2026 | Confirmed (page read). The alert is about election and campaign officials; the guidance is general and the course uses only the general steps |
+| HHS names five main healthcare cybersecurity threats: social engineering, ransomware, loss or theft of equipment or data, insider data loss (accidental or intentional), and attacks on network-connected medical devices that may affect patient safety | HHS 405(d) Health Industry Cybersecurity Practices (2023 edition) | Confirmed from the guidance's own summary in search results; the guidance page itself was not fetched. Counsel: confirm the wording |
+| Not added: SIM swap (carrier number takeover) was proposed and not chosen | | |

@@ -137,7 +137,7 @@ describe("the Cybersecurity course specifically", () => {
 
   it("has 10 modules in teaching order, with the AI and HIPAA-connection modules added in version 2", () => {
     expect(content.modules.map((m) => m.key)).toEqual(["why", "passwords", "phishing", "malware", "browsing", "ai_tools", "devices", "physical", "response", "security_hipaa"]);
-    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(112);
+    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(156);
   });
 
   it("keeps its own exam: 15 questions at 80%, from a bank of at least 100", () => {

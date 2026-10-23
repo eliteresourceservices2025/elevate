@@ -20,7 +20,7 @@ export const CYBERSECURITY_COURSE_SLUG = "cybersecurity";
 export const cybersecurityCourse: CourseContent = {
   title: "Cybersecurity basics for the ERS team",
   attestation: {
-    version: "v2",
+    version: "v3",
     text: "I have completed ERS's cybersecurity basics training. I understand that I must keep my passwords and sign-in codes private, use only approved devices, software and networks for work, keep my devices updated, and report anything suspicious or any lost device to my team lead and HR right away.",
   },
   modules: [whyModule, passwordsModule, phishingModule, malwareModule, browsingModule, aiToolsModule, devicesModule, physicalModule, responseModule, securityHipaaModule],
