@@ -5,7 +5,7 @@ category: recruiting
 audience: super_admin, hr_admin, recruiter
 order: 1
 video: post-a-job
-updated: 2026-10-21
+updated: 2026-10-23
 ---
 
 A job opening is what applicants apply to. Open jobs show on the public careers page. Anyone can apply without an account.
@@ -22,8 +22,9 @@ A job opening is what applicants apply to. Open jobs show on the public careers 
    - **Team (optional)**
    - **Web address.** ELEVATE makes one from the title. You can change it only while the job is a draft, because the link may be shared.
 4. Choose the emails applicants get: a "we received your application" email, and an email when they are not selected.
-5. Under **Hiring team**, add Team Leads who should see this job's applicants and fill in scorecards. HR and recruiters always see everything.
-6. Click **Create job (draft)**. You land on the job's page. Later changes use **Edit job** and **Save job**, and a message says **Job saved.**
+5. Under **Resume keywords (optional)**, list the words to look for in resumes. See "Use the keyword match on resumes".
+6. Under **Hiring team**, add Team Leads who should see this job's applicants and fill in scorecards. HR and recruiters always see everything.
+7. Click **Create job (draft)**. You land on the job's page. Later changes use **Edit job** and **Save job**, and a message says **Job saved.**
 
 ![The Recruiting page lists your jobs and applicants.](help:post-a-job/01-recruiting-page.png)
 
@@ -45,7 +46,7 @@ When the text is ready, click **Publish job**. A message says **The job is open 
 
 The careers page itself has its own title, introduction and banner picture.
 
-1. On **Recruiting**, open the **Careers page** link.
+1. On **Recruiting**, click **More**, then **Edit careers page**.
 2. Change the **Page title** and **Introduction**.
 3. To add a banner, click **Add a banner** (or **Change banner**) and choose a picture. Drag it to move it and use **Zoom**. Click **Save banner**.
 4. Save the page. A message says **Careers page saved.**
@@ -56,7 +57,7 @@ Use pictures of the team or the work. Never use a client or a patient.
 
 # Check how it looks
 
-Use **View careers page** or **View job ad** on the Recruiting page to see it as an applicant does.
+Use **View careers page** or **View job ad** on the Recruiting page to see it as an applicant does. The apply form asks people how they heard about the job. A link ending in `?src=linkedin` (or `facebook`, `referral` and so on) fills in the answer for them. See "Tag applicants and see where they come from".
 
 # Common mistakes
 

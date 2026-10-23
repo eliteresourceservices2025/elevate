@@ -3,7 +3,7 @@ title: Erase test applications
 summary: Remove practice applications for good. Only a Super Admin can do this.
 category: recruiting
 audience: super_admin
-order: 6
+order: 14
 updated: 2026-10-21
 ---
 

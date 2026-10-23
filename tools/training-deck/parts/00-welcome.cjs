@@ -18,7 +18,7 @@ module.exports = {
       title: "What you will learn",
       cards: [
         { icon: "LuUsers", head: "Part A: People", text: "Invite, add, organise, onboard and offboard people." },
-        { icon: "LuBriefcase", head: "Part B: Recruiting", text: "Post jobs, review applicants, interview, offer and hire." },
+        { icon: "LuBriefcase", head: "Part B: Recruiting", text: "Post jobs, search and sort applicants, interview, offer and hire." },
         { icon: "LuClock", head: "Part C: Time", text: "The clock, hours, corrections, extra hours, time off and schedules." },
         { icon: "LuFileText", head: "Part D: Documents and growth", text: "Files, policies, signing, training and reviews." },
         { icon: "LuShieldCheck", head: "Part E: Reports and settings", text: "Numbers, roles, support, privacy and moving to ELEVATE." },

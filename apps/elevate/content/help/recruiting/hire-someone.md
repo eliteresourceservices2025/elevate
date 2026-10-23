@@ -3,7 +3,7 @@ title: Hire someone and hand off to onboarding
 summary: Turn a signed offer into a person record, an invitation and an onboarding checklist.
 category: recruiting
 audience: super_admin, hr_admin
-order: 5
+order: 10
 updated: 2026-10-21
 ---
 

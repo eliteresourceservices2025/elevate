@@ -490,13 +490,13 @@
       "h": 20
     },
     "Close job": {
-      "x": 873,
+      "x": 731,
       "y": 108,
       "w": 79,
       "h": 28
     },
     "View job ad": {
-      "x": 960,
+      "x": 818,
       "y": 108,
       "w": 113,
       "h": 28
@@ -549,19 +549,19 @@
     },
     "stage card": {
       "x": 313,
-      "y": 347,
+      "y": 969,
       "w": 910,
       "h": 28
     },
     "Move to": {
       "x": 313,
-      "y": 407,
+      "y": 1029,
       "w": 192,
       "h": 32
     },
     "Close this application": {
       "x": 313,
-      "y": 451,
+      "y": 1073,
       "w": 910,
       "h": 20
     }
@@ -1390,6 +1390,167 @@
       "y": 1170,
       "w": 125,
       "h": 46
+    }
+  },
+  "find-applicants/02-more-filters": {
+    "How it closed": {
+      "x": 313,
+      "y": 297,
+      "w": 219,
+      "h": 32
+    },
+    "Source": {
+      "x": 544,
+      "y": 297,
+      "w": 219,
+      "h": 32
+    },
+    "Tag": {
+      "x": 774,
+      "y": 297,
+      "w": 219,
+      "h": 32
+    },
+    "Keyword match": {
+      "x": 1005,
+      "y": 297,
+      "w": 219,
+      "h": 32
+    },
+    "Only the talent pool": {
+      "x": 313,
+      "y": 367,
+      "w": 16,
+      "h": 16
+    }
+  },
+  "merge-duplicate-applicants/01-duplicates": {},
+  "read-recruiting-reports/01-reports": {},
+  "reword-applicant-emails/01-emails": {},
+  "find-applicants/01-list": {
+    "Name or email": {
+      "x": 313,
+      "y": 201,
+      "w": 219,
+      "h": 32
+    },
+    "Job": {
+      "x": 544,
+      "y": 201,
+      "w": 219,
+      "h": 32
+    },
+    "Stage": {
+      "x": 774,
+      "y": 201,
+      "w": 219,
+      "h": 32
+    },
+    "Apply filters": {
+      "x": 1005,
+      "y": 201,
+      "w": 103,
+      "h": 32
+    },
+    "More filters": {
+      "x": 313,
+      "y": 245,
+      "w": 910,
+      "h": 20
+    },
+    "Possible duplicates": {
+      "x": 947,
+      "y": 80,
+      "w": 151,
+      "h": 32
+    },
+    "Source and tags": {
+      "x": 890,
+      "y": 481,
+      "w": 242,
+      "h": 40
+    }
+  },
+  "tag-applicants-and-track-sources/01-source-and-tags": {
+    "Heard about the job": {
+      "x": 313,
+      "y": 815,
+      "w": 295,
+      "h": 32
+    },
+    "tags": {
+      "x": 313,
+      "y": 923,
+      "w": 213,
+      "h": 14
+    }
+  },
+  "keyword-match-resumes/01-job-keywords": {
+    "Must have": {
+      "x": 330,
+      "y": 276,
+      "w": 342,
+      "h": 64
+    },
+    "Nice to have": {
+      "x": 688,
+      "y": 276,
+      "w": 342,
+      "h": 64
+    }
+  },
+  "keyword-match-resumes/02-keyword-match": {
+    "Found in the resume": {
+      "x": 313,
+      "y": 383,
+      "w": 449,
+      "h": 20
+    },
+    "Not found": {
+      "x": 774,
+      "y": 383,
+      "w": 449,
+      "h": 20
+    }
+  },
+  "talent-pool/01-pool-panel": {
+    "Take out of the pool": {
+      "x": 313,
+      "y": 597,
+      "w": 155,
+      "h": 32
+    },
+    "another job": {
+      "x": 313,
+      "y": 661,
+      "w": 300,
+      "h": 32
+    }
+  },
+  "act-on-many-applicants/01-bulk": {
+    "Select or clear this page": {
+      "x": 313,
+      "y": 183,
+      "w": 170,
+      "h": 28
+    },
+    "Do this": {
+      "x": 313,
+      "y": 243,
+      "w": 219,
+      "h": 32
+    },
+    "Tag": {
+      "x": 544,
+      "y": 243,
+      "w": 219,
+      "h": 32
+    },
+    "Apply to": {
+      "x": 774,
+      "y": 243,
+      "w": 90,
+      "h": 32
     }
   }
 }

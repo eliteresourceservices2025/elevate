@@ -57,26 +57,29 @@ export const firstLinkTo = (list: string, pattern: RegExp) => async (page: Page)
 };
 
 /** The address of the job board with this title. */
-export const jobPath = (title: string) => async (page: Page) => {
-  await page.goto("/recruiting");
-  const link = page.getByRole("link", { name: title }).first();
+export const jobPath = (title: string) => async (page: Page) => `/recruiting/${await jobIdByTitle(page, title)}`;
+
+/** The id of the job with this title, read from the job choice on the Applicants page (so it works however many other jobs exist). */
+const jobIdByTitle = async (page: Page, title: string) => {
+  await page.goto("/recruiting/applicants");
+  const option = page.locator("#ap-job option", { hasText: title }).first();
+  await option.waitFor({ state: "attached" });
+  return (await option.getAttribute("value"))!;
+};
+
+/** The Applicants page narrowed to one job, so only that job's demo people show. */
+export const applicantsOf = (title: string) => async (page: Page) => `/recruiting/applicants?job=${await jobIdByTitle(page, title)}`;
+
+/** The address of an applicant page, found by searching the Applicants page for the name. */
+export const applicantByName = (name: string) => async (page: Page) => {
+  await page.goto(`/recruiting/applicants?q=${encodeURIComponent(name)}`);
+  const link = page.getByRole("link", { name }).first();
   await link.waitFor();
   return (await link.getAttribute("href"))!;
 };
 
-/** The address of an applicant page for the named person, found through the job board. */
-export const applicantPath = (name: string) => async (page: Page) => {
-  await page.goto("/recruiting");
-  await page.locator("main a").first().waitFor();
-  const jobs = [...new Set((await page.locator("main a").evaluateAll((links) => links.map((a) => a.getAttribute("href") ?? ""))).filter((h) => /^\/recruiting\/[0-9a-f-]{36}$/.test(h)))];
-  for (const job of jobs) {
-    await page.goto(job);
-    await page.locator("section[data-stage]").first().waitFor();
-    const link = page.getByRole("link", { name }).first();
-    if (await link.count()) return (await link.getAttribute("href"))!;
-  }
-  throw new Error(`${name} is not on any job board. Is the demo data there?`);
-};
+/** The address of an applicant page for the named person (kept under its old name for the older pictures). */
+export const applicantPath = applicantByName;
 
 export const SHOTS: Shot[] = [
   // Getting started
@@ -485,10 +488,122 @@ export const SHOTS: Shot[] = [
     article: "review-applications",
     file: "02-applicant",
     targets: { "applicant details": (p) => p.getByText("Applicant", { exact: true }).first(), "stage card": (p) => p.getByText("Stage", { exact: true }).first(), "Move to": (p) => p.getByLabel("Move to"), "Close this application": (p) => p.getByText("Close this application") },
-    alt: "An applicant's page: resume, notes, interviews and history.",
+    alt: "An applicant's page: details, keyword match, talent pool, source and tags, then the resume, notes, interviews and history.",
+    viewport: { width: 1280, height: 1500 },
     role: "hr_admin",
     path: applicantPath("Mark Anthony Ramos"),
     ready: (p) => p.getByRole("heading", { name: "Mark Anthony Ramos" }),
+  },
+  // The applicants list and the tools around it
+  {
+    article: "find-applicants",
+    file: "01-list",
+    targets: { "Name or email": (p) => p.getByLabel("Name or email"), "Job": (p) => p.getByLabel("Job", { exact: true }), "Stage": (p) => p.getByLabel("Stage", { exact: true }), "Apply filters": (p) => p.getByRole("button", { name: "Apply filters" }), "More filters": (p) => p.getByText("More filters"), "Possible duplicates": (p) => p.getByRole("link", { name: "Possible duplicates" }), "Source and tags": (p) => p.getByRole("columnheader", { name: "Source and tags" }) },
+    alt: "The Applicants page: filters on top, one row for each applicant.",
+    role: "hr_admin",
+    viewport: { width: 1280, height: 1000 },
+    path: applicantsOf("Virtual Assistant, Medical Billing"),
+    ready: (p) => p.getByRole("link", { name: "Joseph Miller" }).first(),
+  },
+  {
+    article: "find-applicants",
+    file: "02-more-filters",
+    targets: { "How it closed": (p) => p.getByLabel("How it closed"), "Source": (p) => p.getByLabel("Source", { exact: true }), "Tag": (p) => p.getByLabel("Tag", { exact: true }), "Keyword match": (p) => p.getByLabel("Keyword match"), "Only the talent pool": (p) => p.getByLabel("Only the talent pool") },
+    alt: "More filters: how it closed, source, tag, keyword match and the talent pool.",
+    role: "hr_admin",
+    viewport: { width: 1280, height: 1000 },
+    path: applicantsOf("Virtual Assistant, Medical Billing"),
+    ready: (p) => p.getByText("More filters"),
+    prepare: async (p) => {
+      await p.getByText("More filters").click();
+      await p.getByLabel("Only the talent pool").waitFor();
+    },
+  },
+  {
+    article: "act-on-many-applicants",
+    file: "01-bulk",
+    targets: { "Select or clear this page": (p) => p.getByRole("button", { name: "Select or clear this page" }), "Do this": (p) => p.getByLabel("Do this"), "Tag": (p) => p.locator("#bulk-tag"), "Apply to": (p) => p.getByRole("button", { name: /^Apply to/ }) },
+    alt: "Tick applicants, choose what to do, then click Apply.",
+    role: "hr_admin",
+    viewport: { width: 1280, height: 1000 },
+    path: applicantsOf("Virtual Assistant, Medical Billing"),
+    ready: (p) => p.getByRole("button", { name: "Select or clear this page" }),
+    prepare: async (p) => {
+      await p.getByLabel("Select Katrina Dela Cruz").first().check();
+      await p.getByLabel("Select Joseph Miller").first().check();
+      await p.getByLabel("Do this").selectOption("tag");
+      await p.locator("#bulk-tag").selectOption({ index: 1 });
+    },
+  },
+  {
+    article: "tag-applicants-and-track-sources",
+    file: "01-source-and-tags",
+    targets: { "Heard about the job": (p) => p.getByLabel("Heard about the job"), "tags": (p) => p.getByText("Make a new tag") },
+    alt: "On an applicant's page: where they heard about the job, and their tags.",
+    role: "hr_admin",
+    viewport: { width: 1280, height: 1100 },
+    path: applicantByName("Joseph Miller"),
+    ready: (p) => p.getByRole("heading", { name: "Source and tags" }),
+  },
+  {
+    article: "keyword-match-resumes",
+    file: "01-job-keywords",
+    targets: { "Must have": (p) => p.locator("#op-kw-req"), "Nice to have": (p) => p.locator("#op-kw-nice") },
+    alt: "On the job form: the words to look for in resumes.",
+    role: "hr_admin",
+    viewport: { width: 1280, height: 560 },
+    path: async (p) => `/recruiting/${await jobIdByTitle(p, "Virtual Assistant, Medical Billing")}/edit`,
+    ready: (p) => p.locator("#op-kw-req"),
+    prepare: async (p) => {
+      await p.locator("#op-kw-req").evaluate((el) => el.scrollIntoView({ block: "center" }));
+    },
+  },
+  {
+    article: "keyword-match-resumes",
+    file: "02-keyword-match",
+    targets: { "Found in the resume": (p) => p.getByText("Found in the resume"), "Not found": (p) => p.getByText("Not found", { exact: true }) },
+    alt: "An applicant's keyword match: the percentage, the words found and the words missing.",
+    role: "hr_admin",
+    viewport: { width: 1280, height: 1100 },
+    path: applicantByName("Katrina Dela Cruz"),
+    ready: (p) => p.getByRole("heading", { name: "Keyword match" }),
+  },
+  {
+    article: "talent-pool",
+    file: "01-pool-panel",
+    targets: { "Take out of the pool": (p) => p.getByRole("button", { name: "Take out of the pool" }), "another job": (p) => p.getByLabel("Also consider for another open job") },
+    alt: "On an applicant's page: the talent pool panel.",
+    role: "hr_admin",
+    viewport: { width: 1280, height: 1100 },
+    path: applicantByName("Joseph Miller"),
+    ready: (p) => p.getByRole("heading", { name: "Talent pool" }),
+  },
+  {
+    article: "merge-duplicate-applicants",
+    file: "01-duplicates",
+    alt: "Possible duplicates: records that look like the same person.",
+    role: "hr_admin",
+    viewport: { width: 1280, height: 900 },
+    path: "/recruiting/applicants/duplicates",
+    ready: (p) => p.getByRole("heading", { level: 1 }),
+  },
+  {
+    article: "read-recruiting-reports",
+    file: "01-reports",
+    alt: "Recruiting reports: how far applications got, time in each stage, sources and how applications ended.",
+    role: "hr_admin",
+    viewport: { width: 1280, height: 1300 },
+    path: async (p) => `/recruiting/reports?job=${await jobIdByTitle(p, "Virtual Assistant, Medical Billing")}`,
+    ready: (p) => p.getByRole("heading", { level: 1 }),
+  },
+  {
+    article: "reword-applicant-emails",
+    file: "01-emails",
+    alt: "Applicant emails: the built-in wording, and a place to write your own.",
+    role: "hr_admin",
+    viewport: { width: 1280, height: 1100 },
+    path: "/recruiting/email-templates",
+    ready: (p) => p.getByRole("heading", { level: 1 }),
   },
   {
     article: "interviews-and-scorecards",
