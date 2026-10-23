@@ -3,7 +3,9 @@
 // renderer reads them) and for the transcript the player shows beside it. Every line restates the module's approved lesson text:
 // no new facts, no legal claims that are not in the lessons. Lint: content.test.ts.
 
+import captionIds from "./recap-captions.json";
 import durations from "./recap-durations.json";
+import spoken from "./recap-spoken.json";
 
 export type RecapScene =
   | { kind: "statement"; text: string }
@@ -11,7 +13,9 @@ export type RecapScene =
   | { kind: "steps"; heading: string; items: { title: string; text: string }[] }
   | { kind: "layers"; heading: string; items: { label: string; text: string }[] }
   | { kind: "compare"; heading: string; left: { title: string; items: string[] }; right: { title: string; items: string[] }; neutral?: boolean }
-  | { kind: "timeline"; heading: string; items: { when: string; text: string }[] };
+  | { kind: "timeline"; heading: string; items: { when: string; text: string }[] }
+  // an animated video: the words the voice says in one scene, in order (the pictures come from tools/recap-video/learn)
+  | { kind: "spoken"; lines: string[] };
 
 export type Recap = {
   course: "hipaa" | "cybersecurity";
@@ -37,6 +41,8 @@ export function sceneLines(s: RecapScene): string[] {
       return [s.heading, s.left.title, ...s.left.items, s.right.title, ...s.right.items];
     case "timeline":
       return [s.heading, ...s.items.map((i) => `${i.when}: ${i.text}`)];
+    case "spoken":
+      return s.lines;
   }
 }
 
@@ -62,12 +68,13 @@ export function recapSeconds(r: Recap): number {
 /** The plain-text transcript shown beside the video (the same words as the captions). */
 export function recapTranscript(r: Recap): string[] {
   return r.scenes.flatMap((s) => {
+    if (s.kind === "spoken") return [s.lines.join(" ")];
     const l = sceneLines(s);
     return s.kind === "statement" ? [l[0]] : [`${l[0]}: ${l.slice(1).join("; ")}`];
   });
 }
 
-export const RECAPS: Recap[] = [
+const BASE_RECAPS: Recap[] = [
   // ---------------------------------------------------------------- HIPAA
   {
     course: "hipaa",
@@ -91,6 +98,15 @@ export const RECAPS: Recap[] = [
           { title: "ERS", text: "bound by an agreement" },
           { title: "Anyone ERS uses", text: "bound by the same promise" },
           { title: "You", text: "the last link" },
+        ],
+      },
+      {
+        kind: "layers",
+        heading: "Three keys that make the rules work",
+        items: [
+          { label: "Education", text: "everyone knows the rules and why" },
+          { label: "Commitment", text: "everyone does their part, even unwatched" },
+          { label: "Culture", text: "asking and reporting feel normal" },
         ],
       },
       { kind: "statement", text: "Access is not permission. Use information only for the task you were given." },
@@ -291,6 +307,30 @@ export const RECAPS: Recap[] = [
         ],
       },
       { kind: "statement", text: "Real cases usually start with ordinary failures: no risk analysis, an unprotected device, an unapproved vendor." },
+    ],
+  },
+  {
+    course: "hipaa",
+    module: "state_laws",
+    scenes: [
+      { kind: "statement", text: "HIPAA is the floor, not the ceiling. A state law that protects patients more still applies." },
+      { kind: "statement", text: "When HIPAA and a state rule both apply and differ, follow the stricter one." },
+      {
+        kind: "compare",
+        heading: "Two examples",
+        left: { title: "Texas", items: ["Train new staff within 90 days", "Electronic record copy in 15 business days", "Signed training statements kept six years"] },
+        right: { title: "California", items: ["Patients can act on a negligent release", "Clinic breach reports in 15 business days", "Other businesses: 30 calendar days"] },
+      },
+      {
+        kind: "steps",
+        heading: "Not sure which rules apply?",
+        items: [
+          { title: "Read the client sheet", text: "state rules are written there" },
+          { title: "Check the client's state", text: "ask your lead" },
+          { title: "Follow the stricter rule", text: "it protects the patient" },
+          { title: "Report fast", text: "so the client meets its deadline" },
+        ],
+      },
     ],
   },
   {
@@ -578,7 +618,14 @@ export const RECAPS: Recap[] = [
  * retired one they started) would hear words that do not match their lessons, so they get no recap. The recaps were written
  * against the deepened courses: HIPAA version 2 onward, Cybersecurity basics version 2 onward.
  */
-export const RECAP_FROM_VERSION: Record<Recap["course"], number> = { hipaa: 2, cybersecurity: 2 };
+/** Every recap. Where an animated storyboard exists (recap-spoken.json), its spoken words are the scenes. */
+export const RECAPS: Recap[] = BASE_RECAPS.map((r) => {
+  const lines = (spoken as Record<string, string[][]>)[`${r.course}-${r.module}`];
+  return lines ? { ...r, scenes: lines.map((l) => ({ kind: "spoken" as const, lines: l })) } : r;
+});
+
+// HIPAA version 3 is the one the animated videos were written for (state laws added, games added).
+export const RECAP_FROM_VERSION: Record<Recap["course"], number> = { hipaa: 3, cybersecurity: 2 };
 
 /** The recap for a module. When the person's version number is known and older than the recaps were written for, there is none. */
 export function findRecap(course: string, moduleKey: string, version?: number | null): Recap | null {
@@ -589,4 +636,8 @@ export function findRecap(course: string, moduleKey: string, version?: number | 
 }
 
 /** The file served from the app's own origin (the content security policy allows media from `self` only). */
-export const recapFile = (r: Pick<Recap, "course" | "module">) => `/recaps/${r.course}-${r.module}.mp4`;
+/** Videos are not public files: they are served by a route that needs a signed-in person (src/lib/recap-media.ts). */
+export const recapFile = (r: Pick<Recap, "course" | "module">) => `/api/recaps/${r.course}-${r.module}.mp4`;
+
+/** The subtitle file of a video that has one (the player offers it as an option), or null. */
+export const recapCaptions = (r: Pick<Recap, "course" | "module">): string | null => ((captionIds as string[]).includes(`${r.course}-${r.module}`) ? `/api/recaps/${r.course}-${r.module}.vtt` : null);

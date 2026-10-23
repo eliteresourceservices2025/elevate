@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CourseModule } from "@/content/schema";
 import { HEARTBEAT_SECONDS, ACTIVITY_PROMPT_SECONDS } from "@/lib/constants";
 import { clock, post } from "./api-client";
@@ -19,6 +19,8 @@ import { ChevronRight } from "lucide-react";
 export function ModulePlayer(props: {
   assignmentId: string;
   module: CourseModule;
+  /** An update shows only the new or changed screens (their indexes in the module); null shows the whole module. */
+  onlyScreens?: number[] | null;
   seenScreens: number[];
   seconds: number;
   minSeconds: number;
@@ -29,12 +31,20 @@ export function ModulePlayer(props: {
 }) {
   const { assignmentId, module, minSeconds } = props;
   const router = useRouter();
-  const total = module.screens.length;
-  // Start at the first screen not yet seen (or the last one when everything was seen).
-  const firstUnseen = Array.from({ length: total }, (_, i) => i).find((i) => !props.seenScreens.includes(i)) ?? total - 1;
+  // The slides shown, and where each one sits in the whole module (the server counts screens by their place in the module).
+  const screenCount = module.screens.length;
+  const onlyKey = (props.onlyScreens ?? []).join(",");
+  const real = useMemo(() => {
+    const picked = onlyKey ? onlyKey.split(",").map(Number).filter((i) => i >= 0 && i < screenCount) : [];
+    return picked.length > 0 ? picked : Array.from({ length: screenCount }, (_, i) => i);
+  }, [onlyKey, screenCount]);
+  const shown = real.map((i) => module.screens[i]);
+  const total = shown.length;
+  // Start at the first slide not yet seen (or the last one when everything was seen).
+  const firstUnseen = real.findIndex((r) => !props.seenScreens.includes(r)) === -1 ? total - 1 : real.findIndex((r) => !props.seenScreens.includes(r));
   const [index, setIndex] = useState(firstUnseen);
   // the furthest slide reached, so the step journey lets the person jump back to any slide up to here
-  const [reached, setReached] = useState(Math.max(firstUnseen, ...props.seenScreens));
+  const [reached, setReached] = useState(Math.max(firstUnseen, ...real.map((r, i) => (props.seenScreens.includes(r) ? i : 0))));
   if (index > reached) setReached(index);
   const [seconds, setSeconds] = useState(props.seconds);
   const [message, setMessage] = useState<string | null>(null);
@@ -60,8 +70,8 @@ export function ModulePlayer(props: {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- tells the server this screen was shown; state is only set after the call returns
-    void open(index);
-  }, [index, open]);
+    void open(real[index]);
+  }, [index, open, real]);
 
   // Activity: anything the person does resets the idle clock.
   useEffect(() => {
@@ -101,7 +111,6 @@ export function ModulePlayer(props: {
 
   const enough = seconds >= minSeconds;
   const onLast = index === total - 1;
-  const screen = module.screens[index];
   const remaining = Math.max(0, minSeconds - seconds);
 
   const finish = async () => {
@@ -135,7 +144,7 @@ export function ModulePlayer(props: {
     <>
       <LessonStage
         title={module.title}
-        screens={module.screens}
+        screens={shown}
         index={index}
         onIndex={setIndex}
         reachedIndex={reached}

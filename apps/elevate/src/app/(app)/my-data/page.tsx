@@ -196,7 +196,7 @@ export default async function MyDataPage() {
           <ul className="space-y-1 text-sm">
             {data.training.map((t, i) => (
               <li key={i}>
-                {t.course} (version {t.version}): {t.status}, assigned {t.assignedOn}, due {t.dueOn}
+                {t.course}: {t.status}, assigned {t.assignedOn}, due {t.dueOn}
                 {t.passedOn ? `, passed ${t.passedOn}` : ""}, about {t.minutesSpent} minutes
                 {t.certificate ? `; certificate ${t.certificate}, valid until ${t.validUntil}` : ""}
               </li>

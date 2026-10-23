@@ -106,5 +106,27 @@ export function changedModuleKeys(oldModules: readonly ModuleLike[], newModules:
   return newModules.filter((m) => trackKeys.has(m.key) && before.get(m.key) !== JSON.stringify(m)).map((m) => m.key);
 }
 
+type ScopedModuleLike = { key: string; screens?: readonly { id: string }[] };
+export type UpdateScope = { key: string; /** Indexes, in the new module, of the screens that are new or changed. */ screens: number[] };
+
+/**
+ * What a certified person must learn again, by SCREEN: for each module in their track, the screens of the new version that are new or
+ * changed since the version they were certified on. A screen counts as unchanged only when an identical one (same id, same content)
+ * was in that module before; a module that did not exist then is all new. A module whose screens are all unchanged (only its title,
+ * summary or key points moved) is left out: there is nothing new to learn in it.
+ */
+export function changedScopes(oldModules: readonly ScopedModuleLike[], newModules: readonly ScopedModuleLike[], trackKeys: ReadonlySet<string>): UpdateScope[] {
+  const before = new Map(oldModules.map((m) => [m.key, new Map((m.screens ?? []).map((s) => [s.id, JSON.stringify(s)]))]));
+  const out: UpdateScope[] = [];
+  for (const m of newModules) {
+    if (!trackKeys.has(m.key)) continue;
+    const screens = m.screens ?? [];
+    const old = before.get(m.key);
+    const indexes = screens.map((s, i) => (old && old.get(s.id) === JSON.stringify(s) ? -1 : i)).filter((i) => i >= 0);
+    if (indexes.length > 0) out.push({ key: m.key, screens: indexes });
+  }
+  return out;
+}
+
 /** Questions for an update module: five, or fewer when the changed modules have fewer; none means it cannot be examined. */
 export const updateQuestionCount = (available: number): number => Math.min(UPDATE_QUESTIONS, Math.max(0, available));

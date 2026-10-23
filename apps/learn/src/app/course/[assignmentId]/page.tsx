@@ -29,12 +29,13 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
         {doneCount} of {modules.length} modules done · due {assignment.dueOn}
       </p>
 
+
       <ol className="plain modules">
-        {modules.map((m) => (
+        {modules.map((m, i) => (
           <li key={m.key} className={`card module${m.completed ? " done" : ""}${m.locked ? " locked" : ""}`}>
             <div className="row">
               <strong>
-                {m.position}. {m.title}
+                {i + 1}. {m.title}
               </strong>
               <span className="muted">{m.completed ? "Done" : m.locked ? "Locked" : m.seconds > 0 ? "In progress" : "Not started"}</span>
             </div>

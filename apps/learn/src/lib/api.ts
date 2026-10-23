@@ -186,8 +186,7 @@ async function moduleSeconds(ctx: Ctx, assignmentId: string, key: string): Promi
   // Reads go through row-level security, which needs the person set for the transaction.
   const rows = await withUser(ctx.sql, ctx.userId, (tx) => tx`
     select coalesce((select sum(seconds) from learn.module_time where assignment_id = ${assignmentId}::uuid and module_key = ${key}), 0)::int as seconds,
-           coalesce((select m.min_seconds from learn.assignments a join learn.version_modules m on m.version_id = a.version_id
-                     where a.id = ${assignmentId}::uuid and m.module_key = ${key}), 0)::int as min_seconds`);
+           coalesce(learn.assignment_min_seconds(${assignmentId}::uuid, ${key}), 0)::int as min_seconds`);
   return { seconds: rows[0].seconds as number, minSeconds: rows[0].min_seconds as number };
 }
 

@@ -13,7 +13,13 @@ describe("the recap panel", () => {
     expect(html).toContain("Optional: watch a");
     expect(html).toContain('preload="none"');
     expect(html).not.toMatch(/autoplay/i);
-    expect(html).toContain('src="/recaps/hipaa-associates.mp4"');
+    expect(html).toContain('src="/api/recaps/hipaa-associates.mp4"');
+  });
+
+  it("has no download button, no picture-in-picture and no casting", () => {
+    expect(html).toContain('controlsList="nodownload noremoteplayback"');
+    expect(html).toContain("disablePictureInPicture");
+    expect(html).toContain("disableRemotePlayback");
   });
 
   it("gives the same words as text, says it has no sound, and reminds that the module is the required part", () => {
@@ -21,7 +27,7 @@ describe("the recap panel", () => {
     expect(html).toContain("captions on screen");
     expect(html).not.toMatch(/muted/);
     expect(html).toContain("Read the recap as text");
-    expect(html).toContain("No agreement, no information");
+    expect(html).toContain("A business associate does work for a covered entity");
     expect(html).toContain("required part");
   });
 });

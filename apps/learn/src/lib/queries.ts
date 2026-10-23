@@ -62,7 +62,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
     const content = a.content as CourseContent;
 
     const mods = await tx`
-      select m.module_key, m.title, m.position, m.estimated_minutes, m.min_seconds, m.screen_count,
+      select m.module_key, m.title, m.position, m.estimated_minutes, learn.assignment_min_seconds(${assignmentId}::uuid, m.module_key) as min_seconds, m.screen_count, learn.update_screen_indexes(${assignmentId}::uuid, m.module_key) as only_screens,
              exists (select 1 from learn.module_completions c where c.assignment_id = ${assignmentId} and c.module_key = m.module_key) as completed,
              coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = ${assignmentId} and t.module_key = m.module_key), 0)::int as seconds
       from learn.assignment_modules(${assignmentId}::uuid) m
@@ -75,9 +75,10 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
         title: m.title as string,
         summary,
         position: m.position as number,
-        estimatedMinutes: m.estimated_minutes as number,
+        // an update teaches only the new or changed screens, so it shows their number and their share of the time
+        estimatedMinutes: m.only_screens ? Math.max(1, Math.ceil(((m.estimated_minutes as number) * (m.only_screens as number[]).length) / Math.max(1, m.screen_count as number))) : (m.estimated_minutes as number),
         minSeconds: m.min_seconds as number,
-        screenCount: m.screen_count as number,
+        screenCount: m.only_screens ? (m.only_screens as number[]).length : (m.screen_count as number),
         completed: m.completed as boolean,
         seconds: m.seconds as number,
         locked: !earlierDone,
@@ -100,10 +101,9 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
     const lastFail = attempts.filter((x) => x.status === "submitted" && x.passed !== true).at(-1);
     const waitUntil = lastFail?.submittedAt ? new Date(Date.parse(lastFail.submittedAt) + (config.waitMinutesAfterFail ?? 60) * 60_000) : null;
     const trackConfig = config.tracks[a.track as string] ?? { questions: 0 };
-    // An update module asks only what its changed modules can supply, up to the count set when it was assigned.
-    const [scope] = await tx`
-      select least(s.question_count, (select count(*) from learn.questions q where q.version_id = ${a.version_id as string}::uuid and q.module_key = any(s.module_keys)))::int as questions
-      from learn.update_scopes s where s.assignment_id = ${assignmentId}`;
+    // An update asks the count set when it was assigned (already the smaller of 5 and what its changed modules can supply). The app role cannot
+    // read the question bank, so it is not counted here.
+    const [scope] = await tx`select s.question_count::int as questions from learn.update_scopes s where s.assignment_id = ${assignmentId}`;
     const [acc] = await tx`select exists (select 1 from learn.attestations where assignment_id = ${assignmentId}) as accepted`;
 
     const [cert] = await tx`
@@ -254,6 +254,8 @@ export type ModuleView = {
   /** The version number the person is on (a recap is only offered for versions its words were written for). */
   version: number;
   module: CourseModule;
+  /** For an update: the indexes of the screens that are new or changed, which are the only ones the person learns. Null = the whole module. */
+  onlyScreens: number[] | null;
   seenScreens: number[];
   seconds: number;
   minSeconds: number;
@@ -273,12 +275,15 @@ export async function getModuleView(sql: Sql, userId: string, assignmentId: stri
     const found = (a.content as CourseContent).modules.find((m) => m.key === key);
     if (!found) return null;
     const seen = await tx`select screen_index from learn.module_screens where assignment_id = ${assignmentId} and module_key = ${key} order by screen_index`;
+    const [scoped] = await tx`select learn.update_screen_indexes(${assignmentId}::uuid, ${key}) as idx`;
+    const onlyScreens = (scoped?.idx as number[] | null) ?? null;
     const next = overview.modules[index + 1];
     return {
       assignmentId,
       courseSlug: a.slug as string,
       version: a.version as number,
       module: found,
+      onlyScreens,
       seenScreens: seen.map((r) => r.screen_index as number),
       seconds: state.seconds,
       minSeconds: state.minSeconds,
@@ -288,6 +293,7 @@ export async function getModuleView(sql: Sql, userId: string, assignmentId: stri
   });
 }
 
+/** Clips that read an exam question and its choices aloud, in the order shown: the stem, then "Option A" and the choice, and so on. Null where none was made. */
 export type ExamItem = { position: number; questionId: string; type: string; stem: string; options: { id: string; text: string }[]; selected: string[] };
 
 export type AttemptView = {
@@ -323,12 +329,13 @@ export async function getAttemptView(sql: Sql, userId: string, attemptId: string
         where i.attempt_id = ${attemptId} order by i.position`;
       items = rows.map((r) => {
         const byId = new Map((r.options as { id: string; text: string }[]).map((o) => [o.id, o.text]));
+        const shown = (r.option_order as string[]).map((id) => ({ id, text: byId.get(id) ?? "" }));
         return {
           position: r.position as number,
           questionId: r.question_id as string,
           type: r.type as string,
           stem: r.stem as string,
-          options: (r.option_order as string[]).map((id) => ({ id, text: byId.get(id) ?? "" })),
+          options: shown,
           selected: r.selected as string[],
         };
       });
@@ -369,7 +376,6 @@ export async function getAttemptView(sql: Sql, userId: string, attemptId: string
 export type RecordEntry = {
   assignmentId: string;
   courseTitle: string;
-  version: number;
   track: string;
   status: string;
   assignedOn: string;
@@ -380,39 +386,49 @@ export type RecordEntry = {
   attempts: number;
   /** The score of the passing try (the person's own score: it is theirs to see). */
   scorePercent: number | null;
-  certificate: { reference: string; issuedOn: string; endsOn: string; revoked: boolean } | null;
+  /** The newest certificate for this course, even from an earlier round (a renewal in progress must not hide a valid certificate). */
+  certificate: { assignmentId: string; reference: string; issuedOn: string; endsOn: string; revoked: boolean } | null;
 };
 
-/** Everything the person has done in training, newest first: one entry per assignment, with its certificate if there is one. */
+/**
+ * The person's training, newest first: ONE entry per course (the current round) with its newest certificate. Earlier rounds and older
+ * course versions stay in the database as evidence for HR and the privacy team, but the learner is not shown them, and no version number.
+ */
 export async function getRecord(sql: Sql, userId: string): Promise<RecordEntry[]> {
   return withUser(sql, userId, async (tx) => {
     const rows = await tx`
-      select a.id, co.title, cv.version, a.track, a.status, a.assigned_at::date::text as assigned_on, a.due_on::text as due_on,
+      select distinct on (a.course_id) a.id, co.title, a.track, a.status, a.assigned_at::date::text as assigned_on, a.due_on::text as due_on,
              a.passed_at::date::text as passed_on,
              coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = a.id), 0)::int as seconds,
              (select count(*) from learn.exam_attempts x where x.assignment_id = a.id and x.status = 'submitted')::int as attempts,
              (select x.score_percent::float from learn.exam_attempts x where x.assignment_id = a.id and x.passed order by x.attempt_no desc limit 1) as score,
-             c.reference, c.issued_on::text as issued_on, c.ends_on::text as ends_on,
+             c.assignment_id as cert_assignment_id, c.reference, c.issued_on::text as issued_on, c.ends_on::text as ends_on,
              exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id) as revoked
       from learn.assignments a
       join learn.courses co on co.id = a.course_id
-      join learn.course_versions cv on cv.id = a.version_id
-      left join learn.certificates c on c.assignment_id = a.id
-      order by a.assigned_at desc`;
-    return rows.map((r) => ({
-      assignmentId: r.id as string,
-      courseTitle: r.title as string,
-      version: r.version as number,
-      track: r.track as string,
-      status: r.status as string,
-      assignedOn: r.assigned_on as string,
-      dueOn: r.due_on as string,
-      passedOn: (r.passed_on as string | null) ?? null,
-      minutesSpent: Math.round((r.seconds as number) / 60),
-      attempts: r.attempts as number,
-      scorePercent: (r.score as number | null) ?? null,
-      certificate: r.reference ? { reference: r.reference as string, issuedOn: r.issued_on as string, endsOn: r.ends_on as string, revoked: r.revoked as boolean } : null,
-    }));
+      left join lateral (
+        select c2.id, c2.assignment_id, c2.reference, c2.issued_on, c2.ends_on
+        from learn.certificates c2 join learn.assignments a2 on a2.id = c2.assignment_id
+        where a2.course_id = a.course_id
+        order by c2.issued_on desc, c2.ends_on desc limit 1
+      ) c on true
+      where a.status <> 'cancelled'
+      order by a.course_id, (a.reason = 'update'), a.assigned_at desc`;
+    return rows
+      .map((r) => ({
+        assignmentId: r.id as string,
+        courseTitle: r.title as string,
+        track: r.track as string,
+        status: r.status as string,
+        assignedOn: r.assigned_on as string,
+        dueOn: r.due_on as string,
+        passedOn: (r.passed_on as string | null) ?? null,
+        minutesSpent: Math.round((r.seconds as number) / 60),
+        attempts: r.attempts as number,
+        scorePercent: (r.score as number | null) ?? null,
+        certificate: r.reference ? { assignmentId: r.cert_assignment_id as string, reference: r.reference as string, issuedOn: r.issued_on as string, endsOn: r.ends_on as string, revoked: r.revoked as boolean } : null,
+      }))
+      .sort((x, y) => (x.assignedOn < y.assignedOn ? 1 : x.assignedOn > y.assignedOn ? -1 : 0));
   });
 }
 

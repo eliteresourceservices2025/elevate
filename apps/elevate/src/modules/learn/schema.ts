@@ -555,6 +555,8 @@ export const updateScopes = learn
         .notNull()
         .references(() => courseVersions.id),
       moduleKeys: text("module_keys").array().notNull(),
+      // which screens of each changed module are new or changed: { "<module key>": [screen index, ...] }. Null (older rows) = whole modules. Migration 0099.
+      screens: jsonb("screens"),
       questionCount: smallint("question_count").notNull(),
       createdAt: stamp("created_at"),
     },

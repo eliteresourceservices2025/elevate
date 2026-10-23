@@ -1,14 +1,14 @@
 {
- "hipaa-foundations": 80,
- "hipaa-phi": 89,
- "hipaa-privacy": 86,
- "hipaa-rights": 89,
- "hipaa-associates": 83,
- "hipaa-security": 71,
- "hipaa-incidents": 86,
- "hipaa-enforcement": 87,
- "hipaa-lab_public": 76,
- "hipaa-lab_records": 87,
+ "hipaa-foundations": 79,
+ "hipaa-phi": 74,
+ "hipaa-privacy": 79,
+ "hipaa-rights": 73,
+ "hipaa-associates": 66,
+ "hipaa-security": 75,
+ "hipaa-incidents": 74,
+ "hipaa-enforcement": 82,
+ "hipaa-lab_public": 67,
+ "hipaa-lab_records": 65,
  "cybersecurity-why": 79,
  "cybersecurity-passwords": 74,
  "cybersecurity-phishing": 79,
@@ -18,5 +18,6 @@
  "cybersecurity-devices": 78,
  "cybersecurity-physical": 77,
  "cybersecurity-response": 85,
- "cybersecurity-security_hipaa": 79
+ "cybersecurity-security_hipaa": 79,
+ "hipaa-state_laws": 66
 }

@@ -32,7 +32,7 @@ export type MyData = {
   documents: { title: string; type: string; expiresOn: string | null; verified: boolean; uploadedAt: string }[];
   acknowledgments: { title: string; kind: string; version: number | null; at: string }[];
   /** Training from ELEVATE Learn: dates, status, time and certificate references. Never answers or question text. */
-  training: { course: string; version: number; track: string; status: string; assignedOn: string; dueOn: string; passedOn: string | null; minutesSpent: number; certificate: string | null; validUntil: string | null }[];
+  training: { course: string; track: string; status: string; assignedOn: string; dueOn: string; passedOn: string | null; minutesSpent: number; certificate: string | null; validUntil: string | null }[];
   /** Quarterly practice answers from ELEVATE Learn: the quarter and whether the better answer was chosen. A nudge, never a score. */
   practice: { course: string; quarter: string; choseBetter: boolean }[];
   requests: { category: string; status: string; createdAt: string }[];

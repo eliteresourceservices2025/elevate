@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, addonNeed, assignmentNeed, changedModuleKeys, daysBetween, describeDue, isOverdue, isoWeekKey, reminderDue, trackFor, updateQuestionCount } from "./rules";
+import { addDays, addonNeed, assignmentNeed, changedModuleKeys, changedScopes, daysBetween, describeDue, isOverdue, isoWeekKey, reminderDue, trackFor, updateQuestionCount } from "./rules";
 
 const TODAY = "2026-10-12";
 const base = { today: TODAY, startDate: null as string | null, openAssignment: false, latestCertificateEndsOn: null as string | null, assignedToPhiClient: false };
@@ -118,5 +118,33 @@ describe("update modules", () => {
     expect(updateQuestionCount(40)).toBe(5);
     expect(updateQuestionCount(3)).toBe(3);
     expect(updateQuestionCount(0)).toBe(0);
+  });
+});
+
+describe("changedScopes (an update teaches only the new or changed screens)", () => {
+  const screen = (id: string, text = "same") => ({ id, text });
+  const mod = (key: string, screens: { id: string; text: string }[], extra = {}) => ({ key, screens, ...extra });
+  const track = new Set(["a", "b", "c"]);
+
+  it("names the screens that are new or changed, by their place in the new module, and nothing else", () => {
+    const before = [mod("a", [screen("s1"), screen("s2"), screen("s3")]), mod("b", [screen("s1")])];
+    const after = [mod("a", [screen("s1"), screen("s2", "reworded"), screen("s3"), screen("s4")]), mod("b", [screen("s1")]), mod("c", [screen("n1"), screen("n2")])];
+    expect(changedScopes(before, after, track)).toEqual([
+      { key: "a", screens: [1, 3] },
+      { key: "c", screens: [0, 1] },
+    ]);
+  });
+
+  it("leaves a module out when only its title, summary or key points changed, and respects the track", () => {
+    const before = [mod("a", [screen("s1")], { summary: "old" })];
+    const after = [mod("a", [screen("s1")], { summary: "new" }), mod("z", [screen("x")])];
+    expect(changedScopes(before, after, track)).toEqual([]);
+    expect(changedScopes(before, [mod("a", [screen("s1", "changed")])], new Set(["b"]))).toEqual([]);
+  });
+
+  it("treats a moved screen with the same id and content as unchanged", () => {
+    const before = [mod("a", [screen("s1"), screen("s2")])];
+    const after = [mod("a", [screen("s2"), screen("s1"), screen("s9")])];
+    expect(changedScopes(before, after, track)).toEqual([{ key: "a", screens: [2] }]);
   });
 });

@@ -67,14 +67,14 @@ describe("recap videos", () => {
   it("finds a recap by course and module, and builds its file path under the app's own origin", () => {
     const r = findRecap("hipaa", "associates");
     expect(r).not.toBeNull();
-    expect(recapFile(r!)).toBe("/recaps/hipaa-associates.mp4");
+    expect(recapFile(r!)).toBe("/api/recaps/hipaa-associates.mp4");
     expect(findRecap("hipaa", "no-such-module")).toBeNull();
     expect(findRecap("someclient-requirements", "associates")).toBeNull();
   });
 
   it("has the rendered file in place for every recap, of a sensible size", () => {
     for (const r of RECAPS) {
-      const file = resolve(__dirname, "../../public", recapFile(r).slice(1));
+      const file = resolve(__dirname, "../../media/recaps", `${r.course}-${r.module}.mp4`);
       expect(existsSync(file), `missing ${recapFile(r)} (render it: see docs/learn/13-recap-videos.md)`).toBe(true);
       const size = statSync(file).size;
       expect(size, recapFile(r)).toBeGreaterThan(20_000);
@@ -91,5 +91,14 @@ describe("recaps and course versions", () => {
     // an unknown version number (a caller that does not know it) keeps the recap, and a module with none still has none
     expect(findRecap("cybersecurity", "why")).not.toBeNull();
     expect(findRecap("hipaa", "no-such-module", 9)).toBeNull();
+  });
+});
+
+describe("recap videos are private and have optional subtitles", () => {
+  it("serves videos from a signed-in route, never a public file", () => {
+    for (const r of RECAPS) {
+      expect(recapFile(r)).toMatch(/^\/api\/recaps\/[a-z_-]+\.mp4$/);
+      expect(existsSync(resolve(__dirname, "../../public/recaps", `${r.course}-${r.module}.mp4`)), `${r.module} must not be in public/`).toBe(false);
+    }
   });
 });

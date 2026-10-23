@@ -70,7 +70,7 @@ async function certifiedOn(a: { courseId: string; v1: string }, clientId: string
 }
 
 /** A new version of the add-on: `change` edits the content, `material` says whether people must relearn what changed. */
-async function publishVersion2(a: Awaited<ReturnType<typeof liveAddon>>, change: (c: { modules: { key: string; summary?: string }[] }) => void, material: boolean) {
+async function publishVersion2(a: Awaited<ReturnType<typeof liveAddon>>, change: (c: { modules: { key: string; summary?: string; screens?: { id: string; title: string }[] }[] }) => void, material: boolean) {
   const draft = await tx((t) => svc.createDraft(t, { courseSlug: a.slug, note: "Changed wording", actorId: a.editor }));
   await tx((t) =>
     svc.editContent(t, {
@@ -78,7 +78,7 @@ async function publishVersion2(a: Awaited<ReturnType<typeof liveAddon>>, change:
       stamp: 0,
       actorId: a.editor,
       change: (content) => {
-        const next = structuredClone(content) as unknown as { modules: { key: string; summary?: string }[] };
+        const next = structuredClone(content) as unknown as { modules: { key: string; summary?: string; screens?: { id: string; title: string }[] }[] };
         change(next);
         return next as never;
       },
@@ -107,13 +107,16 @@ describe("update modules", () => {
     // nothing yet: the published version is the one they hold
     expect(await jobs.runLearnAssign(TODAY, scope, a.slug)).toMatchObject({ updates: 0 });
 
-    const v2 = await publishVersion2(a, (c) => { c.modules.find((m) => m.key === changedKey)!.summary = "A new summary that says something different about this module."; }, true);
+    const v2 = await publishVersion2(a, (c) => { c.modules.find((m) => m.key === changedKey)!.screens![0].title = "A reworded first screen"; }, true);
     const run = await jobs.runLearnAssign(TODAY, scope, a.slug);
     expect(run).toMatchObject({ updates: 1 });
 
     const up = await updateFor(person.id, a.courseId);
     expect(up).toMatchObject({ status: "assigned", track: "full", due_on: plus(TODAY, 30), version_id: v2.versionId });
     expect(up.module_keys).toEqual([changedKey]);
+    // and only the screen that changed (the first), not the whole module
+    const [scoped] = await rows<{ screens: Record<string, number[]> }>(sql`select screens from learn.update_scopes where assignment_id = ${up.id}`);
+    expect(scoped.screens).toEqual({ [changedKey]: [0] });
     expect(up.question_count).toBeGreaterThanOrEqual(1);
     expect(up.question_count).toBeLessThanOrEqual(5);
 
@@ -125,13 +128,45 @@ describe("update modules", () => {
     expect(await jobs.runLearnAssign(TODAY, scope, a.slug)).toMatchObject({ updates: 0 });
   });
 
+  it("finishing a scoped module needs only its changed screens and a share of the reading time", async () => {
+    const a = await liveAddon();
+    const person = await certifiedOn(a, a.clientId, "2027-01-20");
+    const scope = { userIds: [person.id] };
+    const [first] = await rows<{ module_key: string; min_seconds: number; screen_count: number }>(sql`select module_key, min_seconds, screen_count from learn.version_modules where version_id = ${a.v1} order by position limit 1`);
+    await publishVersion2(a, (c) => { c.modules.find((m) => m.key === first.module_key)!.screens![0].title = "A reworded first screen"; }, true);
+    await jobs.runLearnAssign(TODAY, scope, a.slug);
+    const up = await updateFor(person.id, a.courseId);
+
+    const [{ n: need }] = await rows<{ n: number }>(sql`select learn.assignment_min_seconds(${up.id}::uuid, ${first.module_key}) as n`);
+    expect(need).toBeLessThanOrEqual(first.min_seconds);
+    const complete = () => db.execute(sql`select learn.complete_module(${person.id}::uuid, ${up.id}::uuid, ${first.module_key})`);
+    const refused = async (re: RegExp) => {
+      try {
+        await complete();
+      } catch (e) {
+        expect(String((e as { cause?: { message?: string } }).cause?.message ?? e)).toMatch(re);
+        return;
+      }
+      throw new Error("it was not refused");
+    };
+    // nothing opened yet: refused
+    await refused(/screens_missing/);
+    // the changed screen opened, but not enough reading time for it: refused
+    await db.execute(sql`insert into learn.module_screens (assignment_id, user_id, module_key, screen_index) values (${up.id}, ${person.id}, ${first.module_key}, 0)`);
+    if (need > 0) await refused(/time_missing/);
+    // the share of the time that matches the changed screens is enough: no need to open the other screens
+    await db.execute(sql`insert into learn.module_time (assignment_id, user_id, module_key, day, seconds) values (${up.id}, ${person.id}, ${first.module_key}, ${TODAY}::date, ${need})`);
+    await complete();
+    expect((await rows(sql`select 1 from learn.module_completions where assignment_id = ${up.id} and module_key = ${first.module_key}`)).length).toBe(1);
+  });
+
   it("a change that is not marked material, or that touches nothing in the person's track, assigns nothing", async () => {
     const a = await liveAddon();
     const person = await certifiedOn(a, a.clientId, "2027-01-20");
     const scope = { userIds: [person.id] };
     const [first] = await rows<{ module_key: string }>(sql`select module_key from learn.version_modules where version_id = ${a.v1} order by position limit 1`);
 
-    await publishVersion2(a, (c) => { c.modules.find((m) => m.key === first.module_key)!.summary = "Only a wording change, not marked material."; }, false);
+    await publishVersion2(a, (c) => { c.modules.find((m) => m.key === first.module_key)!.screens![0].title = "A reworded first screen"; }, false);
     expect(await jobs.runLearnAssign(TODAY, scope, a.slug)).toMatchObject({ updates: 0 });
     expect(await updateFor(person.id, a.courseId)).toBeUndefined();
   });
@@ -144,7 +179,7 @@ describe("update modules", () => {
     // the open one is mid-way through a renewal on version 1
     await db.execute(sql`insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on, status) values (${openOne.id}, ${a.courseId}, ${a.v1}, 'full', 'renewal', ${plus(TODAY, 20)}::date, 'in_progress')`);
     const [first] = await rows<{ module_key: string }>(sql`select module_key from learn.version_modules where version_id = ${a.v1} order by position limit 1`);
-    await publishVersion2(a, (c) => { c.modules.find((m) => m.key === first.module_key)!.summary = "Material wording change for everyone to relearn."; }, true);
+    await publishVersion2(a, (c) => { c.modules.find((m) => m.key === first.module_key)!.screens![0].title = "A reworded first screen"; }, true);
 
     await jobs.runLearnAssign(TODAY, { userIds: [openOne.id, expired.id, never.id] }, a.slug);
     expect(await updateFor(openOne.id, a.courseId)).toBeUndefined();
@@ -156,7 +191,7 @@ describe("update modules", () => {
     const a = await liveAddon();
     const person = await certifiedOn(a, a.clientId, "2027-01-20");
     const [first] = await rows<{ module_key: string }>(sql`select module_key from learn.version_modules where version_id = ${a.v1} order by position limit 1`);
-    await publishVersion2(a, (c) => { c.modules.find((m) => m.key === first.module_key)!.summary = "Changed so the update covers this module only."; }, true);
+    await publishVersion2(a, (c) => { c.modules.find((m) => m.key === first.module_key)!.screens![0].title = "A reworded first screen"; }, true);
     await jobs.runLearnAssign(TODAY, { userIds: [person.id] }, a.slug);
     const up = (await updateFor(person.id, a.courseId))!;
 
