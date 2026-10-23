@@ -1,4 +1,4 @@
-# 16. HIPAA version 3: go-live checklist
+# 16. HIPAA and Cybersecurity version 3: go-live checklist
 
 HR signed off on 23 October 2026. This is the order for putting it live, and what to check first. Nothing here has been run against production.
 
@@ -23,4 +23,4 @@ HR signed off on 23 October 2026. This is the order for putting it live, and wha
 
 - The lofi music track is git-ignored: keep the licensed file somewhere safe so the videos can be rebuilt (`audio/cs/bgm.mp3`).
 - The update's exam and screens have been tested in the database and in unit tests, but not yet walked through in a browser with a real old-version certificate holder: do that once on a staging copy.
-- Cybersecurity is not part of this release.
+- **Cybersecurity v3 is ready for the same release** (committed 23 October 2026): games in all ten modules, a "verify through a second channel" screen, the HHS five threats activity, ten animated recaps with subtitles, a material update (people with a valid certificate get only the new screens). Publish it the same way: `pnpm learn:publish --course cybersecurity --publish --material --reviewer <email> --counsel-date <date>`. Counsel: confirm the HHS five-threats wording (see the source check).
