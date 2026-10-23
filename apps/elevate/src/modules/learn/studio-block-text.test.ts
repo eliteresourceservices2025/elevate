@@ -29,3 +29,11 @@ describe("interactive blocks as editable text", () => {
     expect(parseBranch("Caller\nReply |  | ok\nOther | 5 | fine")[0].choices.map((c) => c.mood)).toEqual([0, 5]);
   });
 });
+
+describe("the customer record beside a call", () => {
+  it("round-trips label and value lines", async () => {
+    const { formatRecord, parseRecord } = await import("./studio-block-text");
+    const rows = [{ label: "Caller", value: "Maria R. (invented)" }, { label: "Request", value: "Update on a request sent three days ago" }];
+    expect(parseRecord(formatRecord(rows))).toEqual(rows);
+  });
+});

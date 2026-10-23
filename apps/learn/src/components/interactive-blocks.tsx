@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical } from "lucide-react";
+import { motion } from "motion/react";
 import type { Block } from "@/content/schema";
 import { Inline } from "./inline";
+import { celebrate } from "@/lib/celebrate";
+import { Workstation } from "./workstation";
 
 // The interactive lesson blocks. Everything here is practice: nothing is graded, nothing is sent to the server and nothing is kept
 // in browser storage (a streak lasts until the page is closed). Motion is CSS only and switched off by "reduce motion".
@@ -29,7 +36,7 @@ export function Meter({ label, value }: { label: string; value: number }) {
   const tone = v >= 66 ? "calm" : v >= 34 ? "uneasy" : "upset";
   return (
     <div className={`meter ${tone}`} role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={v}>
-      <div className="meter-fill" style={{ width: `${v}%` }} />
+      <motion.div className="meter-fill" initial={false} animate={{ width: `${v}%` }} transition={{ type: "spring", stiffness: 140, damping: 20 }} />
       <span className="meter-text">
         {label}: {tone === "calm" ? "calm" : tone === "uneasy" ? "uneasy" : "upset"}
       </span>
@@ -39,53 +46,58 @@ export function Meter({ label, value }: { label: string; value: number }) {
 
 // ---- Sort it -------------------------------------------------------------------------------------------------------------------
 
+function SortRow({ id, label, pos, last, state, onMove }: { id: string; label: string; pos: number; last: boolean; state: "" | "good" | "bad"; onMove: (from: number, to: number) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`${isDragging ? "dragging" : ""}${state ? ` ${state}` : ""}`}>
+      <span className="grip" data-dnd-handle {...attributes} {...listeners} aria-label={`Drag to reorder: ${label}`}>
+        <GripVertical size={18} aria-hidden="true" />
+      </span>
+      <span className="sortlabel">{label}</span>
+      <span className="sortbtns">
+        <button type="button" className="secondary" aria-label={`Move up: ${label}`} disabled={pos === 0} onClick={() => onMove(pos, pos - 1)}>
+          Up
+        </button>
+        <button type="button" className="secondary" aria-label={`Move down: ${label}`} disabled={last} onClick={() => onMove(pos, pos + 1)}>
+          Down
+        </button>
+      </span>
+    </li>
+  );
+}
+
 export function SortBlock({ block }: { block: Of<"sort"> }) {
   const [order, setOrder] = useState(() => shuffledIndexes(block.items.length, seedOf(block.title)));
   const [checked, setChecked] = useState(false);
-  const [dragging, setDragging] = useState<number | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const move = (from: number, to: number) => {
     if (to < 0 || to >= order.length) return;
     setChecked(false);
-    setOrder((o) => {
-      const next = [...o];
-      const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
-      return next;
-    });
+    setOrder((o) => arrayMove(o, from, to));
+  };
+  const onDragEnd = (e: DragEndEvent) => {
+    if (!e.over || e.active.id === e.over.id) return;
+    move(order.indexOf(Number(e.active.id)), order.indexOf(Number(e.over.id)));
   };
   const right = order.every((v, i) => v === i);
+  useEffect(() => {
+    if (checked && right) void celebrate();
+  }, [checked, right]);
   return (
     <section className="block sortblock" aria-label={block.title}>
       <h3>{block.title}</h3>
       <p>
         <Inline text={block.prompt} />
       </p>
-      <ol className="sortlist">
-        {order.map((itemIndex, pos) => (
-          <li
-            key={itemIndex}
-            draggable
-            className={`${dragging === pos ? "dragging" : ""}${checked ? (itemIndex === pos ? " good" : " bad") : ""}`}
-            onDragStart={() => setDragging(pos)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => {
-              if (dragging !== null) move(dragging, pos);
-              setDragging(null);
-            }}
-            onDragEnd={() => setDragging(null)}
-          >
-            <span>{block.items[itemIndex]}</span>
-            <span className="sortbtns">
-              <button type="button" className="secondary" aria-label={`Move up: ${block.items[itemIndex]}`} disabled={pos === 0} onClick={() => move(pos, pos - 1)}>
-                Up
-              </button>
-              <button type="button" className="secondary" aria-label={`Move down: ${block.items[itemIndex]}`} disabled={pos === order.length - 1} onClick={() => move(pos, pos + 1)}>
-                Down
-              </button>
-            </span>
-          </li>
-        ))}
-      </ol>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={order.map(String)} strategy={verticalListSortingStrategy}>
+          <ol className="sortlist">
+            {order.map((itemIndex, pos) => (
+              <SortRow key={itemIndex} id={String(itemIndex)} label={block.items[itemIndex]} pos={pos} last={pos === order.length - 1} state={checked ? (itemIndex === pos ? "good" : "bad") : ""} onMove={move} />
+            ))}
+          </ol>
+        </SortableContext>
+      </DndContext>
       <button type="button" onClick={() => setChecked(true)}>
         Check the order
       </button>
@@ -110,6 +122,9 @@ export function CardsBlock({ block }: { block: Of<"cards"> }) {
   const [streak, setStreak] = useState(0);
   const [best, setBest] = useState(0);
   const done = index >= block.cards.length;
+  useEffect(() => {
+    if (done && score === block.cards.length) void celebrate();
+  }, [done, score, block.cards.length]);
   const card = block.cards[Math.min(index, block.cards.length - 1)];
   const choose = (g: number) => {
     if (answer !== null) return;
@@ -270,6 +285,7 @@ export function BuildBlock({ block }: { block: Of<"build"> }) {
       <p>
         <Inline text={block.prompt} />
       </p>
+      <Workstation kind="note" title={block.title}>
       {block.slots.map((slot, s) => (
         <fieldset key={s} className="slot">
           <legend>{slot.label}</legend>
@@ -303,6 +319,7 @@ export function BuildBlock({ block }: { block: Of<"build"> }) {
           </div>
         ) : null}
       </div>
+      </Workstation>
     </section>
   );
 }
@@ -314,6 +331,9 @@ export function BranchBlock({ block }: { block: Of<"branch"> }) {
   const [mood, setMood] = useState(block.startMood ?? 40);
   const [picked, setPicked] = useState<number | null>(null);
   const done = turn >= block.turns.length;
+  useEffect(() => {
+    if (done && mood >= 66) void celebrate();
+  }, [done, mood]);
   const current = block.turns[Math.min(turn, block.turns.length - 1)];
   const choose = (i: number) => {
     if (picked !== null) return;
@@ -331,6 +351,7 @@ export function BranchBlock({ block }: { block: Of<"branch"> }) {
       <p>
         <Inline text={block.intro} />
       </p>
+      <Workstation kind="phone" title={block.title} record={block.record}>
       <Meter label="Caller mood" value={mood} />
       {done ? (
         <div role="status" aria-live="polite" className="gameend">
@@ -373,6 +394,7 @@ export function BranchBlock({ block }: { block: Of<"branch"> }) {
           </div>
         </>
       )}
+      </Workstation>
     </section>
   );
 }
@@ -390,6 +412,9 @@ export function GameBlock({ block }: { block: Of<"game"> }) {
   const [started, setStarted] = useState(!block.seconds);
   const answered = useRef(false);
   const done = round >= block.rounds.length;
+  useEffect(() => {
+    if (done && score === block.rounds.length) void celebrate();
+  }, [done, score, block.rounds.length]);
   const current = block.rounds[Math.min(round, block.rounds.length - 1)];
 
   const settle = (choice: number | "time") => {

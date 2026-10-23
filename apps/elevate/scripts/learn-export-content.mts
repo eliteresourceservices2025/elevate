@@ -48,7 +48,7 @@ function block(b: Block): string {
     case "build":
       return `**Build it: ${b.title}**\n\n${b.prompt}\n\n${b.slots.map((s) => `_${s.label}_\n${s.options.map((o) => `- ${o.correct ? "(right) " : ""}${o.text}  \n  _${o.feedback}_`).join("\n")}`).join("\n\n")}`;
     case "branch":
-      return `**Call: ${b.title}**\n\n${b.intro}\n\n${b.turns.map((t, i) => `Turn ${i + 1}, caller: ${t.caller}\n${t.choices.map((c) => `- ${c.text} (mood ${c.mood > 0 ? "+" : ""}${c.mood})  \n  _${c.reply}_`).join("\n")}`).join("\n\n")}`;
+      return `**Call: ${b.title}**\n\n${b.intro}\n\n${b.record ? `_Record shown: ${b.record.title}: ${b.record.rows.map((r) => `${r.label} ${r.value}`).join("; ")}_\n\n` : ""}${b.turns.map((t, i) => `Turn ${i + 1}, caller: ${t.caller}\n${t.choices.map((c) => `- ${c.text} (mood ${c.mood > 0 ? "+" : ""}${c.mood})  \n  _${c.reply}_`).join("\n")}`).join("\n\n")}`;
     case "game":
       return `**Quiz game: ${b.title}**${b.seconds ? ` (${b.seconds} seconds a round)` : ""}\n\n${b.rounds.map((r) => `${r.question}\n${r.options.map((o) => `- ${o.correct ? "(right) " : ""}${o.text}  \n  _${o.feedback}_`).join("\n")}`).join("\n\n")}`;
     case "check":

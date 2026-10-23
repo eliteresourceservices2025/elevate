@@ -63,6 +63,15 @@ export function parseGame(s: string): Of<"game">["rounds"] {
   return groups(s).map(([question, ...opts]) => ({ question, options: parseOptions(opts) }));
 }
 
+// ---- record shown beside a call: "label | value" -------------------------------------------------------------------------------
+export const formatRecord = (rows: { label: string; value: string }[]) => rows.map((r) => `${r.label} | ${r.value}`).join("\n");
+export function parseRecord(s: string): { label: string; value: string }[] {
+  return lines(s).map((l) => {
+    const [label, ...rest] = cells(l);
+    return { label, value: rest.join(" | ") };
+  });
+}
+
 // ---- branch: the caller's line, then "your reply | mood change | caller answers"; a blank line between turns -------------------
 export const formatBranch = (b: Of<"branch">) =>
   b.turns.map((t) => [t.caller, ...t.choices.map((c) => `${c.text} | ${c.mood > 0 ? "+" : ""}${c.mood} | ${c.reply}`)].join("\n")).join("\n\n");

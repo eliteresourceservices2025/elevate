@@ -92,6 +92,8 @@ export const blockSchema = z.discriminatedUnion("type", [
     title: short,
     intro: text,
     startMood: z.number().int().min(10).max(90).optional(),
+    // Facts shown beside the call in the practice window (invented people only), like a customer record.
+    record: z.object({ title: short, rows: z.array(z.object({ label: z.string().trim().min(1).max(40), value: short })).min(1).max(6) }).optional(),
     turns: z
       .array(
         z.object({

@@ -11,6 +11,7 @@ export type LintIssue = { level: "error" | "warning"; where: string; message: st
 export type ExamConfigLike = { tracks?: Record<string, { questions: number }> };
 
 const MIN_POOL_FACTOR = 3;
+const LONG_SLIDE_CHARS = 1400;
 
 const allText = (value: unknown): string[] =>
   typeof value === "string" ? [value] : Array.isArray(value) ? value.flatMap(allText) : value && typeof value === "object" ? Object.values(value as Record<string, unknown>).flatMap(allText) : [];
@@ -42,6 +43,11 @@ export function lintCourse(content: CourseContent, questions: QuestionSeed[], ex
     if (m.screens.length < 5) out.push({ level: "warning", where: m.title, message: `Only ${m.screens.length} screens (the shipped courses have at least 5).` });
     const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => (INTERACTIVE_BLOCK_TYPES as readonly string[]).includes(b.type));
     if (interactive.length === 0) out.push({ level: "warning", where: m.title, message: "No knowledge check or scenario: people have nothing to do in this module." });
+    for (const s of m.screens) {
+      // the lesson stage has no page scroll, so a slide that is long scrolls inside its own card: worth splitting
+      const chars = allText(s.blocks).join(" ").length;
+      if (s.blocks.length > 4 || chars > LONG_SLIDE_CHARS) out.push({ level: "warning", where: `${m.title}: ${s.title}`, message: "This slide is long for the lesson stage (it scrolls inside its card). Consider splitting it into two slides." });
+    }
     textRules(m.title, allText(m), out);
   }
   textRules("responsibility statement", allText(content.attestation), out);

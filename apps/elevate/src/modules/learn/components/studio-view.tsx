@@ -153,6 +153,7 @@ export function BlockView({ block }: { block: Block }) {
         <div className="space-y-1 text-sm">
           <strong>Call: {block.title}</strong>
           <p>{block.intro}</p>
+          {block.record ? <p className="text-muted-foreground">Record: {block.record.title}: {block.record.rows.map((r) => `${r.label} ${r.value}`).join("; ")}</p> : null}
           {block.turns.map((t, i) => (
             <div key={i}>
               <em>Caller: {t.caller}</em>

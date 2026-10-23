@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import type { Block, CourseContent, CourseModule, QuestionSeed } from "../../../../../learn/src/content/schema";
 import { createStudioAddon, createStudioDraft, discardStudioDraft, publishStudioDraft, removeStudioAddon, saveStudioCourseMeta, saveStudioModuleMeta, saveStudioQuestion, saveStudioScreen } from "../studio-actions";
-import { formatBranch, formatBuild, formatCards, formatFlip, formatGame, formatSpot, parseBranch, parseBuild, parseCards, parseFlip, parseGame, parseSpot } from "../studio-block-text";
+import { formatBranch, formatBuild, formatCards, formatFlip, formatGame, formatRecord, formatSpot, parseBranch, parseBuild, parseCards, parseFlip, parseGame, parseRecord, parseSpot } from "../studio-block-text";
 import { newBlock } from "../studio-scaffold";
 import { RemoveQuestionButton, ScreenControls } from "./studio-structure";
 
@@ -379,6 +379,10 @@ function InteractiveEditor({ block, onChange, idp }: { block: Extract<Block, { t
         <div className="space-y-2">
           {head(block.title, (v) => onChange({ ...block, title: v }))}
           {prompt(block.intro, (v) => onChange({ ...block, intro: v }), "Set the scene (invented people only)", "intro")}
+          <Field id={`${idp}-rtitle`} label="Customer record title (optional, shown beside the call)">
+            <Input id={`${idp}-rtitle`} value={block.record?.title ?? ""} onChange={(e) => onChange({ ...block, record: e.target.value || block.record?.rows.length ? { title: e.target.value, rows: block.record?.rows ?? [] } : undefined })} maxLength={160} />
+          </Field>
+          <TextLines id={`${idp}-rrows`} label={"Record facts, one per line as \"label | value\" (1 to 6, invented people only)"} value={formatRecord(block.record?.rows ?? [])} rows={3} normalize={(t) => formatRecord(parseRecord(t))} onText={(t) => onChange({ ...block, record: block.record?.title || parseRecord(t).length ? { title: block.record?.title ?? "", rows: parseRecord(t) } : undefined })} />
           <TextLines
             id={`${idp}-turns`}
             label='Turns: the caller line, then replies as "your reply | mood change | how the caller answers"'

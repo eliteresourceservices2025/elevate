@@ -174,3 +174,51 @@ blockquote { border-left: 4px solid var(--accent); margin: 1rem 0; padding: 0.25
 .meter-text { position: absolute; inset: 0; display: grid; place-items: center; font-size: 0.8rem; font-weight: 600; color: var(--foreground); mix-blend-mode: normal; text-shadow: 0 0 3px var(--card); }
 .caller { animation: cardin 0.25s ease-out; }
 .caller.reply { border-left-color: var(--primary); }
+
+/* The lesson stage: a full-screen frame, one slide at a time, steps along the top, Previous / Next at the bottom. */
+.stage { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; background: var(--background); }
+.stage-head { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1rem; background: var(--card); border-bottom: 4px solid var(--accent); }
+.stage-close { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); }
+.stage-close:hover { color: var(--foreground); background: var(--muted); }
+.stage-title { flex: 1; min-width: 0; display: grid; line-height: 1.25; }
+.stage-title strong { font-family: var(--font-head), system-ui, sans-serif; color: var(--primary); font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.journey { display: flex; gap: 4px; padding: 0.6rem 1rem 0; max-width: 56rem; width: 100%; margin: 0 auto; }
+.journey-step { flex: 1; height: 8px; padding: 0; border-radius: 999px; background: var(--muted); border: 1px solid var(--border); transition: background 0.25s, transform 0.25s; }
+.journey-step.done { background: var(--primary); border-color: var(--primary); }
+.journey-step.here { background: var(--accent); border-color: var(--accent); transform: scaleY(1.5); }
+.journey-step:disabled { cursor: default; opacity: 0.6; }
+.stage-extra { max-width: 56rem; width: 100%; margin: 0 auto; padding: 0 1rem; }
+.stage-body { flex: 1; overflow-y: auto; padding: 0.75rem 1rem 1rem; }
+.slide { max-width: 44rem; margin: 0 auto; background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); padding: 1.25rem 1.4rem; box-shadow: 0 6px 24px rgb(108 26 186 / 0.08); }
+.slide h2 { font-size: 1.5rem; margin: 0 0 0.5rem; color: var(--primary); }
+.stage-foot { background: var(--card); border-top: 1px solid var(--border); padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom)); }
+.stage-nav { max-width: 44rem; margin: 0 auto; display: flex; justify-content: space-between; gap: 0.75rem; }
+.stage-btn { display: inline-flex; align-items: center; gap: 0.3rem; min-width: 8.5rem; justify-content: center; font-weight: 600; text-decoration: none; }
+a.stage-btn { color: var(--primary-foreground); background: var(--primary); padding: 0.6rem 1rem; border-radius: calc(var(--radius) - 2px); }
+.stage-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.stage-notes { max-width: 44rem; margin: 0.25rem auto 0; font-size: 0.85rem; }
+.stage-notes p { margin: 0.2rem 0; }
+@media (max-width: 520px) { .slide { padding: 1rem; } .stage-btn { min-width: 0; flex: 1; } .stage-nav { gap: 0.5rem; } }
+
+/* Practice window for calls and call notes, and the drag handle in the sort block. */
+.workstation { border: 1px solid var(--input); border-radius: var(--radius); overflow: hidden; background: var(--background); margin: 0.75rem 0; }
+.ws-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.4rem 0.75rem; background: var(--secondary); color: var(--secondary-foreground); border-bottom: 1px solid var(--border); font-size: 0.8rem; font-weight: 600; }
+.ws-dots { display: inline-flex; gap: 4px; }
+.ws-dots i { width: 9px; height: 9px; border-radius: 999px; background: var(--primary); opacity: 0.45; }
+.ws-name { display: inline-flex; align-items: center; gap: 0.35rem; }
+.ws-body { display: grid; gap: 0; }
+.ws-body.with-record { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.ws-main { padding: 0.5rem 0.9rem 0.75rem; min-width: 0; }
+.ws-record { padding: 0.6rem 0.9rem; background: var(--card); border-left: 1px solid var(--border); font-size: 0.9rem; }
+.ws-record strong { color: var(--primary); }
+.ws-record dl { margin: 0.4rem 0 0; display: grid; gap: 0.35rem; }
+.ws-record dt { font-size: 0.75rem; color: var(--muted-foreground); }
+.ws-record dd { margin: 0; }
+@media (max-width: 640px) { .ws-body.with-record { grid-template-columns: 1fr; } .ws-record { border-left: 0; border-top: 1px solid var(--border); } }
+.sortlist li { list-style: none; }
+.sortlist { padding-left: 0; }
+.grip { display: grid; place-items: center; cursor: grab; touch-action: none; color: var(--muted-foreground); padding: 0.15rem; border-radius: 6px; }
+.grip:hover { color: var(--foreground); background: var(--muted); }
+.sortlabel { flex: 1; }
+.stage-body { display: flex; flex-direction: column; }
+.slide { margin: auto; width: 100%; }
