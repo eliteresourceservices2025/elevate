@@ -20,10 +20,14 @@ real-database and browser checks) and in the build. Nothing here has been run ag
    newer not yet applied (0099 for HIPAA version 3). They only add tables, functions and guards; apply them **before** the new code is live.
 3. **Deploy ELEVATE and Learn together** (one release). Check the two media folders are in the deployment and that Learn has
    `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (without them Learn refuses every player call on purpose).
-4. **Publish:** `pnpm learn:publish --course customer-service --publish --reviewer <email> --counsel-date <date>`. A first publication starts
-   **paused**, so nobody is assigned yet. The studio refuses to edit this course (it has a graded call): content changes go through the repository.
-5. **Choose who gets it** in ELEVATE > Training status > Customer service > Automatic assignment (everyone, chosen teams, or paused).
-   It takes effect at the next nightly run. Reminders go out at 30 days, 7 days and the due date.
+4. **Publish** (decided 2026-10-23: counsel review date **2026-10-23**, reviewer **eliteresourceservices2025@gmail.com**; the reviewer must have an ELEVATE account with
+   that exact email, or the command stops):
+   `pnpm learn:publish --course customer-service --publish --reviewer eliteresourceservices2025@gmail.com --counsel-date 2026-10-23`
+   The date is stored as evidence that counsel approved the text on that day, so publish only when that is true. A first publication starts **paused**, so nobody is
+   assigned. The studio refuses to edit this course (it has a graded call): content changes go through the repository.
+5. **Who gets it** (decided 2026-10-23): **leave automatic assignment paused** and assign by hand, one person at a time:
+   `pnpm learn:assign --email <work email> --track full --course customer-service` (the person needs an ELEVATE account; due in 30 days). Check that Training status >
+   Customer service shows "Paused". Turn on automatic assignment later, from the same card, when you want the nightly run to do it.
 6. **Privacy notice:** the wording is updated (`docs/policies/privacy-notice.md` and the public Privacy policy page). Publishing the notice is
    permanent and makes everyone accept it again, so publish it **once**, after counsel's review. Do not publish it against a shared dev database.
 7. **Check as a person:** open the course, play a video and a read-aloud clip, try Next on a quiz without answering (it stays off), take the mock call
