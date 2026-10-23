@@ -42,7 +42,7 @@ export async function handleCertificateDownload(
     status: 200,
     headers: {
       "content-type": "application/pdf",
-      "content-disposition": `attachment; filename="ers-certificate-${certificate.reference}.pdf"`,
+      "content-disposition": `${new URL(request.url).searchParams.get("view") === "1" ? "inline" : "attachment"}; filename="ers-certificate-${certificate.reference}.pdf"`,
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
     },

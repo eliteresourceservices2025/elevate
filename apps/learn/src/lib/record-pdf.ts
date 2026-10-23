@@ -67,7 +67,7 @@ export async function renderRecordPdf(input: { holderName: string; generatedOn: 
   for (const e of input.entries) {
     room(70);
     write(`${e.courseTitle}`, { font: bold, size: 12 });
-    write(`Version ${e.version} · ${TRACK[e.track] ?? e.track} · ${STATUS[e.status] ?? e.status}`, { color: muted });
+    write(`${TRACK[e.track] ?? e.track} · ${STATUS[e.status] ?? e.status}`, { color: muted });
     write(`Assigned ${e.assignedOn} · due ${e.dueOn}${e.passedOn ? ` · passed ${e.passedOn}` : ""}`, { indent: 10 });
     write(`About ${e.minutesSpent} minutes reading · ${e.attempts} exam ${e.attempts === 1 ? "try" : "tries"}${e.scorePercent !== null ? ` · passing score ${e.scorePercent}%` : ""}`, { indent: 10 });
     if (e.certificate) {

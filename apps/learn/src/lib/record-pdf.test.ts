@@ -6,7 +6,6 @@ import { renderRecordPdf } from "./record-pdf";
 const entry = (n: number): RecordEntry => ({
   assignmentId: `a${n}`,
   courseTitle: `Course ${n} with a fairly long title that goes on for a while so that it has to wrap`,
-  version: 2,
   track: "full",
   status: "passed",
   assignedOn: "2026-01-05",
@@ -15,7 +14,7 @@ const entry = (n: number): RecordEntry => ({
   minutesSpent: 118,
   attempts: 2,
   scorePercent: 90,
-  certificate: { reference: "ERSHC-2026-ABC234", issuedOn: "2026-01-20", endsOn: "2027-01-20", revoked: false },
+  certificate: { assignmentId: `a${n}`, reference: "ERSHC-2026-ABC234", issuedOn: "2026-01-20", endsOn: "2027-01-20", revoked: false },
 });
 
 describe("the combined training record PDF", () => {

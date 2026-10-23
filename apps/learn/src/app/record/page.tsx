@@ -28,7 +28,7 @@ export default async function RecordPage() {
         </p>
       ) : null}
       <p className="muted">
-        Everything you have done in ELEVATE Learn. Only you, HR and the privacy team can see your scores; your lead sees only whether you have passed.
+        Your current training in ELEVATE Learn and your certificates. Only you, HR and the privacy team can see your scores; your lead sees only whether you have passed.
       </p>
       {entries.length === 0 ? (
         <p>You have no training on record yet.</p>
@@ -42,7 +42,7 @@ export default async function RecordPage() {
               <li key={e.assignmentId} className="card">
                 <strong>{e.courseTitle}</strong>
                 <div className="muted">
-                  Version {e.version} · {TRACK_LABEL[e.track] ?? e.track} · {STATUS_LABEL[e.status] ?? e.status}
+                  {TRACK_LABEL[e.track] ?? e.track} · {STATUS_LABEL[e.status] ?? e.status}
                 </div>
                 <div className="muted small">
                   Assigned {e.assignedOn} · due {e.dueOn}
@@ -64,9 +64,14 @@ export default async function RecordPage() {
                     Open
                   </Link>{" "}
                   {e.certificate && !e.certificate.revoked ? (
-                    <a className="button" href={`/api/certificate/${e.assignmentId}`} download>
-                      Download certificate PDF
-                    </a>
+                    <>
+                      <a className="button secondary" href={`/api/certificate/${e.certificate.assignmentId}?view=1`} target="_blank" rel="noopener">
+                        Preview certificate
+                      </a>{" "}
+                      <a className="button" href={`/api/certificate/${e.certificate.assignmentId}`} download>
+                        Download certificate PDF
+                      </a>
+                    </>
                   ) : null}
                 </p>
               </li>
