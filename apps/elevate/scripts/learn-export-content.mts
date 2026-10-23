@@ -37,6 +37,20 @@ function block(b: Block): string {
       return [b.title ? `**${b.title}**` : '', ...b.items.map((i, n) => `${n + 1}. **${i.when}**: ${i.text}`)].filter(Boolean).join('\n');
     case "glossary":
       return ['**Terms**', ...b.terms.map((t) => `- **${t.term}**: ${t.meaning}`)].join('\n');
+    case "sort":
+      return `**Sort it: ${b.title}**\n\n${b.prompt}\n\n${bullets(b.items, true)}\n\n_${b.explanation}_`;
+    case "cards":
+      return `**Cards: ${b.title}** (${b.groups.join(" / ")})\n\n${b.prompt}\n\n${b.cards.map((c) => `- ${c.text} -> **${b.groups[c.group]}**  \n  _${c.feedback}_`).join("\n")}`;
+    case "spot":
+      return `**Spot the mistake: ${b.title}**\n\n${b.prompt}\n\n${b.lines.map((l) => `- ${l.wrong ? "(the mistake) " : ""}**${l.speaker}:** ${l.text}`).join("\n")}\n\n_${b.explanation}_`;
+    case "flip":
+      return [b.title ? `**${b.title}**` : "**Flip cards**", ...b.cards.map((c) => `- **${c.front}**: ${c.back}`)].join("\n");
+    case "build":
+      return `**Build it: ${b.title}**\n\n${b.prompt}\n\n${b.slots.map((s) => `_${s.label}_\n${s.options.map((o) => `- ${o.correct ? "(right) " : ""}${o.text}  \n  _${o.feedback}_`).join("\n")}`).join("\n\n")}`;
+    case "branch":
+      return `**Call: ${b.title}**\n\n${b.intro}\n\n${b.turns.map((t, i) => `Turn ${i + 1}, caller: ${t.caller}\n${t.choices.map((c) => `- ${c.text} (mood ${c.mood > 0 ? "+" : ""}${c.mood})  \n  _${c.reply}_`).join("\n")}`).join("\n\n")}`;
+    case "game":
+      return `**Quiz game: ${b.title}**${b.seconds ? ` (${b.seconds} seconds a round)` : ""}\n\n${b.rounds.map((r) => `${r.question}\n${r.options.map((o) => `- ${o.correct ? "(right) " : ""}${o.text}  \n  _${o.feedback}_`).join("\n")}`).join("\n\n")}`;
     case "check":
       return `**Check yourself:** ${b.question}${b.multiple ? " (select all that apply)" : ""}\n\n${b.options.map((o) => `- ${o.correct ? "(correct) " : ""}${o.text}  \n  _${o.feedback}_`).join("\n")}`;
   }

@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import type { Block, CourseContent, CourseModule, QuestionSeed } from "../../../../../learn/src/content/schema";
 import { createStudioAddon, createStudioDraft, discardStudioDraft, publishStudioDraft, removeStudioAddon, saveStudioCourseMeta, saveStudioModuleMeta, saveStudioQuestion, saveStudioScreen } from "../studio-actions";
+import { formatBranch, formatBuild, formatCards, formatFlip, formatGame, formatSpot, parseBranch, parseBuild, parseCards, parseFlip, parseGame, parseSpot } from "../studio-block-text";
 import { newBlock } from "../studio-scaffold";
 import { RemoveQuestionButton, ScreenControls } from "./studio-structure";
 
@@ -294,6 +295,114 @@ export function ModuleMetaForm({ versionId, stamp, module }: { versionId: string
 
 // ---- Screens and blocks -------------------------------------------------------------------------------------------------------
 
+/** A text box that keeps its raw text while typing (blank lines and half-typed lines survive); it resets only when the block changes underneath it. */
+function TextLines({ id, label, hint, value, rows, normalize, onText }: { id: string; label: string; hint?: string; value: string; rows: number; normalize: (text: string) => string; onText: (text: string) => void }) {
+  const [text, setText] = useState(value);
+  if (normalize(text) !== value && text !== value) setText(value);
+  return (
+    <Field id={id} label={label} hint={hint}>
+      <Textarea
+        id={id}
+        rows={Math.max(rows, text.split("\n").length + 1)}
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          onText(e.target.value);
+        }}
+      />
+    </Field>
+  );
+}
+
+const OPTION_HINT = 'Start a right answer with + and a wrong one with -, then "text | why". Leave a blank line between items.';
+
+function InteractiveEditor({ block, onChange, idp }: { block: Extract<Block, { type: "sort" | "cards" | "spot" | "flip" | "build" | "branch" | "game" }>; onChange: (b: Block) => void; idp: string }) {
+  const head = (title: string | undefined, set: (v: string) => void, required = true) => (
+    <Field id={`${idp}-title`} label={required ? "Title" : "Title (optional)"}>
+      <Input id={`${idp}-title`} value={title ?? ""} onChange={(e) => set(e.target.value)} maxLength={160} />
+    </Field>
+  );
+  const prompt = (value: string, set: (v: string) => void, label = "Instructions for the learner", suffix = "prompt") => (
+    <Field id={`${idp}-${suffix}`} label={label}>
+      <Textarea id={`${idp}-${suffix}`} rows={2} value={value} onChange={(e) => set(e.target.value)} maxLength={900} />
+    </Field>
+  );
+  switch (block.type) {
+    case "sort":
+      return (
+        <div className="space-y-2">
+          {head(block.title, (v) => onChange({ ...block, title: v }))}
+          {prompt(block.prompt, (v) => onChange({ ...block, prompt: v }))}
+          <Field id={`${idp}-items`} label="Steps in the CORRECT order (one per line, 2 to 7); the learner sees them shuffled">
+            <Textarea id={`${idp}-items`} rows={Math.max(4, block.items.length + 1)} value={block.items.join("\n")} onChange={(e) => onChange({ ...block, items: lines(e.target.value) })} />
+          </Field>
+          {prompt(block.explanation, (v) => onChange({ ...block, explanation: v }), "Why this is the order (shown after checking)", "why")}
+        </div>
+      );
+    case "cards":
+      return (
+        <div className="space-y-2">
+          {head(block.title, (v) => onChange({ ...block, title: v }))}
+          {prompt(block.prompt, (v) => onChange({ ...block, prompt: v }))}
+          <Field id={`${idp}-groups`} label="Groups (one per line, 2 or 3)">
+            <Textarea id={`${idp}-groups`} rows={3} value={block.groups.join("\n")} onChange={(e) => onChange({ ...block, groups: lines(e.target.value) })} />
+          </Field>
+          <TextLines id={`${idp}-cards`} label='Cards, one per line as "card text | group number | why" (3 to 10)' value={formatCards(block)} rows={5} normalize={(t) => formatCards({ ...block, cards: parseCards(t) })} onText={(t) => onChange({ ...block, cards: parseCards(t) })} />
+        </div>
+      );
+    case "spot":
+      return (
+        <div className="space-y-2">
+          {head(block.title, (v) => onChange({ ...block, title: v }))}
+          {prompt(block.prompt, (v) => onChange({ ...block, prompt: v }))}
+          <TextLines id={`${idp}-lines`} label='Lines, one per line as "Speaker | what they say"; add "| wrong" to the mistake' value={formatSpot(block)} rows={5} normalize={(t) => formatSpot({ ...block, lines: parseSpot(t) })} onText={(t) => onChange({ ...block, lines: parseSpot(t) })} />
+          {prompt(block.explanation, (v) => onChange({ ...block, explanation: v }), "What was wrong and why (shown when found)", "why")}
+        </div>
+      );
+    case "flip":
+      return (
+        <div className="space-y-2">
+          {head(block.title, (v) => onChange({ ...block, title: v || undefined }), false)}
+          <TextLines id={`${idp}-flip`} label='Cards, one per line as "front | back" (2 to 8)' value={formatFlip(block)} rows={4} normalize={(t) => formatFlip({ ...block, cards: parseFlip(t) })} onText={(t) => onChange({ ...block, cards: parseFlip(t) })} />
+        </div>
+      );
+    case "build":
+      return (
+        <div className="space-y-2">
+          {head(block.title, (v) => onChange({ ...block, title: v }))}
+          {prompt(block.prompt, (v) => onChange({ ...block, prompt: v }))}
+          <TextLines id={`${idp}-slots`} label="Parts: a name line, then its options (2 to 6 parts, one right option each)" hint={OPTION_HINT} value={formatBuild(block)} rows={8} normalize={(t) => formatBuild({ ...block, slots: parseBuild(t) })} onText={(t) => onChange({ ...block, slots: parseBuild(t) })} />
+        </div>
+      );
+    case "branch":
+      return (
+        <div className="space-y-2">
+          {head(block.title, (v) => onChange({ ...block, title: v }))}
+          {prompt(block.intro, (v) => onChange({ ...block, intro: v }), "Set the scene (invented people only)", "intro")}
+          <TextLines
+            id={`${idp}-turns`}
+            label='Turns: the caller line, then replies as "your reply | mood change | how the caller answers"'
+            hint="Mood change is a whole number from -30 to 30. Leave a blank line between turns (2 to 6 turns)."
+            value={formatBranch(block)}
+            rows={10}
+            normalize={(t) => formatBranch({ ...block, turns: parseBranch(t) })}
+            onText={(t) => onChange({ ...block, turns: parseBranch(t) })}
+          />
+        </div>
+      );
+    case "game":
+      return (
+        <div className="space-y-2">
+          {head(block.title, (v) => onChange({ ...block, title: v }))}
+          <Field id={`${idp}-seconds`} label="Seconds per round (optional, 5 to 60; empty means no timer)">
+            <Input id={`${idp}-seconds`} type="number" min={5} max={60} value={block.seconds ?? ""} onChange={(e) => onChange({ ...block, seconds: e.target.value ? Number(e.target.value) : undefined })} />
+          </Field>
+          <TextLines id={`${idp}-rounds`} label="Rounds: a question line, then its options (3 to 10 rounds)" hint={OPTION_HINT} value={formatGame(block)} rows={10} normalize={(t) => formatGame({ ...block, rounds: parseGame(t) })} onText={(t) => onChange({ ...block, rounds: parseGame(t) })} />
+        </div>
+      );
+  }
+}
+
 function BlockEditor({ block, onChange, idp }: { block: Block; onChange: (b: Block) => void; idp: string }) {
   switch (block.type) {
     case "paragraph":
@@ -476,6 +585,14 @@ function BlockEditor({ block, onChange, idp }: { block: Block; onChange: (b: Blo
           </Field>
         </div>
       );
+    case "sort":
+    case "cards":
+    case "spot":
+    case "flip":
+    case "build":
+    case "branch":
+    case "game":
+      return <InteractiveEditor block={block} onChange={onChange} idp={idp} />;
     case "check":
       return (
         <div className="space-y-2">
@@ -518,6 +635,13 @@ const BLOCK_TYPES: { value: Block["type"]; label: string }[] = [
   { value: "layers", label: "Layers" },
   { value: "timeline", label: "Timeline" },
   { value: "glossary", label: "Glossary" },
+  { value: "sort", label: "Sort it (put in order)" },
+  { value: "cards", label: "Sort cards into groups" },
+  { value: "spot", label: "Spot the mistake" },
+  { value: "flip", label: "Flip cards" },
+  { value: "build", label: "Build it (pick the parts)" },
+  { value: "branch", label: "Call with a mood meter" },
+  { value: "game", label: "Quiz game (rounds)" },
 ];
 
 export function ScreenEditor({ versionId, stamp, moduleKey, screen, index, count }: { versionId: string; stamp: number; moduleKey: string; screen: CourseModule["screens"][number]; index: number; count: number }) {

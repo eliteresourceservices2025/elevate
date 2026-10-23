@@ -64,6 +64,41 @@ export function newBlock(type: Block["type"]): Block {
       return { type, terms: [{ term: "Term", meaning: `${PLACEHOLDER} what it means` }, { term: "Another term", meaning: `${PLACEHOLDER} what it means` }] };
     case "case":
       return { type, title: "A worked case", scenario: `${PLACEHOLDER} describe the situation.`, question: `${PLACEHOLDER} what should happen?`, answer: `${PLACEHOLDER} the answer and why.` };
+    case "sort":
+      return { type, title: "Put these in order", prompt: `${PLACEHOLDER} what should the learner order?`, items: [`${PLACEHOLDER} first step`, `${PLACEHOLDER} second step`], explanation: `${PLACEHOLDER} why this is the order.` };
+    case "cards":
+      return {
+        type,
+        title: "Sort the cards",
+        prompt: `${PLACEHOLDER} what are they sorting?`,
+        groups: ["Group one", "Group two"],
+        cards: [0, 1, 0].map((group, i) => ({ text: `${PLACEHOLDER} card ${i + 1}`, group, feedback: `${PLACEHOLDER} why.` })),
+      };
+    case "spot":
+      return {
+        type,
+        title: "Spot the mistake",
+        prompt: `${PLACEHOLDER} tap the line that is wrong.`,
+        lines: [{ speaker: "Caller", text: `${PLACEHOLDER} what the caller says` }, { speaker: "Agent", text: `${PLACEHOLDER} the mistake`, wrong: true }, { speaker: "Caller", text: `${PLACEHOLDER} reply` }],
+        explanation: `${PLACEHOLDER} what was wrong and why.`,
+      };
+    case "flip":
+      return { type, cards: [{ front: "Term", back: `${PLACEHOLDER} meaning` }, { front: "Another term", back: `${PLACEHOLDER} meaning` }] };
+    case "build": {
+      const slot = (label: string) => ({ label, options: [{ text: `${PLACEHOLDER} the right piece`, correct: true, feedback: `${PLACEHOLDER} why.` }, { text: `${PLACEHOLDER} a wrong piece`, correct: false, feedback: `${PLACEHOLDER} why not.` }] });
+      return { type, title: "Build it", prompt: `${PLACEHOLDER} what are they building?`, slots: [slot("First part"), slot("Second part")] };
+    }
+    case "branch": {
+      const turn = (n: number) => ({
+        caller: `${PLACEHOLDER} what the caller says (turn ${n})`,
+        choices: [{ text: `${PLACEHOLDER} a good reply`, mood: 15, reply: `${PLACEHOLDER} how the caller answers` }, { text: `${PLACEHOLDER} a poor reply`, mood: -20, reply: `${PLACEHOLDER} how the caller answers` }],
+      });
+      return { type, title: "A call", intro: `${PLACEHOLDER} set the scene (invented people only).`, turns: [turn(1), turn(2)] };
+    }
+    case "game": {
+      const round = (n: number) => ({ question: `${PLACEHOLDER} question ${n}`, options: [{ text: `${PLACEHOLDER} right`, correct: true, feedback: `${PLACEHOLDER} why.` }, { text: `${PLACEHOLDER} wrong`, correct: false, feedback: `${PLACEHOLDER} why not.` }] });
+      return { type, title: "Quick round", rounds: [round(1), round(2), round(3)] };
+    }
     case "check":
       return {
         type,

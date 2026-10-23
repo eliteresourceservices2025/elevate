@@ -2,17 +2,10 @@
 
 import { Fragment, useState } from "react";
 import type { Block } from "@/content/schema";
+import { Inline } from "./inline";
+import { BranchBlock, BuildBlock, CardsBlock, FlipBlock, GameBlock, SortBlock, SpotBlock } from "./interactive-blocks";
 
 // Renders lesson blocks as React elements. There is no HTML anywhere: text is plain, and **double asterisks** make bold text.
-
-function Inline({ text }: { text: string }) {
-  const parts = text.split("**");
-  return (
-    <>
-      {parts.map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : <Fragment key={i}>{part}</Fragment>))}
-    </>
-  );
-}
 
 function Scenario({ block }: { block: Extract<Block, { type: "scenario" }> }) {
   const [picked, setPicked] = useState<number | null>(null);
@@ -259,6 +252,20 @@ export function ContentBlocks({ blocks }: { blocks: Block[] }) {
             );
           case "check":
             return <Check key={i} block={block} />;
+          case "sort":
+            return <SortBlock key={i} block={block} />;
+          case "cards":
+            return <CardsBlock key={i} block={block} />;
+          case "spot":
+            return <SpotBlock key={i} block={block} />;
+          case "flip":
+            return <FlipBlock key={i} block={block} />;
+          case "build":
+            return <BuildBlock key={i} block={block} />;
+          case "branch":
+            return <BranchBlock key={i} block={block} />;
+          case "game":
+            return <GameBlock key={i} block={block} />;
         }
       })}
     </>

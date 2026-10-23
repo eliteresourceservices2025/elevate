@@ -47,7 +47,79 @@ export const blockSchema = z.discriminatedUnion("type", [
     multiple: z.boolean().optional(),
     options: z.array(checkOptionSchema).min(2).max(5),
   }),
+  // ---- Interactive blocks (customer service course and later the older courses). Plain data like the rest; none is graded. ----
+  // Put the steps in order. `items` are written in the CORRECT order; the player shows them shuffled.
+  z.object({ type: z.literal("sort"), title: short, prompt: text, items: z.array(short).min(2).max(7), explanation: text }),
+  // Sort each card into a group (for example "Empathy" or "Not empathy"). One card at a time, with a streak.
+  z
+    .object({
+      type: z.literal("cards"),
+      title: short,
+      prompt: text,
+      groups: z.array(z.string().trim().min(1).max(40)).min(2).max(3),
+      cards: z.array(z.object({ text: short, group: z.number().int().min(0).max(2), feedback: z.string().trim().min(1).max(300) })).min(3).max(10),
+    })
+    .refine((b) => b.cards.every((c) => c.group < b.groups.length), { message: "Every card must point at one of the groups." }),
+  // A short conversation or message with something wrong in it: tap the line that is wrong.
+  z
+    .object({
+      type: z.literal("spot"),
+      title: short,
+      prompt: text,
+      lines: z.array(z.object({ speaker: z.string().trim().min(1).max(30), text: short, wrong: z.boolean().optional() })).min(3).max(10),
+      explanation: text,
+    })
+    .refine((b) => b.lines.some((l) => l.wrong), { message: "At least one line must be marked as the mistake." }),
+  // Cards that flip over: a term or framework on the front, its meaning on the back.
+  z.object({ type: z.literal("flip"), title: short.optional(), cards: z.array(z.object({ front: z.string().trim().min(1).max(80), back: z.string().trim().min(1).max(260) })).min(2).max(8) }),
+  // Build something piece by piece (a call note, a reply): pick the right piece for each slot.
+  z.object({
+    type: z.literal("build"),
+    title: short,
+    prompt: text,
+    slots: z
+      .array(
+        z
+          .object({ label: z.string().trim().min(1).max(60), options: z.array(checkOptionSchema).min(2).max(4) })
+          .refine((s) => s.options.filter((o) => o.correct).length === 1, { message: "Each slot needs exactly one correct option." }),
+      )
+      .min(2)
+      .max(6),
+  }),
+  // A short call with a mood meter: the caller speaks, you pick a reply, the caller's mood moves.
+  z.object({
+    type: z.literal("branch"),
+    title: short,
+    intro: text,
+    startMood: z.number().int().min(10).max(90).optional(),
+    turns: z
+      .array(
+        z.object({
+          caller: text,
+          choices: z.array(z.object({ text: short, mood: z.number().int().min(-30).max(30), reply: z.string().trim().min(1).max(400) })).min(2).max(4),
+        }),
+      )
+      .min(2)
+      .max(6),
+  }),
+  // Quiz rounds played as a game: streak, optional seconds per question. Not graded and not part of the exam.
+  z.object({
+    type: z.literal("game"),
+    title: short,
+    seconds: z.number().int().min(5).max(60).optional(),
+    rounds: z
+      .array(
+        z
+          .object({ question: short, options: z.array(checkOptionSchema).min(2).max(4) })
+          .refine((r) => r.options.filter((o) => o.correct).length === 1, { message: "Each round needs exactly one correct option." }),
+      )
+      .min(3)
+      .max(10),
+  }),
 ]);
+
+/** Block types a person can do something with (the lint asks for at least one per module). */
+export const INTERACTIVE_BLOCK_TYPES = ["scenario", "check", "case", "sort", "cards", "spot", "flip", "build", "branch", "game"] as const;
 
 export const screenSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]{1,40}$/),

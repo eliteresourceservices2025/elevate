@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COURSES } from "./index";
-import { courseContentSchema, questionSeedSchema } from "./schema";
+import { courseContentSchema, INTERACTIVE_BLOCK_TYPES, questionSeedSchema } from "./schema";
 
 // Content lint (docs/learn/06-testing-and-review.md): every course and its exam bank are checked like code, so a typo in the key,
 // a duplicate question or a real-looking identifier cannot reach a learner. Runs for every course in the registry.
@@ -39,7 +39,7 @@ for (const course of Object.values(COURSES)) {
         const ids = m.screens.map((s) => s.id);
         expect(new Set(ids).size, `${m.key} screen ids`).toBe(ids.length);
         expect(m.screens.length, `${m.key} screens`).toBeGreaterThanOrEqual(5);
-        const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => b.type === "scenario" || b.type === "check" || b.type === "case");
+        const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => (INTERACTIVE_BLOCK_TYPES as readonly string[]).includes(b.type));
         expect(interactive.length, `${m.key} interactive blocks`).toBeGreaterThanOrEqual(1);
       }
     });
