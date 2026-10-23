@@ -6,6 +6,6 @@ const path = require("path");
 const { beatsOf } = require("../customer-service/beats.cjs");
 const out = path.resolve(__dirname, "../../../apps/learn/src/content/recap-spoken.json");
 const spoken = fs.existsSync(out) ? JSON.parse(fs.readFileSync(out, "utf8")) : {};
-for (const file of ["storyboards-hipaa.cjs"]) for (const v of require("./" + file)) spoken[v.id] = v.scenes.map((s) => beatsOf(s).map((b) => b.say));
+for (const file of ["storyboards-hipaa.cjs", "storyboards-cyber.cjs"].filter((f) => require("fs").existsSync(require("path").join(__dirname, f)))) for (const v of require("./" + file)) spoken[v.id] = v.scenes.map((s) => beatsOf(s).map((b) => b.say));
 fs.writeFileSync(out, JSON.stringify(spoken, null, 1) + "\n");
 console.log("wrote recap-spoken.json:", Object.keys(spoken).length, "videos");
