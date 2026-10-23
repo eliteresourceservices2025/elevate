@@ -701,6 +701,13 @@
       "when": 1792782036924,
       "tag": "0099_learn_update_screens",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1792797158328,
+      "tag": "0100_learn_core_courses_out_of_studio",
+      "breakpoints": true
     }
   ]
 }

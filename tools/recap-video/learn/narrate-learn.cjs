@@ -90,7 +90,12 @@ for (const v of todo) {
 }
 fs.mkdirSync(AUDIO, { recursive: true });
 const bgm = path.join(ROOT, "audio", "cs", "bgm.mp3");
-if (!fs.existsSync(bgm)) throw new Error("Put the music track at audio/cs/bgm.mp3 first (see docs/learn/13-recap-videos.md).");
+const kept = path.join(ROOT, "assets", "music", "zephiramusic-lofi-gaming-606302.mp3"); // the committed copy (assets/music/README.md)
+if (!fs.existsSync(bgm) && fs.existsSync(kept)) {
+  fs.mkdirSync(path.dirname(bgm), { recursive: true });
+  fs.copyFileSync(kept, bgm);
+}
+if (!fs.existsSync(bgm)) throw new Error("The music track is missing: restore tools/recap-video/assets/music/zephiramusic-lofi-gaming-606302.mp3.");
 fs.copyFileSync(bgm, path.join(AUDIO, "bgm.mp3"));
 const manifestFile = path.join(AUDIO, "manifest.json");
 fs.writeFileSync(manifestFile, JSON.stringify(manifest));

@@ -32,6 +32,14 @@ export type StudioVersion = {
   material: boolean;
 };
 
+/**
+ * The three core courses are written and published from the repository (`pnpm learn:publish`), not in the Course studio: the studio does
+ * not show them, cannot open a version of them and cannot start a draft of them. Client add-ons are still written in the studio. Bring a core
+ * course back here later by removing its slug from this list (and rewriting what the studio cannot hold, such as the mock-call pool).
+ */
+export const CODE_MANAGED_COURSES: readonly string[] = ["hipaa", "cybersecurity", "customer-service"];
+export const isCodeManagedCourse = (slug: string): boolean => CODE_MANAGED_COURSES.includes(slug);
+
 export type StudioCourse = { id: string; slug: string; title: string; studioManaged: boolean; kind: "core" | "client_addon"; clientId: string | null; clientName: string | null; versions: StudioVersion[] };
 
 const status = (s: string): StudioVersion["status"] => (s === "published" ? "published" : s === "retired" ? "retired" : "draft");
@@ -41,6 +49,7 @@ export async function listStudioCourses(tx: Tx): Promise<StudioCourse[]> {
   const names = (await tx.execute(sql`select c.id::text as id, cl.name from learn.courses c join core.clients cl on cl.id = c.client_id`)) as unknown as { id: string; name: string }[];
   const out: StudioCourse[] = [];
   for (const c of rows) {
+    if (isCodeManagedCourse(c.slug)) continue;
     out.push({
       id: c.id,
       slug: c.slug,
@@ -95,6 +104,7 @@ export type LoadedVersion = {
 };
 
 export async function loadVersion(tx: Tx, slug: string, versionNumber: number): Promise<LoadedVersion | null> {
+  if (isCodeManagedCourse(slug)) return null;
   const [course] = await tx.select().from(courses).where(eq(courses.slug, slug)).limit(1);
   if (!course) return null;
   const versions = await listVersions(tx, course.id);
@@ -165,6 +175,7 @@ const failIfErrors = (issues: LintIssue[]) => {
 export async function createDraft(tx: Tx, p: { courseSlug: string; fromVersion?: number; note: string; actorId: string }): Promise<{ versionId: string; version: number }> {
   const [course] = await tx.select().from(courses).where(eq(courses.slug, p.courseSlug)).for("update");
   if (!course) throw new ActionFailure("That course has not been loaded yet.");
+  if (isCodeManagedCourse(course.slug)) throw new ActionFailure("This course is written in the course files and published from there, not in the Course studio.");
   // The studio does not hold the mock-call pool (docs/learn/14-mock-call.md): a copy would drop it and nobody could earn the certificate.
   if (course.requiresCall) throw new ActionFailure("This course has a graded mock call, which the studio cannot edit yet. Change it in the course files and publish it from there.");
   const versions = await tx.select().from(courseVersions).where(eq(courseVersions.courseId, course.id)).orderBy(desc(courseVersions.version));
