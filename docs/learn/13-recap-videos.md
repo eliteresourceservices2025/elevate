@@ -64,3 +64,40 @@ A recorded human voice (the pipeline accepts one), a video block inside lesson s
 for client add-on courses (those are written in the studio, so a video would need an in-studio storyboard and a hosted render step). Each would be a separate decision.
 
 Recaps are tied to a course version: `RECAP_FROM_VERSION` in `recaps.ts` is the first version number whose lessons a course's recaps were written for, and a person on an older version is offered none. Raise it when a lesson change makes a recap's words wrong for earlier versions.
+
+## Customer Service Excellence videos (executive review, not in the app)
+
+HR proposed a Customer Service & Family Support Excellence course (`Elite - CS Upskilling.pptx`). Until the executives approve it,
+there is **no course in Learn**: only 14 narrated motion-graphic videos, one per topic of the deck, made with the same renderer.
+Nothing here touches `apps/learn`, `recaps.ts` or `recaps.json`.
+
+- **Decisions (owner, 21 October 2026):** videos only; about one video per topic, 60 to 90 seconds each; mostly graphics, few words;
+  the voice is Zira; mock calls and "instead of / say" examples are animated chat bubbles with Zira reading both sides (two pitches).
+  The three mock calls are one video each, because together they do not fit in 90 seconds (14 videos, not 12).
+- **Storyboards:** `tools/recap-video/customer-service/storyboards.cjs` (data; slide numbers per video). Scene kinds: hero, icons, formula,
+  flow, swap, dialogue, checklist, compare, drawn by `src/Cs.jsx` (icons from lucide, generated into `src/icons.js` by `gen-icons.cjs`).
+  On screen: icons, cards and a few words. The detail is in the narration (`say`); the full text is in `out/customer-service/transcripts.md`.
+- **Every line restates the deck.** No new facts. Caveats stay ("only when the timeline is confirmed", "no private information until
+  verified"). A line that is not in the deck does not belong in a storyboard.
+- **Timing:** `narrate-cs.cjs` speaks every piece separately, joins a scene's pieces with short pauses and records when each starts,
+  so a picture appears when its words start. It prints each video's length and flags any outside 60 to 90 seconds.
+
+```bash
+cd tools/recap-video && npm install                       # once
+node customer-service/narrate-cs.cjs                      # voice, timing, music, transcripts (all, or give video ids)
+node customer-service/render-cs.cjs                       # MP4s into out/customer-service (add --skip-existing to resume)
+node customer-service/render-cs.cjs --stills cs-01-our-role   # a still from every scene, to look at the result
+```
+
+Output is not committed (`out/` is ignored) while the videos are in review. If the course is approved, bringing it into Learn is a
+separate piece of work: the lesson text, the course, moving the storyboards into `recaps.ts` and re-rendering into `apps/learn/public/recaps`.
+
+## HIPAA and Cybersecurity animated videos (in the app, version 3 onward)
+
+The HIPAA recaps are animated (icons, chains, count-up numbers, timelines, stacks), narrated in the owner's cloned voice (VoiceStudio) with the licensed lofi track, with **optional English subtitles** (WebVTT, a CC button in the player; they are not burned in). They are **private**: files live in `apps/learn/media/recaps` and are served only to signed-in people by `/api/recaps/<file>`; the player has no download button, right-click menu or picture-in-picture (`protected-video.tsx`). That keeps casual copying away; anyone who can play a video can still record their screen.
+
+- **Storyboards:** `tools/recap-video/learn/storyboards-hipaa-a.cjs` and `-b.cjs` (data, one per module; Cybersecurity follows after its content update). Scene kinds: the Customer Service ones plus `stat`, `chain`, `timeline`, `stack` (`src/LearnScenes.jsx`). Every spoken line (`say`) restates the lesson: no new facts. `node learn/validate.cjs hipaa` checks kinds, icons and the 60 to 90 second estimate.
+- **Make them** (VoiceStudio open on port 3900): `node learn/narrate-learn.cjs hipaa` (voice, timing, `recap-spoken.json` for "Read the recap as text"), then `node learn/render-learn.cjs hipaa` (mp4 and vtt into `apps/learn/media/recaps`, lengths into `recap-durations.json`, subtitles into `recap-captions.json`). Both accept video ids to redo one video. Lines are cached, so an interrupted run resumes.
+- **Music:** `audio/cs/bgm.mp3` (git-ignored; keep the licensed file safe) mixed at 0.12.
+- **Version:** `RECAP_FROM_VERSION` for HIPAA is 3.
+- This section supersedes the Zira and generated-music notes above for the Customer Service videos too: they now use the same voice and track.

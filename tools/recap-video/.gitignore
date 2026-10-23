@@ -5,3 +5,6 @@ stills
 audio
 samples
 package-lock.json
+out
+customer-service/video-data.json
+learn/video-data-*.json
