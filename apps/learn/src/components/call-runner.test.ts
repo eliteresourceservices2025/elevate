@@ -16,8 +16,8 @@ const scenario = (n: number, answered: CallView["scenarios"][number]["answered"]
   record: { title: "Customer record", rows: [{ label: "Caller", value: "Maria R. (invented)" }] },
   startMood: 40,
   steps: [
-    { kind: "caller" as const, id: "s1", text: "I was promised an update yesterday.", choices: [{ id: "a", text: "I am sorry. Let me look now." }, { id: "b", text: "We were busy." }] },
-    { kind: "note" as const, id: "n1", text: "Follow-up", choices: [{ id: "a", text: "Call back by 3 pm tomorrow." }, { id: "b", text: "Will see." }] },
+    { kind: "caller" as const, id: "s1", text: "I was promised an update yesterday.", audio: null, choices: [{ id: "a", text: "I am sorry. Let me look now." }, { id: "b", text: "We were busy." }] },
+    { kind: "note" as const, id: "n1", text: "Follow-up", audio: null, choices: [{ id: "a", text: "Call back by 3 pm tomorrow." }, { id: "b", text: "Will see." }] },
   ],
   answered,
 });
@@ -121,5 +121,13 @@ describe("the mock call card on the course page", () => {
     expect(passed).not.toContain("Start the mock call");
     const spent = card({ call: call({ triesAllowed: 1, attempts: [{ id: "44444444-4444-4444-8444-444444444444", attemptNo: 1, status: "submitted", submittedAt: "2026-10-23T10:00:00.000Z", scorePercent: 10, passed: false }] }) });
     expect(spent).toContain("used all your tries");
+  });
+});
+
+describe("the Listen button with recorded clips", () => {
+  it("shows a button when there are clips even where the browser cannot speak, and none when there is nothing to play", () => {
+    const html = renderToStaticMarkup(createElement(ListenButton, { text: "Hello", clips: ["/api/voice/v-abc.m4a"], label: "Listen to the reply" }));
+    expect(html).toContain("Listen to the reply");
+    expect(renderToStaticMarkup(createElement(ListenButton, { text: "Hello", clips: [null] }))).toBe("");
   });
 });

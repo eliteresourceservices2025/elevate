@@ -4,6 +4,17 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExamItem } from "@/lib/queries";
 import { clock, post } from "./api-client";
+import { ListenButton } from "./listen-button";
+
+const LETTER = ["A", "B", "C", "D", "E", "F"];
+/** What the browser reads when there are no recorded clips: the question, then each choice in the order shown. Never the answer or the reason. */
+const examSpeech = (item: ExamItem) =>
+  [item.stem, item.type === "multiple" ? "Select all that apply." : "Choose one answer.", ...item.options.map((o, i) => `Option ${LETTER[i]}. ${o.text}`)].join(" ");
+/** The recorded clips, in reading order, only when every one of them exists (otherwise the browser reads it). */
+const examClips = (item: ExamItem): string[] => {
+  const all = [item.audio.stem, ...item.audio.options.flatMap((o) => [o.letter, o.text])];
+  return all.every(Boolean) ? (all as string[]) : [];
+};
 
 /**
  * The exam: one question at a time, each answer saved as it is chosen. The countdown is only a display (the server has the real
@@ -89,6 +100,7 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
 
       <article className="screen">
         <h2 className="q-stem">{item.stem}</h2>
+        <ListenButton key={item.questionId} text={examSpeech(item)} clips={examClips(item)} label="Listen to this question" />
         <p className="muted">{item.type === "multiple" ? "Select all that apply." : "Choose one answer."}</p>
         <div role="group" aria-label="Answer choices" className="choices">
           {item.options.map((o) => {

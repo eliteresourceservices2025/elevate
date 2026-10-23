@@ -4,6 +4,7 @@ import { resolveSession, type Deps } from "./handlers";
 import { sameSiteOrigin } from "./origin";
 import { drillFor, quarterOf } from "../content/drills";
 import { addressOf } from "./rate-limit";
+import { voiceUrl } from "./voice";
 
 // The JSON endpoints behind the player and the exam. Every one is a POST from this site only, needs a Learn session, and calls one
 // database function that holds the rule (docs/learn/03-data-and-security.md): the browser says what the person did, and the
@@ -160,7 +161,7 @@ const ACTIONS: Record<string, { schema: z.ZodType; run: (ctx: Ctx, input: never)
     run: async (ctx, input: { attemptId: string; scenarioId: string; stepId: string; optionId: string }) => {
       // Only the caller's answer, the new mood and whether the call / attempt is finished: never points or the best reply.
       const [r] = await ctx.sql`select * from learn.answer_call_step(${ctx.userId}::uuid, ${input.attemptId}::uuid, ${input.scenarioId}::uuid, ${input.stepId}, ${input.optionId})`;
-      return { body: { ok: true, reply: r.reply as string, mood: r.mood as number, callDone: r.call_done as boolean, attemptDone: r.attempt_done as boolean } };
+      return { body: { ok: true, reply: r.reply as string, replyAudio: voiceUrl(r.reply as string), mood: r.mood as number, callDone: r.call_done as boolean, attemptDone: r.attempt_done as boolean } };
     },
   },
   submitCall: {

@@ -14,7 +14,7 @@ import { Workstation } from "./workstation";
  * back resumes at the next unanswered step because every pick is saved as it is made.
  */
 type Progress = Record<string, { answered: number; mood: number }>;
-type Pending = { reply: string; callDone: boolean; attemptDone: boolean; optionId: string };
+type Pending = { reply: string; replyAudio: string | null; callDone: boolean; attemptDone: boolean; optionId: string };
 
 function start(view: CallView): Progress {
   return Object.fromEntries(view.scenarios.map((s) => [s.id, { answered: s.answered.length, mood: s.answered.at(-1)?.moodAfter ?? s.startMood }]));
@@ -81,7 +81,7 @@ export function CallRunner({ view }: { view: CallView }) {
       return;
     }
     setProgress((p) => ({ ...p, [scenario.id]: { answered: p[scenario.id].answered + 1, mood: Number(r.mood) } }));
-    setPending({ reply: String(r.reply), callDone: Boolean(r.callDone), attemptDone: Boolean(r.attemptDone), optionId });
+    setPending({ reply: String(r.reply), replyAudio: typeof r.replyAudio === "string" ? r.replyAudio : null, callDone: Boolean(r.callDone), attemptDone: Boolean(r.attemptDone), optionId });
   };
 
   const next = () => {
@@ -105,7 +105,7 @@ export function CallRunner({ view }: { view: CallView }) {
             <blockquote key={step.id} className="caller">
               <Inline text={step.text} />
             </blockquote>
-            <ListenButton text={step.text} />
+            <ListenButton key={step.id} text={step.text} clips={[step.audio]} />
           </>
         ) : (
           <p>
@@ -126,6 +126,7 @@ export function CallRunner({ view }: { view: CallView }) {
               <blockquote className="caller reply">
                 <Inline text={pending.reply} />
               </blockquote>
+              <ListenButton key={pending.reply} text={pending.reply} clips={[pending.replyAudio]} label="Listen to the reply" />
               <button type="button" onClick={next}>
                 {pending.attemptDone ? "Finish the calls" : pending.callDone ? "Next call" : "Continue"}
               </button>

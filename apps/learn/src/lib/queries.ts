@@ -1,6 +1,7 @@
 import type { CourseContent, CourseModule } from "../content/schema";
 import { drillFor, quarterOf, type Drill } from "../content/drills";
 import { withUser, type Sql } from "./db";
+import { letterUrl, voiceUrl } from "./voice";
 
 // What the pages read. Every query runs as the signed-in person (row-level security keyed on learn.user_id), so even a mistake here
 // cannot return another person's rows. Nothing here can read the exam answer key: the app role has no grant on it.
@@ -38,7 +39,7 @@ export type ModuleState = {
 export type AttemptSummary = { id: string; attemptNo: number; status: string; submittedAt: string | null; scorePercent: number | null; passed: boolean | null };
 
 export type Overview = {
-  assignment: { id: string; courseTitle: string; track: string; status: string; dueOn: string; isUpdate: boolean; accepted: boolean };
+  assignment: { id: string; courseTitle: string; courseSlug: string; track: string; status: string; dueOn: string; isUpdate: boolean; accepted: boolean };
   modules: ModuleState[];
   allModulesDone: boolean;
   exam: { questions: number; minutes: number | null; passPercent: number; triesAllowed: number; attempts: AttemptSummary[]; openAttemptId: string | null; waitUntil: string | null; waitMinutes: number };
@@ -54,7 +55,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
   if (!/^[0-9a-f-]{36}$/i.test(assignmentId)) return null;
   return withUser(sql, userId, async (tx) => {
     const [a] = await tx`
-      select a.id, a.track, a.status, a.reason, a.due_on::text as due_on, a.version_id, c.title as course_title, c.requires_exam, c.requires_call, v.exam_config, v.content
+      select a.id, a.track, a.status, a.reason, a.due_on::text as due_on, a.version_id, c.title as course_title, c.slug as course_slug, c.requires_exam, c.requires_call, v.exam_config, v.content
       from learn.assignments a join learn.courses c on c.id = a.course_id join learn.course_versions v on v.id = a.version_id
       where a.id = ${assignmentId}`;
     if (!a) return null;
@@ -114,7 +115,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
     const call = a.requires_call && a.reason !== "update" && config.call ? await callOverview(tx, assignmentId, config.call) : null;
 
     return {
-      assignment: { id: a.id as string, courseTitle: a.course_title as string, track: a.track as string, status: a.status as string, dueOn: a.due_on as string, isUpdate: a.reason === "update", accepted: acc.accepted as boolean },
+      assignment: { id: a.id as string, courseTitle: a.course_title as string, courseSlug: a.course_slug as string, track: a.track as string, status: a.status as string, dueOn: a.due_on as string, isUpdate: a.reason === "update", accepted: acc.accepted as boolean },
       modules,
       allModulesDone: modules.length > 0 && modules.every((m) => m.completed),
       exam: {
@@ -172,7 +173,7 @@ async function callOverview(tx: Sql, assignmentId: string, config: CallConfig): 
   };
 }
 
-export type CallStepView = { kind: "caller" | "note"; id: string; text: string; choices: { id: string; text: string }[] };
+export type CallStepView = { kind: "caller" | "note"; id: string; text: string; /** The caller's line spoken ahead of time, when a clip exists. */ audio: string | null; choices: { id: string; text: string }[] };
 export type CallScenarioView = {
   id: string;
   title: string;
@@ -215,6 +216,7 @@ export async function getCallView(sql: Sql, userId: string, attemptId: string): 
         kind: s.kind,
         id: s.id,
         text: (s.kind === "caller" ? s.caller : s.label) ?? "",
+        audio: s.kind === "caller" ? voiceUrl(s.caller ?? "") : null,
         choices: s.choices.map((c) => ({ id: c.id, text: c.text })),
       }));
       return [
@@ -294,7 +296,8 @@ export async function getModuleView(sql: Sql, userId: string, assignmentId: stri
 }
 
 /** Clips that read an exam question and its choices aloud, in the order shown: the stem, then "Option A" and the choice, and so on. Null where none was made. */
-export type ExamItem = { position: number; questionId: string; type: string; stem: string; options: { id: string; text: string }[]; selected: string[] };
+export type ExamAudio = { stem: string | null; options: { letter: string | null; text: string | null }[] };
+export type ExamItem = { position: number; questionId: string; type: string; stem: string; options: { id: string; text: string }[]; selected: string[]; audio: ExamAudio };
 
 export type AttemptView = {
   id: string;
@@ -337,6 +340,7 @@ export async function getAttemptView(sql: Sql, userId: string, attemptId: string
           stem: r.stem as string,
           options: shown,
           selected: r.selected as string[],
+          audio: { stem: voiceUrl(r.stem as string), options: shown.map((o, i) => ({ letter: letterUrl(i), text: voiceUrl(o.text) })) },
         };
       });
     }

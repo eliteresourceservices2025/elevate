@@ -68,11 +68,30 @@ Studio editing of calls is **not** in this first release, and the studio does no
 
 ## Out of scope for this release
 
-Recorded caller audio, recorded learner replies, typed replies, an AI customer, and studio editing of calls. The data model leaves
-room for an optional audio file per caller line later.
+Recorded learner replies, typed replies, an AI customer, and studio editing of calls. (Caller audio was added after this release; see
+"Read-aloud audio" below.)
 
 ## Tests
 
 Zod and content lint (unit); the scoring, ordering, "answer key never returned", tries and wait rules and the pass gate (real
 Postgres integration tests, as for the exam); a response-inspection test that no call response carries key fields; the runner
 (render tests and a browser check). Retention follows the exam: results 6 years, per-step answers 12 months (added to the same job).
+
+## Read-aloud audio (calls and exam)
+
+A **Listen** button reads aloud each caller line, the caller's reply after the learner answers, and every exam question with its choices.
+
+- **Clips are made ahead of time** with VoiceStudio on this computer, never at run time: `pnpm exec tsx scripts/learn-voice-texts.mts` (in
+  `apps/elevate`) lists them, then `node customer-service/make-voice.cjs` (in `tools/recap-video`) makes the files in `apps/learn/media/voice`
+  and the list in `apps/learn/src/content/voice-index.json`. 495 clips: 19 caller lines, 59 replies, 411 exam lines, 6 "Option A" clips.
+- **A clip is named by a hash of its exact text** (`src/lib/voice.ts`). The name says nothing about the answer, and a reply's clip cannot be
+  guessed before the reply is shown (it is shown only after the step is answered). Change a line and its clip no longer matches:
+  `src/lib/voice.test.ts` fails until the clip is made again.
+- **Served only to a signed-in person** by `/api/voice/[file]` (same handler as the videos, `src/lib/recap-media.ts`). Where a clip is
+  missing the button falls back to the browser's own speech.
+- **Exam audio** is one calm voice: the stem, then "Option A", its choice, and so on in the order shown (choices are shuffled each try, so
+  each choice is its own clip). It never reads the reason or the answer.
+- **Callers** are five invented people, each with a designed voice (age, gender, pitch, American accent). Tone comes from **pitch and
+  pace** (angry: higher and faster; worried: higher; relieved: slower). The installed engine (OmniVoice) cannot act an emotion. IndexTTS 2.5
+  can, but took over ten minutes per clip on this CPU-only computer (about 13 GB), so it was tried and uninstalled. If a faster machine
+  with a GPU is available, regenerate the caller clips with it (`make-voice.cjs` has the hook for another engine).

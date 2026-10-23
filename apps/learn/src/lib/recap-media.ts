@@ -8,8 +8,10 @@ import { resolveSession } from "./handlers";
 // keeps the file itself, and the easy ways to save it, away from people who are not course takers.) Seeking works through byte ranges.
 
 export const RECAP_DIR = join(/* turbopackIgnore: true */ process.cwd(), "media", "recaps");
-const NAME = /^[a-z0-9_-]{1,80}\.(mp4|vtt)$/;
-const TYPES: Record<string, string> = { mp4: "video/mp4", vtt: "text/vtt; charset=utf-8" };
+/** The read-aloud clips of the mock call and the exam (src/lib/voice.ts) are served the same way, from their own folder. */
+export const VOICE_DIR = join(/* turbopackIgnore: true */ process.cwd(), "media", "voice");
+const NAME = /^[a-z0-9_-]{1,80}\.(mp4|vtt|m4a)$/;
+const TYPES: Record<string, string> = { mp4: "video/mp4", vtt: "text/vtt; charset=utf-8", m4a: "audio/mp4" };
 
 const plain = (status: number, text: string) => new Response(text, { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
 

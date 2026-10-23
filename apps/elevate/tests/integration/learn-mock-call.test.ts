@@ -479,7 +479,9 @@ describe("the call endpoints and views", () => {
         const r = await api(cookie, "answerCall", { attemptId, scenarioId: sc.id, stepId: st.id, optionId: "a" });
         seen.push(r.body);
         expect(r.status).toBe(200);
-        expect(Object.keys(r.body).sort()).toEqual(["attemptDone", "callDone", "mood", "ok", "reply"]);
+        expect(Object.keys(r.body).sort()).toEqual(["attemptDone", "callDone", "mood", "ok", "reply", "replyAudio"]);
+        // the only new field is a hashed clip name (or null): never the points or the best reply
+        expect(r.body.replyAudio === null || /^\/api\/voice\/v-[0-9a-f]{24}\.m4a$/.test(String(r.body.replyAudio))).toBe(true);
         last = r.body;
       }
     }
