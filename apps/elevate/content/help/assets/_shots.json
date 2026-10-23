@@ -60,26 +60,6 @@
     "alt": "The Offboarding page, where you start an offboarding."
   },
   {
-    "article": "post-a-job",
-    "file": "01-recruiting-page.png",
-    "alt": "The Recruiting page lists your jobs and applicants."
-  },
-  {
-    "article": "post-a-job",
-    "file": "02-new-job.png",
-    "alt": "The New job form. A job starts as a draft."
-  },
-  {
-    "article": "post-a-job",
-    "file": "03-careers-page.png",
-    "alt": "Edit the careers page title, introduction and banner."
-  },
-  {
-    "article": "send-an-offer",
-    "file": "01-offer-templates.png",
-    "alt": "Offer templates: the letter and the fields that fill in by themselves."
-  },
-  {
     "article": "team-attendance",
     "file": "01-team-attendance.png",
     "alt": "Team attendance: who is working now, flags and end-of-day reports."
@@ -198,31 +178,6 @@
     "article": "offboard-someone",
     "file": "03-case.png",
     "alt": "An offboarding case: the checklist, and the HR actions such as Remove access now."
-  },
-  {
-    "article": "post-a-job",
-    "file": "04-job-pipeline.png",
-    "alt": "A job's pipeline: one column for each stage."
-  },
-  {
-    "article": "review-applications",
-    "file": "01-pipeline.png",
-    "alt": "The pipeline. Drag a card to another column, or use Move to."
-  },
-  {
-    "article": "review-applications",
-    "file": "02-applicant.png",
-    "alt": "An applicant's page: resume, notes, interviews and history."
-  },
-  {
-    "article": "interviews-and-scorecards",
-    "file": "01-schedule.png",
-    "alt": "Schedule an interview: type, date and time, length, place and interviewers."
-  },
-  {
-    "article": "send-an-offer",
-    "file": "02-offer-panel.png",
-    "alt": "On an applicant at the Offer stage, open Make an offer."
   },
   {
     "article": "decide-a-time-off-request",
@@ -463,5 +418,100 @@
     "article": "report-something-anonymously",
     "file": "02-check-a-case.png",
     "alt": "To read a reply, type your case code and passphrase."
+  },
+  {
+    "article": "find-applicants",
+    "file": "01-list.png",
+    "alt": "The Applicants page: filters on top, one row for each applicant."
+  },
+  {
+    "article": "find-applicants",
+    "file": "02-more-filters.png",
+    "alt": "More filters: how it closed, source, tag, keyword match and the talent pool."
+  },
+  {
+    "article": "act-on-many-applicants",
+    "file": "01-bulk.png",
+    "alt": "Tick applicants, choose what to do, then click Apply."
+  },
+  {
+    "article": "merge-duplicate-applicants",
+    "file": "01-duplicates.png",
+    "alt": "Possible duplicates: records that look like the same person."
+  },
+  {
+    "article": "reword-applicant-emails",
+    "file": "01-emails.png",
+    "alt": "Applicant emails: the built-in wording, and a place to write your own."
+  },
+  {
+    "article": "post-a-job",
+    "file": "01-recruiting-page.png",
+    "alt": "The Recruiting page lists your jobs and applicants."
+  },
+  {
+    "article": "post-a-job",
+    "file": "02-new-job.png",
+    "alt": "The New job form. A job starts as a draft."
+  },
+  {
+    "article": "post-a-job",
+    "file": "03-careers-page.png",
+    "alt": "Edit the careers page title, introduction and banner."
+  },
+  {
+    "article": "send-an-offer",
+    "file": "01-offer-templates.png",
+    "alt": "Offer templates: the letter and the fields that fill in by themselves."
+  },
+  {
+    "article": "post-a-job",
+    "file": "04-job-pipeline.png",
+    "alt": "A job's pipeline: one column for each stage."
+  },
+  {
+    "article": "interviews-and-scorecards",
+    "file": "01-schedule.png",
+    "alt": "Schedule an interview: type, date and time, length, place and interviewers."
+  },
+  {
+    "article": "send-an-offer",
+    "file": "02-offer-panel.png",
+    "alt": "On an applicant at the Offer stage, open Make an offer."
+  },
+  {
+    "article": "read-recruiting-reports",
+    "file": "01-reports.png",
+    "alt": "Recruiting reports: how far applications got, time in each stage, sources and how applications ended."
+  },
+  {
+    "article": "review-applications",
+    "file": "01-pipeline.png",
+    "alt": "The pipeline. Drag a card to another column, or use Move to."
+  },
+  {
+    "article": "review-applications",
+    "file": "02-applicant.png",
+    "alt": "An applicant's page: details, keyword match, talent pool, source and tags, then the resume, notes, interviews and history."
+  },
+  {
+    "article": "tag-applicants-and-track-sources",
+    "file": "01-source-and-tags.png",
+    "alt": "On an applicant's page: where they heard about the job, and their tags."
+  },
+  {
+    "article": "keyword-match-resumes",
+    "file": "01-job-keywords.png",
+    "alt": "On the job form: the words to look for in resumes."
+  },
+  {
+    "article": "keyword-match-resumes",
+    "file": "02-keyword-match.png",
+    "alt": "An applicant's keyword match: the percentage, the words found and the words missing."
+  },
+  {
+    "article": "talent-pool",
+    "file": "01-pool-panel.png",
+    "alt": "On an applicant's page: the talent pool panel."
   }
 ]

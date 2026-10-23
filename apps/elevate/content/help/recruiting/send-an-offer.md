@@ -3,7 +3,7 @@ title: Send an offer and track signing
 summary: Prepare an offer letter from a template, send it for signature and follow its status.
 category: recruiting
 audience: super_admin, hr_admin, recruiter
-order: 4
+order: 9
 video: send-an-offer
 updated: 2026-10-21
 ---

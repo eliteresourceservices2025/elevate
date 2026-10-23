@@ -3,7 +3,7 @@ title: Schedule interviews and fill in scorecards
 summary: Book an interview, invite interviewers and record each interviewer's scorecard.
 category: recruiting
 audience: super_admin, hr_admin, recruiter, team_lead
-order: 3
+order: 8
 updated: 2026-10-21
 ---
 
