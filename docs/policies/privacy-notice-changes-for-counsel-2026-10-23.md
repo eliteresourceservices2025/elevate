@@ -16,14 +16,12 @@ work with ERS (contractors, 1099) and for people who apply to work with ERS.
   already appeared on certificate copies. Video and audio plays are not logged by the app (the hosting provider's ordinary request logs are outside our control).
 
 ### 2. Why we use it (training)
-- **Now adds:** grading of practice calls, and the sentence "Scores are worked out by the system from the answers you choose, and people review any result that
-  affects you."
+- **Now adds:** grading of practice calls, and the sentence "Scores are calculated by the system, and people review any result that affects you."
 - **Please check:** the notice also says "we do not make decisions about you by computer alone". Pass or fail on the exam and the practice call is computed by the
   system. Is the added sentence enough, or should the notice say plainly that pass or fail is automatic and that HR can review it on request?
 
 ### 3. Who can see it (new line)
-- "Training results: you, HR and the Privacy Officer can see your scores, your practice-call result and the answers you gave. Your team lead and clients see only
-  whether you have completed or passed a course."
+- "Training results: you, HR and the Privacy Officer see your scores and answers. Your lead and clients see only whether you passed."
 - This is how the system works today (leads and clients see completion only, never scores).
 
 ### 4. How long we keep it (training)
