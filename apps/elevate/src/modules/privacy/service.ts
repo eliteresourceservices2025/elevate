@@ -58,17 +58,22 @@ export async function collectMyData(userId: string, email: string): Promise<MyDa
     left join docs.policies p on p.id = pv.policy_id
     where k.user_id = ${userId}
     order by k.acknowledged_at desc limit 200`);
-  // Training from ELEVATE Learn: dates, status, time and the certificate reference. No answers or question text.
+  // Training from ELEVATE Learn: one line per course (the current round) with its newest certificate, like the Learn app's own record. Dates,
+  // status, time and the certificate reference. No answers or question text, and no course version numbers (versions are internal evidence).
   const training = await query(sql`
-    select co.title, cv.version, a.track, a.status, a.assigned_at::date as assigned_on, a.due_on, a.passed_at::date as passed_on,
-           coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = a.id), 0)::int as seconds,
-           c.reference, c.ends_on
-    from learn.assignments a
-    join learn.courses co on co.id = a.course_id
-    join learn.course_versions cv on cv.id = a.version_id
-    left join learn.certificates c on c.assignment_id = a.id
-    where a.user_id = ${userId}
-    order by a.assigned_at desc limit 100`);
+    select * from (
+      select distinct on (a.course_id) co.title, a.track, a.status, a.assigned_at::date as assigned_on, a.due_on, a.passed_at::date as passed_on,
+             coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = a.id), 0)::int as seconds,
+             c.reference, c.ends_on
+      from learn.assignments a
+      join learn.courses co on co.id = a.course_id
+      left join lateral (
+        select c2.reference, c2.ends_on from learn.certificates c2 join learn.assignments a2 on a2.id = c2.assignment_id
+        where a2.course_id = a.course_id and a2.user_id = a.user_id order by c2.issued_on desc, c2.ends_on desc limit 1
+      ) c on true
+      where a.user_id = ${userId} and a.status <> 'cancelled'
+      order by a.course_id, (a.reason = 'update'), a.assigned_at desc
+    ) latest order by assigned_on desc limit 100`);
   const practice = await query(sql`
     select co.title, d.quarter, d.correct from learn.drill_results d join learn.courses co on co.slug = d.course_slug
     where d.user_id = ${userId} order by d.quarter desc limit 100`);
@@ -110,7 +115,7 @@ export async function collectMyData(userId: string, email: string): Promise<MyDa
     clients: clients.map((c) => ({ client: String(c.name), startDate: dateOnly(c.start_date)!, endDate: dateOnly(c.end_date), hoursPerWeek: str(c.hours) })),
     documents: documents.map((d) => ({ title: String(d.title), type: String(d.type), expiresOn: dateOnly(d.expires_on), verified: d.verified_at !== null, uploadedAt: iso(d.created_at)! })),
     acknowledgments: acknowledgments.map((a) => ({ title: String(a.title), kind: String(a.kind), version: a.version === null || hidesVersion(a.policy_kind as string | null) ? null : Number(a.version), at: iso(a.acknowledged_at)! })),
-    training: training.map((t) => ({ course: String(t.title), version: Number(t.version), track: String(t.track), status: String(t.status), assignedOn: dateOnly(t.assigned_on)!, dueOn: dateOnly(t.due_on)!, passedOn: dateOnly(t.passed_on), minutesSpent: Math.round(Number(t.seconds) / 60), certificate: str(t.reference), validUntil: dateOnly(t.ends_on) })),
+    training: training.map((t) => ({ course: String(t.title), track: String(t.track), status: String(t.status), assignedOn: dateOnly(t.assigned_on)!, dueOn: dateOnly(t.due_on)!, passedOn: dateOnly(t.passed_on), minutesSpent: Math.round(Number(t.seconds) / 60), certificate: str(t.reference), validUntil: dateOnly(t.ends_on) })),
     practice: practice.map((p) => ({ course: String(p.title), quarter: String(p.quarter), choseBetter: Boolean(p.correct) })),
     requests: requests.map((r) => ({ category: CHANGE_CATEGORY_LABELS[r.category as ChangeCategory] ?? String(r.category), status: String(r.status), createdAt: iso(r.created_at)! })),
     activity: activity.map((a) => ({ at: iso(a.occurred_at)!, action: String(a.action), by: a.by_me ? "You" : "HR or system" })),

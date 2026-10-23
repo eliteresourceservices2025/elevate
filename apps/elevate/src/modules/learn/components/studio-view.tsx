@@ -102,6 +102,87 @@ export function BlockView({ block }: { block: Block }) {
           <p className="text-muted-foreground">Answer: {block.answer}</p>
         </div>
       );
+    case "sort":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Sort it: {block.title}</strong>
+          <p>{block.prompt}</p>
+          <ol className="list-decimal pl-5">{block.items.map((t, i) => <li key={i}>{t}</li>)}</ol>
+          <p className="text-muted-foreground">{block.explanation}</p>
+        </div>
+      );
+    case "cards":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Cards: {block.title}</strong> <span className="text-muted-foreground">({block.groups.join(" / ")})</span>
+          <p>{block.prompt}</p>
+          <ul className="list-disc pl-5">{block.cards.map((c, i) => <li key={i}>{c.text} <strong>→ {block.groups[c.group]}</strong> <span className="text-muted-foreground">{c.feedback}</span></li>)}</ul>
+        </div>
+      );
+    case "spot":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Spot the mistake: {block.title}</strong>
+          <p>{block.prompt}</p>
+          <ul className="list-disc pl-5">{block.lines.map((l, i) => <li key={i}>{l.wrong ? <strong>(mistake) </strong> : null}{l.speaker}: {l.text}</li>)}</ul>
+          <p className="text-muted-foreground">{block.explanation}</p>
+        </div>
+      );
+    case "hotspot":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Tap the problems: {block.title}</strong>
+          <p>{block.prompt}</p>
+          <ul className="list-disc pl-5">{block.items.map((it, i) => <li key={i}>{it.problem ? <strong>(problem) </strong> : null}{it.label}: {it.text}{it.problem ? <span className="text-muted-foreground"> {it.why}</span> : null}</li>)}</ul>
+          <p className="text-muted-foreground">{block.explanation}</p>
+        </div>
+      );
+    case "flip":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Flip cards{block.title ? ": " + block.title : ""}</strong>
+          <ul className="list-disc pl-5">{block.cards.map((c, i) => <li key={i}><strong>{c.front}:</strong> {c.back}</li>)}</ul>
+        </div>
+      );
+    case "build":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Build it: {block.title}</strong>
+          <p>{block.prompt}</p>
+          {block.slots.map((s, i) => (
+            <div key={i}>
+              <em>{s.label}</em>
+              <ul className="list-disc pl-5">{s.options.map((o, j) => <li key={j}>{o.correct ? <strong>(right) </strong> : null}{o.text}</li>)}</ul>
+            </div>
+          ))}
+        </div>
+      );
+    case "branch":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Call: {block.title}</strong>
+          <p>{block.intro}</p>
+          {block.record ? <p className="text-muted-foreground">Record: {block.record.title}: {block.record.rows.map((r) => `${r.label} ${r.value}`).join("; ")}</p> : null}
+          {block.turns.map((t, i) => (
+            <div key={i}>
+              <em>Caller: {t.caller}</em>
+              <ul className="list-disc pl-5">{t.choices.map((c, j) => <li key={j}>{c.text} <strong>({c.mood > 0 ? "+" : ""}{c.mood})</strong> <span className="text-muted-foreground">{c.reply}</span></li>)}</ul>
+            </div>
+          ))}
+        </div>
+      );
+    case "game":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Quiz game: {block.title}</strong>{block.seconds ? <span className="text-muted-foreground"> ({block.seconds}s per round)</span> : null}
+          {block.rounds.map((r, i) => (
+            <div key={i}>
+              <em>{r.question}</em>
+              <ul className="list-disc pl-5">{r.options.map((o, j) => <li key={j}>{o.correct ? <strong>(right) </strong> : null}{o.text}</li>)}</ul>
+            </div>
+          ))}
+        </div>
+      );
     case "check":
       return (
         <div className="space-y-1 text-sm">

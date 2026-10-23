@@ -4,6 +4,7 @@ import { resolveSession, type Deps } from "./handlers";
 import { sameSiteOrigin } from "./origin";
 import { drillFor, quarterOf } from "../content/drills";
 import { addressOf } from "./rate-limit";
+import { voiceUrl } from "./voice";
 
 // The JSON endpoints behind the player and the exam. Every one is a POST from this site only, needs a Learn session, and calls one
 // database function that holds the rule (docs/learn/03-data-and-security.md): the browser says what the person did, and the
@@ -33,7 +34,10 @@ const MESSAGES: Record<string, [number, string]> = {
   modules_incomplete: [409, "Please finish all the modules before the exam."],
   no_tries_left: [409, "You have used all your tries. Please contact HR."],
   wait_after_fail: [409, "Please review the topics first. You can try again after the wait."],
-  bank_too_small: [500, "The exam is not ready yet. Please contact HR."],
+  bank_too_small: [500, "This part of the training is not ready yet. Please contact HR."],
+  calls_not_configured: [500, "The mock call is not ready yet. Please contact HR."],
+  step_out_of_order: [409, "That step was already answered or is not next. Please reload the call."],
+  call_unfinished: [409, "Please finish every step of every call first."],
   exam_not_configured: [500, "The exam is not ready yet. Please contact HR."],
   time_up: [409, "Time is up. Your saved answers will be graded."],
   already_submitted: [409, "This exam was already submitted."],
@@ -138,6 +142,35 @@ const ACTIONS: Record<string, { schema: z.ZodType; run: (ctx: Ctx, input: never)
       return { body: { ok: true, scorePercent: Number(r.score_percent), correct: r.correct_count as number, total: r.total_count as number, passed: r.passed as boolean } };
     },
   },
+  /** The mock call: start it, answer one step at a time, then submit. The database holds the key and the rules (docs/learn/14-mock-call.md). */
+  startCall: {
+    schema: z.object({ assignmentId: uuid }),
+    run: async (ctx, input: { assignmentId: string }) => {
+      try {
+        const [row] = await ctx.sql`select learn.start_call(${ctx.userId}::uuid, ${input.assignmentId}::uuid) as id`;
+        return { body: { ok: true, attemptId: row.id as string } };
+      } catch (error) {
+        const c = codeOf(error);
+        if (c?.code === "wait_after_fail") throw new ApiError("wait_after_fail", { retryAt: c.detail ?? null });
+        throw error;
+      }
+    },
+  },
+  answerCall: {
+    schema: z.object({ attemptId: uuid, scenarioId: uuid, stepId: z.string().regex(/^[a-z0-9-]{1,20}$/), optionId: z.string().regex(/^[a-d]$/) }),
+    run: async (ctx, input: { attemptId: string; scenarioId: string; stepId: string; optionId: string }) => {
+      // Only the caller's answer, the new mood and whether the call / attempt is finished: never points or the best reply.
+      const [r] = await ctx.sql`select * from learn.answer_call_step(${ctx.userId}::uuid, ${input.attemptId}::uuid, ${input.scenarioId}::uuid, ${input.stepId}, ${input.optionId})`;
+      return { body: { ok: true, reply: r.reply as string, replyAudio: voiceUrl(r.reply as string), mood: r.mood as number, callDone: r.call_done as boolean, attemptDone: r.attempt_done as boolean } };
+    },
+  },
+  submitCall: {
+    schema: z.object({ attemptId: uuid }),
+    run: async (ctx, input: { attemptId: string }) => {
+      const [r] = await ctx.sql`select * from learn.grade_call(${ctx.userId}::uuid, ${input.attemptId}::uuid)`;
+      return { body: { ok: true, scorePercent: Number(r.score_percent), passed: r.passed as boolean, categories: r.categories as Record<string, number> } };
+    },
+  },
   /** After a pass: the responsibility statement and the certificate. */
   accept: {
     schema: z.object({ assignmentId: uuid, statementVersion: z.string().regex(/^[a-z0-9._-]{1,30}$/), typedName: z.string().trim().min(2).max(120) }),
@@ -154,8 +187,7 @@ async function moduleSeconds(ctx: Ctx, assignmentId: string, key: string): Promi
   // Reads go through row-level security, which needs the person set for the transaction.
   const rows = await withUser(ctx.sql, ctx.userId, (tx) => tx`
     select coalesce((select sum(seconds) from learn.module_time where assignment_id = ${assignmentId}::uuid and module_key = ${key}), 0)::int as seconds,
-           coalesce((select m.min_seconds from learn.assignments a join learn.version_modules m on m.version_id = a.version_id
-                     where a.id = ${assignmentId}::uuid and m.module_key = ${key}), 0)::int as min_seconds`);
+           coalesce(learn.assignment_min_seconds(${assignmentId}::uuid, ${key}), 0)::int as min_seconds`);
   return { seconds: rows[0].seconds as number, minSeconds: rows[0].min_seconds as number };
 }
 

@@ -9,7 +9,7 @@ export const m7: CourseModule = {
   key: "incidents",
   title: "Privacy and security incidents and breaches",
   summary: "What counts as an incident, how a breach is decided, who must be told and by when, and exactly what to do and not do when something goes wrong.",
-  estimatedMinutes: 12,
+  estimatedMinutes: 17,
   tracks: ["full", "essentials", "refresher"],
   keyPoints: [
     "An incident is anything that may have exposed patient information or weakened its protection.",
@@ -226,6 +226,130 @@ export const m7: CourseModule = {
       ],
     },
     {
+      id: "play-report-or-not",
+      title: "Play: report it, or not an incident?",
+      blocks: [
+        { type: "paragraph", text: "You do not decide whether something is a reportable breach, but you do notice. Sort each one: would you report it?" },
+        {
+          type: "cards",
+          title: "Incident or not?",
+          prompt: "Would you report this as a possible incident?",
+          groups: ["Report it now", "Not an incident"],
+          cards: [
+            { text: "A schedule with patient names went to a similarly named contact at another company", group: 0, feedback: "A message with patient information sent to the wrong person is an incident. Report it the same day." },
+            { text: "A work phone is missing from your bag", group: 0, feedback: "A lost device that could reach patient information is an incident from the moment you notice." },
+            { text: "A coworker used your password for a minute", group: 0, feedback: "A shared password is an incident, even if nothing was opened." },
+            { text: "A teammate opened a record out of curiosity", group: 0, feedback: "Records opened without a work reason are an incident." },
+            { text: "A stolen laptop that you believe was encrypted", group: 0, feedback: "Encryption may change the outcome, but it is the client's and ERS's call, so you report every loss." },
+            { text: "A reminder pops up to take a break", group: 1, feedback: "Nothing about patient information was exposed or weakened." },
+            { text: "You finish a task in the client's approved system and sign out normally", group: 1, feedback: "That is the job done correctly." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "play-response-order",
+      title: "Play: put the response in order, then make the call",
+      blocks: [
+        {
+          type: "sort",
+          title: "The first steps after a mistake",
+          prompt: "Put the five steps in the order you would do them.",
+          items: [
+            "Stop what you are doing with the information",
+            "Tell your lead and HR immediately",
+            "Describe what happened, with no patient details",
+            "Keep the message or device as it is",
+            "Do what you are asked, and nothing more",
+          ],
+          explanation: "Stop, tell, describe, preserve, then follow instructions. Telling comes before you try anything yourself, and nothing is deleted.",
+        },
+        {
+          type: "branch",
+          title: "The call with your lead",
+          intro: "You sent a schedule to the wrong contact and reported it. Your lead calls to ask what happened. Pick the reply you would give.",
+          startMood: 50,
+          turns: [
+            {
+              caller: "Thanks for telling me so fast. Walk me through what happened.",
+              choices: [
+                { text: "I sent the schedule at ten to five, and it went to a similarly named contact at another company. I noticed fifteen minutes later.", mood: 20, reply: "That is exactly the clear, factual account the client needs." },
+                { text: "It's probably nothing, they most likely won't open it.", mood: -20, reply: "We cannot assume that. Please stick to what you know." },
+                { text: "I'll read you the patient names so you can see how bad it is.", mood: -10, reply: "Leave the names out. We can reach the message without repeating them here." },
+              ],
+            },
+            {
+              caller: "Do you know whether the other person has opened it?",
+              choices: [
+                { text: "I do not know. I have not tried to fix it or contact them.", mood: 20, reply: "Good. That is the honest answer, and leaving it alone helps." },
+                { text: "I asked them to delete it and not tell anyone.", mood: -25, reply: "That should have come through us. We now need to handle that request too." },
+              ],
+            },
+            {
+              caller: "What will you do with the sent email now?",
+              choices: [
+                { text: "Keep it as it is and follow the client's instructions.", mood: 20, reply: "Right. It is evidence, and the client will tell us the next step." },
+                { text: "Delete it from my sent folder so it is not in the way.", mood: -25, reply: "Please don't delete anything. The client needs it as it is." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "quick-round-incidents",
+      title: "Quick round: incidents and breaches",
+      blocks: [
+        {
+          type: "game",
+          title: "Incident sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "Who decides whether an incident is a reportable breach?",
+              options: [
+                { text: "The client and ERS, after a risk assessment", correct: true, feedback: "You report. They decide." },
+                { text: "The person who made the mistake", correct: false, feedback: "That is not your decision." },
+                { text: "The patient", correct: false, feedback: "The patient is told if a breach is confirmed." },
+              ],
+            },
+            {
+              question: "How does the law treat an impermissible use or disclosure of PHI?",
+              options: [
+                { text: "As a breach, unless a risk assessment shows a low probability of compromise", correct: true, feedback: "The burden is on the organization." },
+                { text: "As harmless unless proven otherwise", correct: false, feedback: "It starts the other way around." },
+                { text: "As ignorable if it was small", correct: false, feedback: "Small does not skip the assessment." },
+              ],
+            },
+            {
+              question: "When do you report a possible incident?",
+              options: [
+                { text: "The same day, even if you are not sure", correct: true, feedback: "The clock runs from when it is known." },
+                { text: "When you are certain", correct: false, feedback: "If you wonder, report." },
+                { text: "At the end of the week", correct: false, feedback: "A week can use up the client's time." },
+              ],
+            },
+            {
+              question: "What do you leave out of your incident report?",
+              options: [
+                { text: "Patient names and details", correct: true, feedback: "Say what happened without repeating the information." },
+                { text: "The time it happened", correct: false, feedback: "The time is a key fact." },
+                { text: "Which system it was in", correct: false, feedback: "The system is a key fact too." },
+              ],
+            },
+            {
+              question: "Can ERS punish you for reporting a possible incident in good faith?",
+              options: [
+                { text: "No, good-faith reporting is protected", correct: true, feedback: "Hiding an incident is what brings sanctions." },
+                { text: "Yes, every mistake is punished", correct: false, feedback: "Honest mistakes reported quickly are protected." },
+                { text: "Only if it was your fault", correct: false, feedback: "Good-faith reports are not punished." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: "terms",
       title: "Terms from this module",
       blocks: [
@@ -266,5 +390,8 @@ export const q7: QuestionSeed[] = [
   q("incidents", "No retaliation", "true_false", "True or false: HIPAA prohibits an organization from retaliating against someone for filing a complaint about a possible violation.", ["True", "False"], [0], "The Privacy Rule bars intimidating or retaliatory acts against people who file complaints or take part in investigations. ERS also does not punish good-faith internal reports."),
   q("incidents", "Preserve", "single", "You suspect a phishing email caused a problem. What should you do with the email?", ["Keep it and report it", "Delete it immediately", "Forward it to everyone", "Print it and throw it away"], [0], "Do not delete evidence. The message helps responders understand what happened."),
   q("incidents", "Scenario", "scenario", "You find a printout with patient names left on a shared printer at a co-working space. What do you do?", ["Keep it secure, report it to your lead and HR, and follow instructions", "Throw it in the bin", "Leave it where it is", "Take a photo and post it to ask whose it is"], [0], "Secure the document, then report it. Throwing it away or posting a photo spreads the exposure."),
+  q("incidents", "Response order", "single", "After you realize you shared patient information with the wrong person, which order of steps is best?", ["Stop, tell your lead and HR, describe the facts, keep the evidence, follow instructions", "Delete the message, then tell your lead", "Ask the person to delete it, then tell your lead later", "Fix the autofill, then wait to see what happens"], [0], "Stopping and telling come first. Evidence is kept, and you do only what you are asked."),
+  q("incidents", "Report details", "true_false", "True or false: You should include the patient names in your first message about an incident so your lead can see the harm.", ["True", "False"], [1], "Leave patient names and details out. Describe what happened, when, and in which system."),
+  q("incidents", "Exceptions", "single", "You think a mistake you made was probably harmless and fits an exception. What do you do?", ["Report it anyway and let the client and ERS decide", "Decide it fits and say nothing", "Wait a week and see", "Ask the person who received it to forget it"], [0], "Applying an exception is for the client and ERS. You report."),
   q("incidents", "Common causes", "multiple", "Which of these are common causes of privacy or security incidents? Select all that apply.", ["Information sent to the wrong person", "A lost or stolen laptop", "Records opened without a work reason", "Taking a regular break"], [0, 1, 2], "Misdirected information, lost devices and unauthorized access are among the most common causes. A break is not an incident."),
 ];

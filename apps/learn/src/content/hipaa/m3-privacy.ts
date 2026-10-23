@@ -8,7 +8,7 @@ export const m3: CourseModule = {
   key: "privacy",
   title: "The Privacy Rule: using and sharing patient information",
   summary: "When patient information may be used or shared, when a written authorization is needed, how the public-interest exceptions work, and how to share only the minimum.",
-  estimatedMinutes: 20,
+  estimatedMinutes: 23,
   tracks: ["full", "essentials", "refresher"],
   keyPoints: [
     "Use means working with information inside the organization; disclosure means giving it to someone outside; both need a valid reason.",
@@ -299,6 +299,126 @@ export const m3: CourseModule = {
       ],
     },
     {
+      id: "sensitive-sort",
+      title: "Quick sort: ordinary or stop-and-ask?",
+      blocks: [
+        { type: "paragraph", text: "Some records carry extra rules. You do not decide which rules apply, but you can learn to notice when to stop and ask." },
+        {
+          type: "cards",
+          title: "Ordinary or stop-and-ask?",
+          prompt: "How should you treat each one?",
+          groups: ["Ordinary chart item", "Stop and ask first"],
+          cards: [
+            { text: "A patient's appointment time", group: 0, feedback: "Routine scheduling information. Minimum necessary still applies." },
+            { text: "An invoice amount for a visit", group: 0, feedback: "Ordinary billing information. Still share only what the task needs." },
+            { text: "A counselor's private notes about a session, kept apart from the chart", group: 1, feedback: "Psychotherapy notes get stronger protection. Do not copy, quote or forward them. Ask your lead." },
+            { text: "A request that involves substance use treatment records", group: 1, feedback: "Substance use records often have extra rules. Stop and ask." },
+            { text: "A request that involves HIV records", group: 1, feedback: "HIV records often have extra rules. Stop and ask." },
+            { text: "A request that involves mental health records from another state", group: 1, feedback: "Rules can differ by state. A rule being different is a reason to ask, not to guess." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "minimum-incidental-practice",
+      title: "Practice: minimum necessary and incidental",
+      blocks: [
+        {
+          type: "build",
+          title: "Answer a billing question",
+          prompt: "A clinic contact asks, 'What does this patient owe?' Pick the best piece for each part of your reply.",
+          slots: [
+            {
+              label: "What you send",
+              options: [
+                { text: "The invoice number and the amount", correct: true, feedback: "That answers the question and nothing more." },
+                { text: "The full chart so they can check", correct: false, feedback: "Too much. Minimum necessary means the least needed for the job." },
+              ],
+            },
+            {
+              label: "Where you send it",
+              options: [
+                { text: "The client's approved channel", correct: true, feedback: "Approved channel, right recipient." },
+                { text: "Your personal email, because it is faster", correct: false, feedback: "Not an approved channel." },
+              ],
+            },
+            {
+              label: "What you keep",
+              options: [
+                { text: "Nothing extra: no copies outside the system", correct: true, feedback: "No stray copies." },
+                { text: "A copy in a personal folder, just in case", correct: false, feedback: "An unapproved copy is a new risk." },
+              ],
+            },
+          ],
+        },
+        {
+          type: "spot",
+          title: "Front desk spot",
+          prompt: "A front-desk chat about a sign-in sheet. Tap the line that is not a reasonable safeguard.",
+          lines: [
+            { speaker: "Lead", text: "Our sign-in sheet is on the counter. Patients write their name and the time." },
+            { speaker: "Receptionist", text: "I'll keep it to name and time, and keep the reason for the visit off it." },
+            { speaker: "Colleague", text: "Let's add a column for the reason for the visit so the nurses can see it.", wrong: true },
+            { speaker: "Lead", text: "No, anyone in the waiting room could read that. Keep the reason off." },
+          ],
+          explanation: "Incidental exposure is acceptable only with reasonable safeguards and minimum necessary. A reason-for-visit column that anyone can read breaks both.",
+        },
+      ],
+    },
+    {
+      id: "privacy-round",
+      title: "Quick round: the Privacy Rule",
+      blocks: [
+        {
+          type: "game",
+          title: "Privacy sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "What does minimum necessary mean?",
+              options: [
+                { text: "Use or share only the least information the job needs", correct: true, feedback: "Right." },
+                { text: "Never share anything", correct: false, feedback: "Information has to move for care and payment." },
+                { text: "Share everything you have to be safe", correct: false, feedback: "That is the opposite." },
+              ],
+            },
+            {
+              question: "A caller says he is a detective and wants an address. You...",
+              options: [
+                { text: "Share nothing and pass it to your client contact", correct: true, feedback: "The client verifies and decides. You route." },
+                { text: "Give the address, police have a right", correct: false, feedback: "You cannot verify him." },
+                { text: "Only confirm the person is a patient", correct: false, feedback: "That confirmation is itself a disclosure." },
+              ],
+            },
+            {
+              question: "An incidental disclosure is acceptable when...",
+              options: [
+                { text: "Reasonable safeguards and minimum necessary were in place", correct: true, feedback: "That is the test." },
+                { text: "Nobody complained", correct: false, feedback: "Complaints are not the test." },
+                { text: "A coworker overheard", correct: false, feedback: "Who overhears is not the test." },
+              ],
+            },
+            {
+              question: "You see something about psychotherapy notes in a task. You...",
+              options: [
+                { text: "Do not copy, quote or forward it, and ask your lead", correct: true, feedback: "They get stronger protection." },
+                { text: "Copy the key points to save time", correct: false, feedback: "Do not copy them." },
+                { text: "Forward it to a teammate for a second opinion", correct: false, feedback: "That is a disclosure." },
+              ],
+            },
+            {
+              question: "A state rule is stricter than HIPAA. Which do you follow?",
+              options: [
+                { text: "The stricter one", correct: true, feedback: "HIPAA is the minimum, not the maximum." },
+                { text: "Only HIPAA", correct: false, feedback: "A stricter state law can apply too." },
+                { text: "The one that is quicker", correct: false, feedback: "Speed is not the test." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: "terms",
       title: "Terms from this module",
       blocks: [
@@ -342,6 +462,10 @@ export const q3: QuestionSeed[] = [
   q("privacy", "Minimum necessary", "multiple", "Minimum necessary does not apply to which of these? Select all that apply.", ["Disclosures to the patient themselves", "Disclosures to a provider for the patient's treatment", "Disclosures the law requires", "A routine request to a vendor for patient information"], [0, 1, 2], "The standard does not apply to treatment disclosures, disclosures to the patient, authorized disclosures, HHS investigations and required disclosures. Routine vendor requests are covered."),
   q("privacy", "Incidental", "single", "A name appears on a sign-in sheet at a front desk, with no reason for the visit. This is likely:", ["An incidental disclosure that is acceptable with reasonable safeguards", "A serious breach every time", "Marketing", "A sale of information"], [0], "Incidental exposure that follows reasonable safeguards and minimum necessary is allowed."),
   q("privacy", "Incidental", "single", "Which is a reasonable safeguard against incidental disclosure on a phone call?", ["Moving away from others and lowering your voice", "Speaking louder so the patient hears", "Putting the call on speaker in a shared room", "Reading the details twice"], [0], "Reasonable safeguards limit what others can overhear."),
+  q("privacy", "Incidental", "single", "A front desk wants to add a 'reason for visit' column to a sign-in sheet that anyone in the waiting room can read. What is the problem?", ["It breaks reasonable safeguards and minimum necessary", "There is no problem because patients chose to come", "It is only a problem on weekends", "It is fine if the column is small"], [0], "The reason for a visit should stay off any sheet others can read. Incidental exposure is acceptable only with safeguards and minimum necessary."),
+  q("privacy", "Sensitive records", "single", "A task involves what looks like a counselor's private notes about a session, kept apart from the chart. What should you do?", ["Do not copy, quote or forward them, and ask your lead", "Copy the key points into your task notes", "Forward them to a teammate", "Post a summary in the team chat"], [0], "Psychotherapy notes get stronger protection and most uses need a specific written authorization."),
+  q("privacy", "Sensitive records", "multiple", "Which kinds of records often have extra rules beyond HIPAA, so you should stop and ask? Select all that apply.", ["Mental health records", "Substance use treatment records", "HIV records", "An appointment reminder time"], [0, 1, 2], "Sensitive records often carry extra rules. A routine appointment time does not."),
+  q("privacy", "Minimum necessary", "single", "A clinic contact asks what a patient owes. Which reply follows minimum necessary?", ["The invoice number and the amount, through the client's approved channel", "The full chart through personal email", "A screenshot of the whole account", "The patient's whole history for context"], [0], "Send the least that answers the question, through the approved channel."),
   q("privacy", "State laws", "single", "A state law gives patients more privacy protection than HIPAA for a type of record. What applies?", ["The stricter protection can apply as well, so ask when unsure", "Only HIPAA applies in every case", "Neither applies", "Whichever is quicker to follow"], [0], "HIPAA is a federal floor. Stricter state laws can apply, and a VA asks rather than guesses."),
   q("privacy", "Verification", "single", "A caller who says she is a patient's employer asks about the patient's sick leave diagnosis. What should you do?", ["Share nothing and route the request, since an employer is not a permitted recipient without authorization", "Give the diagnosis if she names the patient", "Give a summary without the diagnosis name", "Confirm the patient has been in"], [0], "An employer has no general right to patient information. Without authorization, you do not share, and you route the request."),
   q("privacy", "Verification", "multiple", "Which of these are acceptable ways to confirm who is asking before sharing PHI? Select all that apply.", ["Using your client's verification steps", "Checking the person is on the approved list for that information", "Taking the caller's word because they know the patient's name", "Asking the caller to read back the number they dialed"], [0, 1], "Use the client's steps and the approved list. A caller knowing a name is not proof."),

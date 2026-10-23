@@ -7,7 +7,7 @@ export const phishingModule: CourseModule = {
   key: "phishing",
   title: "Phishing and social engineering",
   summary: "How attackers trick people, the signs to look for, and what to do when something feels off.",
-  estimatedMinutes: 17,
+  estimatedMinutes: 21,
   tracks: ["full"],
   keyPoints: [
     "Attackers target people, not only computers.",
@@ -231,6 +231,131 @@ export const phishingModule: CourseModule = {
         },
       ],
     },
+    {
+      id: "verify-second-channel",
+      title: "Verify through a second channel",
+      blocks: [
+        { type: "paragraph", text: "A voice or a face is not proof of who is asking. Criminals use software to make convincing fake audio and video, so a call or a video chat that looks and sounds like your manager can still be a fake. A joint FBI and CISA alert of October 2026 advises confirming requests for sensitive information through a second channel, if possible, and using phishing-resistant sign-in." },
+        { type: "callout", tone: "tip", title: "The habit", text: "When a request asks for money, access or patient information, stop and check it another way: call the person back on a number you already know, or ask in a chat channel the client already uses. Never use the number or link that came with the request." },
+        {
+          type: "cards",
+          title: "Second channel or same channel?",
+          prompt: "Is this a real way to check a request, or just more of the same message?",
+          groups: ["A second channel", "Not a check"],
+          cards: [
+            { text: "Call the manager on the number you already have", group: 0, feedback: "A number you already trust is a second channel." },
+            { text: "Call the number written in the message", group: 1, feedback: "The attacker chose that number, so it proves nothing." },
+            { text: "Ask in the chat channel the client already uses", group: 0, feedback: "A known chat channel is a different path from the message." },
+            { text: "Reply to the message and ask whether it is really them", group: 1, feedback: "Replying may reach the attacker and shows the mailbox is active." },
+            { text: "Trust the face on the video call", group: 1, feedback: "Software can fake a face and a voice. It is not proof." },
+            { text: "Tell your lead and let them check with the client", group: 0, feedback: "Reporting is always part of the answer, and your lead can confirm another way." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "video-call-boss",
+      title: "Practice: the video call from the boss",
+      blocks: [
+        {
+          type: "branch",
+          title: "A payment request on a video call",
+          intro: "A video call comes in. The face and voice look like your client's practice manager. They ask you to pay a supplier invoice today.",
+          startMood: 50,
+          turns: [
+            {
+              caller: "Quick favor. I need you to pay a supplier invoice today. I will message you the account details.",
+              choices: [
+                { text: "Pay it. I can see and hear the manager.", mood: -30, reply: "Great, sending the details now. (A familiar face and voice are not proof.)" },
+                { text: "I will call you back on the number I already have to confirm.", mood: 25, reply: "There is no need, just do it. (A real manager will not mind a call back.)" },
+                { text: "Message me the details first and I will decide.", mood: -10, reply: "Here they are. (You now hold payment details from the same unverified source.)" },
+              ],
+            },
+            {
+              caller: "I am travelling and cannot take calls. This is urgent, so just do it this one time.",
+              choices: [
+                { text: "Do it this one time.", mood: -30, reply: "Thank you. (Urgency and a reason you cannot call are the warning signs.)" },
+                { text: "End the call, confirm through a known number or chat, and tell my lead.", mood: 25, reply: "(The call ends. Verifying through a second channel is the right move.)" },
+                { text: "Ask a coworker if it looks right.", mood: -5, reply: "(A coworker cannot confirm it. Check with the manager through a channel you already trust.)" },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "fake-message-check",
+      title: "Check the message: what gives it away?",
+      blocks: [
+        {
+          type: "hotspot",
+          title: "A message about a held claim",
+          prompt: "This invented message says a claim is on hold. Tap every part that is a warning sign, then check.",
+          items: [
+            { label: "Sender", text: "Billing Support, from an address with a zero where a letter o should be", problem: true, why: "An address that is slightly off, such as a number in place of a letter, is a warning sign." },
+            { label: "Subject", text: "Your account closes in 15 minutes", problem: true, why: "Urgency or fear is meant to stop you from thinking." },
+            { label: "Sent", text: "During working hours" },
+            { label: "Button", text: "Sign in now, but the link's real address does not match the text", problem: true, why: "A link whose real address does not match the text is a warning sign." },
+            { label: "Request", text: "Enter your password and the code we just sent to your phone", problem: true, why: "No real service asks for a password and a code in a message." },
+            { label: "Footer", text: "A standard privacy notice at the bottom" },
+          ],
+          explanation: "Stop, check, verify through a number or address you already know, and report. Do not click or reply.",
+        },
+      ],
+    },
+    {
+      id: "quick-round-phishing",
+      title: "Quick round: phishing and social engineering",
+      blocks: [
+        {
+          type: "game",
+          title: "Phish sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "A message says your account closes in 15 minutes. What is the best move?",
+              options: [
+                { text: "Stop and verify through a known channel", correct: true, feedback: "Urgency is a trick to stop you thinking." },
+                { text: "Click quickly to save the account", correct: false, feedback: "That is what the attacker hopes for." },
+                { text: "Reply asking if it is real", correct: false, feedback: "Replying may reach the attacker." },
+              ],
+            },
+            {
+              question: "A video call shows your manager asking for an urgent payment. What do you do?",
+              options: [
+                { text: "Confirm through a number you already know", correct: true, feedback: "A face and a voice are not proof." },
+                { text: "Pay because you can see them", correct: false, feedback: "Fake audio and video can look convincing." },
+                { text: "Ask for the details to be messaged first", correct: false, feedback: "That keeps you inside the same unverified channel." },
+              ],
+            },
+            {
+              question: "Which number do you use to check a request?",
+              options: [
+                { text: "One you already know to be right", correct: true, feedback: "Never the one in the message." },
+                { text: "The one in the message", correct: false, feedback: "The attacker chose it." },
+                { text: "Any number from a quick search", correct: false, feedback: "Use a number you already trust." },
+              ],
+            },
+            {
+              question: "You clicked a bad link. What now?",
+              options: [
+                { text: "Report it to your lead right away", correct: true, feedback: "Fast and honest is always right." },
+                { text: "Delete the message so nobody sees", correct: false, feedback: "It helps the response, so keep it." },
+                { text: "Wait to see what happens", correct: false, feedback: "Attacks are often silent at first." },
+              ],
+            },
+            {
+              question: "A QR code on a poster asks you to sign in. How should you treat it?",
+              options: [
+                { text: "Like any other link: do not trust it", correct: true, feedback: "It can lead to a fake page." },
+                { text: "As safe, because it is printed", correct: false, feedback: "Printing does not make it safe." },
+                { text: "As a reason to share your code", correct: false, feedback: "Never share a code." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -255,4 +380,8 @@ export const phishingQuestions: QuestionSeed[] = [
   q("phishing", "Voice phishing", "single", "A caller says he is from IT and asks you to install a remote tool to fix a problem. What is the best response?", ["Decline, hang up and report it to your lead", "Install it quickly", "Install it on your personal device", "Give him your password so he can do it"], [0], "Remote-access tools give full control. Legitimate IT will use approved routes."),
   q("phishing", "Voice phishing", "true_false", "True or false: It is rude to hang up on a caller who is asking for a password, so you should stay on the line.", ["True", "False"], [1], "You may end any call that feels wrong, and a legitimate caller will understand."),
   q("phishing", "Clicked", "single", "You entered your password on a page you now think was fake. What is the most important next step?", ["Change the password the official way and report it immediately", "Close the browser and hope for the best", "Wait to see if anything happens", "Clear your history only"], [0], "The password is exposed. Change it and report it right away so the account can be watched."),
+  q("phishing", "Second channel", "single", "A video call shows your client's manager asking for an urgent payment and saying they cannot take calls. What is the best response?", ["End the call, verify through a number you already know, and tell your lead", "Pay, because you can see and hear them", "Ask them to message the account details first", "Ask a coworker whether it looks right"], [0], "A face and a voice are not proof, so confirm through a second channel you already trust and report it."),
+  q("phishing", "Second channel", "single", "Why is a familiar voice or face on a call not proof of who is asking?", ["Software can make convincing fake audio and video", "Calls cannot be recorded", "Managers never use video", "Fake voices are always easy to hear"], [0], "Convincing deepfake audio and video exist, so confirm requests another way."),
+  q("phishing", "Second channel", "multiple", "Which are good ways to confirm a request for money or sensitive information? Select all that apply.", ["Call the person on a number you already know", "Ask in a chat channel the client already uses", "Call the number written in the message", "Reply to the message and ask if it is real"], [0, 1], "Use a channel you already trust. The number or reply path in the message belongs to the sender, who may be the attacker."),
+  q("phishing", "Signs", "single", "A message has a button whose real address does not match the text shown. What does that suggest?", ["It may be phishing, so do not click", "It is a normal tracking link", "The message is safe if the logo looks right", "You should click once to see where it goes"], [0], "A link whose real address does not match the text is a classic warning sign."),
 ];

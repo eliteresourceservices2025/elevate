@@ -1,6 +1,7 @@
+import { CUSTOMER_SERVICE_COURSE_SLUG, customerServiceCallSeeds, customerServiceCourse, customerServiceExamConfig, customerServiceQuestions } from "./customer-service";
 import { CYBERSECURITY_COURSE_SLUG, cybersecurityCourse, cybersecurityExamConfig, cybersecurityQuestions } from "./cybersecurity";
 import { HIPAA_COURSE_SLUG, hipaaCourse, hipaaExamConfig, hipaaQuestions } from "./hipaa";
-import type { CourseContent, QuestionSeed } from "./schema";
+import type { CallSeed, CourseContent, QuestionSeed } from "./schema";
 
 export { MIN_TIME_SHARE } from "./hipaa";
 
@@ -8,6 +9,8 @@ export type CourseDefinition = {
   slug: string;
   content: CourseContent;
   questions: QuestionSeed[];
+  /** The mock-call pool, when the course has a graded call (docs/learn/14-mock-call.md). */
+  calls?: CallSeed[];
   examConfig: unknown;
   /** The exam must be drawn from a bank at least this many times its size (so attempts differ). */
   minPoolFactor: number;
@@ -17,4 +20,5 @@ export type CourseDefinition = {
 export const COURSES: Record<string, CourseDefinition> = {
   [HIPAA_COURSE_SLUG]: { slug: HIPAA_COURSE_SLUG, content: hipaaCourse, questions: hipaaQuestions, examConfig: hipaaExamConfig, minPoolFactor: 3 },
   [CYBERSECURITY_COURSE_SLUG]: { slug: CYBERSECURITY_COURSE_SLUG, content: cybersecurityCourse, questions: cybersecurityQuestions, examConfig: cybersecurityExamConfig, minPoolFactor: 3 },
+  [CUSTOMER_SERVICE_COURSE_SLUG]: { slug: CUSTOMER_SERVICE_COURSE_SLUG, content: customerServiceCourse, questions: customerServiceQuestions, calls: customerServiceCallSeeds, examConfig: customerServiceExamConfig, minPoolFactor: 3 },
 };

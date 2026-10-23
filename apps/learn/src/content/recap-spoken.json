@@ -1,0 +1,478 @@
+{
+ "hipaa-foundations": [
+  [
+   "HIPAA exists so people can trust that their health information is used for their care, and for nothing else."
+  ],
+  [
+   "The Privacy Rule: who may use or share information, and why.",
+   "The Security Rule: how electronic information is kept safe.",
+   "The Breach Notification Rule: what happens when it is exposed."
+  ],
+  [
+   "The clinic holds the information.",
+   "ERS is bound by an agreement.",
+   "Anyone ERS uses makes the same promise.",
+   "And you are the last link."
+  ],
+  [
+   "Education: everyone knows the rules and why.",
+   "Commitment: everyone does their part, even when nobody is watching.",
+   "Culture: asking and reporting feel normal."
+  ],
+  [
+   "Open a record only to complete the task you were given.",
+   "Looking up a neighbor or friend is not allowed, even if the system lets you in.",
+   "Nor is copying records to your phone."
+  ]
+ ],
+ "hipaa-phi": [
+  [
+   "PHI is health information that identifies a person, in any form."
+  ],
+  [
+   "Three parts come together.",
+   "It is about a person.",
+   "It is about their health, their care, or payment for it.",
+   "And it identifies them."
+  ],
+  [
+   "There are eighteen identifiers, and a name is only one of them.",
+   "HIPAA has two ways to de-identify information, Safe Harbor and Expert Determination. Taking the name out is not one."
+  ],
+  [
+   "A saved screenshot.",
+   "A file name with a patient's name.",
+   "An email subject line or calendar invite.",
+   "A sticky note or printed schedule."
+  ],
+  [
+   "Taking the name out and sending it on as safe is not de-identifying.",
+   "De-identifying is the client's decision and process, so ask your lead."
+  ]
+ ],
+ "hipaa-privacy": [
+  [
+   "The Privacy Rule works like a locked door. Information may be used and shared only in the ways the rule lists."
+  ],
+  [
+   "Almost everything else needs the patient's written authorization, including marketing and sale.",
+   "Treatment, payment and healthcare operations are allowed without a form.",
+   "Sharing with the patient, and with HHS when it investigates, is always allowed."
+  ],
+  [
+   "Minimum necessary: send the invoice number and amount.",
+   "Too much is sending the full chart to answer a billing question."
+  ],
+  [
+   "Before you send anything, ask five questions. If any answer is not sure, do not send.",
+   "Who? Is the recipient the right, authorized person?",
+   "What? Is it only the minimum needed?",
+   "Why? Is there a task-related reason?",
+   "Where? Is it the approved system or address?",
+   "How? Is the method approved and secure?"
+  ]
+ ],
+ "hipaa-rights": [
+  [
+   "The information in a patient's record is about them, so the Privacy Rule gives patients rights over it."
+  ],
+  [
+   "Access: see and copy their records.",
+   "Amendment: ask for a correction.",
+   "Accounting: a list of certain disclosures.",
+   "Restriction: ask to limit sharing.",
+   "Confidential communications: a different method or place.",
+   "Complaint: to the clinic or to HHS."
+  ],
+  [
+   "The clinic generally answers an access request within 30 days.",
+   "It acts on a correction request within 60 days.",
+   "An accounting covers the six years before the request."
+  ],
+  [
+   "Listen and thank them.",
+   "Take down only the request.",
+   "Do not send or change records yourself.",
+   "Pass it on the client's way, the same day.",
+   "Tell them what happens next."
+  ]
+ ],
+ "hipaa-associates": [
+  [
+   "A business associate does work for a covered entity that involves patient information. ERS is one for many of its clients."
+  ],
+  [
+   "The clinic shares information only after a signed agreement.",
+   "ERS needs an agreement with each vendor it uses.",
+   "The same restrictions follow down the chain."
+  ],
+  [
+   "Use information only as the contract allows.",
+   "Use appropriate safeguards.",
+   "Report any use the contract does not allow, including breaches.",
+   "Make subcontractors agree to the same restrictions."
+  ],
+  [
+   "A business associate reports a breach without unreasonable delay, and within 60 days at most.",
+   "So report a possible incident internally the same day."
+  ]
+ ],
+ "hipaa-security": [
+  [
+   "The Security Rule protects electronic patient information, so that the allowed uses are the only uses that happen."
+  ],
+  [
+   "Confidentiality: only the right people can see it.",
+   "Integrity: it has not been changed by mistake or on purpose.",
+   "Availability: people can get to it when they need it."
+  ],
+  [
+   "Technical: unique logins, encryption and automatic log-off.",
+   "Physical: protecting rooms, workstations and devices.",
+   "Administrative: policies, training and risk analysis."
+  ],
+  [
+   "Find where the information is.",
+   "Find what could go wrong.",
+   "Rate how likely and how harmful.",
+   "Act, and document what was decided."
+  ],
+  [
+   "Your login is yours alone.",
+   "Lock your computer when you step away.",
+   "Report a lost or stolen device immediately."
+  ]
+ ],
+ "hipaa-incidents": [
+  [
+   "An incident is anything that may have exposed patient information, or broken a rule. If you wonder whether it is an incident, report it."
+  ],
+  [
+   "An incident is reported by anyone, the same day.",
+   "A breach is decided by the client and ERS after an assessment, not by you."
+  ],
+  [
+   "The clock starts the day anyone in the workforce knows.",
+   "ERS tells the client right away.",
+   "Within 60 days, the client tells each affected person, in writing."
+  ],
+  [
+   "Stop what you are doing with the information.",
+   "Tell your lead and HR immediately.",
+   "Describe what happened, without patient names.",
+   "Keep the evidence. Delete nothing."
+  ],
+  [
+   "Report right away.",
+   "Write facts only.",
+   "Do not fix it quietly.",
+   "Do not delete or edit records."
+  ]
+ ],
+ "hipaa-enforcement": [
+  [
+   "OCR investigates complaints and breach reports. Most cases end before a penalty, and good faith helps."
+  ],
+  [
+   "A complaint or breach report reaches OCR.",
+   "OCR decides whether HIPAA applies.",
+   "It asks for policies, risk analyses and records.",
+   "Guidance, an agreement with a plan, or a penalty."
+  ],
+  [
+   "Civil penalties rise with what the organization knew.",
+   "Willful neglect, not fixed, is the top tier.",
+   "Then willful neglect, fixed within 30 days.",
+   "Then reasonable cause.",
+   "And not knowing at the bottom."
+  ],
+  [
+   "Knowingly disclosing health information: up to 1 year.",
+   "Under false pretenses: up to 5 years.",
+   "For gain or malicious harm: up to 10 years."
+  ],
+  [
+   "Opening records with no work reason.",
+   "A stolen laptop and no risk analysis to show.",
+   "A patient story posted without a signed authorization."
+  ]
+ ],
+ "hipaa-state_laws": [
+  [
+   "HIPAA is the floor, not the ceiling. A state law that protects patients more still applies, and the stricter rule wins."
+  ],
+  [
+   "Texas requires new hires to be trained within 90 days.",
+   "A Texas provider with an electronic record answers a written request within 15 business days.",
+   "Signed training statements are kept for six years."
+  ],
+  [
+   "California licensed clinics and hospitals report breaches within 15 business days.",
+   "California businesses in general tell affected residents within 30 calendar days. A licensed clinic can fall under both rules."
+  ],
+  [
+   "Read your client's instructions.",
+   "Check which state the client is in.",
+   "Follow the stricter rule.",
+   "When stuck, ask your lead."
+  ]
+ ],
+ "hipaa-lab_public": [
+  [
+   "On the phone, never confirm that someone is a patient. Offer to take a message."
+  ],
+  [
+   "Can you tell me if my neighbor is a patient at your clinic?",
+   "I can't confirm or share anything about anyone. I can take a message, in case she is a patient.",
+   "You neither confirm nor deny, and the message lets her decide."
+  ],
+  [
+   "A reply with visit details confirms the person was a patient.",
+   "A safe reply invites them to contact the office, and the client approves it."
+  ],
+  [
+   "Is any patient in it: a name, photo, story or date?",
+   "Is there a signed authorization for this exact use?",
+   "Does it confirm someone is a patient, even without a name?",
+   "Has the client approved it?"
+  ]
+ ],
+ "hipaa-lab_records": [
+  [
+   "Payment work is allowed, but only for the minimum information each step needs."
+  ],
+  [
+   "Export only the columns the review needs.",
+   "Share only what the eligibility check needs.",
+   "Do not export every field to save time.",
+   "Do not send the whole chart to answer a billing question."
+  ],
+  [
+   "The clinic holds the patient information.",
+   "A collection agency is a business associate, so it needs a signed agreement.",
+   "Only then may it receive anything."
+  ],
+  [
+   "Recipient: who exactly?",
+   "Destination: confirmed?",
+   "Content: only what the step needs.",
+   "Channel: the approved one.",
+   "Copies: none kept."
+  ]
+ ],
+ "cybersecurity-why": [
+  [
+   "Attackers go after people because it is easier than breaking in by force."
+  ],
+  [
+   "Money: payment fraud, fake invoices and ransomware.",
+   "Information: records, logins and personal details.",
+   "Access: your account as a stepping stone to a client.",
+   "Disruption: locking systems so people cannot work."
+  ],
+  [
+   "Spot phishing.",
+   "Use strong passwords.",
+   "Turn on a second sign-in step.",
+   "Install updates."
+  ],
+  [
+   "HHS sorts the main threats to health care into five.",
+   "Social engineering.",
+   "Ransomware.",
+   "Loss or theft of equipment or data.",
+   "Insider data loss, accidental or intentional.",
+   "Attacks on network-connected medical devices that may affect patient safety."
+  ],
+  [
+   "Mistakes are normal.",
+   "Hiding them is what makes them expensive."
+  ]
+ ],
+ "cybersecurity-passwords": [
+  [
+   "A long passphrase beats a short complicated password."
+  ],
+  [
+   "Reuse: a password leaked from one site is tried on every other site.",
+   "Guessing: short or predictable passwords fall to automatic guessing.",
+   "Phishing: a fake page asks you to type it yourself.",
+   "Sharing: a person gives it away, often to someone pretending to help."
+  ],
+  [
+   "A text message or call is better than nothing, but easier to attack.",
+   "An authenticator app gives a code that changes every half minute.",
+   "A security key or passkey is the strongest: it cannot be typed into a fake page."
+  ],
+  [
+   "Never share a password or a code. No real support person asks for either.",
+   "If a prompt or a code is not yours, deny it and report it."
+  ]
+ ],
+ "cybersecurity-phishing": [
+  [
+   "Attackers target people, not only computers. Urgency, fear and authority are the usual tricks."
+  ],
+  [
+   "Phishing: an email that pretends to be someone you trust.",
+   "Spear phishing: the same, but written for you.",
+   "Smishing: the same by text message."
+  ],
+  [
+   "When a request asks for money, access or patient information, stop.",
+   "A voice or a face is not proof of who is asking, because criminals use software to make convincing fake audio and video.",
+   "Check it another way: call back on a number you already know, or ask in a chat channel the client already uses.",
+   "Never use the number or link that came with the request, and tell your lead."
+  ],
+  [
+   "If you clicked or answered, report it immediately. Speed limits the damage."
+  ]
+ ],
+ "cybersecurity-malware": [
+  [
+   "Malware is software that works against you. It usually arrives through a message, a download or an unpatched hole."
+  ],
+  [
+   "Viruses and worms spread from file to file.",
+   "A trojan looks useful and hides something harmful.",
+   "Spyware quietly records what you do and type.",
+   "Ransomware locks your files and demands payment."
+  ],
+  [
+   "Disconnect the device from the network and off Wi-Fi, but do not shut it down.",
+   "Tell your lead and follow the client's instructions.",
+   "Do not pay or reply.",
+   "Your organization restores from backups that were kept apart."
+  ],
+  [
+   "Updates close holes attackers already know about, so install them promptly.",
+   "Keep security software on.",
+   "Install only what you were told to install."
+  ]
+ ],
+ "cybersecurity-browsing": [
+  [
+   "Check where a link really goes before you click. A few seconds of checking is cheap."
+  ],
+  [
+   "A padlock means the connection is private.",
+   "It does not mean the site is honest. Criminals use https too."
+  ],
+  [
+   "Hover over a link to see the real address.",
+   "Check the spelling of the domain.",
+   "If in doubt, go to the site yourself by typing the address."
+  ],
+  [
+   "Download only from approved sources.",
+   "Keep client names and work details off social media.",
+   "Do not paste work, client or personal information into public AI tools.",
+   "Use only the channels your client approved for email, text and fax."
+  ]
+ ],
+ "cybersecurity-ai_tools": [
+  [
+   "Anything you type or upload into an AI tool leaves your control and goes to the company that runs it."
+  ],
+  [
+   "You paste text, upload a file or record audio.",
+   "It travels to the company's systems.",
+   "It may be stored, reviewed by people, or exposed if the company is breached."
+  ],
+  [
+   "A tool named in your client's instructions is approved.",
+   "So is a tool ERS has approved in writing.",
+   "A free account you made yourself is not approved.",
+   "Nor is a tool a coworker recommended."
+  ],
+  [
+   "Read it all. Do not skim.",
+   "Check the facts against the source in the client's system.",
+   "Remove anything that should not be there.",
+   "Own it. What you send is your work, whoever drafted it."
+  ]
+ ],
+ "cybersecurity-devices": [
+  [
+   "Working from home means you are the one responsible for the room, the device and the network."
+  ],
+  [
+   "A place where screens and calls are not seen or heard by others.",
+   "An approved, updated, locked and encrypted device that you alone use for work.",
+   "A home network with a strong password and an updated router, or an approved secure connection.",
+   "Your own login, with the second step on, signed out when you finish."
+  ],
+  [
+   "Use work devices for work and only you.",
+   "Keep personal and work accounts separate.",
+   "Do not let family or friends use a work device.",
+   "Do not connect unknown USB drives."
+  ],
+  [
+   "A lost or stolen device is an emergency: tell your lead immediately.",
+   "Because it was locked and encrypted, a lost device is an inconvenience, not a disaster."
+  ]
+ ],
+ "cybersecurity-physical": [
+  [
+   "Information on paper, on a screen or in a conversation can be seen or heard by people nearby."
+  ],
+  [
+   "Who needs it? Is this person part of the task?",
+   "How much? Only what answers the question.",
+   "By which way? The approved system, not personal email or chat."
+  ],
+  [
+   "Do not hold the door because someone looks like they are working. A uniform proves nothing.",
+   "Politely ask them to use their own access, or to ring or check in with the front desk."
+  ],
+  [
+   "Shred paper with sensitive details, or return it as instructed.",
+   "Keep notes with sensitive details locked away when you are done.",
+   "If you are not sure how to dispose of something, keep it safe and ask."
+  ]
+ ],
+ "cybersecurity-response": [
+  [
+   "Many incidents are noticed first by the person involved. Treat the signs as worth reporting even when you are not sure."
+  ],
+  [
+   "At minute zero you notice something wrong. Stop what you are doing.",
+   "Within minutes, tell your lead and HR. Do not wait to be sure.",
+   "Within the hour, write down the facts: what, when and which system. Keep evidence.",
+   "As instructed, change passwords, sign out sessions or isolate the device."
+  ],
+  [
+   "Report straight away.",
+   "Keep the message or file as it is.",
+   "Do not try to fix it quietly.",
+   "Do not delete the message or reply to the attacker."
+  ],
+  [
+   "What happened.",
+   "When it happened and when you noticed.",
+   "Where: which system, and how it was sent.",
+   "And what you have done so far, and not done."
+  ]
+ ],
+ "cybersecurity-security_hipaa": [
+  [
+   "The Security Rule asks for administrative, physical and technical safeguards, and your daily habits are part of all three."
+  ],
+  [
+   "Strong passwords and a second sign-in step are a technical safeguard.",
+   "Locking the screen and a tidy desk are a physical safeguard.",
+   "Spotting phishing, reporting and training are administrative safeguards."
+  ],
+  [
+   "A convincing email gets a click, and a password is typed into a fake page.",
+   "The attacker signs in as you, and no second step stops them.",
+   "They read, copy or lock information the account can reach.",
+   "When it is noticed, the organization may have to notify the client, patients and HHS."
+  ],
+  [
+   "Waiting a day to be sure is not neutral. It uses time that belongs to the client.",
+   "A breach counts as discovered on the first day anyone in the workforce knows. Report it today."
+  ]
+ ]
+}

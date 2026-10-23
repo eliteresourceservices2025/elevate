@@ -9,8 +9,11 @@ import durations from "./recap-durations.json";
 // checks as the lessons, and the rendered file is in place. Reading the module remains the required part.
 
 describe("recap videos", () => {
-  it("has exactly one recap for every module of both courses, and none for a module that does not exist", () => {
-    for (const course of Object.values(COURSES)) {
+  it("has exactly one recap for every module of each course that has recap videos, and none for a module that does not exist", () => {
+    // recaps are optional: a course without any (the Customer Service course, for now) is skipped; a course with some needs all of them
+    const withRecaps = Object.values(COURSES).filter((c) => RECAPS.some((r) => r.course === (c.slug as string)));
+    expect(withRecaps.map((c) => c.slug).sort()).toEqual(["cybersecurity", "hipaa"]);
+    for (const course of withRecaps) {
       for (const m of course.content.modules) {
         const found = RECAPS.filter((r) => r.course === (course.slug as string) && r.module === m.key);
         expect(found, `${course.slug}/${m.key}`).toHaveLength(1);
@@ -21,7 +24,7 @@ describe("recap videos", () => {
       expect(course, r.course).toBeDefined();
       expect(course.content.modules.some((m) => m.key === r.module), `${r.course}/${r.module}`).toBe(true);
     }
-    expect(RECAPS).toHaveLength(Object.values(COURSES).reduce((n, c) => n + c.content.modules.length, 0));
+    expect(RECAPS).toHaveLength(withRecaps.reduce((n, c) => n + c.content.modules.length, 0));
   });
 
   it("runs 60 to 90 seconds as rendered (the voice sets the pace), with a readable number of scenes", () => {
@@ -64,14 +67,14 @@ describe("recap videos", () => {
   it("finds a recap by course and module, and builds its file path under the app's own origin", () => {
     const r = findRecap("hipaa", "associates");
     expect(r).not.toBeNull();
-    expect(recapFile(r!)).toBe("/recaps/hipaa-associates.mp4");
+    expect(recapFile(r!)).toBe("/api/recaps/hipaa-associates.mp4");
     expect(findRecap("hipaa", "no-such-module")).toBeNull();
     expect(findRecap("someclient-requirements", "associates")).toBeNull();
   });
 
   it("has the rendered file in place for every recap, of a sensible size", () => {
     for (const r of RECAPS) {
-      const file = resolve(__dirname, "../../public", recapFile(r).slice(1));
+      const file = resolve(__dirname, "../../media/recaps", `${r.course}-${r.module}.mp4`);
       expect(existsSync(file), `missing ${recapFile(r)} (render it: see docs/learn/13-recap-videos.md)`).toBe(true);
       const size = statSync(file).size;
       expect(size, recapFile(r)).toBeGreaterThan(20_000);
@@ -88,5 +91,14 @@ describe("recaps and course versions", () => {
     // an unknown version number (a caller that does not know it) keeps the recap, and a module with none still has none
     expect(findRecap("cybersecurity", "why")).not.toBeNull();
     expect(findRecap("hipaa", "no-such-module", 9)).toBeNull();
+  });
+});
+
+describe("recap videos are private and have optional subtitles", () => {
+  it("serves videos from a signed-in route, never a public file", () => {
+    for (const r of RECAPS) {
+      expect(recapFile(r)).toMatch(/^\/api\/recaps\/[a-z_-]+\.mp4$/);
+      expect(existsSync(resolve(__dirname, "../../public/recaps", `${r.course}-${r.module}.mp4`)), `${r.module} must not be in public/`).toBe(false);
+    }
   });
 });

@@ -10,7 +10,7 @@ import { renderCertificatePdf } from "./certificate-pdf";
 import { HIPAA_SLUG } from "./constants";
 import { findLearnCourse, listLearnCourses } from "./course-catalog";
 import { learnBaseUrl } from "./token";
-import { addDays, addonNeed, assignmentNeed, changedModuleKeys, describeDue, isOverdue, isoWeekKey, reminderDue, UPDATE_DUE_DAYS, updateQuestionCount, type ReminderKind } from "./rules";
+import { addDays, addonNeed, assignmentNeed, changedScopes, describeDue, isOverdue, isoWeekKey, reminderDue, UPDATE_DUE_DAYS, updateQuestionCount, type ReminderKind } from "./rules";
 
 // The nightly work of ELEVATE Learn on ELEVATE's side (docs/learn/02-architecture.md). Learn itself runs no scheduled work.
 // Everything here uses ELEVATE's owner connection and goes through the `learn` schema tables; the Learn app never sees any of it.
@@ -177,7 +177,7 @@ export type UpdateRun = { assigned: number; skipped: number };
 async function runUpdateAssignments(opts: { today: string; courseId: string; courseSlug: string; versionId: string; noun: string; scope?: Scope; mode: "all" | "teams" | "paused"; pilotTeams: Set<string> }): Promise<UpdateRun> {
   const { today, courseId, versionId } = opts;
   if (opts.mode === "paused") return { assigned: 0, skipped: 0 };
-  const [current] = await rows<{ version: number; content: { modules?: { key: string }[] } }>(sql`select version, content from learn.course_versions where id = ${versionId}`);
+  const [current] = await rows<{ version: number; content: { modules?: { key: string; screens?: { id: string }[] }[] } }>(sql`select version, content from learn.course_versions where id = ${versionId}`);
   if (!current) return { assigned: 0, skipped: 0 };
   const due = await rows<{ user_id: string; team_id: string | null; track: string; from_version_id: string }>(sql`
     select u.id as user_id, e.team_id::text as team_id, cert.track, cert.version_id::text as from_version_id
@@ -196,10 +196,10 @@ async function runUpdateAssignments(opts: { today: string; courseId: string; cou
       ${onUsers(sql`u.id`, opts.scope)}`);
   if (due.length === 0) return { assigned: 0, skipped: 0 };
 
-  const contentOf = new Map<string, { key: string }[]>();
+  const contentOf = new Map<string, { key: string; screens?: { id: string }[] }[]>();
   const modulesOf = async (id: string) => {
     if (!contentOf.has(id)) {
-      const [r] = await rows<{ content: { modules?: { key: string }[] } }>(sql`select content from learn.course_versions where id = ${id}`);
+      const [r] = await rows<{ content: { modules?: { key: string; screens?: { id: string }[] }[] } }>(sql`select content from learn.course_versions where id = ${id}`);
       contentOf.set(id, r?.content?.modules ?? []);
     }
     return contentOf.get(id)!;
@@ -218,7 +218,8 @@ async function runUpdateAssignments(opts: { today: string; courseId: string; cou
   const newModules = current.content.modules ?? [];
   for (const p of due) {
     if (opts.mode === "teams" && !(p.team_id && opts.pilotTeams.has(p.team_id))) continue;
-    const changed = changedModuleKeys(await modulesOf(p.from_version_id), newModules, await keysFor(p.track));
+    const scopes = changedScopes(await modulesOf(p.from_version_id), newModules, await keysFor(p.track));
+    const changed = scopes.map((s) => s.key);
     if (changed.length === 0) { skipped += 1; continue; }
     const [{ n }] = await rows<{ n: number }>(sql`select count(*)::int as n from learn.questions where version_id = ${versionId} and module_key = any(${pgTextArray(changed)}::text[])`);
     const count = updateQuestionCount(n);
@@ -232,8 +233,8 @@ async function runUpdateAssignments(opts: { today: string; courseId: string; cou
         returning id`)) as unknown as { id: string }[];
       if (inserted.length === 0) return false;
       await tx.execute(sql`
-        insert into learn.update_scopes (assignment_id, from_version_id, module_keys, question_count)
-        values (${inserted[0].id}, ${p.from_version_id}, ${pgTextArray(changed)}::text[], ${count})`);
+        insert into learn.update_scopes (assignment_id, from_version_id, module_keys, screens, question_count)
+        values (${inserted[0].id}, ${p.from_version_id}, ${pgTextArray(changed)}::text[], ${JSON.stringify(Object.fromEntries(scopes.map((s) => [s.key, s.screens])))}::jsonb, ${count})`);
       await notify(tx, {
         userId: p.user_id,
         kind: "learn.update_assigned",
@@ -503,10 +504,10 @@ async function fileCertificateCopies(scope?: Scope): Promise<number> {
 
 // ---- Clean-up -----------------------------------------------------------------------------------------------------------------
 
-export type PurgeRun = { tokens: number; sessions: number; answers: number };
+export type PurgeRun = { tokens: number; sessions: number; answers: number; callSteps: number };
 
 /**
- * Daily: removes finished sign-in tokens and sessions, and per-question exam answers 12 months after the exam was submitted. The
+ * Daily: removes finished sign-in tokens and sessions, and per-question exam answers and mock-call picks 12 months after the exam or call was submitted. The
  * score, the pass result, the attestation and the certificate stay (six years). Answers can only be deleted by this job: it sets
  * learn.purge for its own transaction, which the database's guard checks.
  */
@@ -518,6 +519,10 @@ export async function runLearnPurge(): Promise<PurgeRun> {
     const answers = (await tx.execute(sql`
       delete from learn.exam_answers where attempt_id in (select id from learn.exam_attempts where status = 'submitted' and submitted_at < now() - interval '12 months')
       returning 1`)) as unknown as unknown[];
-    return { tokens: tokens.length, sessions: sessions.length, answers: answers.length };
+    // the mock call's picks follow the same rule (the attempt, its score and category percentages stay six years)
+    const callSteps = (await tx.execute(sql`
+      delete from learn.call_attempt_steps where attempt_id in (select id from learn.call_attempts where status = 'submitted' and submitted_at < now() - interval '12 months')
+      returning 1`)) as unknown as unknown[];
+    return { tokens: tokens.length, sessions: sessions.length, answers: answers.length, callSteps: callSteps.length };
   });
 }

@@ -680,6 +680,34 @@
       "when": 1792707190616,
       "tag": "0096_ats_email_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1792743304072,
+      "tag": "0097_cultured_doctor_strange",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1792743308161,
+      "tag": "0098_learn_mock_call",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1792782036924,
+      "tag": "0099_learn_update_screens",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1792797158328,
+      "tag": "0100_learn_core_courses_out_of_studio",
+      "breakpoints": true
     }
   ]
 }

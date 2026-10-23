@@ -7,7 +7,7 @@ export const m2: CourseModule = {
   key: "phi",
   title: "PHI, ePHI and identifiers",
   summary: "What makes information protected health information, the 18 identifiers, how information can be de-identified, and what HIPAA does not treat as PHI.",
-  estimatedMinutes: 12,
+  estimatedMinutes: 16,
   tracks: ["full", "essentials", "refresher"],
   keyPoints: [
     "PHI is health information that identifies a person, held or sent by a covered entity or business associate, in any form.",
@@ -217,6 +217,129 @@ export const m2: CourseModule = {
       ],
     },
     {
+      id: "file-names-practice",
+      title: "Quick sort: safe or exposed?",
+      blocks: [
+        { type: "paragraph", text: "PHI hides in small places: file names, subject lines, captions. Decide which of these expose a patient." },
+        {
+          type: "cards",
+          title: "Safe or exposed?",
+          prompt: "Does it expose a patient?",
+          groups: ["Safe to use", "Exposes a patient"],
+          cards: [
+            { text: "A file called weekly_report", group: 0, feedback: "No patient is named or identifiable." },
+            { text: "A file called Reyes_Ana_DOB_1980_claim", group: 1, feedback: "A name and a date of birth in a file name show up in every file list." },
+            { text: "An email subject: Appointment for Mr. Tan, knee surgery", group: 1, feedback: "A name plus care details in a subject line is PHI in a place many people see." },
+            { text: "A count of this month's appointments, with no names or dates", group: 0, feedback: "A bare count does not identify anyone." },
+            { text: "A screenshot with the name cropped out but the date of birth and balance showing", group: 1, feedback: "The date of birth and balance still point to a person." },
+            { text: "A photo saved with the patient's name as its file name", group: 1, feedback: "The file name identifies the person, even if the photo does not show a face." },
+          ],
+        },
+        {
+          type: "flip",
+          title: "Hidden places to check before you send",
+          cards: [
+            { front: "File name", back: "Names and dates in a file name travel with the file." },
+            { front: "Email subject or invite title", back: "Many people can see it, often before the message is opened." },
+            { front: "A file's own details", back: "A file's title, properties or comments can hold a name too. Check before you send." },
+            { front: "Screenshot background", back: "Other windows and tabs can show another patient." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "spot-the-identifier",
+      title: "Spot the identifier",
+      blocks: [
+        {
+          type: "spot",
+          title: "The weekly report chat",
+          prompt: "A lead asks for a report on denied claims. Tap the line that puts identifiers where they do not belong.",
+          lines: [
+            { speaker: "Lead", text: "Please write a short summary of last week's denied claims for the team report." },
+            { speaker: "Team member", text: "Sure. Most denials were for a missing referral form." },
+            { speaker: "Team member", text: "For example, Ana Reyes, born 4 March 1980, account 0042, was denied for that reason.", wrong: true },
+            { speaker: "Lead", text: "Counts and reasons only, please. Remove the example." },
+          ],
+          explanation: "A name, a date of birth and an account number are three identifiers tied to a denied claim, which is payment for care. A report to the team needs counts and reasons, not a person.",
+        },
+      ],
+    },
+    {
+      id: "strike-the-identifiers",
+      title: "Clean it up: find what still identifies the patient",
+      blocks: [
+        {
+          type: "hotspot",
+          title: "A summary meant to be shared without names",
+          prompt: "Someone removed the patient's name and is about to share this summary outside the approved channel. Tap everything that could still identify the patient, then check.",
+          items: [
+            { label: "Name", text: "Removed" },
+            { label: "Birth date", text: "14 March 1971", problem: true, why: "A full date tied to a person is an identifier." },
+            { label: "File name", text: "report_for_dana_cruz.pdf", problem: true, why: "A name in a file name still identifies the person." },
+            { label: "Photo", text: "Face visible in a clinic photo", problem: true, why: "A face picture is an identifier." },
+            { label: "Diagnosis", text: "Seasonal allergies" },
+            { label: "Record number", text: "48213 (invented)", problem: true, why: "A record number points to one patient." },
+            { label: "Doctor's note", text: "Follow up in six weeks" },
+          ],
+          explanation: "Removing the name is not enough. Dates, file names, pictures and numbers can identify a person on their own, and they can hide in a file's title or properties. Use the approved process, or ask your lead.",
+        },
+      ],
+    },
+    {
+      id: "phi-round",
+      title: "Quick round: PHI",
+      blocks: [
+        {
+          type: "game",
+          title: "PHI sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "Which of these is one of HIPAA's 18 identifiers?",
+              options: [
+                { text: "A medical record number", correct: true, feedback: "Yes, it points to one person." },
+                { text: "The weather that day", correct: false, feedback: "Not an identifier." },
+                { text: "The clinic's opening hours", correct: false, feedback: "Not an identifier." },
+              ],
+            },
+            {
+              question: "A screenshot of a patient screen is...",
+              options: [
+                { text: "ePHI, like the screen it shows", correct: true, feedback: "The protection follows the information." },
+                { text: "Not PHI because it is a picture", correct: false, feedback: "A picture of PHI is PHI." },
+                { text: "Safe if saved in a private folder", correct: false, feedback: "It is still an unapproved copy." },
+              ],
+            },
+            {
+              question: "You remove a patient's name from a record and leave the rest. Is it de-identified?",
+              options: [
+                { text: "No, HIPAA has two specific methods", correct: true, feedback: "Safe Harbor or Expert Determination." },
+                { text: "Yes, names are what matter", correct: false, feedback: "There are 18 identifiers, and context can identify too." },
+                { text: "Yes, if you tell the recipient", correct: false, feedback: "Telling the recipient does not change the data." },
+              ],
+            },
+            {
+              question: "Which file name is the biggest problem?",
+              options: [
+                { text: "Smith_John_DOB_1980_claim", correct: true, feedback: "A name and a date of birth, visible in any file list." },
+                { text: "invoice_batch_12", correct: false, feedback: "No patient is identified." },
+                { text: "template_v2", correct: false, feedback: "No patient is identified." },
+              ],
+            },
+            {
+              question: "Is PHI only information typed into a system?",
+              options: [
+                { text: "No, it is protected spoken and on paper too", correct: true, feedback: "The protection follows the information, not the format." },
+                { text: "Yes, only typed information counts", correct: false, feedback: "Spoken and paper information counts." },
+                { text: "Yes, but only in email", correct: false, feedback: "Email is one form among many." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: "terms",
       title: "Terms from this module",
       blocks: [
@@ -253,6 +376,10 @@ export const q2: QuestionSeed[] = [
   q("phi", "Not PHI", "single", "Which of these is NOT PHI under HIPAA's definition?", ["Employment records a covered entity holds in its role as an employer", "A patient's lab results", "A claim for a patient's surgery", "A patient's appointment reminder"], [0], "Employment records held by a covered entity as an employer are excluded from PHI, though they may still be protected by other laws."),
   q("phi", "Everywhere", "single", "A teammate saves screenshots of patient screens in a personal folder 'to remember how to do it'. What is the problem?", ["The screenshots are ePHI stored outside the approved system", "Screenshots are not PHI", "The folder name is too short", "There is no problem as long as the folder is private"], [0], "Screenshots of patient screens are ePHI. Saving them outside approved systems is an unapproved copy."),
   q("phi", "Everywhere", "single", "Which file name is the biggest problem?", ["Smith_John_DOB_1980_claim.pdf", "invoice_batch_12.pdf", "weekly_report.pdf", "template_v2.pdf"], [0], "A name plus a date of birth in a file name exposes identifiers to anyone who sees a file list."),
+  q("phi", "Everywhere", "single", "Which email subject line puts a patient's information in a place many people can see?", ["Appointment for Mr. Tan, knee surgery", "Weekly counts attached", "Meeting moved to Tuesday", "Template update"], [0], "A name plus care details in a subject line exposes PHI to anyone who sees the inbox."),
+  q("phi", "Identifiers", "single", "A report example lists a patient's name, date of birth and account number next to a denied claim. What is the problem?", ["Three identifiers are tied to payment for care, and a team report only needs counts and reasons", "There is no problem because the claim was denied", "Only the account number matters", "It is fine inside a team chat"], [0], "Name, date of birth and account number are identifiers, and a claim is payment for care. Use counts and reasons instead."),
+  q("phi", "Everywhere", "true_false", "True or false: A photo is safe to share if the patient's face is not visible, even when the file is named with their name.", ["True", "False"], [1], "The file name identifies the person. Check names in file names before you send."),
+  q("phi", "De-identification", "single", "Which is the right way to share a report with the team when an example would name a patient?", ["Use counts and reasons with no identifiers", "Use initials and the date of birth", "Use first names only", "Use the patient's nickname"], [0], "Initials, first names and dates of birth can still identify someone. Counts and reasons carry no identifiers."),
   q("phi", "Spoken and paper", "true_false", "True or false: Information you hear on a client call is protected only if you write it down.", ["True", "False"], [1], "PHI is protected in every form, including spoken. Overheard and remembered information is covered too."),
   q("phi", "Spoken and paper", "single", "You take a patient call at a shared table in a cafe. What is the best approach?", ["Move to a private place or reschedule, and keep your voice down", "Take the call and speak clearly so the patient can hear", "Put the call on speaker so you can type", "Write the patient's details on a napkin so you will remember"], [0], "Spoken PHI can be overheard. Choose a private place and avoid exposing details."),
 ];

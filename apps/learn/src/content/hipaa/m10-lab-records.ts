@@ -8,7 +8,7 @@ export const m10: CourseModule = {
   key: "lab_records",
   title: "Lab: billing, insurance and records work",
   summary: "Practice the rules on billing, insurance verification, collections, faxing, chart preparation and exports.",
-  estimatedMinutes: 8,
+  estimatedMinutes: 12,
   tracks: ["full"],
   keyPoints: [
     "Payment work is permitted, but only for the minimum information the step needs.",
@@ -117,6 +117,74 @@ export const m10: CourseModule = {
       ],
     },
     {
+      id: "fax-build",
+      title: "Build it: a safe fax",
+      blocks: [
+        {
+          type: "build",
+          title: "Send a form to a payer",
+          prompt: "You must fax a form with patient details to a payer. Pick the right piece for each step.",
+          slots: [
+            {
+              label: "The fax number",
+              options: [
+                { text: "Confirmed from a reliable source", correct: true, feedback: "Check the destination before the information leaves." },
+                { text: "Guessed from a similar number", correct: false, feedback: "A wrong number sends patient information to a stranger." },
+              ],
+            },
+            {
+              label: "The first page",
+              options: [
+                { text: "A cover sheet first, if the client's process allows", correct: true, feedback: "It lets you confirm the number reaches the right place before details go out." },
+                { text: "The full form straight away, to save time", correct: false, feedback: "If the number is wrong, everything has already gone." },
+              ],
+            },
+            {
+              label: "After sending",
+              options: [
+                { text: "Ask for confirmation of receipt", correct: true, feedback: "That closes the loop on a destination you checked." },
+                { text: "Assume it arrived", correct: false, feedback: "You would not know if it reached the wrong place." },
+                { text: "Email a copy to yourself", correct: false, feedback: "That creates an extra copy outside the system." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "check-order",
+      title: "Put the send check in order",
+      blocks: [
+        {
+          type: "sort",
+          title: "Before you send, share or export",
+          prompt: "Arrange the five checks in the order you would run them.",
+          items: ["Recipient: who exactly?", "Destination: confirmed?", "Content: only what the step needs", "Channel: the approved one", "Copies: none kept"],
+          explanation: "Start with who is receiving it, confirm where it is going, trim the content, use the approved channel, and keep no extra copies.",
+        },
+      ],
+    },
+    {
+      id: "minimum-or-too-much",
+      title: "Minimum, or too much?",
+      blocks: [
+        {
+          type: "cards",
+          title: "Minimum necessary, or too much?",
+          prompt: "Does this share the minimum the step needs, or too much?",
+          groups: ["Minimum necessary", "Too much"],
+          cards: [
+            { text: "Only the columns the review needs", group: 0, feedback: "Fewer columns mean less to leak." },
+            { text: "Every export column, to save time", group: 1, feedback: "It breaks minimum necessary and makes a large file that can leak." },
+            { text: "The sections the specialist's request names", group: 0, feedback: "The request defines what the specialist needs." },
+            { text: "The whole chart to answer a billing question", group: 1, feedback: "A billing question needs far less than the chart." },
+            { text: "Only what the eligibility check needs", group: 0, feedback: "Payment work is allowed, limited to the minimum for the step." },
+            { text: "The procedure name on every collections line", group: 1, feedback: "The procedure name is rarely needed by an agency." },
+          ],
+        },
+      ],
+    },
+    {
       id: "checklist",
       title: "Before you send, share or export",
       blocks: [
@@ -147,6 +215,59 @@ export const m10: CourseModule = {
         },
       ],
     },
+    {
+      id: "quick-round",
+      title: "Quick round: billing and records",
+      blocks: [
+        {
+          type: "game",
+          title: "Records sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "An insurer asks for the diagnosis during an eligibility check you do not need it for. You:",
+              options: [
+                { text: "Give only the minimum, and ask your lead if they insist", correct: true, feedback: "Payment is allowed, limited to the minimum." },
+                { text: "Give the diagnosis, they are a health plan", correct: false, feedback: "Being a health plan does not widen the minimum." },
+                { text: "Give the diagnosis and the plan", correct: false, feedback: "Even more than needed." },
+              ],
+            },
+            {
+              question: "What must a collection agency have before getting patient information?",
+              options: [
+                { text: "An agreement with the clinic", correct: true, feedback: "It is a business associate." },
+                { text: "A nice website", correct: false, feedback: "Appearance is not an agreement." },
+                { text: "A local address", correct: false, feedback: "Location is not an agreement." },
+              ],
+            },
+            {
+              question: "The fax number is smudged. You:",
+              options: [
+                { text: "Confirm it from a reliable source first", correct: true, feedback: "A wrong number reaches a stranger." },
+                { text: "Guess from a similar number", correct: false, feedback: "Do not guess a destination." },
+                { text: "Send to both numbers", correct: false, feedback: "Now two places have it." },
+              ],
+            },
+            {
+              question: "A colleague shares a screen with a patient ledger, and an outsider is on the call. You:",
+              options: [
+                { text: "Ask to stop sharing and tell your lead what was visible", correct: true, feedback: "The client decides if it is an incident." },
+                { text: "Say nothing", correct: false, feedback: "A possible disclosure needs reporting." },
+                { text: "Share your own screen too", correct: false, feedback: "That adds to it." },
+              ],
+            },
+            {
+              question: "You finish an export and send it through the approved channel. Your working copy:",
+              options: [
+                { text: "Is removed as the client instructs", correct: true, feedback: "Every extra copy is a new place to leak." },
+                { text: "Stays in your personal folder", correct: false, feedback: "That is an unapproved copy." },
+                { text: "Is emailed to yourself", correct: false, feedback: "That makes another copy." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -169,4 +290,8 @@ export const q10: QuestionSeed[] = [
   q("lab_records", "Email", "single", "You need to email a billing question about a patient. What is the best way to identify the patient?", ["Use the minimum identifier the client's policy allows, such as an account number", "Use the full name, date of birth and diagnosis", "Use only the patient's nickname", "Attach the full chart"], [0], "Use the least identifying information that answers the question, as the client's policy directs."),
   q("lab_records", "Scribing", "single", "While scribing for a clinician, you hear details about a patient who is a friend of yours. What do you do?", ["Complete the task and tell no one, and do not look at anything beyond it", "Mention it to the friend", "Look up the friend's other records", "Post a hint to a group chat"], [0], "Use information only for the task, and never disclose or look further because you know the person."),
   q("lab_records", "Checklist", "multiple", "Which questions belong in a check before you send, share or export patient information? Select all that apply.", ["Who exactly receives it?", "Is the destination confirmed?", "Is it only the minimum?", "How many pages is it?"], [0, 1, 2], "Recipient, destination and minimum are the checks. Page count is not."),
+  q("lab_records", "Screen sharing", "single", "To explain a posting error on a call with an outside consultant, what is a safer way to show the screen?", ["Use a sample record with fake data", "Share the open ledger", "Share only the top half of the ledger", "Send a screenshot afterward"], [0], "A sample record with fake data shows the problem without disclosing real patient information."),
+  q("lab_records", "Exports", "true_false", "True or false: Sending an export in two emails instead of one reduces the information that is shared.", ["True", "False"], [1], "Splitting the message does not reduce what is shared. Only trimming the columns does."),
+  q("lab_records", "Collections", "single", "A collections spreadsheet lists names, addresses, birth dates, balances and procedure names. Which column should you question first?", ["The procedure name, which an agency rarely needs", "The balance", "The account number", "The patient's name"], [0], "Collections need to identify the account and the amount owed. The procedure name is rarely needed."),
+  q("lab_records", "Fax", "multiple", "Which steps belong in a safe fax routine? Select all that apply.", ["Confirm the number from a reliable source", "Send only what the step needs", "Ask for confirmation of receipt", "Reuse a number from a different insurer's email"], [0, 1, 2], "Confirm the destination, trim the content and check that it arrived. A number from another insurer's email is a guess."),
 ];

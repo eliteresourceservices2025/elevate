@@ -28,7 +28,7 @@ describe("scaffolds", () => {
   });
 
   it("builds every block type and every question type to a valid shape", () => {
-    for (const type of ["paragraph", "list", "callout", "compare", "steps", "scenario", "check", "table", "layers", "timeline", "glossary", "case"] as const) {
+    for (const type of ["paragraph", "list", "callout", "compare", "steps", "scenario", "check", "table", "layers", "timeline", "glossary", "case", "sort", "cards", "spot", "hotspot", "flip", "build", "branch", "game"] as const) {
       const s = newScreen("Try", []);
       s.blocks = [newBlock(type)];
       const content = structuredClone(course.content);
@@ -93,5 +93,25 @@ describe("client add-on scaffold", () => {
     expect(addonSlugFor("Acme Health, Inc.", ["acme-health-inc-requirements"])).toBe("acme-health-inc-requirements-2");
     expect(addonSlugFor("***", [])).toBe("client-requirements");
     expect(/^[a-z0-9]+(-[a-z0-9]+)*$/.test(addonSlugFor("A".repeat(200), []))).toBe(true);
+  });
+});
+
+describe("the lesson stage has no page scroll", () => {
+  it("warns about a slide that is too long, and not about a short one", () => {
+    const content = structuredClone(course.content);
+    const long = newScreen("A very long slide", content.modules[0].screens.map((s) => s.id));
+    long.blocks = Array.from({ length: 3 }, () => ({ type: "paragraph" as const, text: "x".repeat(600) }));
+    content.modules[0].screens.push(long);
+    const warned = lintCourse(content, course.questions, cfg).filter((i) => i.message.includes("long for the lesson stage"));
+    expect(warned.map((i) => i.where)).toContain(`${content.modules[0].title}: A very long slide`);
+  });
+});
+
+describe("the Customer Service course", () => {
+  it("passes the same checks the studio and publishing apply (no errors, no unfinished text)", () => {
+    const cs = COURSES["customer-service"];
+    const issues = lintCourse(cs.content, cs.questions, cs.examConfig as ExamConfigLike);
+    expect(issues.filter((i) => i.level === "error"), JSON.stringify(issues.filter((i) => i.level === "error").slice(0, 3))).toEqual([]);
+    expect(hasPlaceholders(issues)).toBe(false);
   });
 });

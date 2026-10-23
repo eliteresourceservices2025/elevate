@@ -9,7 +9,7 @@ export const m4: CourseModule = {
   key: "rights",
   title: "Patients' rights over their information",
   summary: "The rights HIPAA gives patients: notice, access, amendment, accounting of disclosures, restrictions, confidential communications and complaints, and what you do when one is raised.",
-  estimatedMinutes: 15,
+  estimatedMinutes: 19,
   tracks: ["full"],
   keyPoints: [
     "Patients have rights to see, copy, correct and learn about disclosures of their own information.",
@@ -207,6 +207,111 @@ export const m4: CourseModule = {
       ],
     },
     {
+      id: "rights-sort",
+      title: "Quick sort: which right is it?",
+      blocks: [
+        { type: "paragraph", text: "Patients rarely say the name of the right. Listen for what they want, and sort it." },
+        {
+          type: "cards",
+          title: "Which right is it?",
+          prompt: "What is the patient asking for?",
+          groups: ["Access (a copy)", "Amendment (a correction)", "Restriction or private contact"],
+          cards: [
+            { text: "I want a copy of my chart for my new doctor.", group: 0, feedback: "That is the right of access." },
+            { text: "Please send my copy to the specialist I name in writing.", group: 0, feedback: "The patient can direct the copy to someone else they name in writing." },
+            { text: "My phone number in my record is wrong.", group: 1, feedback: "A correction request is an amendment." },
+            { text: "I think the date of my visit is wrong in my record.", group: 1, feedback: "Also an amendment: the patient believes the record is incorrect." },
+            { text: "Please only call my mobile, never the house phone.", group: 2, feedback: "A request to be contacted a particular way is a confidential communication." },
+            { text: "Please do not share this visit with my brother.", group: 2, feedback: "A request to limit sharing is a restriction. The clinic need not agree, but must follow one it agrees to." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "rights-call-practice",
+      title: "Practice: the patient call",
+      blocks: [
+        {
+          type: "branch",
+          title: "A patient wants her records",
+          intro: "A patient phones the clinic's line, impatient. She wants a copy of her records for a new doctor, and says the clinic always takes too long.",
+          startMood: 40,
+          turns: [
+            {
+              caller: "I need my records for my new doctor, and the clinic always takes forever.",
+              choices: [
+                { text: "Thank her, take her request and contact details, and say the clinic will respond.", mood: 20, reply: "Okay. Thank you. I just want to know it is going somewhere." },
+                { text: "Promise to email her chart right away to make up for the wait.", mood: 10, reply: "Great, thank you!" },
+                { text: "Tell her records are never given out over the phone.", mood: -25, reply: "That is ridiculous. I have a right to my own records." },
+              ],
+            },
+            {
+              caller: "Can you also tell me who the clinic has shared my information with?",
+              choices: [
+                { text: "Take down that request too and tell her you will pass both to the client today.", mood: 20, reply: "Okay. That helps. Thank you for listening." },
+                { text: "Tell her you will check the logs yourself and call her back.", mood: 5, reply: "Fine, I will wait for your call." },
+                { text: "Tell her that information is secret.", mood: -25, reply: "I am allowed to ask. I am going to complain." },
+              ],
+            },
+          ],
+        },
+        { type: "callout", tone: "tip", text: "Look back at the choices. Only one reply in each turn takes the request and passes it on. The others either promise something you cannot deliver or refuse a right the patient has." },
+      ],
+    },
+    {
+      id: "rights-round",
+      title: "Quick round: patient rights",
+      blocks: [
+        {
+          type: "game",
+          title: "Rights sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "A clinic generally responds to an access request within...",
+              options: [
+                { text: "30 days, with one extension in writing", correct: true, feedback: "Right." },
+                { text: "24 hours", correct: false, feedback: "The rule allows up to 30 days." },
+                { text: "One year", correct: false, feedback: "Far too long." },
+              ],
+            },
+            {
+              question: "A patient says her address in the record is wrong. What do you do?",
+              options: [
+                { text: "Take the request and pass it to the client", correct: true, feedback: "The client decides on amendments." },
+                { text: "Change it right away", correct: false, feedback: "You never change a record on someone's say-so." },
+                { text: "Tell her records cannot be changed", correct: false, feedback: "Patients can ask for a correction." },
+              ],
+            },
+            {
+              question: "A caller says he is the patient's cousin and wants her chart. You...",
+              options: [
+                { text: "Share nothing and ask the client if he is on file as a personal representative", correct: true, feedback: "Being a relative is not enough." },
+                { text: "Share it, since he is family", correct: false, feedback: "Family alone does not make someone a representative." },
+                { text: "Share if he knows her birthday", correct: false, feedback: "A birthday does not prove authority." },
+              ],
+            },
+            {
+              question: "Which kind of record is not open to the right of access?",
+              options: [
+                { text: "Psychotherapy notes", correct: true, feedback: "They are excluded from the right of access." },
+                { text: "Billing records", correct: false, feedback: "Billing records are in the set." },
+                { text: "Medical records", correct: false, feedback: "Those are in the set." },
+              ],
+            },
+            {
+              question: "A patient files a privacy complaint. Can the clinic retaliate?",
+              options: [
+                { text: "No, retaliation is prohibited", correct: true, feedback: "Patients cannot be punished for it." },
+                { text: "Yes, by refusing care", correct: false, feedback: "That is retaliation." },
+                { text: "Only if the complaint is wrong", correct: false, feedback: "Retaliation is barred either way." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: "terms",
       title: "Terms from this module",
       blocks: [
@@ -246,6 +351,10 @@ export const q4: QuestionSeed[] = [
   q("rights", "Personal representative", "single", "A caller says she is the patient's aunt and wants to see the patient's chart. What is the right approach?", ["Do not share, and ask the client whether she is on file as a personal representative", "Share, since she is family", "Share only the diagnosis", "Share if she knows the date of birth"], [0], "Family relationship alone does not make someone a personal representative. The client's records and state law decide."),
   q("rights", "Complaints", "single", "A patient is unhappy about how their information was handled. Who may they complain to?", ["The clinic, or the HHS Office for Civil Rights", "Only the VA who handled it", "Only a local newspaper", "Nobody"], [0], "Patients may complain to the clinic or to OCR."),
   q("rights", "Complaints", "true_false", "True or false: A clinic may refuse care to a patient who files a privacy complaint.", ["True", "False"], [1], "HIPAA prohibits retaliation against people who file complaints or take part in investigations."),
+  q("rights", "Rights overview", "single", "A patient says: 'Please only call my mobile, never the house phone.' Which right is this?", ["Confidential communications", "Amendment", "Accounting of disclosures", "Access"], [0], "A request to be contacted in a particular way or place is a confidential-communication request."),
+  q("rights", "Access", "single", "Which kind of record is not open to the right of access?", ["Psychotherapy notes", "Billing records", "Medical records", "Claims records"], [0], "Psychotherapy notes are excluded from the right of access, along with a few other narrow exclusions."),
+  q("rights", "Personal representative", "true_false", "True or false: Being a patient's cousin is enough to be treated as their personal representative.", ["True", "False"], [1], "Being a relative is not enough by itself. The client's records and state law decide."),
+  q("rights", "What you do", "single", "A patient asks for a copy of her records and also asks who her information was shared with. How do you handle both requests?", ["Take down both and pass them to the client the same day", "Answer the first yourself and ignore the second", "Tell her one of them is not allowed", "Promise both will be done tomorrow"], [0], "Every right is handled by the client. You take the request and route it, without promising an outcome."),
   q("rights", "What you do", "single", "A patient tells you she wants to know who her information has been shared with. What is your best response?", ["Thank her, take down the request, and pass it to the client the same day", "Tell her you will check the logs yourself and call back", "Tell her that information is secret", "Give her a list from memory"], [0], "An accounting of disclosures is the clinic's process. You take the request and route it."),
   q("rights", "What you do", "multiple", "A patient raises a privacy right on a call. Which of these should you do? Select all that apply.", ["Be kind and take down the request and contact details", "Pass it on to the client the same day", "Make a promise about the outcome", "Avoid writing clinical details in the note"], [0, 1, 3], "Take the request, route it, and keep notes minimal. Do not promise an outcome that is the client's decision."),
   q("rights", "Notice", "single", "A patient asks what a clinic does with their information. What is the most accurate and helpful reply?", ["Point them to the clinic's notice of privacy practices and offer a copy through the client's process", "Tell them the clinic never shares anything", "Tell them it is none of their business", "Describe it from memory"], [0], "The notice is the authoritative statement of the clinic's practices."),

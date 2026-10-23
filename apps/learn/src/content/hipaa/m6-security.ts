@@ -9,7 +9,7 @@ export const m6: CourseModule = {
   key: "security",
   title: "The Security Rule: protecting electronic patient information",
   summary: "What the Security Rule protects, how its three kinds of safeguards fit together, what risk analysis is, and how it shapes your workstation, devices, sign-in and daily habits.",
-  estimatedMinutes: 18,
+  estimatedMinutes: 24,
   tracks: ["full"],
   keyPoints: [
     "The Security Rule protects the confidentiality, integrity and availability of electronic patient information.",
@@ -312,6 +312,132 @@ export const m6: CourseModule = {
       ],
     },
     {
+      id: "play-safeguard-sorter",
+      title: "Play: which kind of safeguard?",
+      blocks: [
+        { type: "paragraph", text: "The Security Rule groups its safeguards into three kinds. Sort each example the way this module does." },
+        {
+          type: "cards",
+          title: "Safeguard sorter",
+          prompt: "Is this an administrative, physical or technical safeguard?",
+          groups: ["Administrative", "Physical", "Technical"],
+          cards: [
+            { text: "Training every team member on HIPAA", group: 0, feedback: "Policies, training and procedures are administrative safeguards." },
+            { text: "A risk analysis that is repeated when things change", group: 0, feedback: "Finding and rating risks is the heart of the administrative safeguards." },
+            { text: "Sanctions for breaking the rules", group: 0, feedback: "Sanctions sit under security management, an administrative safeguard." },
+            { text: "Positioning your screen away from windows and doorways", group: 1, feedback: "Protecting workstations and the space around them is a physical safeguard." },
+            { text: "Never leaving a work device unattended in a car", group: 1, feedback: "Device and media controls are physical safeguards." },
+            { text: "Keeping patient printouts off a tidy desk", group: 1, feedback: "A tidy workspace is a physical safeguard." },
+            { text: "A unique login for each person", group: 2, feedback: "Unique user identification is a technical safeguard." },
+            { text: "A code from an app as a second sign-in step", group: 2, feedback: "Verifying who someone is, including multi-factor sign-in, is a technical safeguard." },
+            { text: "Automatic log-off after a period of inactivity", group: 2, feedback: "Automatic log-off is a technical safeguard." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "play-flexible-rule",
+      title: "Play: a flexible rule, and spot the risk",
+      blocks: [
+        { type: "paragraph", text: "The Security Rule tells organizations what to achieve and lets them choose how. Flip the cards to see what shapes those choices." },
+        {
+          type: "flip",
+          title: "What shapes the choices",
+          cards: [
+            { front: "Size and capabilities", back: "A large company and a small clinic may meet the same goal in different ways." },
+            { front: "Technical setup", back: "The systems and tools in use change which safeguards fit." },
+            { front: "Cost of the measures", back: "Cost is a fair thing to weigh, but it never excuses leaving a serious risk open." },
+            { front: "How likely and how serious", back: "Bigger risks get stronger safeguards. This is what the risk analysis rates." },
+          ],
+        },
+        {
+          type: "spot",
+          title: "Spot the risk",
+          prompt: "A teammate describes a workday in a team chat. Tap the line that creates a security risk.",
+          lines: [
+            { speaker: "Teammate", text: "I started with the client's approved portal and signed in with my own login." },
+            { speaker: "Teammate", text: "My home internet is slow, so I saved the day's patient list to my personal cloud drive to finish it tonight.", wrong: true },
+            { speaker: "Lead", text: "Please don't. Leave it in the client's system and pick it up there tomorrow." },
+            { speaker: "Teammate", text: "Got it. I'll delete my copy and report it so the client can check." },
+          ],
+          explanation: "A personal cloud drive is not approved, and every extra copy is another place the information can leak. The safest place for patient information is where it already is, and a copy made by mistake is reported.",
+        },
+      ],
+    },
+    {
+      id: "check-the-desk",
+      title: "Check the desk: what puts patient information at risk?",
+      blocks: [
+        {
+          type: "hotspot",
+          title: "A remote workstation at home",
+          prompt: "A team member is about to start a shift. Tap everything on this setup that puts patient information at risk, then check.",
+          items: [
+            { label: "Sticky note", text: "A password written on the monitor", problem: true, why: "Anyone in the room can read and use it." },
+            { label: "Screen", text: "Faces the window and the hallway", problem: true, why: "Visitors and passers-by can read what is on it." },
+            { label: "Screen lock", text: "Locks after two minutes" },
+            { label: "Wi-Fi", text: "Home network with a strong password" },
+            { label: "Printer", text: "A printout of a client list left in the tray", problem: true, why: "Paper with patient information must not be left where others can see it." },
+            { label: "Software", text: "Only the client's approved tools" },
+          ],
+          explanation: "Security is a set of habits: no written passwords, a screen nobody else can see, lock when you step away, nothing left on paper. Fix what you can and report what you cannot.",
+        },
+      ],
+    },
+    {
+      id: "quick-round-security",
+      title: "Quick round: the Security Rule",
+      blocks: [
+        {
+          type: "game",
+          title: "Security sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "Which three goals does the Security Rule protect?",
+              options: [
+                { text: "Confidentiality, integrity and availability", correct: true, feedback: "Only the right people see it, it stays accurate, and it can be reached." },
+                { text: "Cost, speed and style", correct: false, feedback: "Those are not the goals." },
+                { text: "Billing, coding and claims", correct: false, feedback: "Those are business tasks, not security goals." },
+              ],
+            },
+            {
+              question: "What does \"addressable\" mean in the Security Rule?",
+              options: [
+                { text: "Implement it, or document why not and use an equal alternative", correct: true, feedback: "Addressable is not optional." },
+                { text: "You can skip it", correct: false, feedback: "That is the common mistake." },
+                { text: "Only for paper records", correct: false, feedback: "The rule is about electronic information." },
+              ],
+            },
+            {
+              question: "Your work laptop goes missing. What is the first move?",
+              options: [
+                { text: "Tell your lead and HR immediately", correct: true, feedback: "A lost device is an incident from the moment you notice." },
+                { text: "Search for a day first", correct: false, feedback: "Time matters more than recovering it yourself." },
+                { text: "Wait to see if it turns up", correct: false, feedback: "Waiting uses up the client's time." },
+              ],
+            },
+            {
+              question: "A coworker asks to borrow your login for an hour. You:",
+              options: [
+                { text: "Decline and help them reach support or your lead", correct: true, feedback: "Logins are personal, and your name goes on their actions." },
+                { text: "Share it and change the password later", correct: false, feedback: "Sharing breaks access controls and audit logs." },
+                { text: "Share it if they promise to be careful", correct: false, feedback: "A promise does not change whose name is in the log." },
+              ],
+            },
+            {
+              question: "The stricter Security Rule HHS proposed is:",
+              options: [
+                { text: "A proposal, and the current rule stays in effect", correct: true, feedback: "ERS updates this course when the rules change." },
+                { text: "Already in effect", correct: false, feedback: "It has not been finished." },
+                { text: "Cancelled forever", correct: false, feedback: "It is a proposal still under work." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: "terms",
       title: "Terms from this module",
       blocks: [
@@ -359,4 +485,8 @@ export const q6: QuestionSeed[] = [
   q("security", "Integrity", "single", "While entering data you realize you selected the wrong patient. What should you do?", ["Stop, and tell your lead or client contact so it can be corrected properly", "Quietly delete the entry", "Change the patient's name to match", "Leave it and finish the batch"], [0], "Integrity matters: errors in the record can harm care and billing. Report so it is corrected through the proper process."),
   q("security", "The rule is changing", "true_false", "True or false: The stricter Security Rule that HHS proposed is already in effect, replacing the current rule.", ["True", "False"], [1], "It is a proposal. The current Security Rule remains in effect while HHS works on it."),
   q("security", "Public places", "single", "You need to finish a task and the only available place is a busy cafe. What is the best approach?", ["Ask your lead for an approved way to continue, such as another place or a handoff", "Work there with a privacy screen", "Work there on a public network", "Work there but speak quietly on calls"], [0], "Public places expose screens, conversations and networks, and are not approved places to work with patient information."),
+  q("security", "Safeguards", "multiple", "Which of these are physical safeguards? Select all that apply.", ["Positioning your screen away from a window", "Never leaving a work device unattended in a car", "Keeping a tidy desk with no patient printouts out", "Requiring a unique login for each person"], [0, 1, 2], "Protecting rooms, workstations and devices is physical. A unique login is a technical safeguard."),
+  q("security", "Safeguards", "single", "A policy that ends a former team member's access when their work ends is mainly an example of which kind of safeguard?", ["Administrative", "Physical", "Technical", "Cosmetic"], [0], "Workforce security and termination procedures are administrative safeguards, though the system enforces them."),
+  q("security", "Flexibility", "single", "The Security Rule lets an organization choose its safeguards. What should the choice be based on?", ["Its risk analysis, size and technology, without leaving a serious risk open", "Whatever is cheapest", "Whatever the newest tool offers", "Whatever the IT team prefers"], [0], "The rule is flexible about how, not about whether. Cost can be weighed, but not at the price of a serious risk."),
+  q("security", "Storing", "single", "You save a patient list to a personal cloud drive to finish it at home. A teammate tells you to stop. What is the best next step?", ["Delete the copy as instructed and report it so the client can check", "Leave it and hope no one notices", "Move it to a second personal folder", "Print it instead"], [0], "An unapproved copy is reported even when it is removed quickly, so the client can assess it."),
 ];

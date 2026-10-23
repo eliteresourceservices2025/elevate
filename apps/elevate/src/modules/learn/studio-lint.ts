@@ -1,4 +1,4 @@
-import { courseContentSchema, questionSeedSchema, type CourseContent, type QuestionSeed } from "../../../../learn/src/content/schema";
+import { courseContentSchema, INTERACTIVE_BLOCK_TYPES, questionSeedSchema, type CourseContent, type QuestionSeed } from "../../../../learn/src/content/schema";
 import { placeholdersIn } from "./studio-scaffold";
 
 // The checks a course must pass before it can be saved or published from the studio. Pure (no database). The same rules the content
@@ -11,6 +11,7 @@ export type LintIssue = { level: "error" | "warning"; where: string; message: st
 export type ExamConfigLike = { tracks?: Record<string, { questions: number }> };
 
 const MIN_POOL_FACTOR = 3;
+const LONG_SLIDE_CHARS = 1400;
 
 const allText = (value: unknown): string[] =>
   typeof value === "string" ? [value] : Array.isArray(value) ? value.flatMap(allText) : value && typeof value === "object" ? Object.values(value as Record<string, unknown>).flatMap(allText) : [];
@@ -40,8 +41,13 @@ export function lintCourse(content: CourseContent, questions: QuestionSeed[], ex
     const ids = m.screens.map((s) => s.id);
     if (new Set(ids).size !== ids.length) out.push({ level: "error", where: m.title, message: "Two screens in this module have the same id." });
     if (m.screens.length < 5) out.push({ level: "warning", where: m.title, message: `Only ${m.screens.length} screens (the shipped courses have at least 5).` });
-    const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => b.type === "scenario" || b.type === "check" || b.type === "case");
+    const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => (INTERACTIVE_BLOCK_TYPES as readonly string[]).includes(b.type));
     if (interactive.length === 0) out.push({ level: "warning", where: m.title, message: "No knowledge check or scenario: people have nothing to do in this module." });
+    for (const s of m.screens) {
+      // the lesson stage has no page scroll, so a slide that is long scrolls inside its own card: worth splitting
+      const chars = allText(s.blocks).join(" ").length;
+      if (s.blocks.length > 4 || chars > LONG_SLIDE_CHARS) out.push({ level: "warning", where: `${m.title}: ${s.title}`, message: "This slide is long for the lesson stage (it scrolls inside its card). Consider splitting it into two slides." });
+    }
     textRules(m.title, allText(m), out);
   }
   textRules("responsibility statement", allText(content.attestation), out);

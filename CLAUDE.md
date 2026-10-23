@@ -199,6 +199,7 @@ The Learn app, course content and studio, assignment jobs, client add-ons, certi
 - Learn has no Supabase keys and no ELEVATE secrets; people arrive by a one-time POST handoff token; the answer key never reaches the app role.
 - Content is validated JSON, never HTML; published versions are frozen; the certificate PDF file is duplicated in both apps and a test fails if they differ.
 - Training never blocks work (overdue warns only); evidence and status views show completion only, never scores to leads or clients.
+- The graded mock call (`docs/learn/14-mock-call.md`): the scoring key lives in `call_scenario_keys` with no grant to `learn_app`; an assignment becomes `passed` only through `learn.finish_if_complete` (exam passed, and the call when `courses.requires_call`); calls are authored in code and the studio refuses a course that requires one.
 
 ### Schedule and client import from an attendance sheet — `docs/modules/schedule-import.md`
 Settings > Import schedules and clients: upload the team's attendance sheet (CSV or XLSX), preview what would change.

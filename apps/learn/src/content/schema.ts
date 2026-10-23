@@ -47,7 +47,93 @@ export const blockSchema = z.discriminatedUnion("type", [
     multiple: z.boolean().optional(),
     options: z.array(checkOptionSchema).min(2).max(5),
   }),
+  // ---- Interactive blocks (customer service course and later the older courses). Plain data like the rest; none is graded. ----
+  // Put the steps in order. `items` are written in the CORRECT order; the player shows them shuffled.
+  z.object({ type: z.literal("sort"), title: short, prompt: text, items: z.array(short).min(2).max(7), explanation: text }),
+  // Sort each card into a group (for example "Empathy" or "Not empathy"). One card at a time, with a streak.
+  z
+    .object({
+      type: z.literal("cards"),
+      title: short,
+      prompt: text,
+      groups: z.array(z.string().trim().min(1).max(40)).min(2).max(3),
+      cards: z.array(z.object({ text: short, group: z.number().int().min(0).max(2), feedback: z.string().trim().min(1).max(300) })).min(3).max(10),
+    })
+    .refine((b) => b.cards.every((c) => c.group < b.groups.length), { message: "Every card must point at one of the groups." }),
+  // A short conversation or message with something wrong in it: tap the line that is wrong.
+  z
+    .object({
+      type: z.literal("spot"),
+      title: short,
+      prompt: text,
+      lines: z.array(z.object({ speaker: z.string().trim().min(1).max(30), text: short, wrong: z.boolean().optional() })).min(3).max(10),
+      explanation: text,
+    })
+    .refine((b) => b.lines.some((l) => l.wrong), { message: "At least one line must be marked as the mistake." }),
+  // A scene or form (a desk, a claim form, a screen) with several things on it: tap everything that is a problem, then check.
+  z
+    .object({
+      type: z.literal("hotspot"),
+      title: short,
+      prompt: text,
+      items: z.array(z.object({ label: z.string().trim().min(1).max(40), text: short, problem: z.literal(true).optional(), why: z.string().trim().min(1).max(300).optional() })).min(4).max(10),
+      explanation: text,
+    })
+    .refine((b) => b.items.some((i) => i.problem), { message: "At least one item must be marked as a problem." })
+    .refine((b) => b.items.every((i) => !i.problem || Boolean(i.why)), { message: "Every problem needs a short reason." })
+    .refine((b) => b.items.every((i) => i.problem || !i.why), { message: "Only a problem has a reason." }),
+  // Cards that flip over: a term or framework on the front, its meaning on the back.
+  z.object({ type: z.literal("flip"), title: short.optional(), cards: z.array(z.object({ front: z.string().trim().min(1).max(80), back: z.string().trim().min(1).max(260) })).min(2).max(8) }),
+  // Build something piece by piece (a call note, a reply): pick the right piece for each slot.
+  z.object({
+    type: z.literal("build"),
+    title: short,
+    prompt: text,
+    slots: z
+      .array(
+        z
+          .object({ label: z.string().trim().min(1).max(60), options: z.array(checkOptionSchema).min(2).max(4) })
+          .refine((s) => s.options.filter((o) => o.correct).length === 1, { message: "Each slot needs exactly one correct option." }),
+      )
+      .min(2)
+      .max(6),
+  }),
+  // A short call with a mood meter: the caller speaks, you pick a reply, the caller's mood moves.
+  z.object({
+    type: z.literal("branch"),
+    title: short,
+    intro: text,
+    startMood: z.number().int().min(10).max(90).optional(),
+    // Facts shown beside the call in the practice window (invented people only), like a customer record.
+    record: z.object({ title: short, rows: z.array(z.object({ label: z.string().trim().min(1).max(40), value: short })).min(1).max(6) }).optional(),
+    turns: z
+      .array(
+        z.object({
+          caller: text,
+          choices: z.array(z.object({ text: short, mood: z.number().int().min(-30).max(30), reply: z.string().trim().min(1).max(400) })).min(2).max(4),
+        }),
+      )
+      .min(2)
+      .max(6),
+  }),
+  // Quiz rounds played as a game: streak, optional seconds per question. Not graded and not part of the exam.
+  z.object({
+    type: z.literal("game"),
+    title: short,
+    seconds: z.number().int().min(5).max(60).optional(),
+    rounds: z
+      .array(
+        z
+          .object({ question: short, options: z.array(checkOptionSchema).min(2).max(4) })
+          .refine((r) => r.options.filter((o) => o.correct).length === 1, { message: "Each round needs exactly one correct option." }),
+      )
+      .min(3)
+      .max(10),
+  }),
 ]);
+
+/** Block types a person can do something with (the lint asks for at least one per module). */
+export const INTERACTIVE_BLOCK_TYPES = ["scenario", "check", "case", "sort", "cards", "spot", "hotspot", "flip", "build", "branch", "game"] as const;
 
 export const screenSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]{1,40}$/),
@@ -116,3 +202,41 @@ export const questionSeedSchema = z.object({
   correctIds: z.array(z.enum(IDS)).min(1).max(5),
   rationale: z.string().trim().min(20).max(700),
 });
+
+// ---- Graded mock call (docs/learn/14-mock-call.md). Authored in code like the exam bank and published with the version. ----
+// The text parts reach the app; points, mood changes, the caller's answers and the reasons stay in the database key table.
+
+export const CALL_CATEGORIES = ["opening", "listening", "accuracy", "resolution", "deescalation", "documentation"] as const;
+
+const callChoiceSchema = z.object({
+  id: z.enum(["a", "b", "c", "d"]),
+  text: short,
+  /** 3 is the best reply, 0 a harmful one. */
+  points: z.number().int().min(0).max(3),
+  /** How the caller's mood moves when this reply is picked. */
+  mood: z.number().int().min(-30).max(30),
+  /** What the caller says next. */
+  reply: z.string().trim().min(1).max(400),
+  why: z.string().trim().min(1).max(400),
+});
+const callChoices = z.array(callChoiceSchema).min(2).max(4);
+const stepId = z.string().regex(/^[a-z0-9-]{1,20}$/);
+
+export const callStepSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("caller"), id: stepId, caller: text, category: z.enum(CALL_CATEGORIES), choices: callChoices }),
+  // The call note at the end of a call: always scored under documentation.
+  z.object({ kind: z.literal("note"), id: stepId, label: z.string().trim().min(1).max(60), choices: callChoices }),
+]);
+
+export const callSeedSchema = z.object({
+  key: z.string().regex(/^[a-z0-9_]{1,40}$/),
+  title: short,
+  moduleKey: z.string().regex(/^[a-z0-9_]{1,40}$/),
+  medical: z.boolean(),
+  intro: text,
+  record: z.object({ title: short, rows: z.array(z.object({ label: z.string().trim().min(1).max(40), value: short })).min(1).max(6) }).optional(),
+  startMood: z.number().int().min(10).max(90),
+  steps: z.array(callStepSchema).min(3).max(10),
+});
+
+export type CallSeed = z.infer<typeof callSeedSchema>;

@@ -1,11 +1,13 @@
 import type { CourseContent, CourseModule } from "../content/schema";
 import { drillFor, quarterOf, type Drill } from "../content/drills";
 import { withUser, type Sql } from "./db";
+import { letterUrl, voiceUrl } from "./voice";
 
 // What the pages read. Every query runs as the signed-in person (row-level security keyed on learn.user_id), so even a mistake here
 // cannot return another person's rows. Nothing here can read the exam answer key: the app role has no grant on it.
 
-export type ExamConfig = { passPercent: number; maxTries: number; waitMinutesAfterFail: number; renewalMonths: number; tracks: Record<string, { questions: number; minutes?: number }> };
+export type CallConfig = { passPercent: number; scenarios: number; maxTries: number; waitMinutesAfterFail: number };
+export type ExamConfig = { passPercent: number; maxTries: number; waitMinutesAfterFail: number; renewalMonths: number; tracks: Record<string, { questions: number; minutes?: number }>; call?: CallConfig };
 
 export type AssignmentSummary = { id: string; title: string; track: string; status: string; dueOn: string };
 
@@ -37,10 +39,12 @@ export type ModuleState = {
 export type AttemptSummary = { id: string; attemptNo: number; status: string; submittedAt: string | null; scorePercent: number | null; passed: boolean | null };
 
 export type Overview = {
-  assignment: { id: string; courseTitle: string; track: string; status: string; dueOn: string; isUpdate: boolean; accepted: boolean };
+  assignment: { id: string; courseTitle: string; courseSlug: string; track: string; status: string; dueOn: string; isUpdate: boolean; accepted: boolean };
   modules: ModuleState[];
   allModulesDone: boolean;
   exam: { questions: number; minutes: number | null; passPercent: number; triesAllowed: number; attempts: AttemptSummary[]; openAttemptId: string | null; waitUntil: string | null; waitMinutes: number };
+  /** The graded mock call, only for a course that requires one (docs/learn/14-mock-call.md). */
+  call: CallOverview | null;
   certificate: { reference: string; holderName: string; issuedOn: string; endsOn: string; revoked: boolean } | null;
   attestation: { version: string; text: string };
   /** False for an acknowledgment-only course: every module read and the statement accepted finishes it. */
@@ -51,7 +55,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
   if (!/^[0-9a-f-]{36}$/i.test(assignmentId)) return null;
   return withUser(sql, userId, async (tx) => {
     const [a] = await tx`
-      select a.id, a.track, a.status, a.reason, a.due_on::text as due_on, a.version_id, c.title as course_title, c.requires_exam, v.exam_config, v.content
+      select a.id, a.track, a.status, a.reason, a.due_on::text as due_on, a.version_id, c.title as course_title, c.slug as course_slug, c.requires_exam, c.requires_call, v.exam_config, v.content
       from learn.assignments a join learn.courses c on c.id = a.course_id join learn.course_versions v on v.id = a.version_id
       where a.id = ${assignmentId}`;
     if (!a) return null;
@@ -59,7 +63,7 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
     const content = a.content as CourseContent;
 
     const mods = await tx`
-      select m.module_key, m.title, m.position, m.estimated_minutes, m.min_seconds, m.screen_count,
+      select m.module_key, m.title, m.position, m.estimated_minutes, learn.assignment_min_seconds(${assignmentId}::uuid, m.module_key) as min_seconds, m.screen_count, learn.update_screen_indexes(${assignmentId}::uuid, m.module_key) as only_screens,
              exists (select 1 from learn.module_completions c where c.assignment_id = ${assignmentId} and c.module_key = m.module_key) as completed,
              coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = ${assignmentId} and t.module_key = m.module_key), 0)::int as seconds
       from learn.assignment_modules(${assignmentId}::uuid) m
@@ -72,9 +76,10 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
         title: m.title as string,
         summary,
         position: m.position as number,
-        estimatedMinutes: m.estimated_minutes as number,
+        // an update teaches only the new or changed screens, so it shows their number and their share of the time
+        estimatedMinutes: m.only_screens ? Math.max(1, Math.ceil(((m.estimated_minutes as number) * (m.only_screens as number[]).length) / Math.max(1, m.screen_count as number))) : (m.estimated_minutes as number),
         minSeconds: m.min_seconds as number,
-        screenCount: m.screen_count as number,
+        screenCount: m.only_screens ? (m.only_screens as number[]).length : (m.screen_count as number),
         completed: m.completed as boolean,
         seconds: m.seconds as number,
         locked: !earlierDone,
@@ -97,10 +102,9 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
     const lastFail = attempts.filter((x) => x.status === "submitted" && x.passed !== true).at(-1);
     const waitUntil = lastFail?.submittedAt ? new Date(Date.parse(lastFail.submittedAt) + (config.waitMinutesAfterFail ?? 60) * 60_000) : null;
     const trackConfig = config.tracks[a.track as string] ?? { questions: 0 };
-    // An update module asks only what its changed modules can supply, up to the count set when it was assigned.
-    const [scope] = await tx`
-      select least(s.question_count, (select count(*) from learn.questions q where q.version_id = ${a.version_id as string}::uuid and q.module_key = any(s.module_keys)))::int as questions
-      from learn.update_scopes s where s.assignment_id = ${assignmentId}`;
+    // An update asks the count set when it was assigned (already the smaller of 5 and what its changed modules can supply). The app role cannot
+    // read the question bank, so it is not counted here.
+    const [scope] = await tx`select s.question_count::int as questions from learn.update_scopes s where s.assignment_id = ${assignmentId}`;
     const [acc] = await tx`select exists (select 1 from learn.attestations where assignment_id = ${assignmentId}) as accepted`;
 
     const [cert] = await tx`
@@ -108,8 +112,10 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
              exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id) as revoked
       from learn.certificates c where c.assignment_id = ${assignmentId}`;
 
+    const call = a.requires_call && a.reason !== "update" && config.call ? await callOverview(tx, assignmentId, config.call) : null;
+
     return {
-      assignment: { id: a.id as string, courseTitle: a.course_title as string, track: a.track as string, status: a.status as string, dueOn: a.due_on as string, isUpdate: a.reason === "update", accepted: acc.accepted as boolean },
+      assignment: { id: a.id as string, courseTitle: a.course_title as string, courseSlug: a.course_slug as string, track: a.track as string, status: a.status as string, dueOn: a.due_on as string, isUpdate: a.reason === "update", accepted: acc.accepted as boolean },
       modules,
       allModulesDone: modules.length > 0 && modules.every((m) => m.completed),
       exam: {
@@ -123,9 +129,123 @@ export async function getOverview(sql: Sql, userId: string, assignmentId: string
         waitMinutes: waitUntil && waitUntil.getTime() > Date.now() ? Math.ceil((waitUntil.getTime() - Date.now()) / 60000) : 0,
       },
       certificate: cert ? { reference: cert.reference as string, holderName: cert.holder_name as string, issuedOn: cert.issued_on as string, endsOn: cert.ends_on as string, revoked: cert.revoked as boolean } : null,
+      call,
       attestation: content.attestation,
       requiresExam: a.requires_exam as boolean,
     } satisfies Overview;
+  });
+}
+
+export type CallAttemptSummary = { id: string; attemptNo: number; status: string; submittedAt: string | null; scorePercent: number | null; passed: boolean | null };
+export type CallOverview = {
+  scenarios: number;
+  passPercent: number;
+  triesAllowed: number;
+  attempts: CallAttemptSummary[];
+  openAttemptId: string | null;
+  waitUntil: string | null;
+  waitMinutes: number;
+};
+
+async function callOverview(tx: Sql, assignmentId: string, config: CallConfig): Promise<CallOverview> {
+  const attempts = (await tx`
+    select id, attempt_no, status, submitted_at, score_percent::float as score, passed
+    from learn.call_attempts where assignment_id = ${assignmentId} order by attempt_no`).map((r) => ({
+    id: r.id as string,
+    attemptNo: r.attempt_no as number,
+    status: r.status as string,
+    submittedAt: r.submitted_at ? (r.submitted_at as Date).toISOString() : null,
+    scorePercent: r.score as number | null,
+    passed: r.passed as boolean | null,
+  }));
+  const [grants] = await tx`select coalesce(sum(extra_tries), 0)::int as tries from learn.retry_grants where assignment_id = ${assignmentId} and kind = 'tries'`;
+  const lastFail = attempts.filter((x) => x.status === "submitted" && x.passed !== true).at(-1);
+  const waitUntil = lastFail?.submittedAt ? new Date(Date.parse(lastFail.submittedAt) + (config.waitMinutesAfterFail ?? 60) * 60_000) : null;
+  const waiting = waitUntil !== null && waitUntil.getTime() > Date.now();
+  return {
+    scenarios: config.scenarios ?? 3,
+    passPercent: config.passPercent,
+    triesAllowed: (config.maxTries ?? 3) + (grants.tries as number),
+    attempts,
+    openAttemptId: attempts.find((x) => x.status === "in_progress")?.id ?? null,
+    waitUntil: waiting ? waitUntil.toISOString() : null,
+    waitMinutes: waiting ? Math.ceil((waitUntil.getTime() - Date.now()) / 60000) : 0,
+  };
+}
+
+export type CallStepView = { kind: "caller" | "note"; id: string; text: string; /** The caller's line spoken ahead of time, when a clip exists. */ audio: string | null; choices: { id: string; text: string }[] };
+export type CallScenarioView = {
+  id: string;
+  title: string;
+  intro: string;
+  record: { title: string; rows: { label: string; value: string }[] } | null;
+  startMood: number;
+  steps: CallStepView[];
+  /** What the person picked so far and the mood after it (never the points). */
+  answered: { stepId: string; optionId: string; moodAfter: number }[];
+};
+export type CallView = {
+  id: string;
+  assignmentId: string;
+  status: string;
+  scenarios: CallScenarioView[];
+  result: { scorePercent: number; passed: boolean; categories: Record<string, number> } | null;
+  /** After a PASSED attempt only: every step with the pick, the best reply and the reason. */
+  review: { scenarioId: string; stepId: string; chosen: string; best: string; points: number; maxPoints: number; why: string }[];
+  config: { passPercent: number; maxTries: number };
+};
+
+/** One mock-call attempt for the runner and the result page, or null when it is not the person's. The key is never read. */
+export async function getCallView(sql: Sql, userId: string, attemptId: string): Promise<CallView | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(attemptId)) return null;
+  return withUser(sql, userId, async (tx) => {
+    const [x] = await tx`
+      select c.id, c.assignment_id, c.status, c.scenario_ids, c.score_percent::float as score, c.passed, c.category_scores, v.exam_config
+      from learn.call_attempts c join learn.assignments a on a.id = c.assignment_id join learn.course_versions v on v.id = a.version_id
+      where c.id = ${attemptId}`;
+    if (!x) return null;
+    const config = (x.exam_config as ExamConfig).call ?? { passPercent: 85, scenarios: 3, maxTries: 3, waitMinutesAfterFail: 60 };
+    const ids = x.scenario_ids as string[];
+    const rows = await tx`select id, title, intro, start_mood, record, steps from learn.call_scenarios where id = any(${ids}::uuid[])`;
+    const picks = await tx`select scenario_id, step_id, option_id, mood_after from learn.call_attempt_steps where attempt_id = ${attemptId} order by answered_at, step_id`;
+    const byId = new Map(rows.map((r) => [r.id as string, r]));
+    const scenarios: CallScenarioView[] = ids.flatMap((id) => {
+      const r = byId.get(id);
+      if (!r) return [];
+      const steps = (r.steps as { kind: "caller" | "note"; id: string; caller?: string; label?: string; choices: { id: string; text: string }[] }[]).map((s) => ({
+        kind: s.kind,
+        id: s.id,
+        text: (s.kind === "caller" ? s.caller : s.label) ?? "",
+        audio: s.kind === "caller" ? voiceUrl(s.caller ?? "") : null,
+        choices: s.choices.map((c) => ({ id: c.id, text: c.text })),
+      }));
+      return [
+        {
+          id,
+          title: r.title as string,
+          intro: r.intro as string,
+          record: (r.record as CallScenarioView["record"]) ?? null,
+          startMood: r.start_mood as number,
+          steps,
+          answered: picks.filter((p) => p.scenario_id === id).map((p) => ({ stepId: p.step_id as string, optionId: p.option_id as string, moodAfter: p.mood_after as number })),
+        },
+      ];
+    });
+
+    let review: CallView["review"] = [];
+    if (x.status === "submitted" && x.passed === true) {
+      const r = await tx`select * from learn.call_review(${userId}::uuid, ${attemptId}::uuid)`;
+      review = r.map((row) => ({ scenarioId: row.scenario_id as string, stepId: row.step_id as string, chosen: row.chosen as string, best: row.best as string, points: row.points as number, maxPoints: row.max_points as number, why: row.why as string }));
+    }
+    return {
+      id: x.id as string,
+      assignmentId: x.assignment_id as string,
+      status: x.status as string,
+      scenarios,
+      result: x.status === "submitted" ? { scorePercent: x.score as number, passed: x.passed as boolean, categories: (x.category_scores as Record<string, number>) ?? {} } : null,
+      review,
+      config: { passPercent: config.passPercent, maxTries: config.maxTries },
+    } satisfies CallView;
   });
 }
 
@@ -136,6 +256,8 @@ export type ModuleView = {
   /** The version number the person is on (a recap is only offered for versions its words were written for). */
   version: number;
   module: CourseModule;
+  /** For an update: the indexes of the screens that are new or changed, which are the only ones the person learns. Null = the whole module. */
+  onlyScreens: number[] | null;
   seenScreens: number[];
   seconds: number;
   minSeconds: number;
@@ -155,12 +277,15 @@ export async function getModuleView(sql: Sql, userId: string, assignmentId: stri
     const found = (a.content as CourseContent).modules.find((m) => m.key === key);
     if (!found) return null;
     const seen = await tx`select screen_index from learn.module_screens where assignment_id = ${assignmentId} and module_key = ${key} order by screen_index`;
+    const [scoped] = await tx`select learn.update_screen_indexes(${assignmentId}::uuid, ${key}) as idx`;
+    const onlyScreens = (scoped?.idx as number[] | null) ?? null;
     const next = overview.modules[index + 1];
     return {
       assignmentId,
       courseSlug: a.slug as string,
       version: a.version as number,
       module: found,
+      onlyScreens,
       seenScreens: seen.map((r) => r.screen_index as number),
       seconds: state.seconds,
       minSeconds: state.minSeconds,
@@ -170,7 +295,9 @@ export async function getModuleView(sql: Sql, userId: string, assignmentId: stri
   });
 }
 
-export type ExamItem = { position: number; questionId: string; type: string; stem: string; options: { id: string; text: string }[]; selected: string[] };
+/** Clips that read an exam question and its choices aloud, in the order shown: the stem, then "Option A" and the choice, and so on. Null where none was made. */
+export type ExamAudio = { stem: string | null; options: { letter: string | null; text: string | null }[] };
+export type ExamItem = { position: number; questionId: string; type: string; stem: string; options: { id: string; text: string }[]; selected: string[]; audio: ExamAudio };
 
 export type AttemptView = {
   id: string;
@@ -205,13 +332,15 @@ export async function getAttemptView(sql: Sql, userId: string, attemptId: string
         where i.attempt_id = ${attemptId} order by i.position`;
       items = rows.map((r) => {
         const byId = new Map((r.options as { id: string; text: string }[]).map((o) => [o.id, o.text]));
+        const shown = (r.option_order as string[]).map((id) => ({ id, text: byId.get(id) ?? "" }));
         return {
           position: r.position as number,
           questionId: r.question_id as string,
           type: r.type as string,
           stem: r.stem as string,
-          options: (r.option_order as string[]).map((id) => ({ id, text: byId.get(id) ?? "" })),
+          options: shown,
           selected: r.selected as string[],
+          audio: { stem: voiceUrl(r.stem as string), options: shown.map((o, i) => ({ letter: letterUrl(i), text: voiceUrl(o.text) })) },
         };
       });
     }
@@ -251,7 +380,6 @@ export async function getAttemptView(sql: Sql, userId: string, attemptId: string
 export type RecordEntry = {
   assignmentId: string;
   courseTitle: string;
-  version: number;
   track: string;
   status: string;
   assignedOn: string;
@@ -262,39 +390,49 @@ export type RecordEntry = {
   attempts: number;
   /** The score of the passing try (the person's own score: it is theirs to see). */
   scorePercent: number | null;
-  certificate: { reference: string; issuedOn: string; endsOn: string; revoked: boolean } | null;
+  /** The newest certificate for this course, even from an earlier round (a renewal in progress must not hide a valid certificate). */
+  certificate: { assignmentId: string; reference: string; issuedOn: string; endsOn: string; revoked: boolean } | null;
 };
 
-/** Everything the person has done in training, newest first: one entry per assignment, with its certificate if there is one. */
+/**
+ * The person's training, newest first: ONE entry per course (the current round) with its newest certificate. Earlier rounds and older
+ * course versions stay in the database as evidence for HR and the privacy team, but the learner is not shown them, and no version number.
+ */
 export async function getRecord(sql: Sql, userId: string): Promise<RecordEntry[]> {
   return withUser(sql, userId, async (tx) => {
     const rows = await tx`
-      select a.id, co.title, cv.version, a.track, a.status, a.assigned_at::date::text as assigned_on, a.due_on::text as due_on,
+      select distinct on (a.course_id) a.id, co.title, a.track, a.status, a.assigned_at::date::text as assigned_on, a.due_on::text as due_on,
              a.passed_at::date::text as passed_on,
              coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = a.id), 0)::int as seconds,
              (select count(*) from learn.exam_attempts x where x.assignment_id = a.id and x.status = 'submitted')::int as attempts,
              (select x.score_percent::float from learn.exam_attempts x where x.assignment_id = a.id and x.passed order by x.attempt_no desc limit 1) as score,
-             c.reference, c.issued_on::text as issued_on, c.ends_on::text as ends_on,
+             c.assignment_id as cert_assignment_id, c.reference, c.issued_on::text as issued_on, c.ends_on::text as ends_on,
              exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id) as revoked
       from learn.assignments a
       join learn.courses co on co.id = a.course_id
-      join learn.course_versions cv on cv.id = a.version_id
-      left join learn.certificates c on c.assignment_id = a.id
-      order by a.assigned_at desc`;
-    return rows.map((r) => ({
-      assignmentId: r.id as string,
-      courseTitle: r.title as string,
-      version: r.version as number,
-      track: r.track as string,
-      status: r.status as string,
-      assignedOn: r.assigned_on as string,
-      dueOn: r.due_on as string,
-      passedOn: (r.passed_on as string | null) ?? null,
-      minutesSpent: Math.round((r.seconds as number) / 60),
-      attempts: r.attempts as number,
-      scorePercent: (r.score as number | null) ?? null,
-      certificate: r.reference ? { reference: r.reference as string, issuedOn: r.issued_on as string, endsOn: r.ends_on as string, revoked: r.revoked as boolean } : null,
-    }));
+      left join lateral (
+        select c2.id, c2.assignment_id, c2.reference, c2.issued_on, c2.ends_on
+        from learn.certificates c2 join learn.assignments a2 on a2.id = c2.assignment_id
+        where a2.course_id = a.course_id
+        order by c2.issued_on desc, c2.ends_on desc limit 1
+      ) c on true
+      where a.status <> 'cancelled'
+      order by a.course_id, (a.reason = 'update'), a.assigned_at desc`;
+    return rows
+      .map((r) => ({
+        assignmentId: r.id as string,
+        courseTitle: r.title as string,
+        track: r.track as string,
+        status: r.status as string,
+        assignedOn: r.assigned_on as string,
+        dueOn: r.due_on as string,
+        passedOn: (r.passed_on as string | null) ?? null,
+        minutesSpent: Math.round((r.seconds as number) / 60),
+        attempts: r.attempts as number,
+        scorePercent: (r.score as number | null) ?? null,
+        certificate: r.reference ? { assignmentId: r.cert_assignment_id as string, reference: r.reference as string, issuedOn: r.issued_on as string, endsOn: r.ends_on as string, revoked: r.revoked as boolean } : null,
+      }))
+      .sort((x, y) => (x.assignedOn < y.assignedOn ? 1 : x.assignedOn > y.assignedOn ? -1 : 0));
   });
 }
 

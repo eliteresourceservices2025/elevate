@@ -12,10 +12,10 @@ describe("course catalog", () => {
   it("lists the core courses first and then add-ons by name", async () => {
     const list = await listLearnCourses(rowsOf([ADDON]));
     expect(list.map((c) => c.slug)).toEqual([...CORE_COURSES.map((c) => c.slug), "acme-health"]);
-    expect(list[2]).toMatchObject({ kind: "client_addon", clientId: ADDON.client_id, fixedTrack: "full", label: "Acme Health requirements", noun: "Acme Health requirements training" });
+    expect(list[CORE_COURSES.length]).toMatchObject({ kind: "client_addon", clientId: ADDON.client_id, fixedTrack: "full", label: "Acme Health requirements", noun: "Acme Health requirements training" });
   });
 
-  it("with no add-ons it is exactly the two core courses", async () => {
+  it("with no add-ons it is exactly the core courses", async () => {
     const list = await listLearnCourses(rowsOf([]));
     expect(list).toEqual([...CORE_COURSES]);
   });

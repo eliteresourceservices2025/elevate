@@ -6,7 +6,7 @@ export const whyModule: CourseModule = {
   key: "why",
   title: "Why security is everyone's job",
   summary: "What attackers want, why ordinary people are the target, and the four habits that stop most attacks.",
-  estimatedMinutes: 9,
+  estimatedMinutes: 13,
   tracks: ["full"],
   keyPoints: [
     "Attackers go after people because it is easier than breaking in by force.",
@@ -140,6 +140,115 @@ export const whyModule: CourseModule = {
         },
       ],
     },
+    {
+      id: "five-threats",
+      title: "HHS's five main threats",
+      blocks: [
+        { type: "paragraph", text: "HHS's health industry cybersecurity guidance (the 405(d) program) sorts the main threats to health care into five. You have already met most of them in this course. Tap each card to turn it over." },
+        {
+          type: "flip",
+          title: "The five main threats",
+          cards: [
+            { front: "Social engineering", back: "Tricking a person into giving access or information: phishing emails, fake calls and fake bosses." },
+            { front: "Ransomware", back: "Malware that locks files and demands payment. A clinic feels the pressure because care cannot wait." },
+            { front: "Loss or theft of equipment or data", back: "A lost phone, a stolen laptop or a document left behind puts the information on it at risk." },
+            { front: "Insider data loss, accidental or intentional", back: "Mostly mistakes such as a wrong recipient or a shared password. A few are deliberate misuse." },
+            { front: "Attacks on network-connected medical devices that may affect patient safety", back: "Devices in a clinic that connect to the network can be attacked. Report anything odd to your lead." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "five-threats-sort",
+      title: "Quick sort: which threat is it?",
+      blocks: [
+        {
+          type: "cards",
+          title: "Name the threat",
+          prompt: "Sort each situation under the kind of threat it belongs to.",
+          groups: ["Social engineering", "Ransomware", "Lost, stolen or insider data"],
+          cards: [
+            { text: "A caller says he is from IT and needs your password", group: 0, feedback: "Tricking a person into handing over access is social engineering." },
+            { text: "Every file will not open and a message demands payment", group: 1, feedback: "Locked files and a demand for payment are ransomware." },
+            { text: "A laptop with client files is stolen from a parked car", group: 2, feedback: "Loss or theft of equipment or data." },
+            { text: "A report goes to the wrong recipient by mistake", group: 2, feedback: "Mostly accidental: an insider data loss, even though nobody meant harm." },
+            { text: "An email from \"billing\" links to a fake sign-in page", group: 0, feedback: "A fake message that aims to get your login is social engineering." },
+            { text: "The clinic's schedule is gone behind a payment demand", group: 1, feedback: "Ransomware: the clinic cannot simply close, so the pressure to pay is high." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "no-blame-chat",
+      title: "Spot the slip: after a mistake",
+      blocks: [
+        {
+          type: "spot",
+          title: "A team chat after a click",
+          prompt: "A teammate clicked a link and then realized it looked wrong. Tap the line that makes the damage worse.",
+          lines: [
+            { speaker: "Teammate", text: "I clicked a link in an odd message a minute ago. Nothing seems to have happened." },
+            { speaker: "Coworker", text: "If nothing happened, there is nothing to report. Just delete the message.", wrong: true },
+            { speaker: "Lead", text: "Please tell me exactly what you did, and keep the message. I will check the account." },
+            { speaker: "Teammate", text: "Understood. I will send you the details now." },
+          ],
+          explanation: "Attacks are often silent at first, and deleting the message removes evidence. Fast, honest reporting is what keeps a small event small.",
+        },
+      ],
+    },
+    {
+      id: "quick-round-why",
+      title: "Quick round: why security is everyone's job",
+      blocks: [
+        {
+          type: "game",
+          title: "Security sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "Why do attackers go after people?",
+              options: [
+                { text: "It is easier than breaking in by force", correct: true, feedback: "Yes. A click, a call or a reply is the usual way in." },
+                { text: "People never use passwords", correct: false, feedback: "Passwords are used all the time, which is why they are stolen." },
+                { text: "Computers cannot be attacked", correct: false, feedback: "They can, but people are often the easier target." },
+              ],
+            },
+            {
+              question: "Which step of the cycle is most about noticing something odd and speaking up?",
+              options: [
+                { text: "Detect", correct: true, feedback: "You are nearly all of \"detect\"." },
+                { text: "Identify", correct: false, feedback: "Identify is knowing what you have and what matters most." },
+                { text: "Recover", correct: false, feedback: "Recover is restoring from backups and learning from it." },
+              ],
+            },
+            {
+              question: "A stolen laptop with client files belongs under which HHS threat?",
+              options: [
+                { text: "Loss or theft of equipment or data", correct: true, feedback: "Right." },
+                { text: "Ransomware", correct: false, feedback: "Ransomware locks files and demands payment." },
+                { text: "Social engineering", correct: false, feedback: "That is tricking a person." },
+              ],
+            },
+            {
+              question: "You think you made a mistake. What is the best first move?",
+              options: [
+                { text: "Tell your lead straight away", correct: true, feedback: "Fast and honest is always right." },
+                { text: "Say nothing until you are sure", correct: false, feedback: "You do not have to be sure. Reporting is not accusing." },
+                { text: "Delete the evidence", correct: false, feedback: "Deleting removes what helps the response." },
+              ],
+            },
+            {
+              question: "Which of these is one of the four habits?",
+              options: [
+                { text: "Turn on a second sign-in step", correct: true, feedback: "Along with spotting phishing, strong passwords and updates." },
+                { text: "Share one password with the team", correct: false, feedback: "Sharing a password breaks the basic controls." },
+                { text: "Skip updates to save time", correct: false, feedback: "Updates close holes attackers already know about." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -159,4 +268,8 @@ export const whyQuestions: QuestionSeed[] = [
   q("why", "Chain of events", "single", "A person enters a work password on a page reached from an unexpected email. Which later habit could still limit the damage?", ["A second sign-in step, and reporting the click immediately", "Waiting to see if anything happens", "Deleting the email and saying nothing", "Changing nothing"], [0], "A second step can stop a stolen password being enough, and fast reporting lets the organization respond."),
   q("why", "Everyone", "single", "Why is security described as everyone's job and not only IT's?", ["Most attacks begin with an ordinary person's click, call or reply", "IT staff are not available", "Only large companies have IT", "Security is only about hardware"], [0], "Attackers go after people, so people are part of the defense."),
   q("why", "Pressure", "single", "A message says an account will close in one hour unless you click. What is the most useful thing to know?", ["Urgency is a common tool of attackers, so slow down and verify another way", "Urgent messages are always legitimate", "You must click to be safe", "Clicking later is not possible"], [0], "Artificial urgency is meant to stop you thinking. Verify through an official route."),
+  q("why", "HHS threats", "single", "HHS sorts the main cybersecurity threats to health care into five. Which of these is one of them?", ["Loss or theft of equipment or data", "A slow internet connection", "A printer that jams", "A shortage of office supplies"], [0], "The five are social engineering, ransomware, loss or theft of equipment or data, insider data loss (accidental or intentional) and attacks on network-connected medical devices that may affect patient safety."),
+  q("why", "HHS threats", "multiple", "Which of these are among HHS's five main threats to health care? Select all that apply.", ["Social engineering", "Ransomware", "Insider data loss, accidental or intentional", "Attacks on network-connected medical devices that may affect patient safety", "A shortage of office supplies"], [0, 1, 2, 3], "Supply shortages are not a cybersecurity threat. The other four are on HHS's list of five, together with loss or theft of equipment or data."),
+  q("why", "HHS threats", "single", "A laptop that holds client files is stolen from a parked car. Which kind of threat is this?", ["Loss or theft of equipment or data", "Ransomware", "Social engineering", "A medical device attack"], [0], "Losing or having equipment or data stolen is one of the five main threats."),
+  q("why", "HHS threats", "single", "A teammate sends a report to the wrong recipient by mistake. Which kind of threat does this belong to?", ["Insider data loss, which is mostly accidental", "Ransomware", "A medical device attack", "Not a security matter"], [0], "Insider data loss includes honest mistakes such as a wrong recipient, and it should be reported quickly."),
 ];

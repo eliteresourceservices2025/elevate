@@ -4,7 +4,7 @@ export const browsingModule: CourseModule = {
   key: "browsing",
   title: "Safe browsing, email and online privacy",
   summary: "Links, downloads, extensions, social media and AI tools: how to use the internet at work without handing attackers a way in.",
-  estimatedMinutes: 11,
+  estimatedMinutes: 15,
   tracks: ["full"],
   keyPoints: [
     "Check where a link really goes before you click. A padlock means the connection is private, not that the site is honest.",
@@ -125,6 +125,65 @@ export const browsingModule: CourseModule = {
       ],
     },
     {
+      id: "hotspot-suspicious-message",
+      title: "Tap what should make you stop",
+      blocks: [
+        {
+          type: "hotspot",
+          title: "A message about your account",
+          prompt: "A message says to sign in to a client's portal. Tap everything that should make you stop and check, then press check.",
+          items: [
+            { label: "Message", text: "Arrived unexpectedly and sounds urgent", problem: true, why: "Be careful with links in unexpected messages. Go to the site yourself by typing the address." },
+            { label: "Real address", text: "The link leads to shopp.example, one letter off from shop.example", problem: true, why: "Attackers register names that are one letter off." },
+            { label: "Link type", text: "The button uses a shortened link", problem: true, why: "Be careful with shortened links, because you cannot see where they go." },
+            { label: "Padlock", text: "The page shows a padlock" },
+            { label: "Your habit", text: "You type the site's address yourself instead" },
+            { label: "Hover", text: "You hover over the link and read the real address first" },
+          ],
+          explanation: "A padlock only means the connection is private, not that the site is honest. Check the real address, be wary of unexpected and shortened links, and go to the site yourself when in doubt.",
+        },
+      ],
+    },
+    {
+      id: "cards-open-or-look",
+      title: "Quick sort: open it, or look first?",
+      blocks: [
+        {
+          type: "cards",
+          title: "Fine to open, or look first?",
+          prompt: "Sort each item before you open, install or click it.",
+          groups: ["Fine to open", "Look first"],
+          cards: [
+            { text: "A file you expected from the client's approved system", group: 0, feedback: "Open files you expected, from the official source." },
+            { text: "A shortened link in an unexpected message", group: 1, feedback: "Check where it really goes, or type the address yourself." },
+            { text: "A document that asks you to enable macros", group: 1, feedback: "Be wary of any file that asks you to turn them on." },
+            { text: "A site you reach by typing the address yourself", group: 0, feedback: "Going there yourself avoids a fake link." },
+            { text: "A browser extension you found yourself", group: 1, feedback: "Install extensions only when ERS or your client approved them." },
+            { text: "A spreadsheet of patient balances from a personal email address", group: 1, feedback: "A personal mailbox is outside the clinic's control. Tell your lead." },
+            { text: "An extension ERS approved for your work", group: 0, feedback: "Approved extensions are fine to use." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "quick-round-browsing",
+      title: "Quick round: browsing and email",
+      blocks: [
+        {
+          type: "game",
+          title: "Browsing sprint",
+          seconds: 20,
+          rounds: [
+            { question: "A website shows a padlock. What does that tell you?", options: [{ text: "The connection is private, not that the site is honest", correct: true, feedback: "Criminals use https too." }, { text: "The site is safe and genuine", correct: false, feedback: "Fake sites can have a padlock too." }] },
+            { question: "How can you see where a link really goes?", options: [{ text: "Hover over it, or press and hold on a phone", correct: true, feedback: "The visible text can differ from the real address." }, { text: "Click it and see", correct: false, feedback: "By then it is too late." }] },
+            { question: "A quiz asks for your first pet and the street you grew up on. What do you do?", options: [{ text: "Skip it", correct: true, feedback: "Those answers double as account recovery answers." }, { text: "Join in, it is only fun", correct: false, feedback: "Attackers use them to reset accounts." }] },
+            { question: "Which channel is right for patient information?", options: [{ text: "Only the channels your client approved", correct: true, feedback: "The channel decides who can read it on the way." }, { text: "Whichever is quickest", correct: false, feedback: "The simplest route is not always an approved one." }, { text: "A personal email address", correct: false, feedback: "The clinic does not control it." }] },
+            { question: "What can a browser extension do?", options: [{ text: "Read what you do and see what is on your screen", correct: true, feedback: "That is why only approved ones should be installed." }, { text: "Nothing, it only changes colors", correct: false, feedback: "A fake extension is a common way to capture logins." }] },
+          ],
+        },
+      ],
+    },
+    {
       id: "scenario-quiz",
       title: "Try it: the friendly quiz",
       blocks: [
@@ -159,4 +218,8 @@ export const browsingQuestions: QuestionSeed[] = [
   q("browsing", "Voicemail", "single", "What is the best content for a voicemail reminder?", ["A callback number and the clinic's name, as the client's script allows", "The reason for the visit", "The test result", "The patient's full date of birth"], [0], "Voicemail can be heard by others. Share as little as possible."),
   q("browsing", "Shared inbox", "true_false", "True or false: A shared inbox that everyone on the team can open is a good place to keep patient lists.", ["True", "False"], [1], "Access should be limited to what each person's job needs."),
   q("browsing", "Forwarding", "single", "You are about to forward a message thread that includes patient details to someone new. What should you check first?", ["That they are authorized and need it, and that the thread holds only the minimum", "That the subject is short", "That it is a weekday", "That it has an attachment"], [0], "A forward carries everything below it. Check the recipient and the content."),
+  q("browsing", "Links", "single", "A link in a message says it goes to your client's portal, but the real address is one letter off. What do you do?", ["Do not click it; go to the site yourself by typing the address", "Click it to check", "Reply to the message asking if it is real", "Forward it to a colleague"], [0], "Attackers register names that are one letter off. Go to the site yourself."),
+  q("browsing", "Links", "single", "Why does a link in an unexpected message deserve extra care?", ["It may lead somewhere other than it claims, and one quick click can be enough", "Links make a device slower", "Links from any sender are always safe", "Links cost money to open"], [0], "Many attacks come down to one click on a link that is not what it seems."),
+  q("browsing", "Look first", "multiple", "Which of these should you look at first, before opening or installing? Select all that apply.", ["A document that asks you to enable macros", "A shortened link in an unexpected message", "A browser extension you found yourself", "A file you expected from the client's approved system"], [0, 1, 2], "Macros, shortened links and unapproved extensions are risky. A file you expected from an approved source is fine."),
+  q("browsing", "Padlock", "true_false", "True or false: A padlock on a site means it is safe to type your password into it.", ["True", "False"], [1], "A padlock only means the connection is private. The site can still be fake."),
 ];

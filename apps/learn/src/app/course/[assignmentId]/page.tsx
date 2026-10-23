@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { RecapPanel, VideoGroup } from "@/components/recap-panel";
+import { demoVideos, welcomeVideo } from "@/content/customer-service/videos";
+import { CallCard } from "@/components/call-card";
+import { ModuleCard } from "@/components/module-card";
 import { StartExamButton } from "@/components/forms";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
@@ -19,36 +23,46 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
 
   return (
     <>
-      <p className="muted">
-        <Link href="/">My training</Link>
-      </p>
-      <h1>{assignment.isUpdate ? `${assignment.courseTitle}: update` : assignment.courseTitle}</h1>
-      {assignment.isUpdate ? <p>Some lessons changed since you were certified. Read the ones below, then answer a few questions. Your certificate stays valid.</p> : null}
-      <p className="muted">
-        {doneCount} of {modules.length} modules done · due {assignment.dueOn}
-      </p>
-
-      <ol className="plain modules">
-        {modules.map((m) => (
-          <li key={m.key} className={`card module${m.completed ? " done" : ""}${m.locked ? " locked" : ""}`}>
-            <div className="row">
-              <strong>
-                {m.position}. {m.title}
-              </strong>
-              <span className="muted">{m.completed ? "Done" : m.locked ? "Locked" : m.seconds > 0 ? "In progress" : "Not started"}</span>
+      <div className="course-wide">
+        <p className="muted">
+          <Link href="/">My training</Link>
+        </p>
+        <div className="course-head">
+          <div>
+            <h1>{assignment.isUpdate ? `${assignment.courseTitle}: update` : assignment.courseTitle}</h1>
+            {assignment.isUpdate ? <p>Some lessons changed since you were certified. Read the ones below, then answer a few questions. Your certificate stays valid.</p> : null}
+            <p className="muted">Due {assignment.dueOn}</p>
+          </div>
+          <div className="course-progress" role="group" aria-label="Your progress">
+            <span className="muted small">
+              {doneCount} of {modules.length} modules done
+            </span>
+            <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={modules.length} aria-valuenow={doneCount}>
+              <div style={{ width: `${modules.length ? (doneCount / modules.length) * 100 : 0}%` }} />
             </div>
-            <p className="muted">{m.summary}</p>
-            <p className="muted">About {m.estimatedMinutes} minutes · {m.screenCount} screens</p>
-            {!m.locked && !finished ? (
-              <Link className={m.completed ? "button secondary" : "button"} href={`/course/${assignment.id}/${m.key}`}>
-                {m.completed ? "Review" : m.seconds > 0 ? "Continue" : "Start"}
-              </Link>
-            ) : null}
-            {m.locked ? <p className="muted">Finish the earlier modules to open this one.</p> : null}
-          </li>
-        ))}
-      </ol>
+          </div>
+        </div>
 
+        {welcomeVideo(assignment.courseSlug) ? <RecapPanel recap={welcomeVideo(assignment.courseSlug)!} title={assignment.courseTitle} /> : null}
+
+        <ol className="mod-grid" aria-label="Modules">
+          {modules.map((m, i) => (
+            <ModuleCard
+              key={m.key}
+              index={i + 1}
+              title={m.title}
+              summary={m.summary}
+              minutes={m.estimatedMinutes}
+              status={m.completed ? "done" : m.locked ? "locked" : m.seconds > 0 ? "progress" : "new"}
+              href={!m.locked && !finished ? `/course/${assignment.id}/${m.key}` : null}
+              course={assignment.courseSlug}
+              moduleKey={m.key}
+            />
+          ))}
+        </ol>
+      </div>
+
+      <div className="course-narrow">
       {!overview.requiresExam ? (
         <section className="card" aria-labelledby="ack-h">
           <h2 id="ack-h">Acknowledgment</h2>
@@ -112,6 +126,8 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
               Accept and get my certificate
             </Link>
           </p>
+        ) : exam.attempts.some((a) => a.passed) ? (
+          <p className="feedback good">{overview.call ? "You passed the exam. Pass the mock call too, to get your certificate." : "You passed the exam."}</p>
         ) : exam.openAttemptId ? (
           <p>
             <Link className="button" href={`/exam/${exam.openAttemptId}`}>
@@ -133,6 +149,9 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
         )}
       </section>
       )}
+      {overview.call && demoVideos(assignment.courseSlug).length ? <VideoGroup videos={demoVideos(assignment.courseSlug)} title="Worked example calls" heading="Optional: watch three worked example calls before the mock call" /> : null}
+      {overview.call ? <CallCard assignmentId={assignment.id} call={overview.call} allModulesDone={overview.allModulesDone} finished={finished} /> : null}
+      </div>
     </>
   );
 }

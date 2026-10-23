@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CourseModule } from "@/content/schema";
 import { HEARTBEAT_SECONDS, ACTIVITY_PROMPT_SECONDS } from "@/lib/constants";
 import { clock, post } from "./api-client";
-import { ContentBlocks } from "./content-blocks";
-import { RecapPanel, type RecapView } from "./recap-panel";
+import { RecapPanel, VideoGroup, type RecapView } from "./recap-panel";
+import { LessonStage } from "./lesson-stage";
+import { celebrate } from "@/lib/celebrate";
+import { ChevronRight } from "lucide-react";
 
 /**
  * The module player: one screen at a time. The page tells the server which screens were opened and sends a heartbeat every 30
@@ -17,6 +19,8 @@ import { RecapPanel, type RecapView } from "./recap-panel";
 export function ModulePlayer(props: {
   assignmentId: string;
   module: CourseModule;
+  /** An update shows only the new or changed screens (their indexes in the module); null shows the whole module. */
+  onlyScreens?: number[] | null;
   seenScreens: number[];
   seconds: number;
   minSeconds: number;
@@ -24,13 +28,26 @@ export function ModulePlayer(props: {
   nextModule: { key: string; title: string } | null;
   /** The optional recap video for this module, when one exists. */
   recap?: RecapView | null;
+  /** Lesson videos for this module (the Customer Service course), each optional. */
+  videos?: RecapView[];
 }) {
   const { assignmentId, module, minSeconds } = props;
   const router = useRouter();
-  const total = module.screens.length;
-  // Start at the first screen not yet seen (or the last one when everything was seen).
-  const firstUnseen = Array.from({ length: total }, (_, i) => i).find((i) => !props.seenScreens.includes(i)) ?? total - 1;
+  // The slides shown, and where each one sits in the whole module (the server counts screens by their place in the module).
+  const screenCount = module.screens.length;
+  const onlyKey = (props.onlyScreens ?? []).join(",");
+  const real = useMemo(() => {
+    const picked = onlyKey ? onlyKey.split(",").map(Number).filter((i) => i >= 0 && i < screenCount) : [];
+    return picked.length > 0 ? picked : Array.from({ length: screenCount }, (_, i) => i);
+  }, [onlyKey, screenCount]);
+  const shown = real.map((i) => module.screens[i]);
+  const total = shown.length;
+  // Start at the first slide not yet seen (or the last one when everything was seen).
+  const firstUnseen = real.findIndex((r) => !props.seenScreens.includes(r)) === -1 ? total - 1 : real.findIndex((r) => !props.seenScreens.includes(r));
   const [index, setIndex] = useState(firstUnseen);
+  // the furthest slide reached, so the step journey lets the person jump back to any slide up to here
+  const [reached, setReached] = useState(Math.max(firstUnseen, ...real.map((r, i) => (props.seenScreens.includes(r) ? i : 0))));
+  if (index > reached) setReached(index);
   const [seconds, setSeconds] = useState(props.seconds);
   const [message, setMessage] = useState<string | null>(null);
   const [idle, setIdle] = useState(false);
@@ -55,8 +72,8 @@ export function ModulePlayer(props: {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- tells the server this screen was shown; state is only set after the call returns
-    void open(index);
-  }, [index, open]);
+    void open(real[index]);
+  }, [index, open, real]);
 
   // Activity: anything the person does resets the idle clock.
   useEffect(() => {
@@ -96,7 +113,6 @@ export function ModulePlayer(props: {
 
   const enough = seconds >= minSeconds;
   const onLast = index === total - 1;
-  const screen = module.screens[index];
   const remaining = Math.max(0, minSeconds - seconds);
 
   const finish = async () => {
@@ -105,75 +121,61 @@ export function ModulePlayer(props: {
     const r = await post("complete", { assignmentId, moduleKey: module.key });
     setFinishing(false);
     if (r.ok) {
-      router.push(`/course/${assignmentId}`);
-      router.refresh();
+      void celebrate();
+      window.setTimeout(() => {
+        router.push(`/course/${assignmentId}`);
+        router.refresh();
+      }, 900);
       return;
     }
     if (typeof r.remainingSeconds === "number") setSeconds(Math.max(seconds, minSeconds - r.remainingSeconds));
     setMessage(r.error ?? "Please try again.");
   };
 
+  const finalAction = props.completed ? (
+    <Link className="button stage-btn" href={props.nextModule ? `/course/${assignmentId}/${props.nextModule.key}` : `/course/${assignmentId}`}>
+      {props.nextModule ? "Next module" : "Back to the course"} <ChevronRight size={18} aria-hidden="true" />
+    </Link>
+  ) : (
+    <button type="button" className="stage-btn" onClick={() => void finish()} disabled={!enough || finishing}>
+      {finishing ? "Saving..." : "Finish this module"}
+    </button>
+  );
+
   return (
-    <div className="player">
-      <p className="muted">
-        <Link href={`/course/${assignmentId}`}>Back to the course</Link>
-      </p>
-      <h1>{module.title}</h1>
-      {props.recap ? <RecapPanel recap={props.recap} title={module.title} /> : null}
-
-      <div className="progress" role="progressbar" aria-label="Screens in this module" aria-valuemin={1} aria-valuemax={total} aria-valuenow={index + 1}>
-        <div style={{ width: `${((index + 1) / total) * 100}%` }} />
-      </div>
-      <p className="muted">
-        Screen {index + 1} of {total}
-      </p>
-
-      <article className="screen" aria-live="polite">
-        <h2>{screen.title}</h2>
-        <ContentBlocks key={screen.id} blocks={screen.blocks} />
-      </article>
-
-      {onLast && module.keyPoints.length ? (
-        <aside className="block callout tip">
-          <strong>Key points</strong>
-          <ul>
-            {module.keyPoints.map((k) => (
-              <li key={k}>{k}</li>
-            ))}
-          </ul>
-        </aside>
-      ) : null}
-
-      <div className="nav-row">
-        <button type="button" className="secondary" onClick={() => setIndex((i) => Math.max(0, i - 1))} disabled={index === 0}>
-          Back
-        </button>
-        {!onLast ? (
-          <button type="button" onClick={() => setIndex((i) => Math.min(total - 1, i + 1))}>
-            Next
-          </button>
-        ) : props.completed ? (
-          <Link className="button" href={props.nextModule ? `/course/${assignmentId}/${props.nextModule.key}` : `/course/${assignmentId}`}>
-            {props.nextModule ? "Next module" : "Back to the course"}
-          </Link>
-        ) : (
-          <button type="button" onClick={() => void finish()} disabled={!enough || finishing}>
-            {finishing ? "Saving..." : "Finish this module"}
-          </button>
-        )}
-      </div>
-
-      {!props.completed ? (
-        <p className="muted" role="status" aria-live="polite">
-          {enough ? "You have spent enough time on this module." : `Reading time: ${clock(seconds)} of ${clock(minSeconds)} needed. Take your time: about ${Math.ceil(remaining / 60)} more minute${Math.ceil(remaining / 60) === 1 ? "" : "s"}.`}
-        </p>
-      ) : null}
-      {message ? (
-        <p className="feedback bad" role="alert">
-          {message}
-        </p>
-      ) : null}
-
+    <>
+      <LessonStage
+        title={module.title}
+        screens={shown}
+        index={index}
+        onIndex={setIndex}
+        reachedIndex={reached}
+        backHref={`/course/${assignmentId}`}
+        finalAction={finalAction}
+        keyPoints={module.keyPoints}
+        topExtra={
+          props.recap || props.videos?.length ? (
+            <>
+              {props.recap ? <RecapPanel recap={props.recap} title={module.title} /> : null}
+              {props.videos?.length ? <VideoGroup videos={props.videos} title={module.title} /> : null}
+            </>
+          ) : null
+        }
+        notes={
+          <>
+            {!props.completed ? (
+              <p className="muted" role="status" aria-live="polite">
+                {enough ? "You have spent enough time on this module." : `Reading time: ${clock(seconds)} of ${clock(minSeconds)} needed. Take your time: about ${Math.ceil(remaining / 60)} more minute${Math.ceil(remaining / 60) === 1 ? "" : "s"}.`}
+              </p>
+            ) : null}
+            {message ? (
+              <p className="feedback bad" role="alert">
+                {message}
+              </p>
+            ) : null}
+          </>
+        }
+      />
       {idle ? (
         <div className="modal-back">
           <div role="dialog" aria-modal="true" aria-labelledby="idle-title" className="modal">
@@ -185,6 +187,6 @@ export function ModulePlayer(props: {
           </div>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }

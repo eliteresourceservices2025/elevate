@@ -5,27 +5,27 @@ import { AbsoluteFill, Audio, Sequence, interpolate, spring, staticFile, useCurr
 // always the captions. When the recap carries a `narration` block (see narrate.cjs) a voice reads each scene and the visuals are
 // paced to it; without one the video is silent. Brand: ERS purple and gold on a deep ink background.
 
-const C = { ink: "#1F1535", card: "#2E2250", cardHi: "#3A2B66", purple: "#6C1ABA", lilac: "#C9B2EE", gold: "#E2BE2B", white: "#FFFFFF", muted: "#CFC6E6", warn: "#F5A8A0" };
-const HEAD = "Cambria, Georgia, serif";
-const BODY = "Calibri, Arial, sans-serif";
+export const C = { ink: "#1F1535", card: "#2E2250", cardHi: "#3A2B66", purple: "#6C1ABA", lilac: "#C9B2EE", gold: "#E2BE2B", white: "#FFFFFF", muted: "#CFC6E6", warn: "#F5A8A0" };
+export const HEAD = "Cambria, Georgia, serif";
+export const BODY = "Calibri, Arial, sans-serif";
 
-const fps = 30;
+export const fps = 30;
 // Background music sits well under the voice: about 13 dB below it (measured on the first render at 0.14: 20 dB under was too quiet to hear).
-const MUSIC_VOLUME = 0.3;
+export const MUSIC_VOLUME = 0.3;
 
-function useAppear(delaySec = 0, durSec = 0.5) {
+export function useAppear(delaySec = 0, durSec = 0.5) {
   const f = useCurrentFrame();
   const start = delaySec * fps;
   return interpolate(f, [start, start + durSec * fps], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 }
 
-function useSlide(delaySec = 0) {
+export function useSlide(delaySec = 0) {
   const f = useCurrentFrame();
   const { fps: vfps } = useVideoConfig();
   return spring({ frame: f - delaySec * fps, fps: vfps, config: { damping: 18, stiffness: 120 }, durationInFrames: 22 });
 }
 
-const Shell = ({ children }) => (
+export const Shell = ({ children }) => (
   <AbsoluteFill style={{ backgroundColor: C.ink, fontFamily: BODY, color: C.white }}>
     <AbsoluteFill style={{ background: "radial-gradient(circle at 85% 12%, rgba(108,26,186,0.55) 0%, rgba(31,21,53,0) 52%)" }} />
     {children}
@@ -214,13 +214,13 @@ const Outro = ({ recap }) => {
   );
 };
 
-const Progress = ({ total }) => {
+export const Progress = ({ total }) => {
   const f = useCurrentFrame();
   const w = Math.min(1, f / total) * 100;
   return <div style={{ position: "absolute", left: 0, bottom: 0, height: 8, width: `${w}%`, background: C.gold }} />;
 };
 
-const Fade = ({ dur, children }) => {
+export const Fade = ({ dur, children }) => {
   const f = useCurrentFrame();
   const o = interpolate(f, [0, 8, dur - 8, dur], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return <AbsoluteFill style={{ opacity: o }}>{children}</AbsoluteFill>;
@@ -230,6 +230,8 @@ const itemsOf = (s) => (s.items ? s.items.length : 1);
 
 export const Recap = ({ recap }) => {
   const { durationInFrames } = useVideoConfig();
+  // a recorded track (bgm.mp3) is already mastered loud, so it sits lower than the synthesized music
+  const musicVolume = recap.narration && recap.narration.music === "bgm.mp3" ? 0.12 : MUSIC_VOLUME;
   const nar = recap.narration || null; // { intro, outro, scenes: [{file, seconds}], introSeconds, outroSeconds, folder }
   let at = 0;
   const parts = [];
@@ -269,7 +271,7 @@ export const Recap = ({ recap }) => {
           ) : null}
         </Sequence>
       ))}
-      {nar && nar.music ? <Audio src={staticFile(nar.music)} volume={(f) => interpolate(f, [0, 30, durationInFrames - 75, durationInFrames], [0, MUSIC_VOLUME, MUSIC_VOLUME, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })} /> : null}
+      {nar && nar.music ? <Audio src={staticFile(nar.music)} volume={(f) => interpolate(f, [0, 30, durationInFrames - 75, durationInFrames], [0, musicVolume, musicVolume, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })} /> : null}
       <Progress total={durationInFrames} />
     </AbsoluteFill>
   );

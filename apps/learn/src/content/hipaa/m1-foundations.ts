@@ -8,7 +8,7 @@ export const m1: CourseModule = {
   key: "foundations",
   title: "HIPAA foundations and your role at ERS",
   summary: "Why HIPAA exists, the three rules and how they fit together, who it covers, and where ERS and you sit in the chain that protects patient information.",
-  estimatedMinutes: 15,
+  estimatedMinutes: 18,
   tracks: ["full", "essentials", "refresher"],
   keyPoints: [
     "HIPAA exists so people can trust that their health information is used for their care and not for anything else.",
@@ -230,6 +230,108 @@ export const m1: CourseModule = {
       ],
     },
     {
+      id: "sort-who-is-who",
+      title: "Quick sort: who is who?",
+      blocks: [
+        { type: "paragraph", text: "Swipe through these one at a time and decide where each one sits in the chain." },
+        {
+          type: "cards",
+          title: "Covered entity or business associate?",
+          prompt: "Where does each one sit?",
+          groups: ["Covered entity", "Business associate or subcontractor"],
+          cards: [
+            { text: "A clinic that bills insurance electronically", group: 0, feedback: "A provider that sends certain transactions electronically is a covered entity." },
+            { text: "A health plan", group: 0, feedback: "Health plans are covered entities." },
+            { text: "A healthcare clearinghouse", group: 0, feedback: "Clearinghouses are covered entities too." },
+            { text: "ERS, doing billing work for a clinic", group: 1, feedback: "ERS handles patient information while doing work for a covered entity, so it is a business associate." },
+            { text: "A cloud service the billing company uses", group: 1, feedback: "A company a business associate uses for part of its work is a subcontractor." },
+            { text: "A medical billing company that works for a clinic", group: 1, feedback: "It handles patient information for a covered entity, so it is a business associate." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "keys-to-success",
+      title: "What keeps the chain strong",
+      blocks: [
+        { type: "paragraph", text: "Rules on paper do not protect anyone by themselves. Three things make them work in daily life:" },
+        {
+          type: "layers",
+          title: "Three keys",
+          items: [
+            { label: "Education", text: "Everyone knows the rules and why they exist. That is this course." },
+            { label: "Commitment", text: "Everyone does their part, even when nobody is watching." },
+            { label: "Culture", text: "Asking and reporting feel normal, and nobody is punished for a good-faith report." },
+          ],
+        },
+        {
+          type: "spot",
+          title: "Spot the weak link",
+          prompt: "A team chat after a small mistake. Tap the line that works against a good culture.",
+          lines: [
+            { speaker: "Team member", text: "I sent a file to the wrong teammate by mistake. I told my lead right away." },
+            { speaker: "Lead", text: "Thanks for telling me. Let's fix it and note what happened." },
+            { speaker: "Coworker", text: "You should not have said anything. If nobody reports it, it never happened.", wrong: true },
+            { speaker: "Lead", text: "Please keep reporting. Fast reports limit the damage." },
+          ],
+          explanation: "Staying quiet is the weak link. ERS wants to hear about mistakes quickly, does not punish good-faith reports, and HIPAA bars retaliation against people who raise concerns.",
+        },
+      ],
+    },
+    {
+      id: "foundations-round",
+      title: "Quick round: foundations",
+      blocks: [
+        {
+          type: "game",
+          title: "Foundations sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "Which rule decides who may use or share health information?",
+              options: [
+                { text: "The Privacy Rule", correct: true, feedback: "Yes. It sets who may use or share it and for what reasons." },
+                { text: "The Security Rule", correct: false, feedback: "That one protects electronic information." },
+                { text: "The Breach Notification Rule", correct: false, feedback: "That one covers what to do after an exposure." },
+              ],
+            },
+            {
+              question: "A clinic that bills insurance electronically is a...",
+              options: [
+                { text: "Covered entity", correct: true, feedback: "Right." },
+                { text: "Business associate", correct: false, feedback: "A business associate works for a covered entity." },
+                { text: "Subcontractor", correct: false, feedback: "A subcontractor works for a business associate." },
+              ],
+            },
+            {
+              question: "Your login opens every chart. When may you open one?",
+              options: [
+                { text: "Only when your task needs it", correct: true, feedback: "Access is not permission." },
+                { text: "When you are curious and nobody will know", correct: false, feedback: "Access is logged, and curiosity is a violation." },
+                { text: "When a friend asks", correct: false, feedback: "That is a disclosure." },
+              ],
+            },
+            {
+              question: "A free site would speed up a task, but ERS has no agreement with it. What now?",
+              options: [
+                { text: "Do not send patient information to it", correct: true, feedback: "It is outside the chain of trust." },
+                { text: "Use it if the site looks professional", correct: false, feedback: "Looks do not bind anyone." },
+                { text: "Use it and delete the file afterward", correct: false, feedback: "The disclosure already happened." },
+              ],
+            },
+            {
+              question: "You are not sure something is allowed. First move?",
+              options: [
+                { text: "Stop, do not share, and ask your lead", correct: true, feedback: "Asking is never a mistake." },
+                { text: "Do it fast and mention it later", correct: false, feedback: "A wrong disclosure cannot be taken back." },
+                { text: "Ask a friend in healthcare", correct: false, feedback: "Your lead or client contact is the right source." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: "terms",
       title: "Terms from this module",
       blocks: [
@@ -269,5 +371,9 @@ export const q1: QuestionSeed[] = [
   q("foundations", "Compliance program", "multiple", "Which of these are part of the privacy and security program ERS runs? Select all that apply.", ["Training for the workforce", "Written policies and client agreements", "Sanctions for people who break the rules", "Letting each person decide their own rules"], [0, 1, 2], "A program has training, written policies and agreements, sanctions, risk checks and records. Individuals do not set their own rules."),
   q("foundations", "History", "single", "What did the 2009 HITECH Act change for companies like ERS?", ["It made business associates directly responsible for the Security Rule and strengthened enforcement", "It ended the Privacy Rule", "It made HIPAA apply only to hospitals", "It removed penalties for small companies"], [0], "HITECH extended the Security Rule requirements directly to business associates and increased enforcement."),
   q("foundations", "Reporting", "true_false", "True or false: ERS will punish you for reporting a possible privacy incident you noticed, even if it turns out to be nothing.", ["True", "False"], [1], "ERS does not punish good-faith reports, and fast reporting is how problems are limited."),
+  q("foundations", "Culture", "single", "A coworker says nobody should report a small mistake because 'if nobody reports it, it never happened'. What is the right response?", ["Report it anyway: fast reports limit the damage, and good-faith reports are not punished", "Agree, since small mistakes do not matter", "Wait a week to see whether anyone notices", "Delete the evidence first"], [0], "A good culture makes reporting normal. ERS does not punish good-faith reports."),
+  q("foundations", "Culture", "multiple", "Which of these help keep the chain of protection strong? Select all that apply.", ["Education for everyone who handles information", "Commitment to follow the rules when nobody is watching", "A culture where asking and reporting feel normal", "Keeping quiet about mistakes"], [0, 1, 2], "Education, commitment and culture keep rules working in daily life. Staying quiet weakens them."),
+  q("foundations", "Who is who", "single", "A cloud service is used by a billing company to store part of the clinic's billing files. In HIPAA terms the cloud service is most likely:", ["A subcontractor", "A covered entity", "A patient", "A regulator"], [0], "A company a business associate uses to do part of its work is a subcontractor, bound by the same protections."),
+  q("foundations", "Who is who", "true_false", "True or false: A health plan is a covered entity.", ["True", "False"], [0], "Health plans, clearinghouses and providers who send certain transactions electronically are covered entities."),
   q("foundations", "Consequences", "multiple", "Which of these can follow a deliberate privacy violation? Select all that apply.", ["Penalties for the organization", "Criminal penalties for knowingly misusing patient information", "ERS sanctions, up to ending the engagement", "A bonus for finding the record first"], [0, 1, 2], "HIPAA has civil and criminal penalties, and ERS applies sanctions. Nothing rewards misuse."),
 ];

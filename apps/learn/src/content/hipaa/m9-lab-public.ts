@@ -7,7 +7,7 @@ export const m9: CourseModule = {
   key: "lab_public",
   title: "Lab: front desk, scheduling, marketing and websites",
   summary: "Practice the rules on work that faces patients and the public: calls, reminders, intake, reviews, social posts and website tools.",
-  estimatedMinutes: 9,
+  estimatedMinutes: 14,
   tracks: ["full", "essentials"],
   keyPoints: [
     "On the phone, confirm who you are speaking with and share only what the client's process allows.",
@@ -116,6 +116,83 @@ export const m9: CourseModule = {
       ],
     },
     {
+      id: "call-daughter",
+      title: "Live call: the daughter on the line",
+      blocks: [
+        {
+          type: "branch",
+          title: "A caller says she is the patient's daughter",
+          intro: "You answer the clinic line. The caller says her mother has an appointment this week and may be confused about the day. She asks for the date and time, and whether her mother's results are ready.",
+          startMood: 45,
+          record: {
+            title: "Client sheet",
+            rows: [
+              { label: "Verification", value: "Use the client's steps first" },
+              { label: "No verification", value: "Take a message only" },
+              { label: "Family on the line", value: "Not automatically authorized" },
+            ],
+          },
+          turns: [
+            {
+              caller: "Hi, I'm Dana, Mrs. Alvarez's daughter. Mom is a little confused about her appointment. Can you just tell me the day and time?",
+              choices: [
+                { text: "Say you can't confirm or share anything yet, and ask her to go through the client's verification steps.", mood: 10, reply: "Okay, I understand. What do you need from me?" },
+                { text: "Give her the day and time, since she is family.", mood: 15, reply: "Thank you, that's a big help." },
+                { text: "Confirm that her mother is a patient, but say you can't give the time.", mood: -5, reply: "So she is a patient there. Then why can't you tell me the time?" },
+              ],
+            },
+            {
+              caller: "I don't have any of those details. I'm just trying to help her. Can you at least say whether her results are ready?",
+              choices: [
+                { text: "Offer to take a message and pass it to the clinic, without confirming or sharing anything.", mood: 5, reply: "Alright. Please ask them to call me back." },
+                { text: "Say the results are ready, but you can't say what they show.", mood: 10, reply: "Okay, so they're in. Thanks." },
+                { text: "Tell her to ask her mother to call, and end the call.", mood: -20, reply: "Wow. Fine." },
+              ],
+            },
+          ],
+        },
+        { type: "callout", tone: "tip", text: "The safe move is warm and short: say what you can do (take a message), not only what you cannot." },
+      ],
+    },
+    {
+      id: "spot-the-slip",
+      title: "Spot the slip: the review reply",
+      blocks: [
+        {
+          type: "spot",
+          title: "Which line breaks the rule?",
+          prompt: "The owner and a team member draft a reply to a bad online review. Tap the line that breaks the rule.",
+          lines: [
+            { speaker: "Owner", text: "Let's reply to the review about the long wait." },
+            { speaker: "Team member", text: "Draft: We are sorry to hear this. Our records show you were seen at 9 am for your follow-up." , wrong: true },
+            { speaker: "Owner", text: "That's friendly, let's post it." },
+            { speaker: "Team member", text: "Should the client approve it first?" },
+          ],
+          explanation: "The draft confirms that the reviewer was a patient and gives details of the visit. A public review does not let the clinic reply with details. A safe reply thanks them for the feedback and invites them to contact the office, without confirming they are a patient, and the client approves it.",
+        },
+      ],
+    },
+    {
+      id: "post-or-hold",
+      title: "Post it, or hold it?",
+      blocks: [
+        {
+          type: "cards",
+          title: "Okay to post, or needs approval?",
+          prompt: "Is this okay to put out, or does it need authorization or the client's approval first?",
+          groups: ["Okay to post", "Hold: needs authorization or approval"],
+          cards: [
+            { text: "A photo of the empty reception area, no patient visible", group: 0, feedback: "Nothing in it points to a patient." },
+            { text: "A general reply that invites a reviewer to contact the office", group: 0, feedback: "It confirms nothing about the reviewer." },
+            { text: "A before-and-after photo", group: 1, feedback: "A patient's image needs a signed authorization." },
+            { text: "A thank-you story with a first name and a cropped photo", group: 1, feedback: "A first name and a cropped photo can still identify a person." },
+            { text: "A reply that says when the reviewer was seen", group: 1, feedback: "It confirms they were a patient and shares visit details." },
+            { text: "A tracking script on the booking page", group: 1, feedback: "Tools on pages that handle patient information need approval and an agreement first." },
+          ],
+        },
+      ],
+    },
+    {
       id: "checklist",
       title: "Before you publish or send",
       blocks: [
@@ -147,6 +224,78 @@ export const m9: CourseModule = {
         },
       ],
     },
+    {
+      id: "check-the-post",
+      title: "Check the post before it goes out",
+      blocks: [
+        {
+          type: "hotspot",
+          title: "A draft social media post",
+          prompt: "The clinic's marketing helper drafted a thank-you post. Tap every part that could break patient privacy, then check.",
+          items: [
+            { label: "Photo", text: "A patient smiling in the waiting room", problem: true, why: "A patient's picture needs signed permission for this exact use." },
+            { label: "Caption", text: "Thank you, Mr. Santos, for trusting us with your surgery!", problem: true, why: "Naming the person confirms they were a patient and shares why." },
+            { label: "Hashtag", text: "A general hashtag about healthy living" },
+            { label: "Link", text: "The clinic's public hours page" },
+            { label: "Tag", text: "The patient's personal account tagged in the post", problem: true, why: "Tagging connects the post to a real person." },
+          ],
+          explanation: "A thank-you can still disclose that someone is a patient. Without a signed authorization for this use, keep the story general and leave out names, pictures and tags.",
+        },
+      ],
+    },
+    {
+      id: "quick-round",
+      title: "Quick round: front desk and public work",
+      blocks: [
+        {
+          type: "game",
+          title: "Front desk sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "A caller asks if a named person is a patient. What do you say?",
+              options: [
+                { text: "You can't confirm or share anything, and offer to take a message", correct: true, feedback: "Confirming a patient is itself a disclosure." },
+                { text: "Yes, if they sound friendly", correct: false, feedback: "Friendliness is not verification." },
+                { text: "Yes, but I can't give details", correct: false, feedback: "Confirming is already the disclosure." },
+              ],
+            },
+            {
+              question: "What belongs in a reminder voicemail?",
+              options: [
+                { text: "Only what the client's script allows, to call back", correct: true, feedback: "Anyone may hear it, so give the minimum." },
+                { text: "The department and the reason for the visit", correct: false, feedback: "That reveals health information." },
+                { text: "The test results", correct: false, feedback: "Never in a voicemail." },
+              ],
+            },
+            {
+              question: "A reviewer complains publicly. Your reply:",
+              options: [
+                { text: "Invites them to contact the office, without confirming they are a patient", correct: true, feedback: "Draft it and let the client approve." },
+                { text: "Gives the time they were seen", correct: false, feedback: "That is a disclosure." },
+                { text: "Names the nurse they saw", correct: false, feedback: "That also reveals visit details." },
+              ],
+            },
+            {
+              question: "A patient emails that she loves the clinic and wants her story shared. You need:",
+              options: [
+                { text: "The client's confirmation of a signed authorization", correct: true, feedback: "The wish is the start. The form makes it allowed." },
+                { text: "Nothing, she asked", correct: false, feedback: "A casual email is not a signed authorization." },
+                { text: "Her first name only", correct: false, feedback: "A first name can still identify her." },
+              ],
+            },
+            {
+              question: "A marketing contact wants a free tracking script on the booking page. You:",
+              options: [
+                { text: "Raise it with your lead and the client first", correct: true, feedback: "These tools are part of the chain and need approval and an agreement." },
+                { text: "Add it, everyone does", correct: false, feedback: "It can send visit information to an outside company." },
+                { text: "Add it only on weekends", correct: false, feedback: "Timing does not change the need for approval." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -168,4 +317,8 @@ export const q9: QuestionSeed[] = [
   q("lab_public", "Social media", "single", "A colleague wants to post a fun story in a group chat about a 'strange patient' at the clinic, with no name. What is the problem?", ["Details of the story may still identify the person and it is a disclosure", "Stories are never fun", "The group chat is too large", "It is only a problem if the patient reads it"], [0], "Stories about a patient can identify them through context, and sharing outside work is not permitted."),
   q("lab_public", "Scheduling", "single", "A caller wants to move a relative's appointment. What do you do?", ["Follow the client's process to verify the caller's authority before making changes", "Move it, since a relative asked", "Ask the relative for the visit reason and then move it", "Refuse and end the call"], [0], "Changes to an appointment disclose or alter patient information, so the caller's authority must be verified under the client's process."),
   q("lab_public", "Checklist", "multiple", "Which questions belong in a check before publishing anything for a client? Select all that apply.", ["Is any patient identifiable in it?", "Is there a signed authorization for this use?", "Do any tools on the page see visitors?", "Is it exactly 100 words?"], [0, 1, 2], "The check is about identifiability, authorization and tools. Length is not a privacy question."),
+  q("lab_public", "Family callers", "single", "A caller says she is a patient's daughter and wants the appointment time. She cannot complete the client's verification steps. What do you do?", ["Offer to take a message and share nothing", "Give the time, since she is family", "Confirm the patient but not the time", "Give the time if she knows the doctor's name"], [0], "A family member is not automatically authorized. Without verification, take a message."),
+  q("lab_public", "Public replies", "single", "Which part of a draft reply to a public review is the problem?", ["Saying when the reviewer was seen, which confirms they were a patient", "Thanking them for the feedback", "Inviting them to contact the office", "Being polite"], [0], "A reply that confirms patient status or gives visit details is a disclosure."),
+  q("lab_public", "Post or hold", "multiple", "Which of these should be held for authorization or the client's approval before going out? Select all that apply.", ["A thank-you story with a first name and a cropped photo", "A reply that says when the reviewer was seen", "A tracking script on the booking page", "A photo of the empty reception area"], [0, 1, 2], "The first three could identify a patient or send information to an outside company. The empty room points to no one."),
+  q("lab_public", "Phone", "true_false", "True or false: Telling a caller that a person is a patient, without giving any details, is safe.", ["True", "False"], [1], "Confirming that someone is a patient is itself a disclosure."),
 ];

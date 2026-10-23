@@ -20,6 +20,8 @@ const csp = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // the recap videos are read from this private folder at run time, so they must travel with the route that serves them
+  outputFileTracingIncludes: { "/api/recaps/[file]": ["./media/recaps/**/*"], "/api/voice/[file]": ["./media/voice/**/*"] },
   async headers() {
     return [
       {

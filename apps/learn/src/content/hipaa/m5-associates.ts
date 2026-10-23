@@ -8,7 +8,7 @@ export const m5: CourseModule = {
   key: "associates",
   title: "Business associates and the agreements behind your work",
   summary: "What a business associate is, what the business associate agreement must contain, who is responsible for what, and why a careless vendor is everyone's problem.",
-  estimatedMinutes: 8,
+  estimatedMinutes: 12,
   tracks: ["full", "essentials"],
   keyPoints: [
     "A business associate performs functions for a covered entity that involve patient information.",
@@ -153,6 +153,116 @@ export const m5: CourseModule = {
       ],
     },
     {
+      id: "play-needs-agreement",
+      title: "Play: does this vendor need an agreement?",
+      blocks: [
+        { type: "paragraph", text: "Sort each one as you would for a client. Think about whether the company or person handles patient information to do its job." },
+        {
+          type: "cards",
+          title: "Agreement or no agreement?",
+          prompt: "Does this need a business associate agreement before any patient information is shared?",
+          groups: ["Needs an agreement", "No agreement needed"],
+          cards: [
+            { text: "A billing company that processes a clinic's claims", group: 0, feedback: "Billing and claims work involves patient information, so an agreement comes first." },
+            { text: "A cloud service that stores a clinic's patient files", group: 0, feedback: "Hosting and storage that holds patient information is a business associate function." },
+            { text: "A scheduling app that holds appointment lists with patient names", group: 0, feedback: "Even an app that seems harmless needs an agreement when it holds patient information." },
+            { text: "A transcription service that types up patient voicemails", group: 0, feedback: "Transcription and virtual assistant services are on the list of business associate work." },
+            { text: "A courier who only moves sealed mail and cannot see inside", group: 1, feedback: "A courier with no access to the contents is not using the information." },
+            { text: "A patient who pays their own bill at the front desk", group: 1, feedback: "A patient is the person the information is about, not a business associate." },
+          ],
+        },
+        { type: "callout", tone: "tip", text: "When you are not sure which side a tool falls on, treat it as needing an agreement and ask your lead." },
+      ],
+    },
+    {
+      id: "play-due-diligence",
+      title: "Play: ask before you adopt a tool",
+      blocks: [
+        { type: "paragraph", text: "A team member finds a faster tool for client work. Build the message to your lead by choosing the best piece for each part." },
+        {
+          type: "build",
+          title: "Ask before you adopt",
+          prompt: "Pick the best piece for each part of the message.",
+          slots: [
+            {
+              label: "What you ask first",
+              options: [
+                { text: "Is this tool approved, and is there an agreement with it?", correct: true, feedback: "That is the question the chain of trust depends on." },
+                { text: "Can I start with a short trial using real schedules?", correct: false, feedback: "A trial with real patient information is still a disclosure to a vendor with no agreement." },
+              ],
+            },
+            {
+              label: "What you use meanwhile",
+              options: [
+                { text: "The tool the client already approved", correct: true, feedback: "Slower is fine. Approved is the rule." },
+                { text: "The new tool, with names removed", correct: false, feedback: "Appointment details can still identify people, and the tool is still unapproved." },
+              ],
+            },
+            {
+              label: "Who decides",
+              options: [
+                { text: "My lead and the client, not me", correct: true, feedback: "Approving a vendor is the covered entity's and ERS's decision." },
+                { text: "Me, if the tool looks professional", correct: false, feedback: "Looks are not an agreement." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "quick-round-associates",
+      title: "Quick round: business associates",
+      blocks: [
+        {
+          type: "game",
+          title: "Business associate sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "When must a business associate agreement be in place?",
+              options: [
+                { text: "Before patient information is shared", correct: true, feedback: "No agreement, no information." },
+                { text: "After the first problem", correct: false, feedback: "By then the information has already moved." },
+                { text: "Only if the vendor asks", correct: false, feedback: "The law requires it, whether or not anyone asks." },
+              ],
+            },
+            {
+              question: "A free tool would speed up your task. What matters first?",
+              options: [
+                { text: "Whether it is approved and has an agreement", correct: true, feedback: "Price does not matter. Approval does." },
+                { text: "Whether it looks professional", correct: false, feedback: "Appearance is not a contract." },
+                { text: "Whether other teams use it", correct: false, feedback: "Other teams may be breaking the same rule." },
+              ],
+            },
+            {
+              question: "How must a business associate treat its own subcontractors?",
+              options: [
+                { text: "Make them agree to the same restrictions", correct: true, feedback: "The protection follows the information down the chain." },
+                { text: "Trust them without a contract", correct: false, feedback: "Trust is not an agreement." },
+                { text: "Keep them secret from the client", correct: false, feedback: "Tools and vendors must be approved." },
+              ],
+            },
+            {
+              question: "A business associate finds a breach of unsecured PHI. Notification is due:",
+              options: [
+                { text: "Without unreasonable delay, and no later than 60 days after discovery", correct: true, feedback: "Many contracts require much sooner." },
+                { text: "At the end of the contract", correct: false, feedback: "That would be far too late." },
+                { text: "Only if the patient asks", correct: false, feedback: "The duty does not depend on a request." },
+              ],
+            },
+            {
+              question: "A client's staff member asks for patient lists at a personal email. You:",
+              options: [
+                { text: "Decline politely and ask your lead for the approved way", correct: true, feedback: "The approved systems are the rule, even when the client asks." },
+                { text: "Send it, because she is the client", correct: false, feedback: "Client staff can break the client's rules too." },
+                { text: "Send it without names", correct: false, feedback: "The channel is still unapproved." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: "terms",
       title: "Terms from this module",
       blocks: [
@@ -185,4 +295,8 @@ export const q5: QuestionSeed[] = [
   q("associates", "Vendors", "single", "You find a free tool that would make a client task faster. What must be true before you use it with patient information?", ["It is approved by ERS and the client, with an agreement in place", "It looks professional", "Other teams use it", "It does not ask for a login"], [0], "A tool that handles patient information must be approved and covered by an agreement."),
   q("associates", "Vendors", "single", "A client's staff member asks you to forward patient information to their personal email 'just this once'. What do you do?", ["Decline politely and ask your lead for the approved way", "Forward it, because they are the client", "Forward it with the subject line left blank", "Forward only part of it"], [0], "Personal email is outside approved systems. A client's staff can ask, but the approved systems are the rule."),
   q("associates", "Where you work", "single", "Your client's agreement limits where work can be done from. A new place would be more convenient. What do you do?", ["Follow the agreement and raise the idea with your lead", "Work from the convenient place anyway", "Work there and say nothing", "Move the work to a personal account"], [0], "The agreement decides where and how the work is done."),
+  q("associates", "Who", "single", "A company stores a clinic's appointment lists, with patient names, in an online scheduling app. Is the company that runs the app a business associate?", ["Yes, because it holds patient information to do work for the clinic", "No, because the app is only software", "No, because it is a small company", "Only if the clinic pays for it"], [0], "A vendor that holds patient information for a covered entity is a business associate, however simple the product looks."),
+  q("associates", "Who", "true_false", "True or false: A patient who pays their own bill at the front desk is a business associate.", ["True", "False"], [1], "A patient is the person the information is about. A business associate does work for a covered entity."),
+  q("associates", "Vendors", "single", "A teammate wants to start using a new tool before asking anyone, planning to tell the client later. What is the main problem?", ["The tool has no agreement and the client has not approved it, so it sits outside the chain of trust", "The tool might be slow", "The client may want a discount", "Nothing, if it works well"], [0], "Using an unapproved vendor means nothing binds it to protect the information, and the client has not assessed the risk."),
+  q("associates", "Subcontractors", "multiple", "Which of these are true of subcontractors? Select all that apply.", ["They need an agreement with the business associate that uses them", "The agreement carries the same restrictions down the chain", "They can handle patient information without an agreement if the work is small", "They answer directly under the rules"], [0, 1, 3], "Subcontractors are bound by the same limits and are directly liable. Small work does not remove the need for an agreement."),
 ];

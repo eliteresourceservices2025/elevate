@@ -4,7 +4,7 @@ export const physicalModule: CourseModule = {
   key: "physical",
   title: "Handling information and physical security",
   summary: "Knowing what is sensitive, sharing only what is needed, protecting paper and screens, and the in-person tricks attackers use.",
-  estimatedMinutes: 9,
+  estimatedMinutes: 13,
   tracks: ["full"],
   keyPoints: [
     "Know what you are handling, and treat client and personal information as sensitive by default.",
@@ -63,6 +63,26 @@ export const physicalModule: CourseModule = {
       ],
     },
     {
+      id: "check-the-desk",
+      title: "Check the desk: what leaks information?",
+      blocks: [
+        {
+          type: "hotspot",
+          title: "A desk during a client call",
+          prompt: "A team member takes a call at home. Tap everything that puts information at risk, then check.",
+          items: [
+            { label: "Screen", text: "Left open on a billing summary while the team member steps away", problem: true, why: "Do not leave a screen showing information when you step away." },
+            { label: "Printout", text: "A client summary left in the printer tray", problem: true, why: "Keep printouts with sensitive details locked away when you are done." },
+            { label: "Sticky note", text: "A password written on a note under the keyboard", problem: true, why: "Passwords and codes are sensitive, and a note under the keyboard is easy to find." },
+            { label: "Drawer", text: "Notes locked away when the work is finished" },
+            { label: "Call", text: "Taken on a headset in a room with the door closed" },
+            { label: "Phone", text: "A personal phone kept off the documents, not used to photograph them" },
+          ],
+          explanation: "A clean workspace keeps paper, screens and conversations out of sight and earshot.",
+        },
+      ],
+    },
+    {
       id: "tailgating",
       title: "People in person",
       blocks: [
@@ -111,6 +131,33 @@ export const physicalModule: CourseModule = {
       ],
     },
     {
+      id: "shred-keep-ask",
+      title: "Quick sort: shred, lock away or follow instructions?",
+      blocks: [
+        {
+          type: "cards",
+          title: "What happens to it",
+          prompt: "Sort each item, one at a time.",
+          groups: ["Shred or return it","Lock it away","Follow instructions or ask"],
+          cards: [
+            { text: "A printout with sensitive details that you have finished with", group: 0, feedback: "Shred paper with sensitive details, or return it as instructed." },
+            { text: "Notes with sensitive details that you will need tomorrow", group: 1, feedback: "Keep notes with sensitive details locked away when you are done." },
+            { text: "A retired work laptop", group: 2, feedback: "Do not sell, give away or recycle a work device. It is cleared the approved way." },
+            { text: "Something you are not sure how to dispose of", group: 2, feedback: "If you are not sure how to dispose of something, keep it safe and ask." },
+            { text: "A download you no longer need", group: 2, feedback: "Remove downloads and working copies as instructed." },
+            { text: "A printout you need to keep until the task is done", group: 1, feedback: "Keep printouts locked away when you are not using them." },
+          ],
+        },
+        {
+          type: "sort",
+          title: "Keep only what you need",
+          prompt: "Put the steps of handling information in order.",
+          items: ["Do the task, working in the client system where you can","Do not copy: no extra files, notes or printouts unless told to","Clear up downloads and working copies as instructed","Destroy properly: shred or use the approved method"],
+          explanation: "Do the task without making copies, then clear up and destroy what is left the approved way, not in the bin.",
+        },
+      ],
+    },
+    {
       id: "case-home-printer",
       title: "Worked case: the home printer",
       blocks: [
@@ -120,6 +167,23 @@ export const physicalModule: CourseModule = {
           scenario: "You need to read a client's three-page billing summary carefully, and the screen is tiring. You print it on your home printer, read it, and leave it in a drawer to \"deal with in the morning\". In the morning a visitor is staying and the drawer is open.",
           question: "What went wrong, and what should happen to the pages?",
           answer: "Printing created an extra copy outside the client's system, which the client probably did not allow and cannot control, and it was left where others could reach it. The pages should be secured now, and the print reported to your lead so the client can decide what to do. Next time, ask whether printing is permitted and how paper must be destroyed. Throwing it in the bin is not destruction.",
+        },
+      ],
+    },
+    {
+      id: "quick-round-physical",
+      title: "Quick round: handling information",
+      blocks: [
+        {
+          type: "game",
+          title: "Handling information sprint",
+          rounds: [
+            { question: "A stranger in a uniform asks you to hold the door. What is the best response?", options: [{ text: "Politely ask them to use their own access or check in at the front desk", correct: true, feedback: "Right. A uniform proves nothing." }, { text: "Hold the door", correct: false, feedback: "Attackers rely on politeness." }, { text: "Ask them to promise they work here", correct: false, feedback: "A promise proves nothing." }] },
+            { question: "Where do old printouts with sensitive details go?", options: [{ text: "Shredded, or returned as instructed", correct: true, feedback: "Right." }, { text: "The normal bin", correct: false, feedback: "Anyone can read what goes in the bin." }, { text: "A drawer at home for ever", correct: false, feedback: "Keep only what you need, for as long as you need it." }] },
+            { question: "You are not sure how to dispose of something. What now?", options: [{ text: "Keep it safe and ask", correct: true, feedback: "Right." }, { text: "Throw it in the bin", correct: false, feedback: "Ask first." }, { text: "Give it away", correct: false, feedback: "Devices and papers keep what was on them." }] },
+            { question: "Which way may you share a document with sensitive details?", options: [{ text: "The approved system, with those who need it", correct: true, feedback: "Right." }, { text: "Personal chat", correct: false, feedback: "Use the approved system." }, { text: "A public channel", correct: false, feedback: "Share only with people who need it." }] },
+            { question: "May you photograph a work document with your personal phone?", options: [{ text: "No: it is an unapproved copy", correct: true, feedback: "Right." }, { text: "Yes, if it is small", correct: false, feedback: "A photo is still a copy." }, { text: "Yes, if you delete it later", correct: false, feedback: "It still sat outside approved systems." }] },
+          ],
         },
       ],
     },
@@ -159,4 +223,8 @@ export const physicalQuestions: QuestionSeed[] = [
   q("physical", "Destruction", "single", "Which is an acceptable way to dispose of printed client information?", ["Shredding it or using the method the client approved", "Throwing it in the household bin", "Tearing it once", "Leaving it for the cleaner"], [0], "Only proper destruction protects the information from being reassembled."),
   q("physical", "Destruction", "true_false", "True or false: Deleting a file from your desktop and emptying the recycle bin permanently destroys it in every case.", ["True", "False"], [1], "Deleted files can remain on a device or in backups, so media must be cleared the approved way."),
   q("physical", "Clean desk", "multiple", "Which of these belong to a clean-desk habit? Select all that apply.", ["Putting papers away when you leave", "Locking your screen", "Keeping passwords off sticky notes", "Leaving a list of patient names beside the keyboard"], [0, 1, 2], "A clean desk limits what anyone passing can see or take."),
+  q("physical", "Retention", "single", "Who decides how long a copy of client information may be kept, and where?", ["Your client's instructions","You, as you see fit","Whoever prints it","Nobody, copies can be kept for ever"], [0], "Follow your client's instructions on how long something may be kept and where."),
+  q("physical", "Retention", "multiple", "Which of these belong in keeping only what you need? Select all that apply.", ["Work in the client system where you can","Do not make extra copies unless told to","Clear up downloads and working copies as instructed","Make a spare copy for safekeeping"], [0,1,2], "Extra copies multiply the risk and sit outside the client's control."),
+  q("physical", "Tailgating", "true_false", "True or false: A uniform shows that a person may enter a secure area.", ["True","False"], [1], "A uniform proves nothing, and attackers rely on politeness."),
+  q("physical", "Paper", "single", "Where should a printout with sensitive details be when you finish for the day?", ["Locked away","On the desk","In the printer tray","In the normal bin"], [0], "Keep printouts with sensitive details locked away when you are done."),
 ];

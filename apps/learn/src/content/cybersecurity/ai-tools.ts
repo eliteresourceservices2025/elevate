@@ -7,7 +7,7 @@ export const aiToolsModule: CourseModule = {
   key: "ai_tools",
   title: "AI tools and your data",
   summary: "Why pasting work into an AI tool is a disclosure, what counts as an AI tool, how to check what comes back, and what to do instead.",
-  estimatedMinutes: 10,
+  estimatedMinutes: 15,
   tracks: ["full"],
   keyPoints: [
     "Anything you type or upload into an AI tool leaves your control and goes to the company that runs it.",
@@ -129,6 +129,103 @@ export const aiToolsModule: CourseModule = {
       ],
     },
     {
+      id: "cards-paste-or-not",
+      title: "Quick sort: fine to type, or never paste?",
+      blocks: [
+        {
+          type: "cards",
+          title: "Fine to type, or never paste?",
+          prompt: "Sort each thing you might put into an AI tool that nobody approved for client work.",
+          groups: ["Fine to type", "Never paste"],
+          cards: [
+            { text: "A general question with no work or personal details", group: 0, feedback: "Nothing about a client or a person goes out." },
+            { text: "A patient complaint letter with the name deleted", group: 1, feedback: "Removing a name is not enough: the details can still identify her." },
+            { text: "A password or a code", group: 1, feedback: "Never enter passwords or codes into a tool." },
+            { text: "A work document to a free online converter", group: 1, feedback: "Uploading a work document sends it to an outside company." },
+            { text: "The last three emails of a client thread", group: 1, feedback: "Fewer emails is still client information sent to an unapproved tool." },
+            { text: "A task in a tool named in your client's instructions", group: 0, feedback: "An approved tool, for approved purposes, is fine." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "build-safe-request",
+      title: "Build a safe way to get help",
+      blocks: [
+        {
+          type: "build",
+          title: "Handling the summary request",
+          prompt: "A manager asks you for a summary of a long thread by the end of the hour. Pick the right piece for each part.",
+          slots: [
+            {
+              label: "Which tool",
+              options: [
+                { text: "The tool named in my client's instructions", correct: true, feedback: "Approved tools are named by ERS or the client." },
+                { text: "A free assistant I signed up for myself", correct: false, feedback: "A free account you made yourself is not approved." },
+              ],
+            },
+            {
+              label: "What goes in",
+              options: [
+                { text: "Only what that approved tool is approved for", correct: true, feedback: "Use an approved tool for approved purposes." },
+                { text: "The thread with the names deleted", correct: false, feedback: "Details can still identify a person." },
+              ],
+            },
+            {
+              label: "Before it goes out",
+              options: [
+                { text: "I read it all and check the facts against the client's system", correct: true, feedback: "Output may be wrong, and what you send is your work." },
+                { text: "I send it because it sounds sure", correct: false, feedback: "Tools can sound sure and be wrong." },
+              ],
+            },
+            {
+              label: "If I am unsure",
+              options: [
+                { text: "I ask my lead for the approved way", correct: true, feedback: "A question costs minutes. A disclosure cannot be undone." },
+                { text: "I try it and see", correct: false, feedback: "You cannot take back what you paste." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "spot-the-chat-slip",
+      title: "Spot the slip in the chat",
+      blocks: [
+        {
+          type: "spot",
+          title: "A chat about a complaint letter",
+          prompt: "Tap the line that puts patient information at risk.",
+          lines: [
+            { speaker: "Manager", text: "Can you summarize this patient complaint letter by the end of the hour?" },
+            { speaker: "You", text: "Sure. I will write it in the client's system." },
+            { speaker: "Coworker", text: "Just delete her name and paste it into the free assistant I use. It is quick.", wrong: true },
+            { speaker: "You", text: "I will check with my lead about an approved tool first." },
+          ],
+          explanation: "A free assistant nobody approved is an outside company, and deleting the name does not stop the details from identifying her. Write it in the client's system and ask your lead.",
+        },
+      ],
+    },
+    {
+      id: "quick-round-ai",
+      title: "Quick round: AI tools and your data",
+      blocks: [
+        {
+          type: "game",
+          title: "AI tools sprint",
+          seconds: 20,
+          rounds: [
+            { question: "You paste text into a public AI chatbot. What is true?", options: [{ text: "It goes to the company that runs the tool, and you cannot take it back", correct: true, feedback: "The information leaves your control." }, { text: "It stays on your computer", correct: false, feedback: "It travels to the company's systems." }] },
+            { question: "What makes a tool approved for client work?", options: [{ text: "ERS or the client reviewed it and has an agreement limiting what the company may do", correct: true, feedback: "Approval comes from ERS or the client." }, { text: "It has a free plan", correct: false, feedback: "Price does not make a tool approved." }, { text: "A coworker recommended it", correct: false, feedback: "A recommendation is not approval." }] },
+            { question: "Does removing a patient's name make a text safe to paste?", options: [{ text: "No, details can still identify the person", correct: true, feedback: "A date, a condition or a street can point to one person." }, { text: "Yes, names are the only risk", correct: false, feedback: "Context can identify someone." }] },
+            { question: "A notetaker bot joins a client call. What do you do?", options: [{ text: "Ask the host if it is approved, and tell your lead if not", correct: true, feedback: "Unapproved notetakers can capture client information." }, { text: "Ignore it", correct: false, feedback: "It may store names and details with a third party." }] },
+            { question: "An AI draft is ready to send to a patient. What first?", options: [{ text: "A person checks the facts and owns the message", correct: true, feedback: "Tools can sound sure and be wrong." }, { text: "Send it, the tool is smart", correct: false, feedback: "Output must be checked before it is used." }] },
+          ],
+        },
+      ],
+    },
+    {
       id: "terms",
       title: "Terms from this module",
       blocks: [
@@ -162,4 +259,8 @@ export const aiToolsQuestions: QuestionSeed[] = [
   q("ai_tools", "Hidden instructions", "single", "Why should you be careful about letting an AI assistant open files or links from unknown senders?", ["Hidden text can instruct it to do things you did not ask", "The files are too large", "Assistants do not read files", "It uses too much battery"], [0], "Instructions planted in a document or page can steer an assistant, and you may not see them."),
   q("ai_tools", "Access", "single", "A tool asks for access to your work email and files to 'help you work faster'. What should you do?", ["Decline, and ask your lead whether it is approved", "Allow it, since it saves time", "Allow it on your phone only", "Allow it for one day"], [0], "Giving a tool access to mail and files exposes everything in them. It needs approval first."),
   q("ai_tools", "Doubt", "single", "You are unsure whether an AI feature in your office software is approved for client work. What do you do?", ["Do not use it on client information, and ask your lead", "Use it and see", "Use it only for short texts", "Use it at night when nobody is watching"], [0], "When unsure, hold back and ask. A question costs minutes, a disclosure cannot be undone."),
+  q("ai_tools", "Copying a colleague", "single", "A coworker says to delete the name from a patient letter and paste it into the free assistant they use. What is the right response?", ["Decline, and check with your lead for an approved way", "Do it, since the name is removed", "Paste only half of the letter", "Paste it from your personal phone instead"], [0], "A free assistant nobody approved is an outside company, and the details can still identify the patient."),
+  q("ai_tools", "Approved", "single", "What makes an AI tool approved for a given use?", ["ERS or the client reviewed it and has an agreement that limits what the company may do with the information", "It has a free plan", "A coworker recommended it", "Many people use it"], [0], "Approval comes from ERS or the client, backed by an agreement."),
+  q("ai_tools", "What not to paste", "multiple", "Which of these should never go into a tool that has not been approved? Select all that apply.", ["A client's patient information", "A password or code", "A work document to convert", "A general question with no work details"], [0, 1, 2], "Client information, credentials and work documents must stay out of unapproved tools. A general question reveals nothing."),
+  q("ai_tools", "What happens", "true_false", "True or false: You can take back what you pasted into a public AI tool by deleting the chat.", ["True", "False"], [1], "You cannot take it back. The information has already reached the company that runs the tool."),
 ];

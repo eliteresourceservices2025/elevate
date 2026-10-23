@@ -4,7 +4,7 @@ export const responseModule: CourseModule = {
   key: "response",
   title: "When something goes wrong",
   summary: "How to recognize that something is wrong, what to do in the first minutes, and why speed and honesty matter more than being sure.",
-  estimatedMinutes: 10,
+  estimatedMinutes: 15,
   tracks: ["full"],
   keyPoints: [
     "Signs of trouble: unexpected prompts, locked files, strange messages sent from your account, odd pop-ups.",
@@ -104,6 +104,19 @@ export const responseModule: CourseModule = {
       ],
     },
     {
+      id: "first-hour-order",
+      title: "Put it in order: the first hour",
+      blocks: [
+        {
+          type: "sort",
+          title: "From the moment you notice",
+          prompt: "Put these in the order they should happen.",
+          items: ["Stop what you are doing","Tell your lead and HR, without waiting to be sure","Write down the facts: what, when, which system, and keep the evidence","Change passwords or isolate the device, if asked","Cooperate with questions afterward"],
+          explanation: "Stop, tell, describe and preserve, then do what you are asked. Speed matters more than being sure.",
+        },
+      ],
+    },
+    {
       id: "good-report",
       title: "What a good report looks like",
       blocks: [
@@ -122,6 +135,23 @@ export const responseModule: CourseModule = {
       ],
     },
     {
+      id: "build-a-report",
+      title: "Build it: a useful report",
+      blocks: [
+        {
+          type: "build",
+          title: "A report to your lead",
+          prompt: "You sent a file to the wrong address. Pick the best piece for each part of your report.",
+          slots: [
+            { label: "What happened", options: [{ text: "Sent a file with 12 rows to the wrong email address", correct: true, feedback: "Specific and short." }, { text: "Something went wrong", correct: false, feedback: "Too vague to act on." }] },
+            { label: "When", options: [{ text: "Today at 3:40 pm, noticed at 3:55 pm", correct: true, feedback: "Gives the times." }, { text: "Earlier", correct: false, feedback: "Too vague." }] },
+            { label: "Where", options: [{ text: "Client billing portal export, sent by email", correct: true, feedback: "Names the system and how it was sent." }, { text: "Somewhere", correct: false, feedback: "Too vague." }] },
+            { label: "Done so far", options: [{ text: "Nothing deleted, no reply sent", correct: true, feedback: "Says what you did and did not do." }, { text: "Fixed it", correct: false, feedback: "Does not say what was done." }] },
+          ],
+        },
+      ],
+    },
+    {
       id: "case-click",
       title: "Worked case: the click you nearly kept to yourself",
       blocks: [
@@ -131,6 +161,23 @@ export const responseModule: CourseModule = {
           scenario: "On Monday you clicked a link in a message and entered your login. The page then said \"Session expired\", so you assumed nothing had happened and went on. On Wednesday your lead announces that a teammate's mailbox sent odd messages to clients. You realize your login may be connected.",
           question: "What should you do now, and how does the delay change things?",
           answer: "Report it today, with the facts: what you clicked, when, and what you entered. The delay has cost two days, but honest late reporting is still far better than silence, and it is protected. Change your password the official way and tell your lead and HR everything you remember. The organization may need to look at your account's activity from Monday on.",
+        },
+      ],
+    },
+    {
+      id: "call-your-lead",
+      title: "Practice: the call to your lead",
+      blocks: [
+        {
+          type: "branch",
+          title: "Reporting a click",
+          intro: "You clicked a link and typed your password, then noticed the page looked wrong. You phone your lead to report it.",
+          startMood: 50,
+          turns: [
+            { caller: "Thanks for calling. Tell me what happened.", choices: [{ text: "I clicked a link at 3:40 pm and typed my password. The page looked wrong.", mood: 20, reply: "Thank you. Those facts are exactly what I need." }, { text: "It is probably nothing. I just wanted to mention it.", mood: -15, reply: "I need the facts. What did you click and when?" }] },
+            { caller: "Have you done anything since then?", choices: [{ text: "I have kept the message and changed nothing else.", mood: 20, reply: "Good. Keeping it helps the team see what happened." }, { text: "I deleted the message and cleared my history.", mood: -25, reply: "Please do not delete things. The message is evidence." }] },
+            { caller: "What about your password?", choices: [{ text: "I will change it through the official site, as you tell me.", mood: 20, reply: "Yes. Change it the official way and we will take it from here." }, { text: "I will wait until tomorrow to see if anything happens.", mood: -20, reply: "The password is already exposed. We act now." }] },
+          ],
         },
       ],
     },
@@ -146,6 +193,23 @@ export const responseModule: CourseModule = {
             { text: "Change the password through the official site and tell your lead right away.", feedback: "Correct. Change it the official way and report: both, quickly.", best: true },
             { text: "Hope nothing happens and carry on.", feedback: "The password is already in the attacker's hands. Act now.", best: false },
             { text: "Close the browser and delete your history.", feedback: "That does not undo anything and removes useful evidence.", best: false },
+          ],
+        },
+      ],
+    },
+    {
+      id: "quick-round-response",
+      title: "Quick round: when something goes wrong",
+      blocks: [
+        {
+          type: "game",
+          title: "First-minutes sprint",
+          rounds: [
+            { question: "Which of these may be a sign that something is wrong?", options: [{ text: "A sign-in prompt you did not ask for", correct: true, feedback: "Right." }, { text: "A calendar reminder you set yourself", correct: false, feedback: "That is your own reminder." }, { text: "A new coffee machine", correct: false, feedback: "Not a sign of an incident." }] },
+            { question: "You think your device is infected. What do you do first?", options: [{ text: "Stop and tell your lead", correct: true, feedback: "Right." }, { text: "Keep working on it", correct: false, feedback: "Stop and tell." }, { text: "Restart it again and again", correct: false, feedback: "That can destroy evidence." }] },
+            { question: "What should you do with a suspicious message you clicked?", options: [{ text: "Keep it and report it", correct: true, feedback: "Right. It is evidence." }, { text: "Delete it at once", correct: false, feedback: "Do not delete evidence." }, { text: "Forward it to everyone", correct: false, feedback: "Do not warn everyone first." }] },
+            { question: "A message says to pay to get your files back. What do you do?", options: [{ text: "Do not reply or pay, and tell your lead", correct: true, feedback: "Right." }, { text: "Pay to be safe", correct: false, feedback: "Paying is not your decision." }, { text: "Reply to negotiate", correct: false, feedback: "Do not reply to the attacker." }] },
+            { question: "Do you need to be sure before you report?", options: [{ text: "No: report even when you are not sure", correct: true, feedback: "Right." }, { text: "Yes, wait for proof", correct: false, feedback: "Waiting uses time that matters." }, { text: "Yes, for a few days", correct: false, feedback: "A day of delay is a day of exposure." }] },
           ],
         },
       ],
@@ -170,4 +234,8 @@ export const responseQuestions: QuestionSeed[] = [
   q("response", "Reports", "true_false", "True or false: An incident report should include the patient names so the team knows exactly who is affected.", ["True", "False"], [1], "Keep patient details out of the report. The facts about the event are what is needed."),
   q("response", "Late reporting", "single", "You realize two days later that a click may have been a problem. What should you do?", ["Report it today with the facts, and change your password the official way", "Say nothing, since it is too late", "Wait a week to see", "Delete your messages"], [0], "Late reporting is far better than none, and honest reports are protected."),
   q("response", "Evidence", "single", "Why should you not delete a suspicious message after reporting it?", ["It is evidence that helps responders understand what happened", "It uses memory", "It is a legal requirement for the sender", "It will come back anyway"], [0], "Responders use the message to understand and contain the problem."),
+  q("response", "First minutes", "single", "Which comes first in the first minutes after you notice something is wrong?", ["Stop what you are doing","Write a long report","Warn everyone in a public chat","Switch the device off at once"], [0], "Stop, then tell your lead."),
+  q("response", "Devices", "single", "Your instructions say to take a possibly infected device off the network. What about switching it off?", ["Do not switch it off unless told to","Always switch it off first","Switch it off and delete files","Keep it online to see what happens"], [0], "Take it off the network if told to, but do not switch it off unless told to."),
+  q("response", "Reports", "single", "Why is \"Fixed it\" an unhelpful note under \"done so far\" in a report?", ["It does not say what was actually done","It is too long","It names a patient","It is too honest"], [0], "A useful note says exactly what was and was not done, such as nothing deleted and no reply sent."),
+  q("response", "Call", "single", "You phone your lead to report a click. Which is the most useful way to start?", ["Say what you clicked, when, and what you typed","Say it is probably nothing","Ask whose fault it is","Say you will explain next week"], [0], "Facts such as what, when and where let the response start in the right place."),
 ];

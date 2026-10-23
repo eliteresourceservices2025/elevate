@@ -4,7 +4,7 @@ export const devicesModule: CourseModule = {
   key: "devices",
   title: "Devices, networks and working remotely",
   summary: "Locking and protecting your devices, securing your home network, using public Wi-Fi and video calls safely, and what to do when a device goes missing.",
-  estimatedMinutes: 14,
+  estimatedMinutes: 19,
   tracks: ["full"],
   keyPoints: [
     "Lock your screen, use a screen lock code, and encrypt your devices.",
@@ -135,6 +135,27 @@ export const devicesModule: CourseModule = {
       ],
     },
     {
+      id: "check-the-remote-setup",
+      title: "Check the setup: what is wrong with this home desk?",
+      blocks: [
+        {
+          type: "hotspot",
+          title: "A home desk before the shift",
+          prompt: "A team member is about to start work from home. Tap everything on this setup that puts client information at risk, then check.",
+          items: [
+            { label: "Place", text: "A desk by a window that faces the street", problem: true, why: "Screens and calls should be where others cannot see or hear them." },
+            { label: "Device", text: "A work laptop that is updated, encrypted and locked when away" },
+            { label: "Router", text: "Still on the factory admin password", problem: true, why: "A router with the factory password is one of the easiest ways into a home network." },
+            { label: "Wi-Fi", text: "WPA3 with a strong password" },
+            { label: "Guest network", text: "Visitors and smart devices kept on a guest network" },
+            { label: "Family", text: "A relative checks email on the work laptop", problem: true, why: "Work devices are for work, and only for you." },
+            { label: "Phone", text: "A phone with a screen lock and updates" },
+          ],
+          explanation: "A safe remote setup has a place, a device, a network and a sign-in, and each needs to be safe, even at home.",
+        },
+      ],
+    },
+    {
       id: "shared-home",
       title: "Worked case: the shared family computer",
       blocks: [
@@ -164,6 +185,28 @@ export const devicesModule: CourseModule = {
       ],
     },
     {
+      id: "habit-or-risk",
+      title: "Quick sort: good habit or risk?",
+      blocks: [
+        {
+          type: "cards",
+          title: "Habit or risk",
+          prompt: "Sort each card, one at a time.",
+          groups: ["Good habit","Risk"],
+          cards: [
+            { text: "Lock your screen before you step away", group: 0, feedback: "A locked screen keeps others from seeing or using your session." },
+            { text: "Connect a USB drive you found", group: 1, feedback: "Do not connect unknown USB drives." },
+            { text: "Share one window on a call and close private ones first", group: 0, feedback: "Sharing one window avoids exposing other information by accident." },
+            { text: "Use free public Wi-Fi at a cafe for client work", group: 1, feedback: "A public network and a public room are both risks for client work." },
+            { text: "Keep the router software updated", group: 0, feedback: "An old router is an easy way in." },
+            { text: "Let a family member use the work laptop", group: 1, feedback: "Use work devices for work, and only you." },
+            { text: "Sign out of a remote session when you finish", group: 0, feedback: "Signing out ends the session so nobody else can use it." },
+            { text: "Use a free consumer VPN app nobody approved", group: 1, feedback: "Do not use free consumer VPN apps for work unless they were approved." },
+          ],
+        },
+      ],
+    },
+    {
       id: "lost-device",
       title: "A device goes missing",
       blocks: [
@@ -177,6 +220,36 @@ export const devicesModule: CourseModule = {
           ],
         },
         { type: "callout", tone: "warning", text: "Do not wait to see if it turns up. A day of delay is a day of exposure." },
+      ],
+    },
+    {
+      id: "missing-device-order",
+      title: "Put it in order: a device goes missing",
+      blocks: [
+        {
+          type: "sort",
+          title: "A device goes missing",
+          prompt: "Put these steps in the order you should do them.",
+          items: ["Tell your lead immediately","Say what it is, when and where you last had it","Follow the instructions to lock or wipe it","Change the passwords of accounts that were signed in on it"],
+          explanation: "Telling your lead comes first because seconds count: a lock or remote wipe only works while the device can still be reached.",
+        },
+      ],
+    },
+    {
+      id: "quick-round-devices",
+      title: "Quick round: devices and networks",
+      blocks: [
+        {
+          type: "game",
+          title: "Devices sprint",
+          rounds: [
+            { question: "You step away from your home desk with work open. What comes first?", options: [{ text: "Lock your screen", correct: true, feedback: "Right. Lock it yourself whenever you step away." }, { text: "Leave it, since you are at home", correct: false, feedback: "A device at home can be borrowed." }, { text: "Turn the brightness down", correct: false, feedback: "That does not stop anyone using it." }] },
+            { question: "Which Wi-Fi security should your router use?", options: [{ text: "WPA2 or WPA3 with a strong password", correct: true, feedback: "Right." }, { text: "The factory setting, since it works", correct: false, feedback: "Change the default." }, { text: "No password, so guests can join", correct: false, feedback: "Use a guest network instead." }] },
+            { question: "Your work phone is lost. Who do you tell first?", options: [{ text: "Your lead, immediately", correct: true, feedback: "Right. Do not wait to see if it turns up." }, { text: "Nobody until it is found", correct: false, feedback: "A day of delay is a day of exposure." }, { text: "A friend online", correct: false, feedback: "Report it through your lead." }] },
+            { question: "What does a VPN not do?", options: [{ text: "Stop you from clicking a bad link", correct: true, feedback: "Right. A VPN protects traffic on a network you do not control." }, { text: "Protect traffic on a network you do not control", correct: false, feedback: "That is what it does." }, { text: "Create a private tunnel to your organization", correct: false, feedback: "That is what it does." }] },
+            { question: "Which device may do client work?", options: [{ text: "An approved one that only you use", correct: true, feedback: "Right." }, { text: "The family computer in the kitchen", correct: false, feedback: "A shared family computer is not approved." }, { text: "Any device with internet", correct: false, feedback: "Use only approved devices." }] },
+          ],
+        },
       ],
     },
   ],
@@ -200,4 +273,8 @@ export const devicesQuestions: QuestionSeed[] = [
   q("devices", "Phones", "single", "May you take a photo of a client's screen on your personal phone to help remember a step?", ["No, because that creates an unapproved copy of client information", "Yes, if it is a small photo", "Yes, if you delete it later", "Yes, if it has no names"], [0], "Photos create copies outside approved systems."),
   q("devices", "Network", "single", "Your home router has never been updated and still uses its default password. What should you do?", ["Change the password and update it, or ask for help", "Leave it, since it works", "Move to a neighbor's Wi-Fi", "Turn off the firewall"], [0], "Default passwords and old software leave a home network open."),
   q("devices", "Place", "single", "Which is the best place to take a client call at home?", ["A room with a door, away from others", "The kitchen with the family nearby", "The balcony", "The living room with the television on"], [0], "Choose a private space where the call cannot be overheard."),
+  q("devices", "Phones", "single", "Your phone that receives work sign-in codes is replaced or lost. What should you do?", ["Report it immediately, because it may hold sign-in codes","Wait to see if it turns up","Change your wallpaper","Ask a friend to find it"], [0], "A phone that receives sign-in codes is part of your security."),
+  q("devices", "Remote sessions", "single", "What should you do when you finish a remote work session?", ["Sign out of the remote session","Leave it open for the next shift","Share the session link with a teammate","Close the lid without signing out"], [0], "Signing out of remote sessions is part of using remote access as instructed."),
+  q("devices", "VPN", "true_false", "True or false: A VPN stops you from being harmed by clicking a bad link.", ["True","False"], [1], "A VPN protects traffic on an untrusted network, but it does not stop a bad link from working."),
+  q("devices", "USB", "single", "You find a USB drive in a shared space. What is the right choice?", ["Do not connect it, and tell your lead","Plug it in to find the owner","Use it for backups","Plug it into the work laptop only"], [0], "Do not connect unknown USB drives."),
 ];

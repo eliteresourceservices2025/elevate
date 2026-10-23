@@ -142,3 +142,133 @@ blockquote { border-left: 4px solid var(--accent); margin: 1rem 0; padding: 0.25
 .small { font-size: 0.8rem; }
 @media (max-width: 560px) { .compare { grid-template-columns: 1fr; } }
 @media print { header.site, .no-print { display: none !important; } body { background: #fff; color: #000; } .certificate { border-color: #000; } }
+
+/* Interactive lesson blocks. Motion is short and is switched off by the reduce-motion rule above. */
+.sortblock, .cardsblock, .spotblock, .flipblock, .buildblock, .branchblock, .gameblock { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; }
+.sortblock h3, .cardsblock h3, .spotblock h3, .flipblock h3, .buildblock h3, .branchblock h3, .gameblock h3 { margin: 0 0 0.25rem; font-size: 1rem; color: var(--primary); }
+.sortlist { list-style: decimal; display: grid; gap: 0.5rem; margin: 0.75rem 0; padding-left: 1.5rem; }
+.sortlist li { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; background: var(--card); border: 1px solid var(--input); border-radius: calc(var(--radius) - 2px); padding: 0.5rem 0.75rem; cursor: grab; transition: transform 0.15s, border-color 0.15s; }
+.sortlist li.dragging { opacity: 0.5; }
+.sortlist li.good { border-color: var(--primary); background: var(--secondary); }
+.sortlist li.bad { border-color: var(--destructive); }
+.sortbtns { display: flex; gap: 0.35rem; flex-shrink: 0; }
+.sortbtns button { padding: 0.25rem 0.6rem; }
+.playcard { background: var(--secondary); color: var(--secondary-foreground); border-radius: var(--radius); padding: 1rem 1.1rem; margin: 0.75rem 0; font-size: 1.05rem; animation: cardin 0.25s ease-out; }
+@keyframes cardin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.groupbtns { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
+.groupbtns .choice { flex: 1 1 8rem; justify-content: center; font-weight: 600; }
+.gameend { animation: cardin 0.3s ease-out; }
+.transcript { list-style: none; margin: 0.75rem 0; padding: 0; display: grid; gap: 0.4rem; }
+.line { width: 100%; text-align: left; background: var(--card); color: var(--card-foreground); border: 1px solid var(--input); }
+.line.good { border-color: var(--primary); background: var(--secondary); }
+.line.bad { border-color: var(--destructive); }
+.line.picked { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.line.missed { border-style: dashed; border-color: var(--destructive); }
+.flipgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.6rem; margin-top: 0.5rem; }
+.flipcard { display: grid; gap: 0.35rem; align-content: start; text-align: left; min-height: 6rem; background: var(--card); color: var(--card-foreground); border: 1px solid var(--input); }
+.flipcard.open { background: var(--secondary); color: var(--secondary-foreground); animation: cardin 0.2s ease-out; }
+.slot { border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); margin: 0.6rem 0; padding: 0.4rem 0.75rem; }
+.slot legend { font-weight: 600; color: var(--primary); padding: 0 0.25rem; }
+.meter { position: relative; height: 1.6rem; border-radius: 999px; background: var(--muted); overflow: hidden; margin: 0.5rem 0; border: 1px solid var(--border); }
+.meter-fill { height: 100%; transition: width 0.4s ease; background: var(--primary); }
+.meter.upset .meter-fill { background: var(--destructive); }
+.meter.uneasy .meter-fill { background: var(--accent); }
+.meter-text { position: absolute; inset: 0; display: grid; place-items: center; font-size: 0.8rem; font-weight: 600; color: var(--foreground); mix-blend-mode: normal; text-shadow: 0 0 3px var(--card); }
+.caller { animation: cardin 0.25s ease-out; }
+.caller.reply { border-left-color: var(--primary); }
+
+/* The lesson stage: a full-screen frame, one slide at a time, steps along the top, Previous / Next at the bottom. */
+.stage { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; background: var(--background); }
+.stage-head { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1rem; background: var(--card); border-bottom: 4px solid var(--accent); }
+.stage-close { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); }
+.stage-close:hover { color: var(--foreground); background: var(--muted); }
+.stage-title { flex: 1; min-width: 0; display: grid; line-height: 1.25; }
+.stage-title strong { font-family: var(--font-head), system-ui, sans-serif; color: var(--primary); font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.journey { display: flex; gap: 4px; padding: 0.6rem 1rem 0; max-width: 56rem; width: 100%; margin: 0 auto; }
+.journey-step { flex: 1; height: 8px; padding: 0; border-radius: 999px; background: var(--muted); border: 1px solid var(--border); transition: background 0.25s, transform 0.25s; }
+.journey-step.done { background: var(--primary); border-color: var(--primary); }
+.journey-step.here { background: var(--accent); border-color: var(--accent); transform: scaleY(1.5); }
+.journey-step:disabled { cursor: default; opacity: 0.6; }
+.stage-extra { max-width: 56rem; width: 100%; margin: 0 auto; padding: 0 1rem; flex: none; max-height: 55vh; overflow-y: auto; }
+/* an opened video never takes the whole stage: the lesson below it keeps its room */
+.stage-extra .recap-video { max-height: 32vh; }
+.stage-body { flex: 1; overflow-y: auto; padding: 0.75rem 1rem 1rem; }
+.slide { max-width: 44rem; margin: 0 auto; background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); padding: 1.25rem 1.4rem; box-shadow: 0 6px 24px rgb(108 26 186 / 0.08); }
+.slide h2 { font-size: 1.5rem; margin: 0 0 0.5rem; color: var(--primary); }
+.stage-foot { background: var(--card); border-top: 1px solid var(--border); padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom)); }
+.stage-nav { max-width: 44rem; margin: 0 auto; display: flex; justify-content: space-between; gap: 0.75rem; }
+.stage-btn { display: inline-flex; align-items: center; gap: 0.3rem; min-width: 8.5rem; justify-content: center; font-weight: 600; text-decoration: none; }
+a.stage-btn { color: var(--primary-foreground); background: var(--primary); padding: 0.6rem 1rem; border-radius: calc(var(--radius) - 2px); }
+.stage-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.stage-final { display: contents; }
+.stage-final[inert] > * { opacity: 0.45; cursor: not-allowed; }
+.stage-hint { max-width: 44rem; margin: 0.4rem auto 0; text-align: center; min-height: 1.2em; }
+.stage-notes { max-width: 44rem; margin: 0.25rem auto 0; font-size: 0.85rem; }
+.stage-notes p { margin: 0.2rem 0; }
+@media (max-width: 520px) { .slide { padding: 1rem; } .stage-btn { min-width: 0; flex: 1; } .stage-nav { gap: 0.5rem; } }
+
+/* Practice window for calls and call notes, and the drag handle in the sort block. */
+.workstation { border: 1px solid var(--input); border-radius: var(--radius); overflow: hidden; background: var(--background); margin: 0.75rem 0; }
+.ws-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.4rem 0.75rem; background: var(--secondary); color: var(--secondary-foreground); border-bottom: 1px solid var(--border); font-size: 0.8rem; font-weight: 600; }
+.ws-dots { display: inline-flex; gap: 4px; }
+.ws-dots i { width: 9px; height: 9px; border-radius: 999px; background: var(--primary); opacity: 0.45; }
+.ws-name { display: inline-flex; align-items: center; gap: 0.35rem; }
+.ws-body { display: grid; gap: 0; }
+.ws-body.with-record { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.ws-main { padding: 0.5rem 0.9rem 0.75rem; min-width: 0; }
+.ws-record { padding: 0.6rem 0.9rem; background: var(--card); border-left: 1px solid var(--border); font-size: 0.9rem; }
+.ws-record strong { color: var(--primary); }
+.ws-record dl { margin: 0.4rem 0 0; display: grid; gap: 0.35rem; }
+.ws-record dt { font-size: 0.75rem; color: var(--muted-foreground); }
+.ws-record dd { margin: 0; }
+@media (max-width: 640px) { .ws-body.with-record { grid-template-columns: 1fr; } .ws-record { border-left: 0; border-top: 1px solid var(--border); } }
+.sortlist li { list-style: none; }
+.sortlist { padding-left: 0; }
+.grip { display: grid; place-items: center; cursor: grab; touch-action: none; color: var(--muted-foreground); padding: 0.15rem; border-radius: 6px; }
+.grip:hover { color: var(--foreground); background: var(--muted); }
+.sortlabel { flex: 1; }
+.stage-body { display: flex; flex-direction: column; }
+.slide { margin: auto; width: 100%; }
+
+/* Mock call: the skills list on the result page and the Listen button. */
+.skills { display: grid; gap: 0.6rem; }
+.skills li { display: grid; grid-template-columns: minmax(9rem, 14rem) 1fr 3rem; gap: 0.6rem; align-items: center; }
+.skills .progress { height: 10px; }
+.listen { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.25rem 0 0.5rem; }
+@media (max-width: 520px) { .skills li { grid-template-columns: 1fr 3rem; } .skills li > span { grid-column: 1 / -1; } }
+
+/* Course page: the modules as picture cards in a grid. The page is wider than the rest of the app so the grid can use the width. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.course-wide { position: relative; left: 50%; width: min(72rem, calc(100vw - 2rem)); transform: translateX(-50%); }
+.course-narrow { max-width: 44rem; margin: 0 auto; }
+.course-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 0.5rem 1.5rem; }
+.course-head h1 { margin: 0.25rem 0; }
+.course-progress { min-width: 14rem; flex: 0 1 20rem; }
+.course-progress .progress { margin-top: 0.35rem; }
+.mod-grid { list-style: none; padding: 0; margin: 1.25rem 0 2rem; display: grid; gap: 1.1rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 62rem) { .mod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 40rem) { .mod-grid { grid-template-columns: minmax(0, 1fr); } }
+.mod-card { background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); overflow: hidden; display: flex; box-shadow: 0 2px 10px rgb(108 26 186 / 0.06); transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.mod-card:has(a.mod-link:hover) { transform: translateY(-3px); box-shadow: 0 10px 28px rgb(108 26 186 / 0.18); }
+.mod-card.done { border-color: color-mix(in srgb, var(--accent) 70%, var(--border)); }
+.mod-card.locked { opacity: 0.7; }
+.mod-card.locked .mod-art { filter: grayscale(0.85); }
+.mod-link { display: flex; flex-direction: column; flex: 1; color: inherit; text-decoration: none; min-width: 0; }
+a.mod-link:focus-visible { outline: 3px solid var(--ring); outline-offset: -3px; border-radius: calc(var(--radius) + 4px); }
+.mod-card.locked { flex-direction: column; }
+.mod-head { padding: 0.85rem 1rem 0.6rem; }
+.mod-num { display: block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); }
+.mod-title { font-size: 1.05rem; line-height: 1.25; margin: 0.15rem 0 0; font-family: var(--font-head), system-ui, sans-serif; min-height: 2.6em; }
+.mod-pic { position: relative; }
+.mod-art { aspect-ratio: 16 / 9; width: 100%; overflow: hidden; }
+.mod-art svg { display: block; width: 100%; height: 100%; }
+.mod-chip { position: absolute; top: 0.55rem; right: 0.55rem; display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 999px; background: rgb(255 255 255 / 0.92); color: #3b0f6b; box-shadow: 0 1px 4px rgb(0 0 0 / 0.2); }
+.mod-chip.done { background: var(--accent); color: var(--accent-foreground); }
+.mod-chip.progress { background: #fff; color: #6c1aba; }
+.mod-chip.locked { background: rgb(31 21 53 / 0.85); color: #fff; }
+.mod-desc { margin: 0; padding: 0.8rem 1rem 0.4rem; font-size: 0.9rem; line-height: 1.45; color: var(--muted-foreground); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
+.mod-foot { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem 0.9rem; font-size: 0.82rem; }
+.mod-time { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted-foreground); }
+.mod-go { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 700; color: var(--primary); }
+.mod-card:has(a.mod-link:hover) .mod-go svg { transform: translateX(3px); }
+.mod-go svg { transition: transform 0.15s ease; }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { COURSES } from "./index";
-import { courseContentSchema, questionSeedSchema } from "./schema";
+import { callsLint } from "./calls";
+import { courseContentSchema, INTERACTIVE_BLOCK_TYPES, questionSeedSchema } from "./schema";
 
 // Content lint (docs/learn/06-testing-and-review.md): every course and its exam bank are checked like code, so a typo in the key,
 // a duplicate question or a real-looking identifier cannot reach a learner. Runs for every course in the registry.
@@ -14,7 +15,7 @@ const allText = (value: unknown): string[] => {
 
 describe("the course registry", () => {
   it("holds the HIPAA course and the separate cybersecurity course", () => {
-    expect(Object.keys(COURSES).sort()).toEqual(["cybersecurity", "hipaa"]);
+    expect(Object.keys(COURSES).sort()).toEqual(["customer-service", "cybersecurity", "hipaa"]);
   });
 
   it("keeps the HIPAA course about HIPAA: general cybersecurity modules live in their own course", () => {
@@ -39,7 +40,7 @@ for (const course of Object.values(COURSES)) {
         const ids = m.screens.map((s) => s.id);
         expect(new Set(ids).size, `${m.key} screen ids`).toBe(ids.length);
         expect(m.screens.length, `${m.key} screens`).toBeGreaterThanOrEqual(5);
-        const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => b.type === "scenario" || b.type === "check" || b.type === "case");
+        const interactive = m.screens.flatMap((s) => s.blocks).filter((b) => (INTERACTIVE_BLOCK_TYPES as readonly string[]).includes(b.type));
         expect(interactive.length, `${m.key} interactive blocks`).toBeGreaterThanOrEqual(1);
       }
     });
@@ -106,15 +107,15 @@ for (const course of Object.values(COURSES)) {
 describe("the HIPAA course specifically", () => {
   const { content, questions, examConfig } = COURSES.hipaa;
 
-  it("has 10 modules of about 125 minutes, in order", () => {
-    expect(content.modules.map((m) => m.key)).toEqual(["foundations", "phi", "privacy", "rights", "associates", "security", "incidents", "enforcement", "lab_public", "lab_records"]);
-    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(125);
+  it("has 11 modules of about 179 minutes, in order (state laws added in version 3)", () => {
+    expect(content.modules.map((m) => m.key)).toEqual(["foundations", "phi", "privacy", "rights", "associates", "security", "incidents", "enforcement", "state_laws", "lab_public", "lab_records"]);
+    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(179);
   });
 
   it("puts the right modules in each track", () => {
     const inTrack = (t: "full" | "essentials" | "refresher") => content.modules.filter((m) => m.tracks.includes(t)).map((m) => m.key);
-    expect(inTrack("full")).toHaveLength(10);
-    expect(inTrack("essentials")).toEqual(["foundations", "phi", "privacy", "associates", "incidents", "lab_public"]);
+    expect(inTrack("full")).toHaveLength(11);
+    expect(inTrack("essentials")).toEqual(["foundations", "phi", "privacy", "associates", "incidents", "state_laws", "lab_public"]);
     expect(inTrack("refresher")).toEqual(["foundations", "phi", "privacy", "incidents"]);
   });
 
@@ -136,7 +137,7 @@ describe("the Cybersecurity course specifically", () => {
 
   it("has 10 modules in teaching order, with the AI and HIPAA-connection modules added in version 2", () => {
     expect(content.modules.map((m) => m.key)).toEqual(["why", "passwords", "phishing", "malware", "browsing", "ai_tools", "devices", "physical", "response", "security_hipaa"]);
-    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(112);
+    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(156);
   });
 
   it("keeps its own exam: 15 questions at 80%, from a bank of at least 100", () => {
@@ -144,5 +145,42 @@ describe("the Cybersecurity course specifically", () => {
     expect(config.passPercent).toBe(80);
     for (const t of Object.values(config.tracks)) expect(t.questions).toBe(15);
     expect(questions.length).toBeGreaterThanOrEqual(100);
+  });
+});
+
+describe("the Customer Service & Family Support course specifically", () => {
+  const { content, questions, examConfig, calls } = COURSES["customer-service"];
+
+  it("has 11 modules in teaching order, with healthcare calls added at HR's request", () => {
+    expect(content.modules.map((m) => m.key)).toEqual(["excellence", "communication", "channels", "listening", "confidentiality", "healthcare", "difficult", "personalities", "bad_news", "resolution", "resilience"]);
+    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(178);
+  });
+
+  it("asks 25 questions at 85% from a bank of 88, with 8 for every module", () => {
+    const config = examConfig as { passPercent: number; renewalMonths: number; tracks: Record<string, { questions: number }> };
+    expect(config.passPercent).toBe(85);
+    expect(config.renewalMonths).toBe(24);
+    expect(config.tracks.full.questions).toBe(25);
+    expect(questions.length).toBe(88);
+    for (const m of content.modules) expect(questions.filter((x) => x.moduleKey === m.key).length, m.key).toBe(8);
+  });
+
+  it("has a mock-call pool of five (two medical) that passes the call lint, and the call rules", () => {
+    expect(calls).toBeDefined();
+    expect(calls!.length).toBe(5);
+    expect(calls!.filter((c) => c.medical).length).toBe(2);
+    expect(callsLint(calls!, content.modules.map((m) => m.key))).toEqual([]);
+    const config = examConfig as { call: { passPercent: number; scenarios: number; maxTries: number } };
+    expect(config.call).toMatchObject({ passPercent: 85, scenarios: 3, maxTries: 3 });
+  });
+
+  it("puts the best reply in different positions, so the pattern cannot be learned", () => {
+    const positions = new Set(calls!.flatMap((c) => c.steps.map((s) => s.choices.findIndex((x) => x.points === 3))));
+    expect(positions.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("avoids employee-style wording (the team are independent contractors)", () => {
+    const text = JSON.stringify(content).toLowerCase();
+    expect(text).not.toMatch(/\bpto\b|paid time off|\bovertime\b|\bemployee\b/);
   });
 });
