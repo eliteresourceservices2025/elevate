@@ -107,15 +107,15 @@ for (const course of Object.values(COURSES)) {
 describe("the HIPAA course specifically", () => {
   const { content, questions, examConfig } = COURSES.hipaa;
 
-  it("has 10 modules of about 125 minutes, in order", () => {
-    expect(content.modules.map((m) => m.key)).toEqual(["foundations", "phi", "privacy", "rights", "associates", "security", "incidents", "enforcement", "lab_public", "lab_records"]);
-    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(125);
+  it("has 11 modules of about 179 minutes, in order (state laws added in version 3)", () => {
+    expect(content.modules.map((m) => m.key)).toEqual(["foundations", "phi", "privacy", "rights", "associates", "security", "incidents", "enforcement", "state_laws", "lab_public", "lab_records"]);
+    expect(content.modules.reduce((n, m) => n + m.estimatedMinutes, 0)).toBe(179);
   });
 
   it("puts the right modules in each track", () => {
     const inTrack = (t: "full" | "essentials" | "refresher") => content.modules.filter((m) => m.tracks.includes(t)).map((m) => m.key);
-    expect(inTrack("full")).toHaveLength(10);
-    expect(inTrack("essentials")).toEqual(["foundations", "phi", "privacy", "associates", "incidents", "lab_public"]);
+    expect(inTrack("full")).toHaveLength(11);
+    expect(inTrack("essentials")).toEqual(["foundations", "phi", "privacy", "associates", "incidents", "state_laws", "lab_public"]);
     expect(inTrack("refresher")).toEqual(["foundations", "phi", "privacy", "incidents"]);
   });
 

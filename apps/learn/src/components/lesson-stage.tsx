@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Screen } from "@/content/schema";
+import { GATED_TYPES, GateProvider, useGateState } from "./block-gate";
 import { ContentBlocks } from "./content-blocks";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -43,6 +44,14 @@ export function LessonStage(props: {
     setPrev(index);
   }
   const bodyRef = useRef<HTMLDivElement>(null);
+  // Next waits for every quiz, game or sort on the slide to be answered. A slide the person already finished stays open if they come back.
+  const { pending, total: blockCount, gate } = useGateState(screen.id);
+  const [finished, setFinished] = useState<string[]>([]);
+  const answered = finished.includes(screen.id);
+  // a slide with gated blocks waits until they have mounted and been answered (blockCount is 0 while the old slide is still fading out)
+  const hasGated = screen.blocks.some((b) => GATED_TYPES.has(b.type));
+  const waiting = hasGated && !answered && (blockCount === 0 || pending > 0);
+  if (blockCount > 0 && pending === 0 && !answered) setFinished([...finished, screen.id]);
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: 0 });
@@ -54,12 +63,12 @@ export function LessonStage(props: {
       const t = e.target as HTMLElement | null;
       if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
       if (t?.closest("[role='dialog'], [data-dnd-handle]")) return;
-      if (e.key === "ArrowRight" && index < total - 1) onIndex(index + 1);
+      if (e.key === "ArrowRight" && index < total - 1 && !waiting) onIndex(index + 1);
       if (e.key === "ArrowLeft" && index > 0) onIndex(index - 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [index, total, onIndex]);
+  }, [index, total, onIndex, waiting]);
 
   return (
     <MotionConfig reducedMotion="user">
@@ -106,7 +115,9 @@ export function LessonStage(props: {
               transition={{ duration: 0.22, ease: "easeOut" }}
             >
               <h2>{screen.title}</h2>
-              <ContentBlocks blocks={screen.blocks} />
+              <GateProvider value={gate}>
+                <ContentBlocks blocks={screen.blocks} />
+              </GateProvider>
               {onLast && props.keyPoints?.length ? (
                 <aside className="block callout tip">
                   <strong>Key points</strong>
@@ -126,13 +137,18 @@ export function LessonStage(props: {
               <ChevronLeft size={18} aria-hidden="true" /> Previous
             </button>
             {onLast ? (
-              props.finalAction
+              <div inert={waiting} className={waiting ? "stage-final waiting" : "stage-final"}>
+                {props.finalAction}
+              </div>
             ) : (
-              <button type="button" className="stage-btn" onClick={() => onIndex(Math.min(total - 1, index + 1))}>
+              <button type="button" className="stage-btn" disabled={waiting} onClick={() => onIndex(Math.min(total - 1, index + 1))}>
                 Next <ChevronRight size={18} aria-hidden="true" />
               </button>
             )}
           </div>
+          <p className="muted small stage-hint" role="status" aria-live="polite">
+            {waiting ? (pending <= 1 ? "Answer the question or finish the activity above to continue." : "Answer the questions or finish the activities above to continue.") : ""}
+          </p>
           {props.notes ? <div className="stage-notes">{props.notes}</div> : null}
         </footer>
       </div>

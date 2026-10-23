@@ -9,7 +9,7 @@ export const m8: CourseModule = {
   key: "enforcement",
   title: "Enforcement, penalties and real-world cases",
   summary: "How a complaint becomes an investigation, what the civil and criminal penalty tiers mean, three generic cases that show how problems actually arise, and the other laws that sit beside HIPAA.",
-  estimatedMinutes: 8,
+  estimatedMinutes: 12,
   tracks: ["full"],
   keyPoints: [
     "OCR investigates complaints and reports, and can resolve them with guidance, an agreement or a penalty.",
@@ -153,6 +153,50 @@ export const m8: CourseModule = {
       ],
     },
     {
+      id: "what-went-wrong",
+      title: "Match: what went wrong, in which case?",
+      blocks: [
+        { type: "paragraph", text: "You have read three cases. Each detail below belongs to one of them. Sort the details, one card at a time." },
+        {
+          type: "cards",
+          title: "Which case is it?",
+          prompt: "Which case does this detail belong to?",
+          groups: ["The curious employee", "The stolen laptop", "The testimonial"],
+          cards: [
+            { text: "Records opened with no work reason", group: 0, feedback: "That is the curious employee: access without a reason is an impermissible use." },
+            { text: "An audit of the access logs found it months later", group: 0, feedback: "Access logs record every look, and an audit surfaced it." },
+            { text: "No security risk analysis could be shown", group: 1, feedback: "That is the stolen laptop case: OCR asked for the risk analysis and there was none." },
+            { text: "An unencrypted laptop was stolen from a car", group: 1, feedback: "The theft started the case, and the missing safeguards made it grow." },
+            { text: "Patients said yes in person, with no signed form", group: 2, feedback: "That is the testimonial: a spoken yes is not a written authorization." },
+            { text: "The clinic removed the content and took corrective steps", group: 2, feedback: "The clinic had to take the posts down and fix its process." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "tier-ladder",
+      title: "Climb the penalty ladder",
+      blocks: [
+        { type: "paragraph", text: "The civil tiers rise with what the organization knew and what it did next. Put them in order, from the least to the most serious." },
+        {
+          type: "sort",
+          title: "Order the civil tiers",
+          prompt: "Arrange the tiers from least serious to most serious.",
+          items: ["Tier 1: did not know", "Tier 2: reasonable cause", "Tier 3: willful neglect, corrected", "Tier 4: willful neglect, not corrected"],
+          explanation: "The tiers move from not knowing, to should have known, to willful neglect that was fixed, to willful neglect that was not fixed. Fixing quickly moves a violation toward a lower tier.",
+        },
+        {
+          type: "flip",
+          title: "Criminal penalties in three cards",
+          cards: [
+            { front: "Knowingly obtaining or disclosing health information", back: "Up to 1 year in prison." },
+            { front: "The same, under false pretenses", back: "Up to 5 years in prison." },
+            { front: "Intent to sell, or for gain or malicious harm", back: "Up to 10 years in prison." },
+          ],
+        },
+      ],
+    },
+    {
       id: "check-enforcement",
       title: "Quick check",
       blocks: [
@@ -163,6 +207,89 @@ export const m8: CourseModule = {
             { text: "Showing documented training, a risk analysis and quick reporting and fixing", correct: true, feedback: "Right. Evidence of good-faith compliance and prompt correction carries weight." },
             { text: "Saying nobody was hurt", correct: false, feedback: "Harm is not the test. The question is whether required safeguards and steps were in place." },
             { text: "Deleting old logs", correct: false, feedback: "Destroying records makes things much worse." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "keys-to-success",
+      title: "Keys to success: what keeps you out of trouble",
+      blocks: [
+        { type: "paragraph", text: "Look back at the three cases. In each one, the trouble came from an ordinary gap, not a villain. Three habits close most of those gaps." },
+        {
+          type: "flip",
+          title: "Three keys",
+          cards: [
+            { front: "Education", back: "Everyone who touches patient information knows the rules and why they exist. That is what this course is for." },
+            { front: "Commitment", back: "Leads and teammates take the rules seriously every day, not only after a problem." },
+            { front: "Culture", back: "Asking and reporting are normal and welcome, so small slips are fixed the same day." },
+          ],
+        },
+        {
+          type: "cards",
+          title: "Leads to trouble, or helps?",
+          prompt: "Does this lead to trouble in an investigation, or help the organization?",
+          groups: ["Leads to trouble", "Helps"],
+          cards: [
+            { text: "No risk analysis on file", group: 0, feedback: "A missing risk analysis turned a theft into a compliance case." },
+            { text: "An unencrypted laptop and no policy for portable devices", group: 0, feedback: "That is the safeguard gap OCR found in the laptop case." },
+            { text: "Posting a patient's story with no signed authorization", group: 0, feedback: "A spoken yes is not enough. The signed form makes it allowed." },
+            { text: "Deleting old logs", group: 0, feedback: "Destroying records makes things much worse." },
+            { text: "Documented training and a risk analysis", group: 1, feedback: "Evidence of good faith is what carries weight." },
+            { text: "Reporting a problem the same day and fixing it", group: 1, feedback: "Quick reporting and a quick fix can move a violation toward a lower tier." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "quick-round",
+      title: "Quick round: enforcement",
+      blocks: [
+        {
+          type: "game",
+          title: "Enforcement sprint",
+          seconds: 20,
+          rounds: [
+            {
+              question: "Who investigates most HIPAA complaints and breach reports?",
+              options: [
+                { text: "HHS Office for Civil Rights", correct: true, feedback: "Yes. The Department of Justice handles criminal cases." },
+                { text: "The Postal Service", correct: false, feedback: "OCR handles civil enforcement." },
+                { text: "A local school board", correct: false, feedback: "OCR handles civil enforcement." },
+              ],
+            },
+            {
+              question: "An employee opens records out of curiosity and tells no one. What is it?",
+              options: [
+                { text: "A violation that access logs can reveal later", correct: true, feedback: "Access is not permission, and every look is logged." },
+                { text: "Fine, since nothing was shared", correct: false, feedback: "Opening records without a work reason is an impermissible use." },
+                { text: "Fine, since she works there", correct: false, feedback: "Working there does not make every record yours to open." },
+              ],
+            },
+            {
+              question: "Which civil tier is the most serious?",
+              options: [
+                { text: "Willful neglect, not corrected", correct: true, feedback: "Conscious disregard that is not fixed within 30 days." },
+                { text: "Did not know", correct: false, feedback: "That is the least serious tier." },
+                { text: "Reasonable cause", correct: false, feedback: "That is the second tier." },
+              ],
+            },
+            {
+              question: "What is the highest prison term in the HIPAA criminal provisions?",
+              options: [
+                { text: "10 years, for gain or malicious harm", correct: true, feedback: "The tiers are 1, 5 and 10 years." },
+                { text: "30 days", correct: false, feedback: "The terms are measured in years." },
+                { text: "There is none", correct: false, feedback: "Knowing misuse can be prosecuted." },
+              ],
+            },
+            {
+              question: "A patient said yes in person to a photo on the clinic's website. What is missing?",
+              options: [
+                { text: "A signed authorization", correct: true, feedback: "A written authorization is what makes the use allowed." },
+                { text: "A bigger photo", correct: false, feedback: "Size is not the issue." },
+                { text: "A caption", correct: false, feedback: "A caption does not change the need for a signed form." },
+              ],
+            },
           ],
         },
       ],
@@ -199,4 +326,8 @@ export const q8: QuestionSeed[] = [
   q("enforcement", "Case: snooping", "single", "An employee opens several patients' records out of curiosity and tells nobody. What is the best description?", ["An impermissible use, even though nothing was shared, and logs can reveal it later", "Not a problem if nothing was shared", "Allowed if she works there", "A problem only if the patients complain"], [0], "Looking without a work reason is a violation, and access logs record every look."),
   q("enforcement", "Case: risk analysis", "single", "After a laptop theft, what made OCR's case against a practice more serious?", ["It could not show a risk analysis or safeguards for portable devices", "The laptop was expensive", "The theft happened at night", "The practice had too few patients"], [0], "Missing documentation and safeguards turned a theft into a compliance case."),
   q("enforcement", "Case: testimonial", "single", "A patient said yes in person to a clinic posting their photo and story on its website. What is missing?", ["A signed authorization on file", "A better photo", "A longer caption", "A comment from a neighbor"], [0], "A written authorization is required to use a patient's photo or story for promotion."),
+  q("enforcement", "Case: testimonial", "single", "In the testimonial case, which question from the person who maintained the website would have caught the problem?", ["Is there a signed authorization on file for each of these?", "Are the photos bright enough?", "Do the stories fit on one page?", "Has anyone shared the page yet?"], [0], "The person who maintains the site is well placed to ask whether each patient's signed authorization is on file."),
+  q("enforcement", "Case: risk analysis", "multiple", "Which of these were missing in the stolen laptop case? Select all that apply.", ["A documented security risk analysis", "Encryption on the laptop", "A policy covering portable devices", "A police report"], [0, 1, 2], "The practice could not show a risk analysis, the laptop was unencrypted and no policy covered portable devices."),
+  q("enforcement", "Case: snooping", "single", "In the curious employee case, how were the unneeded looks found?", ["An audit of the access logs, months later", "The employee confessed at once", "A patient noticed them on screen", "They were never found"], [0], "Access logs recorded each look, and an audit surfaced them."),
+  q("enforcement", "Good faith", "true_false", "True or false: Deleting old access logs before an investigation helps an organization.", ["True", "False"], [1], "Destroying records makes things much worse. Evidence of good faith is what helps."),
 ];

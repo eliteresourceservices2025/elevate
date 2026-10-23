@@ -43,6 +43,8 @@ function block(b: Block): string {
       return `**Cards: ${b.title}** (${b.groups.join(" / ")})\n\n${b.prompt}\n\n${b.cards.map((c) => `- ${c.text} -> **${b.groups[c.group]}**  \n  _${c.feedback}_`).join("\n")}`;
     case "spot":
       return `**Spot the mistake: ${b.title}**\n\n${b.prompt}\n\n${b.lines.map((l) => `- ${l.wrong ? "(the mistake) " : ""}**${l.speaker}:** ${l.text}`).join("\n")}\n\n_${b.explanation}_`;
+    case "hotspot":
+      return `**Tap the problems: ${b.title}**\n\n${b.prompt}\n\n${b.items.map((i) => `- ${i.problem ? "(a problem) " : ""}**${i.label}:** ${i.text}${i.problem ? `  \n  _${i.why}_` : ""}`).join("\n")}\n\n_${b.explanation}_`;
     case "flip":
       return [b.title ? `**${b.title}**` : "**Flip cards**", ...b.cards.map((c) => `- **${c.front}**: ${c.back}`)].join("\n");
     case "build":

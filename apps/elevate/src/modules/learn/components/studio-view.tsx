@@ -128,6 +128,15 @@ export function BlockView({ block }: { block: Block }) {
           <p className="text-muted-foreground">{block.explanation}</p>
         </div>
       );
+    case "hotspot":
+      return (
+        <div className="space-y-1 text-sm">
+          <strong>Tap the problems: {block.title}</strong>
+          <p>{block.prompt}</p>
+          <ul className="list-disc pl-5">{block.items.map((it, i) => <li key={i}>{it.problem ? <strong>(problem) </strong> : null}{it.label}: {it.text}{it.problem ? <span className="text-muted-foreground"> {it.why}</span> : null}</li>)}</ul>
+          <p className="text-muted-foreground">{block.explanation}</p>
+        </div>
+      );
     case "flip":
       return (
         <div className="space-y-1 text-sm">

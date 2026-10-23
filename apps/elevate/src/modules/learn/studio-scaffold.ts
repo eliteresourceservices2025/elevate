@@ -82,6 +82,19 @@ export function newBlock(type: Block["type"]): Block {
         lines: [{ speaker: "Caller", text: `${PLACEHOLDER} what the caller says` }, { speaker: "Agent", text: `${PLACEHOLDER} the mistake`, wrong: true }, { speaker: "Caller", text: `${PLACEHOLDER} reply` }],
         explanation: `${PLACEHOLDER} what was wrong and why.`,
       };
+    case "hotspot":
+      return {
+        type,
+        title: "Find the problems",
+        prompt: `${PLACEHOLDER} describe the scene and what to tap.`,
+        items: [
+          { label: "Item 1", text: `${PLACEHOLDER} what is shown`, problem: true, why: `${PLACEHOLDER} why it is a problem.` },
+          { label: "Item 2", text: `${PLACEHOLDER} what is shown` },
+          { label: "Item 3", text: `${PLACEHOLDER} what is shown` },
+          { label: "Item 4", text: `${PLACEHOLDER} what is shown` },
+        ],
+        explanation: `${PLACEHOLDER} what the learner should take away.`,
+      };
     case "flip":
       return { type, cards: [{ front: "Term", back: `${PLACEHOLDER} meaning` }, { front: "Another term", back: `${PLACEHOLDER} meaning` }] };
     case "build": {

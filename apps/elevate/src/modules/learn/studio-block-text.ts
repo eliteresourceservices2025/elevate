@@ -31,6 +31,16 @@ export function parseSpot(s: string): Of<"spot">["lines"] {
   });
 }
 
+// ---- hotspot: "Label | what is shown" and "Label | what is shown | problem | why" for a problem ---------------------------------------
+export const formatHotspot = (b: Of<"hotspot">) => b.items.map((i) => `${i.label} | ${i.text}${i.problem ? ` | problem | ${i.why ?? ""}` : ""}`).join("\n");
+export function parseHotspot(s: string): Of<"hotspot">["items"] {
+  return lines(s).map((l) => {
+    const parts = cells(l);
+    const problem = parts.length >= 3 && parts[2].toLowerCase() === "problem";
+    return problem ? { label: parts[0], text: parts[1], problem: true as const, why: parts.slice(3).join(" | ") } : { label: parts[0], text: parts.slice(1).join(" | ") };
+  });
+}
+
 // ---- flip: "front | back" --------------------------------------------------------------------------------------------------------
 export const formatFlip = (b: Of<"flip">) => b.cards.map((c) => `${c.front} | ${c.back}`).join("\n");
 export function parseFlip(s: string): Of<"flip">["cards"] {

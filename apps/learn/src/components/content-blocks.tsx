@@ -2,13 +2,15 @@
 
 import { Fragment, useState } from "react";
 import type { Block } from "@/content/schema";
+import { useBlockGate } from "./block-gate";
 import { Inline } from "./inline";
-import { BranchBlock, BuildBlock, CardsBlock, FlipBlock, GameBlock, SortBlock, SpotBlock } from "./interactive-blocks";
+import { BranchBlock, BuildBlock, CardsBlock, FlipBlock, GameBlock, HotspotBlock, SortBlock, SpotBlock } from "./interactive-blocks";
 
 // Renders lesson blocks as React elements. There is no HTML anywhere: text is plain, and **double asterisks** make bold text.
 
 function Scenario({ block }: { block: Extract<Block, { type: "scenario" }> }) {
   const [picked, setPicked] = useState<number | null>(null);
+  useBlockGate(picked !== null);
   return (
     <section className="block scenario" aria-label={block.title}>
       <h3>{block.title}</h3>
@@ -70,6 +72,7 @@ function Check({ block }: { block: Extract<Block, { type: "check" }> }) {
     setPicked((p) => (block.multiple ? (p.includes(i) ? p.filter((x) => x !== i) : [...p, i]) : [i]));
   };
   const allRight = block.options.every((o, i) => o.correct === picked.includes(i));
+  useBlockGate(shown);
   return (
     <section className="block check" aria-label="Quick check">
       <h3>Quick check</h3>
@@ -258,6 +261,8 @@ export function ContentBlocks({ blocks }: { blocks: Block[] }) {
             return <CardsBlock key={i} block={block} />;
           case "spot":
             return <SpotBlock key={i} block={block} />;
+          case "hotspot":
+            return <HotspotBlock key={i} block={block} />;
           case "flip":
             return <FlipBlock key={i} block={block} />;
           case "build":

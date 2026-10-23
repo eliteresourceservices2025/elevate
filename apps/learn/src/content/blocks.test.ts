@@ -49,6 +49,14 @@ describe("interactive lesson blocks", () => {
     expect(blockSchema.safeParse({ type: "spot", title: "Find it", prompt: "Tap the mistake.", lines: lines(false), explanation: "None." }).success).toBe(false);
   });
 
+  it("needs at least one problem, each with a reason, in a hotspot block", () => {
+    const base = { type: "hotspot", title: "Desk", prompt: "Tap the problems.", explanation: "Why it matters." };
+    const items = (problem: boolean, why: boolean) => ["A", "B", "C", "D"].map((label, i) => ({ label, text: `Thing ${i}`, ...(i === 0 && problem ? { problem: true } : {}), ...(i === 0 && problem && why ? { why: "Because." } : {}) }));
+    expect(blockSchema.safeParse({ ...base, items: items(true, true) }).success).toBe(true);
+    expect(blockSchema.safeParse({ ...base, items: items(false, false) }).success).toBe(false);
+    expect(blockSchema.safeParse({ ...base, items: items(true, false) }).success).toBe(false);
+  });
+
   it("needs exactly one correct option in each build slot and game round", () => {
     const slot = (n: number) => ({ label: "Date and time", options: [opt(n > 0), opt(n > 1)] });
     expect(blockSchema.safeParse({ type: "build", title: "Note", prompt: "Build it.", slots: [slot(1), slot(1)] }).success).toBe(true);

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useWarnWhenEdited } from "@/components/unsaved-changes";
 import type { Block, CourseContent, CourseModule, QuestionSeed } from "../../../../../learn/src/content/schema";
 import { createStudioAddon, createStudioDraft, discardStudioDraft, publishStudioDraft, removeStudioAddon, saveStudioCourseMeta, saveStudioModuleMeta, saveStudioQuestion, saveStudioScreen } from "../studio-actions";
-import { formatBranch, formatBuild, formatCards, formatFlip, formatGame, formatRecord, formatSpot, parseBranch, parseBuild, parseCards, parseFlip, parseGame, parseRecord, parseSpot } from "../studio-block-text";
+import { formatBranch, formatBuild, formatCards, formatFlip, formatGame, formatHotspot, formatRecord, formatSpot, parseBranch, parseBuild, parseCards, parseFlip, parseGame, parseHotspot, parseRecord, parseSpot } from "../studio-block-text";
 import { newBlock } from "../studio-scaffold";
 import { RemoveQuestionButton, ScreenControls } from "./studio-structure";
 
@@ -316,7 +316,7 @@ function TextLines({ id, label, hint, value, rows, normalize, onText }: { id: st
 
 const OPTION_HINT = 'Start a right answer with + and a wrong one with -, then "text | why". Leave a blank line between items.';
 
-function InteractiveEditor({ block, onChange, idp }: { block: Extract<Block, { type: "sort" | "cards" | "spot" | "flip" | "build" | "branch" | "game" }>; onChange: (b: Block) => void; idp: string }) {
+function InteractiveEditor({ block, onChange, idp }: { block: Extract<Block, { type: "sort" | "cards" | "spot" | "hotspot" | "flip" | "build" | "branch" | "game" }>; onChange: (b: Block) => void; idp: string }) {
   const head = (title: string | undefined, set: (v: string) => void, required = true) => (
     <Field id={`${idp}-title`} label={required ? "Title" : "Title (optional)"}>
       <Input id={`${idp}-title`} value={title ?? ""} onChange={(e) => set(e.target.value)} maxLength={160} />
@@ -357,6 +357,15 @@ function InteractiveEditor({ block, onChange, idp }: { block: Extract<Block, { t
           {prompt(block.prompt, (v) => onChange({ ...block, prompt: v }))}
           <TextLines id={`${idp}-lines`} label='Lines, one per line as "Speaker | what they say"; add "| wrong" to the mistake' value={formatSpot(block)} rows={5} normalize={(t) => formatSpot({ ...block, lines: parseSpot(t) })} onText={(t) => onChange({ ...block, lines: parseSpot(t) })} />
           {prompt(block.explanation, (v) => onChange({ ...block, explanation: v }), "What was wrong and why (shown when found)", "why")}
+        </div>
+      );
+    case "hotspot":
+      return (
+        <div className="space-y-2">
+          {head(block.title, (v) => onChange({ ...block, title: v }))}
+          {prompt(block.prompt, (v) => onChange({ ...block, prompt: v }))}
+          <TextLines id={`${idp}-items`} label='Things in the scene, one per line as "Label | what is shown"; for a problem add "| problem | why it is a problem" (4 to 10)' value={formatHotspot(block)} rows={6} normalize={(t) => formatHotspot({ ...block, items: parseHotspot(t) })} onText={(t) => onChange({ ...block, items: parseHotspot(t) })} />
+          {prompt(block.explanation, (v) => onChange({ ...block, explanation: v }), "What to take away (shown after checking)", "why")}
         </div>
       );
     case "flip":
@@ -592,6 +601,7 @@ function BlockEditor({ block, onChange, idp }: { block: Block; onChange: (b: Blo
     case "sort":
     case "cards":
     case "spot":
+    case "hotspot":
     case "flip":
     case "build":
     case "branch":
@@ -642,6 +652,7 @@ const BLOCK_TYPES: { value: Block["type"]; label: string }[] = [
   { value: "sort", label: "Sort it (put in order)" },
   { value: "cards", label: "Sort cards into groups" },
   { value: "spot", label: "Spot the mistake" },
+  { value: "hotspot", label: "Tap the problems" },
   { value: "flip", label: "Flip cards" },
   { value: "build", label: "Build it (pick the parts)" },
   { value: "branch", label: "Call with a mood meter" },

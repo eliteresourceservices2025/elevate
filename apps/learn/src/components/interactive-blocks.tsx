@@ -7,6 +7,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { motion } from "motion/react";
 import type { Block } from "@/content/schema";
+import { useBlockGate } from "./block-gate";
 import { Inline } from "./inline";
 import { celebrate } from "@/lib/celebrate";
 import { Workstation } from "./workstation";
@@ -80,6 +81,7 @@ export function SortBlock({ block }: { block: Of<"sort"> }) {
     move(order.indexOf(Number(e.active.id)), order.indexOf(Number(e.over.id)));
   };
   const right = order.every((v, i) => v === i);
+  useBlockGate(checked);
   useEffect(() => {
     if (checked && right) void celebrate();
   }, [checked, right]);
@@ -122,6 +124,7 @@ export function CardsBlock({ block }: { block: Of<"cards"> }) {
   const [streak, setStreak] = useState(0);
   const [best, setBest] = useState(0);
   const done = index >= block.cards.length;
+  useBlockGate(done);
   useEffect(() => {
     if (done && score === block.cards.length) void celebrate();
   }, [done, score, block.cards.length]);
@@ -208,6 +211,7 @@ export function SpotBlock({ block }: { block: Of<"spot"> }) {
   const wrongCount = block.lines.filter((l) => l.wrong).length;
   const found = picked.filter((i) => block.lines[i].wrong).length;
   const finished = found === wrongCount;
+  useBlockGate(finished);
   return (
     <section className="block spotblock" aria-label={block.title}>
       <h3>{block.title}</h3>
@@ -246,6 +250,75 @@ export function SpotBlock({ block }: { block: Of<"spot"> }) {
   );
 }
 
+// ---- Tap the problems ----------------------------------------------------------------------------------------------------------
+
+export function HotspotBlock({ block }: { block: Of<"hotspot"> }) {
+  const [marked, setMarked] = useState<number[]>([]);
+  const [checked, setChecked] = useState(false);
+  const problems = block.items.filter((i) => i.problem).length;
+  const found = marked.filter((i) => block.items[i].problem).length;
+  const falseAlarms = marked.length - found;
+  const perfect = checked && found === problems && falseAlarms === 0;
+  useBlockGate(checked);
+  const toggle = (i: number) => setMarked((m) => (m.includes(i) ? m.filter((x) => x !== i) : [...m, i]));
+  const check = () => {
+    setChecked(true);
+    if (found === problems && falseAlarms === 0) void celebrate();
+  };
+  const reset = () => {
+    setMarked([]);
+    setChecked(false);
+  };
+  return (
+    <section className="block spotblock hotspotblock" aria-label={block.title}>
+      <h3>{block.title}</h3>
+      <p>
+        <Inline text={block.prompt} />
+      </p>
+      <ul className="transcript">
+        {block.items.map((it, i) => {
+          const isMarked = marked.includes(i);
+          const state = checked ? (it.problem ? (isMarked ? " good" : " missed") : isMarked ? " bad" : "") : isMarked ? " picked" : "";
+          return (
+            <li key={i}>
+              <button type="button" className={`line${state}`} aria-pressed={isMarked} disabled={checked} onClick={() => toggle(i)}>
+                <strong>{it.label}: </strong>
+                {it.text}
+                {checked ? <em className="small muted">{it.problem ? (isMarked ? " (a problem: you found it)" : " (a problem: you missed it)") : isMarked ? " (not a problem: marked by mistake)" : ""}</em> : null}
+              </button>
+              {checked && it.problem ? (
+                <p className="small muted">
+                  <Inline text={it.why ?? ""} />
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="small muted">
+        Marked {marked.length}. {problems} problem{problems === 1 ? "" : "s"} to find.
+      </p>
+      <div role="status" aria-live="polite">
+        {checked ? (
+          <p className={`feedback ${perfect ? "good" : "bad"}`}>
+            <strong>{perfect ? "All of them, and nothing extra. " : `You found ${found} of ${problems}${falseAlarms ? ` and marked ${falseAlarms} that ${falseAlarms === 1 ? "was" : "were"} fine` : ""}. `}</strong>
+            <Inline text={block.explanation} />
+          </p>
+        ) : null}
+      </div>
+      {checked ? (
+        <button type="button" className="secondary" onClick={reset}>
+          Try again
+        </button>
+      ) : (
+        <button type="button" onClick={check} disabled={marked.length === 0}>
+          Check my marks
+        </button>
+      )}
+    </section>
+  );
+}
+
 // ---- Flip cards ---------------------------------------------------------------------------------------------------------------
 
 export function FlipBlock({ block }: { block: Of<"flip"> }) {
@@ -279,6 +352,7 @@ export function FlipBlock({ block }: { block: Of<"flip"> }) {
 export function BuildBlock({ block }: { block: Of<"build"> }) {
   const [picks, setPicks] = useState<(number | null)[]>(() => block.slots.map(() => null));
   const complete = picks.every((p, i) => p !== null && block.slots[i].options[p].correct);
+  useBlockGate(picks.every((p) => p !== null));
   return (
     <section className="block buildblock" aria-label={block.title}>
       <h3>{block.title}</h3>
@@ -331,6 +405,7 @@ export function BranchBlock({ block }: { block: Of<"branch"> }) {
   const [mood, setMood] = useState(block.startMood ?? 40);
   const [picked, setPicked] = useState<number | null>(null);
   const done = turn >= block.turns.length;
+  useBlockGate(done);
   useEffect(() => {
     if (done && mood >= 66) void celebrate();
   }, [done, mood]);
@@ -412,6 +487,7 @@ export function GameBlock({ block }: { block: Of<"game"> }) {
   const [started, setStarted] = useState(!block.seconds);
   const answered = useRef(false);
   const done = round >= block.rounds.length;
+  useBlockGate(done);
   useEffect(() => {
     if (done && score === block.rounds.length) void celebrate();
   }, [done, score, block.rounds.length]);

@@ -70,11 +70,11 @@ describe("loading and publishing the HIPAA course", () => {
   it("saves it as a draft first, and repeating changes nothing", async () => {
     const first = await loadCourse(admin, { newVersion: true });
     expect(first.status).toBe("draft");
-    expect(first.modules).toBe(10);
+    expect(first.modules).toBe(hipaaCourse.modules.length);
     expect(first.questions).toBe(hipaaQuestions.length);
     const [{ n: modules }] = await admin`select count(*)::int as n from learn.version_modules where version_id = ${first.versionId}`;
     const [{ n: questions }] = await admin`select count(*)::int as n from learn.questions where version_id = ${first.versionId}`;
-    expect(modules).toBe(10);
+    expect(modules).toBe(hipaaCourse.modules.length);
     expect(questions).toBe(hipaaQuestions.length);
 
     const again = await loadCourse(admin);
@@ -182,7 +182,7 @@ describe("a learner going through the course", () => {
 
     // The overview: 7 modules, only the first open, the exam locked.
     const overview = await getOverview(app, p.id, assignmentId);
-    expect(overview!.modules.map((m) => m.locked)).toEqual([false, true, true, true, true, true, true, true, true, true]);
+    expect(overview!.modules.map((m) => m.locked)).toEqual(hipaaCourse.modules.map((_, i) => i > 0));
     expect(overview!.exam).toMatchObject({ questions: 20, minutes: null, passPercent: 80, triesAllowed: 3 });
     expect(await getModuleView(app, p.id, assignmentId, "phi")).toBeNull(); // locked
 
@@ -275,7 +275,10 @@ describe("a learner going through the course", () => {
     const mine = record.find((r) => r.assignmentId === assignmentId)!;
     expect(mine.status).toBe("passed");
     expect(mine.attempts).toBeGreaterThanOrEqual(1);
-    expect(mine.certificate).toMatchObject({ reference, revoked: false });
+    expect(mine.certificate).toMatchObject({ assignmentId, reference, revoked: false });
+    // one current entry per course, and no version number for the learner
+    expect(record.filter((r) => r.courseTitle === mine.courseTitle)).toHaveLength(1);
+    expect("version" in mine).toBe(false);
     expect(mine.scorePercent).toBeGreaterThanOrEqual(80);
     expect(mine.minutesSpent).toBeGreaterThan(0);
     const someoneElse = await makePerson("Zed", "Other");

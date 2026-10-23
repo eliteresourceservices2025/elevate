@@ -70,6 +70,18 @@ export const blockSchema = z.discriminatedUnion("type", [
       explanation: text,
     })
     .refine((b) => b.lines.some((l) => l.wrong), { message: "At least one line must be marked as the mistake." }),
+  // A scene or form (a desk, a claim form, a screen) with several things on it: tap everything that is a problem, then check.
+  z
+    .object({
+      type: z.literal("hotspot"),
+      title: short,
+      prompt: text,
+      items: z.array(z.object({ label: z.string().trim().min(1).max(40), text: short, problem: z.literal(true).optional(), why: z.string().trim().min(1).max(300).optional() })).min(4).max(10),
+      explanation: text,
+    })
+    .refine((b) => b.items.some((i) => i.problem), { message: "At least one item must be marked as a problem." })
+    .refine((b) => b.items.every((i) => !i.problem || Boolean(i.why)), { message: "Every problem needs a short reason." })
+    .refine((b) => b.items.every((i) => i.problem || !i.why), { message: "Only a problem has a reason." }),
   // Cards that flip over: a term or framework on the front, its meaning on the back.
   z.object({ type: z.literal("flip"), title: short.optional(), cards: z.array(z.object({ front: z.string().trim().min(1).max(80), back: z.string().trim().min(1).max(260) })).min(2).max(8) }),
   // Build something piece by piece (a call note, a reply): pick the right piece for each slot.
@@ -121,7 +133,7 @@ export const blockSchema = z.discriminatedUnion("type", [
 ]);
 
 /** Block types a person can do something with (the lint asks for at least one per module). */
-export const INTERACTIVE_BLOCK_TYPES = ["scenario", "check", "case", "sort", "cards", "spot", "flip", "build", "branch", "game"] as const;
+export const INTERACTIVE_BLOCK_TYPES = ["scenario", "check", "case", "sort", "cards", "spot", "hotspot", "flip", "build", "branch", "game"] as const;
 
 export const screenSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]{1,40}$/),

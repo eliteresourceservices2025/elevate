@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { blockSchema } from "../../../../learn/src/content/schema";
-import { formatBranch, formatBuild, formatCards, formatFlip, formatGame, formatSpot, parseBranch, parseBuild, parseCards, parseFlip, parseGame, parseSpot } from "./studio-block-text";
+import { formatBranch, formatBuild, formatCards, formatFlip, formatGame, formatHotspot, formatSpot, parseBranch, parseBuild, parseCards, parseFlip, parseGame, parseHotspot, parseSpot } from "./studio-block-text";
 
 const opt = (correct: boolean, n: number) => ({ text: `Option ${n}`, correct, feedback: `Because ${n}.` });
 
@@ -12,6 +12,12 @@ describe("interactive blocks as editable text", () => {
     expect(parseSpot(formatSpot(spot))).toEqual(spot.lines);
     const flip = { type: "flip" as const, cards: [{ front: "Empathy", back: "Understanding feelings" }, { front: "Sympathy", back: "Feeling sorry" }] };
     expect(parseFlip(formatFlip(flip))).toEqual(flip.cards);
+  });
+
+  it("round-trips hotspot items, with and without a problem", () => {
+    const hotspot = { type: "hotspot" as const, title: "T", prompt: "P", explanation: "E", items: [{ label: "Screen", text: "Shows a chart", problem: true as const, why: "Visible to visitors" }, { label: "Door", text: "Locked" }, { label: "Desk", text: "Clear" }, { label: "Bin", text: "Shredder" }] };
+    expect(parseHotspot(formatHotspot(hotspot))).toEqual(hotspot.items);
+    expect(blockSchema.safeParse(hotspot).success).toBe(true);
   });
 
   it("round-trips build, game and branch, and the result still passes the schema", () => {
