@@ -388,6 +388,7 @@ export async function getAttemptView(sql: Sql, userId: string, attemptId: string
 export type RecordEntry = {
   assignmentId: string;
   courseTitle: string;
+  courseSlug: string;
   track: string;
   status: string;
   assignedOn: string;
@@ -409,7 +410,7 @@ export type RecordEntry = {
 export async function getRecord(sql: Sql, userId: string): Promise<RecordEntry[]> {
   return withUser(sql, userId, async (tx) => {
     const rows = await tx`
-      select distinct on (a.course_id) a.id, co.title, a.track, a.status, a.assigned_at::date::text as assigned_on, a.due_on::text as due_on,
+      select distinct on (a.course_id) a.id, co.title, co.slug, a.track, a.status, a.assigned_at::date::text as assigned_on, a.due_on::text as due_on,
              a.passed_at::date::text as passed_on,
              coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = a.id), 0)::int as seconds,
              (select count(*) from learn.exam_attempts x where x.assignment_id = a.id and x.status = 'submitted')::int as attempts,
@@ -430,6 +431,7 @@ export async function getRecord(sql: Sql, userId: string): Promise<RecordEntry[]
       .map((r) => ({
         assignmentId: r.id as string,
         courseTitle: r.title as string,
+        courseSlug: r.slug as string,
         track: r.track as string,
         status: r.status as string,
         assignedOn: r.assigned_on as string,

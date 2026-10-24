@@ -49,8 +49,16 @@ h1, h2, h3, h4 { font-family: var(--font-head), system-ui, sans-serif; font-weig
 code, kbd, pre { font-family: var(--font-code), ui-monospace, monospace; }
 main { max-width: 44rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
 header.site { border-bottom: 4px solid var(--accent); background: var(--card); }
-header.site > div { max-width: 44rem; margin: 0 auto; padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+header.site > div { max-width: 84rem; margin: 0 auto; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 1rem; }
 header.site strong { font-family: var(--font-head), system-ui, sans-serif; color: var(--primary); font-size: 1.2rem; font-weight: 700; }
+.brand { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--primary); text-decoration: none; }
+.topnav { display: flex; gap: 0.25rem; flex: 1; }
+.topnav a { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.8rem; border-radius: 999px; text-decoration: none; color: var(--foreground); font-weight: 600; font-size: 0.9rem; }
+.topnav a:hover { background: var(--secondary); color: var(--primary); }
+.topright { display: flex; align-items: center; gap: 0.6rem; margin-left: auto; }
+.signout-top { display: inline-flex; align-items: center; gap: 0.4rem; background: transparent; color: var(--primary); border: 1px solid var(--border); padding: 0.4rem 0.85rem; border-radius: 999px; font-weight: 600; font-size: 0.9rem; }
+.signout-top:hover { background: var(--secondary); }
+@media (max-width: 40rem) { .nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } .topnav a, .signout-top { padding: 0.5rem; } }
 h1 { font-size: 1.75rem; margin: 0 0 0.5rem; }
 p { margin: 0.5rem 0; }
 .muted { color: var(--muted-foreground); font-size: 0.92rem; }
@@ -239,6 +247,71 @@ a.stage-btn { color: var(--primary-foreground); background: var(--primary); padd
 
 /* Course page: the modules as picture cards in a grid. The page is wider than the rest of the app so the grid can use the width. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+/* signed-in list pages use the full width (up to 84rem); reading pages keep the narrow column */
+main:has(> .page-wide) { max-width: 84rem; }
+.back { margin: 0 0 0.75rem; }
+.back a { display: inline-flex; align-items: center; gap: 0.35rem; text-decoration: none; font-weight: 600; font-size: 0.92rem; }
+.hero { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 2rem; padding: 1.4rem 1.7rem; margin: 0 0 1.4rem; border-radius: calc(var(--radius) + 8px); background: linear-gradient(135deg, #6c1aba 0%, #a862ea 100%); color: #fff; box-shadow: 0 6px 22px rgb(108 26 186 / 0.22); }
+.hero h1 { color: #fff; margin: 0; font-size: 1.9rem; }
+.hero p { margin: 0.3rem 0 0; color: rgb(255 255 255 / 0.92); }
+.hero-stats { list-style: none; display: flex; flex-wrap: wrap; gap: 0.7rem; padding: 0; margin: 0; }
+.hero-stats li { display: inline-flex; align-items: center; gap: 0.5rem; background: rgb(255 255 255 / 0.17); padding: 0.55rem 1rem; border-radius: 999px; font-size: 0.95rem; }
+.hero-stats strong { font-size: 1.25rem; font-family: var(--font-head), system-ui, sans-serif; }
+.page-hero { justify-content: flex-start; }
+.hero-icon { width: 3.6rem; height: 3.6rem; border-radius: 1rem; background: rgb(255 255 255 / 0.18); display: grid; place-items: center; flex: none; }
+.hero-text { flex: 1 1 22rem; min-width: 0; }
+.hero-extra { margin-left: auto; }
+a.button.hero-btn { background: #fff; color: var(--primary); font-weight: 700; display: inline-flex; align-items: center; gap: 0.45rem; }
+.button svg { vertical-align: -2px; }
+.stat-tiles { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; padding: 0; margin: 0 0 1.25rem; }
+.stat-tiles li { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.9rem 1.2rem; display: flex; flex-direction: column; }
+.stat-tiles strong { font-size: 1.9rem; line-height: 1.1; color: var(--primary); font-family: var(--font-head), system-ui, sans-serif; }
+.stat-tiles span { color: var(--muted-foreground); font-size: 0.9rem; }
+@media (max-width: 40rem) { .stat-tiles { grid-template-columns: minmax(0, 1fr); } .hero { padding: 1.1rem; } .hero h1 { font-size: 1.5rem; } }
+.mod-chip.inline { position: static; display: inline-flex; flex: none; }
+.record-grid { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; padding: 0; margin: 0; }
+@media (max-width: 62rem) { .record-grid { grid-template-columns: minmax(0, 1fr); } }
+.record-card { display: flex; background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); overflow: hidden; box-shadow: 0 2px 10px rgb(108 26 186 / 0.06); }
+.record-card.done { border-color: color-mix(in srgb, var(--accent) 70%, var(--border)); }
+.record-art { flex: 0 0 11rem; }
+.record-art .mod-art { aspect-ratio: auto; height: 100%; min-height: 100%; }
+.record-body { padding: 1rem 1.1rem 1.1rem; flex: 1; min-width: 0; }
+.record-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
+.record-title h2 { font-size: 1.1rem; margin: 0; line-height: 1.25; }
+.record-body p { margin: 0.2rem 0; }
+.facts { list-style: none; padding: 0; margin: 0.5rem 0; font-size: 0.88rem; color: var(--muted-foreground); }
+.facts li { display: flex; align-items: flex-start; gap: 0.45rem; margin: 0.25rem 0; }
+.facts svg { flex: none; margin-top: 0.15rem; }
+.cert-box { display: flex; align-items: center; gap: 0.7rem; background: color-mix(in srgb, var(--accent) 22%, var(--card)); border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: var(--radius); padding: 0.55rem 0.8rem; margin: 0.6rem 0; }
+.cert-box svg { color: var(--primary); flex: none; }
+.cert-box div { display: flex; flex-direction: column; min-width: 0; }
+.record-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+.record-actions .button { display: inline-flex; align-items: center; gap: 0.4rem; }
+@media (max-width: 40rem) { .record-card { flex-direction: column; } .record-art { flex: none; } .record-art .mod-art { aspect-ratio: 16 / 7; min-height: 0; } }
+.cards-course { margin: 1.9rem 0; }
+.cards-course-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.cards-course-head h2 { margin: 0; font-size: 1.3rem; }
+.cards-course-head p { margin: 0.1rem 0 0; }
+.cards-thumb { width: 8.5rem; border-radius: var(--radius); overflow: hidden; flex: none; }
+.keycards { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.2rem 1rem; }
+@media (max-width: 62rem) { .keycards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 40rem) { .keycards { grid-template-columns: minmax(0, 1fr); } }
+.keycard { position: relative; background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-top: 4px solid var(--primary); border-radius: var(--radius); padding: 1.05rem 1.05rem 0.8rem; }
+.keycard-num { position: absolute; top: -0.95rem; right: 0.8rem; background: var(--accent); color: var(--accent-foreground); width: 1.9rem; height: 1.9rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; box-shadow: 0 2px 6px rgb(0 0 0 / 0.15); }
+.keycard h3 { margin: 0.1rem 1.6rem 0.5rem 0; font-size: 1.05rem; line-height: 1.25; }
+.keycard ul { list-style: none; padding: 0; margin: 0; }
+.keycard li { display: flex; gap: 0.5rem; margin: 0.45rem 0; font-size: 0.92rem; line-height: 1.45; }
+.keycard li svg { flex: none; color: var(--primary); margin-top: 0.2rem; }
+.drill-grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+@media (max-width: 62rem) { .drill-grid { grid-template-columns: minmax(0, 1fr); } }
+.drill-card { background: var(--card); color: var(--card-foreground); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); overflow: hidden; box-shadow: 0 2px 10px rgb(108 26 186 / 0.06); }
+.drill-art { position: relative; }
+.drill-art .mod-art { aspect-ratio: 16 / 6; }
+.drill-art .mod-chip { position: absolute; top: 0.6rem; right: 0.6rem; }
+.drill-body { padding: 1rem 1.2rem 1.25rem; }
+.drill-body h2 { margin: 0.1rem 0 0.5rem; font-size: 1.2rem; }
+.drill-body ul.plain { margin: 0.6rem 0; }
+.drill-body ul.plain button { width: 100%; text-align: left; padding: 0.7rem 1rem; margin: 0.35rem 0; }
 .course-wide { position: relative; left: 50%; width: min(72rem, calc(100vw - 2rem)); transform: translateX(-50%); }
 .course-narrow { max-width: 44rem; margin: 0 auto; }
 .course-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 0.5rem 1.5rem; }
@@ -273,11 +346,11 @@ a.mod-link:focus-visible { outline: 3px solid var(--ring); outline-offset: -3px;
 .mod-card:has(a.mod-link:hover) .mod-go svg { transform: translateX(3px); }
 .mod-go svg { transition: transform 0.15s ease; }
 /* the home page: course cards and shortcuts use the module picture cards, two to a row */
-.mod-grid.home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 1rem; }
-@media (max-width: 40rem) { .mod-grid.home-grid { grid-template-columns: minmax(0, 1fr); } }
 .home-more { font-size: 1.15rem; margin: 1.75rem 0 0; }
 .mod-btn { background: var(--primary); color: var(--primary-foreground); padding: 0.4rem 0.8rem; border-radius: 999px; }
 .mod-btn svg { flex: none; }
 .mod-card:has(a.mod-link:hover) .mod-btn { filter: brightness(1.12); }
 .home-signout { margin: 0.5rem 0 2rem; }
 .signout-btn { display: inline-flex; align-items: center; gap: 0.45rem; }
+@media (max-width: 40rem) { header.site > div { gap: 0.4rem; padding: 0.5rem 0.6rem; } header.site strong { font-size: 1rem; white-space: nowrap; } .topnav { gap: 0; } .topright { gap: 0.3rem; } }
+@media (max-width: 26rem) { .brand strong { display: none; } }

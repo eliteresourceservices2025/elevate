@@ -5,6 +5,7 @@ import { renderRecordPdf } from "./record-pdf";
 
 const entry = (n: number): RecordEntry => ({
   assignmentId: `a${n}`,
+  courseSlug: "hipaa",
   courseTitle: `Course ${n} with a fairly long title that goes on for a while so that it has to wrap`,
   track: "full",
   status: "passed",
