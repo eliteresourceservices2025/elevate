@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       // A player asks for many ranges of one video: audit the start of a viewing only.
       const range = request.headers.get("range");
       if (!range || /^bytes=0-/.test(range)) await writeAudit({ actor: viewer, action: "content.video_view", targetType: "content_file", targetId: file.id }).catch(() => {});
-      return new Response(null, { status: 307, headers: { Location: file.playbackUrl, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+      return new Response(null, { status: 307, headers: { Location: file.playbackUrl, "Cache-Control": "private, max-age=240", "X-Content-Type-Options": "nosniff" } }); // the link lives 300 s: reuse it for the many range requests of one viewing
     }
     const headers: Record<string, string> = {
       "Content-Type": file.mimeType,

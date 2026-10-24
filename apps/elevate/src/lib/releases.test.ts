@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { APP_VERSION, RELEASES } from "./releases";
 
@@ -7,7 +7,7 @@ const parts = (v: string) => v.split(".").map(Number);
 
 describe("releases", () => {
   it("shows the version in package.json", () => {
-    const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as { version: string };
+    const pkg = JSON.parse(readFileSync(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8")) as { version: string };
     expect(APP_VERSION).toBe(pkg.version);
   });
 

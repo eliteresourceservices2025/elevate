@@ -5,6 +5,7 @@ import { authorize, can } from "@/lib/authz";
 import type { AuthUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
+import { writeAudit } from "@/modules/audit/write";
 import { MAX_FILE_BYTES, MAX_VIDEO_BYTES, VIDEO_HEAD_BYTES, VIDEO_TYPES, extensionOf, mimeOf, sniffFileKind, sniffVideoKind, videoKindFromMime } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { employees } from "@/modules/people/schema";
@@ -39,12 +40,17 @@ export function safeFileName(raw: string, fallback: string): string {
   return base || fallback;
 }
 
+/** Whether the author already has as many unsaved (pending) files as one person may keep waiting. */
+async function tooManyPending(actor: AuthUser): Promise<boolean> {
+  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(contentFiles).where(and(eq(contentFiles.ownerId, actor.id), isNull(contentFiles.announcementId), isNull(contentFiles.policyVersionId)));
+  return n >= PENDING_LIMIT;
+}
+
 /** Stores an uploaded picture (already cropped and re-encoded by the browser; cleaned again here) or document as a pending file. */
 export async function uploadContentFile(actor: AuthUser, input: { kind: "image" | "file"; bytes: Uint8Array; fileName: string }): Promise<{ ok: true; file: ContentFileView } | { ok: false; error: string }> {
   await authorize(actor, "announcements.manage");
 
-  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(contentFiles).where(and(eq(contentFiles.ownerId, actor.id), isNull(contentFiles.announcementId), isNull(contentFiles.policyVersionId)));
-  if (n >= PENDING_LIMIT) return { ok: false, error: "Too many files are waiting. Save what you are writing first." };
+  if (await tooManyPending(actor)) return { ok: false, error: "Too many files are waiting. Save what you are writing first." };
 
   let bytes = input.bytes;
   let mime: string;
@@ -85,8 +91,7 @@ export async function requestVideoUpload(actor: AuthUser, input: { fileName: str
   if (!kind) return { ok: false, error: "Add an MP4 or WebM video." };
   if (input.sizeBytes <= 0 || input.sizeBytes > MAX_VIDEO_BYTES) return { ok: false, error: "A video can be up to 100 MB." };
 
-  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(contentFiles).where(and(eq(contentFiles.ownerId, actor.id), isNull(contentFiles.announcementId), isNull(contentFiles.policyVersionId)));
-  if (n >= PENDING_LIMIT) return { ok: false, error: "Too many files are waiting. Save what you are writing first." };
+  if (await tooManyPending(actor)) return { ok: false, error: "Too many files are waiting. Save what you are writing first." };
 
   const path = `${VIDEO_PREFIX}${randomUUID()}.${VIDEO_TYPES[kind].extension}`;
   const fileName = safeFileName(input.fileName, `video.${VIDEO_TYPES[kind].extension}`);
@@ -123,7 +128,11 @@ export async function finalizeVideoUpload(actor: AuthUser, id: string): Promise<
   if (VIDEO_TYPES[kind].mime !== row.mimeType) return reject("The file does not match the type you chose, so it was not saved.");
 
   const sha256 = createHash("sha256").update(head.bytes).digest("hex"); // of the first bytes only: the video is never read whole here
-  const [updated] = await db.update(contentFiles).set({ sha256, sizeBytes: head.size }).where(and(eq(contentFiles.id, row.id), eq(contentFiles.sha256, ""))).returning({ id: contentFiles.id, kind: contentFiles.kind, fileName: contentFiles.fileName, sizeBytes: contentFiles.sizeBytes });
+  const updated = await db.transaction(async (tx) => {
+    const [r] = await tx.update(contentFiles).set({ sha256, sizeBytes: head.size }).where(and(eq(contentFiles.id, row.id), eq(contentFiles.sha256, ""))).returning({ id: contentFiles.id, kind: contentFiles.kind, fileName: contentFiles.fileName, sizeBytes: contentFiles.sizeBytes });
+    if (r) await writeAudit({ actor, action: "content.video_add", targetType: "content_file", targetId: r.id, metadata: { sizeBytes: r.sizeBytes } }, tx);
+    return r;
+  });
   if (!updated) return { ok: false, error: "That upload was already finished." };
   return { ok: true, file: view(updated) };
 }
