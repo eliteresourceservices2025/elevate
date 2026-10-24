@@ -1,3 +1,4 @@
 {
+  "installCommand": "npx --yes pnpm@12.5.1 install --frozen-lockfile",
   "regions": ["sin1"]
 }

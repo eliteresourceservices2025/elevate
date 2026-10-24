@@ -6,9 +6,18 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
+      # react and react-dom must always be the same version, so they move together
+      react:
+        patterns: ["react", "react-dom"]
+      # every other minor and patch update lands in one weekly PR
+      minor-and-patch:
+        update-types: ["minor", "patch"]
       react:
         patterns: ["react", "react-dom"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
