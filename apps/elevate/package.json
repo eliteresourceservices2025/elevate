@@ -26,6 +26,7 @@
     "rebuild:historical-october": "tsx --conditions react-server scripts/rebuild-historical-october.mts",
     "schedule-import:draft": "tsx scripts/schedule-import-draft.ts",
     "learn:assign": "tsx scripts/learn-assign.mts",
+    "learn:upgrade": "tsx scripts/learn-upgrade.mts",
     "learn:export": "tsx scripts/learn-export-content.mts",
     "learn:export-recaps": "tsx scripts/learn-export-recaps.mts",
     "format": "prettier --write .",
