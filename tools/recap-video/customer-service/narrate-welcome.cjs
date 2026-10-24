@@ -72,6 +72,7 @@ async function voiceId() {
   return mine.id;
 }
 
+// HIPAA is written "Heepa" for the voice (it says "Hip-aye" otherwise) and ERS is said as "ELITE Resource Services"; captions and transcripts keep the real spelling.
 async function speak(text, file, voice, rate = 1) {
   if (fs.existsSync(file) && !process.argv.includes("--redo")) return; // resume where it stopped
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -79,7 +80,7 @@ async function speak(text, file, voice, rate = 1) {
       const res = await fetch(`${BASE}/v1/audio/speech`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: "omnivoice", input: text, voice, response_format: "wav", language: "en", speed: Math.round(SPEED * rate * 100) / 100 }),
+        body: JSON.stringify({ model: "omnivoice", input: text.replace(/HIPAA/g, "Heepa").replace(/\bERS\b/g, "ELITE Resource Services"), voice, response_format: "wav", language: "en", speed: Math.round(SPEED * rate * 100) / 100 }),
       });
       if (!res.ok) throw new Error(`VoiceStudio answered ${res.status}`);
       fs.mkdirSync(path.dirname(file), { recursive: true });

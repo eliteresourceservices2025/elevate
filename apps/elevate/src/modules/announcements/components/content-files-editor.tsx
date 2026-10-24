@@ -2,10 +2,13 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { FileText, ImageUp, Paperclip, Trash2 } from "lucide-react";
+import { FileText, ImageUp, Paperclip, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { referencedFileIds } from "@/lib/markdown";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { MAX_VIDEO_BYTES, videoKindFromMime } from "@/modules/documents/files";
 import type { ContentFileView } from "../content-files";
+import { cancelAnnouncementVideoUpload, finalizeAnnouncementVideoUpload, requestAnnouncementVideoUpload } from "../video-actions";
 
 const MAX_SIDE = 1600;
 const MAX_FILES = 12;
@@ -50,8 +53,25 @@ async function upload(kind: "image" | "file", blob: Blob, name: string): Promise
   return body.file;
 }
 
+/** Sends a video straight to storage (request, upload, finalize); a failed upload cancels the request. */
+async function uploadVideo(file: File): Promise<ContentFileView> {
+  const mimeType = file.type || (file.name.toLowerCase().endsWith(".webm") ? "video/webm" : "video/mp4");
+  if (!videoKindFromMime(mimeType)) throw new Error("Add an MP4 or WebM video.");
+  if (file.size > MAX_VIDEO_BYTES) throw new Error("A video can be up to 100 MB.");
+  const ticket = await requestAnnouncementVideoUpload({ fileName: file.name, mimeType, sizeBytes: file.size });
+  if (!ticket.ok) throw new Error(ticket.error);
+  const { error } = await createSupabaseBrowserClient().storage.from(ticket.data.bucket).uploadToSignedUrl(ticket.data.path, ticket.data.token, file, { contentType: ticket.data.contentType });
+  if (error) {
+    await cancelAnnouncementVideoUpload({ id: ticket.data.id });
+    throw new Error("The video did not upload. Check your connection and try again.");
+  }
+  const done = await finalizeAnnouncementVideoUpload({ id: ticket.data.id });
+  if (!done.ok) throw new Error(done.error);
+  return done.data;
+}
+
 /**
- * Pictures and documents for an announcement or policy. A picture is inserted into the text as ![description](file:id); a document
+ * Pictures, documents and (announcements only) one video. A picture is inserted into the text as ![description](file:id); a document
  * is a download under the text. Removing a picture also removes its line from the text.
  */
 export function ContentFilesEditor({
@@ -60,14 +80,20 @@ export function ContentFilesEditor({
   body,
   onBodyChange,
   disabled,
+  allowVideo,
 }: {
   files: ContentFileView[];
   onFilesChange: (files: ContentFileView[]) => void;
   body: string;
   onBodyChange: (body: string) => void;
   disabled?: boolean;
+  /** Announcements only: one MP4 or WebM video, shown above the text. */
+  allowVideo?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const videoInput = useRef<HTMLInputElement>(null);
+  const hasVideo = files.some((f) => f.kind === "video");
   const [alt, setAlt] = useState<Record<string, string>>({});
   const photoInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -87,6 +113,22 @@ export function ContentFilesEditor({
       toast.error(error instanceof Error && error.message !== "unreadable" ? error.message : "We could not open that picture. Try a JPG or PNG.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const addVideo = async (picked: File | undefined) => {
+    if (!picked) return;
+    setBusy(true);
+    setUploadingVideo(true);
+    try {
+      const stored = await uploadVideo(picked);
+      onFilesChange([...files, stored]);
+      toast.success("Video added. Save the announcement to publish it.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "We could not upload that video. Please try again.");
+    } finally {
+      setBusy(false);
+      setUploadingVideo(false);
     }
   };
 
@@ -118,6 +160,24 @@ export function ContentFilesEditor({
         <Button type="button" size="sm" variant="outline" disabled={disabled || busy} onClick={() => fileInput.current?.click()}>
           <Paperclip aria-hidden /> Attach a PDF or Word file
         </Button>
+        {allowVideo ? (
+          <>
+            <Button type="button" size="sm" variant="outline" disabled={disabled || busy || hasVideo} onClick={() => videoInput.current?.click()}>
+              <Video aria-hidden /> {uploadingVideo ? "Uploading video…" : "Add a video"}
+            </Button>
+            <input
+              ref={videoInput}
+              type="file"
+              accept="video/mp4,video/webm,.mp4,.webm"
+              className="sr-only"
+              aria-label="Choose a video"
+              onChange={(e) => {
+                void addVideo(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+          </>
+        ) : null}
         <input
           ref={photoInput}
           type="file"
@@ -141,7 +201,7 @@ export function ContentFilesEditor({
           }}
         />
       </div>
-      <p className="text-xs text-muted-foreground">Pictures show inside the text, files are downloads under it. Please do not add client or patient information. Up to {MAX_FILES} items, files up to 10 MB.</p>
+      <p className="text-xs text-muted-foreground">Pictures show inside the text, files are downloads under it. Please do not add client or patient information. Up to {MAX_FILES} items, files up to 10 MB{allowVideo ? "; one video (MP4 or WebM) up to 100 MB, with no client or patient screens in it" : ""}.</p>
 
       {files.length === 0 ? null : (
         <ul className="space-y-2">
@@ -150,13 +210,15 @@ export function ContentFilesEditor({
               {f.kind === "image" ? (
                 // eslint-disable-next-line @next/next/no-img-element -- a private picture served by our own route
                 <img src={`/api/content/files/${f.id}`} alt="" className="size-12 rounded object-cover" />
+              ) : f.kind === "video" ? (
+                <Video className="size-6 text-muted-foreground" aria-hidden />
               ) : (
                 <FileText className="size-6 text-muted-foreground" aria-hidden />
               )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{f.fileName}</span>
                 <span className="text-xs text-muted-foreground">
-                  {f.kind === "image" ? (inText.has(f.id) ? "Picture, shown in the text" : "Picture, not in the text yet") : "Document"} · {sizeText(f.sizeBytes)}
+                  {f.kind === "image" ? (inText.has(f.id) ? "Picture, shown in the text" : "Picture, not in the text yet") : f.kind === "video" ? "Video, shown above the text" : "Document"} · {sizeText(f.sizeBytes)}
                 </span>
               </span>
               {f.kind === "image" && !inText.has(f.id) ? (

@@ -84,7 +84,7 @@ export function AnnouncementForm({
       {locked ? <p className="rounded-lg border bg-muted/50 p-3 text-sm">People have already acknowledged this, so the title and text are locked. You can still change the due date, pinning and attachment.</p> : null}
       <TextField id="an-title" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required disabled={locked} />
       <MarkdownField id="an-body" label="Message" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={10} required disabled={locked} />
-      <ContentFilesEditor files={files} onFilesChange={setFiles} body={body} onBodyChange={setBody} disabled={locked} />
+      <ContentFilesEditor files={files} onFilesChange={setFiles} body={body} onBodyChange={setBody} disabled={locked} allowVideo />
 
       {!edit ? (
         <fieldset className="space-y-3">

@@ -13,11 +13,13 @@ import { writeAudit } from "@/modules/audit/write";
 import { todayInZone } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { ALLOWED_TYPES_TEXT, MAX_FILE_BYTES, extensionOf, kindFromMime, mimeOf, sanitizeFileName, sniffFileKind } from "./files";
-import { documentFolders, documentTypes, documents } from "./schema";
+import { documentFolders, documentReminders, documentTypes, documents, systemDocuments } from "./schema";
 import { authorizeDocumentView, clientChoices } from "./service";
 import { BUCKETS, getDocumentStorage, type Bucket } from "./storage";
 import {
   archiveDocumentTypeSchema,
+  bulkDocumentsSchema,
+  renameDocumentSchema,
   changeDocumentTypeSchema,
   createFolderSchema,
   documentIdSchema,
@@ -311,6 +313,110 @@ export async function archiveDocument(input: unknown): Promise<ActionResult> {
     });
     refresh(found.doc.employeeId);
     return { ok: true, data: undefined };
+  });
+}
+
+// --- HR housekeeping: rename, restore, delete, bulk -----------------------------------
+
+/** Changes the file name shown and used for downloads. The extension always follows the real file type; the storage path does not change. */
+export async function renameDocument(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "documents.rename");
+    const parsed = renameDocumentSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+
+    const found = await loadDocument(parsed.data.documentId);
+    if (!found) return fail("That document was not found.");
+    const kind = found.doc.mimeType ? kindFromMime(found.doc.mimeType) : null;
+    if (!kind) return fail("This file cannot be renamed.");
+    const fileName = sanitizeFileName(parsed.data.name, kind);
+
+    await db.transaction(async (tx) => {
+      await tx.update(documents).set({ originalName: fileName, updatedAt: new Date() }).where(eq(documents.id, found.doc.id));
+      await writeAudit({ actor, action: "document.rename", targetType: found.doc.employeeId ? "employee" : "company", targetId: found.doc.employeeId ?? "company", metadata: { documentId: found.doc.id } }, tx);
+    });
+    refresh(found.doc.employeeId);
+    return { ok: true, data: undefined };
+  });
+}
+
+export type BulkDocumentsResult = { requested: number; done: number; failed: { documentId: string; reason: string }[] };
+
+/**
+ * One action for many documents (archive, restore, delete for good). Each runs in its own transaction, so one that cannot change is
+ * reported and the rest still go through; the run adds one summary audit row (ids, counts, and the reason for a delete; never names).
+ * Deleting works only on archived files, and never on a file an announcement uses or the system filed (a sweep would file it again).
+ * Stored files are removed after the database change is saved.
+ */
+export async function bulkUpdateDocuments(input: unknown): Promise<ActionResult<BulkDocumentsResult>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "documents.bulk");
+    const parsed = bulkDocumentsSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const v = parsed.data;
+    await authorize(actor, v.action === "delete" ? "documents.delete" : v.action === "restore" ? "documents.restore" : "documents.archive");
+    const ids = [...new Set(v.documentIds)];
+
+    const failed: BulkDocumentsResult["failed"] = [];
+    const toRemove: { bucket: Bucket; path: string }[] = [];
+    const touched = new Set<string>();
+    let done = 0;
+
+    for (const documentId of ids) {
+      try {
+        await db.transaction(async (tx) => {
+          const [doc] = await tx.select().from(documents).where(eq(documents.id, documentId)).limit(1).for("update");
+          if (!doc || doc.status !== "active") throw new ActionFailure("That document was not found.");
+
+          if (v.action === "archive") {
+            if (doc.archivedAt) throw new ActionFailure("Already archived.");
+            await tx.update(documents).set({ archivedAt: new Date(), archivedBy: actor.id, updatedAt: new Date() }).where(eq(documents.id, doc.id));
+          } else if (v.action === "restore") {
+            if (!doc.archivedAt) throw new ActionFailure("Not archived.");
+            await tx.update(documents).set({ archivedAt: null, archivedBy: null, updatedAt: new Date() }).where(eq(documents.id, doc.id));
+          } else {
+            if (!doc.archivedAt) throw new ActionFailure("Archive it first, then delete it.");
+            const [used] = (await tx.execute(sql`select 1 as used from docs.announcements where attachment_document_id = ${doc.id} limit 1`)) as unknown as { used: number }[];
+            if (used) throw new ActionFailure("An announcement uses this file.");
+            const [filed] = await tx.select({ id: systemDocuments.documentId }).from(systemDocuments).where(eq(systemDocuments.documentId, doc.id)).limit(1);
+            if (filed) throw new ActionFailure("The system filed this file (signed copy or certificate).");
+            await tx.delete(documentReminders).where(eq(documentReminders.documentId, doc.id));
+            await tx.delete(documents).where(eq(documents.id, doc.id));
+            toRemove.push({ bucket: doc.storageBucket as Bucket, path: doc.storagePath });
+          }
+          if (doc.employeeId) touched.add(doc.employeeId);
+        });
+        done += 1;
+      } catch (error) {
+        failed.push({ documentId, reason: error instanceof ActionFailure ? error.message : "Something went wrong." });
+      }
+    }
+
+    await db.transaction((tx) =>
+      writeAudit(
+        {
+          actor,
+          action: `document.bulk_${v.action}`,
+          targetType: "document",
+          metadata: { requested: ids.length, documentIds: ids, done, failed: failed.length, ...(v.action === "delete" ? { reason: v.reason } : {}) },
+        },
+        tx,
+      ),
+    );
+
+    // The rows are gone; a file that cannot be removed now is only an orphan, so one failure never undoes or blocks the rest.
+    const storage = getDocumentStorage();
+    for (const bucket of new Set(toRemove.map((f) => f.bucket))) {
+      await storage.remove(bucket, toRemove.filter((f) => f.bucket === bucket).map((f) => f.path)).catch(() => undefined);
+    }
+
+    revalidatePath("/documents");
+    for (const employeeId of touched) revalidatePath(`/people/${employeeId}`);
+    return { ok: true, data: { requested: ids.length, done, failed: failed.slice(0, 20) } };
   });
 }
 

@@ -1,11 +1,11 @@
 {
- "hipaa-foundations": 79,
+ "hipaa-foundations": 82,
  "hipaa-phi": 74,
  "hipaa-privacy": 79,
  "hipaa-rights": 73,
- "hipaa-associates": 66,
- "hipaa-security": 75,
- "hipaa-incidents": 74,
+ "hipaa-associates": 68,
+ "hipaa-security": 74,
+ "hipaa-incidents": 76,
  "hipaa-enforcement": 82,
  "hipaa-lab_public": 67,
  "hipaa-lab_records": 65,
@@ -19,5 +19,5 @@
  "cybersecurity-physical": 64,
  "cybersecurity-response": 70,
  "cybersecurity-security_hipaa": 75,
- "hipaa-state_laws": 66
+ "hipaa-state_laws": 65
 }
