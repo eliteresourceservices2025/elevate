@@ -2,14 +2,17 @@
 
 import { Download, File, FileImage, FileText } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useId, useTransition } from "react";
 import { toast } from "sonner";
+import type { ActionResult } from "@/lib/run-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateOnly } from "@/lib/time";
 import { CategorizeDocument, type CategorizeOptions } from "./categorize-document";
-import { archiveDocument, getDownloadUrl, moveDocument, verifyDocument } from "../actions";
+import { archiveDocument, bulkUpdateDocuments, getDownloadUrl, moveDocument, verifyDocument, type BulkDocumentsResult } from "../actions";
+import { DocumentBulkBar, bulkBoxProps } from "./document-bulk-bar";
+import { RenameDocument } from "./rename-document";
 import type { ExpiryStatus } from "../expiry";
 import { canPreview, formatBytes } from "../files";
 import type { DocumentRow, FolderRow } from "../queries";
@@ -79,6 +82,10 @@ export function DocumentList({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const formId = `docs-bulk-${useId()}`;
+  /** A bulk call for one file: its single failure reason becomes the error. */
+  const single = (r: ActionResult<BulkDocumentsResult>): { ok: boolean; error?: string } =>
+    !r.ok ? r : r.data.failed.length > 0 ? { ok: false, error: r.data.failed[0].reason } : { ok: true };
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string) =>
     startTransition(async () => {
@@ -91,10 +98,13 @@ export function DocumentList({
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{emptyText}</p>;
 
   return (
+    <div className="space-y-3">
+    {viewerIsHr ? <DocumentBulkBar formId={formId} /> : null}
     <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
       <Table>
         <TableHeader>
           <TableRow>
+            {viewerIsHr ? <TableHead className="w-8"><span className="sr-only">Select</span></TableHead> : null}
             <TableHead>Type</TableHead>
             <TableHead>Document</TableHead>
             <TableHead>Expiry</TableHead>
@@ -105,6 +115,11 @@ export function DocumentList({
         <TableBody>
           {rows.map((r) => (
             <TableRow key={r.id} className={r.archived ? "opacity-60" : undefined}>
+              {viewerIsHr ? (
+                <TableCell>
+                  <input {...bulkBoxProps(formId)} value={r.id} aria-label={`Select ${r.title}`} className="size-4 accent-primary" />
+                </TableCell>
+              ) : null}
               <TableCell>
                 <TypeBadge slug={r.typeSlug} name={r.typeName} />
               </TableCell>
@@ -166,6 +181,7 @@ export function DocumentList({
                       {r.verified ? "Unverify" : "Verify"}
                     </Button>
                   ) : null}
+                  {viewerIsHr && !r.archived ? <RenameDocument row={r} /> : null}
                   {!r.archived && (viewerIsHr || !r.verified) ? (
                     <Button
                       type="button"
@@ -177,12 +193,24 @@ export function DocumentList({
                       Archive
                     </Button>
                   ) : null}
+                  {viewerIsHr && r.archived ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      disabled={pending}
+                      onClick={() => run(() => bulkUpdateDocuments({ action: "restore", documentIds: [r.id] }).then(single), "Document restored.")}
+                    >
+                      Restore
+                    </Button>
+                  ) : null}
                 </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+    </div>
     </div>
   );
 }

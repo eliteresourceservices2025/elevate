@@ -10,6 +10,7 @@ import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatDateOnly, formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { CompanyDocuments } from "@/modules/documents/components/company-documents";
+import { DocumentBulkBar, bulkBoxProps } from "@/modules/documents/components/document-bulk-bar";
 import { ExpiryBadge } from "@/modules/documents/components/document-list";
 import { TypeBadge } from "@/modules/documents/components/type-badge";
 import { NewTypeForm, TypeRow } from "@/modules/documents/components/type-admin";
@@ -52,8 +53,8 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
   const missing = overview ? paginate(overview.missing, paging.page, paging.pageSize) : null;
   const unverified = overview ? paginate(overview.unverified, paging.page, paging.pageSize) : null;
   const one = (v: string | string[] | undefined) => (typeof v === "string" && v !== "" ? v : undefined);
-  const filesQuery = { q: one(sp.q), type: one(sp.type) };
-  const files = isHr && tab === "files" ? await orNotFound(listAllEmployeeDocuments({ q: filesQuery.q, typeSlug: filesQuery.type, page: paging.page, pageSize: paging.pageSize })) : null;
+  const filesQuery = { q: one(sp.q), type: one(sp.type), archived: one(sp.archived) === "1" };
+  const files = isHr && tab === "files" ? await orNotFound(listAllEmployeeDocuments({ q: filesQuery.q, typeSlug: filesQuery.type, archived: filesQuery.archived, page: paging.page, pageSize: paging.pageSize })) : null;
   const company = tab === "company" ? await listCompanyDocuments() : null;
   const companyUpload = tab === "company" && can(user, "documents.manage_company") ? await getUploadOptions("company") : null;
   const types = isHr && tab === "types" ? await orNotFound(listDocumentTypes()) : null;
@@ -210,10 +211,15 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
                 ))}
               </select>
             </div>
+            <label htmlFor="files-archived" className="flex h-8 items-center gap-2 text-sm">
+              <input id="files-archived" type="checkbox" name="archived" value="1" defaultChecked={filesQuery.archived} className="size-4 accent-primary" />
+              Show archived files only
+            </label>
             <button type="submit" className="h-8 rounded-lg border bg-card px-3 text-sm shadow-sm hover:bg-secondary/60">
               Filter
             </button>
           </form>
+          {files.rows.length > 0 ? <DocumentBulkBar formId="files-bulk" /> : null}
           {files.rows.length === 0 ? (
             <p className="text-muted-foreground">No document matches.</p>
           ) : (
@@ -221,6 +227,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8"><span className="sr-only">Select</span></TableHead>
                     <TableHead>Person</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Document</TableHead>
@@ -232,6 +239,9 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
                 <TableBody>
                   {files.rows.map((r) => (
                     <TableRow key={r.id}>
+                      <TableCell>
+                        <input {...bulkBoxProps("files-bulk")} value={r.id} aria-label={`Select ${r.title}`} className="size-4 accent-primary" />
+                      </TableCell>
                       <TableCell>
                         <PersonLink id={r.employeeId} name={r.employeeName} number={r.employeeNumber} />
                       </TableCell>
@@ -253,8 +263,8 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
               </Table>
             </div>
           )}
-          <PagerLinks info={files.info} basePath="/documents" query={{ tab: "files", q: filesQuery.q, type: filesQuery.type }} label="documents" />
-          <p className="text-xs text-muted-foreground">Open a person to download, verify or archive their files.</p>
+          <PagerLinks info={files.info} basePath="/documents" query={{ tab: "files", q: filesQuery.q, type: filesQuery.type, archived: filesQuery.archived ? "1" : undefined }} label="documents" />
+          <p className="text-xs text-muted-foreground">Open a person to download, rename, verify or archive their files. Deleting for good works on archived files only.</p>
         </div>
       ) : null}
 
