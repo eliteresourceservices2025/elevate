@@ -1,0 +1,43 @@
+{
+ "hipaa": {
+  "id": "hipaa-00-welcome",
+  "title": "HIPAA Privacy, Security and Awareness",
+  "seconds": 73,
+  "transcript": [
+   "Welcome to HIPAA Privacy, Security and Awareness.",
+   "Many of our clients are healthcare organizations. When you work for them, you may see information about real patients. That information belongs to the patient, and HIPAA applies to you from your first day.",
+   "In this course, you will learn:",
+   "What counts as patient information.",
+   "When it may be shared, and how to share only the minimum.",
+   "How to keep it secure.",
+   "And what to do when something goes wrong.",
+   "Three HIPAA rules, three questions.",
+   "Privacy: who may use or share it?",
+   "Security: how is it kept safe?",
+   "Breach notification: who is told when it is exposed?",
+   "When you are unsure, stop, do not share, and ask your team lead or your client contact. Asking is never a mistake. Let us begin.",
+   "Stop. Do not share. Ask. Report."
+  ]
+ },
+ "cybersecurity": {
+  "id": "cybersecurity-00-welcome",
+  "title": "Cybersecurity basics for the ERS team",
+  "seconds": 65,
+  "transcript": [
+   "Welcome to Cybersecurity basics for the ERS team.",
+   "Ordinary people are the target of most attacks. Four simple habits stop most of them.",
+   "Four habits.",
+   "Recognize and report phishing.",
+   "Use strong passwords.",
+   "Turn on a second sign-in step.",
+   "And install updates.",
+   "You will also learn to:",
+   "Browse and use email safely.",
+   "Know why pasting work into an AI tool is a disclosure.",
+   "Protect your devices and home network.",
+   "And see how it fits HIPAA's Security Rule.",
+   "If something looks wrong, report it to your team lead and HR right away. Speed and honesty matter more than being sure. Let us begin.",
+   "Spot. Lock. Update. Report."
+  ]
+ }
+}

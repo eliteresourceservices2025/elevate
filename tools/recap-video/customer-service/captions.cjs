@@ -54,7 +54,7 @@ function captionsFor(v) {
     });
     at += Math.round(v.scenesSeconds[i] * FPS);
   });
-  OUTRO.forEach((t, k) => place(list, t, at + AUDIO_DELAY + Math.round(nar.outroCues[k] * FPS), Math.round(0.9 * FPS)));
+  (v.outroItems ? v.outroItems.map((i) => i.word + ".") : OUTRO).forEach((t, k) => place(list, t, at + AUDIO_DELAY + Math.round(nar.outroCues[k] * FPS), Math.round(0.9 * FPS)));
   return list;
 }
 
