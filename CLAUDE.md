@@ -27,7 +27,7 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 ## Stack
 
-- Next.js 16.3 App Router, React 19, TypeScript strict, pnpm, Node 24
+- Next.js 16.3 App Router, React 19, TypeScript strict, pnpm, Node 24.22.1 or newer (pinned in `.nvmrc`; older patches have a Brotli RCE)
 - Tailwind CSS v4 + shadcn/ui; lucide-react icons; TanStack Table; shadcn charts (Recharts); React Flow for the org chart; dnd-kit for boards
 - React Hook Form + Zod (one schema in `validators.ts`, used by the form AND the server action)
 - Supabase: Auth (Google + email/password, TOTP MFA), Storage (private buckets), Postgres (Singapore)
