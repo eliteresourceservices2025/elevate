@@ -90,7 +90,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
     "eslint-plugin-security": "^4.1.0",
-    "prettier": "^3.9.9",
+    "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "supabase": "^2.121.0",
     "tailwindcss": "^4",
