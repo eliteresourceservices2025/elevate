@@ -372,3 +372,5 @@ a.mod-link:focus-visible { outline: 3px solid var(--ring); outline-offset: -3px;
 .mod-chip.inline.new { background: var(--secondary); color: var(--foreground); border-color: var(--border); }
 .mod-chip.inline.done { border-color: color-mix(in srgb, var(--accent) 70%, #000 10%); }
 .mod-chip.inline.locked { background: rgb(31 21 53 / 0.85); color: #fff; }
+/* The status chips carry the class "progress", which also names the thin progress bar (height 8px, overflow hidden): undo that for chips */
+.mod-chip.progress { height: auto; overflow: visible; line-height: 1.3; }
