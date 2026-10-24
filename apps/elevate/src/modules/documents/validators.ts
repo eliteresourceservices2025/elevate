@@ -42,7 +42,16 @@ export const changeDocumentTypeSchema = z.object({
   audience: z.enum(["all_staff", "hr_only"]).optional(),
 });
 
-export const verifyDocumentSchema = z.object({ documentId: uuid, verified: z.boolean() });
+export const renameDocumentSchema = z.object({ documentId: uuid, name: z.string().trim().min(1, "Enter a file name").max(255, "Use 255 characters or fewer") });
+
+const documentIds = z.array(uuid).min(1, "Select at least one document").max(100, "Select 100 documents at most");
+export const bulkDocumentsSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("archive"), documentIds }),
+  z.object({ action: z.literal("restore"), documentIds }),
+  z.object({ action: z.literal("delete"), documentIds, reason: z.string().trim().min(3, "Give a short reason").max(500, "Use 500 characters or fewer") }),
+]);
+
+export const verifyDocumentSchema =z.object({ documentId: uuid, verified: z.boolean() });
 
 export const documentTypeSchema = z.object({
   name: name("a name", 80),

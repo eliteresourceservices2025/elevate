@@ -36,6 +36,10 @@ const typeInput = { name: "Visa", scope: "employee", requiresExpiry: true, requi
 const actionCases: { name: string; call: () => Promise<{ ok: boolean; error?: string }>; allowed: RoleSlug[] }[] = [
   { name: "requestUpload (company)", call: () => actions.requestUpload(companyUpload), allowed: HR },
   { name: "verifyDocument", call: () => actions.verifyDocument({ documentId: ID, verified: true }), allowed: HR },
+  { name: "renameDocument", call: () => actions.renameDocument({ documentId: ID, name: "New name" }), allowed: HR },
+  { name: "bulkUpdateDocuments (archive)", call: () => actions.bulkUpdateDocuments({ action: "archive", documentIds: [ID] }), allowed: HR },
+  { name: "bulkUpdateDocuments (restore)", call: () => actions.bulkUpdateDocuments({ action: "restore", documentIds: [ID] }), allowed: HR },
+  { name: "bulkUpdateDocuments (delete)", call: () => actions.bulkUpdateDocuments({ action: "delete", documentIds: [ID], reason: "Duplicate upload" }), allowed: HR },
   { name: "createDocumentType", call: () => actions.createDocumentType(typeInput), allowed: HR },
   { name: "updateDocumentType", call: () => actions.updateDocumentType({ ...typeInput, typeId: OTHER }), allowed: HR },
   { name: "archiveDocumentType", call: () => actions.archiveDocumentType({ typeId: OTHER }), allowed: HR },

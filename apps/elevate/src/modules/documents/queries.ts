@@ -263,14 +263,15 @@ export type AllFilesRow = DocumentRow & { employeeId: string; employeeName: stri
  * Every employee's documents in one list, for HR (and Super Admin): newest first, filtered by a search on the title, file name or
  * person and by type, paged here. Archived and still-pending uploads are left out, and so are people who have left.
  */
-export async function listAllEmployeeDocuments(opts: { q?: string; typeSlug?: string; page: number; pageSize: number }): Promise<{ rows: AllFilesRow[]; info: PageInfo; types: { slug: string; name: string }[] }> {
+export async function listAllEmployeeDocuments(opts: { q?: string; typeSlug?: string; archived?: boolean; page: number; pageSize: number }): Promise<{ rows: AllFilesRow[]; info: PageInfo; types: { slug: string; name: string }[] }> {
   const user = await requireUser();
   await authorize(user, "documents.view_overview");
   const today = todayInZone();
   const name = sql<string>`coalesce(nullif(btrim(e.preferred_name), ''), e.legal_first_name) || ' ' || e.legal_last_name`;
   const q = opts.q?.trim().slice(0, 80) ?? "";
   const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
-  const where = sql`d.status = 'active' and d.archived_at is null and d.employee_id is not null and e.archived_at is null and e.status <> 'separated'
+  // The archived view shows only archived files (so HR can restore or delete them); the normal view hides them.
+  const where = sql`d.status = 'active' and d.archived_at is ${opts.archived ? sql`not null` : sql`null`} and d.employee_id is not null and e.archived_at is null and e.status <> 'separated'
     ${opts.typeSlug ? sql`and t.slug = ${opts.typeSlug}` : sql``}
     ${q ? sql`and (d.title ilike ${like} or d.original_name ilike ${like} or ${name} ilike ${like})` : sql``}`;
   const [{ n }] = (await db.execute(sql`

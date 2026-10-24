@@ -18,4 +18,9 @@ export const documentsPermissions = definePermissions({
     roles: { super_admin: "all", hr_admin: "all", team_lead: "all", recruiter: "all", executive: "all", employee: "all" },
   },
   "documents.manage_company": { roles: { super_admin: "all", hr_admin: "all" } },
+  // HR housekeeping on any file: rename, bring back from the archive, delete for good, and act on many at once.
+  "documents.rename": { roles: { super_admin: "all", hr_admin: "all" } },
+  "documents.restore": { roles: { super_admin: "all", hr_admin: "all" } },
+  "documents.delete": { roles: { super_admin: "all", hr_admin: "all" } },
+  "documents.bulk": { roles: { super_admin: "all", hr_admin: "all" } },
 });
