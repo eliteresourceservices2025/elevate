@@ -684,3 +684,60 @@ describe("in-page preview", () => {
     expect(await rows(sql`select 1 from ops.audit_log where action = 'document.preview' and metadata->>'documentId' = ${idOf(empty)}`)).toHaveLength(0);
   });
 });
+
+describe("HR housekeeping: rename, restore, bulk archive and delete", () => {
+  const idOf2 = (r: Awaited<ReturnType<typeof upload>>) => (r.ticket.ok ? r.ticket.data.documentId : "");
+  const pathOf = async (id: string) => (await rows<{ storage_path: string }>(sql`select storage_path from docs.documents where id = ${id}`))[0].storage_path;
+
+  it("rename keeps the extension and the storage path; only HR can do it", async () => {
+    const p = await person("Ren");
+    const id = idOf2(await upload({ actor: hr, employeeId: p.id }));
+    const before = await pathOf(id);
+    as(p.user);
+    expect(await docs.renameDocument({ documentId: id, name: "Mine" })).toEqual({ ok: false, error: NO_ACCESS });
+    as(hr);
+    expect((await docs.renameDocument({ documentId: id, name: "../Passport scan.exe" })).ok).toBe(true);
+    const [d] = await rows<{ original_name: string }>(sql`select original_name from docs.documents where id = ${id}`);
+    expect(d.original_name).toBe("Passport scan.pdf");
+    expect(await pathOf(id)).toBe(before);
+  });
+
+  it("bulk archive, restore, then delete: archived only, row and file removed, reasons reported", async () => {
+    const p = await person("Bulk");
+    const a = idOf2(await upload({ actor: hr, employeeId: p.id }));
+    const b = idOf2(await upload({ actor: hr, employeeId: p.id }));
+    const pathA = await pathOf(a);
+    as(hr);
+
+    const early = await docs.bulkUpdateDocuments({ action: "delete", documentIds: [a], reason: "Duplicate upload" });
+    expect(early).toMatchObject({ ok: true, data: { done: 0, failed: [{ reason: "Archive it first, then delete it." }] } });
+
+    const arch = await docs.bulkUpdateDocuments({ action: "archive", documentIds: [a, b, a] });
+    expect(arch).toMatchObject({ ok: true, data: { requested: 2, done: 2 } });
+    expect((await docs.bulkUpdateDocuments({ action: "archive", documentIds: [a] }))).toMatchObject({ ok: true, data: { done: 0, failed: [{ reason: "Already archived." }] } });
+
+    expect((await docs.bulkUpdateDocuments({ action: "restore", documentIds: [b] }))).toMatchObject({ ok: true, data: { done: 1 } });
+
+    const del = await docs.bulkUpdateDocuments({ action: "delete", documentIds: [a, b], reason: "Duplicate upload" });
+    expect(del).toMatchObject({ ok: true, data: { requested: 2, done: 1, failed: [{ documentId: b, reason: "Archive it first, then delete it." }] } });
+    expect(await rows(sql`select 1 from docs.documents where id = ${a}`)).toHaveLength(0);
+    expect(await rows(sql`select 1 from docs.documents where id = ${b}`)).toHaveLength(1);
+    expect(fake.removed.some((k) => k.includes(pathA))).toBe(true);
+    const audit = await rows<{ action: string }>(sql`select action from ops.audit_log where action like 'document.bulk_%' and metadata->'documentIds' ? ${a} order by id`);
+    expect(audit.map((x) => x.action)).toEqual(["document.bulk_delete", "document.bulk_archive", "document.bulk_archive", "document.bulk_delete"]);
+
+    as(p.user);
+    expect(await docs.bulkUpdateDocuments({ action: "archive", documentIds: [b] })).toEqual({ ok: false, error: NO_ACCESS });
+  });
+
+  it("delete refuses a file the system filed", async () => {
+    const p = await person("Filed");
+    const id = idOf2(await upload({ actor: hr, employeeId: p.id }));
+    await db.execute(sql`insert into docs.system_documents (source_kind, source_id, employee_id, document_id) values ('learn_certificate', ${randomUUID()}, ${p.id}, ${id})`);
+    as(hr);
+    await docs.bulkUpdateDocuments({ action: "archive", documentIds: [id] });
+    const r = await docs.bulkUpdateDocuments({ action: "delete", documentIds: [id], reason: "Cleanup" });
+    expect(r).toMatchObject({ ok: true, data: { done: 0, failed: [{ reason: expect.stringMatching(/system filed/) }] } });
+    expect(await rows(sql`select 1 from docs.documents where id = ${id}`)).toHaveLength(1);
+  });
+});
