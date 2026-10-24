@@ -3,6 +3,7 @@
 // The subtitles are burned into the picture (they cannot be switched off or lost), so there is no separate subtitle track to offer.
 // Every video is optional: reading the module stays the required part. The three worked mock calls (cs-11 to cs-13) are NOT here on
 // purpose: they show model answers close to the graded mock call, so they stay out of the learner's course.
+import welcomes from "../welcome-videos.json";
 import videos from "./videos.json";
 
 export type CourseVideo = { id: string; title: string; seconds: number; transcript: string[] };
@@ -41,4 +42,13 @@ function view(id: string): VideoView {
 
 export const videosForModule = (course: string, moduleKey: string): VideoView[] => (course === COURSE ? (MODULE_VIDEOS[moduleKey] ?? []).map(view) : []);
 export const demoVideos = (course: string): VideoView[] => (course === COURSE ? DEMO_VIDEOS.map(view) : []);
-export const welcomeVideo = (course: string): VideoView | null => (course === COURSE ? { ...view(WELCOME_VIDEO), label: "Welcome to the course" } : null);
+/**
+ * The welcome video on the course page. Customer Service has its own among its lesson videos; HIPAA and Cybersecurity have one each in
+ * ../welcome-videos.json (tools/recap-video/customer-service/export-welcome-to-learn.cjs), served as <course>-00-welcome.mp4.
+ */
+const WELCOMES = welcomes as Record<string, CourseVideo>;
+export const welcomeVideo = (course: string): VideoView | null => {
+  if (course === COURSE) return { ...view(WELCOME_VIDEO), label: "Welcome to the course" };
+  const v = Object.hasOwn(WELCOMES, course) ? WELCOMES[course] : null;
+  return v ? { label: "Welcome to the course", file: `/api/recaps/${v.id}.mp4`, seconds: v.seconds, transcript: v.transcript } : null;
+};

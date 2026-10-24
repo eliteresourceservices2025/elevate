@@ -54,7 +54,8 @@ describe("the Customer Service lesson videos", () => {
     expect(demoVideos("hipaa")).toEqual([]);
     expect(videosForModule("hipaa", "listening")).toEqual([]);
     expect(welcomeVideo("customer-service")?.label).toBe("Welcome to the course");
-    expect(welcomeVideo("hipaa")).toBeNull();
+    expect(welcomeVideo("no_such_course")).toBeNull();
+    expect(welcomeVideo("constructor")).toBeNull();
   });
 
   it("renders a titled, optional, download-free player with its transcript", () => {
@@ -64,6 +65,24 @@ describe("the Customer Service lesson videos", () => {
     expect(html).not.toContain("<track"); // a second set of subtitles would double the burned-in ones
     expect(html).toContain("Read the video as text");
     expect(html).toContain("This video is optional");
+    expect(html).toContain("<dialog"); // opens in a pop-up, not an open drop-down
     expect(html).not.toMatch(/autoplay/i);
+  });
+
+  it("has a welcome video with a transcript for the HIPAA and Cybersecurity courses, in the private folder", () => {
+    for (const course of ["hipaa", "cybersecurity"]) {
+      const w = welcomeVideo(course);
+      expect(w?.label, course).toBe("Welcome to the course");
+      expect(w?.file, course).toBe(`/api/recaps/${course}-00-welcome.mp4`);
+      expect(w?.seconds, course).toBeGreaterThan(50);
+      expect(w?.seconds, course).toBeLessThan(80);
+      expect(w?.transcript.length, course).toBeGreaterThan(5);
+      for (const t of w?.transcript ?? []) expect(t).not.toMatch(/[<>]|https?:\/\//);
+      const mp4 = media(`${course}-00-welcome.mp4`);
+      expect(existsSync(mp4), course).toBe(true);
+      expect(statSync(mp4).size, course).toBeGreaterThan(200_000);
+      expect(statSync(mp4).size, course).toBeLessThan(6_000_000);
+      expect(existsSync(resolve(__dirname, "../../../public/recaps", `${course}-00-welcome.mp4`)), course).toBe(false);
+    }
   });
 });

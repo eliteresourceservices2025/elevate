@@ -83,8 +83,11 @@ export function ModulePlayer(props: {
     };
     const events = ["pointermove", "pointerdown", "keydown", "scroll", "touchstart"] as const;
     for (const e of events) window.addEventListener(e, bump, { passive: true });
+    // watching a video is activity too: media events do not bubble, so listen in the capture phase
+    window.addEventListener("timeupdate", bump, true);
     return () => {
       for (const e of events) window.removeEventListener(e, bump);
+      window.removeEventListener("timeupdate", bump, true);
     };
   }, []);
 

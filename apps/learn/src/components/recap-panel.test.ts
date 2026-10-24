@@ -8,9 +8,9 @@ describe("the recap panel", () => {
   const r = findRecap("hipaa", "associates")!;
   const html = renderToStaticMarkup(createElement(RecapPanel, { recap: { file: recapFile(r), seconds: recapSeconds(r), transcript: recapTranscript(r) }, title: "Business associates" }));
 
-  it("is optional and collapsed: a details element, with a video that is not loaded until played and does not autoplay", () => {
-    expect(html).toContain("<details");
-    expect(html).toContain("Optional: watch a");
+  it("is optional and opens in a pop-up (a dialog), with a video that is not loaded until played and does not autoplay", () => {
+    expect(html).toContain("<dialog");
+    expect(html).toContain("Watch the");
     expect(html).toContain('preload="none"');
     expect(html).not.toMatch(/autoplay/i);
     expect(html).toContain('src="/api/recaps/hipaa-associates.mp4"');

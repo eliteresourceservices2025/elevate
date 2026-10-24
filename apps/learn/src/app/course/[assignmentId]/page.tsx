@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { RecapPanel, VideoGroup } from "@/components/recap-panel";
+import { VideoButton, VideoGroup } from "@/components/recap-panel";
 import { demoVideos, welcomeVideo } from "@/content/customer-service/videos";
 import { CallCard } from "@/components/call-card";
 import { ModuleCard } from "@/components/module-card";
@@ -20,6 +20,7 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
   const doneCount = modules.filter((m) => m.completed).length;
   const finished = assignment.status === "passed";
   const next = modules.find((m) => !m.completed && !m.locked);
+  const welcome = welcomeVideo(assignment.courseSlug);
 
   return (
     <>
@@ -32,6 +33,13 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
             <h1>{assignment.isUpdate ? `${assignment.courseTitle}: update` : assignment.courseTitle}</h1>
             {assignment.isUpdate ? <p>Some lessons changed since you were certified. Read the ones below, then answer a few questions. Your certificate stays valid.</p> : null}
             <p className="muted">Due {assignment.dueOn}</p>
+            {welcome ? (
+              <div className="video-bar">
+                <VideoButton recap={welcome} title={assignment.courseTitle} className="video-btn video-btn-primary">
+                  Watch welcome video
+                </VideoButton>
+              </div>
+            ) : null}
           </div>
           <div className="course-progress" role="group" aria-label="Your progress">
             <span className="muted small">
@@ -42,8 +50,6 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
             </div>
           </div>
         </div>
-
-        {welcomeVideo(assignment.courseSlug) ? <RecapPanel recap={welcomeVideo(assignment.courseSlug)!} title={assignment.courseTitle} /> : null}
 
         <ol className="mod-grid" aria-label="Modules">
           {modules.map((m, i) => (
