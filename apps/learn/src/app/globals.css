@@ -272,3 +272,12 @@ a.mod-link:focus-visible { outline: 3px solid var(--ring); outline-offset: -3px;
 .mod-go { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 700; color: var(--primary); }
 .mod-card:has(a.mod-link:hover) .mod-go svg { transform: translateX(3px); }
 .mod-go svg { transition: transform 0.15s ease; }
+/* the home page: course cards and shortcuts use the module picture cards, two to a row */
+.mod-grid.home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 1rem; }
+@media (max-width: 40rem) { .mod-grid.home-grid { grid-template-columns: minmax(0, 1fr); } }
+.home-more { font-size: 1.15rem; margin: 1.75rem 0 0; }
+.mod-btn { background: var(--primary); color: var(--primary-foreground); padding: 0.4rem 0.8rem; border-radius: 999px; }
+.mod-btn svg { flex: none; }
+.mod-card:has(a.mod-link:hover) .mod-btn { filter: brightness(1.12); }
+.home-signout { margin: 0.5rem 0 2rem; }
+.signout-btn { display: inline-flex; align-items: center; gap: 0.45rem; }
