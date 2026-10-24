@@ -114,7 +114,7 @@ port = 54324
 [storage]
 enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "50MiB"
+file_size_limit = "100MiB"
 
 # Private document buckets (also created by `pnpm storage:setup`, which works on hosted projects too).
 [storage.buckets.employee-docs]
@@ -126,6 +126,11 @@ allowed_mime_types = ["application/pdf", "image/jpeg", "image/png", "application
 public = false
 file_size_limit = "10MiB"
 allowed_mime_types = ["application/pdf", "image/jpeg", "image/png", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+
+[storage.buckets.announcement-videos]
+public = false
+file_size_limit = "100MiB"
+allowed_mime_types = ["video/mp4", "video/webm"]
 
 # Uncomment to configure more local storage buckets
 # [storage.buckets.images]

@@ -1,0 +1,2 @@
+ALTER TABLE "docs"."content_files" DROP CONSTRAINT "content_files_kind_chk";--> statement-breakpoint
+ALTER TABLE "docs"."content_files" ADD CONSTRAINT "content_files_kind_chk" CHECK ("docs"."content_files"."kind" in ('image','file','video'));

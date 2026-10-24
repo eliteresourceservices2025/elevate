@@ -3,6 +3,19 @@ import type { ContentFileView } from "../content-files";
 
 const sizeText = (bytes: number) => (bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`);
 
+/** The video of an announcement, played above its text from our own signed-in route (which redirects to a short-lived link). */
+export function ContentVideo({ files }: { files: ContentFileView[] }) {
+  const video = files.find((f) => f.kind === "video");
+  if (!video) return null;
+  return (
+    <figure className="mb-4">
+      <video controls preload="metadata" playsInline className="aspect-video w-full rounded-lg border bg-black" aria-label={`Video: ${video.fileName}`} src={`/api/content/files/${video.id}`}>
+        Your browser cannot play this video.
+      </video>
+    </figure>
+  );
+}
+
 /** The documents attached to an announcement or policy version, as downloads. (Pictures show inside the text.) */
 export function ContentFileList({ files }: { files: ContentFileView[] }) {
   const documents = files.filter((f) => f.kind === "file");

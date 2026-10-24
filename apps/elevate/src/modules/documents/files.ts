@@ -80,6 +80,36 @@ export function sniffFileKind(bytes: Uint8Array): FileKind | null {
   return null;
 }
 
+// --- Announcement videos -----------------------------------------------------------
+// Videos are not vault files: they have their own bucket, a larger limit, and are judged by their first bytes only
+// (they go straight from the browser to storage and are never read into the app whole).
+
+export const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
+export const VIDEO_HEAD_BYTES = 64;
+export const VIDEO_TYPES = {
+  mp4: { mime: "video/mp4", extension: "mp4" },
+  webm: { mime: "video/webm", extension: "webm" },
+} as const;
+export type VideoKind = keyof typeof VIDEO_TYPES;
+export const VIDEO_MIME_TYPES: string[] = Object.values(VIDEO_TYPES).map((t) => t.mime);
+
+export function videoKindFromMime(mime: string): VideoKind | null {
+  const m = mime.toLowerCase();
+  return m === VIDEO_TYPES.mp4.mime ? "mp4" : m === VIDEO_TYPES.webm.mime ? "webm" : null;
+}
+
+// Major brands of ordinary MP4 files. Others (HEIC, 3GP, QuickTime, ...) are refused.
+const MP4_BRANDS = new Set(["isom", "iso2", "iso4", "iso5", "iso6", "mp41", "mp42", "avc1", "dash", "M4V "]);
+
+/** MP4 (an `ftyp` box with an ordinary brand) or WebM (EBML header with doctype "webm"), judged by the first bytes only. */
+export function sniffVideoKind(head: Uint8Array): VideoKind | null {
+  if (head.length < 12) return null;
+  const text = (from: number, to: number) => String.fromCharCode(...Array.from(head.subarray(from, to)));
+  if (text(4, 8) === "ftyp") return MP4_BRANDS.has(text(8, 12)) ? "mp4" : null;
+  if (startsWith(head, [0x1a, 0x45, 0xdf, 0xa3])) return text(0, Math.min(head.length, VIDEO_HEAD_BYTES)).includes("webm") ? "webm" : null;
+  return null;
+}
+
 /** A safe name to show and to put in Content-Disposition: no path, no control characters, bounded. */
 export function sanitizeFileName(name: string, kind: FileKind): string {
   const base = name.split(/[\\/]/).pop() ?? "";

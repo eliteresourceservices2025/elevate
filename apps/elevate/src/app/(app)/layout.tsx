@@ -13,6 +13,7 @@ import { AckBanner } from "@/modules/announcements/components/ack-display";
 import { listMyPending } from "@/modules/announcements/queries";
 import { listMyPopups } from "@/modules/announcements/popup-queries";
 import type { PopupItem } from "@/modules/announcements/components/popup-queue";
+import { ContentVideo } from "@/modules/announcements/components/content-file-list";
 import { dueState } from "@/modules/announcements/due";
 import { todayInZone } from "@/modules/org/service";
 import { getClockStatus } from "@/modules/attendance/queries";
@@ -56,7 +57,12 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       dueText: p.requiresAck && p.dueOn ? (due === "overdue" ? `was due ${p.dueOn}` : `due ${p.dueOn}`) : null,
       version: p.version,
       link: p.link,
-      content: <Markdown source={p.body} />,
+      content: (
+        <>
+          {p.videoId ? <ContentVideo files={[{ id: p.videoId, kind: "video", fileName: p.title, sizeBytes: 0 }]} /> : null}
+          <Markdown source={p.body} />
+        </>
+      ),
     };
   });
 

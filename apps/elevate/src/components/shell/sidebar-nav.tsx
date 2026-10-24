@@ -7,6 +7,7 @@ import { ShieldQuestion } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { NAV_GROUPS } from "@/lib/nav";
+import { APP_VERSION } from "@/lib/releases";
 
 // The longest matching link wins, so "/people/me" does not also light up "/people".
 function activeHref(pathname: string) {
@@ -94,6 +95,11 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
           </div>
         ))}
       </nav>
+      {collapsed ? null : (
+        <Link href="/whats-new" onClick={onNavigate} className="shrink-0 px-5 py-3 text-xs text-sidebar-foreground/80 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-sidebar-ring">
+          ELEVATE {APP_VERSION}
+        </Link>
+      )}
     </div>
   );
 }
