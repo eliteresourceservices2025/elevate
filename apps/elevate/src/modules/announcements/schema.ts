@@ -134,7 +134,11 @@ export const contentFiles = docs
       ownerId: uuid("owner_id").notNull(),
       announcementId: uuid("announcement_id").references(() => announcements.id),
       policyVersionId: uuid("policy_version_id").references(() => policyVersions.id),
-      /** image = a picture shown in the text; file = a PDF or Word document to download. */
+      /**
+       * image = a picture shown in the text; file = a PDF or Word document to download; video = an MP4/WebM played above the text
+       * (announcements only, one each, own bucket). A video row is inserted when the upload is requested with sha256 = '' and is
+       * only usable once finalized (sha256 then holds the hash of its first 64 bytes, as the file itself is never read whole).
+       */
       kind: text("kind").notNull(),
       fileName: text("file_name").notNull(),
       mimeType: text("mime_type").notNull(),
@@ -148,7 +152,7 @@ export const contentFiles = docs
       index("content_files_version_idx").on(t.policyVersionId),
       index("content_files_pending_idx").on(t.ownerId, t.createdAt),
       index("content_files_path_idx").on(t.storagePath),
-      check("content_files_kind_chk", sql`${t.kind} in ('image','file')`),
+      check("content_files_kind_chk", sql`${t.kind} in ('image','file','video')`),
       check("content_files_one_parent_chk", sql`${t.announcementId} is null or ${t.policyVersionId} is null`),
     ],
   )

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALLOWED_MIME_TYPES, FILE_TYPES, canPreview, formatBytes, kindFromMime, sanitizeFileName, sniffFileKind, titleFromFileName } from "./files";
+import { ALLOWED_MIME_TYPES, FILE_TYPES, canPreview, formatBytes, kindFromMime, sanitizeFileName, sniffFileKind, sniffVideoKind, titleFromFileName, videoKindFromMime } from "./files";
 
 const bytes = (...b: number[]) => new Uint8Array([...b, 0, 0, 0, 0, 0, 0, 0, 0]);
 const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0));
@@ -105,5 +105,26 @@ describe("canPreview", () => {
     expect(canPreview(null, "scan.JPEG")).toBe(true);
     expect(canPreview(null, "notes.doc")).toBe(false);
     expect(canPreview(null, "noextension")).toBe(false);
+  });
+});
+
+describe("sniffVideoKind (first bytes only)", () => {
+  const mp4 = (brand: string) => new Uint8Array([0, 0, 0, 0x18, ...ascii("ftyp"), ...ascii(brand), 0, 0, 2, 0]);
+  it("accepts an MP4 with an ordinary brand and a WebM with the webm doctype", () => {
+    expect(sniffVideoKind(mp4("isom"))).toBe("mp4");
+    expect(sniffVideoKind(mp4("mp42"))).toBe("mp4");
+    expect(sniffVideoKind(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 1, 0x42, 0x82, 0x84, ...ascii("webm"), 0, 0]))).toBe("webm");
+  });
+  it("refuses other containers, Matroska and files that only claim to be video", () => {
+    expect(sniffVideoKind(mp4("heic"))).toBeNull();
+    expect(sniffVideoKind(mp4("qt  "))).toBeNull();
+    expect(sniffVideoKind(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 1, 0x42, 0x82, 0x88, ...ascii("matroska")]))).toBeNull();
+    expect(sniffVideoKind(new Uint8Array([...ascii("%PDF-1.7\n"), 1, 2, 3, 4]))).toBeNull();
+    expect(sniffVideoKind(new Uint8Array([0, 1, 2]))).toBeNull();
+  });
+  it("maps only the two allowed types from a declared MIME type", () => {
+    expect(videoKindFromMime("video/mp4")).toBe("mp4");
+    expect(videoKindFromMime("VIDEO/WEBM")).toBe("webm");
+    expect(videoKindFromMime("video/quicktime")).toBeNull();
   });
 });

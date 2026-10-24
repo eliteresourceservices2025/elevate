@@ -708,6 +708,13 @@
       "when": 1792797158328,
       "tag": "0100_learn_core_courses_out_of_studio",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1792838303274,
+      "tag": "0101_overjoyed_blackheart",
+      "breakpoints": true
     }
   ]
 }

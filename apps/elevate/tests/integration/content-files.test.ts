@@ -113,7 +113,7 @@ describe("announcements with pictures and files", () => {
 
     // Bound now: the addressed team opens them, an outsider does not, HR does
     expect((await content.openContentFile(inTeam as never, photo.id))?.kind).toBe("image");
-    expect((await content.openContentFile(inTeam as never, doc.id))?.fileName).toBe("Schedule.pdf");
+    expect(((await content.openContentFile(inTeam as never, doc.id)) as { fileName: string } | null)?.fileName).toBe("Schedule.pdf");
     expect(await content.openContentFile(outside as never, photo.id)).toBeNull();
     expect(await content.openContentFile(hr as never, doc.id)).not.toBeNull();
 

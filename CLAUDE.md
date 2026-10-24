@@ -106,6 +106,7 @@ Announcements, versioned policies, email queue, privacy notice gate, My data.
 - Policy and announcement versions are frozen by triggers; acknowledgments are insert-only.
 - All email goes through `ops.email_queue` under the daily budget; bodies carry counts and a link only.
 - Markdown is rendered to React elements, never an HTML string; every Markdown box is `MarkdownField`.
+- An announcement can carry one MP4/WebM video (100 MB, own bucket `announcement-videos`, direct browser upload, first-bytes check, played through a signed redirect); never a video on a policy. Run `pnpm storage:setup` on every environment, and a hosted project's file size cap must be at least 100 MB.
 - Publishing the privacy notice is permanent and gates everyone; never publish one against a shared dev database.
 
 ### Time off — `docs/modules/time-off.md`
