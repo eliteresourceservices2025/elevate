@@ -366,3 +366,9 @@ a.mod-link:focus-visible { outline: 3px solid var(--ring); outline-offset: -3px;
 .signout-btn { display: inline-flex; align-items: center; gap: 0.45rem; }
 @media (max-width: 40rem) { header.site > div { gap: 0.4rem; padding: 0.5rem 0.6rem; } header.site strong { font-size: 1rem; white-space: nowrap; } .topnav { gap: 0; } .topright { gap: 0.3rem; } }
 @media (max-width: 26rem) { .brand strong { display: none; } }
+/* Chips that sit on a white card (not on a picture) need their own tint, or the white chip vanishes and looks like unpadded text */
+.mod-chip.inline { box-shadow: none; border: 1px solid transparent; padding: 0.25rem 0.7rem; }
+.mod-chip.inline.progress { background: color-mix(in srgb, var(--primary) 12%, var(--card)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 35%, var(--card)); }
+.mod-chip.inline.new { background: var(--secondary); color: var(--foreground); border-color: var(--border); }
+.mod-chip.inline.done { border-color: color-mix(in srgb, var(--accent) 70%, #000 10%); }
+.mod-chip.inline.locked { background: rgb(31 21 53 / 0.85); color: #fff; }
