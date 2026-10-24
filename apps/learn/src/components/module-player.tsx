@@ -30,8 +30,11 @@ export function ModulePlayer(props: {
   recap?: RecapView | null;
   /** Lesson videos for this module (the Customer Service course), each optional. */
   videos?: RecapView[];
+  /** A finished course being read again: nothing is sent to the server (no screens, no time) and Next does not wait for answers. */
+  review?: boolean;
 }) {
   const { assignmentId, module, minSeconds } = props;
+  const review = Boolean(props.review);
   const router = useRouter();
   // The slides shown, and where each one sits in the whole module (the server counts screens by their place in the module).
   const screenCount = module.screens.length;
@@ -43,10 +46,10 @@ export function ModulePlayer(props: {
   const shown = real.map((i) => module.screens[i]);
   const total = shown.length;
   // Start at the first slide not yet seen (or the last one when everything was seen).
-  const firstUnseen = real.findIndex((r) => !props.seenScreens.includes(r)) === -1 ? total - 1 : real.findIndex((r) => !props.seenScreens.includes(r));
+  const firstUnseen = review ? 0 : real.findIndex((r) => !props.seenScreens.includes(r)) === -1 ? total - 1 : real.findIndex((r) => !props.seenScreens.includes(r));
   const [index, setIndex] = useState(firstUnseen);
   // the furthest slide reached, so the step journey lets the person jump back to any slide up to here
-  const [reached, setReached] = useState(Math.max(firstUnseen, ...real.map((r, i) => (props.seenScreens.includes(r) ? i : 0))));
+  const [reached, setReached] = useState(review ? total - 1 : Math.max(firstUnseen, ...real.map((r, i) => (props.seenScreens.includes(r) ? i : 0))));
   if (index > reached) setReached(index);
   const [seconds, setSeconds] = useState(props.seconds);
   const [message, setMessage] = useState<string | null>(null);
@@ -59,7 +62,7 @@ export function ModulePlayer(props: {
   // Mark a screen as seen on the server the first time it is shown.
   const open = useCallback(
     async (i: number) => {
-      if (seen.current.has(i)) return;
+      if (review || seen.current.has(i)) return;
       seen.current.add(i);
       const r = await post("screen", { assignmentId, moduleKey: module.key, screen: i });
       if (!r.ok) {
@@ -67,7 +70,7 @@ export function ModulePlayer(props: {
         setMessage(r.error ?? "Something went wrong.");
       }
     },
-    [assignmentId, module.key],
+    [assignmentId, module.key, review],
   );
 
   useEffect(() => {
@@ -90,7 +93,7 @@ export function ModulePlayer(props: {
 
   // The heartbeat and the idle check.
   useEffect(() => {
-    if (props.completed) return;
+    if (props.completed || review) return;
     const timer = window.setInterval(async () => {
       if (document.visibilityState !== "visible" || idleRef.current) return;
       if (Date.now() - lastInput.current > ACTIVITY_PROMPT_SECONDS * 1000) {
@@ -103,7 +106,7 @@ export function ModulePlayer(props: {
       else if (r.code === "signed_out") setMessage(r.error ?? null);
     }, HEARTBEAT_SECONDS * 1000);
     return () => window.clearInterval(timer);
-  }, [assignmentId, module.key, props.completed]);
+  }, [assignmentId, module.key, props.completed, review]);
 
   const stillHere = () => {
     idleRef.current = false;
@@ -132,7 +135,7 @@ export function ModulePlayer(props: {
     setMessage(r.error ?? "Please try again.");
   };
 
-  const finalAction = props.completed ? (
+  const finalAction = props.completed || review ? (
     <Link className="button stage-btn" href={props.nextModule ? `/course/${assignmentId}/${props.nextModule.key}` : `/course/${assignmentId}`}>
       {props.nextModule ? "Next module" : "Back to the course"} <ChevronRight size={18} aria-hidden="true" />
     </Link>
@@ -153,6 +156,7 @@ export function ModulePlayer(props: {
         backHref={`/course/${assignmentId}`}
         finalAction={finalAction}
         keyPoints={module.keyPoints}
+        gated={!review}
         topExtra={
           props.recap || props.videos?.length ? (
             <>
@@ -163,7 +167,8 @@ export function ModulePlayer(props: {
         }
         notes={
           <>
-            {!props.completed ? (
+            {review ? <p className="muted">You are reading a finished module again. Nothing here is recorded and nothing is marked as done.</p> : null}
+            {!props.completed && !review ? (
               <p className="muted" role="status" aria-live="polite">
                 {enough ? "You have spent enough time on this module." : `Reading time: ${clock(seconds)} of ${clock(minSeconds)} needed. Take your time: about ${Math.ceil(remaining / 60)} more minute${Math.ceil(remaining / 60) === 1 ? "" : "s"}.`}
               </p>

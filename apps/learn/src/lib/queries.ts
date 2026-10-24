@@ -262,15 +262,22 @@ export type ModuleView = {
   seconds: number;
   minSeconds: number;
   completed: boolean;
+  /** True when a PASSED course is read again: the player records nothing (no screens, no time) and does not wait for answers. */
+  review: boolean;
   nextModule: { key: string; title: string } | null;
 };
 
-/** One module for the player, or null when it does not exist, is not on the person's track or is still locked. */
+/**
+ * One module for the player, or null when it does not exist, is not on the person's track or is still locked. A passed course can be
+ * read again (review): every module is open, and nothing about the visit is recorded.
+ */
 export async function getModuleView(sql: Sql, userId: string, assignmentId: string, key: string): Promise<ModuleView | null> {
   const overview = await getOverview(sql, userId, assignmentId);
-  if (!overview || !["assigned", "in_progress"].includes(overview.assignment.status)) return null;
+  if (!overview) return null;
+  const review = overview.assignment.status === "passed";
+  if (!review && !["assigned", "in_progress"].includes(overview.assignment.status)) return null;
   const index = overview.modules.findIndex((m) => m.key === key);
-  if (index < 0 || overview.modules[index].locked) return null;
+  if (index < 0 || (overview.modules[index].locked && !review)) return null;
   const state = overview.modules[index];
   return withUser(sql, userId, async (tx) => {
     const [a] = await tx`select v.content, v.version, c.slug from learn.assignments a join learn.course_versions v on v.id = a.version_id join learn.courses c on c.id = a.course_id where a.id = ${assignmentId}`;
@@ -290,6 +297,7 @@ export async function getModuleView(sql: Sql, userId: string, assignmentId: stri
       seconds: state.seconds,
       minSeconds: state.minSeconds,
       completed: state.completed,
+      review,
       nextModule: next ? { key: next.key, title: next.title } : null,
     } satisfies ModuleView;
   });

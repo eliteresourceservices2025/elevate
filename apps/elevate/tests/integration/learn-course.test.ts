@@ -270,6 +270,12 @@ describe("a learner going through the course", () => {
     const certified = await getOverview(app, p.id, assignmentId);
     expect(certified!.certificate).toMatchObject({ reference, holderName: "Lia Santos", revoked: false });
 
+    // A passed course can be read again (review): every module opens, and the player is told to record nothing.
+    const again = await getModuleView(app, p.id, assignmentId, "phi");
+    expect(again).not.toBeNull();
+    expect(again!.review).toBe(true);
+    expect(await getModuleView(app, p.id, assignmentId, "no_such_module")).toBeNull();
+
     // The person's own record: this assignment with its certificate, score and time; nobody else's rows.
     const record = await getRecord(app, p.id);
     const mine = record.find((r) => r.assignmentId === assignmentId)!;
