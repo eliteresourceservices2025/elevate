@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Source_Sans_3 } from "next/font/google";
+import { cookies } from "next/headers";
+import { SiteHeader } from "@/components/site-header";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { cookieName } from "@/lib/cookie";
 import "./globals.css";
 
 // The same three fonts as ELEVATE (Inter for text, Source Sans 3 for headings, JetBrains Mono for code). next/font downloads them
@@ -16,17 +18,14 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // only whether a session cookie is there, to show the menu and Sign out; each page still checks the session itself
+  const signedIn = Boolean((await cookies()).get(cookieName(process.env.NODE_ENV === "production"))?.value);
   return (
     <html lang="en" suppressHydrationWarning className={`${body.variable} ${head.variable} ${code.variable}`}>
       <body>
         <ThemeProvider>
-          <header className="site">
-            <div>
-              <strong>ELEVATE Learn</strong>
-              <ThemeToggle />
-            </div>
-          </header>
+          <SiteHeader signedIn={signedIn} />
           <main>{children}</main>
         </ThemeProvider>
       </body>
