@@ -54,3 +54,17 @@ version 2 in the same file.
 - The update flow (screens recorded, finishing, the 5-question exam, acceptance) is covered by database tests but was not walked through in a browser
   with a real old-version certificate holder (a local app without Upstash refuses player calls). The owner's production check in step 4 covers it.
 - The Customer Service voices were made on a CPU-only computer; someone should listen to a sample before go-live (`14-mock-call.md`).
+
+## Moving people who are partway through an older version
+
+By default a person finishes the version they started, and the short update brings them up to date after. To put everyone on the latest lessons at once
+(decided 2026-10-24 for HIPAA and Cybersecurity), run, in the PowerShell window with the production string set, **a dry run first**:
+
+```
+pnpm learn:upgrade --course hipaa
+pnpm learn:upgrade --course cybersecurity
+```
+
+It prints the database host, then each unfinished assignment on an older version with how many modules the person had finished. Check it, then add `--apply`:
+the old assignment is ended (kept as history) and the person gets the latest version with the **same due date and track**; their progress on the old one is
+not carried over, because the screens differ between versions. Each person gets a notification, and the audit log records only the counts.
