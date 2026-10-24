@@ -73,7 +73,7 @@ runs against them.
 
 Follow `docs/DEPLOY.md`, Part 5b, steps 2 to 5 (that part is the authoritative list; the short version):
 
-1. Vercel > Add New > Project > import the same repository. Name `elevate-learn`. **Root Directory `apps/learn`**, Node 24.x.
+1. Vercel > Add New > Project > import the same repository. Name `elevate-learn`. **Root Directory `apps/learn`**, Node 24.x (24.22.1 or newer).
 2. Environment variables, Production, set **before** the first deploy:
    - `LEARN_DATABASE_URL` (Sensitive): from step 2;
    - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (Sensitive): the same values as ELEVATE;

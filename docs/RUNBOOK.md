@@ -233,6 +233,13 @@ Assets hold no prices or values. Item notes are for HR only: never put passwords
 - A failed deploy is rolled back from the host's dashboard, and the Health tab confirms jobs are running again.
 - The host's own scheduler calls `/api/cron/backstop` every 15 minutes (needs `CRON_SECRET`). If the job service (Inngest) is down, this still sends waiting Jibble calls, repairs Jibble and sends the health alert.
 
+### Security patching (Node.js)
+
+- Node publishes security releases on nodejs.org/en/blog/vulnerability. When one lands, a developer checks it the same week.
+- The minimum patched version lives in `.nvmrc`, `.node-version` and `engines.node` in the root `package.json`. CI fails below it. Raise all three together.
+- Roll out in this order: the developer's computer, then CI (reads `.nvmrc`), then the Vercel projects `elevate`, `safe-voice` and `learn` (Settings > Node.js Version = 24.x, then redeploy and read the Node version in the build log).
+- Oct 2026: Node 24.22.1 fixed a Brotli remote code execution flaw (CVE-2026-111497) and TLS hostname bypasses.
+
 ## 7. Data safety
 
 - Clock events, corrections and approvals cannot be edited or deleted, even by the developer with database access (a database rule refuses).

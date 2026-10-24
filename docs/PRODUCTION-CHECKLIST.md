@@ -48,7 +48,7 @@ Rules that never change: keys and passwords only in a password manager and in Ve
 
 **Plan and projects**
 - [ ] Both projects (ELEVATE and Safe Voice) are under the **Pro team**, not an old personal Hobby space. Billing shows Pro with the seats you need; set a spend limit.
-- [ ] Root directories `apps/elevate` and `apps/safe-voice`, Node 24.x on both.
+- [ ] Root directories `apps/elevate` and `apps/safe-voice`, Node 24.x (24.22.1 or newer) on both.
 - [ ] **Function region is Singapore (sin1)** in both (set by `vercel.json`; confirm under Settings > Functions). Do not remove it: it is the difference between a 2-second and a 10-second dashboard.
 - [ ] **Cron**: Settings > Cron Jobs lists `/api/cron/backstop` every 15 minutes (this repo's `vercel.json` now does that on Pro), and `CRON_SECRET` is set (16+ characters).
 

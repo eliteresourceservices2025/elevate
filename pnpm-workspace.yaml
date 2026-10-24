@@ -7,3 +7,22 @@ allowBuilds:
   unrs-resolver: false
   esbuild: true
   protobufjs: false
+
+minimumReleaseAgeExclude:
+  - '@next/env@16.4.3'
+  - '@next/swc-darwin-arm64@16.4.3'
+  - '@next/swc-darwin-x64@16.4.3'
+  - '@next/swc-linux-arm64-gnu@16.4.3'
+  - '@next/swc-linux-arm64-musl@16.4.3'
+  - '@next/swc-linux-x64-gnu@16.4.3'
+  - '@next/swc-linux-x64-musl@16.4.3'
+  - '@next/swc-win32-arm64-msvc@16.4.3'
+  - '@next/swc-win32-x64-msvc@16.4.3'
+  - next@16.4.3
+  - '@next/eslint-plugin-next@16.4.3'
+  - eslint-config-next@16.4.3
+
+overrides:
+  # Security: patched versions of build/dev-time transitive packages (pnpm audit, Oct 2026)
+  source-map-js: ">=1.2.2"
+  body-parser: ">=2.4.0"

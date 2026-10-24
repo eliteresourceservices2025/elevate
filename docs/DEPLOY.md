@@ -109,7 +109,7 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"        
 ## Part 5. Vercel project 2: Safe Voice
 
 1. Add New > Project > import the **same** repository again.
-2. **Root Directory:** `apps/safe-voice`. Node 24.x.
+2. **Root Directory:** `apps/safe-voice`. Node 24.x (24.22.1 or newer).
 3. Environment variables (Production), all Sensitive:
    - `SAFEVOICE_DATABASE_URL`: the `safevoice_app` string;
    - `SAFEVOICE_PEPPER`: the pepper (never change it);
@@ -131,7 +131,7 @@ Do this **after** migration 0054 is applied to the production database (the `lea
 
    Build the connection string from the transaction pooler string (port 6543), replacing the user name with `learn_app.<project-ref>` and the password with the one above. This is `LEARN_DATABASE_URL`.
 2. **Vercel:** Add New > Project > import the **same** repository again. Name it `elevate-learn`.
-3. **Root Directory:** `apps/learn`. Framework: Next.js (detected). Node 24.x. Leave "Include source files outside of the Root Directory" on. `apps/learn/vercel.json` already pins the Singapore region.
+3. **Root Directory:** `apps/learn`. Framework: Next.js (detected). Node 24.x (24.22.1 or newer). Leave "Include source files outside of the Root Directory" on. `apps/learn/vercel.json` already pins the Singapore region.
 4. **Environment variables** (Production; mark the first two Sensitive). `NEXT_PUBLIC_*` values are baked in at build, so set them **before** the first deploy:
    - `LEARN_DATABASE_URL`: the `learn_app` string;
    - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`: ELEVATE's can be reused (the keys are prefixed `learn:`); without them production refuses every handoff on purpose;
