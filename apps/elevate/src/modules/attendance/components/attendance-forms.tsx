@@ -19,6 +19,7 @@ import { EvidenceField, uploadEvidence } from "./evidence-field";
 import { cancelCorrection, decideCorrection, fileCorrectionForOthers, openEvidence, requestCorrection, saveClockRules, savePreferences, saveShiftNote } from "../actions";
 import { EOD_TEMPLATE } from "../clock";
 import type { CorrectionItem, FilablePerson, RulesRow } from "../queries";
+import { useAsk } from "@/components/confirm-dialog";
 
 function useRun() {
   const router = useRouter();
@@ -406,6 +407,7 @@ export function RulesForm({ row, monitoringPublished }: { row: RulesRow; monitor
 /** For HR and Super Admin accounts without a people record: add themselves so they can use the clock like everyone else. */
 export function SetupProfileForm({ records }: { records: { id: string; name: string; workEmail: string; hasAccount: boolean }[] }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [mine, setMine] = useState("");
@@ -435,9 +437,9 @@ export function SetupProfileForm({ records }: { records: { id: string; name: str
           <Button
             type="button"
             disabled={pending || !mine}
-            onClick={() => {
+            onClick={async () => {
               const replace = Boolean(target?.hasAccount);
-              if (replace && !window.confirm("That record already has a sign-in account (probably your old one). Use this account instead? The old account stays, without a people record.")) return;
+              if (replace && !(await ask("That record already has a sign-in account (probably your old one). Use this account instead? The old account stays, without a people record."))) return;
               run(() => claimMyProfile({ employeeId: mine, replaceExisting: replace }), "Linked. The time clock is ready.");
             }}
           >

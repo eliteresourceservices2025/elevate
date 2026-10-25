@@ -14,7 +14,7 @@ export default async function OrgChartPage({ searchParams }: PageProps<"/org-cha
   const people = await getOrgChart();
 
   return (
-    <PageContainer>
+    <PageContainer width="canvas">
       <PageHeader
         title="Org chart"
         description={

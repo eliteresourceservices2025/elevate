@@ -26,9 +26,8 @@ export function GlobalSearch({ pages }: { pages: PageEntry[] }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const [remote, setRemote] = useState<SearchHit[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The server's answer is kept with the text that produced it, so an answer to an older query is never shown or opened.
+  const [answer, setAnswer] = useState<{ q: string; hits: SearchHit[]; error: string | null } | null>(null);
   const [active, setActive] = useState(0);
   const ticket = useRef(0);
 
@@ -45,10 +44,8 @@ export function GlobalSearch({ pages }: { pages: PageEntry[] }) {
 
   const reset = useCallback(() => {
     setQ("");
-    setRemote([]);
-    setError(null);
+    setAnswer(null);
     setActive(0);
-    setBusy(false);
     ticket.current += 1;
   }, []);
 
@@ -60,32 +57,27 @@ export function GlobalSearch({ pages }: { pages: PageEntry[] }) {
     }
     const mine = ++ticket.current;
     const timer = setTimeout(async () => {
-      setBusy(true);
       try {
         const result = await searchEverything({ q });
         if (mine !== ticket.current) return;
-        if (result.ok) {
-          setRemote(result.data);
-          setError(null);
-        } else {
-          setRemote([]);
-          setError(result.error);
-        }
+        setAnswer(result.ok ? { q, hits: result.data, error: null } : { q, hits: [], error: result.error });
       } catch {
-        if (mine === ticket.current) setError("Search could not reach ELEVATE. Try again.");
-      } finally {
-        if (mine === ticket.current) setBusy(false);
+        if (mine === ticket.current) setAnswer({ q, hits: [], error: "Search could not reach ELEVATE. Try again." });
       }
     }, 250);
     return () => clearTimeout(timer);
   }, [q]);
 
   const typed = q.trim().length >= 2;
+  const current = answer && answer.q === q ? answer : null;
+  // Waiting covers the typing pause and the request itself.
+  const busy = typed && !current;
+  const error = current?.error ?? null;
   const hits = useMemo<SearchHit[]>(() => {
     if (!typed) return [];
     const local = matchPages(pages, q).map<SearchHit>((p) => ({ kind: "page", title: p.label, subtitle: p.description, href: p.href }));
-    return [...local, ...remote];
-  }, [pages, q, remote, typed]);
+    return [...local, ...(current?.hits ?? [])];
+  }, [pages, q, current, typed]);
 
   const groups = GROUPS.map((g) => ({ ...g, items: hits.filter((h) => h.kind === g.kind) })).filter((g) => g.items.length > 0);
   const flat = groups.flatMap((g) => g.items);

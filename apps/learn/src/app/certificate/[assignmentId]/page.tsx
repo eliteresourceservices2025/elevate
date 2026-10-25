@@ -4,6 +4,9 @@ import { AcceptForm, PrintButton } from "@/components/forms";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { getOverview } from "@/lib/queries";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Certificate" };
 
 export const dynamic = "force-dynamic";
 

@@ -115,7 +115,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
         <p className="text-muted-foreground">Nobody has hours or a scheduled day that week.</p>
       ) : (
         <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-          <Table>
+          <Table stack>
             <TableHeader>
               <TableRow>
                 <TableHead>Person</TableHead>
@@ -135,9 +135,9 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
                       {r.name}
                       <span className="block text-xs font-normal text-muted-foreground">{r.team ?? "No team"}</span>
                     </TableCell>
-                    <TableCell className="text-right">{hours(r.scheduledMinutes)}</TableCell>
-                    <TableCell className="text-right font-medium">{hours(r.workedMinutes)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell label="Scheduled" className="text-right">{hours(r.scheduledMinutes)}</TableCell>
+                    <TableCell label="Worked" className="text-right font-medium">{hours(r.workedMinutes)}</TableCell>
+                    <TableCell label="Extra" className="text-right">
                       {r.extraMinutes ? (
                         <>
                           +{formatDuration(r.extraMinutes * MINUTE)}
@@ -147,17 +147,17 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
                         "-"
                       )}
                     </TableCell>
-                    <TableCell className="space-x-1">
+                    <TableCell label="Flags" className="flex-wrap space-x-1">
                       {r.flags.length === 0 ? "-" : r.flags.map((f) => (
                         <Badge key={f} variant="outline">
                           {label(f)}
                         </Badge>
                       ))}
                     </TableCell>
-                    <TableCell>
+                    <TableCell label="Status">
                       <Badge variant={STATE_VARIANT[r.state]}>{STATE_TEXT[r.state]}</Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell label="">
                       {r.canApprove ? (
                         <Button size="sm" disabled={pending} onClick={() => run<{ approved: number }>(() => approveHoursWeek({ employeeId: r.employeeId, weekStart: review.weekStart }), (d) => `Approved ${d?.approved ?? 0} ${(d?.approved ?? 0) === 1 ? "day" : "days"} for ${r.name}.`)}>
                           Approve week
@@ -165,7 +165,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
                       ) : null}
                     </TableCell>
                   </TableRow>
-                  <TableRow className="bg-muted/30 text-xs">
+                  <TableRow data-detail="" className="bg-muted/30 text-xs">
                     <TableCell colSpan={7} className="py-1">
                       <details>
                         <summary className="cursor-pointer text-muted-foreground">Days ({r.days.length})</summary>

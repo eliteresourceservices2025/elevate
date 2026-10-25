@@ -74,7 +74,7 @@ export default async function AnnouncementPage({ params }: PageProps<"/announcem
           {a.needsMyAck ? (
             <>
               <p className="text-sm text-muted-foreground">Confirming records your name, this announcement and the time. Nothing else.</p>
-              <AcknowledgeButton subject={{ kind: "announcement", id: a.id }} />
+              <AcknowledgeButton subject={{ kind: "announcement", id: a.id }} revision={a.revision} />
             </>
           ) : a.acknowledgedAt ? (
             <p className="text-sm text-muted-foreground">You acknowledged this on {formatInZone(a.acknowledgedAt, DEFAULT_TIMEZONE, "MMM d, yyyy 'at' h:mm a")}.</p>

@@ -13,6 +13,7 @@ import { addNote, cancelInterview, deleteApplication, getResumeLink, moveApplica
 import { BOARD_STAGES, CRITERIA, INTERVIEW_KINDS, INTERVIEW_KIND_LABELS, RECOMMENDATIONS, RECOMMENDATION_LABELS, STAGE_LABELS, type CloseKind, type CriterionKey, type Stage } from "../constants";
 import type { PersonChoice } from "../queries";
 import { useRun } from "./use-run";
+import { useAsk } from "@/components/confirm-dialog";
 
 /** The resume inside the page: a PDF as it is, a Word (DOCX) file as a plain preview; both also offer the download. */
 export function ResumeViewer({ applicationId, kind }: { applicationId: string; kind: string | null }) {
@@ -90,15 +91,16 @@ export function MoveControls({ applicationId, stage }: { applicationId: string; 
 
 export function RejectForm({ applicationId, sendRejection }: { applicationId: string; sendRejection: boolean }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [kind, setKind] = useState<CloseKind>("rejected");
   const [reason, setReason] = useState("");
   const [notify, setNotify] = useState(false);
   return (
     <form
       className="space-y-3"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        if (!window.confirm("Close this application? You can reopen it later.")) return;
+        if (!(await ask("Close this application? You can reopen it later."))) return;
         run(() => rejectApplication({ applicationId, kind, reason, notifyCandidate: notify }), "Application closed.");
       }}
     >
@@ -257,8 +259,9 @@ export function InterviewForm({ applicationId, people, calendar }: { application
 
 export function CancelInterviewButton({ interviewId }: { interviewId: string }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   return (
-    <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => window.confirm("Cancel this interview? Everyone is sent a cancellation.") && run<{ warning: string | null }>(() => cancelInterview({ interviewId }), "Interview cancelled.", (d) => d?.warning && toast.warning(d.warning))}>
+    <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={async () => (await ask("Cancel this interview? Everyone is sent a cancellation.")) && run<{ warning: string | null }>(() => cancelInterview({ interviewId }), "Interview cancelled.", (d) => d?.warning && toast.warning(d.warning))}>
       Cancel interview
     </Button>
   );
@@ -266,6 +269,7 @@ export function CancelInterviewButton({ interviewId }: { interviewId: string }) 
 
 export function ScorecardForm({ interviewId }: { interviewId: string }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [ratings, setRatings] = useState<Partial<Record<CriterionKey, number>>>({});
   const [recommendation, setRecommendation] = useState<(typeof RECOMMENDATIONS)[number] | "">("");
   const [comments, setComments] = useState("");
@@ -273,10 +277,10 @@ export function ScorecardForm({ interviewId }: { interviewId: string }) {
   return (
     <form
       className="space-y-3 rounded-lg border bg-muted/30 p-3"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         if (!complete) return;
-        if (!window.confirm("Submit your scorecard? It cannot be changed afterwards.")) return;
+        if (!(await ask("Submit your scorecard? It cannot be changed afterwards."))) return;
         run(() => submitScorecard({ interviewId, ratings, recommendation, comments }), "Scorecard submitted.");
       }}
     >

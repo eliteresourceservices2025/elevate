@@ -13,6 +13,7 @@ import { MoreHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAsk } from "@/components/confirm-dialog";
 import {
   archiveEmployee,
   assignClient,
@@ -45,6 +46,7 @@ function useRun() {
 /** More actions on a profile: archive or restore the record. Archiving still asks first. */
 export function ArchiveMenu({ employeeId, archived }: { employeeId: string; archived: boolean }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger aria-label="More actions" disabled={pending} className={cn(buttonVariants({ variant: "outline", size: "icon" }), "outline-none")}>
@@ -53,8 +55,8 @@ export function ArchiveMenu({ employeeId, archived }: { employeeId: string; arch
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuItem
           variant={archived ? "default" : "destructive"}
-          onClick={() => {
-            if (!archived && !window.confirm("Archive this person? They disappear from the directory but their history is kept.")) return;
+          onClick={async () => {
+            if (!archived && !(await ask("Archive this person? They disappear from the directory but their history is kept."))) return;
             run(() => archiveEmployee({ employeeId, restore: archived }), archived ? "Record restored." : "Record archived.");
           }}
         >
@@ -218,6 +220,7 @@ function EditAssignmentForm({
   onClose: () => void;
 }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [clientId, setClientId] = useState(assignment.clientId);
   const [startDate, setStartDate] = useState(assignment.startDate);
   const [endDate, setEndDate] = useState(assignment.endDate ?? "");
@@ -227,9 +230,9 @@ function EditAssignmentForm({
 
   return (
     <div className="space-y-3 text-left">
-      <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => {
+      <form className="grid gap-3 sm:grid-cols-2" onSubmit={async (e) => {
         e.preventDefault();
-        if (consequential && !window.confirm("Correct this assignment? Historical evidence, eligibility and reports can change. Review extra-hours and training records. Earlier exports, approvals, training due dates and certificates are not rewritten. Older analytics may need an operator rebuild.")) return;
+        if (consequential && !(await ask("Correct this assignment? Historical evidence, eligibility and reports can change. Review extra-hours and training records. Earlier exports, approvals, training due dates and certificates are not rewritten. Older analytics may need an operator rebuild."))) return;
         save();
       }}>
         <SelectField id={`client-${assignment.id}`} label="Assigned client" value={clientId} onChange={(e) => setClientId(e.target.value)} required>

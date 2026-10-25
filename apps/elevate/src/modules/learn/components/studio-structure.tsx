@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { useAsk } from "@/components/confirm-dialog";
 import {
   addStudioModule,
   addStudioQuestion,
@@ -43,6 +44,7 @@ const TRACKS = ["full", "essentials", "refresher"] as const;
 
 /** Up, down and remove for one row (a module or a screen). */
 function RowControls({ index, count, onMove, onRemove, pending, what }: { index: number; count: number; onMove: (d: "up" | "down") => void; onRemove: () => void; pending: boolean; what: string }) {
+  const ask = useAsk();
   return (
     <span className="inline-flex items-center gap-1">
       <Button type="button" size="xs" variant="outline" disabled={pending || index === 0} onClick={() => onMove("up")} aria-label={`Move ${what} up`}>
@@ -56,8 +58,8 @@ function RowControls({ index, count, onMove, onRemove, pending, what }: { index:
         size="xs"
         variant="outline"
         disabled={pending}
-        onClick={() => {
-          if (window.confirm(`Remove ${what}? This cannot be undone once saved.`)) onRemove();
+        onClick={async () => {
+          if ((await ask(`Remove ${what}? This cannot be undone once saved.`))) onRemove();
         }}
         aria-label={`Remove ${what}`}
       >
@@ -198,6 +200,7 @@ export function AddQuestionForm({ versionId, stamp, moduleKey }: { versionId: st
 }
 
 export function RemoveQuestionButton({ versionId, stamp, questionId }: { versionId: string; stamp: number; questionId: string }) {
+  const ask = useAsk();
   const { run, pending } = useDo();
   return (
     <Button
@@ -205,8 +208,8 @@ export function RemoveQuestionButton({ versionId, stamp, questionId }: { version
       size="xs"
       variant="outline"
       disabled={pending}
-      onClick={() => {
-        if (window.confirm("Remove this question from the bank?")) run(() => removeStudioQuestion({ versionId, stamp, questionId }), "Question removed.");
+      onClick={async () => {
+        if ((await ask("Remove this question from the bank?"))) run(() => removeStudioQuestion({ versionId, stamp, questionId }), "Question removed.");
       }}
     >
       Remove this question

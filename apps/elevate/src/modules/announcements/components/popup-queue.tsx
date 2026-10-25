@@ -16,6 +16,8 @@ export type PopupItem = {
   /** "Due Oct 20" style text, when acknowledgment has a due date. */
   dueText: string | null;
   version: number | null;
+  /** Version stamp of the announcement text shown, sent back with the acknowledgment (null for a policy). */
+  revision: string | null;
   link: string;
   /** The text, already rendered on the server. */
   content: ReactNode;
@@ -47,7 +49,7 @@ export function PopupQueue({ items: initial, onDone }: { items: PopupItem[]; onD
   const confirm = () =>
     startTransition(async () => {
       try {
-        const result = await acknowledge({ kind: item.kind === "policy" ? "policy_version" : "announcement", id: item.subjectId });
+        const result = await acknowledge({ kind: item.kind === "policy" ? "policy_version" : "announcement", id: item.subjectId, revision: item.revision ?? undefined });
         if (!result.ok) return void toast.error(result.error);
         next();
       } catch {

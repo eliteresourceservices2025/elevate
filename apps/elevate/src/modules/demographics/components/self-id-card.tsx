@@ -9,6 +9,7 @@ import { clearMySelfIdentification, saveMySelfIdentification } from "../actions"
 import { DEMOGRAPHICS_NOTE } from "../constants";
 import type { SelfIdentification } from "../service";
 import { SelfIdFields } from "./self-id-fields";
+import { useAsk } from "@/components/confirm-dialog";
 
 /** "About me": the person's own optional answers, in a pop-up opened from their Personal tab. Pronouns show next to the name; gender, sexual orientation and religion only when the person switches "show on my profile" on. */
 export function SelfIdCard({ initial }: { initial: SelfIdentification }) {
@@ -23,6 +24,7 @@ function SelfIdForm({ initial }: { initial: SelfIdentification }) {
   const dialog = useFormDialog();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const ask = useAsk();
   const [formKey, setFormKey] = useState(0);
 
   function save(event: React.FormEvent<HTMLFormElement>) {
@@ -50,8 +52,8 @@ function SelfIdForm({ initial }: { initial: SelfIdentification }) {
     });
   }
 
-  function clear() {
-    if (!window.confirm("Remove your gender, pronouns, sexual orientation and religion from ELEVATE?")) return;
+  async function clear() {
+    if (!(await ask("Remove your gender, pronouns, sexual orientation and religion from ELEVATE?"))) return;
     startTransition(async () => {
       const result = await clearMySelfIdentification();
       if (!result.ok) return void toast.error(result.error);

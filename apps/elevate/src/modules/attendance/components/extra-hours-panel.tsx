@@ -392,8 +392,15 @@ export function ExtraHoursPanel({
         <section aria-label="Extra hours queue" className="space-y-3">
           <h2 className="text-lg font-semibold">Requests to review</h2>
           <p className="text-sm text-muted-foreground">{queue.scope === "team" ? "From people on your team." : "Everyone's. HR decides when nobody above the person can, or when it was asked for more than 7 days late."} Times are in {queueZone}.</p>
-          {filable && clients ? <FileForm people={filable} clients={clients} zone={queueZone} /> : null}
           <Items items={queue.pending} zone={queueZone} mode="queue" empty="Nothing is waiting." />
+          {filable && clients ? (
+            <details className="rounded-xl border bg-card p-4">
+              <summary className="cursor-pointer text-sm font-medium">The client asked for extra hours: file them for someone</summary>
+              <div className="mt-3">
+                <FileForm people={filable} clients={clients} zone={queueZone} />
+              </div>
+            </details>
+          ) : null}
           {queue.recent.length > 0 ? (
             <details className="rounded-xl border bg-card p-4">
               <summary className="cursor-pointer text-sm font-medium">Decided in the last two weeks ({queue.recent.length})</summary>
@@ -407,11 +414,11 @@ export function ExtraHoursPanel({
 
       {mine ? (
         <>
-          <RequestForm data={mine} />
           <section aria-label="My extra hours" className="space-y-2">
             <h2 className="text-lg font-semibold">My extra hours</h2>
             <Items items={mine.items.filter((i) => !i.needsMyAnswer)} zone={mine.zone} mode="mine" empty="You have not asked for any extra hours." />
           </section>
+          <RequestForm data={mine} />
         </>
       ) : (
         <p className="text-muted-foreground">Extra hours need a people record. Set up your profile in My time first.</p>

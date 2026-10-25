@@ -8,6 +8,7 @@ import { bulkUpdateApplications, type BulkResult } from "../actions";
 import { BOARD_STAGES, CLOSE_KINDS, CLOSE_KIND_LABELS, STAGE_LABELS, type CloseKind, type Stage } from "../constants";
 import type { TagChoice } from "../queries";
 import { useRun } from "./use-run";
+import { useAsk } from "@/components/confirm-dialog";
 
 const BULK_STAGES = BOARD_STAGES.filter((s) => s !== "hired"); // hiring is done one person at a time, from an offer
 const ACTIONS = [
@@ -23,6 +24,7 @@ type ActionValue = (typeof ACTIONS)[number]["value"];
 /** The checkboxes live in the list (server-rendered, `form={formId}`); this reads which are ticked and runs one action on all of them. */
 export function BulkBar({ formId, tags }: { formId: string; tags: TagChoice[] }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [selected, setSelected] = useState(0);
   const [action, setAction] = useState<ActionValue | "">("");
   const [stage, setStage] = useState<string>(BULK_STAGES[1] ?? "screening");
@@ -55,7 +57,7 @@ export function BulkBar({ formId, tags }: { formId: string; tags: TagChoice[] })
     setSelected(next ? new Set(all.map((b) => b.value)).size : 0);
   }
 
-  function submit(event: React.FormEvent) {
+  async function submit(event: React.FormEvent) {
     event.preventDefault();
     const ids = checkedIds();
     if (ids.length === 0 || action === "") return;
@@ -69,7 +71,7 @@ export function BulkBar({ formId, tags }: { formId: string; tags: TagChoice[] })
             ? { ...base, action }
             : { ...base, action, tagId };
     const what = action === "move" ? `Move ${ids.length} to ${STAGE_LABELS[stage as Stage]}` : action === "close" ? `Close ${ids.length} as ${CLOSE_KIND_LABELS[kind].toLowerCase()}` : action === "tag" ? `Add the tag to ${ids.length}` : action === "untag" ? `Remove the tag from ${ids.length}` : action === "pool_add" ? `Add ${ids.length} to the talent pool (only those who agreed to be kept)` : `Take ${ids.length} out of the talent pool`;
-    if (!window.confirm(`${what}? Each one is recorded in its history.`)) return;
+    if (!(await ask(`${what}? Each one is recorded in its history.`))) return;
     setResult(null);
     run<BulkResult>(
       () => bulkUpdateApplications(input),

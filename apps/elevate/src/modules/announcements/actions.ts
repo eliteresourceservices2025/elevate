@@ -17,9 +17,9 @@ import { todayInZone } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { PLACEHOLDER_MARK, hidesVersion } from "./constants";
-import { deleteUnusedPaths, listAnnouncementFiles, removeVersionFiles, syncContentFiles } from "./content-files";
+import { deleteUnusedPaths, queueStorageDeletion, removeVersionFiles, syncContentFiles } from "./content-files";
 import { announcementRecipients, announcementTeams, announcements, acknowledgments, contentFiles, policies, policyVersions } from "./schema";
-import { ackStatus, activeUserIds, audienceEmployees, pendingAcknowledgments, queueAckEmails, remindPending } from "./service";
+import { ackStatus, activeUserIds, audienceEmployees, lockAnnouncement, pendingAcknowledgments, queueAckEmails, remindPending } from "./service";
 import {
   acknowledgeSchema,
   announcementIdSchema,
@@ -126,15 +126,6 @@ export async function updateAnnouncement(input: unknown): Promise<ActionResult> 
     const [current] = await db.select().from(announcements).where(eq(announcements.id, v.announcementId)).limit(1);
     if (!current || current.archivedAt) return fail("That announcement was not found.");
 
-    if (v.title !== current.title || v.body !== current.body) {
-      const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(acknowledgments).where(eq(acknowledgments.announcementId, current.id));
-      if (n > 0) return fail("People have already acknowledged this, so the text cannot change. Post a new announcement instead.");
-    }
-    // Once people have acknowledged, what they were shown cannot change: the same goes for its pictures and files.
-    const currentFiles = (await listAnnouncementFiles(current.id)).map((f) => f.id).sort();
-    const newFiles = [...new Set(v.attachmentIds)].sort();
-    const [{ acked }] = await db.select({ acked: sql<number>`count(*)::int` }).from(acknowledgments).where(eq(acknowledgments.announcementId, current.id));
-    if (acked > 0 && JSON.stringify(currentFiles) !== JSON.stringify(newFiles)) return fail("People have already acknowledged this, so its pictures and files cannot change. Post a new announcement instead.");
     if (v.dueOn && !current.requiresAck) return fail("A due date only applies when acknowledgment is required.");
     if (v.dueOn && v.dueOn !== current.dueOn && v.dueOn < todayInZone()) return fail("The due date has already passed.");
     if (v.attachmentDocumentId !== (current.attachmentDocumentId ?? undefined)) {
@@ -143,6 +134,22 @@ export async function updateAnnouncement(input: unknown): Promise<ActionResult> 
     }
 
     const removedPaths = await db.transaction(async (tx) => {
+      // Lock the row first: an acknowledgment arriving now waits for this edit (and then sees its new revision), so what a person
+      // acknowledged is always what is stored, and the checks below cannot be overtaken by a first acknowledgment.
+      const locked = await lockAnnouncement(tx, current.id);
+      if (!locked || locked.archived) throw new ActionFailure("That announcement was not found.");
+      if (v.expectedRevision && v.expectedRevision !== locked.revision) throw new ActionFailure("Someone changed this announcement while you were editing. Reload the page and make your change again.");
+
+      const [{ acked }] = await tx.select({ acked: sql<number>`count(*)::int` }).from(acknowledgments).where(eq(acknowledgments.announcementId, current.id));
+      if (acked > 0) {
+        const [stored] = await tx.select({ title: announcements.title, body: announcements.body }).from(announcements).where(eq(announcements.id, current.id)).limit(1);
+        if (v.title !== stored.title || v.body !== stored.body) throw new ActionFailure("People have already acknowledged this, so the text cannot change. Post a new announcement instead.");
+        // What they were shown includes its pictures and files.
+        const storedFiles = (await tx.select({ id: contentFiles.id }).from(contentFiles).where(eq(contentFiles.announcementId, current.id))).map((f) => f.id).sort();
+        const newFiles = [...new Set(v.attachmentIds)].sort();
+        if (JSON.stringify(storedFiles) !== JSON.stringify(newFiles)) throw new ActionFailure("People have already acknowledged this, so its pictures and files cannot change. Post a new announcement instead.");
+      }
+
       await tx
         .update(announcements)
         .set({ title: v.title, body: v.body, pinned: v.pinned, dueOn: v.dueOn ?? null, attachmentDocumentId: v.attachmentDocumentId ?? null, updatedAt: new Date() })
@@ -214,7 +221,10 @@ export async function deleteAnnouncement(input: unknown): Promise<ActionResult> 
       await tx.execute(sql`delete from docs.popup_dismissals where announcement_id = ${id}::uuid`);
       await tx.execute(sql`delete from docs.popups where announcement_id = ${id}::uuid`);
       await tx.execute(sql`delete from docs.acknowledgment_reminders where announcement_id = ${id}::uuid`);
-      if (files.length) await tx.delete(contentFiles).where(inArray(contentFiles.id, files.map((f) => f.id)));
+      if (files.length) {
+        await queueStorageDeletion(tx, files.map((f) => f.path));
+        await tx.delete(contentFiles).where(inArray(contentFiles.id, files.map((f) => f.id)));
+      }
       await tx.delete(announcementRecipients).where(eq(announcementRecipients.announcementId, id));
       await tx.delete(announcementTeams).where(eq(announcementTeams.announcementId, id));
       await tx.delete(announcements).where(eq(announcements.id, id));
@@ -237,7 +247,7 @@ export async function acknowledge(input: unknown): Promise<ActionResult> {
     await authorize(actor, "announcements.acknowledge", { ownerUserId: actor.id });
     const parsed = acknowledgeSchema.safeParse(input);
     if (!parsed.success) return fail(BAD);
-    const { kind, id } = parsed.data;
+    const { kind, id, revision } = parsed.data;
 
     const [me] = await db
       .select({ id: employees.id })
@@ -247,8 +257,11 @@ export async function acknowledge(input: unknown): Promise<ActionResult> {
 
     await db.transaction(async (tx) => {
       if (kind === "announcement") {
+        // Locked, so an edit in progress finishes first; the reader must have seen the content as it is now.
+        const locked = await lockAnnouncement(tx, id);
         const [a] = await tx.select({ requiresAck: announcements.requiresAck, archivedAt: announcements.archivedAt }).from(announcements).where(eq(announcements.id, id)).limit(1);
-        if (!a || a.archivedAt || !a.requiresAck) throw new ActionFailure("Nothing to acknowledge here.");
+        if (!locked || !a || a.archivedAt || !a.requiresAck) throw new ActionFailure("Nothing to acknowledge here.");
+        if (revision && revision !== locked.revision) throw new ActionFailure("This announcement was changed after you opened it. Reload the page, read it again, then acknowledge.");
         if (!me) throw new ActionFailure("Only people with an active ELEVATE profile can acknowledge.");
         const [r] = await tx
           .select({ employeeId: announcementRecipients.employeeId })

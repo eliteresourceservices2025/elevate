@@ -13,6 +13,7 @@ import { DEFAULT_PAGE_SIZE, pageInfo } from "@/lib/pagination";
 import { requireUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { EMPLOYEE_STATUSES, statusLabel } from "@/modules/people/constants";
+import { listAddress } from "@/lib/return-to";
 import { DirectoryTable } from "@/modules/people/components/directory-table";
 import { ManageMenu } from "@/modules/people/components/manage-menu";
 import { listTeamFilterOptions } from "@/modules/org/queries";
@@ -142,7 +143,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/people">)
         </form>
 
         <div className="border-t">
-          <DirectoryTable rows={rows} seesClients={seesClients} sort={query.sort} dir={query.dir} params={filters} />
+          <DirectoryTable rows={rows} seesClients={seesClients} sort={query.sort} dir={query.dir} params={filters} returnTo={listAddress("/people", { ...filters, sort: query.sort, dir: query.dir, page: info.page > 1 ? info.page : undefined, size: info.pageSize !== DEFAULT_PAGE_SIZE ? info.pageSize : undefined })} />
         </div>
 
         <div className="border-t px-4 py-3">

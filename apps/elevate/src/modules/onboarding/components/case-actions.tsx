@@ -14,6 +14,7 @@ import { cancelOffboarding, completeOffboarding, completeOnboarding, issueCertif
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { PeoplePicker } from "./people-picker";
 import { LEAVING_LABELS, LEAVING_REASONS, type LeavingReason } from "../constants";
+import { useAsk } from "@/components/confirm-dialog";
 
 export function CompleteOnboardingButton({ caseId, ready, openTasks = [] }: { caseId: string; ready: boolean; openTasks?: string[] }) {
   const { run, pending } = useRun();
@@ -217,6 +218,7 @@ export function StartOffboardingForm({ people, today }: { people: { id: string; 
   const router = useRouter();
   const dialog = useFormDialog();
   const [pending, startTransition] = useTransition();
+  const ask = useAsk();
   const [ids, setIds] = useState<string[]>([]);
   const [lastWorkingDay, setLastWorkingDay] = useState(today);
   const [reason, setReason] = useState<LeavingReason>("resignation");
@@ -225,9 +227,9 @@ export function StartOffboardingForm({ people, today }: { people: { id: string; 
   return (
     <form
       className="space-y-4"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        if (ids.length > 1 && !window.confirm(`Start offboarding for ${ids.length} people with the same last working day and reason?`)) return;
+        if (ids.length > 1 && !(await ask(`Start offboarding for ${ids.length} people with the same last working day and reason?`))) return;
         setResults(null);
         startTransition(async () => {
           const out = await startEach(ids, people, (id) => startOffboarding({ employeeId: id, lastWorkingDay, reason, note }), (caseId) => `/offboarding/${caseId}`);

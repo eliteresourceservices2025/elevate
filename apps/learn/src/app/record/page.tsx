@@ -6,6 +6,9 @@ import { PageHead } from "@/components/page-head";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { getRecord } from "@/lib/queries";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "My training record" };
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +51,7 @@ export default async function RecordPage() {
             </li>
             <li>
               <strong>{minutes}</strong>
-              <span>minutes of training time</span>
+              <span>{minutes === 1 ? "minute" : "minutes"} of training time</span>
             </li>
           </ul>
           <ul className="record-grid">
@@ -71,7 +74,7 @@ export default async function RecordPage() {
                         {e.passedOn ? ` · passed ${e.passedOn}` : ""}
                       </li>
                       <li>
-                        <Clock size={15} aria-hidden="true" /> About {e.minutesSpent} minutes
+                        <Clock size={15} aria-hidden="true" /> {e.minutesSpent > 0 ? `About ${e.minutesSpent} ${e.minutesSpent === 1 ? "minute" : "minutes"}` : "No time recorded yet"}
                         {e.attempts > 0 ? ` · ${e.attempts} exam ${e.attempts === 1 ? "try" : "tries"}` : ""}
                         {e.scorePercent !== null ? ` · score ${Math.round(e.scorePercent * 10) / 10}%` : ""}
                       </li>

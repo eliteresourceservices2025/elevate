@@ -8,12 +8,14 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { mergeDuplicate, relinkSignInAccount } from "../duplicates-actions";
 import type { DuplicateReport } from "../duplicates-queries";
+import { useAsk } from "@/components/confirm-dialog";
 
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
 /** One group of records that share a name: choose the one that stays (the oldest is pre-selected), then merge the others into it. */
 function GroupCard({ group }: { group: DuplicateReport["groups"][number] }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [keepId, setKeepId] = useState(group.people[0].id);
   const [adoptEmail, setAdoptEmail] = useState(true);
   const others = group.people.filter((p) => p.id !== keepId);
@@ -55,8 +57,8 @@ function GroupCard({ group }: { group: DuplicateReport["groups"][number] }) {
             key={o.id}
             type="button"
             disabled={pending}
-            onClick={() => {
-              if (!window.confirm(`Merge ${o.workEmail} into the record you kept? It is archived and nothing is deleted, but anything recorded on it (time clock, leave, documents) stays on the archived record.`)) return;
+            onClick={async () => {
+              if (!(await ask(`Merge ${o.workEmail} into the record you kept? It is archived and nothing is deleted, but anything recorded on it (time clock, leave, documents) stays on the archived record.`))) return;
               run(() => mergeDuplicate({ keepId, duplicateId: o.id, adoptEmail: adoptEmail && o.hasAccount }), (d) => (d?.accountMoved ? "Merged. The sign-in account moved to the record that stays." : "Merged."));
             }}
           >
@@ -71,6 +73,7 @@ function GroupCard({ group }: { group: DuplicateReport["groups"][number] }) {
 /** A sign-in account with no people record: pick the record it belongs to. */
 function AccountRow({ account, records }: { account: DuplicateReport["accounts"][number]; records: DuplicateReport["records"] }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [employeeId, setEmployeeId] = useState("");
   const target = records.find((r) => r.id === employeeId);
   return (
@@ -94,9 +97,9 @@ function AccountRow({ account, records }: { account: DuplicateReport["accounts"]
         type="button"
         variant="outline"
         disabled={pending || !employeeId}
-        onClick={() => {
+        onClick={async () => {
           const replace = Boolean(target?.hasAccount);
-          if (replace && !window.confirm("That record already has a sign-in account. Replace it with this one? The old account stays, without a people record.")) return;
+          if (replace && !(await ask("That record already has a sign-in account. Replace it with this one? The old account stays, without a people record."))) return;
           run(() => relinkSignInAccount({ userId: account.userId, employeeId, replaceExisting: replace }), "Account linked.");
         }}
       >
@@ -109,6 +112,7 @@ function AccountRow({ account, records }: { account: DuplicateReport["accounts"]
 /** Two records HR knows are the same person, whatever their names and emails now say: pick both and merge. */
 function ByHand({ records }: { records: DuplicateReport["records"] }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [keepId, setKeepId] = useState("");
   const [duplicateId, setDuplicateId] = useState("");
   const [adoptEmail, setAdoptEmail] = useState(true);
@@ -149,8 +153,8 @@ function ByHand({ records }: { records: DuplicateReport["records"] }) {
       <Button
         type="button"
         disabled={pending || !keepId || !duplicateId}
-        onClick={() => {
-          if (!window.confirm("Merge these two records? The second is archived and nothing is deleted, but anything recorded on it (time clock, leave, documents) stays on the archived record.")) return;
+        onClick={async () => {
+          if (!(await ask("Merge these two records? The second is archived and nothing is deleted, but anything recorded on it (time clock, leave, documents) stays on the archived record."))) return;
           run(() => mergeDuplicate({ keepId, duplicateId, adoptEmail: adoptEmail && Boolean(dup?.hasAccount) }), (d) => (d?.accountMoved ? "Merged. The sign-in account moved to the record that stays." : "Merged."));
         }}
       >

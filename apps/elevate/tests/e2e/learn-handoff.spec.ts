@@ -18,7 +18,7 @@ test("a person opens HIPAA training from ELEVATE and lands signed in on Learn", 
   await page.goto("/learn");
   await expect(page.getByRole("heading", { name: "My training" })).toBeVisible(slow);
   await waitForHydration(page, "main button");
-  await page.getByRole("button", { name: /Open HIPAA training/ }).click();
+  await page.getByRole("button", { name: /Open ELEVATE Learn/ }).click();
 
   await page.waitForURL(`${LEARN}/**`, slow);
   await expect(page.getByRole("heading", { name: /Hello, Lia/ })).toBeVisible(slow);

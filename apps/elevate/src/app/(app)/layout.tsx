@@ -56,6 +56,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       requiresAck: p.requiresAck,
       dueText: p.requiresAck && p.dueOn ? (due === "overdue" ? `was due ${p.dueOn}` : `due ${p.dueOn}`) : null,
       version: p.version,
+      revision: p.revision,
       link: p.link,
       content: (
         <>

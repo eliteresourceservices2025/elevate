@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { acknowledge, archiveAnnouncement, archivePolicy, deleteAnnouncement, exportAcknowledgments, sendReminder } from "../actions";
 
@@ -22,11 +23,14 @@ function useRun() {
 
 type Subject = { kind: "announcement" | "policy_version"; id: string };
 
-/** The one click that records "I have read and understand" for this item (and, for a policy, this version). */
-export function AcknowledgeButton({ subject }: { subject: Subject }) {
+/**
+ * The one click that records "I have read and understand" for this item (and, for a policy, this version).
+ * For an announcement, `revision` is the version of the text this page shows; the server refuses it if the post has changed since.
+ */
+export function AcknowledgeButton({ subject, revision }: { subject: Subject; revision?: string }) {
   const { run, pending } = useRun();
   return (
-    <Button type="button" disabled={pending} onClick={() => run(() => acknowledge(subject), "Thank you. Your acknowledgment is recorded.")}>
+    <Button type="button" disabled={pending} onClick={() => run(() => acknowledge({ ...subject, revision }), "Thank you. Your acknowledgment is recorded.")}>
       I have read and understand
     </Button>
   );
@@ -75,15 +79,16 @@ export function StatusActions({ subject, canRemind, canExport, pendingCount }: {
 export function DeleteAnnouncementButton({ announcementId, title }: { announcementId: string; title: string }) {
   const { run, pending } = useRun();
   const router = useRouter();
+  const confirm = useConfirm();
   return (
     <Button
       type="button"
       variant="destructive"
       disabled={pending}
-      onClick={() =>
-        window.confirm(`Permanently delete "${title}"? Nobody has acknowledged it. This cannot be undone. Use Archive if you only want it out of sight.`) &&
-        run(() => deleteAnnouncement({ announcementId }), "Announcement deleted.", () => router.push("/announcements"))
-      }
+      onClick={async () => {
+        const ok = await confirm({ title: `Permanently delete "${title}"?`, description: "Nobody has acknowledged it. This cannot be undone. Use Archive if you only want it out of sight.", confirmLabel: "Delete announcement", destructive: true });
+        if (ok) run(() => deleteAnnouncement({ announcementId }), "Announcement deleted.", () => router.push("/announcements"));
+      }}
     >
       Delete
     </Button>
@@ -94,15 +99,16 @@ export function DeleteAnnouncementButton({ announcementId, title }: { announceme
 export function ArchivePolicyButton({ policyId, title }: { policyId: string; title: string }) {
   const { run, pending } = useRun();
   const router = useRouter();
+  const confirm = useConfirm();
   return (
     <Button
       type="button"
       variant="outline"
       disabled={pending}
-      onClick={() =>
-        window.confirm(`Archive "${title}"? It disappears from the list, from acknowledgment reminders and from pop-ups for everyone. Its versions and the acknowledgments already recorded are kept.`) &&
-        run(() => archivePolicy({ policyId }), "Policy archived.", () => router.push("/announcements?tab=policies"))
-      }
+      onClick={async () => {
+        const ok = await confirm({ title: `Archive "${title}"?`, description: "It disappears from the list, from acknowledgment reminders and from pop-ups for everyone. Its versions and the acknowledgments already recorded are kept.", confirmLabel: "Archive policy" });
+        if (ok) run(() => archivePolicy({ policyId }), "Policy archived.", () => router.push("/announcements?tab=policies"));
+      }}
     >
       Archive policy
     </Button>
@@ -112,15 +118,16 @@ export function ArchivePolicyButton({ policyId, title }: { policyId: string; tit
 export function ArchiveAnnouncementButton({ announcementId, title }: { announcementId: string; title: string }) {
   const { run, pending } = useRun();
   const router = useRouter();
+  const confirm = useConfirm();
   return (
     <Button
       type="button"
       variant="outline"
       disabled={pending}
-      onClick={() =>
-        window.confirm(`Archive "${title}"? It disappears from the list for everyone. Acknowledgments already recorded are kept.`) &&
-        run(() => archiveAnnouncement({ announcementId }), "Announcement archived.", () => router.push("/announcements"))
-      }
+      onClick={async () => {
+        const ok = await confirm({ title: `Archive "${title}"?`, description: "It disappears from the list for everyone. Acknowledgments already recorded are kept.", confirmLabel: "Archive announcement" });
+        if (ok) run(() => archiveAnnouncement({ announcementId }), "Announcement archived.", () => router.push("/announcements"));
+      }}
     >
       Archive
     </Button>

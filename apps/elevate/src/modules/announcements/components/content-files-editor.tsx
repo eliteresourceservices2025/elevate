@@ -1,13 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { FileText, ImageUp, Paperclip, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { referencedFileIds } from "@/lib/markdown";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { MAX_VIDEO_BYTES, videoKindFromMime } from "@/modules/documents/files";
+import { MAX_FILE_BYTES, MAX_VIDEO_BYTES, videoKindFromMime } from "@/modules/documents/files";
 import type { ContentFileView } from "../content-files";
+import { cancelAnnouncementFileUpload, finalizeAnnouncementFileUpload, requestAnnouncementFileUpload } from "../upload-actions";
 import { cancelAnnouncementVideoUpload, finalizeAnnouncementVideoUpload, requestAnnouncementVideoUpload } from "../video-actions";
 
 const MAX_SIDE = 1600;
@@ -43,7 +44,7 @@ async function toJpeg(file: File): Promise<Blob> {
   }
 }
 
-async function upload(kind: "image" | "file", blob: Blob, name: string): Promise<ContentFileView> {
+async function upload(kind: "image", blob: Blob, name: string): Promise<ContentFileView> {
   const form = new FormData();
   form.set("kind", kind);
   form.set("file", blob, name);
@@ -70,6 +71,30 @@ async function uploadVideo(file: File): Promise<ContentFileView> {
   return done.data;
 }
 
+const DOCUMENT_TYPES: Record<string, string> = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+};
+
+/** Sends a PDF or Word document straight to storage (request, upload, finalize); a failed upload cancels the request. */
+async function uploadDocument(file: File): Promise<ContentFileView> {
+  // eslint-disable-next-line security/detect-object-injection -- the extension only selects from the three known keys
+  const mimeType = Object.values(DOCUMENT_TYPES).includes(file.type) ? file.type : (DOCUMENT_TYPES[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "");
+  if (!mimeType) throw new Error("Attach a PDF or Word document.");
+  if (file.size > MAX_FILE_BYTES) throw new Error("A file can be up to 10 MB.");
+  const ticket = await requestAnnouncementFileUpload({ fileName: file.name, mimeType, sizeBytes: file.size });
+  if (!ticket.ok) throw new Error(ticket.error);
+  const { error } = await createSupabaseBrowserClient().storage.from(ticket.data.bucket).uploadToSignedUrl(ticket.data.path, ticket.data.token, file, { contentType: ticket.data.contentType });
+  if (error) {
+    await cancelAnnouncementFileUpload({ id: ticket.data.id });
+    throw new Error("The file did not upload. Check your connection and try again.");
+  }
+  const done = await finalizeAnnouncementFileUpload({ id: ticket.data.id });
+  if (!done.ok) throw new Error(done.error);
+  return done.data;
+}
+
 /**
  * Pictures, documents and (announcements only) one video. A picture is inserted into the text as ![description](file:id); a document
  * is a download under the text. Removing a picture also removes its line from the text.
@@ -77,13 +102,17 @@ async function uploadVideo(file: File): Promise<ContentFileView> {
 export function ContentFilesEditor({
   files,
   onFilesChange,
+  onBusyChange,
   body,
   onBodyChange,
   disabled,
   allowVideo,
 }: {
   files: ContentFileView[];
-  onFilesChange: (files: ContentFileView[]) => void;
+  /** Takes an updater, so a finished upload joins the list as it is now, not as it was when the upload began. */
+  onFilesChange: (update: (files: ContentFileView[]) => ContentFileView[]) => void;
+  /** Told when an upload starts or ends, so the page can hold back Save and Publish until nothing is in flight (pass a stable setter). */
+  onBusyChange?: (busy: boolean) => void;
   body: string;
   onBodyChange: (body: string) => void;
   disabled?: boolean;
@@ -93,6 +122,7 @@ export function ContentFilesEditor({
   const [busy, setBusy] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const videoInput = useRef<HTMLInputElement>(null);
+  useEffect(() => onBusyChange?.(busy), [busy, onBusyChange]);
   const hasVideo = files.some((f) => f.kind === "video");
   const [alt, setAlt] = useState<Record<string, string>>({});
   const photoInput = useRef<HTMLInputElement>(null);
@@ -104,10 +134,8 @@ export function ContentFilesEditor({
     if (files.length >= MAX_FILES) return void toast.error(`At most ${MAX_FILES} pictures and files.`);
     setBusy(true);
     try {
-      const blob = kind === "image" ? await toJpeg(picked) : picked;
-      const name = kind === "image" ? picked.name.replace(/\.[^.]+$/, "") + ".jpg" : picked.name;
-      const stored = await upload(kind, blob, name);
-      onFilesChange([...files, stored]);
+      const stored = kind === "image" ? await upload("image", await toJpeg(picked), picked.name.replace(/\.[^.]+$/, "") + ".jpg") : await uploadDocument(picked);
+      onFilesChange((current) => [...current, stored]);
       toast.success(kind === "image" ? "Picture added. Describe it, then insert it into the text." : "File attached.");
     } catch (error) {
       toast.error(error instanceof Error && error.message !== "unreadable" ? error.message : "We could not open that picture. Try a JPG or PNG.");
@@ -122,7 +150,7 @@ export function ContentFilesEditor({
     setUploadingVideo(true);
     try {
       const stored = await uploadVideo(picked);
-      onFilesChange([...files, stored]);
+      onFilesChange((current) => [...current, stored]);
       toast.success("Video added. Save the announcement to publish it.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "We could not upload that video. Please try again.");
@@ -140,7 +168,7 @@ export function ContentFilesEditor({
   };
 
   const remove = (f: ContentFileView) => {
-    onFilesChange(files.filter((x) => x.id !== f.id));
+    onFilesChange((current) => current.filter((x) => x.id !== f.id));
     if (inText.has(f.id)) {
       const kept = body
         .split("\n")
@@ -234,12 +262,12 @@ export function ContentFilesEditor({
                     placeholder="Describe the picture"
                     className="h-8 w-56 max-w-full rounded-md border bg-background px-2 text-xs"
                   />
-                  <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => insert(f)}>
+                  <Button type="button" size="sm" variant="outline" disabled={disabled || busy} onClick={() => insert(f)}>
                     Insert in text
                   </Button>
                 </>
               ) : null}
-              <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => remove(f)} aria-label={`Remove ${f.fileName}`}>
+              <Button type="button" size="sm" variant="ghost" disabled={disabled || busy} onClick={() => remove(f)} aria-label={`Remove ${f.fileName}`}>
                 <Trash2 aria-hidden />
               </Button>
             </li>

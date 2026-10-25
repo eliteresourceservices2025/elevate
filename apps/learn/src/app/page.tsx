@@ -3,6 +3,10 @@ import { CourseCard, HomeTile, homeStatus } from "@/components/course-card";
 import { requireSession } from "@/lib/auth";
 import { getSql, withUser } from "@/lib/db";
 import { getPractice, listAssignments } from "@/lib/queries";
+import type { Metadata } from "next";
+
+// The root layout's title template does not apply to the page of its own segment, so the full title is written out here.
+export const metadata: Metadata = { title: { absolute: "My training · ELEVATE Learn" } };
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +45,7 @@ export default async function Home() {
       ) : (
         <ul className="mod-grid" aria-label="My training">
           {assignments.map((a) => (
-            <CourseCard key={a.id} slug={a.slug} title={a.title} track={a.track} status={a.status} dueOn={a.dueOn} isUpdate={a.isUpdate} href={`/course/${a.id}`} />
+            <CourseCard key={a.id} slug={a.slug} title={a.title} track={a.track} status={a.status} dueOn={a.dueOn} isUpdate={a.isUpdate} reason={a.reason} href={`/course/${a.id}`} />
           ))}
         </ul>
       )}

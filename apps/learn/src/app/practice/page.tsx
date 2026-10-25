@@ -5,6 +5,9 @@ import { PageHead } from "@/components/page-head";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { getPractice } from "@/lib/queries";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Quarterly practice" };
 
 export const dynamic = "force-dynamic";
 

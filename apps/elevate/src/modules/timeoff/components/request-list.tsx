@@ -12,6 +12,7 @@ import { formatDateOnly } from "@/lib/time";
 import { formatDays } from "../ledger";
 import { cancelRequest, decideRequest, getLeaveInvite } from "../request-actions";
 import type { RequestItem } from "../request-queries";
+import { useAsk } from "@/components/confirm-dialog";
 
 const STATUS: Record<RequestItem["status"], { label: string; variant: "success" | "warning" | "outline" | "destructive" }> = {
   pending_lead: { label: "Waiting for lead", variant: "warning" },
@@ -26,6 +27,7 @@ const STEP_TEXT = { approved: "approved", declined: "declined", escalated: "did 
 function RequestCard({ item, showPerson }: { item: RequestItem; showPerson: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const ask = useAsk();
   const [note, setNote] = useState("");
   const status = STATUS[item.status];
   const range = item.startDate === item.endDate ? formatDateOnly(item.startDate) : `${formatDateOnly(item.startDate)} to ${formatDateOnly(item.endDate)}`;
@@ -103,7 +105,7 @@ function RequestCard({ item, showPerson }: { item: RequestItem; showPerson: bool
           </Button>
         ) : null}
         {item.canCancel ? (
-          <Button size="sm" variant="ghost" disabled={pending} onClick={() => window.confirm("Cancel this request?") && run(() => cancelRequest({ requestId: item.id }), "Request cancelled.")}>
+          <Button size="sm" variant="ghost" disabled={pending} onClick={async () => (await ask("Cancel this request?")) && run(() => cancelRequest({ requestId: item.id }), "Request cancelled.")}>
             Cancel request
           </Button>
         ) : null}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { mergeCandidates } from "../actions";
 import { STAGE_LABELS } from "../constants";
@@ -11,12 +12,20 @@ import { useRun } from "./use-run";
 export function MergeGroup({ group }: { group: DuplicateGroupView }) {
   const { run, pending } = useRun();
   const [keep, setKeep] = useState(group.candidates[0]?.id ?? "");
+  const confirm = useConfirm();
 
-  function merge() {
+  async function merge() {
     const others = group.candidates.filter((c) => c.id !== keep);
     const kept = group.candidates.find((c) => c.id === keep);
     if (!kept) return;
-    if (!window.confirm(`Merge ${others.length === 1 ? "the other record" : `the other ${others.length} records`} into ${kept.name} (${kept.email})? Their applications move to this record and the other record is emptied. This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: "Merge these records?",
+      description: `${others.length === 1 ? "The other record" : `The other ${others.length} records`} will be merged into ${kept.name} (${kept.email}). Their applications move to this record and the other record is emptied. This cannot be undone.`,
+      confirmLabel: "Merge records",
+      cancelLabel: "Keep both",
+      destructive: true,
+    });
+    if (!ok) return;
     run(
       async () => {
         let moved = 0;
@@ -36,12 +45,12 @@ export function MergeGroup({ group }: { group: DuplicateGroupView }) {
       <legend className="px-1 text-sm font-semibold">Possible duplicate: same {group.reasons.map((r) => (r === "phone" ? "phone number" : "name")).join(" and ")}</legend>
       <ul className="space-y-2">
         {group.candidates.map((c) => (
-          <li key={c.id}>
+          <li key={c.id} className="min-w-0">
             <label htmlFor={`keep-${c.id}`} className="flex items-start gap-3 rounded-lg border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5">
               <input id={`keep-${c.id}`} type="radio" name={`keep-${group.candidates[0]?.id}`} className="mt-1 size-4 accent-primary" checked={keep === c.id} onChange={() => setKeep(c.id)} />
-              <span className="space-y-0.5">
-                <span className="block font-medium">{c.name}</span>
-                <span className="block text-muted-foreground">
+              <span className="min-w-0 space-y-0.5 break-words">
+                <span className="block font-medium [overflow-wrap:anywhere]">{c.name}</span>
+                <span className="block text-muted-foreground [overflow-wrap:anywhere]">
                   {c.email}
                   {c.phone ? ` · ${c.phone}` : ""}
                 </span>
@@ -55,8 +64,8 @@ export function MergeGroup({ group }: { group: DuplicateGroupView }) {
         ))}
       </ul>
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" disabled={pending} onClick={merge}>
-          Keep the selected record and merge the rest into it
+        <Button type="button" disabled={pending} onClick={merge} className="h-auto min-h-(--control-h) whitespace-normal text-left">
+          Merge into selected record
         </Button>
         <p className="text-xs text-muted-foreground">Looks alike but not the same person? Just leave it. Nothing is merged for you.</p>
       </div>

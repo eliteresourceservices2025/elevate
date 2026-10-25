@@ -13,6 +13,20 @@ import { acknowledgmentReminders } from "./schema";
 
 type Executor = Pick<typeof db, "execute" | "insert" | "select">;
 
+/**
+ * An announcement's content revision: its last-change time in milliseconds. Every edit (text, due date, pictures and files) sets it, so a reader
+ * who sends back the revision they were shown can be told their page is out of date. Read it in SQL both times so the two always agree.
+ */
+export const REVISION_SQL = sql`floor(extract(epoch from updated_at) * 1000)::bigint::text`;
+
+/** Locks the announcement row until the transaction ends and returns its current revision (null if there is no such announcement). */
+export async function lockAnnouncement(tx: Executor, id: string): Promise<{ revision: string; archived: boolean } | null> {
+  const rows = (await tx.execute(
+    sql`select ${REVISION_SQL} as revision, archived_at is not null as archived from docs.announcements where id = ${id}::uuid for update`,
+  )) as unknown as { revision: string; archived: boolean }[];
+  return rows[0] ?? null;
+}
+
 export type PendingAck = {
   userId: string;
   kind: "announcement" | "policy";

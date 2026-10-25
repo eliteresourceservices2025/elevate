@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "./modal";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -185,15 +186,13 @@ export function ModulePlayer(props: {
         }
       />
       {idle ? (
-        <div className="modal-back">
-          <div role="dialog" aria-modal="true" aria-labelledby="idle-title" className="modal">
+        <Modal labelledBy="idle-title" onClose={stillHere}>
             <h2 id="idle-title">Are you still there?</h2>
             <p>You have not done anything for 5 minutes, so the timer paused. Your progress is saved.</p>
-            <button type="button" autoFocus onClick={stillHere}>
+            <button type="button" data-autofocus onClick={stillHere}>
               Yes, continue
             </button>
-          </div>
-        </div>
+        </Modal>
       ) : null}
     </>
   );

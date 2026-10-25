@@ -15,6 +15,7 @@ export function NotificationBell({ unread: initialUnread }: { unread: number }) 
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(initialUnread);
   const [items, setItems] = useState<NotificationItem[] | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const root = useRef<HTMLDivElement>(null);
 
@@ -32,16 +33,23 @@ export function NotificationBell({ unread: initialUnread }: { unread: number }) 
     };
   }, [open]);
 
+  function load() {
+    setFailed(null);
+    startTransition(async () => {
+      try {
+        const result = await loadNotifications();
+        if (result.ok) setItems(result.data.items);
+        else setFailed(result.error);
+      } catch {
+        setFailed("Could not reach ELEVATE.");
+      }
+    });
+  }
+
   function toggle() {
     const next = !open;
     setOpen(next);
-    if (next) {
-      startTransition(async () => {
-        const result = await loadNotifications();
-        if (result.ok) setItems(result.data.items);
-        else toast.error(result.error);
-      });
-    }
+    if (next) load();
   }
 
   function openItem(item: NotificationItem) {
@@ -95,7 +103,15 @@ export function NotificationBell({ unread: initialUnread }: { unread: number }) 
             ) : null}
           </div>
           <ul className="max-h-96 overflow-y-auto">
-            {items === null ? <li className="px-3 py-4 text-sm text-muted-foreground">Loading…</li> : null}
+            {items === null && !failed ? <li className="px-3 py-4 text-sm text-muted-foreground">Loading…</li> : null}
+            {failed ? (
+              <li role="alert" className="space-y-2 px-3 py-4 text-sm">
+                <p className="text-destructive">We could not load your notifications. {failed}</p>
+                <Button type="button" variant="outline" size="sm" onClick={load} disabled={pending}>
+                  Try again
+                </Button>
+              </li>
+            ) : null}
             {items?.length === 0 ? <li className="px-3 py-4 text-sm text-muted-foreground">You are all caught up.</li> : null}
             {items?.map((n) => (
               <li key={n.id} className="border-b last:border-b-0">

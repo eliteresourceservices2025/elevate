@@ -14,6 +14,7 @@ import { applyScheduleImport, discardScheduleImport, rememberScheduleImportMatch
 import type { Decision, Plan, PlanRow } from "../plan";
 import { ImportOutcome, rememberOutcome } from "./import-outcome";
 import { Alert } from "@/components/ui/alert";
+import { useAsk } from "@/components/confirm-dialog";
 
 export type Targets = { people: { id: string; label: string }[]; clients: { id: string; label: string }[] };
 
@@ -27,6 +28,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 /** The preview of an attendance sheet and the apply step: choose rows, adjust the assumed break and the estimated hours, tick who to end. */
 export function PlanView({ batchId, plan, digest, targets }: { batchId: string; plan: Plan; digest: string; targets: Targets | null }) {
+  const ask = useAsk();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(plan.totals.update > 0 ? "update" : plan.totals.needsDecision > 0 ? "decisions" : "unchanged");
   const [pending, setPending] = useState(false);
@@ -83,7 +85,7 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
   const edit = (key: string, patch: Partial<Edit>) => setEdits((e) => ({ ...e, [key]: { ...(e[key] ?? { breakMinutes: "", hoursPerWeek: "" }), ...patch } }));
 
   async function discard() {
-    if (!window.confirm("Discard this upload? Its rows are deleted.")) return;
+    if (!(await ask("Discard this upload? Its rows are deleted."))) return;
     setPending(true);
     try {
       const r = await discardScheduleImport({ batchId });
@@ -138,7 +140,7 @@ export function PlanView({ batchId, plan, digest, targets }: { batchId: string; 
     });
     if (bad) return void toast.error(`Check the break and hours for ${bad.personName}.`);
     const summary = `${chosen.length} ${chosen.length === 1 ? "person" : "people"} will get the shown client and schedule${ending.size ? `, and ${ending.size} assignment${ending.size === 1 ? "" : "s"} will end on ${endDate}` : ""}. Continue?`;
-    if (!window.confirm(summary)) return;
+    if (!(await ask(summary))) return;
     setPending(true);
     try {
       const r = await applyScheduleImport({

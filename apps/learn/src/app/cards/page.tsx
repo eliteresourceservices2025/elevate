@@ -4,6 +4,9 @@ import { PageHead } from "@/components/page-head";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { getCards } from "@/lib/queries";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Reference cards" };
 
 export const dynamic = "force-dynamic";
 

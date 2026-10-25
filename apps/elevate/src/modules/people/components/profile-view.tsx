@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { TabNav } from "@/components/tab-nav";
 import { Breadcrumbs } from "@/components/page-header";
+import { returnCrumb, withReturn } from "@/lib/return-to";
 import { PageContainer } from "@/components/page-container";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatDateOnly, formatInZone } from "@/lib/time";
@@ -42,7 +43,7 @@ const TABS = [
  * One person's profile. Shared by /people/[id] (anyone with access) and /people/me (the signed-in person's own), so My profile keeps its own
  * address and menu highlight instead of bouncing to the People list.
  */
-export async function ProfileView({ id, requestedTab, basePath, own }: { id: string; requestedTab: string | undefined; basePath: string; own: boolean }) {
+export async function ProfileView({ id, requestedTab, basePath, own, returnTo = null }: { id: string; requestedTab: string | undefined; basePath: string; own: boolean; /** A safe list address (see safeReturnTo) the person came from. */ returnTo?: string | null }) {
   const profile = await orNotFound(getProfile(id));
   const { employee: e, access } = profile;
 
@@ -76,7 +77,7 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
   return (
     <PageContainer>
       <div className="space-y-3">
-        <Breadcrumbs items={own ? [{ label: "My profile" }] : [{ label: "People", href: "/people" }, { label: displayName(e) }]} />
+        <Breadcrumbs items={own ? [{ label: "My profile" }] : [returnCrumb(returnTo) ?? { label: "People", href: "/people" }, { label: displayName(e) }]} />
 
         <section aria-label="Profile summary" className="overflow-clip rounded-2xl border bg-card shadow-sm animate-in fade-in-0 duration-300 motion-reduce:animate-none">
           <div className="flex flex-wrap items-start gap-x-5 gap-y-4 p-5 md:p-6">
@@ -121,7 +122,7 @@ export async function ProfileView({ id, requestedTab, basePath, own }: { id: str
 
       <PendingRequests requests={profile.pendingRequests} canCancel={access.canRequestChange} />
 
-      <TabNav label="Profile sections" items={visible.map((t) => ({ key: t.key, label: t.label, href: `${basePath}?tab=${t.key}` }))} current={active.key} />
+      <TabNav label="Profile sections" items={visible.map((t) => ({ key: t.key, label: t.label, href: withReturn(`${basePath}?tab=${t.key}`, returnTo) }))} current={active.key} />
 
       {active.key === "personal" ? <PersonalSection profile={profile} /> : null}
       {mine ? (

@@ -1,4 +1,7 @@
 import { elevateUrl } from "@/lib/origin";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Signed out" };
 
 // Signing out redirects here (a page on this site: the content-security policy's form-action rule also covers the redirects of a
 // form post, so the post cannot be sent straight to another site). This page then moves the person on to ELEVATE with a new

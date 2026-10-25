@@ -102,10 +102,10 @@ export function CallRunner({ view }: { view: CallView }) {
         <Meter label="Caller mood" value={state.mood} />
         {step.kind === "caller" ? (
           <>
-            <blockquote key={step.id} className="caller">
+            <blockquote key={`${step.id}-text`} className="caller">
               <Inline text={step.text} />
             </blockquote>
-            <ListenButton key={step.id} text={step.text} clips={[step.audio]} />
+            <ListenButton key={`${step.id}-listen`} text={step.text} clips={[step.audio]} />
           </>
         ) : (
           <p>

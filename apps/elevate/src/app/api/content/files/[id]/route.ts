@@ -18,17 +18,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       if (!range || /^bytes=0-/.test(range)) await writeAudit({ actor: viewer, action: "content.video_view", targetType: "content_file", targetId: file.id }).catch(() => {});
       return new Response(null, { status: 307, headers: { Location: file.playbackUrl, "Cache-Control": "private, max-age=240", "X-Content-Type-Options": "nosniff" } }); // the link lives 300 s: reuse it for the many range requests of one viewing
     }
+    if (file.kind === "file") {
+      // A document goes straight from storage under a 60-second link (a function response is limited to a few MB on the host).
+      await writeAudit({ actor: viewer, action: "content.file_view", targetType: "content_file", targetId: file.id }).catch(() => {});
+      return new Response(null, { status: 307, headers: { Location: file.downloadUrl, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+    }
     const headers: Record<string, string> = {
       "Content-Type": file.mimeType,
       "Cache-Control": "private, max-age=300",
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
     };
-    if (file.kind === "file") {
-      const ascii = file.fileName.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "");
-      headers["Content-Disposition"] = `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.fileName)}`;
-      await writeAudit({ actor: viewer, action: "content.file_view", targetType: "content_file", targetId: file.id }).catch(() => {});
-    }
     return new Response(Buffer.from(file.bytes), { headers });
   } catch (error) {
     if (error instanceof ForbiddenError) return new Response("Not found", { status: 404 });

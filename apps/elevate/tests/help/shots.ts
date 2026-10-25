@@ -875,7 +875,7 @@ export const SHOTS: Shot[] = [
     role: "employee",
     path: "/learn",
     ready: (p) => p.getByRole("heading", { name: "My training", level: 1 }),
-    targets: { "open button": (p) => p.getByRole("link", { name: /Open HIPAA training/ }).or(p.getByRole("button", { name: /Open HIPAA training/ })).first() },
+    targets: { "open button": (p) => p.getByRole("link", { name: /Open ELEVATE Learn/ }).or(p.getByRole("button", { name: /Open ELEVATE Learn/ })).first() },
   },
   {
     article: "your-certificates-and-equipment",

@@ -27,6 +27,8 @@ export function AnnouncementForm({
   /** Present when editing: audience and "requires acknowledgment" are fixed after posting. */
   edit?: {
     announcementId: string;
+    /** The version of the announcement this form was opened on. */
+    revision: string;
     title: string;
     body: string;
     pinned: boolean;
@@ -49,6 +51,9 @@ export function AnnouncementForm({
   const [dueOn, setDueOn] = useState(edit?.dueOn ?? "");
   const [attachment, setAttachment] = useState(edit?.attachmentDocumentId ?? "");
   const [files, setFiles] = useState<ContentFileView[]>(edit?.files ?? []);
+  const [uploading, setUploading] = useState(false);
+  // A new date cannot be in the past, but an existing overdue date may stay so unrelated edits (like pinning) can still be saved.
+  const earliestDue = edit?.dueOn && edit.dueOn < today ? edit.dueOn : today;
 
   useWarnWhenEdited({ title, body, audience, teamIds, pinned, requiresAck, dueOn, attachment, files: files.map((f) => f.id) });
   const locked = edit?.textLocked ?? false;
@@ -56,9 +61,10 @@ export function AnnouncementForm({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (uploading) return void toast.error("Wait for the upload to finish, then save.");
     startTransition(async () => {
       if (edit) {
-        const result = await updateAnnouncement({ announcementId: edit.announcementId, title, body, pinned, dueOn, attachmentDocumentId: attachment, attachmentIds: files.map((f) => f.id) });
+        const result = await updateAnnouncement({ announcementId: edit.announcementId, expectedRevision: edit.revision, title, body, pinned, dueOn, attachmentDocumentId: attachment, attachmentIds: files.map((f) => f.id) });
         if (!result.ok) return void toast.error(result.error);
         toast.success("Announcement updated.");
         router.push(`/announcements/${edit.announcementId}`);
@@ -84,7 +90,7 @@ export function AnnouncementForm({
       {locked ? <p className="rounded-lg border bg-muted/50 p-3 text-sm">People have already acknowledged this, so the title and text are locked. You can still change the due date, pinning and attachment.</p> : null}
       <TextField id="an-title" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required disabled={locked} />
       <MarkdownField id="an-body" label="Message" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={10} required disabled={locked} />
-      <ContentFilesEditor files={files} onFilesChange={setFiles} body={body} onBodyChange={setBody} disabled={locked} allowVideo />
+      <ContentFilesEditor files={files} onFilesChange={setFiles} onBusyChange={setUploading} body={body} onBodyChange={setBody} disabled={locked} allowVideo />
 
       {!edit ? (
         <fieldset className="space-y-3">
@@ -109,7 +115,7 @@ export function AnnouncementForm({
         {box("an-pinned", "Pin to the top", pinned, setPinned)}
         {box("an-ack", "Require acknowledgment", requiresAck, setRequiresAck, Boolean(edit))}
         {requiresAck ? (
-          <TextField id="an-due" label="Due date (optional)" type="date" min={today} value={dueOn} onChange={(e) => setDueOn(e.target.value)} hint="People are reminded 3 days before, on the day, and weekly while overdue." />
+          <TextField id="an-due" label="Due date (optional)" type="date" min={earliestDue} value={dueOn} onChange={(e) => setDueOn(e.target.value)} hint="People are reminded 3 days before, on the day, and weekly while overdue." />
         ) : null}
         <SelectField id="an-attach" label="Attach a company document (optional)" value={attachment} onChange={(e) => setAttachment(e.target.value)}>
           <option value="">No attachment</option>
@@ -120,7 +126,7 @@ export function AnnouncementForm({
       </fieldset>
 
       <div className="flex gap-2">
-        <Button type="submit" disabled={pending}>{edit ? "Save changes" : "Post announcement"}</Button>
+        <Button type="submit" disabled={pending || uploading}>{uploading ? "Uploading…" : edit ? "Save changes" : "Post announcement"}</Button>
         <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
       </div>
     </form>

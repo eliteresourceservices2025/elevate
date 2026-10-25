@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useConfirm } from "@/components/confirm-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,10 @@ const ACTIONS = [
 ] as const;
 type ActionValue = (typeof ACTIONS)[number]["value"];
 
-/** Checkbox attributes for a document row; the bar below reads the ticked boxes from the page. */
-export const bulkBoxProps = (formId: string) => ({ type: "checkbox" as const, form: formId, name: "document" });
-
 /** HR only. The checkboxes live in the list (`form={formId}`); this reads which are ticked and runs one action on all of them. */
 export function DocumentBulkBar({ formId }: { formId: string }) {
   const { run, pending } = useRun();
+  const confirm = useConfirm();
   const [selected, setSelected] = useState(0);
   const [action, setAction] = useState<ActionValue | "">("");
   const [reason, setReason] = useState("");
@@ -47,17 +46,19 @@ export function DocumentBulkBar({ formId }: { formId: string }) {
     setSelected(next ? new Set(all.map((b) => b.value)).size : 0);
   }
 
-  function submit(event: React.FormEvent) {
+  async function submit(event: React.FormEvent) {
     event.preventDefault();
     const ids = checkedIds();
     if (ids.length === 0 || action === "") return;
-    const what =
+    const count = `${ids.length} document${ids.length === 1 ? "" : "s"}`;
+    const ok = await confirm(
       action === "archive"
-        ? `Archive ${ids.length} document${ids.length === 1 ? "" : "s"}? They are hidden from lists; the files are kept.`
+        ? { title: `Archive ${count}?`, description: "They are hidden from lists; the files are kept and can be restored.", confirmLabel: `Archive ${count}` }
         : action === "restore"
-          ? `Restore ${ids.length} document${ids.length === 1 ? "" : "s"} from the archive?`
-          : `Delete ${ids.length} document${ids.length === 1 ? "" : "s"} for good? The files are removed and this cannot be undone.`;
-    if (!window.confirm(what)) return;
+          ? { title: `Restore ${count}?`, description: "They return to the lists from the archive.", confirmLabel: `Restore ${count}` }
+          : { title: `Delete ${count} for good?`, description: "The files are removed and this cannot be undone.", confirmLabel: `Delete ${count}`, destructive: true },
+    );
+    if (!ok) return;
     setResult(null);
     const input = action === "delete" ? { action, documentIds: ids, reason } : { action, documentIds: ids };
     run<BulkDocumentsResult>(

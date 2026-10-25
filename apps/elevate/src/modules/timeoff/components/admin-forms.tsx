@@ -9,6 +9,7 @@ import { useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { archiveHoliday, archiveLeaveType, createHoliday, createLeaveType, importHolidays, updateHoliday, updateLeaveType, verifyAllHolidays } from "../actions";
 import type { HolidayRow, LeaveTypeRow } from "../queries";
+import { useAsk } from "@/components/confirm-dialog";
 
 function useRun() {
   const router = useRouter();
@@ -60,6 +61,7 @@ export function NewLeaveTypeForm() {
 
 export function LeaveTypeRowForm({ type }: { type: LeaveTypeRow }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(type.name);
   const [skipHr, setSkipHr] = useState(type.skipHr);
@@ -78,7 +80,7 @@ export function LeaveTypeRowForm({ type }: { type: LeaveTypeRow }) {
             <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
               Edit
             </Button>
-            <Button variant="ghost" size="sm" disabled={pending} onClick={() => window.confirm(`Retire "${type.name}"? It disappears from new awards. Existing entries stay.`) && run(() => archiveLeaveType({ leaveTypeId: type.id }), "Leave type retired.")}>
+            <Button variant="ghost" size="sm" disabled={pending} onClick={async () => (await ask(`Retire "${type.name}"? It disappears from new awards. Existing entries stay.`)) && run(() => archiveLeaveType({ leaveTypeId: type.id }), "Leave type retired.")}>
               Retire
             </Button>
           </div>
@@ -179,13 +181,14 @@ export function ImportHolidaysButton({ year }: { year: number }) {
 /** After HR has compared the year's list with the official proclamation: ticks every unchecked day at once. */
 export function VerifyAllHolidaysButton({ year, count }: { year: number; count: number }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   if (count === 0) return null;
   return (
     <Button
       variant="outline"
       disabled={pending}
-      onClick={() => {
-        if (!window.confirm(`Mark all ${count} unchecked ${year} holidays as checked? Only do this after comparing them with the official list: checked days count for absence flags and leave.`)) return;
+      onClick={async () => {
+        if (!(await ask(`Mark all ${count} unchecked ${year} holidays as checked? Only do this after comparing them with the official list: checked days count for absence flags and leave.`))) return;
         run(() => verifyAllHolidays({ year }), `Marked ${count} holidays as checked.`);
       }}
     >
@@ -225,6 +228,7 @@ export function NewHolidayForm({ defaultDate }: { defaultDate: string }) {
 /** HR controls on one holiday row: mark checked, edit, remove. */
 export function HolidayControls({ holiday }: { holiday: HolidayRow }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [editing, setEditing] = useState(false);
   const [calendar, setCalendar] = useState(holiday.calendar);
   const [date, setDate] = useState(holiday.date);
@@ -243,7 +247,7 @@ export function HolidayControls({ holiday }: { holiday: HolidayRow }) {
         <Button variant="ghost" size="xs" onClick={() => setEditing(true)} aria-label={`Edit ${holiday.name}`}>
           Edit
         </Button>
-        <Button variant="ghost" size="xs" disabled={pending} aria-label={`Remove ${holiday.name}`} onClick={() => window.confirm(`Remove "${holiday.name}" (${holiday.date}) from the calendar?`) && run(() => archiveHoliday({ holidayId: holiday.id }), "Holiday removed.")}>
+        <Button variant="ghost" size="xs" disabled={pending} aria-label={`Remove ${holiday.name}`} onClick={async () => (await ask(`Remove "${holiday.name}" (${holiday.date}) from the calendar?`)) && run(() => archiveHoliday({ holidayId: holiday.id }), "Holiday removed.")}>
           Remove
         </Button>
       </div>

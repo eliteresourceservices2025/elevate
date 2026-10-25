@@ -14,6 +14,7 @@ import type { DocumentRow, FolderRow } from "../queries";
 import type { CategorizeOptions } from "./categorize-document";
 import { DocumentList } from "./document-list";
 import { DocumentFilterBar, GroupedDocuments, useDocumentFilters } from "./document-filters";
+import { useAsk } from "@/components/confirm-dialog";
 
 const ALL = "all";
 const NONE = "none";
@@ -25,6 +26,7 @@ const NONE = "none";
 export function DocumentLibrary({ employeeId, rows, folders, canOrganize, viewerIsHr, categorize }: { employeeId: string; rows: DocumentRow[]; folders: FolderRow[]; canOrganize: boolean; viewerIsHr: boolean; categorize?: CategorizeOptions }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const ask = useAsk();
   const [view, setView] = useState<string>(ALL);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -149,8 +151,8 @@ export function DocumentLibrary({ employeeId, rows, folders, canOrganize, viewer
                 size="xs"
                 variant="ghost"
                 disabled={pending}
-                onClick={() =>
-                  window.confirm(`Remove the folder "${folder.name}"? Its documents are kept and move to "No folder".`) &&
+                onClick={async () =>
+                  (await ask(`Remove the folder "${folder.name}"? Its documents are kept and move to "No folder".`)) &&
                   run(() => archiveFolder({ folderId: folder.id }), "Folder removed.", () => setView(ALL))
                 }
               >

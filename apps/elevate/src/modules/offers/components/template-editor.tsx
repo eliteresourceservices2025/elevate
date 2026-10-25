@@ -11,12 +11,14 @@ import { useRun } from "@/modules/recruiting/components/use-run";
 import { archiveOfferTemplate, saveOfferTemplate } from "../actions";
 import { DEFAULT_OFFER_TEMPLATE, MERGE_FIELDS, renderText, templateProblem } from "../merge";
 import type { TemplateRow } from "../queries";
+import { useAsk } from "@/components/confirm-dialog";
 
 const SAMPLE = { candidate_name: "Ana Reyes", offer_date: "October 1, 2026", expires_on: "October 8, 2026", role_title: "Virtual Assistant", start_date: "November 2, 2026", client_name: "Acme Dental", pay_note: "Hourly rate agreed per client." };
 
 /** HR: write offer letters with merge fields, with a live preview filled with sample values. */
 export function TemplateEditor({ templates }: { templates: TemplateRow[] }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [editing, setEditing] = useState<TemplateRow | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -47,7 +49,7 @@ export function TemplateEditor({ templates }: { templates: TemplateRow[] }) {
                 <Button size="sm" variant="outline" onClick={() => load(t)}>
                   Edit
                 </Button>
-                <Button size="sm" variant="ghost" disabled={pending} onClick={() => window.confirm("Archive this template? Offers already sent are not affected.") && run(() => archiveOfferTemplate({ templateId: t.id }), "Template archived.", () => editing?.id === t.id && load(null))}>
+                <Button size="sm" variant="ghost" disabled={pending} onClick={async () => (await ask("Archive this template? Offers already sent are not affected.")) && run(() => archiveOfferTemplate({ templateId: t.id }), "Template archived.", () => editing?.id === t.id && load(null))}>
                   Archive
                 </Button>
               </div>

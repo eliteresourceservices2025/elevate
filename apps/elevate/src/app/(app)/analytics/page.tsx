@@ -15,7 +15,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps<"/analyt
   const params = await searchParams;
   const data = await orNotFound(getDashboard(params));
   return (
-    <PageContainer>
+    <PageContainer width="canvas">
       <PageHeader title="Analytics" description="Headcount, turnover, time off, attendance and hiring. Totals only, read-only." />
       <AnalyticsDashboard data={data} canExport={can(user, "analytics.export")} />
       {can(user, "demographics.view_summary") ? <SelfIdSummary /> : null}

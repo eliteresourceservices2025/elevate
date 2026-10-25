@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { acknowledgeReview, calibrateReview, closeReviewCycle, reassignReviewer, restoreReview, shareCycleReviews, shareReview, submitLeadReview, submitSelfReview, waiveReview } from "../actions";
 import { RATINGS, RATING_LABELS, type Answers, type Question } from "../constants";
+import { useAsk } from "@/components/confirm-dialog";
 
 const sections = (qs: Question[]) => [...new Set(qs.map((q) => q.section))];
 
@@ -160,6 +161,7 @@ export function AcknowledgeForm({ reviewId }: { reviewId: string }) {
 /** HR or the lead: this review is not needed this time. A written reason is required. */
 export function WaiveForm({ reviewId }: { reviewId: string }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   if (!open) {
@@ -172,9 +174,9 @@ export function WaiveForm({ reviewId }: { reviewId: string }) {
   return (
     <form
       className="max-w-xl space-y-2 rounded-xl border bg-card p-4"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        if (!window.confirm("Waive this review? It is taken out of reminders and counts. You can bring it back until the cycle closes.")) return;
+        if (!(await ask("Waive this review? It is taken out of reminders and counts. You can bring it back until the cycle closes."))) return;
         run(() => waiveReview({ reviewId, reason }), "Review waived.");
       }}
     >

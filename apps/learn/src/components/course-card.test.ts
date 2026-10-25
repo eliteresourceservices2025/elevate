@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CourseCard, HomeTile, homeStatus } from "./course-card";
 import { hasHomeScene, homeSceneKeys } from "./home-art";
 
-const card = (status: string, extra: Partial<{ slug: string; isUpdate: boolean; track: string }> = {}) =>
+const card = (status: string, extra: Partial<{ slug: string; isUpdate: boolean; track: string; reason: string }> = {}) =>
   renderToStaticMarkup(createElement("ul", null, createElement(CourseCard, { slug: "hipaa", title: "HIPAA Privacy, Security and Awareness", track: "full", status, dueOn: "2026-11-13", isUpdate: false, href: "/course/abc", ...extra })));
 
 describe("the course picture cards on the home page", () => {
@@ -13,26 +13,40 @@ describe("the course picture cards on the home page", () => {
     expect(html).toContain("HIPAA Privacy, Security and Awareness");
     expect(html).toContain("<svg");
     expect(html).toContain("In progress");
-    expect(html).toContain("Due 2026-11-13");
+    expect(html).toContain("Due Nov 13, 2026");
     expect(html).toContain("Continue");
     expect(html).toContain("Full course");
     expect(html.match(/<a /g)).toHaveLength(1);
     expect(html).toContain('href="/course/abc"');
   });
 
-  it("say Start, Continue or View certificate by status, and show a passed course as Passed", () => {
+  it("say Start, Continue or Review course by status (the certificate link is inside the course), and show a passed course as Passed", () => {
     expect(card("assigned")).toContain("Start");
     expect(card("assigned")).toContain("Not started");
     const passed = card("passed");
-    expect(passed).toContain("View certificate");
+    expect(passed).toContain("Review course");
     expect(passed).toContain("Passed");
-    expect(passed).not.toContain("Due 2026-11-13");
+    expect(passed).not.toContain("Due Nov 13, 2026");
   });
 
   it("call an update an update, and say the certificate stays valid", () => {
     const html = card("assigned", { isUpdate: true });
     expect(html).toContain("Short update");
     expect(html).toContain("Your certificate stays valid.");
+  });
+
+  it("say why a course was assigned, so two cards with one title can be told apart", () => {
+    expect(card("assigned", { reason: "new_hire" })).toContain("New-hire course · Full course");
+    expect(card("assigned", { reason: "renewal", track: "refresher" })).toContain("Yearly renewal · Refresher");
+    expect(card("assigned", { reason: "manual", track: "essentials" })).toContain("Assigned by HR · Essentials");
+    expect(card("assigned", { reason: "update", isUpdate: true })).toContain("Short update");
+    expect(card("assigned")).toContain("Full course"); // no reason given: the track alone, as before
+  });
+
+  it("say a finished update is finished, not that lessons still need reading", () => {
+    const html = card("passed", { isUpdate: true, reason: "update" });
+    expect(html).toContain("You are up to date.");
+    expect(html).not.toContain("Read only what is new");
   });
 
   it("hide the picture from screen readers and add no scripts or raw HTML", () => {

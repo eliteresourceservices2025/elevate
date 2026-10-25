@@ -16,7 +16,7 @@ import { NewPolicyForm } from "@/modules/announcements/components/policy-editor"
 import { hidesVersion } from "@/modules/announcements/constants";
 import { PopupQueueAdmin } from "@/modules/announcements/components/popup-admin";
 import { listPopupQueue } from "@/modules/announcements/popup-queries";
-import { listAnnouncements, listPolicies } from "@/modules/announcements/queries";
+import { listAnnouncementsPage, listPolicies } from "@/modules/announcements/queries";
 import { todayInZone } from "@/modules/org/service";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
@@ -40,10 +40,9 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
   const tab = TABS.find((t) => t.key === requested && (t.key !== "popups" || isHr))?.key ?? "announcements";
   const today = todayInZone();
 
-  const items = tab === "announcements" ? await orNotFound(listAnnouncements()) : null;
+  const itemPage = tab === "announcements" ? await orNotFound(listAnnouncementsPage(paging)) : null;
   const policies = tab === "policies" ? await orNotFound(listPolicies()) : null;
   const popupRows = tab === "popups" ? await orNotFound(listPopupQueue()) : null;
-  const itemPage = items ? paginate(items, paging.page, paging.pageSize) : null;
   const policyPage = policies ? paginate(policies, paging.page, paging.pageSize) : null;
 
   return (
@@ -85,12 +84,12 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
         ))}
       </nav>
 
-      {items ? (
-        items.length === 0 ? (
+      {itemPage ? (
+        itemPage.info.total === 0 ? (
           <p className="text-muted-foreground">No announcements yet.</p>
         ) : (
           <ul className="space-y-3">
-            {itemPage?.rows.map((a) => (
+            {itemPage.rows.map((a) => (
               <li key={a.id}>
                 <Link href={`/announcements/${a.id}`} className="block rounded-xl border bg-card p-4 outline-none transition-colors hover:bg-secondary/50 focus-visible:ring-2 focus-visible:ring-ring">
                   <div className="flex flex-wrap items-center gap-2">

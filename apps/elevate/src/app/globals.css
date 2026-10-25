@@ -189,6 +189,26 @@
   }
 }
 
+/* A <Table stack> becomes a list of cards below the tablet width: the first cell is the card title, the others show their label
+   (TableCell label="Team") on the left and the value on the right; the actions cell sits at the bottom. */
+@media (max-width: 47.99rem) {
+  #main table[data-stack] { display: block; }
+  #main table[data-stack] thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #main table[data-stack] tbody { display: block; }
+  #main table[data-stack] tr { display: block; margin: 0.75rem; padding: 0.75rem 0.9rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--card); }
+  #main table[data-stack] tbody tr:nth-child(even) { background-color: var(--card); }
+  #main table[data-stack] td { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 0.25rem 0; white-space: normal; text-align: right; overflow-wrap: anywhere; }
+  #main table[data-stack] td[data-label]::before { content: attr(data-label); flex: none; color: var(--muted-foreground); font-size: 0.8rem; text-align: left; }
+  #main table[data-stack] td:not([data-label]) { justify-content: flex-start; text-align: left; font-weight: 600; font-size: 1rem; padding-bottom: 0.4rem; }
+  #main table[data-stack] td:empty { display: none; }
+  /* A selection checkbox sits in the top corner of its card instead of being the title. */
+  #main table[data-stack] tr { position: relative; }
+  #main table[data-stack] td[data-select] { position: absolute; top: 0.7rem; right: 0.8rem; padding: 0; }
+  /* A detail row under its main row (for example the days of a week) hangs below the card it belongs to. */
+  #main table[data-stack] tr[data-detail] { margin-top: -0.5rem; padding-top: 0.25rem; }
+  #main table[data-stack] tr[data-detail] td { font-weight: 400; font-size: 0.8rem; }
+}
+
 .scroll-shadow-x {
   background-image:
     linear-gradient(to right, var(--shadow-cover, var(--card)), var(--shadow-cover, var(--card))),

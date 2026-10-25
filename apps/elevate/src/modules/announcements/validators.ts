@@ -39,13 +39,16 @@ export const updateAnnouncementSchema = z.object({
   dueOn: optionalDate,
   attachmentDocumentId: z.preprocess(blankToUndefined, uuid.optional()),
   attachmentIds,
+  /** The revision the editor was opened on; refused when the announcement changed since. */
+  expectedRevision: z.string().regex(/^\d{1,16}$/).optional(),
 });
 
 export const announcementIdSchema = z.object({ announcementId: uuid });
 
 /** For policies, id is the policy VERSION id: people acknowledge a specific version. */
 export const subjectSchema = z.object({ kind: z.enum(["announcement", "policy_version"]), id: uuid });
-export const acknowledgeSchema = subjectSchema;
+/** `revision` is what the reader was shown (announcements only; a policy version is frozen). */
+export const acknowledgeSchema = subjectSchema.extend({ revision: z.string().regex(/^\d{1,16}$/).optional() });
 
 export const createPolicySchema = z.object({ title, body, requiresAck: z.boolean().default(true), dueOn: optionalDate, attachmentIds });
 
@@ -74,3 +77,13 @@ export const requestVideoUploadSchema = z.object({
   sizeBytes: z.number().int().min(1, "That video is empty.").max(MAX_VIDEO_BYTES, "A video can be up to 100 MB."),
 });
 export const videoIdSchema = z.object({ id: uuid });
+
+/** A PDF or Word document, sent straight to storage after this request. The server checks the real type again when it is finalized. */
+export const requestFileUploadSchema = z.object({
+  fileName: z.string().trim().min(1).max(200),
+  mimeType: z.enum(
+    ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    { error: "Attach a PDF or Word document." },
+  ),
+  sizeBytes: z.number().int().min(1, "That file is empty.").max(10 * 1024 * 1024, "A file can be up to 10 MB."),
+});

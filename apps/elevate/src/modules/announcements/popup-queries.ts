@@ -22,6 +22,8 @@ export type MyPopup = {
   version: number | null;
   /** The announcement's video (content file id), when it has one. */
   videoId: string | null;
+  /** Version stamp of an announcement's content as shown (null for a policy: its version is frozen). */
+  revision: string | null;
   link: string;
 };
 
@@ -38,6 +40,7 @@ export async function listMyPopups(): Promise<MyPopup[]> {
     select * from (
       select a.id::text as subject_id, 'announcement' as kind, a.title, a.body, a.requires_ack, a.due_on::text as due_on, null::int as version,
              (select cf.id::text from docs.content_files cf where cf.announcement_id = a.id and cf.kind = 'video' limit 1) as video_id,
+             floor(extract(epoch from a.updated_at) * 1000)::bigint::text as revision,
              p.sort_order, p.show_from, p.created_at
       from docs.popups p
       join docs.announcements a on a.id = p.announcement_id
@@ -47,7 +50,7 @@ export async function listMyPopups(): Promise<MyPopup[]> {
         and not exists (select 1 from docs.acknowledgments k where k.user_id = ${user.id} and k.announcement_id = a.id)
         and not exists (select 1 from docs.popup_dismissals d where d.user_id = ${user.id} and d.announcement_id = a.id)
       union all
-      select pv.id::text, 'policy', pol.title, pv.body, pv.requires_ack, pv.due_on::text, pv.version, null::text,
+      select pv.id::text, 'policy', pol.title, pv.body, pv.requires_ack, pv.due_on::text, pv.version, null::text, null::text,
              p.sort_order, p.show_from, p.created_at
       from docs.popups p
       join docs.policies pol on pol.id = p.policy_id
@@ -60,7 +63,7 @@ export async function listMyPopups(): Promise<MyPopup[]> {
     ) q
     order by sort_order asc, show_from asc, created_at asc
     limit ${MAX_POPUPS_AT_ONCE}`)) as unknown as {
-    subject_id: string; kind: "announcement" | "policy"; title: string; body: string; requires_ack: boolean; due_on: string | null; version: number | null; video_id: string | null;
+    subject_id: string; kind: "announcement" | "policy"; title: string; body: string; requires_ack: boolean; due_on: string | null; version: number | null; video_id: string | null; revision: string | null;
   }[];
 
   // A policy's page address is its policy id, not its version id.
@@ -79,6 +82,7 @@ export async function listMyPopups(): Promise<MyPopup[]> {
     dueOn: r.due_on,
     version: r.version,
     videoId: r.video_id,
+    revision: r.revision,
     link: r.kind === "announcement" ? `/announcements/${r.subject_id}` : `/announcements/policies/${policyIds.get(r.subject_id) ?? ""}`,
   }));
 }

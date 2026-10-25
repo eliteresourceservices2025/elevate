@@ -49,19 +49,24 @@ export function ApprovalRow({ item, waitedDays }: { item: QueueItem; waitedDays:
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3.5">
       <div className="min-w-[min(100%,14rem)] flex-1">
-        <p className="truncate text-sm font-medium">
+        <p className="text-sm font-medium [overflow-wrap:anywhere]">
           {item.who} <span className="font-normal text-muted-foreground">· {KIND_LABEL[item.kind]}</span>
         </p>
-        <p className="truncate text-xs text-muted-foreground">
+        <p className="line-clamp-2 text-xs text-muted-foreground" title={item.what}>
           {item.what}
           {waitedDays >= 1 ? ` · waiting ${waitedDays} ${waitedDays === 1 ? "day" : "days"}` : ""}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {item.inlineApprove ? (
-          <Button size="sm" disabled={pending} onClick={() => run(true)}>
-            Approve
-          </Button>
+          <>
+            <Link href={item.href} className={buttonVariants({ size: "sm", variant: "ghost" })} aria-label={`Details: ${item.who}, ${KIND_LABEL[item.kind]}`}>
+              Details
+            </Link>
+            <Button size="sm" disabled={pending} onClick={() => run(true)}>
+              Approve
+            </Button>
+          </>
         ) : (
           <Link href={item.href} className={buttonVariants({ size: "sm" })}>
             Review

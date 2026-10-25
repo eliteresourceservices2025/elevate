@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExamItem } from "@/lib/queries";
 import { clock, post } from "./api-client";
+import { AnswerSaver } from "./answer-saver";
+import { Modal } from "./modal";
 import { ListenButton } from "./listen-button";
 
 const LETTER = ["A", "B", "C", "D", "E", "F"];
@@ -24,7 +26,13 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
   const router = useRouter();
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string[]>>(() => Object.fromEntries(items.map((i) => [i.questionId, i.selected])));
-  const [saveState, setSaveState] = useState<"saved" | "saving" | "failed">("saved");
+  // Each answer is saved on its own and remembered until the server has it (see answer-saver.ts); the label below never says "Saved" while one is missing.
+  const [, setTick] = useState(0);
+  const [saver] = useState(() => {
+    const s = new AnswerSaver((questionId, selected) => post("answer", { attemptId, questionId, selected }), () => setTick((n) => n + 1));
+    for (const i of items) s.seed(i.questionId, i.selected);
+    return s;
+  });
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,10 +44,18 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
   const item = items[index];
   const answered = useMemo(() => items.filter((i) => (answers[i.questionId] ?? []).length > 0).length, [items, answers]);
 
-  const submit = async () => {
+  // `late` is the countdown reaching zero: the server grades what it has, so wait only a moment for answers still on their way.
+  const submit = async (late = false) => {
     if (submitted.current) return;
     submitted.current = true;
     setSubmitting(true);
+    const everySaved = late ? await Promise.race([saver.settle(), new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), 3000))]) : await saver.settle();
+    if (!everySaved && !late) {
+      submitted.current = false;
+      setSubmitting(false);
+      setError(`${saver.failedCount === 1 ? "One answer is" : "Some answers are"} not saved yet. Check your connection and try again: nothing is lost, and the exam is not submitted.`);
+      return;
+    }
     const r = await post("submit", { attemptId });
     if (r.ok) {
       router.refresh();
@@ -62,26 +78,37 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
 
   // Time is up: the server grades what was saved before the deadline.
   useEffect(() => {
-    if (remaining === 0 && deadlineAt && !submitted.current) void submit();
+    if (remaining === 0 && deadlineAt && !submitted.current) void submit(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- submit is stable enough; this must run only when the countdown reaches zero
   }, [remaining]);
 
-  const choose = async (optionId: string) => {
+  const choose = (optionId: string) => {
     const current = answers[item.questionId] ?? [];
     const multiple = item.type === "multiple";
     const next = multiple ? (current.includes(optionId) ? current.filter((x) => x !== optionId) : [...current, optionId]) : [optionId];
     setAnswers((a) => ({ ...a, [item.questionId]: next }));
-    setSaveState("saving");
-    const r = await post("answer", { attemptId, questionId: item.questionId, selected: next });
-    setSaveState(r.ok ? "saved" : "failed");
-    if (!r.ok) setError(r.error ?? null);
-    else setError(null);
+    setError(null);
+    saver.choose(item.questionId, next);
   };
+
+  // An answer that did not go through is tried again by itself, and again as soon as the connection is back.
+  const failed = saver.failedCount;
+  useEffect(() => {
+    if (failed === 0) return;
+    const timer = window.setTimeout(() => void saver.retryFailed(), 5000);
+    const back = () => void saver.retryFailed();
+    window.addEventListener("online", back);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("online", back);
+    };
+  }, [failed, saver]);
 
   const low = remaining !== null && remaining <= 120;
 
   return (
     <div className="player">
+      <h1 className="sr-only">Exam</h1>
       <div className="exam-bar">
         <span>
           Question {index + 1} of {items.length}
@@ -93,11 +120,26 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
         ) : (
           <span className="muted">No time limit: take your time</span>
         )}
-        <span className="muted" role="status" aria-live="polite">
-          {saveState === "saving" ? "Saving..." : saveState === "failed" ? "Not saved" : "Saved"}
+        <span className={failed > 0 ? "feedback bad" : "muted"} role="status" aria-live="polite">
+          {failed > 0 ? (
+            <>
+              {failed === 1 ? "1 answer not saved" : `${failed} answers not saved`}{" "}
+              <button type="button" className="secondary" onClick={() => void saver.retryFailed()}>
+                Try again
+              </button>
+            </>
+          ) : saver.saving ? (
+            "Saving..."
+          ) : (
+            "Saved"
+          )}
         </span>
       </div>
 
+      {/* The keyboard stays on Next, so a screen reader is told which question it is now on. */}
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        Question {index + 1} of {items.length}. {item.type === "multiple" ? "Select all that apply." : "Choose one answer."}
+      </p>
       <article className="screen">
         <h2 className="q-stem">{item.stem}</h2>
         <ListenButton key={item.questionId} text={examSpeech(item)} clips={examClips(item)} label="Listen to this question" />
@@ -132,7 +174,7 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
 
       <nav aria-label="Question map" className="qmap">
         {items.map((it, i) => (
-          <button key={it.questionId} type="button" className={`qdot${i === index ? " here" : ""}${(answers[it.questionId] ?? []).length ? " done" : ""}`} aria-label={`Question ${i + 1}${(answers[it.questionId] ?? []).length ? ", answered" : ", not answered"}`} aria-current={i === index} onClick={() => setIndex(i)}>
+          <button key={it.questionId} type="button" className={`qdot${i === index ? " here" : ""}${(answers[it.questionId] ?? []).length ? " done" : ""}${saver.isUnsaved(it.questionId) ? " unsaved" : ""}`} aria-label={`Question ${i + 1}${(answers[it.questionId] ?? []).length ? ", answered" : ", not answered"}${saver.isUnsaved(it.questionId) ? ", not saved yet" : ""}`} aria-current={i === index} onClick={() => setIndex(i)}>
             {i + 1}
           </button>
         ))}
@@ -145,12 +187,11 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
       ) : null}
 
       {confirming ? (
-        <div className="modal-back">
-          <div role="dialog" aria-modal="true" aria-labelledby="submit-title" className="modal">
+        <Modal labelledBy="submit-title" onClose={() => !submitting && setConfirming(false)}>
             <h2 id="submit-title">Submit your exam?</h2>
             <p>
               You answered {answered} of {items.length} questions.
-              {answered < items.length ? ` ${items.length - answered} unanswered will count as wrong.` : ""} You cannot change answers after you submit.
+              {answered < items.length ? ` ${items.length - answered} unanswered will count as wrong.` : ""}{saver.unsaved.length > 0 ? ` ${saver.unsaved.length === 1 ? "One of your answers is" : `${saver.unsaved.length} of your answers are`} not saved yet: we will try to save ${saver.unsaved.length === 1 ? "it" : "them"} first.` : ""} You cannot change answers after you submit.
             </p>
             <div className="nav-row">
               <button type="button" className="secondary" onClick={() => setConfirming(false)} disabled={submitting}>
@@ -160,8 +201,7 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
                 {submitting ? "Submitting..." : "Submit exam"}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       ) : null}
     </div>
   );

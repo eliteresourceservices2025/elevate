@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { orNotFound } from "@/lib/or-not-found";
-import { parsePaging } from "@/lib/pagination";
+import { DEFAULT_PAGE_SIZE, parsePaging } from "@/lib/pagination";
+import { listAddress, withReturn } from "@/lib/return-to";
 import { formatInZone } from "@/lib/time";
 import { APPLICANT_SORTS, APPLICANT_SORT_LABELS, MIN_SCORES, filtersToQuery, parseApplicantFilters } from "@/modules/recruiting/applicant-filters";
 import { CLOSE_KIND_LABELS, CLOSE_KINDS, SOURCE_LABELS, SOURCES, STAGE_LABELS, STAGES } from "@/modules/recruiting/constants";
@@ -49,6 +50,8 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
   const paging = parsePaging({ page: sp.page, size: sp.size });
   const data = await orNotFound(listApplicants(filters, paging));
   const query = filtersToQuery(filters);
+  // This list as it is now (filters and page): a record opened from it gets a "back to the applicants" breadcrumb.
+  const here = listAddress(BASE, { ...query, page: data.info.page > 1 ? data.info.page : undefined, size: paging.pageSize !== DEFAULT_PAGE_SIZE ? paging.pageSize : undefined });
   const filtering = Object.values(query).some((v) => v !== undefined);
   const { q: _q, job: _job, stage: _stage, ...rest } = query;
   const moreInUse = Object.values(rest).some((v) => v !== undefined);
@@ -199,7 +202,7 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
                       </TableCell>
                     ) : null}
                     <TableCell className="font-medium">
-                      <Link href={`/recruiting/applications/${r.applicationId}`} className="text-primary underline-offset-4 hover:underline">
+                      <Link href={withReturn(`/recruiting/applications/${r.applicationId}`, here)} className="text-primary underline-offset-4 hover:underline">
                         {r.name}
                       </Link>
                       {r.email ? <span className="block text-xs font-normal text-muted-foreground">{r.email}</span> : null}
@@ -230,7 +233,7 @@ export default async function ApplicantsPage({ searchParams }: PageProps<"/recru
                 <div className="flex items-start justify-between gap-2">
                   <label className="flex items-start gap-2">
                     {data.canBulk ? <input type="checkbox" form={BULK_FORM} name="applicant" value={r.applicationId} aria-label={`Select ${r.name}`} className="mt-1 size-4 accent-primary" /> : null}
-                    <Link href={`/recruiting/applications/${r.applicationId}`} className="font-medium text-primary underline-offset-4 hover:underline">
+                    <Link href={withReturn(`/recruiting/applications/${r.applicationId}`, here)} className="font-medium text-primary underline-offset-4 hover:underline">
                       {r.name}
                     </Link>
                   </label>

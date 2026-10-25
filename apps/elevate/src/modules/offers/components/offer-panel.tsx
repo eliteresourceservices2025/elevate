@@ -14,6 +14,7 @@ import { hireCandidate, makeOffer, previewOffer, resendOfferLink, sendOffer, wit
 import type { OfferRow } from "../queries";
 import type { OfferStatus } from "../service";
 import { Alert } from "@/components/ui/alert";
+import { useAsk } from "@/components/confirm-dialog";
 
 type Panel = {
   stage: string;
@@ -113,6 +114,7 @@ function MakeOfferForm({ applicationId, panel }: { applicationId: string; panel:
 
 function OfferRowView({ o }: { o: OfferRow }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   return (
     <li className="space-y-2 rounded-lg border p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -134,7 +136,7 @@ function OfferRowView({ o }: { o: OfferRow }) {
           </Button>
         ) : null}
         {o.status === "draft" || o.status === "sent" ? (
-          <Button size="sm" variant="ghost" disabled={pending} onClick={() => window.confirm("Withdraw this offer? The applicant's link stops working.") && run(() => withdrawOffer({ offerId: o.id }), "Offer withdrawn.")}>
+          <Button size="sm" variant="ghost" disabled={pending} onClick={async () => (await ask("Withdraw this offer? The applicant's link stops working.")) && run(() => withdrawOffer({ offerId: o.id }), "Offer withdrawn.")}>
             Withdraw
           </Button>
         ) : null}
@@ -150,6 +152,7 @@ function OfferRowView({ o }: { o: OfferRow }) {
 
 function HireForm({ applicationId, panel }: { applicationId: string; panel: Panel }) {
   const { run, pending, router } = useRun();
+  const ask = useAsk();
   const [first, setFirst] = useState(panel.hireDefaults.legalFirstName);
   const [last, setLast] = useState(panel.hireDefaults.legalLastName);
   const [email, setEmail] = useState(panel.hireDefaults.workEmail);
@@ -161,9 +164,9 @@ function HireForm({ applicationId, panel }: { applicationId: string; panel: Pane
   return (
     <form
       className="space-y-3"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        if (!window.confirm("Hire this person? This creates their people record and invites them to ELEVATE.")) return;
+        if (!(await ask("Hire this person? This creates their people record and invites them to ELEVATE."))) return;
         run<{ employeeId: string; invited: boolean; emailed: boolean }>(
           () => hireCandidate({ applicationId, legalFirstName: first, legalLastName: last, workEmail: email, positionId, teamId, startDate, withoutOfferReason: panel.hasSignedOffer ? undefined : reason }),
           (d) => `Hired. ${d?.invited ? (d.emailed ? "An invitation was emailed." : "They are invited, but the email could not be sent: tell them to use Accept an invite on the sign-in page.") : "They already have an ELEVATE account, which was linked."}`,

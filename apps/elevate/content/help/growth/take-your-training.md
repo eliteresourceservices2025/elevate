@@ -12,9 +12,9 @@ Your assigned training, such as HIPAA and Cybersecurity basics, is in **ELEVATE 
 # Open it
 
 1. Click **My training** in the left menu.
-2. Click **Open HIPAA training** (or the button for the course you were assigned).
+2. Click **Open ELEVATE Learn** (or the button for the course you were assigned).
 
-It opens ELEVATE Learn in a new page with the same account. Your progress is saved as you go.
+It opens ELEVATE Learn in this tab with the same account. Use the back arrow in ELEVATE Learn, or your browser's Back button, to return to ELEVATE. Your progress is saved as you go.
 
 ![My training: open your assigned course.](help:take-your-training/01-my-training.png)
 

@@ -96,7 +96,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
           <p className="text-muted-foreground">Nothing has been sent yet.</p>
         ) : (
           <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-            <Table>
+            <Table stack>
               <TableHeader>
                 <TableRow>
                   <TableHead>When</TableHead>
@@ -111,17 +111,17 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
                 {logPaged.rows.map((l) => (
                   <TableRow key={l.id}>
                     <TableCell>{formatInZone(l.createdAt, undefined, "MMM d, h:mm a")}</TableCell>
-                    <TableCell className="font-medium">{l.name}</TableCell>
-                    <TableCell>
+                    <TableCell label="Person" className="font-medium">{l.name}</TableCell>
+                    <TableCell label="Call">
                       {l.action}
                       {l.source === "repair" ? <Badge variant="outline" className="ml-1">repair</Badge> : null}
                       {l.fallback ? <Badge variant="outline" className="ml-1">clock-out instead</Badge> : null}
                     </TableCell>
-                    <TableCell>
+                    <TableCell label="Status">
                       <Badge variant={STATUS_VARIANT.get(l.status) ?? "outline"}>{l.status}</Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{l.lastError ?? (l.attempts > 1 ? `${l.attempts} tries` : "")}</TableCell>
-                    <TableCell>
+                    <TableCell label="Note" className="text-xs text-muted-foreground">{l.lastError ?? (l.attempts > 1 ? `${l.attempts} tries` : "")}</TableCell>
+                    <TableCell label="">
                       {l.status === "failed" ? (
                         <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => retryJibbleSend({ logId: l.id }), () => "Sent again.")}>
                           Retry
@@ -147,7 +147,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
           Only people not matched
         </label>
         <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-          <Table>
+          <Table stack>
             <TableHeader>
               <TableRow>
                 <TableHead>Person</TableHead>
@@ -160,14 +160,14 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
               {peoplePaged.rows.map((p) => (
                 <TableRow key={p.employeeId}>
                   <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell>{p.team ?? "No team"}</TableCell>
-                  <TableCell>{p.jibblePersonId ? <Badge variant="default">Matched by {p.matchedBy}</Badge> : <Badge variant="outline">Not matched</Badge>}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
+                  <TableCell label="Team">{p.team ?? "No team"}</TableCell>
+                  <TableCell label="Jibble">{p.jibblePersonId ? <Badge variant="default">Matched by {p.matchedBy}</Badge> : <Badge variant="outline">Not matched</Badge>}</TableCell>
+                  <TableCell label="Match by hand">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       <Label htmlFor={`jp-${p.employeeId}`} className="sr-only">
                         Email in Jibble or member code for {p.name}
                       </Label>
-                      <Input id={`jp-${p.employeeId}`} className="h-8 w-64" placeholder="Email in Jibble or member code" value={manual[p.employeeId] ?? ""} onChange={(e) => setManual((m) => ({ ...m, [p.employeeId]: e.target.value }))} />
+                      <Input id={`jp-${p.employeeId}`} className="h-8 w-64 max-w-full" placeholder="Email in Jibble or member code" value={manual[p.employeeId] ?? ""} onChange={(e) => setManual((m) => ({ ...m, [p.employeeId]: e.target.value }))} />
                       <Button size="sm" variant="outline" disabled={pending || !(manual[p.employeeId] ?? "").trim()} onClick={() => run(() => setJibblePerson({ employeeId: p.employeeId, jibblePersonId: manual[p.employeeId] }), () => "Matched.")}>
                         Save
                       </Button>

@@ -11,13 +11,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatDateOnly } from "@/lib/time";
 import { CategorizeDocument, type CategorizeOptions } from "./categorize-document";
 import { archiveDocument, bulkUpdateDocuments, getDownloadUrl, moveDocument, verifyDocument, type BulkDocumentsResult } from "../actions";
-import { DocumentBulkBar, bulkBoxProps } from "./document-bulk-bar";
+import { DocumentBulkBar } from "./document-bulk-bar";
+import { bulkBoxProps } from "../bulk-box";
 import { RenameDocument } from "./rename-document";
 import type { ExpiryStatus } from "../expiry";
 import { canPreview, formatBytes } from "../files";
 import type { DocumentRow, FolderRow } from "../queries";
 import { PreviewButton } from "./document-preview";
 import { TypeBadge } from "./type-badge";
+import { useAsk } from "@/components/confirm-dialog";
 
 /** A small icon for the kind of file (PDF, picture, Word), so the file name line reads at a glance. */
 function FileKindIcon({ mime }: { mime: string | null }) {
@@ -82,6 +84,7 @@ export function DocumentList({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const ask = useAsk();
   const formId = `docs-bulk-${useId()}`;
   /** A bulk call for one file: its single failure reason becomes the error. */
   const single = (r: ActionResult<BulkDocumentsResult>): { ok: boolean; error?: string } =>
@@ -188,7 +191,7 @@ export function DocumentList({
                       variant="ghost"
                       size="xs"
                       disabled={pending}
-                      onClick={() => window.confirm(`Archive "${r.title}"? It is hidden from lists. The file is kept.`) && run(() => archiveDocument({ documentId: r.id }), "Document archived.")}
+                      onClick={async () => (await ask(`Archive "${r.title}"? It is hidden from lists. The file is kept.`)) && run(() => archiveDocument({ documentId: r.id }), "Document archived.")}
                     >
                       Archive
                     </Button>

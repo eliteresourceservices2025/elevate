@@ -7,9 +7,11 @@ import { cn } from "@/lib/utils"
  * A table wider than its box scrolls sideways inside this container, with edge shadows that show there is more to see
  * (see .scroll-shadow-x). The shadows fade into the colour of whatever the table sits on: a card by default; for a table that
  * sits straight on the page pass containerClassName="[--shadow-cover:var(--background)]".
+ * `stack` turns each row into a card below the tablet width (the first cell is the card title, every other cell shows its `label`),
+ * for a list people work through on a phone. Keep a plain scrolling table for a dense comparison.
  * Inside #main every table gets the tinted header and striped rows from globals.css; `plain` opts this table out (data-plain).
  */
-function Table({ className, containerClassName, plain = false, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; plain?: boolean }) {
+function Table({ className, containerClassName, plain = false, stack = false, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; plain?: boolean; stack?: boolean }) {
   return (
     <div
       data-slot="table-container"
@@ -18,6 +20,7 @@ function Table({ className, containerClassName, plain = false, ...props }: React
       <table
         data-slot="table"
         data-plain={plain ? "" : undefined}
+        data-stack={stack ? "" : undefined}
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
       />
@@ -84,10 +87,11 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+function TableCell({ className, label, ...props }: React.ComponentProps<"td"> & { label?: string }) {
   return (
     <td
       data-slot="table-cell"
+      data-label={label}
       className={cn(
         "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className

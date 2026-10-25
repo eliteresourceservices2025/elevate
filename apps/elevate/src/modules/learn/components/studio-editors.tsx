@@ -14,6 +14,7 @@ import { createStudioAddon, createStudioDraft, discardStudioDraft, publishStudio
 import { formatBranch, formatBuild, formatCards, formatFlip, formatGame, formatHotspot, formatRecord, formatSpot, parseBranch, parseBuild, parseCards, parseFlip, parseGame, parseHotspot, parseRecord, parseSpot } from "../studio-block-text";
 import { newBlock } from "../studio-scaffold";
 import { RemoveQuestionButton, ScreenControls } from "./studio-structure";
+import { useAsk } from "@/components/confirm-dialog";
 
 type Saved = { ok: true } | { ok: false; error: string };
 
@@ -137,6 +138,7 @@ export function NewAddonForm({ clients }: { clients: { id: string; name: string;
 }
 
 export function DiscardDraftButton({ versionId, stamp, course }: { versionId: string; stamp: number; course: string }) {
+  const ask = useAsk();
   const { run, pending, router } = useSave();
   return (
     <Button
@@ -144,8 +146,8 @@ export function DiscardDraftButton({ versionId, stamp, course }: { versionId: st
       variant="outline"
       size="sm"
       disabled={pending}
-      onClick={() => {
-        if (!window.confirm("Discard this draft? Its edits are deleted and cannot be brought back.")) return;
+      onClick={async () => {
+        if (!(await ask("Discard this draft? Its edits are deleted and cannot be brought back."))) return;
         run(
           async () => {
             const r = await discardStudioDraft({ versionId, stamp });
@@ -162,6 +164,7 @@ export function DiscardDraftButton({ versionId, stamp, course }: { versionId: st
 }
 
 export function PublishCard({ versionId, canPublish, blocked, addon = false }: { versionId: string; canPublish: boolean; blocked: string | null; addon?: boolean }) {
+  const ask = useAsk();
   const { run, pending, router } = useSave();
   const [reviewer, setReviewer] = useState("");
   const [date, setDate] = useState("");
@@ -172,9 +175,9 @@ export function PublishCard({ versionId, canPublish, blocked, addon = false }: {
       {blocked ? <p className="text-sm text-muted-foreground">{blocked}</p> : null}
       <form
         className="space-y-3"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (!window.confirm("Publish now? A published version is frozen. People already on the old version finish it.")) return;
+          if (!(await ask("Publish now? A published version is frozen. People already on the old version finish it."))) return;
           run(
             async () => {
               const r = await publishStudioDraft({ versionId, reviewerEmail: reviewer, counselApprovedOn: date, material });
@@ -844,6 +847,7 @@ export function QuestionEditor({ versionId, stamp, question, number, modules }: 
 
 /** Removes a client add-on that never went live. Only offered for those: a live add-on is part of the training record. */
 export function RemoveAddonButton({ course, title, redirectTo }: { course: string; title: string; redirectTo?: string }) {
+  const ask = useAsk();
   const { run, pending, router } = useSave();
   return (
     <Button
@@ -851,8 +855,8 @@ export function RemoveAddonButton({ course, title, redirectTo }: { course: strin
       variant="outline"
       size="sm"
       disabled={pending}
-      onClick={() => {
-        if (!window.confirm(`Remove the add-on "${title}"? Its draft is deleted and cannot be brought back.`)) return;
+      onClick={async () => {
+        if (!(await ask(`Remove the add-on "${title}"? Its draft is deleted and cannot be brought back.`))) return;
         run(
           async () => {
             const r = await removeStudioAddon({ course });

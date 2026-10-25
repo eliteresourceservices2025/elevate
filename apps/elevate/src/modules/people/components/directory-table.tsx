@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { withReturn } from "@/lib/return-to";
 import { initialsOf } from "@/lib/initials";
 import { formatDateOnly } from "@/lib/time";
 import { STATUS_BADGE, STATUS_LABELS } from "../constants";
@@ -21,6 +22,8 @@ type Props = {
   dir: "asc" | "desc";
   /** Current filters, kept when a header is clicked to change the sort. */
   params: Record<string, string>;
+  /** This list's own address (filters, sort, page): the profile it opens gets a "back to the list" breadcrumb. */
+  returnTo?: string;
 };
 
 function StatusBadges({ row }: { row: DirectoryRow }) {
@@ -57,7 +60,7 @@ function SortHeader({ label, column, sort, dir, params }: { label: string; colum
 }
 
 // Sorting, filtering and paging happen on the server (URL state); TanStack Table lays out the columns.
-export function DirectoryTable({ rows, seesClients, sort, dir, params }: Props) {
+export function DirectoryTable({ rows, seesClients, sort, dir, params, returnTo }: Props) {
   "use no memo"; // TanStack Table returns functions the React Compiler cannot memoize safely
   const columns = useMemo<ColumnDef<DirectoryRow>[]>(() => {
     const cols: ColumnDef<DirectoryRow>[] = [
@@ -68,7 +71,7 @@ export function DirectoryTable({ rows, seesClients, sort, dir, params }: Props) 
           <div className="flex items-center gap-3">
             <Initials row={row.original} />
             <div className="min-w-0">
-              <Link href={`/people/${row.original.id}`} className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline">
+              <Link href={withReturn(`/people/${row.original.id}`, returnTo)} className="font-medium text-foreground underline-offset-4 hover:text-primary hover:underline">
                 {displayName(row.original)}
               </Link>
               <div className="max-w-[22rem] truncate text-xs text-muted-foreground">
@@ -120,7 +123,7 @@ export function DirectoryTable({ rows, seesClients, sort, dir, params }: Props) 
       <ul className="divide-y md:hidden">
         {rows.map((row) => (
           <li key={row.id}>
-            <Link href={`/people/${row.id}`} className="flex items-start gap-3 px-4 py-3.5 outline-none transition-colors hover:bg-secondary/50 focus-visible:bg-secondary/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+            <Link href={withReturn(`/people/${row.id}`, returnTo)} className="flex items-start gap-3 px-4 py-3.5 outline-none transition-colors hover:bg-secondary/50 focus-visible:bg-secondary/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
               <Initials row={row} />
               <span className="min-w-0 flex-1">
                 <span className="flex items-start justify-between gap-2">

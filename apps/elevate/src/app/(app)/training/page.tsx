@@ -83,21 +83,11 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         <>
           {auto.rule.mode === "paused" && published ? (
             <Alert variant="warning" role="note" className="rounded-xl p-3 text-sm">
-              Automatic assignment is <strong>paused</strong> for this course: nobody is assigned until you choose a pilot or everyone below.
+              Automatic assignment is <strong>paused</strong> for this course: nobody is assigned until you choose a pilot or everyone in the settings under the list.
             </Alert>
           ) : null}
-          <AutoAssignCard
-            key={`${course}-${auto.rule.mode}-${auto.rule.teamIds.join(",")}`}
-            course={course}
-            courseLabel={courseLabel}
-            initial={{ mode: auto.rule.mode, teamIds: auto.rule.teamIds }}
-            teams={auto.teams}
-            updatedText={auto.rule.updatedAt ? `Last changed ${auto.rule.updatedAt.slice(0, 10)}.` : auto.rule.configured ? null : "Not set: everyone is assigned automatically."}
-          />
         </>
       ) : null}
-
-      {evidenceClients ? <EvidenceCard clients={evidenceClients} today={todayInZone()} /> : null}
 
       <ul className="flex flex-wrap gap-2 text-sm" aria-label="Filter by status">
         {chips.map((c) => (
@@ -133,7 +123,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
       {rows.length === 0 ? (
         <p className="rounded-xl border p-6 text-sm text-muted-foreground">No one matches. {counts.people === 0 ? "Training is shown for people with an ELEVATE account." : ""}</p>
       ) : (
-        <Table>
+        <Table stack>
           <TableHeader>
             <TableRow>
               <TableHead>Person</TableHead>
@@ -141,9 +131,9 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
               <TableHead>Track</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Due</TableHead>
-              <TableHead>Certificate until</TableHead>
+              <TableHead className="whitespace-normal">Certificate until</TableHead>
               {canSeeResults ? <TableHead>Tries</TableHead> : null}
-              {canSeeResults ? <TableHead>Latest score</TableHead> : null}
+              {canSeeResults ? <TableHead className="whitespace-normal">Latest score</TableHead> : null}
               {canManage ? <TableHead>Actions</TableHead> : null}
             </TableRow>
           </TableHeader>
@@ -151,17 +141,26 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
             {rows.map((r) => (
               <TableRow key={r.employeeId}>
                 <TableCell className="font-medium">{r.name}</TableCell>
-                <TableCell>{r.team ?? "-"}</TableCell>
-                <TableCell>{r.track ? TRACK[r.track] ?? r.track : "-"}</TableCell>
-                <TableCell>
+                <TableCell label="Team">{r.team ?? "-"}</TableCell>
+                <TableCell label="Track">{r.track ? TRACK[r.track] ?? r.track : "-"}</TableCell>
+                <TableCell label="Status" className="whitespace-normal">
                   <span className={r.state === "overdue" ? "font-medium text-destructive" : r.state === "passed" ? "font-medium" : undefined}>{r.label}</span>
                 </TableCell>
-                <TableCell>{r.dueText ? `${r.dueOn} (${r.dueText})` : "-"}</TableCell>
-                <TableCell>{r.certificateEndsOn ?? "-"}</TableCell>
-                {canSeeResults ? <TableCell>{r.attempts ?? "-"}</TableCell> : null}
-                {canSeeResults ? <TableCell>{r.lastScore === null ? "-" : `${r.lastScore}%`}</TableCell> : null}
+                <TableCell label="Due">
+                  {r.dueText ? (
+                    <>
+                      {r.dueOn}
+                      <span className="block text-xs text-muted-foreground">{r.dueText}</span>
+                    </>
+                  ) : (
+                    "-"
+                  )}
+                </TableCell>
+                <TableCell label="Certificate until">{r.certificateEndsOn ?? "-"}</TableCell>
+                {canSeeResults ? <TableCell label="Tries">{r.attempts ?? "-"}</TableCell> : null}
+                {canSeeResults ? <TableCell label="Latest score">{r.lastScore === null ? "-" : `${r.lastScore}%`}</TableCell> : null}
                 {canManage ? (
-                  <TableCell>
+                  <TableCell label="Actions" className="whitespace-normal">
                     <TrainingRowActions course={course} fixedTrack={fixedTrack} userId={r.userId} employeeId={r.employeeId} queued={r.state === "queued"} assignmentId={r.state === "open" || r.state === "overdue" ? r.assignmentId : null} canAssign={canManage} canGrant={canManage} />
                   </TableCell>
                 ) : null}
@@ -171,6 +170,31 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         </Table>
       )}
       <PagerLinks info={info} basePath="/training" query={{ state: filters.state, q: filters.q, course: course !== "hipaa" ? course : undefined }} label="people" />
+
+      {/* Set-up and reporting are used now and then: the list people came for comes first. */}
+      {auto ? (
+        <details className="rounded-xl border bg-card p-4" open={auto.rule.mode === "paused" && published ? true : undefined}>
+          <summary className="cursor-pointer text-sm font-medium">Automatic assignment settings</summary>
+          <div className="mt-3">
+            <AutoAssignCard
+              key={`${course}-${auto.rule.mode}-${auto.rule.teamIds.join(",")}`}
+              course={course}
+              courseLabel={courseLabel}
+              initial={{ mode: auto.rule.mode, teamIds: auto.rule.teamIds }}
+              teams={auto.teams}
+              updatedText={auto.rule.updatedAt ? `Last changed ${auto.rule.updatedAt.slice(0, 10)}.` : auto.rule.configured ? null : "Not set: everyone is assigned automatically."}
+            />
+          </div>
+        </details>
+      ) : null}
+      {evidenceClients ? (
+        <details className="rounded-xl border bg-card p-4">
+          <summary className="cursor-pointer text-sm font-medium">Client evidence report</summary>
+          <div className="mt-3">
+          <EvidenceCard clients={evidenceClients} today={todayInZone()} />
+          </div>
+        </details>
+      ) : null}
     </PageContainer>
   );
 }
