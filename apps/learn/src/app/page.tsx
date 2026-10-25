@@ -45,7 +45,7 @@ export default async function Home() {
       ) : (
         <ul className="mod-grid" aria-label="My training">
           {assignments.map((a) => (
-            <CourseCard key={a.id} slug={a.slug} title={a.title} track={a.track} status={a.status} dueOn={a.dueOn} isUpdate={a.isUpdate} href={`/course/${a.id}`} />
+            <CourseCard key={a.id} slug={a.slug} title={a.title} track={a.track} status={a.status} dueOn={a.dueOn} isUpdate={a.isUpdate} reason={a.reason} href={`/course/${a.id}`} />
           ))}
         </ul>
       )}

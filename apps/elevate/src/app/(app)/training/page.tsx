@@ -83,21 +83,11 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         <>
           {auto.rule.mode === "paused" && published ? (
             <Alert variant="warning" role="note" className="rounded-xl p-3 text-sm">
-              Automatic assignment is <strong>paused</strong> for this course: nobody is assigned until you choose a pilot or everyone below.
+              Automatic assignment is <strong>paused</strong> for this course: nobody is assigned until you choose a pilot or everyone in the settings under the list.
             </Alert>
           ) : null}
-          <AutoAssignCard
-            key={`${course}-${auto.rule.mode}-${auto.rule.teamIds.join(",")}`}
-            course={course}
-            courseLabel={courseLabel}
-            initial={{ mode: auto.rule.mode, teamIds: auto.rule.teamIds }}
-            teams={auto.teams}
-            updatedText={auto.rule.updatedAt ? `Last changed ${auto.rule.updatedAt.slice(0, 10)}.` : auto.rule.configured ? null : "Not set: everyone is assigned automatically."}
-          />
         </>
       ) : null}
-
-      {evidenceClients ? <EvidenceCard clients={evidenceClients} today={todayInZone()} /> : null}
 
       <ul className="flex flex-wrap gap-2 text-sm" aria-label="Filter by status">
         {chips.map((c) => (
@@ -171,6 +161,31 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         </Table>
       )}
       <PagerLinks info={info} basePath="/training" query={{ state: filters.state, q: filters.q, course: course !== "hipaa" ? course : undefined }} label="people" />
+
+      {/* Set-up and reporting are used now and then: the list people came for comes first. */}
+      {auto ? (
+        <details className="rounded-xl border bg-card p-4" open={auto.rule.mode === "paused" && published ? true : undefined}>
+          <summary className="cursor-pointer text-sm font-medium">Automatic assignment settings</summary>
+          <div className="mt-3">
+            <AutoAssignCard
+              key={`${course}-${auto.rule.mode}-${auto.rule.teamIds.join(",")}`}
+              course={course}
+              courseLabel={courseLabel}
+              initial={{ mode: auto.rule.mode, teamIds: auto.rule.teamIds }}
+              teams={auto.teams}
+              updatedText={auto.rule.updatedAt ? `Last changed ${auto.rule.updatedAt.slice(0, 10)}.` : auto.rule.configured ? null : "Not set: everyone is assigned automatically."}
+            />
+          </div>
+        </details>
+      ) : null}
+      {evidenceClients ? (
+        <details className="rounded-xl border bg-card p-4">
+          <summary className="cursor-pointer text-sm font-medium">Client evidence report</summary>
+          <div className="mt-3">
+          <EvidenceCard clients={evidenceClients} today={todayInZone()} />
+          </div>
+        </details>
+      ) : null}
     </PageContainer>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { VideoButton, VideoGroup } from "@/components/recap-panel";
 import { demoVideos, welcomeVideo } from "@/content/customer-service/videos";
+import { readableDay } from "@/components/course-card";
 import { CallCard } from "@/components/call-card";
 import { ModuleCard } from "@/components/module-card";
 import { StartExamButton } from "@/components/forms";
@@ -40,7 +41,7 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
                 You passed this course. {certificate ? <Link href={`/certificate/${assignment.id}`}>View my certificate</Link> : null}
               </p>
             ) : (
-              <p className="muted">Due {assignment.dueOn}</p>
+              <p className="muted">Due {readableDay(assignment.dueOn)}</p>
             )}
             {welcome ? (
               <div className="video-bar">

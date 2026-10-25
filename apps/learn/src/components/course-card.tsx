@@ -6,7 +6,9 @@ import { HomeArt } from "./home-art";
 export type HomeStatus = "new" | "progress" | "done" | "expired";
 
 const CHIP: Record<HomeStatus, string> = { new: "Not started", progress: "In progress", done: "Passed", expired: "Expired" };
-const ACTION: Record<HomeStatus, string> = { new: "Start", progress: "Continue", done: "View certificate", expired: "View" };
+const ACTION: Record<HomeStatus, string> = { new: "Start", progress: "Continue", done: "Review course", expired: "View" };
+/** Why the course was assigned, so two cards with the same title can be told apart. */
+const REASON: Record<string, string> = { new_hire: "New-hire course", renewal: "Yearly renewal", update: "Short update", manual: "Assigned by HR" };
 const TRACK: Record<string, string> = { full: "Full course", essentials: "Essentials", refresher: "Refresher" };
 
 /** What each built-in course is about, in one line. A client add-on gets a plain line until it has its own. */
@@ -16,13 +18,19 @@ const BLURB: Record<string, string> = {
   "customer-service": "Calls with families: listening, empathy, clear next steps and a graded practice call.",
 };
 
+/** 2026-11-13 as Nov 13, 2026 (dates in the database are plain days, so no time zone shift). */
+export const readableDay = (iso: string) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+};
+
 export const homeStatus = (status: string): HomeStatus => (status === "passed" ? "done" : status === "in_progress" ? "progress" : status === "assigned" ? "new" : "expired");
 
 /**
  * One assigned course as a picture card: the course's drawn picture, its status, a line about it, the due date and a clear action. The
  * whole card opens the course. Same look as the module cards, so the app reads as one thing.
  */
-export function CourseCard(props: { slug: string; title: string; track: string; status: string; dueOn: string; isUpdate: boolean; href: string }) {
+export function CourseCard(props: { slug: string; title: string; track: string; status: string; dueOn: string; isUpdate: boolean; reason?: string; href: string }) {
   const status = homeStatus(props.status);
   const Icon = status === "new" ? Play : status === "done" ? Award : ArrowRight;
   const blurb = props.isUpdate ? "Some lessons changed. Read only what is new, then answer a few questions. Your certificate stays valid." : (Object.hasOwn(BLURB, props.slug) ? BLURB[props.slug] : "Training from ELEVATE Learn.");
@@ -30,7 +38,7 @@ export function CourseCard(props: { slug: string; title: string; track: string; 
     <li className={`mod-card${status === "done" ? " done" : ""}`}>
       <Link href={props.href} className="mod-link">
         <header className="mod-head">
-          <span className="mod-num">{props.isUpdate ? "Short update" : (TRACK[props.track] ?? "Course")}</span>
+          <span className="mod-num">{props.isUpdate ? "Short update" : (props.reason && Object.hasOwn(REASON, props.reason) ? `${REASON[props.reason]} · ${TRACK[props.track] ?? "Course"}` : (TRACK[props.track] ?? "Course"))}</span>
           <h2 className="mod-title">{props.title}</h2>
         </header>
         <div className="mod-pic">
@@ -43,7 +51,7 @@ export function CourseCard(props: { slug: string; title: string; track: string; 
         <p className="mod-desc">{blurb}</p>
         <footer className="mod-foot">
           <span className="mod-time">
-            <CalendarDays size={15} aria-hidden="true" /> {status === "done" ? "Passed" : `Due ${props.dueOn}`}
+            <CalendarDays size={15} aria-hidden="true" /> {status === "done" ? "Passed" : `Due ${readableDay(props.dueOn)}`}
           </span>
           <span className="mod-go mod-btn">
             <Icon size={15} aria-hidden="true" /> {ACTION[status]}

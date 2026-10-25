@@ -28,6 +28,9 @@ type Props = ({ mode: "create" } | { mode: "edit"; employeeId: string }) & {
 
 type FormValues = EmployeeFieldsInput & { teamId?: string; managerId?: string; confirmDifferentPerson?: boolean };
 
+/** The form's values with empty ones left out, so an untouched field (undefined) and a blank one ("") count as the same. */
+const filled = (values: object) => JSON.stringify(Object.entries(values).filter(([, v]) => v !== undefined && v !== null && v !== "" && v !== false).sort(([a], [b]) => a.localeCompare(b)));
+
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace("_", " ");
 
 export function EmployeeForm(props: Props) {
@@ -44,12 +47,16 @@ export function EmployeeForm(props: Props) {
     handleSubmit,
     control,
     setValue,
-    formState: { errors, isSubmitting, isDirty },
+    formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver,
     defaultValues: { status: "onboarding", workerType: "contractor", country: "PH", ...props.defaults },
   });
-  useUnsavedChanges(isDirty && !isSubmitting);
+  // "Edited" means the values differ from what the form opened with. react-hook-form's own isDirty also turned on when a blank
+  // submit registered every empty field, which asked "leave without saving?" about a form nobody had typed in.
+  const [opened] = useState(() => filled({ status: "onboarding", workerType: "contractor", country: "PH", ...props.defaults }));
+  const values = useWatch({ control });
+  useUnsavedChanges(filled(values) !== opened && !isSubmitting);
   const status = useWatch({ control, name: "status" });
   const [addressLine, city, province, postalCode, country] = useWatch({ control, name: ["addressLine", "city", "province", "postalCode", "country"] });
   // Shown after the server says someone with the same name exists
@@ -172,7 +179,7 @@ export function EmployeeForm(props: Props) {
         <Button type="submit" disabled={isSubmitting}>
           {creating ? "Add person" : "Save changes"}
         </Button>
-        <Button type="button" variant="ghost" onClick={() => router.back()}>
+        <Button type="button" variant="ghost" onClick={() => (window.history.length > 1 ? router.back() : router.push(creating ? "/people" : `/people/${props.employeeId}`))}>
           Cancel
         </Button>
       </div>
