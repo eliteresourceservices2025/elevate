@@ -11,7 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatDateOnly } from "@/lib/time";
 import { CategorizeDocument, type CategorizeOptions } from "./categorize-document";
 import { archiveDocument, bulkUpdateDocuments, getDownloadUrl, moveDocument, verifyDocument, type BulkDocumentsResult } from "../actions";
-import { DocumentBulkBar, bulkBoxProps } from "./document-bulk-bar";
+import { DocumentBulkBar } from "./document-bulk-bar";
+import { bulkBoxProps } from "../bulk-box";
 import { RenameDocument } from "./rename-document";
 import type { ExpiryStatus } from "../expiry";
 import { canPreview, formatBytes } from "../files";

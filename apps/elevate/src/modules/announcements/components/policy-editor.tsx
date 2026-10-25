@@ -33,6 +33,7 @@ export function NewPolicyForm({ today }: { today: string }) {
   const [requiresAck, setRequiresAck] = useState(true);
   const [dueOn, setDueOn] = useState("");
   const [files, setFiles] = useState<ContentFileView[]>([]);
+  const [uploading, setUploading] = useState(false);
   useWarnWhenEdited({ title, body, requiresAck, dueOn, files: files.map((f) => f.id) });
 
   return (
@@ -40,6 +41,7 @@ export function NewPolicyForm({ today }: { today: string }) {
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
+        if (uploading) return void toast.error("Wait for the upload to finish, then save.");
         startTransition(async () => {
           const result = await createPolicy({ title, body, requiresAck, dueOn, attachmentIds: files.map((f) => f.id) });
           if (!result.ok) return void toast.error(result.error);
@@ -50,9 +52,9 @@ export function NewPolicyForm({ today }: { today: string }) {
     >
       <TextField id="np-title" label="Policy title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required />
       <MarkdownField id="np-body" label="Text" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={8} required />
-      <ContentFilesEditor files={files} onFilesChange={setFiles} body={body} onBodyChange={setBody} />
+      <ContentFilesEditor files={files} onFilesChange={setFiles} onBusyChange={setUploading} body={body} onBodyChange={setBody} />
       <AckFields {...{ requiresAck, setRequiresAck, dueOn, setDueOn, today }} idPrefix="np" />
-      <Button type="submit" disabled={pending}>Create draft</Button>
+      <Button type="submit" disabled={pending || uploading}>{uploading ? "Uploading…" : "Create draft"}</Button>
     </form>
   );
 }
@@ -84,9 +86,12 @@ export function DraftEditor({
   const [requiresAck, setRequiresAck] = useState(initial.requiresAck);
   const [dueOn, setDueOn] = useState(initial.dueOn ?? "");
   const [files, setFiles] = useState<ContentFileView[]>(initial.files);
+  const [uploading, setUploading] = useState(false);
   const { markSaved } = useWarnWhenEdited({ body, changeNote, requiresAck, dueOn, files: files.map((f) => f.id) });
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string) =>
+  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string) => {
+    // Saving or publishing now would leave out the file still going up.
+    if (uploading) return void toast.error("Wait for the upload to finish first.");
     startTransition(async () => {
       const result = await fn();
       if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
@@ -94,20 +99,21 @@ export function DraftEditor({
       markSaved();
       router.refresh();
     });
+  };
   const save = () => saveDraft({ policyId, body, changeNote, requiresAck, dueOn, attachmentIds: files.map((f) => f.id) });
 
   return (
     <form className="space-y-4 rounded-xl border bg-card p-4" onSubmit={(e) => { e.preventDefault(); run(save, "Draft saved."); }}>
       <h3 className="font-semibold">{showVersion ? `Draft of version ${nextVersion}` : "Draft"}</h3>
       <MarkdownField id="pd-body" label="Text" value={body} onChange={setBody} hint={MARKDOWN_HINT} rows={14} required />
-      <ContentFilesEditor files={files} onFilesChange={setFiles} body={body} onBodyChange={setBody} />
+      <ContentFilesEditor files={files} onFilesChange={setFiles} onBusyChange={setUploading} body={body} onBodyChange={setBody} />
       {hasPublished ? <TextField id="pd-note" label="What changed (shown to readers)" value={changeNote} onChange={(e) => setChangeNote(e.target.value)} maxLength={500} /> : null}
       <AckFields {...{ requiresAck, setRequiresAck, dueOn, setDueOn, today }} idPrefix="pd" />
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" variant="outline" disabled={pending}>Save draft</Button>
+        <Button type="submit" variant="outline" disabled={pending || uploading}>Save draft</Button>
         <Button
           type="button"
-          disabled={pending}
+          disabled={pending || uploading}
           onClick={() =>
             window.confirm(`Publish ${showVersion ? `version ${nextVersion}` : "this update"}? Nobody can change it afterwards, and everyone is notified${requiresAck ? " and asked to acknowledge it" : ""}.`) &&
             run(async () => {

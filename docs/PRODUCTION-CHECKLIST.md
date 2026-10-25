@@ -37,7 +37,7 @@ Rules that never change: keys and passwords only in a password manager and in Ve
 **Data safety**
 - [ ] **Data API is switched off**, or at least none of `core, docs, time, talent, ops` is exposed (Settings > API). ELEVATE never uses it: it reads the database from the server and uses Supabase only for sign-in and file links. Turning it off removes a whole class of risk.
 - [ ] Database > Advisors: run the **Security** and **Performance** advisors. Fix anything marked critical; tell me what remains and I will tell you which are expected (tables with RLS and no policy are intentional: nothing reads them except the server).
-- [ ] Storage: the buckets `employee-docs`, `company-docs`, `recruiting-docs`, `signed-docs` exist and are all **private** (`pnpm storage:setup` creates them).
+- [ ] Storage: the buckets `employee-docs`, `company-docs`, `recruiting-docs`, `signed-docs`, `announcement-videos` exist and are all **private** (`pnpm storage:setup` creates them). The project-wide file size limit (Supabase dashboard, Storage settings) is at least 100 MB, or announcement videos above it fail to upload.
 - [ ] SSL is enforced (Settings > Database).
 - [ ] The two Safe Voice database logins exist with long **letters-and-digits** passwords saved in the password manager, and the app strings use the pooler user names (`safevoice_app.<ref>`, `safevoice_handler.<ref>`).
 

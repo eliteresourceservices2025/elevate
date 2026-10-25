@@ -14,9 +14,6 @@ const ACTIONS = [
 ] as const;
 type ActionValue = (typeof ACTIONS)[number]["value"];
 
-/** Checkbox attributes for a document row; the bar below reads the ticked boxes from the page. */
-export const bulkBoxProps = (formId: string) => ({ type: "checkbox" as const, form: formId, name: "document" });
-
 /** HR only. The checkboxes live in the list (`form={formId}`); this reads which are ticked and runs one action on all of them. */
 export function DocumentBulkBar({ formId }: { formId: string }) {
   const { run, pending } = useRun();

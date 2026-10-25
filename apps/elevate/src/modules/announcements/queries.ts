@@ -3,6 +3,7 @@ import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { ForbiddenError, authorize, can, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { pageInfo, type PageInfo } from "@/lib/pagination";
 import { documents } from "@/modules/documents/schema";
 import { downlineEmployeeIds, todayInZone } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
@@ -10,7 +11,7 @@ import { employees } from "@/modules/people/schema";
 import { dueState, type DueState } from "./due";
 import { acknowledgments, announcementRecipients, announcementTeams, announcements, policies, policyVersions } from "./schema";
 import { listAnnouncementFiles, listVersionFiles, type ContentFileView } from "./content-files";
-import { ackStatus, pendingAcknowledgments, pendingLink, type StatusRow } from "./service";
+import { REVISION_SQL, ackStatus, pendingAcknowledgments, pendingLink, type StatusRow } from "./service";
 
 // Every query starts with requireUser() and authorize(). Pages wrap them in orNotFound().
 
@@ -42,6 +43,18 @@ const excerptOf = (body: string) => body.replace(/[#*_`>\[\]()-]/g, "").replace(
 
 /** Announcements the viewer may see: addressed to everyone, to them, or (for HR) all of them. Pinned first, newest first. */
 export async function listAnnouncements(opts: { limit?: number } = {}): Promise<AnnouncementListItem[]> {
+  return (await announcementRows({ limit: Math.min(opts.limit ?? 50, 100), offset: 0 })).items;
+}
+
+/** One page of the announcements the viewer may see, with the true total, so every post can be reached. */
+export async function listAnnouncementsPage(opts: { page: number; pageSize: number }): Promise<{ rows: AnnouncementListItem[]; info: PageInfo }> {
+  const { total } = await announcementRows({ limit: 0, offset: 0 });
+  const info = pageInfo(total, opts.page, opts.pageSize);
+  const { items } = await announcementRows({ limit: info.pageSize, offset: info.offset });
+  return { rows: items, info };
+}
+
+async function announcementRows(opts: { limit: number; offset: number }): Promise<{ items: AnnouncementListItem[]; total: number }> {
   const user = await requireUser();
   await authorize(user, "announcements.view");
   const isHr = can(user, "announcements.manage");
@@ -51,6 +64,9 @@ export async function listAnnouncements(opts: { limit?: number } = {}): Promise<
   const visible = isHr
     ? sql`true`
     : sql`(${announcements.audience} = 'all' or exists (select 1 from docs.announcement_recipients r where r.announcement_id = ${announcements.id} and r.employee_id = ${me}::uuid))`;
+
+  const [{ n: total }] = await db.select({ n: sql<number>`count(*)::int` }).from(announcements).where(and(isNull(announcements.archivedAt), visible));
+  if (opts.limit === 0) return { items: [], total };
 
   const rows = await db
     .select({
@@ -70,10 +86,11 @@ export async function listAnnouncements(opts: { limit?: number } = {}): Promise<
     .from(announcements)
     .leftJoin(acknowledgments, and(eq(acknowledgments.announcementId, announcements.id), eq(acknowledgments.userId, user.id)))
     .where(and(isNull(announcements.archivedAt), visible))
-    .orderBy(desc(announcements.pinned), desc(announcements.publishedAt))
-    .limit(Math.min(opts.limit ?? 50, 100));
+    .orderBy(desc(announcements.pinned), desc(announcements.publishedAt), desc(announcements.id))
+    .limit(opts.limit)
+    .offset(opts.offset);
 
-  return rows.map((r) => ({
+  const items = rows.map<AnnouncementListItem>((r) => ({
     id: r.id,
     title: r.title,
     excerpt: excerptOf(r.body),
@@ -87,6 +104,7 @@ export async function listAnnouncements(opts: { limit?: number } = {}): Promise<
     acknowledged: r.acknowledgedAt !== null,
     progress: isHr && r.requiresAck ? { done: r.done, total: r.total } : null,
   }));
+  return { items, total };
 }
 
 export type AnnouncementDetail = {
@@ -105,6 +123,8 @@ export type AnnouncementDetail = {
   files: ContentFileView[];
   needsMyAck: boolean;
   acknowledgedAt: Date | null;
+  /** What this page shows, as a version stamp; sent back with an acknowledgment or an edit so a stale page is refused. */
+  revision: string;
   canManage: boolean;
   canSeeStatus: boolean;
   canRemind: boolean;
@@ -133,6 +153,7 @@ export async function getAnnouncement(id: string): Promise<AnnouncementDetail | 
   const [attachment] = a.attachmentDocumentId
     ? await db.select({ id: documents.id, title: documents.title }).from(documents).where(and(eq(documents.id, a.attachmentDocumentId), isNull(documents.archivedAt))).limit(1)
     : [];
+  const [rev] = (await db.execute(sql`select ${REVISION_SQL} as revision from docs.announcements where id = ${id}::uuid`)) as unknown as { revision: string }[];
 
   return {
     id: a.id,
@@ -141,6 +162,7 @@ export async function getAnnouncement(id: string): Promise<AnnouncementDetail | 
     pinned: a.pinned,
     requiresAck: a.requiresAck,
     dueOn: a.dueOn,
+    revision: rev?.revision ?? "0",
     due: a.requiresAck && !ack ? dueState(a.dueOn, todayInZone()) : "none",
     publishedAt: a.publishedAt,
     audience: a.audience === "teams" ? "teams" : "all",
@@ -345,5 +367,6 @@ export async function getAnnouncementForEdit(id: string) {
   if (!a) return null;
   const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(acknowledgments).where(eq(acknowledgments.announcementId, id));
   const options = await getComposeOptions();
-  return { announcement: a, textLocked: n > 0, documents: options.documents, files: await listAnnouncementFiles(id) };
+  const [rev] = (await db.execute(sql`select ${REVISION_SQL} as revision from docs.announcements where id = ${id}::uuid`)) as unknown as { revision: string }[];
+  return { announcement: a, revision: rev?.revision ?? "0", textLocked: n > 0, documents: options.documents, files: await listAnnouncementFiles(id) };
 }

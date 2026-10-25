@@ -23,6 +23,7 @@ export default async function EditAnnouncementPage({ params }: PageProps<"/annou
         documents={data.documents}
         edit={{
           announcementId: a.id,
+          revision: data.revision,
           title: a.title,
           body: a.body,
           pinned: a.pinned,

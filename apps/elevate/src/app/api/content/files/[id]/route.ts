@@ -3,15 +3,21 @@ import { requireUser } from "@/lib/auth";
 import { writeAudit } from "@/modules/audit/write";
 import { openContentFile } from "@/modules/announcements/content-files";
 
-// A picture or file of an announcement or policy, for signed-in people who may read it (see openContentFile). Pictures show in the
-// page; documents download. Served by the app, never a public link.
+// A picture, file or video of an announcement or policy, for signed-in people who may read it (see openContentFile). Pictures show in
+// the page; documents download; a video redirects to a short-lived storage link so the browser can seek. Never a public link.
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const viewer = await requireUser();
   const { id } = await params;
   try {
     const file = await openContentFile(viewer, id);
     if (!file) return new Response("Not found", { status: 404 });
+    if (file.kind === "video") {
+      // A player asks for many ranges of one video: audit the start of a viewing only.
+      const range = request.headers.get("range");
+      if (!range || /^bytes=0-/.test(range)) await writeAudit({ actor: viewer, action: "content.video_view", targetType: "content_file", targetId: file.id }).catch(() => {});
+      return new Response(null, { status: 307, headers: { Location: file.playbackUrl, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+    }
     const headers: Record<string, string> = {
       "Content-Type": file.mimeType,
       "Cache-Control": "private, max-age=300",

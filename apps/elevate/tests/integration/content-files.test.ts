@@ -113,7 +113,7 @@ describe("announcements with pictures and files", () => {
 
     // Bound now: the addressed team opens them, an outsider does not, HR does
     expect((await content.openContentFile(inTeam as never, photo.id))?.kind).toBe("image");
-    expect((await content.openContentFile(inTeam as never, doc.id))?.fileName).toBe("Schedule.pdf");
+    expect(((await content.openContentFile(inTeam as never, doc.id)) as { fileName: string } | null)?.fileName).toBe("Schedule.pdf");
     expect(await content.openContentFile(outside as never, photo.id)).toBeNull();
     expect(await content.openContentFile(hr as never, doc.id)).not.toBeNull();
 
@@ -148,14 +148,40 @@ describe("announcements with pictures and files", () => {
     const reader = await person("cfack");
     const doc = await upload(hr, "file", PDF_BYTES, "Rules.pdf");
     as(hr);
-    const created = await actions.createAnnouncement({ title: uniq("Notice "), body: "Read this.", audience: "all", teamIds: [], requiresAck: true, attachmentIds: [doc.id] });
+    const title = uniq("Notice ");
+    const created = await actions.createAnnouncement({ title, body: "Read this.", audience: "all", teamIds: [], requiresAck: true, attachmentIds: [doc.id] });
     if (!created.ok) throw new Error(created.error);
     as(reader);
     expect((await actions.acknowledge({ kind: "announcement", id: created.data.id })).ok).toBe(true);
     as(hr);
     const more = await upload(hr, "file", PDF_BYTES, "More.pdf");
-    const changed = await actions.updateAnnouncement({ announcementId: created.data.id, title: "x", body: "Read this.", pinned: false, attachmentIds: [doc.id, more.id] });
-    expect(changed).toMatchObject({ ok: false });
+    // Same valid title and text as posted: only the file list differs, so the refusal can only come from the file freeze.
+    const changed = await actions.updateAnnouncement({ announcementId: created.data.id, title, body: "Read this.", pinned: false, attachmentIds: [doc.id, more.id] });
+    expect(changed).toEqual({ ok: false, error: "People have already acknowledged this, so its pictures and files cannot change. Post a new announcement instead." });
+    const dropped = await actions.updateAnnouncement({ announcementId: created.data.id, title, body: "Read this.", pinned: false, attachmentIds: [] });
+    expect(dropped).toEqual({ ok: false, error: "People have already acknowledged this, so its pictures and files cannot change. Post a new announcement instead." });
+  });
+
+  it("refuses an acknowledgment or an edit made on a page that is out of date", async () => {
+    const reader = await person("cfrev");
+    as(hr);
+    const created = await actions.createAnnouncement({ title: uniq("Notice "), body: "Read this.", audience: "all", teamIds: [], requiresAck: true, attachmentIds: [] });
+    if (!created.ok) throw new Error(created.error);
+    const id = created.data.id;
+    const opened = (await queries.getAnnouncement(id))!.revision;
+    // HR edits while the reader still has the old page open.
+    const edited = await actions.updateAnnouncement({ announcementId: id, expectedRevision: opened, title: uniq("Changed "), body: "Read this, changed.", pinned: false, attachmentIds: [] });
+    expect(edited.ok).toBe(true);
+    // A second editor who opened the page before that edit is told to reload.
+    const staleEdit = await actions.updateAnnouncement({ announcementId: id, expectedRevision: opened, title: uniq("Again "), body: "Read this.", pinned: false, attachmentIds: [] });
+    expect(staleEdit.ok).toBe(false);
+    as(reader);
+    const stale = await actions.acknowledge({ kind: "announcement", id, revision: opened });
+    expect(stale).toEqual({ ok: false, error: "This announcement was changed after you opened it. Reload the page, read it again, then acknowledge." });
+    as(hr);
+    const fresh = (await queries.getAnnouncement(id))!.revision;
+    as(reader);
+    expect((await actions.acknowledge({ kind: "announcement", id, revision: fresh })).ok).toBe(true);
   });
 });
 

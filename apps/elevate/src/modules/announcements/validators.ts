@@ -38,13 +38,16 @@ export const updateAnnouncementSchema = z.object({
   dueOn: optionalDate,
   attachmentDocumentId: z.preprocess(blankToUndefined, uuid.optional()),
   attachmentIds,
+  /** The revision the editor was opened on; refused when the announcement changed since. */
+  expectedRevision: z.string().regex(/^\d{1,16}$/).optional(),
 });
 
 export const announcementIdSchema = z.object({ announcementId: uuid });
 
 /** For policies, id is the policy VERSION id: people acknowledge a specific version. */
 export const subjectSchema = z.object({ kind: z.enum(["announcement", "policy_version"]), id: uuid });
-export const acknowledgeSchema = subjectSchema;
+/** `revision` is what the reader was shown (announcements only; a policy version is frozen). */
+export const acknowledgeSchema = subjectSchema.extend({ revision: z.string().regex(/^\d{1,16}$/).optional() });
 
 export const createPolicySchema = z.object({ title, body, requiresAck: z.boolean().default(true), dueOn: optionalDate, attachmentIds });
 
@@ -64,3 +67,12 @@ export const policyIdSchema = z.object({ policyId: uuid });
 export const digestPreferenceSchema = z.object({ optOut: z.boolean() });
 
 export type AnnouncementInput = z.input<typeof announcementSchema>;
+
+// --- Announcement videos ---------------------------------------------------------------
+
+export const requestVideoUploadSchema = z.object({
+  fileName: z.string().trim().min(1).max(200),
+  mimeType: z.enum(["video/mp4", "video/webm"], { error: "Add an MP4 or WebM video." }),
+  sizeBytes: z.number().int().min(1, "That video is empty.").max(100 * 1024 * 1024, "A video can be up to 100 MB."),
+});
+export const videoIdSchema = z.object({ id: uuid });

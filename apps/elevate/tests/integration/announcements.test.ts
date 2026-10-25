@@ -112,6 +112,18 @@ describe("posting an announcement", () => {
     expect(audit).toHaveLength(1);
   });
 
+  it("pages through every visible announcement, not only the first 50", async () => {
+    as(hr);
+    const first = await queries.listAnnouncementsPage({ page: 1, pageSize: 10 });
+    const needed = Math.max(0, 52 - first.info.total);
+    for (let i = 0; i < needed; i++) idOf(await post(hr, {}));
+    const seen = new Set<string>();
+    const info = (await queries.listAnnouncementsPage({ page: 1, pageSize: 10 })).info;
+    expect(info.total).toBeGreaterThanOrEqual(52);
+    for (let p = 1; p <= info.pages; p++) for (const r of (await queries.listAnnouncementsPage({ page: p, pageSize: 10 })).rows) seen.add(r.id);
+    expect(seen.size).toBe(info.total); // every post is reachable, none twice
+  });
+
   it("addresses only the selected teams, and keeps it from people outside them", async () => {
     const team = await makeTeam("Support ");
     const other = await makeTeam("Billing ");

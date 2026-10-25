@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pin } from "lucide-react";
 import { Markdown } from "@/components/markdown";
-import { ContentFileList } from "@/modules/announcements/components/content-file-list";
+import { ContentFileList, ContentVideo } from "@/modules/announcements/components/content-file-list";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { can } from "@/lib/authz";
@@ -53,6 +53,7 @@ export default async function AnnouncementPage({ params }: PageProps<"/announcem
       />
 
       <article className="rounded-xl border bg-card p-5">
+        <ContentVideo files={a.files} />
         <Markdown source={a.body} />
         <ContentFileList files={a.files} />
         {a.attachment ? (
@@ -73,7 +74,7 @@ export default async function AnnouncementPage({ params }: PageProps<"/announcem
           {a.needsMyAck ? (
             <>
               <p className="text-sm text-muted-foreground">Confirming records your name, this announcement and the time. Nothing else.</p>
-              <AcknowledgeButton subject={{ kind: "announcement", id: a.id }} />
+              <AcknowledgeButton subject={{ kind: "announcement", id: a.id }} revision={a.revision} />
             </>
           ) : a.acknowledgedAt ? (
             <p className="text-sm text-muted-foreground">You acknowledged this on {formatInZone(a.acknowledgedAt, DEFAULT_TIMEZONE, "MMM d, yyyy 'at' h:mm a")}.</p>

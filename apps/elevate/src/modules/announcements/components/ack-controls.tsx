@@ -22,11 +22,14 @@ function useRun() {
 
 type Subject = { kind: "announcement" | "policy_version"; id: string };
 
-/** The one click that records "I have read and understand" for this item (and, for a policy, this version). */
-export function AcknowledgeButton({ subject }: { subject: Subject }) {
+/**
+ * The one click that records "I have read and understand" for this item (and, for a policy, this version).
+ * For an announcement, `revision` is the version of the text this page shows; the server refuses it if the post has changed since.
+ */
+export function AcknowledgeButton({ subject, revision }: { subject: Subject; revision?: string }) {
   const { run, pending } = useRun();
   return (
-    <Button type="button" disabled={pending} onClick={() => run(() => acknowledge(subject), "Thank you. Your acknowledgment is recorded.")}>
+    <Button type="button" disabled={pending} onClick={() => run(() => acknowledge({ ...subject, revision }), "Thank you. Your acknowledgment is recorded.")}>
       I have read and understand
     </Button>
   );
