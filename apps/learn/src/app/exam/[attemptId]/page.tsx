@@ -24,7 +24,8 @@ export default async function ExamPage({ params }: { params: Promise<{ attemptId
   const result = view.result!;
   // a course with a mock call needs it passed too before the statement and the certificate
   const overview = result.passed ? await getOverview(getSql(), session.userId, view.assignmentId) : null;
-  const callPending = Boolean(overview?.call) && overview?.assignment.status !== "passed";
+  // Only while the call itself is still to pass: a passed call with a record that has not caught up must not say "pass the mock call too".
+  const callPending = Boolean(overview?.call) && overview?.assignment.status !== "passed" && !overview?.call?.attempts.some((x) => x.passed === true);
   const missed = view.review.filter((r) => !r.isCorrect);
   const modules = [...new Map(missed.map((r) => [r.moduleKey, r.moduleTitle])).entries()];
 

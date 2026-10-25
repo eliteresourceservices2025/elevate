@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { readableDay } from "@/lib/dates";
 import { post } from "./api-client";
 
 /** Starts (or resumes) the exam and opens it. The server enforces the order, the tries and the wait. */
@@ -120,8 +121,8 @@ export function VerifyForm() {
       const res = await fetch("/api/verify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reference, name }), cache: "no-store" });
       const data = (await res.json()) as { ok: boolean; status?: string; issuedOn?: string; endsOn?: string; error?: string };
       if (!data.ok) setResult(data.error ?? "Please try again.");
-      else if (data.status === "valid") setResult(`Valid. Issued ${data.issuedOn}, valid until ${data.endsOn}.`);
-      else if (data.status === "expired") setResult(`This certificate was issued ${data.issuedOn} and expired on ${data.endsOn}.`);
+      else if (data.status === "valid") setResult(`Valid. Issued ${readableDay(data.issuedOn ?? "")}, valid until ${readableDay(data.endsOn ?? "")}.`);
+      else if (data.status === "expired") setResult(`This certificate was issued ${readableDay(data.issuedOn ?? "")} and expired on ${readableDay(data.endsOn ?? "")}.`);
       else if (data.status === "revoked") setResult("This certificate was revoked.");
       else setResult("No certificate matches that reference and name.");
     } catch {

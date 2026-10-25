@@ -1,6 +1,7 @@
 import { ArrowRight, Award, CalendarDays, Check, Play } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { readableDay } from "@/lib/dates";
 import { HomeArt } from "./home-art";
 
 export type HomeStatus = "new" | "progress" | "done" | "expired";
@@ -18,11 +19,7 @@ const BLURB: Record<string, string> = {
   "customer-service": "Calls with families: listening, empathy, clear next steps and a graded practice call.",
 };
 
-/** 2026-11-13 as Nov 13, 2026 (dates in the database are plain days, so no time zone shift). */
-export const readableDay = (iso: string) => {
-  const d = new Date(`${iso}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-};
+export { readableDay };
 
 export const homeStatus = (status: string): HomeStatus => (status === "passed" ? "done" : status === "in_progress" ? "progress" : status === "assigned" ? "new" : "expired");
 

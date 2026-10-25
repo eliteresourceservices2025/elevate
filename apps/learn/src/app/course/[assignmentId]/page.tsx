@@ -143,7 +143,7 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
             </Link>
           </p>
         ) : exam.attempts.some((a) => a.passed) ? (
-          <p className="feedback good">{overview.call ? "You passed the exam. Pass the mock call too, to get your certificate." : "You passed the exam."}</p>
+          <p className="feedback good">{overview.call ? (overview.call.attempts.some((x) => x.passed === true) ? "You passed the exam and the mock call. Your record is being completed: reload this page in a moment, and tell HR if the certificate does not appear." : "You passed the exam. Pass the mock call too, to get your certificate.") : "You passed the exam."}</p>
         ) : exam.openAttemptId ? (
           <p>
             <Link className="button" href={`/exam/${exam.openAttemptId}`}>

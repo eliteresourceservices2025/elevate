@@ -228,6 +228,9 @@ export async function handleApi(request: Request, action: string, deps: ApiDeps)
 }
 
 /** The public certificate check: needs the reference and the full name. Rate limited by address; no session. */
+/** A date column arrives as a Date: send the plain day (2026-10-25), not a timestamp. */
+const day = (v: unknown): string | null => (v instanceof Date ? v.toISOString().slice(0, 10) : typeof v === "string" ? v.slice(0, 10) : null);
+
 export async function handleVerify(request: Request, deps: Pick<Deps, "sql" | "allow">): Promise<Response> {
   if (!sameSiteOrigin(request)) return json(403, { ok: false, error: "This request was not allowed." });
   if (!(await deps.allow(request))) return json(429, { ok: false, error: "Too many tries. Please wait a few minutes." });
@@ -241,7 +244,7 @@ export async function handleVerify(request: Request, deps: Pick<Deps, "sql" | "a
   if (!parsed.success) return json(400, { ok: false, error: "Please enter the reference and the full name." });
   try {
     const [r] = await deps.sql`select * from learn.verify_certificate(${parsed.data.reference}, ${parsed.data.name})`;
-    return json(200, { ok: true, status: r.status as string, issuedOn: r.issued_on ?? null, endsOn: r.ends_on ?? null });
+    return json(200, { ok: true, status: r.status as string, issuedOn: day(r.issued_on), endsOn: day(r.ends_on) });
   } catch {
     return json(500, { ok: false, error: "Something went wrong. Please try again." });
   }
