@@ -69,7 +69,7 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
               summary={m.summary}
               minutes={m.estimatedMinutes}
               status={m.completed ? "done" : m.locked ? "locked" : m.seconds > 0 ? "progress" : "new"}
-              href={!m.locked && !finished ? `/course/${assignment.id}/${m.key}` : null}
+              href={!m.locked || finished ? `/course/${assignment.id}/${m.key}` : null}
               course={assignment.courseSlug}
               moduleKey={m.key}
             />

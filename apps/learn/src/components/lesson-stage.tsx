@@ -31,6 +31,8 @@ export function LessonStage(props: {
   topExtra?: React.ReactNode;
   /** Under the footer buttons (reading time, messages). */
   notes?: React.ReactNode;
+  /** False when a finished course is read again: Next does not wait for answers. */
+  gated?: boolean;
 }) {
   const { screens, index, onIndex, reachedIndex } = props;
   const total = screens.length;
@@ -50,7 +52,7 @@ export function LessonStage(props: {
   const answered = finished.includes(screen.id);
   // a slide with gated blocks waits until they have mounted and been answered (blockCount is 0 while the old slide is still fading out)
   const hasGated = screen.blocks.some((b) => GATED_TYPES.has(b.type));
-  const waiting = hasGated && !answered && (blockCount === 0 || pending > 0);
+  const waiting = props.gated !== false && hasGated && !answered && (blockCount === 0 || pending > 0);
   if (blockCount > 0 && pending === 0 && !answered) setFinished([...finished, screen.id]);
 
   useEffect(() => {

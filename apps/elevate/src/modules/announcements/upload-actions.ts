@@ -4,7 +4,6 @@ import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { allowRequest } from "@/lib/rate-limit";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
-import { writeAudit } from "@/modules/audit/write";
 import { cancelFileUpload, finalizeFileUpload, requestFileUpload, type ContentFileView, type VideoTicket } from "./content-files";
 import { requestFileUploadSchema, videoIdSchema } from "./validators";
 
@@ -35,8 +34,7 @@ export async function finalizeAnnouncementFileUpload(input: unknown): Promise<Ac
     if (!parsed.success) return fail(BAD);
     const result = await finalizeFileUpload(actor, parsed.data.id);
     if (!result.ok) return fail(result.error);
-    await writeAudit({ actor, action: "content.file_add", targetType: "content_file", targetId: result.file.id, metadata: { sizeBytes: result.file.sizeBytes } });
-    return { ok: true, data: result.file };
+    return { ok: true, data: result.file }; // the audit entry is written with the change, inside finalizeFileUpload
   });
 }
 

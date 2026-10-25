@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MARKDOWN_MAX_LENGTH } from "@/lib/markdown";
+import { MAX_VIDEO_BYTES } from "@/modules/documents/files";
 import { isoDate } from "@/modules/people/validators";
 
 const uuid = z.uuid();
@@ -73,7 +74,7 @@ export type AnnouncementInput = z.input<typeof announcementSchema>;
 export const requestVideoUploadSchema = z.object({
   fileName: z.string().trim().min(1).max(200),
   mimeType: z.enum(["video/mp4", "video/webm"], { error: "Add an MP4 or WebM video." }),
-  sizeBytes: z.number().int().min(1, "That video is empty.").max(100 * 1024 * 1024, "A video can be up to 100 MB."),
+  sizeBytes: z.number().int().min(1, "That video is empty.").max(MAX_VIDEO_BYTES, "A video can be up to 100 MB."),
 });
 export const videoIdSchema = z.object({ id: uuid });
 

@@ -59,19 +59,29 @@ class SupabaseDocumentStorage implements DocumentStorage {
   async head(bucket: Bucket, path: string, length: number) {
     const { data, error } = await this.client.storage.from(bucket).createSignedUrl(path, 60);
     if (error || !data) return null;
-    const response = await fetch(data.signedUrl, { headers: { Range: `bytes=0-${length - 1}` } });
-    if (!response.ok || !response.body) return null;
-    // Read only the first `length` bytes even if storage ignored the Range header (a 200 would be the whole file).
-    const reader = response.body.getReader();
+    // A stuck storage connection must not hang the upload: give up after 15 seconds.
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 15_000);
+    let response: Response;
     const chunks: Uint8Array[] = [];
     let got = 0;
-    while (got < length) {
-      const { done, value } = await reader.read();
-      if (done || !value) break;
-      chunks.push(value);
-      got += value.length;
+    try {
+      response = await fetch(data.signedUrl, { headers: { Range: `bytes=0-${length - 1}` }, signal: abort.signal });
+      if (!response.ok || !response.body) return null;
+      // Read only the first `length` bytes even if storage ignored the Range header (a 200 would be the whole file).
+      const reader = response.body.getReader();
+      while (got < length) {
+        const { done, value } = await reader.read();
+        if (done || !value) break;
+        chunks.push(value);
+        got += value.length;
+      }
+      void reader.cancel().catch(() => {}); // not awaited: closing an unfinished stream can wait on the network
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
     }
-    await reader.cancel().catch(() => {});
     const bytes = new Uint8Array(Math.min(got, length));
     let at = 0;
     for (const c of chunks) {

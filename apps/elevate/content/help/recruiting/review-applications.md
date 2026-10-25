@@ -5,12 +5,12 @@ category: recruiting
 audience: super_admin, hr_admin, recruiter, team_lead
 order: 2
 video: review-applications
-updated: 2026-10-21
+updated: 2026-10-23
 ---
 
 Each job has a **pipeline**: a board with columns for each stage. An applicant moves left to right.
 
-The stages are **Applied**, **Screening**, **Interview**, **Assessment**, **Offer** and **Hired**. People who are not moving forward are listed apart as **Rejected**.
+The stages are **Applied**, **Screening**, **Interview**, **Assessment**, **Offer** and **Hired**. People who are not moving forward are listed apart as closed: **Rejected**, **Not qualified** or **Withdrew**.
 
 # Open the pipeline
 
@@ -23,12 +23,13 @@ A Team Lead sees only the jobs they are on the hiring team for. The Executive se
 
 # Read an application
 
-Click an applicant's card. Their page shows their details, the resume, notes, interviews, scorecards and history.
+Click an applicant's card, or a name on the **Applicants** page. Their page shows their details, then boxes for the **Keyword match**, **Talent pool**, **Source and tags**, **Stage**, **Offer and hiring**, **Interviews and scorecards**, the resume, notes and history.
 
-- Click **View resume** to read it in the page. A Word resume cannot be shown, so download it instead.
+- Click **View resume** to read it in the page. A PDF and a Word (DOCX) resume both open in the page. An old Word (DOC) file cannot be shown, so download it instead.
 - Opening a resume is recorded.
+- The other boxes are explained in "Use the keyword match on resumes", "Keep good applicants in the talent pool" and "Tag applicants and see where they come from".
 
-![An applicant's page: resume, notes, interviews and history.](help:review-applications/02-applicant.png)
+![An applicant's page: details, keyword match, talent pool, source and tags, and the stage.](help:review-applications/02-applicant.png)
 
 # Move an applicant to another stage
 
@@ -47,12 +48,20 @@ Type a note and click to add it. A message says **Note added.** Notes are intern
 
 If the applicant is not moving forward, close it:
 
-- **We are not moving forward**, or
-- **The applicant withdrew**.
+1. Open **Close this application**.
+2. Under **Why is it closing**, choose:
+   - **We are not moving forward**,
+   - **Not qualified for the role**, or
+   - **The applicant withdrew**.
+3. Write a **Reason (internal only)**.
+4. If the job allows it, you can tick **Send the applicant a short, polite rejection email**. The email never includes your notes or reasons. HR can change its wording. See "Change the wording of applicant emails".
+5. Click **Close application** and confirm.
 
-Write a **Reason (internal only)**. If the job allows it, you can tick the box to send a polite rejection email. The email never includes your notes or reasons.
+To close many at once, see "Act on many applicants at once".
 
 A closed application can be reopened. Use **Reopen into** and choose a stage.
+
+To find someone across all your jobs, see "Find applicants across all your jobs".
 
 # Common mistakes
 

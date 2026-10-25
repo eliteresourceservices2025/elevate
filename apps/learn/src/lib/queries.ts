@@ -9,17 +9,17 @@ import { letterUrl, voiceUrl } from "./voice";
 export type CallConfig = { passPercent: number; scenarios: number; maxTries: number; waitMinutesAfterFail: number };
 export type ExamConfig = { passPercent: number; maxTries: number; waitMinutesAfterFail: number; renewalMonths: number; tracks: Record<string, { questions: number; minutes?: number }>; call?: CallConfig };
 
-export type AssignmentSummary = { id: string; title: string; track: string; status: string; dueOn: string; reason: string };
+export type AssignmentSummary = { id: string; title: string; slug: string; track: string; status: string; dueOn: string; isUpdate: boolean };
 
 /** The home list. A cancelled assignment (a retired version nobody finished) is history and shows only in My training record. */
 export async function listAssignments(sql: Sql, userId: string): Promise<AssignmentSummary[]> {
   return withUser(sql, userId, async (tx) => {
     const rows = await tx`
-      select a.id, c.title, a.track, a.status, a.due_on::text as due_on
+      select a.id, c.title, c.slug, a.track, a.status, a.reason, a.due_on::text as due_on
       from learn.assignments a join learn.courses c on c.id = a.course_id
       where a.status <> 'cancelled'
       order by a.assigned_at desc`;
-    return rows.map((r) => ({ id: r.id as string, title: r.title as string, track: r.track as string, status: r.status as string, dueOn: r.due_on as string, reason: r.reason as string }));
+    return rows.map((r) => ({ id: r.id as string, title: r.title as string, slug: r.slug as string, track: r.track as string, status: r.status as string, dueOn: r.due_on as string, isUpdate: r.reason === "update" }));
   });
 }
 
@@ -262,15 +262,22 @@ export type ModuleView = {
   seconds: number;
   minSeconds: number;
   completed: boolean;
+  /** True when a PASSED course is read again: the player records nothing (no screens, no time) and does not wait for answers. */
+  review: boolean;
   nextModule: { key: string; title: string } | null;
 };
 
-/** One module for the player, or null when it does not exist, is not on the person's track or is still locked. */
+/**
+ * One module for the player, or null when it does not exist, is not on the person's track or is still locked. A passed course can be
+ * read again (review): every module is open, and nothing about the visit is recorded.
+ */
 export async function getModuleView(sql: Sql, userId: string, assignmentId: string, key: string): Promise<ModuleView | null> {
   const overview = await getOverview(sql, userId, assignmentId);
-  if (!overview || !["assigned", "in_progress"].includes(overview.assignment.status)) return null;
+  if (!overview) return null;
+  const review = overview.assignment.status === "passed";
+  if (!review && !["assigned", "in_progress"].includes(overview.assignment.status)) return null;
   const index = overview.modules.findIndex((m) => m.key === key);
-  if (index < 0 || overview.modules[index].locked) return null;
+  if (index < 0 || (overview.modules[index].locked && !review)) return null;
   const state = overview.modules[index];
   return withUser(sql, userId, async (tx) => {
     const [a] = await tx`select v.content, v.version, c.slug from learn.assignments a join learn.course_versions v on v.id = a.version_id join learn.courses c on c.id = a.course_id where a.id = ${assignmentId}`;
@@ -290,6 +297,7 @@ export async function getModuleView(sql: Sql, userId: string, assignmentId: stri
       seconds: state.seconds,
       minSeconds: state.minSeconds,
       completed: state.completed,
+      review,
       nextModule: next ? { key: next.key, title: next.title } : null,
     } satisfies ModuleView;
   });
@@ -380,6 +388,7 @@ export async function getAttemptView(sql: Sql, userId: string, attemptId: string
 export type RecordEntry = {
   assignmentId: string;
   courseTitle: string;
+  courseSlug: string;
   track: string;
   status: string;
   assignedOn: string;
@@ -401,7 +410,7 @@ export type RecordEntry = {
 export async function getRecord(sql: Sql, userId: string): Promise<RecordEntry[]> {
   return withUser(sql, userId, async (tx) => {
     const rows = await tx`
-      select distinct on (a.course_id) a.id, co.title, a.track, a.status, a.assigned_at::date::text as assigned_on, a.due_on::text as due_on,
+      select distinct on (a.course_id) a.id, co.title, co.slug, a.track, a.status, a.assigned_at::date::text as assigned_on, a.due_on::text as due_on,
              a.passed_at::date::text as passed_on,
              coalesce((select sum(t.seconds) from learn.module_time t where t.assignment_id = a.id), 0)::int as seconds,
              (select count(*) from learn.exam_attempts x where x.assignment_id = a.id and x.status = 'submitted')::int as attempts,
@@ -422,6 +431,7 @@ export async function getRecord(sql: Sql, userId: string): Promise<RecordEntry[]
       .map((r) => ({
         assignmentId: r.id as string,
         courseTitle: r.title as string,
+        courseSlug: r.slug as string,
         track: r.track as string,
         status: r.status as string,
         assignedOn: r.assigned_on as string,

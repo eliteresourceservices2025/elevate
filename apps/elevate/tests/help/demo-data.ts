@@ -1,6 +1,7 @@
 import { config } from "dotenv";
 import postgres from "postgres";
 import type { Page } from "@playwright/test";
+import { keywordSetKey } from "../../src/modules/recruiting/keywords";
 
 config({ path: ".env.local" });
 
@@ -70,6 +71,44 @@ export async function seedDemoData(): Promise<void> {
       if (!c) continue; // already there from an earlier run
       await sql`insert into talent.applications (opening_id, candidate_id, stage) values (${jobIds[a.job]}, ${c.id}, ${a.stage})`;
     }
+
+    // The applicants list: where people heard about the job, tags, keyword matches, the talent pool, a closed application, a possible duplicate.
+    await sql`update talent.job_openings set keywords_required = ${sql.json(["Medical billing", "Excel"])}, keywords_nice = ${sql.json(["HIPAA", "Spanish"])} where id = ${jobIds[0]}`;
+    const KEYWORD_KEY = keywordSetKey({ required: ["Medical billing", "Excel"], nice: ["HIPAA", "Spanish"] });
+    // Test tags left behind by the end-to-end tests would crowd the tag list in the pictures: hide them (archived, not erased).
+    await sql`update talent.tags set archived_at = now() where name ilike 'E2E%' and archived_at is null`;
+    const ATS: Record<string, { source: string; score: number | null; found?: string[]; missed?: string[]; tags?: string[] }> = {
+      "Katrina Dela Cruz": { source: "linkedin", score: 85, found: ["Medical billing", "Excel"], missed: ["Spanish"], tags: ["Strong English"] },
+      "Joseph Miller": { source: "referral", score: 100, found: ["Medical billing", "Excel", "HIPAA"], missed: [], tags: ["Strong English", "Quick starter"] },
+      "Andrea Bautista": { source: "careers_page", score: 55, found: ["Excel"], missed: ["Medical billing", "HIPAA"] },
+      "Mark Anthony Ramos": { source: "facebook", score: 70, found: ["Medical billing"], missed: ["Excel"], tags: ["Quick starter"] },
+      "Sarah Johnson": { source: "job_board", score: 90, found: ["Medical billing", "Excel", "Spanish"], missed: [] },
+    };
+    const tagIds = new Map<string, string>();
+    for (const name of ["Strong English", "Quick starter"]) {
+      const [t] = await sql<{ id: string }[]>`select id from talent.tags where lower(name) = lower(${name}) and archived_at is null`;
+      tagIds.set(name, t?.id ?? (await sql<{ id: string }[]>`insert into talent.tags (name) values (${name}) returning id`)[0].id);
+    }
+    for (const [name, v] of Object.entries(ATS)) {
+      const [app] = await sql<{ id: string }[]>`select a.id from talent.applications a join talent.candidates c on c.id = a.candidate_id where c.full_name = ${name} limit 1`;
+      if (!app) continue;
+      await sql`update talent.applications set source = ${v.source}, keyword_score = ${v.score}, keyword_matched = ${sql.json(v.found ?? [])}, keyword_missed = ${sql.json(v.missed ?? [])}, keyword_scored_at = now(), keyword_set_key = ${KEYWORD_KEY} where id = ${app.id}`;
+      for (const t of v.tags ?? []) await sql`insert into talent.application_tags (application_id, tag_id) values (${app.id}, ${tagIds.get(t)!}) on conflict do nothing`;
+    }
+    // Two applicants agreed to be kept for future roles; one of them is in the talent pool.
+    await sql`update talent.candidates set pool_consent_at = now(), pool_expires_at = now() + interval '12 months' where full_name in ('Joseph Miller', 'Sarah Johnson')`;
+    await sql`update talent.candidates set in_pool = true, in_pool_at = now() where full_name = 'Joseph Miller'`;
+    // One application that ended as "Not qualified".
+    const [dan] = await sql<{ id: string }[]>`
+      insert into talent.candidates (email, full_name, country) values ('daniel.brooks@example.com', 'Daniel Brooks', 'United States')
+      on conflict do nothing returning id`;
+    if (dan) await sql`insert into talent.applications (opening_id, candidate_id, stage, close_kind, close_reason, source) values (${jobIds[0]}, ${dan.id}, 'rejected', 'not_qualified', 'Cannot work the required hours', 'job_board')`;
+    // The same person applied twice with different email addresses and the same phone number.
+    await sql`update talent.candidates set phone = '+63 917 123 4567' where full_name = 'Katrina Dela Cruz'`;
+    const [dup] = await sql<{ id: string }[]>`
+      insert into talent.candidates (email, full_name, phone, country) values ('katrina.d.cruz@example.com', 'Katrina D. Cruz', '0917 123 4567', 'Philippines')
+      on conflict do nothing returning id`;
+    if (dup) await sql`insert into talent.applications (opening_id, candidate_id, stage, source) values (${jobIds[1]}, ${dup.id}, 'applied', 'agency')`;
 
     // Last week's hours for eight people: mostly clean, a few with something to look at
     const people = await sql<{ id: string }[]>`

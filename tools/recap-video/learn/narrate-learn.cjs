@@ -35,9 +35,10 @@ const VIDEOS = require("./" + FILES[course]);
 const todo = want.length ? VIDEOS.filter((v) => want.includes(v.id)) : VIDEOS;
 if (want.length && todo.length !== want.length) throw new Error("Unknown video in: " + want.join(", "));
 
-// Words a voice would mangle: spell out acronyms letter by letter. The cloned voice says "HIPAA" correctly.
+// Words a voice would mangle: spell out acronyms letter by letter. HIPAA is written "Heepa" for the voice (it says "Hip-aye" otherwise) and ERS is said as "ELITE Resource Services";
+// captions and the "read as text" transcript keep the real spelling because only the spoken text goes through this list.
 const SAY = [
-  [/\bePHI\b/g, "e P H I"], [/\bPHI\b/g, "P H I"], [/\bHHS\b/g, "H H S"], [/\bOCR\b/g, "O C R"], [/\bERS\b/g, "E R S"], [/\bMFA\b/g, "M F A"],
+  [/\bHIPAA\b/g, "Heepa"], [/\bePHI\b/g, "e P H I"], [/\bPHI\b/g, "P H I"], [/\bHHS\b/g, "H H S"], [/\bOCR\b/g, "O C R"], [/\bERS\b/g, "ELITE Resource Services"], [/\bMFA\b/g, "M F A"],
   [/\bBAA\b/g, "B A A"], [/\bCMIA\b/g, "C M I A"], [/\bHB\b/g, "H B"], [/\bAI\b/g, "A I"], [/\bIT\b/g, "I T"], [/\bWPA2\b/g, "W P A 2"], [/\bWPA3\b/g, "W P A 3"],
   [/\bEHR\b/g, "E H R"], [/\bHR\b/g, "H R"], [/\bVAs?\b/g, "V A"], [/\bQR\b/g, "Q R"], [/\bURLs?\b/g, "U R L"], [/\bIDs?\b/g, "I D"], [/\bSMS\b/g, "S M S"],
   [/\bVPN\b/g, "V P N"], [/\bUSB\b/g, "U S B"], [/\bPDF\b/g, "P D F"], [/\bDOJ\b/g, "D O J"], [/\bNPP\b/g, "N P P"],

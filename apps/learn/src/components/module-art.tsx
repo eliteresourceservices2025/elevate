@@ -42,7 +42,7 @@ import type { ReactNode } from "react";
  * A module with no scene of its own (a client add-on) gets a generic one with a colour taken from its name.
  */
 
-const C = {
+export const C = {
   purple: "#6C1ABA",
   deep: "#34115F",
   lav: "#B98CEE",
@@ -64,7 +64,7 @@ const C = {
 };
 
 export type Backdrop = "purple" | "deep" | "teal" | "coral" | "sky" | "gold" | "rose";
-const BACKDROP: Record<Backdrop, string> = {
+export const BACKDROP: Record<Backdrop, string> = {
   purple: "linear-gradient(135deg, #6C1ABA 0%, #A862EA 100%)",
   deep: "linear-gradient(135deg, #2A0F4A 0%, #5B2AA0 100%)",
   teal: "linear-gradient(135deg, #0E7A6F 0%, #35C4B2 100%)",
@@ -79,7 +79,7 @@ const at = ({ x, y, s = 1, r = 0 }: At) => `translate(${x} ${y}) rotate(${r}) sc
 
 // ---- shapes ------------------------------------------------------------------------------------------------------------------------
 
-function Person({ x, y, s, r, skin = C.skin1, hair = C.ink, shirt = C.purple, headset = false }: At & { skin?: string; hair?: string; shirt?: string; headset?: boolean }) {
+export function Person({ x, y, s, r, skin = C.skin1, hair = C.ink, shirt = C.purple, headset = false }: At & { skin?: string; hair?: string; shirt?: string; headset?: boolean }) {
   return (
     <g transform={at({ x, y, s, r })}>
       <path d="M-32 0 C-32 -22 -17 -28 0 -28 C17 -28 32 -22 32 0 Z" fill={shirt} />
@@ -98,7 +98,7 @@ function Person({ x, y, s, r, skin = C.skin1, hair = C.ink, shirt = C.purple, he
   );
 }
 
-function Phone({ x, y, s, r, tint = C.pale }: At & { tint?: string }) {
+export function Phone({ x, y, s, r, tint = C.pale }: At & { tint?: string }) {
   return (
     <g transform={at({ x, y, s, r })}>
       <rect x="-19" y="-34" width="38" height="68" rx="8" fill={C.ink} />
@@ -112,7 +112,7 @@ function Phone({ x, y, s, r, tint = C.pale }: At & { tint?: string }) {
   );
 }
 
-function Monitor({ x, y, s, r, children }: At & { children?: ReactNode }) {
+export function Monitor({ x, y, s, r, children }: At & { children?: ReactNode }) {
   return (
     <g transform={at({ x, y, s, r })}>
       <rect x="-46" y="-32" width="92" height="58" rx="6" fill={C.ink} />
@@ -131,7 +131,7 @@ function Monitor({ x, y, s, r, children }: At & { children?: ReactNode }) {
   );
 }
 
-function Doc({ x, y, s, r, check = false, lines = 4, accent = C.purple }: At & { check?: boolean; lines?: number; accent?: string }) {
+export function Doc({ x, y, s, r, check = false, lines = 4, accent = C.purple }: At & { check?: boolean; lines?: number; accent?: string }) {
   return (
     <g transform={at({ x, y, s, r })}>
       <path d="M-26 -34 H12 L26 -20 V34 a4 4 0 0 1 -4 4 H-22 a4 4 0 0 1 -4 -4 Z" fill={C.white} />
@@ -146,7 +146,7 @@ function Doc({ x, y, s, r, check = false, lines = 4, accent = C.purple }: At & {
   );
 }
 
-function Shield({ x, y, s, r, fill = C.white, children }: At & { fill?: string; children?: ReactNode }) {
+export function Shield({ x, y, s, r, fill = C.white, children }: At & { fill?: string; children?: ReactNode }) {
   return (
     <g transform={at({ x, y, s, r })}>
       <path d="M0 -38 L30 -27 V4 C30 24 15 35 0 42 C-15 35 -30 24 -30 4 V-27 Z" fill={fill} />
@@ -156,7 +156,7 @@ function Shield({ x, y, s, r, fill = C.white, children }: At & { fill?: string; 
   );
 }
 
-function Bubble({ x, y, s, r, flip = false, fill = C.white, children }: At & { flip?: boolean; fill?: string; children?: ReactNode }) {
+export function Bubble({ x, y, s, r, flip = false, fill = C.white, children }: At & { flip?: boolean; fill?: string; children?: ReactNode }) {
   return (
     <g transform={at({ x, y, s, r })}>
       <g transform={flip ? "scale(-1 1)" : undefined}>
@@ -168,7 +168,7 @@ function Bubble({ x, y, s, r, flip = false, fill = C.white, children }: At & { f
   );
 }
 
-function Lines({ x, y, color = C.pale, widths = [44, 32] }: { x: number; y: number; color?: string; widths?: number[] }) {
+export function Lines({ x, y, color = C.pale, widths = [44, 32] }: { x: number; y: number; color?: string; widths?: number[] }) {
   return (
     <g fill={color}>
       {widths.map((w, i) => (
@@ -179,7 +179,7 @@ function Lines({ x, y, color = C.pale, widths = [44, 32] }: { x: number; y: numb
 }
 
 /** A round badge with one of the app's icons in it. */
-function Badge({ x, y, s = 1, icon: Icon, bg = C.gold, fg = C.ink, r = 18 }: At & { icon: LucideIcon; bg?: string; fg?: string; r?: number }) {
+export function Badge({ x, y, s = 1, icon: Icon, bg = C.gold, fg = C.ink, r = 18 }: At & { icon: LucideIcon; bg?: string; fg?: string; r?: number }) {
   const size = r * 1.15;
   return (
     <g transform={at({ x, y, s })}>
@@ -189,11 +189,11 @@ function Badge({ x, y, s = 1, icon: Icon, bg = C.gold, fg = C.ink, r = 18 }: At 
   );
 }
 
-function Spark({ x, y, s = 1, fill = C.gold }: At & { fill?: string }) {
+export function Spark({ x, y, s = 1, fill = C.gold }: At & { fill?: string }) {
   return <path transform={at({ x, y, s })} d="M0 -10 C1 -3 3 -1 10 0 C3 1 1 3 0 10 C-1 3 -3 1 -10 0 C-3 -1 -1 -3 0 -10 Z" fill={fill} />;
 }
 
-function Dots({ x, y, color = C.white, rows = 3, cols = 5, gap = 12 }: { x: number; y: number; color?: string; rows?: number; cols?: number; gap?: number }) {
+export function Dots({ x, y, color = C.white, rows = 3, cols = 5, gap = 12 }: { x: number; y: number; color?: string; rows?: number; cols?: number; gap?: number }) {
   return (
     <g fill={color} opacity="0.35">
       {Array.from({ length: rows * cols }, (_, i) => (
@@ -203,7 +203,7 @@ function Dots({ x, y, color = C.white, rows = 3, cols = 5, gap = 12 }: { x: numb
   );
 }
 
-function Hills({ a = C.deep, b = C.purple }: { a?: string; b?: string }) {
+export function Hills({ a = C.deep, b = C.purple }: { a?: string; b?: string }) {
   return (
     <g>
       <path d="M0 150 C60 120 110 140 170 128 C230 116 280 130 320 118 V180 H0 Z" fill={b} opacity="0.55" />
@@ -212,7 +212,7 @@ function Hills({ a = C.deep, b = C.purple }: { a?: string; b?: string }) {
   );
 }
 
-function Rings({ cx = 160, cy = 92, color = C.white }: { cx?: number; cy?: number; color?: string }) {
+export function Rings({ cx = 160, cy = 92, color = C.white }: { cx?: number; cy?: number; color?: string }) {
   return (
     <g fill="none" stroke={color} opacity="0.22">
       <circle cx={cx} cy={cy} r="78" strokeWidth="1.5" />
@@ -224,9 +224,9 @@ function Rings({ cx = 160, cy = 92, color = C.white }: { cx?: number; cy?: numbe
 
 // ---- scenes ------------------------------------------------------------------------------------------------------------------------
 
-type Scene = { bg: Backdrop; art: ReactNode };
+export type Scene = { bg: Backdrop; art: ReactNode };
 
-const SCENES: Record<string, Scene> = {
+export const SCENES: Record<string, Scene> = {
   // Customer Service
   "customer-service/excellence": {
     bg: "purple",
@@ -661,7 +661,7 @@ const SCENES: Record<string, Scene> = {
 };
 
 /** A colour and a few shapes for a module with no scene of its own (a client add-on): the same module always gets the same picture. */
-function generic(key: string): Scene {
+export function generic(key: string): Scene {
   let h = 0;
   for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const order: Backdrop[] = ["purple", "deep", "teal", "sky", "coral", "rose"];

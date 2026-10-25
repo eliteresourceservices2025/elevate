@@ -22,6 +22,7 @@
     "db:bootstrap": "pnpm --filter elevate --reporter=append-only db:bootstrap",
     "learn:publish": "pnpm --filter elevate --reporter=append-only learn:publish",
     "learn:assign": "pnpm --filter elevate --reporter=append-only learn:assign",
+    "learn:upgrade": "pnpm --filter elevate --reporter=append-only learn:upgrade",
     "learn:export": "pnpm --filter elevate --reporter=append-only learn:export",
     "test:integration": "pnpm --filter elevate test:integration",
     "wordpress:zip": "tar -a -cf wordpress/elevate-jobs.zip -C wordpress elevate-jobs"

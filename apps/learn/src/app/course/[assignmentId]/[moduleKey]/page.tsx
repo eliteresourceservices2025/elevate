@@ -27,6 +27,7 @@ export default async function ModulePage({ params }: { params: Promise<{ assignm
       seconds={view.seconds}
       minSeconds={view.minSeconds}
       completed={view.completed}
+      review={view.review}
       nextModule={view.nextModule}
       recap={recap}
       videos={videosForModule(view.courseSlug, view.module.key)}

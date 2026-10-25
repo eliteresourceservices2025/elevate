@@ -624,8 +624,9 @@ export const RECAPS: Recap[] = BASE_RECAPS.map((r) => {
   return lines ? { ...r, scenes: lines.map((l) => ({ kind: "spoken" as const, lines: l })) } : r;
 });
 
-// HIPAA version 3 is the one the animated videos were written for (state laws added, games added).
-export const RECAP_FROM_VERSION: Record<Recap["course"], number> = { hipaa: 3, cybersecurity: 3 };
+// The first PRODUCTION version number whose lessons these recaps were written for. Version numbers differ from one database to another: in
+// production the new HIPAA lessons are version 5 (versions 3 and 4 are the old ones) and the new Cybersecurity lessons are version 3.
+export const RECAP_FROM_VERSION: Record<Recap["course"], number> = { hipaa: 5, cybersecurity: 3 };
 
 /** The recap for a module. When the person's version number is known and older than the recaps were written for, there is none. */
 export function findRecap(course: string, moduleKey: string, version?: number | null): Recap | null {

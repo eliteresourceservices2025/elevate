@@ -249,3 +249,10 @@ Assets hold no prices or values. Item notes are for HR only: never put passwords
 ## 8. Who to call
 
 Fill in before go-live: developer, Jibble support, the host (Vercel), Supabase support, counsel.
+
+## Releasing a version (What's new and the version number)
+
+1. Add an entry at the top of `RELEASES` in `apps/elevate/src/lib/releases.ts` (version, date, title, plain-English highlights) and set the same version in `apps/elevate/package.json`. A test fails if they differ. Minor number = a new feature, patch = a fix. Stay on 0.x.y until the owner says every VA has been invited: then the release is `1.0.0`.
+2. Make the release video if it is a feature release (see `tools/recap-video/`; the narration says "ELITE Resource Services", never "ERS").
+3. After deploying, post an announcement (HR > Announcements > New) with the video attached, then paste that announcement's id into the entry's `announcementId` so What's new links to it.
+4. Tag the commit `v<version>` in git (ask the owner before pushing).
