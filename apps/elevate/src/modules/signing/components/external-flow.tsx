@@ -7,6 +7,7 @@ import { TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { CONSENT_TEXT } from "../constants";
 import { SignaturePad } from "./signature-pad";
+import { useAsk } from "@/components/confirm-dialog";
 
 type Answer = { ok: boolean; error?: string; needCode?: boolean };
 
@@ -77,6 +78,7 @@ function CodeStep({ token, email }: { token: string; email: string }) {
 
 /** Read the document, agree, sign (type or draw), or decline. */
 function SignStep({ token, defaultName }: { token: string; defaultName: string }) {
+  const ask = useAsk();
   const router = useRouter();
   const [opened, setOpened] = useState(false);
   const [kind, setKind] = useState<"typed" | "drawn">("typed");
@@ -103,7 +105,7 @@ function SignStep({ token, defaultName }: { token: string; defaultName: string }
   }
   async function decline(e: React.FormEvent) {
     e.preventDefault();
-    if (!window.confirm("Decline to sign? This stops the document.")) return;
+    if (!(await ask("Decline to sign? This stops the document."))) return;
     setBusy(true);
     const r = await post(`/api/sign/${token}/decline`, { reason });
     setBusy(false);

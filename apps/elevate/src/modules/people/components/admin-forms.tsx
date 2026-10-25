@@ -8,6 +8,7 @@ import { TimeZonePicker } from "@/components/time-zone-picker";
 import { Button } from "@/components/ui/button";
 import { archiveCustomFieldDef, createClient, createCustomFieldDef, updateClient } from "../actions";
 import { CUSTOM_FIELD_TYPES, CUSTOM_FIELD_VISIBILITY } from "../constants";
+import { useAsk } from "@/components/confirm-dialog";
 
 function useRun() {
   const router = useRouter();
@@ -190,13 +191,14 @@ export function NewCustomFieldForm() {
 
 export function ArchiveFieldButton({ fieldDefId, label }: { fieldDefId: string; label: string }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   return (
     <Button
       variant="ghost"
       size="sm"
       disabled={pending}
-      onClick={() => {
-        if (window.confirm(`Archive "${label}"? It disappears from profiles; saved values are kept.`)) run(() => archiveCustomFieldDef({ fieldDefId }), "Field archived.");
+      onClick={async () => {
+        if ((await ask(`Archive "${label}"? It disappears from profiles; saved values are kept.`))) run(() => archiveCustomFieldDef({ fieldDefId }), "Field archived.");
       }}
     >
       Archive

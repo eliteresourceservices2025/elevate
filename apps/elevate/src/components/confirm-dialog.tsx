@@ -78,3 +78,29 @@ export function useConfirm(): Ask {
     (async (o) => window.confirm(`${o.title}\n\n${typeof o.description === "string" ? o.description : ""}`.trim()))
   );
 }
+
+/** Splits a plain question ("Archive this template? Offers already sent are not affected.") into a title and the rest. */
+export function splitQuestion(message: string): { title: string; description: string } {
+  const m = /^(.+?[?!.])(?:s+([sS]*))?$/.exec(message.trim());
+  return m ? { title: m[1], description: m[2] ?? "" } : { title: message.trim(), description: "" };
+}
+
+/**
+ * The same dialog for a sentence written as a plain question: the first sentence becomes the title, the rest the explanation, and the
+ * button names the action ("Archive this template"). Anything that removes, voids, declines or cannot be undone gets the red button.
+ * Use useConfirm directly when a button needs its own wording.
+ */
+export function useAsk(): (message: string, options?: Partial<Pick<ConfirmOptions, "confirmLabel" | "cancelLabel" | "destructive">>) => Promise<boolean> {
+  const confirm = useConfirm();
+  return (message, options = {}) => {
+    const { title, description } = splitQuestion(message);
+    const action = title.replace(/[?!.]+$/, "");
+    return confirm({
+      title,
+      description: description || " ",
+      confirmLabel: options.confirmLabel ?? (action.length <= 40 ? action : "Yes, continue"),
+      cancelLabel: options.cancelLabel ?? "Go back",
+      destructive: options.destructive ?? /cannot be (undone|changed)|delete|remove|erase|void|decline|discard|stops the document/i.test(message),
+    });
+  };
+}

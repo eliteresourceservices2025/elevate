@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { addCredential, importCredentials, removeCredential, type ImportSummary } from "../actions";
+import { useAsk } from "@/components/confirm-dialog";
 
 /** HR records one certificate by hand. */
 export function AddCredentialForm({ people }: { people: PickerOption[] }) {
@@ -55,6 +56,7 @@ export function AddCredentialForm({ people }: { people: PickerOption[] }) {
 /** Takes a certificate off the list (it is archived, not erased). */
 export function RemoveCredentialButton({ id, label }: { id: string; label: string }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   return (
     <Button
       type="button"
@@ -62,7 +64,7 @@ export function RemoveCredentialButton({ id, label }: { id: string; label: strin
       variant="ghost"
       disabled={pending}
       aria-label={`Remove ${label}`}
-      onClick={() => window.confirm("Remove this certificate from the list? Use this for one entered by mistake.") && run(() => removeCredential({ credentialId: id }), "Certificate removed.")}
+      onClick={async () => (await ask("Remove this certificate from the list? Use this for one entered by mistake.")) && run(() => removeCredential({ credentialId: id }), "Certificate removed.")}
     >
       Remove
     </Button>

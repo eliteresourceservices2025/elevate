@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
+import { useAsk } from "@/components/confirm-dialog";
 import {
   archiveDepartment,
   archivePosition,
@@ -171,6 +172,7 @@ function Row({
 
 export function StructureAdmin({ departments, teams, positions }: { departments: Dept[]; teams: Team[]; positions: Position[] }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const deptName = (id: string | null) => departments.find((d) => d.id === id)?.name ?? "No department";
 
   const [newDept, setNewDept] = useState("");
@@ -202,7 +204,7 @@ export function StructureAdmin({ departments, teams, positions }: { departments:
               detail={`${teams.filter((t) => t.departmentId === d.id).length} teams`}
               pending={pending}
               onRename={(name, done) => run(() => updateDepartment({ departmentId: d.id, name }), "Department renamed.", done)}
-              onArchive={() => window.confirm(`Archive "${d.name}"?`) && run(() => archiveDepartment({ departmentId: d.id }), "Department archived.")}
+              onArchive={async () => (await ask(`Archive "${d.name}"?`)) && run(() => archiveDepartment({ departmentId: d.id }), "Department archived.")}
             />
           ))}
         </ul>
@@ -240,7 +242,7 @@ export function StructureAdmin({ departments, teams, positions }: { departments:
                 </SelectField>
               }
               onRename={(name, done) => run(() => updateTeam({ teamId: t.id, name, departmentId: moveDept.get(t.id) ?? t.departmentId }), "Team updated.", done)}
-              onArchive={() => window.confirm(`Archive "${t.name}"?`) && run(() => archiveTeam({ teamId: t.id }), "Team archived.")}
+              onArchive={async () => (await ask(`Archive "${t.name}"?`)) && run(() => archiveTeam({ teamId: t.id }), "Team archived.")}
             />
           ))}
         </ul>
@@ -264,7 +266,7 @@ export function StructureAdmin({ departments, teams, positions }: { departments:
               detail={`${p.holders} ${p.holders === 1 ? "person" : "people"}${p.departmentId ? ` · ${deptName(p.departmentId)}` : ""}`}
               pending={pending}
               onRename={(title, done) => run(() => updatePosition({ positionId: p.id, title, departmentId: p.departmentId ?? "" }), "Position renamed.", done)}
-              onArchive={() => window.confirm(`Archive "${p.title}"?`) && run(() => archivePosition({ positionId: p.id }), "Position archived.")}
+              onArchive={async () => (await ask(`Archive "${p.title}"?`)) && run(() => archivePosition({ positionId: p.id }), "Position archived.")}
             />
           ))}
         </ul>

@@ -11,6 +11,7 @@ import { declineEnvelope, getDocumentLink, signEnvelope } from "../actions";
 import { CONSENT_TEXT, SIGNEE_DETAIL_FIELDS, detailProblem, isSigneeDetailKey, isValidInitials, suggestInitials } from "../constants";
 import { InitialsStepper } from "./initials-stepper";
 import { SignaturePad } from "./signature-pad";
+import { useAsk } from "@/components/confirm-dialog";
 
 /** Downloads the document (a 60-second signed link that saves the file). Reading it in the page is the viewer below. */
 export function OpenDocumentButton({ envelopeId, label = "Download" }: { envelopeId: string; label?: string }) {
@@ -46,6 +47,7 @@ export function EnvelopeDocument({ envelopeId, title, openLabel, sealed = false,
 /** What a signer does: open and read, agree, type or draw, sign. Or decline with a reason. */
 export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null, detailKeys = [] }: { envelopeId: string; viewed: boolean; defaultName: string; initialPages?: number | null; detailKeys?: string[] }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [kind, setKind] = useState<"typed" | "drawn">("typed");
   const [typed, setTyped] = useState(defaultName);
   const [png, setPng] = useState<string | null>(null);
@@ -132,10 +134,10 @@ export function SignPanel({ envelopeId, viewed, defaultName, initialPages = null
         ) : (
           <form
             className="max-w-md space-y-2"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               if (reason.trim().length < 3) return void toast.error("Give a short reason.");
-              if (!window.confirm("Decline to sign? This stops the document for everyone.")) return;
+              if (!(await ask("Decline to sign? This stops the document for everyone."))) return;
               run(() => declineEnvelope({ envelopeId, reason }), "You declined. HR was told.");
             }}
           >

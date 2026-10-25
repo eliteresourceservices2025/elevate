@@ -24,6 +24,15 @@ describe("UI conventions", () => {
     expect(offenders).toEqual([]);
   }, 30_000);
 
+  it("a question before a consequential action uses the styled confirmation (useConfirm or useAsk), never the browser's window.confirm", () => {
+    // components/confirm-dialog.tsx keeps one window.confirm as the fallback for a component rendered outside the app shell.
+    const offenders = files(SRC)
+      .filter((f) => rel(f) !== "components/confirm-dialog.tsx")
+      .filter((f) => /window\.confirm\(/.test(readFileSync(f, "utf8")))
+      .map(rel);
+    expect(offenders).toEqual([]);
+  }, 30_000);
+
   it("status colours come from the success, warning, info and destructive tokens, not raw palette classes", () => {
     // Categories (document types), the print label sheet and the always-white signing paper preview are not statuses.
     const allowed = new Set(["modules/documents/type-style.ts", "modules/assets/components/label-sheet.tsx", "modules/signing/components/compose-editor.tsx"]);

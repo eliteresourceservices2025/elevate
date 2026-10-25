@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { archiveDocumentType, createDocumentType, updateDocumentType } from "../actions";
 import type { TypeAdminRow } from "../queries";
+import { useAsk } from "@/components/confirm-dialog";
 
 function useRun() {
   const router = useRouter();
@@ -82,6 +83,7 @@ export function NewTypeForm() {
 
 export function TypeRow({ type }: { type: TypeAdminRow }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(type.name);
   const [requiresExpiry, setRequiresExpiry] = useState(type.requiresExpiry);
@@ -107,7 +109,7 @@ export function TypeRow({ type }: { type: TypeAdminRow }) {
             variant="ghost"
             size="sm"
             disabled={pending}
-            onClick={() => window.confirm(`Retire "${type.name}"? Existing documents stay; nobody can upload this type any more.`) && run(() => archiveDocumentType({ typeId: type.id }), "Type retired.")}
+            onClick={async () => (await ask(`Retire "${type.name}"? Existing documents stay; nobody can upload this type any more.`)) && run(() => archiveDocumentType({ typeId: type.id }), "Type retired.")}
           >
             Retire
           </Button>

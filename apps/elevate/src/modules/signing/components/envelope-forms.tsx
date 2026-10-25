@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { ComposeEditor } from "./compose-editor";
 import { BUILTIN_TEMPLATES } from "../builtin-templates";
 import { SEND_FIELDS, fieldsUsed, sendFieldsUsed } from "../merge";
+import { useAsk } from "@/components/confirm-dialog";
 
 import { Textarea } from "@/components/ui/textarea";
 
@@ -21,6 +22,7 @@ type Picked = { userId: string; role: string };
 
 /** HR: send a PDF (or a saved template) to one or more people to sign. */
 export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }: { people: SignerChoice[]; templates: TemplateRow[]; groups: SigneeGroups; initialTemplateId?: string }) {
+  const ask = useAsk();
   const router = useRouter();
   const template = templates.find((t) => t.id === initialTemplateId) ?? null;
   const [title, setTitle] = useState(template?.name ?? "");
@@ -62,10 +64,10 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
   }
 
   /** Fills the title, the text and the signer role from a ready-made document. HR can still change all of it before sending. */
-  function applyBuiltin(id: string) {
+  async function applyBuiltin(id: string) {
     const t = BUILTIN_TEMPLATES.find((x) => x.id === id);
     if (!t) return;
-    if ((content.trim() || title.trim()) && !window.confirm("Replace what you have written with this ready-made document?")) return;
+    if ((content.trim() || title.trim()) && !(await ask("Replace what you have written with this ready-made document?"))) return;
     setTitle(t.title);
     setContent(t.body);
     setSharedRole(t.roles[0] ?? "");
@@ -128,7 +130,7 @@ export function NewEnvelopeForm({ people, templates, groups, initialTemplateId }
     setSending(true);
     try {
       if (individual) {
-        if (send && signers.length > 1 && !window.confirm(`Send this document to ${signers.length} people, each as their own copy?`)) return;
+        if (send && signers.length > 1 && !(await ask(`Send this document to ${signers.length} people, each as their own copy?`))) return;
         // Details filled in from people's records: check everyone first, so a missing address stops the send before anyone gets a copy.
         if (source === "write" && fieldsUsed(content).length > 0) {
           for (let i = 0; i < signers.length; i += MAX_SIGNERS) {
@@ -532,8 +534,9 @@ export function NewTemplateForm() {
 
 export function ArchiveTemplateButton({ templateId }: { templateId: string }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   return (
-    <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => window.confirm("Archive this template? Documents already sent are not affected.") && run(() => archiveTemplate({ templateId }), "Template archived.")}>
+    <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={async () => (await ask("Archive this template? Documents already sent are not affected.")) && run(() => archiveTemplate({ templateId }), "Template archived.")}>
       Archive
     </Button>
   );
@@ -542,6 +545,7 @@ export function ArchiveTemplateButton({ templateId }: { templateId: string }) {
 /** HR controls on one envelope. */
 export function ManageButtons({ envelopeId, title = "", status, sealing, isTest = false, archived = false, canDelete = false }: { envelopeId: string; title?: string; status: string; sealing: boolean; isTest?: boolean; archived?: boolean; canDelete?: boolean }) {
   const { run, pending, router } = useRun();
+  const ask = useAsk();
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState("");
   return (
@@ -552,7 +556,7 @@ export function ManageButtons({ envelopeId, title = "", status, sealing, isTest 
             <Button size="sm" disabled={pending} onClick={() => run(() => sendEnvelope({ envelopeId }), "Sent for signature.")}>
               Send for signature
             </Button>
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => window.confirm("Discard this draft?") && run(() => discardDraft({ envelopeId }), "Draft discarded.")}>
+            <Button size="sm" variant="ghost" disabled={pending} onClick={async () => (await ask("Discard this draft?")) && run(() => discardDraft({ envelopeId }), "Draft discarded.")}>
               Discard draft
             </Button>
           </>
@@ -597,9 +601,9 @@ export function ManageButtons({ envelopeId, title = "", status, sealing, isTest 
       {voiding ? (
         <form
           className="max-w-md space-y-2"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            if (!window.confirm("Void this document? Nobody will be able to sign it.")) return;
+            if (!(await ask("Void this document? Nobody will be able to sign it."))) return;
             run(() => voidEnvelope({ envelopeId, reason }), "Document voided.");
           }}
         >

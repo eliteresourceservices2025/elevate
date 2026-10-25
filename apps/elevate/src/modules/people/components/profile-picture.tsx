@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { OPEN_PHOTO_EVENT } from "@/components/shell/photo-events";
 import { removeProfilePhoto } from "../photo-actions";
+import { useAsk } from "@/components/confirm-dialog";
 
 /** The big picture at the top of a profile: the photo, or the initials. */
 export function ProfilePicture({ initials, photo }: { initials: string; photo: { userId: string; version: number } | null }) {
@@ -32,14 +33,15 @@ export function ChangePhotoButton({ hasPhoto }: { hasPhoto: boolean }) {
 export function RemovePhotoButton({ userId }: { userId: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const ask = useAsk();
   return (
     <Button
       type="button"
       variant="ghost"
       size="sm"
       disabled={pending}
-      onClick={() => {
-        if (!window.confirm("Remove this person's photo? They can add a new one.")) return;
+      onClick={async () => {
+        if (!(await ask("Remove this person's photo? They can add a new one."))) return;
         startTransition(async () => {
           const result = await removeProfilePhoto({ userId });
           if (!result.ok) return void toast.error(result.error);

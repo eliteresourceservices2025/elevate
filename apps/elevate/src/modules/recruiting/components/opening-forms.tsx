@@ -11,6 +11,7 @@ import { deleteOpening, saveOpening, saveRetention, setOpeningStatus } from "../
 import type { OpeningStatus } from "../constants";
 import type { PersonChoice } from "../queries";
 import { useRun } from "./use-run";
+import { useAsk } from "@/components/confirm-dialog";
 
 type OpeningValues = { id?: string; title: string; slug: string; description: string; location: string; payNote: string; teamId: string; sendAck: boolean; sendRejection: boolean; keywordsRequired: string; keywordsNice: string; hiringTeamUserIds: string[] };
 
@@ -110,6 +111,7 @@ export function OpeningForm({ initial, teams, people, status }: { initial?: Part
 
 export function OpeningStatusButtons({ id, status }: { id: string; status: OpeningStatus }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const set = (next: OpeningStatus, message: string) => run(() => setOpeningStatus({ id, status: next }), message);
   return (
     <div className="flex flex-wrap gap-2">
@@ -118,7 +120,7 @@ export function OpeningStatusButtons({ id, status }: { id: string; status: Openi
           {status === "closed" ? "Reopen job" : "Publish job"}
         </Button>
       ) : (
-        <Button size="sm" variant="outline" disabled={pending} onClick={() => window.confirm("Close this job? It disappears from the careers page.") && set("closed", "Job closed.")}>
+        <Button size="sm" variant="outline" disabled={pending} onClick={async () => (await ask("Close this job? It disappears from the careers page.")) && set("closed", "Job closed.")}>
           Close job
         </Button>
       )}
@@ -129,9 +131,10 @@ export function OpeningStatusButtons({ id, status }: { id: string; status: Openi
 /** Removes the job ad. A job with applications is hidden instead of erased, and the message says which happened. */
 export function DeleteOpeningButton({ id, applications }: { id: string; applications: number }) {
   const { run, pending, router } = useRun();
+  const ask = useAsk();
   const warning = applications > 0 ? `Delete this job? It has ${applications} application${applications === 1 ? "" : "s"}, so it is hidden from every list and the applications are kept under the retention rules.` : "Delete this job for good? Nobody has applied to it.";
   return (
-    <Button size="sm" variant="outline" className="text-destructive" disabled={pending} onClick={() => window.confirm(warning) && run(() => deleteOpening({ id }), (d) => (d?.erased ? "Job deleted." : "Job removed from the lists."), () => router.push("/recruiting"))}>
+    <Button size="sm" variant="outline" className="text-destructive" disabled={pending} onClick={async () => (await ask(warning)) && run(() => deleteOpening({ id }), (d) => (d?.erased ? "Job deleted." : "Job removed from the lists."), () => router.push("/recruiting"))}>
       Delete job
     </Button>
   );

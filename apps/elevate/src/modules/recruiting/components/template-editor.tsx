@@ -10,10 +10,12 @@ import { resetEmailTemplate, saveEmailTemplate } from "../actions";
 import { BODY_MAX, MERGE_FIELDS, SUBJECT_MAX, renderTemplate, validateTemplate } from "../mail";
 import type { EmailTemplateView } from "../queries";
 import { useRun } from "./use-run";
+import { useAsk } from "@/components/confirm-dialog";
 
 /** One applicant email: its subject and message, a live preview with a sample applicant, save, and back to the built-in wording. */
 export function TemplateEditor({ template }: { template: EmailTemplateView }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   const [subject, setSubject] = useState(template.subject);
   const [body, setBody] = useState(template.body);
   const problem = validateTemplate({ subject, body });
@@ -52,7 +54,7 @@ export function TemplateEditor({ template }: { template: EmailTemplateView }) {
             Save
           </Button>
           {template.custom ? (
-            <Button type="button" variant="outline" disabled={pending} onClick={() => window.confirm("Go back to the built-in wording? Your text is removed.") && run(() => resetEmailTemplate({ kind: template.kind }), "Back to the built-in wording.")}>
+            <Button type="button" variant="outline" disabled={pending} onClick={async () => (await ask("Go back to the built-in wording? Your text is removed.")) && run(() => resetEmailTemplate({ kind: template.kind }), "Back to the built-in wording.")}>
               Use the built-in wording
             </Button>
           ) : null}

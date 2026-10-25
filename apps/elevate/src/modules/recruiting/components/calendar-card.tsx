@@ -5,6 +5,7 @@ import { disconnectCalendar } from "../actions";
 import type { CalendarStatus } from "../calendar";
 import { useRun } from "./use-run";
 import { Alert } from "@/components/ui/alert";
+import { useAsk } from "@/components/confirm-dialog";
 
 const FLASH: Record<string, { tone: "ok" | "bad"; text: string }> = {
   connected: { tone: "ok", text: "Google Calendar is connected. New interviews you schedule will be created on it with a Meet link." },
@@ -16,6 +17,7 @@ const FLASH: Record<string, { tone: "ok" | "bad"; text: string }> = {
 /** Connect or disconnect your own Google Calendar. Only for HR, Super Admin and recruiters. */
 export function CalendarCard({ status, flash }: { status: CalendarStatus; flash?: string }) {
   const { run, pending } = useRun();
+  const ask = useAsk();
   // eslint-disable-next-line security/detect-object-injection -- looked up only after Object.hasOwn confirms it is one of our own keys
   const note = flash && Object.hasOwn(FLASH, flash) ? FLASH[flash] : undefined;
   return (
@@ -43,7 +45,7 @@ export function CalendarCard({ status, flash }: { status: CalendarStatus; flash?
                 Reconnect
               </a>
             ) : null}
-            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => window.confirm("Disconnect Google Calendar? Interviews already on your calendar stay there.") && run(() => disconnectCalendar(), "Disconnected.")}>
+            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={async () => (await ask("Disconnect Google Calendar? Interviews already on your calendar stay there.")) && run(() => disconnectCalendar(), "Disconnected.")}>
               Disconnect
             </Button>
           </div>
