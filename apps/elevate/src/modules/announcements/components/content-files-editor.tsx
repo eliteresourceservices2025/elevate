@@ -6,8 +6,9 @@ import { FileText, ImageUp, Paperclip, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { referencedFileIds } from "@/lib/markdown";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { MAX_VIDEO_BYTES, videoKindFromMime } from "@/modules/documents/files";
+import { MAX_FILE_BYTES, MAX_VIDEO_BYTES, videoKindFromMime } from "@/modules/documents/files";
 import type { ContentFileView } from "../content-files";
+import { cancelAnnouncementFileUpload, finalizeAnnouncementFileUpload, requestAnnouncementFileUpload } from "../upload-actions";
 import { cancelAnnouncementVideoUpload, finalizeAnnouncementVideoUpload, requestAnnouncementVideoUpload } from "../video-actions";
 
 const MAX_SIDE = 1600;
@@ -43,7 +44,7 @@ async function toJpeg(file: File): Promise<Blob> {
   }
 }
 
-async function upload(kind: "image" | "file", blob: Blob, name: string): Promise<ContentFileView> {
+async function upload(kind: "image", blob: Blob, name: string): Promise<ContentFileView> {
   const form = new FormData();
   form.set("kind", kind);
   form.set("file", blob, name);
@@ -66,6 +67,30 @@ async function uploadVideo(file: File): Promise<ContentFileView> {
     throw new Error("The video did not upload. Check your connection and try again.");
   }
   const done = await finalizeAnnouncementVideoUpload({ id: ticket.data.id });
+  if (!done.ok) throw new Error(done.error);
+  return done.data;
+}
+
+const DOCUMENT_TYPES: Record<string, string> = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+};
+
+/** Sends a PDF or Word document straight to storage (request, upload, finalize); a failed upload cancels the request. */
+async function uploadDocument(file: File): Promise<ContentFileView> {
+  // eslint-disable-next-line security/detect-object-injection -- the extension only selects from the three known keys
+  const mimeType = Object.values(DOCUMENT_TYPES).includes(file.type) ? file.type : (DOCUMENT_TYPES[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "");
+  if (!mimeType) throw new Error("Attach a PDF or Word document.");
+  if (file.size > MAX_FILE_BYTES) throw new Error("A file can be up to 10 MB.");
+  const ticket = await requestAnnouncementFileUpload({ fileName: file.name, mimeType, sizeBytes: file.size });
+  if (!ticket.ok) throw new Error(ticket.error);
+  const { error } = await createSupabaseBrowserClient().storage.from(ticket.data.bucket).uploadToSignedUrl(ticket.data.path, ticket.data.token, file, { contentType: ticket.data.contentType });
+  if (error) {
+    await cancelAnnouncementFileUpload({ id: ticket.data.id });
+    throw new Error("The file did not upload. Check your connection and try again.");
+  }
+  const done = await finalizeAnnouncementFileUpload({ id: ticket.data.id });
   if (!done.ok) throw new Error(done.error);
   return done.data;
 }
@@ -109,9 +134,7 @@ export function ContentFilesEditor({
     if (files.length >= MAX_FILES) return void toast.error(`At most ${MAX_FILES} pictures and files.`);
     setBusy(true);
     try {
-      const blob = kind === "image" ? await toJpeg(picked) : picked;
-      const name = kind === "image" ? picked.name.replace(/\.[^.]+$/, "") + ".jpg" : picked.name;
-      const stored = await upload(kind, blob, name);
+      const stored = kind === "image" ? await upload("image", await toJpeg(picked), picked.name.replace(/\.[^.]+$/, "") + ".jpg") : await uploadDocument(picked);
       onFilesChange((current) => [...current, stored]);
       toast.success(kind === "image" ? "Picture added. Describe it, then insert it into the text." : "File attached.");
     } catch (error) {

@@ -715,6 +715,13 @@
       "when": 1792838303274,
       "tag": "0101_overjoyed_blackheart",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1792903471758,
+      "tag": "0102_fair_cerise",
+      "breakpoints": true
     }
   ]
 }

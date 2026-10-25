@@ -5,12 +5,12 @@ import { authorize, can } from "@/lib/authz";
 import type { AuthUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
-import { MAX_FILE_BYTES, MAX_VIDEO_BYTES, VIDEO_HEAD_BYTES, VIDEO_TYPES, extensionOf, mimeOf, sniffFileKind, sniffVideoKind, videoKindFromMime } from "@/modules/documents/files";
+import { MAX_FILE_BYTES, MAX_VIDEO_BYTES, VIDEO_HEAD_BYTES, VIDEO_TYPES, extensionOf, kindFromMime, mimeOf, sniffFileKind, sniffVideoKind, videoKindFromMime } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { employees } from "@/modules/people/schema";
 import { cleanJpeg } from "@/modules/people/photo";
 import { referencedFileIds } from "@/lib/markdown";
-import { announcementRecipients, announcements, contentFiles, policies, policyVersions } from "./schema";
+import { announcementRecipients, announcements, contentFiles, policies, policyVersions, storageDeletions } from "./schema";
 
 // Pictures and files on announcements and policies. See contentFiles in schema.ts for the model.
 
@@ -23,6 +23,7 @@ const FILE_KINDS = new Set(["pdf", "docx", "doc"]);
 
 const VIDEO_PREFIX = "videos/";
 const PLAYBACK_SECONDS = 300;
+const DOWNLOAD_SECONDS = 60;
 
 export type ContentFileView = { id: string; kind: "image" | "file" | "video"; fileName: string; sizeBytes: number };
 export type Parent = { announcementId: string } | { policyVersionId: string; policyId: string };
@@ -39,7 +40,17 @@ export function safeFileName(raw: string, fallback: string): string {
   return base || fallback;
 }
 
-/** Stores an uploaded picture (already cropped and re-encoded by the browser; cleaned again here) or document as a pending file. */
+/**
+ * Records stored files that must be removed from storage, in the caller's transaction, so the retry entry exists exactly when the
+ * last row pointing at the file is gone. deleteUnusedPaths clears an entry once storage confirms (or the file is in use again).
+ */
+export async function queueStorageDeletion(tx: Pick<typeof db, "insert">, paths: string[]): Promise<void> {
+  const unique = [...new Set(paths)];
+  if (unique.length === 0) return;
+  await tx.insert(storageDeletions).values(unique.map((path) => ({ path }))).onConflictDoNothing();
+}
+
+/** Stores an uploaded picture (already cropped and re-encoded by the browser; cleaned again here) or document as a pending file. Documents from the editor use requestFileUpload instead (a request body to the server is limited to a few MB on the host). */
 export async function uploadContentFile(actor: AuthUser, input: { kind: "image" | "file"; bytes: Uint8Array; fileName: string }): Promise<{ ok: true; file: ContentFileView } | { ok: false; error: string }> {
   await authorize(actor, "announcements.manage");
 
@@ -98,20 +109,29 @@ export async function requestVideoUpload(actor: AuthUser, input: { fileName: str
   return { ok: true, ticket: { id: row.id, bucket: BUCKETS.videos, path, token, contentType: VIDEO_TYPES[kind].mime } };
 }
 
-async function ownPendingVideo(actor: AuthUser, id: string) {
+/** A requested, not yet finalized upload of this kind that belongs to the author (an unfinished upload has sha256 = ''). */
+async function ownPendingUpload(actor: AuthUser, id: string, kind: "video" | "file") {
   const [row] = await db.select().from(contentFiles).where(eq(contentFiles.id, id)).limit(1);
-  const ok = row && row.kind === "video" && row.ownerId === actor.id && row.announcementId === null && row.policyVersionId === null && row.sha256 === "";
+  const ok = row && row.kind === kind && row.ownerId === actor.id && row.announcementId === null && row.policyVersionId === null && row.sha256 === "";
   return ok ? row : null;
+}
+
+/** Drops an upload that failed its checks or was abandoned: the row, then the stored file (queued, so a failed removal is retried). */
+async function discardUpload(row: { id: string; storagePath: string }): Promise<void> {
+  await db.transaction(async (tx) => {
+    await queueStorageDeletion(tx, [row.storagePath]);
+    await tx.delete(contentFiles).where(eq(contentFiles.id, row.id));
+  });
+  await deleteUnusedPaths([row.storagePath]);
 }
 
 /** Step 3: reads only the first bytes and the size, checks what the file really is, and makes the row usable. A failing file is deleted. */
 export async function finalizeVideoUpload(actor: AuthUser, id: string): Promise<{ ok: true; file: ContentFileView } | { ok: false; error: string }> {
   await authorize(actor, "announcements.manage");
-  const row = await ownPendingVideo(actor, id);
+  const row = await ownPendingUpload(actor, id, "video");
   if (!row) return { ok: false, error: "That upload was not found." };
   const reject = async (error: string) => {
-    await db.delete(contentFiles).where(eq(contentFiles.id, row.id));
-    await getDocumentStorage().remove(BUCKETS.videos, [row.storagePath]).catch(() => {});
+    await discardUpload(row);
     return { ok: false as const, error };
   };
 
@@ -131,10 +151,62 @@ export async function finalizeVideoUpload(actor: AuthUser, id: string): Promise<
 /** Abandons an upload that was requested (for example the browser upload failed). */
 export async function cancelVideoUpload(actor: AuthUser, id: string): Promise<void> {
   await authorize(actor, "announcements.manage");
-  const row = await ownPendingVideo(actor, id);
-  if (!row) return;
-  await db.delete(contentFiles).where(eq(contentFiles.id, row.id));
-  await getDocumentStorage().remove(BUCKETS.videos, [row.storagePath]).catch(() => {});
+  const row = await ownPendingUpload(actor, id, "video");
+  if (row) await discardUpload(row);
+}
+
+// --- Documents (PDF, Word): the same three steps as a video, so a 10 MB file never travels through a server request -------------------
+
+/** Step 1 for a document: checks the declared type and size, records a not-yet-usable row and returns a one-time upload token. */
+export async function requestFileUpload(actor: AuthUser, input: { fileName: string; mimeType: string; sizeBytes: number }): Promise<{ ok: true; ticket: VideoTicket } | { ok: false; error: string }> {
+  await authorize(actor, "announcements.manage");
+  const kind = kindFromMime(input.mimeType);
+  if (!kind || !FILE_KINDS.has(kind)) return { ok: false, error: "Attach a PDF or Word document." };
+  if (input.sizeBytes <= 0 || input.sizeBytes > MAX_FILE_BYTES) return { ok: false, error: "A file can be up to 10 MB." };
+
+  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(contentFiles).where(and(eq(contentFiles.ownerId, actor.id), isNull(contentFiles.announcementId), isNull(contentFiles.policyVersionId)));
+  if (n >= PENDING_LIMIT) return { ok: false, error: "Too many files are waiting. Save what you are writing first." };
+
+  const ext = extensionOf(kind);
+  const path = `content/${randomUUID()}.${ext}`;
+  const fileName = safeFileName(input.fileName, `file.${ext}`);
+  const { token } = await getDocumentStorage().createSignedUpload(BUCKETS.company, path);
+  const [row] = await db
+    .insert(contentFiles)
+    .values({ ownerId: actor.id, kind: "file", fileName, mimeType: mimeOf(kind), sizeBytes: input.sizeBytes, sha256: "", storagePath: path })
+    .returning({ id: contentFiles.id });
+  return { ok: true, ticket: { id: row.id, bucket: BUCKETS.company, path, token, contentType: mimeOf(kind) } };
+}
+
+/** Step 3 for a document: reads the stored file (server to storage, not a request body), checks what it really is, and makes the row usable. */
+export async function finalizeFileUpload(actor: AuthUser, id: string): Promise<{ ok: true; file: ContentFileView } | { ok: false; error: string }> {
+  await authorize(actor, "announcements.manage");
+  const row = await ownPendingUpload(actor, id, "file");
+  if (!row) return { ok: false, error: "That upload was not found." };
+  const reject = async (error: string) => {
+    await discardUpload(row);
+    return { ok: false as const, error };
+  };
+
+  const head = await getDocumentStorage().head(BUCKETS.company, row.storagePath, 1);
+  if (!head) return reject("We did not receive the file. Try uploading it again.");
+  if (head.size <= 0 || head.size > MAX_FILE_BYTES) return reject("A file can be up to 10 MB.");
+  const bytes = await getDocumentStorage().read(BUCKETS.company, row.storagePath);
+  if (!bytes || bytes.length === 0 || bytes.length > MAX_FILE_BYTES) return reject("We did not receive the file. Try uploading it again.");
+  const kind = sniffFileKind(bytes);
+  if (!kind || !FILE_KINDS.has(kind)) return reject("That file is not a PDF or Word document (or it contains macros), so it was not saved.");
+  if (mimeOf(kind) !== row.mimeType) return reject("The file does not match the type you chose, so it was not saved.");
+
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const [updated] = await db.update(contentFiles).set({ sha256, sizeBytes: bytes.length }).where(and(eq(contentFiles.id, row.id), eq(contentFiles.sha256, ""))).returning({ id: contentFiles.id, kind: contentFiles.kind, fileName: contentFiles.fileName, sizeBytes: contentFiles.sizeBytes });
+  if (!updated) return { ok: false, error: "That upload was already finished." };
+  return { ok: true, file: view(updated) };
+}
+
+export async function cancelFileUpload(actor: AuthUser, id: string): Promise<void> {
+  await authorize(actor, "announcements.manage");
+  const row = await ownPendingUpload(actor, id, "file");
+  if (row) await discardUpload(row);
 }
 
 type Tx = Pick<typeof db, "select" | "insert" | "update" | "delete">;
@@ -157,7 +229,7 @@ export async function syncContentFiles(tx: Tx, actor: { id: string }, parent: Pa
   const videos = keep.filter((r) => r.kind === "video");
   if (videos.length > 1) throw new ActionFailure("Only one video can be added.");
   if (videos.length && !("announcementId" in parent)) throw new ActionFailure("Videos can only be added to announcements.");
-  if (videos.some((r) => r.sha256 === "")) throw new ActionFailure("The video has not finished uploading.");
+  if (keep.some((r) => r.sha256 === "")) throw new ActionFailure("A file has not finished uploading. Wait for it, then save.");
 
   const onThis = "announcementId" in parent ? eq(contentFiles.announcementId, parent.announcementId) : eq(contentFiles.policyVersionId, parent.policyVersionId);
   const siblingVersions = "policyId" in parent ? (await tx.select({ id: policyVersions.id }).from(policyVersions).where(eq(policyVersions.policyId, parent.policyId))).map((v) => v.id) : [];
@@ -187,20 +259,45 @@ export async function syncContentFiles(tx: Tx, actor: { id: string }, parent: Pa
   const keptPaths = new Set(keep.map((r) => r.storagePath));
   const removed = current.filter((c) => !keptIds.includes(c.id) && !keptPaths.has(c.path));
   if (removed.length) await tx.delete(contentFiles).where(inArray(contentFiles.id, removed.map((r) => r.id)));
-  return { removedPaths: [...new Set(removed.map((r) => r.path))] };
+  const removedPaths = [...new Set(removed.map((r) => r.path))];
+  await queueStorageDeletion(tx, removedPaths);
+  return { removedPaths };
 }
 
-/** Removes stored files that no row uses any more (several rows can share one). Best effort: a failure leaves a file for the next purge. */
+/**
+ * Removes stored files that no row uses any more (several rows can share one). Each path is queued first and leaves the queue only
+ * after storage confirms the removal, so a failure is retried by the daily clean-up (retryStorageDeletions). A path that is in use
+ * again (a policy version shares it) is dropped from the queue without touching the file.
+ */
 export async function deleteUnusedPaths(paths: string[]): Promise<void> {
   const unique = [...new Set(paths)];
   if (unique.length === 0) return;
   const used = await db.select({ path: contentFiles.storagePath }).from(contentFiles).where(inArray(contentFiles.storagePath, unique));
   const inUse = new Set(used.map((u) => u.path));
+  if (inUse.size) await db.delete(storageDeletions).where(inArray(storageDeletions.path, [...inUse]));
   const free = unique.filter((p) => !inUse.has(p));
-  const videos = free.filter((p) => bucketFor(p) === BUCKETS.videos);
-  const others = free.filter((p) => bucketFor(p) === BUCKETS.company);
-  if (others.length) await getDocumentStorage().remove(BUCKETS.company, others).catch(() => {});
-  if (videos.length) await getDocumentStorage().remove(BUCKETS.videos, videos).catch(() => {});
+  if (free.length === 0) return;
+  await queueStorageDeletion(db, free);
+
+  for (const bucket of [BUCKETS.company, BUCKETS.videos]) {
+    const batch = free.filter((p) => bucketFor(p) === bucket);
+    if (batch.length === 0) continue;
+    try {
+      await getDocumentStorage().remove(bucket, batch);
+      await db.delete(storageDeletions).where(inArray(storageDeletions.path, batch));
+    } catch {
+      await db.update(storageDeletions).set({ attempts: sql`${storageDeletions.attempts} + 1` }).where(inArray(storageDeletions.path, batch)).catch(() => {});
+    }
+  }
+}
+
+const RETRY_BATCH = 200;
+
+/** Daily: tries again every stored file whose removal failed before. Returns how many entries were attempted. */
+export async function retryStorageDeletions(): Promise<{ retried: number }> {
+  const queued = await db.select({ path: storageDeletions.path }).from(storageDeletions).orderBy(storageDeletions.queuedAt).limit(RETRY_BATCH);
+  await deleteUnusedPaths(queued.map((q) => q.path));
+  return { retried: queued.length };
 }
 
 export async function listAnnouncementFiles(announcementId: string): Promise<ContentFileView[]> {
@@ -214,7 +311,9 @@ export async function listVersionFiles(policyVersionId: string): Promise<Content
 }
 
 export type OpenedFile =
-  | { kind: "image" | "file"; bytes: Uint8Array; mimeType: string; fileName: string; id: string }
+  | { kind: "image"; bytes: Uint8Array; mimeType: string; fileName: string; id: string }
+  // A document is a short-lived storage link that saves it under its own name, so a large file never passes through the app's response.
+  | { kind: "file"; downloadUrl: string; mimeType: string; fileName: string; id: string }
   | { kind: "video"; playbackUrl: string; id: string };
 
 /**
@@ -249,9 +348,13 @@ export async function openContentFile(viewer: AuthUser, id: string): Promise<Ope
     if (f.sha256 === "") return null;
     return { kind: "video", id: f.id, playbackUrl: await getDocumentStorage().createSignedPlayback(BUCKETS.videos, f.storagePath, PLAYBACK_SECONDS) };
   }
+  if (f.kind === "file") {
+    if (f.sha256 === "") return null; // still uploading
+    return { kind: "file", id: f.id, mimeType: f.mimeType, fileName: f.fileName, downloadUrl: await getDocumentStorage().createSignedDownload(bucketFor(f.storagePath), f.storagePath, DOWNLOAD_SECONDS, f.fileName) };
+  }
   const bytes = await getDocumentStorage().read(bucketFor(f.storagePath), f.storagePath);
   if (!bytes) return null;
-  return { bytes, mimeType: f.mimeType, fileName: f.fileName, kind: f.kind === "image" ? "image" : "file", id: f.id };
+  return { bytes, mimeType: f.mimeType, fileName: f.fileName, kind: "image", id: f.id };
 }
 
 async function isRecipient(announcementId: string, userId: string): Promise<boolean> {
@@ -271,9 +374,15 @@ export async function purgeOrphanContentFiles(now = new Date()): Promise<{ remov
     .select({ id: contentFiles.id, path: contentFiles.storagePath })
     .from(contentFiles)
     .where(and(isNull(contentFiles.announcementId), isNull(contentFiles.policyVersionId), lt(contentFiles.createdAt, cutoff)));
-  if (stale.length === 0) return { removed: 0 };
-  await db.delete(contentFiles).where(inArray(contentFiles.id, stale.map((s) => s.id)));
-  await deleteUnusedPaths(stale.map((s) => s.path));
+  if (stale.length > 0) {
+    await db.transaction(async (tx) => {
+      await queueStorageDeletion(tx, stale.map((s) => s.path));
+      await tx.delete(contentFiles).where(inArray(contentFiles.id, stale.map((s) => s.id)));
+    });
+    await deleteUnusedPaths(stale.map((s) => s.path));
+  }
+  // Also retry removals that failed earlier (including the ones just above).
+  await retryStorageDeletions();
   return { removed: stale.length };
 }
 
@@ -281,5 +390,7 @@ export async function purgeOrphanContentFiles(now = new Date()): Promise<{ remov
 export async function removeVersionFiles(tx: Tx, policyVersionId: string): Promise<string[]> {
   const rows = await tx.select({ id: contentFiles.id, path: contentFiles.storagePath }).from(contentFiles).where(eq(contentFiles.policyVersionId, policyVersionId));
   if (rows.length) await tx.delete(contentFiles).where(inArray(contentFiles.id, rows.map((r) => r.id)));
-  return [...new Set(rows.map((r) => r.path))];
+  const paths = [...new Set(rows.map((r) => r.path))];
+  await queueStorageDeletion(tx, paths);
+  return paths;
 }

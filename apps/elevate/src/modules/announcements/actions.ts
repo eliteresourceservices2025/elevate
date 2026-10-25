@@ -17,7 +17,7 @@ import { todayInZone } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { PLACEHOLDER_MARK, hidesVersion } from "./constants";
-import { deleteUnusedPaths, removeVersionFiles, syncContentFiles } from "./content-files";
+import { deleteUnusedPaths, queueStorageDeletion, removeVersionFiles, syncContentFiles } from "./content-files";
 import { announcementRecipients, announcementTeams, announcements, acknowledgments, contentFiles, policies, policyVersions } from "./schema";
 import { ackStatus, activeUserIds, audienceEmployees, lockAnnouncement, pendingAcknowledgments, queueAckEmails, remindPending } from "./service";
 import {
@@ -221,7 +221,10 @@ export async function deleteAnnouncement(input: unknown): Promise<ActionResult> 
       await tx.execute(sql`delete from docs.popup_dismissals where announcement_id = ${id}::uuid`);
       await tx.execute(sql`delete from docs.popups where announcement_id = ${id}::uuid`);
       await tx.execute(sql`delete from docs.acknowledgment_reminders where announcement_id = ${id}::uuid`);
-      if (files.length) await tx.delete(contentFiles).where(inArray(contentFiles.id, files.map((f) => f.id)));
+      if (files.length) {
+        await queueStorageDeletion(tx, files.map((f) => f.path));
+        await tx.delete(contentFiles).where(inArray(contentFiles.id, files.map((f) => f.id)));
+      }
       await tx.delete(announcementRecipients).where(eq(announcementRecipients.announcementId, id));
       await tx.delete(announcementTeams).where(eq(announcementTeams.announcementId, id));
       await tx.delete(announcements).where(eq(announcements.id, id));

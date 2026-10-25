@@ -29,7 +29,14 @@ export class FakeStorage implements DocumentStorage {
     return this.objects.get(this.key(bucket, path)) ?? null;
   }
 
+  /** Tests: make the next removals fail, like a storage outage. */
+  failRemovals = 0;
+
   async remove(bucket: Bucket, paths: string[]) {
+    if (this.failRemovals > 0) {
+      this.failRemovals -= 1;
+      throw new Error("Could not remove the file");
+    }
     for (const p of paths) {
       this.objects.delete(this.key(bucket, p));
       this.removed.push(this.key(bucket, p));

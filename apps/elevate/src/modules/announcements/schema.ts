@@ -158,6 +158,19 @@ export const contentFiles = docs
   )
   .enableRLS();
 
+/**
+ * Stored files waiting to be removed from storage. A path is queued in the same transaction that drops its last row, and leaves this
+ * table only after storage confirms the removal (or after it is found in use again), so a failed removal is retried by the daily
+ * clean-up instead of leaving a file nobody can find. Paths only: never a file name or content.
+ */
+export const storageDeletions = docs
+  .table("storage_deletions", {
+    path: text("path").primaryKey(),
+    queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
+    attempts: integer("attempts").notNull().default(0),
+  })
+  .enableRLS();
+
 /** Insert-only (database trigger). Exactly one of announcement_id / policy_version_id is set. */
 export const acknowledgments = docs
   .table(

@@ -76,3 +76,13 @@ export const requestVideoUploadSchema = z.object({
   sizeBytes: z.number().int().min(1, "That video is empty.").max(100 * 1024 * 1024, "A video can be up to 100 MB."),
 });
 export const videoIdSchema = z.object({ id: uuid });
+
+/** A PDF or Word document, sent straight to storage after this request. The server checks the real type again when it is finalized. */
+export const requestFileUploadSchema = z.object({
+  fileName: z.string().trim().min(1).max(200),
+  mimeType: z.enum(
+    ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    { error: "Attach a PDF or Word document." },
+  ),
+  sizeBytes: z.number().int().min(1, "That file is empty.").max(10 * 1024 * 1024, "A file can be up to 10 MB."),
+});
