@@ -5,6 +5,9 @@ import { StartExamButton } from "@/components/forms";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { getAttemptView, getOverview } from "@/lib/queries";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Exam" };
 
 export const dynamic = "force-dynamic";
 

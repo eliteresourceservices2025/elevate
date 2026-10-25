@@ -9,7 +9,7 @@ import { letterUrl, voiceUrl } from "./voice";
 export type CallConfig = { passPercent: number; scenarios: number; maxTries: number; waitMinutesAfterFail: number };
 export type ExamConfig = { passPercent: number; maxTries: number; waitMinutesAfterFail: number; renewalMonths: number; tracks: Record<string, { questions: number; minutes?: number }>; call?: CallConfig };
 
-export type AssignmentSummary = { id: string; title: string; track: string; status: string; dueOn: string };
+export type AssignmentSummary = { id: string; title: string; track: string; status: string; dueOn: string; reason: string };
 
 /** The home list. A cancelled assignment (a retired version nobody finished) is history and shows only in My training record. */
 export async function listAssignments(sql: Sql, userId: string): Promise<AssignmentSummary[]> {
@@ -19,7 +19,7 @@ export async function listAssignments(sql: Sql, userId: string): Promise<Assignm
       from learn.assignments a join learn.courses c on c.id = a.course_id
       where a.status <> 'cancelled'
       order by a.assigned_at desc`;
-    return rows.map((r) => ({ id: r.id as string, title: r.title as string, track: r.track as string, status: r.status as string, dueOn: r.due_on as string }));
+    return rows.map((r) => ({ id: r.id as string, title: r.title as string, track: r.track as string, status: r.status as string, dueOn: r.due_on as string, reason: r.reason as string }));
   });
 }
 

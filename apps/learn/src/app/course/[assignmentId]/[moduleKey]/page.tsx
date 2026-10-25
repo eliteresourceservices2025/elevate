@@ -5,6 +5,9 @@ import { videosForModule } from "@/content/customer-service/videos";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { getModuleView } from "@/lib/queries";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Lesson" };
 
 export const dynamic = "force-dynamic";
 

@@ -2,11 +2,17 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { getSql, withUser } from "@/lib/db";
 import { getPractice, listAssignments } from "@/lib/queries";
+import type { Metadata } from "next";
+
+// The root layout's title template does not apply to the page of its own segment, so the full title is written out here.
+export const metadata: Metadata = { title: { absolute: "My training · ELEVATE Learn" } };
 
 export const dynamic = "force-dynamic";
 
 const TRACK_LABEL: Record<string, string> = { full: "Full course", essentials: "Essentials", refresher: "Refresher" };
 const STATUS_LABEL: Record<string, string> = { assigned: "Not started", in_progress: "In progress", passed: "Passed", expired: "Expired", cancelled: "Cancelled" };
+/** What kind of assignment it is, so two with the same course title can be told apart. */
+const REASON_LABEL: Record<string, string> = { new_hire: "New-hire course", renewal: "Yearly renewal", update: "Update", manual: "Assigned by HR" };
 const ACTION_LABEL: Record<string, string> = { assigned: "Start", in_progress: "Continue", passed: "View", expired: "View", cancelled: "View" };
 
 export default async function Home() {
@@ -26,7 +32,7 @@ export default async function Home() {
         <ul className="plain">
           {assignments.map((a) => (
             <li key={a.id} className="card">
-              <strong>{a.title}</strong>
+              <strong>{a.title}</strong>{REASON_LABEL[a.reason] ? <span className="badge"> {REASON_LABEL[a.reason]}</span> : null}
               <div className="muted">
                 {TRACK_LABEL[a.track] ?? a.track} · due {a.dueOn} · {STATUS_LABEL[a.status] ?? a.status}
               </div>

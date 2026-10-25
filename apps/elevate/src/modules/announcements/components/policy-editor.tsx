@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { MarkdownField } from "@/components/markdown-field";
@@ -87,6 +88,7 @@ export function DraftEditor({
   const [dueOn, setDueOn] = useState(initial.dueOn ?? "");
   const [files, setFiles] = useState<ContentFileView[]>(initial.files);
   const [uploading, setUploading] = useState(false);
+  const confirm = useConfirm();
   const { markSaved } = useWarnWhenEdited({ body, changeNote, requiresAck, dueOn, files: files.map((f) => f.id) });
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string) => {
@@ -114,18 +116,26 @@ export function DraftEditor({
         <Button
           type="button"
           disabled={pending || uploading}
-          onClick={() =>
-            window.confirm(`Publish ${showVersion ? `version ${nextVersion}` : "this update"}? Nobody can change it afterwards, and everyone is notified${requiresAck ? " and asked to acknowledge it" : ""}.`) &&
+          onClick={async () => {
+            const ok = await confirm({
+              title: `Publish ${showVersion ? `version ${nextVersion}` : "this update"}?`,
+              description: `Nobody can change it afterwards, and everyone is notified${requiresAck ? " and asked to acknowledge it" : ""}.`,
+              confirmLabel: showVersion ? `Publish version ${nextVersion}` : "Publish update",
+              cancelLabel: "Keep editing",
+            });
+            if (!ok) return;
             run(async () => {
               const saved = await save();
               return saved.ok ? publishDraft({ policyId }) : saved;
-            }, showVersion ? `Version ${nextVersion} published.` : "Published.")
-          }
+            }, showVersion ? `Version ${nextVersion} published.` : "Published.");
+          }}
         >
           {showVersion ? `Publish version ${nextVersion}` : "Publish update"}
         </Button>
         {hasPublished ? (
-          <Button type="button" variant="ghost" disabled={pending} onClick={() => window.confirm("Discard this draft?") && run(() => discardDraft({ policyId }), "Draft discarded.")}>
+          <Button type="button" variant="ghost" disabled={pending} onClick={async () => {
+            if (await confirm({ title: "Discard this draft?", description: "The draft and its files are removed. The published version stays as it is.", confirmLabel: "Discard draft", cancelLabel: "Keep draft", destructive: true })) run(() => discardDraft({ policyId }), "Draft discarded.");
+          }}>
             Discard draft
           </Button>
         ) : null}
@@ -134,15 +144,16 @@ export function DraftEditor({
             type="button"
             variant="ghost"
             disabled={pending}
-            onClick={() =>
-              window.confirm("Remove this policy? It was never published, so nobody has seen it.") &&
+            onClick={async () => {
+              const ok = await confirm({ title: "Remove this policy?", description: "It was never published, so nobody has seen it.", confirmLabel: "Remove policy", destructive: true });
+              if (!ok) return;
               startTransition(async () => {
                 const result = await archivePolicy({ policyId });
                 if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
                 toast.success("Policy removed.");
                 router.push("/announcements");
-              })
-            }
+              });
+            }}
           >
             Remove policy
           </Button>

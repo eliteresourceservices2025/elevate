@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -5,11 +8,22 @@ export type TabItem = { key: string; label: string; href: string };
 
 /**
  * The tab bar of a page whose tabs are addresses (`?tab=...`): underlined links in one row that scrolls sideways on a narrow screen,
- * instead of wrapping onto several lines. The current tab is marked with aria-current.
+ * instead of wrapping onto several lines. The current tab is marked with aria-current and scrolled into view on arrival, so a later tab
+ * is never hidden off the edge. The bar has no vertical scroll (the 1px overlap of the underline is padded, not overflowed).
  */
 export function TabNav({ label, items, current, className }: { label: string; items: TabItem[]; current: string; className?: string }) {
+  const bar = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const active = bar.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!active || !bar.current) return;
+    // Scroll only the bar sideways: scrollIntoView would also move the page.
+    const left = active.offsetLeft - (bar.current.clientWidth - active.offsetWidth) / 2;
+    bar.current.scrollTo({ left: Math.max(0, left), behavior: "auto" });
+  }, [current]);
+
   return (
-    <nav aria-label={label} className={cn("-mt-2 flex gap-6 overflow-x-auto border-b", className)}>
+    <nav ref={bar} aria-label={label} className={cn("-mt-2 flex gap-6 overflow-x-auto overflow-y-hidden border-b pb-px", className)}>
       {items.map((t) => (
         <Link
           key={t.key}

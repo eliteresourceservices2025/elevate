@@ -68,7 +68,7 @@ export function PersonPicker({
           autoComplete="off"
           value={text}
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
+          aria-describedby={[hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean).join(" ") || undefined}
           placeholder="Start typing a name"
           className={text ? "pr-10" : undefined}
           onChange={(e) => {
@@ -100,7 +100,7 @@ export function PersonPicker({
           <option key={o.id} value={o.text} />
         ))}
       </datalist>
-      {hint && !error ? (
+      {hint ? (
         <p id={`${id}-hint`} className="text-xs text-muted-foreground">
           {hint}
         </p>

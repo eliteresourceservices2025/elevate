@@ -2,6 +2,9 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { getRecord } from "@/lib/queries";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "My training record" };
 
 export const dynamic = "force-dynamic";
 

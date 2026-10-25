@@ -73,7 +73,7 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
 
       {summary ? (
         <section aria-label="Summary" className="space-y-2">
-          <dl className="grid gap-3 sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {(
               [
                 ["Open jobs", summary.openJobs],
@@ -82,7 +82,7 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
                 ["In the pipeline", STAGES.filter((s) => s !== "hired" && s !== "rejected").reduce((n, s) => n + summary.counts[s], 0)],
               ] as const
             ).map(([label, value]) => (
-              <div key={label} className="rounded-xl border bg-card p-4">
+              <div key={label} className="rounded-xl border bg-card p-3 sm:p-4">
                 <dt className="text-xs text-muted-foreground">{label}</dt>
                 <dd className="text-2xl font-semibold">{value}</dd>
               </div>

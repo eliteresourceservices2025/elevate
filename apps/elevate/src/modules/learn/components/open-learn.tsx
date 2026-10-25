@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { startLearnLaunch } from "../actions";
 
@@ -44,7 +44,7 @@ export function OpenLearn({ auto = false }: { auto?: boolean }) {
   return (
     <div className="space-y-3">
       <Button onClick={() => void open()} disabled={state === "opening"}>
-        {state === "opening" ? "Opening training..." : "Open HIPAA training"} <ExternalLink aria-hidden />
+        {state === "opening" ? "Opening training..." : "Open ELEVATE Learn"} <ArrowRight aria-hidden />
       </Button>
       <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
         {state === "opening" ? "Taking you to ELEVATE Learn. This only takes a moment." : null}

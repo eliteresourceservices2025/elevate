@@ -78,7 +78,7 @@ export function LessonStage(props: {
             <X size={20} aria-hidden="true" />
           </Link>
           <div className="stage-title">
-            <strong>{props.title}</strong>
+            <h1 title={props.title}>{props.title}</h1>
             <span className="muted">
               Step {index + 1} of {total}
             </span>
@@ -93,7 +93,8 @@ export function LessonStage(props: {
                 key={s.id}
                 type="button"
                 className={`journey-step${i === index ? " here" : ""}${i < index ? " done" : ""}`}
-                aria-label={`Step ${i + 1}: ${s.title}`}
+                aria-label={`Step ${i + 1} of ${total}: ${s.title}`}
+                title={s.title}
                 aria-current={i === index ? "step" : undefined}
                 disabled={!reachable}
                 onClick={() => onIndex(i)}

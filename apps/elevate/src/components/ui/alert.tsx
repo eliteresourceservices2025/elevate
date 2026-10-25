@@ -31,7 +31,8 @@ function Alert({
   return (
     <div
       data-slot="alert"
-      role="alert"
+      // Only an error interrupts a screen reader; success, info and warning notes are polite, and plain or muted notes are not announced.
+      role={variant === "destructive" ? "alert" : variant === "success" || variant === "info" || variant === "warning" ? "status" : undefined}
       className={cn(alertVariants({ variant }), className)}
       {...props}
     />

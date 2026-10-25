@@ -196,11 +196,14 @@ blockquote { border-left: 4px solid var(--accent); margin: 1rem 0; padding: 0.25
 .stage-close { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); }
 .stage-close:hover { color: var(--foreground); background: var(--muted); }
 .stage-title { flex: 1; min-width: 0; display: grid; line-height: 1.25; }
-.stage-title strong { font-family: var(--font-head), system-ui, sans-serif; color: var(--primary); font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.journey { display: flex; gap: 4px; padding: 0.6rem 1rem 0; max-width: 56rem; width: 100%; margin: 0 auto; }
-.journey-step { flex: 1; height: 8px; padding: 0; border-radius: 999px; background: var(--muted); border: 1px solid var(--border); transition: background 0.25s, transform 0.25s; }
-.journey-step.done { background: var(--primary); border-color: var(--primary); }
-.journey-step.here { background: var(--accent); border-color: var(--accent); transform: scaleY(1.5); }
+.stage-title strong, .stage-title h1 { margin: 0; font-family: var(--font-head), system-ui, sans-serif; font-weight: 700; color: var(--primary); font-size: 1.1rem; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.journey { display: flex; gap: 2px; padding: 0.6rem 1rem 0; max-width: 56rem; width: 100%; margin: 0 auto; }
+/* The thin bar is drawn inside a taller button, so the touch target is comfortable while the graphic stays slim. */
+.journey-step { position: relative; flex: 1; height: 28px; padding: 0; background: transparent; border: 0; }
+.journey-step::before { content: ""; position: absolute; inset: 10px 1px; border-radius: 999px; background: var(--muted); border: 1px solid var(--border); transition: background 0.25s, transform 0.25s; }
+.journey-step.done::before { background: var(--primary); border-color: var(--primary); }
+.journey-step.here::before { background: var(--accent); border-color: var(--accent); transform: scaleY(1.5); }
+.journey-step:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; border-radius: 6px; }
 .journey-step:disabled { cursor: default; opacity: 0.6; }
 .stage-extra { max-width: 56rem; width: 100%; margin: 0 auto; padding: 0 1rem; flex: none; max-height: 55vh; overflow-y: auto; }
 /* an opened video never takes the whole stage: the lesson below it keeps its room */
@@ -284,3 +287,6 @@ a.mod-link:focus-visible { outline: 3px solid var(--ring); outline-offset: -3px;
 .mod-go { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 700; color: var(--primary); }
 .mod-card:has(a.mod-link:hover) .mod-go svg { transform: translateX(3px); }
 .mod-go svg { transition: transform 0.15s ease; }
+
+/* A small label beside a title (for example the kind of assignment). */
+.badge { display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.5rem; border: 1px solid var(--border); border-radius: 999px; background: var(--muted); color: var(--muted-foreground); font-size: 0.75rem; font-weight: 600; vertical-align: middle; }

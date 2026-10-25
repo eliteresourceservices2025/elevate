@@ -2,12 +2,13 @@
 
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type Ctx = {
   /** Closes the dialog. Pass true after a save so it never asks about the draft. */
-  close: (force?: boolean) => void;
+  close: (force?: boolean) => void | Promise<void>;
   /** The draft was saved but the dialog stays open (to show a result): closing it later does not ask. */
   markClean: () => void;
 };
@@ -67,11 +68,16 @@ export function FormDialog({
   const dirty = useRef(false);
   const reduce = useReducedMotion();
 
-  const close = useCallback((force = false) => {
-    if (!force && dirty.current && !window.confirm("Discard what you wrote?")) return;
+  const confirm = useConfirm();
+
+  const close = useCallback(async (force = false) => {
+    if (!force && dirty.current) {
+      const discard = await confirm({ title: "Discard what you wrote?", description: "What you typed in this form is lost if you close it now.", confirmLabel: "Discard changes", cancelLabel: "Keep editing", destructive: true });
+      if (!discard) return;
+    }
     dirty.current = false;
     setOpen(false);
-  }, [setOpen]);
+  }, [setOpen, confirm]);
 
   const markClean = useCallback(() => {
     dirty.current = false;

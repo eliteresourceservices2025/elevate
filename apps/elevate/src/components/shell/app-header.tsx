@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -45,6 +46,13 @@ export function AppHeader({
   onToggleSidebar?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  // The menu drawer closes whenever the page changes, also after "Leave page" in the unsaved-changes question (which stops the link click that would have closed it).
+  const [seenPath, setSeenPath] = useState(pathname);
+  if (pathname !== seenPath) {
+    setSeenPath(pathname);
+    setOpen(false);
+  }
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card px-3 sm:gap-3 sm:px-4 print:hidden">

@@ -27,7 +27,7 @@ export function PagerLinks({ info, basePath, query = {}, pageKey = "page", sizeK
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">Per page</span>
         {PAGE_SIZES.map((s) => (
-          <Link key={s} href={href(1, s)} aria-current={s === info.pageSize ? "true" : undefined} className={cn("rounded-md px-2 py-0.5 text-xs", s === info.pageSize ? "bg-primary text-primary-foreground" : "hover:bg-secondary/50")}>
+          <Link key={s} href={href(1, s)} aria-current={s === info.pageSize ? "true" : undefined} className={cn("inline-flex min-h-8 min-w-8 items-center justify-center rounded-md px-2 text-xs max-sm:min-h-10 max-sm:min-w-10", s === info.pageSize ? "bg-primary text-primary-foreground" : "hover:bg-secondary/50")}>
             {s}
           </Link>
         ))}

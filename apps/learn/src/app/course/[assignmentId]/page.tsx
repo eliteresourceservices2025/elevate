@@ -8,6 +8,9 @@ import { StartExamButton } from "@/components/forms";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { getOverview } from "@/lib/queries";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Course" };
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +35,13 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
           <div>
             <h1>{assignment.isUpdate ? `${assignment.courseTitle}: update` : assignment.courseTitle}</h1>
             {assignment.isUpdate ? <p>Some lessons changed since you were certified. Read the ones below, then answer a few questions. Your certificate stays valid.</p> : null}
-            <p className="muted">Due {assignment.dueOn}</p>
+            {finished ? (
+              <p className="feedback good">
+                You passed this course. {certificate ? <Link href={`/certificate/${assignment.id}`}>View my certificate</Link> : null}
+              </p>
+            ) : (
+              <p className="muted">Due {assignment.dueOn}</p>
+            )}
             {welcome ? (
               <div className="video-bar">
                 <VideoButton recap={welcome} title={assignment.courseTitle} className="video-btn video-btn-primary">
@@ -43,7 +52,7 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
           </div>
           <div className="course-progress" role="group" aria-label="Your progress">
             <span className="muted small">
-              {doneCount} of {modules.length} modules done
+              {finished && doneCount < modules.length ? "Course completed. Lesson progress from before is not shown." : `${doneCount} of ${modules.length} modules done`}
             </span>
             <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={modules.length} aria-valuenow={doneCount}>
               <div style={{ width: `${modules.length ? (doneCount / modules.length) * 100 : 0}%` }} />
