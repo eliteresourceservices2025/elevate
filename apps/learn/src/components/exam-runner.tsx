@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExamItem } from "@/lib/queries";
 import { clock, post } from "./api-client";
 import { AnswerSaver } from "./answer-saver";
+import { Modal } from "./modal";
 import { ListenButton } from "./listen-button";
 
 const LETTER = ["A", "B", "C", "D", "E", "F"];
@@ -107,6 +108,7 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
 
   return (
     <div className="player">
+      <h1 className="sr-only">Exam</h1>
       <div className="exam-bar">
         <span>
           Question {index + 1} of {items.length}
@@ -134,6 +136,10 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
         </span>
       </div>
 
+      {/* The keyboard stays on Next, so a screen reader is told which question it is now on. */}
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        Question {index + 1} of {items.length}. {item.type === "multiple" ? "Select all that apply." : "Choose one answer."}
+      </p>
       <article className="screen">
         <h2 className="q-stem">{item.stem}</h2>
         <ListenButton key={item.questionId} text={examSpeech(item)} clips={examClips(item)} label="Listen to this question" />
@@ -181,8 +187,7 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
       ) : null}
 
       {confirming ? (
-        <div className="modal-back">
-          <div role="dialog" aria-modal="true" aria-labelledby="submit-title" className="modal">
+        <Modal labelledBy="submit-title" onClose={() => !submitting && setConfirming(false)}>
             <h2 id="submit-title">Submit your exam?</h2>
             <p>
               You answered {answered} of {items.length} questions.
@@ -196,8 +201,7 @@ export function ExamRunner({ attemptId, items, deadlineAt, serverNow }: { attemp
                 {submitting ? "Submitting..." : "Submit exam"}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       ) : null}
     </div>
   );

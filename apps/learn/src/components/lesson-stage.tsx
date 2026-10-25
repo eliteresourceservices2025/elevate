@@ -48,6 +48,21 @@ export function LessonStage(props: {
   const bodyRef = useRef<HTMLDivElement>(null);
   // The outline: every step by name, with where you are and which ones you can open.
   const [outlineOpen, setOutlineOpen] = useState(false);
+  const outlineToggle = useRef<HTMLButtonElement>(null);
+  const outlineList = useRef<HTMLElement>(null);
+  // Opening the outline moves the keyboard into it (to the step you are on); Escape closes it and puts the keyboard back on its button.
+  useEffect(() => {
+    if (!outlineOpen) return;
+    outlineList.current?.querySelector<HTMLElement>(".outline-item.here")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setOutlineOpen(false);
+      outlineToggle.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [outlineOpen]);
   // Next waits for every quiz, game or sort on the slide to be answered. A slide the person already finished stays open if they come back.
   const { pending, total: blockCount, gate } = useGateState(screen.id);
   const [finished, setFinished] = useState<string[]>([]);
@@ -87,13 +102,13 @@ export function LessonStage(props: {
               Step {index + 1} of {total}
             </span>
           </div>
-          <button type="button" className="secondary outline-toggle" aria-expanded={outlineOpen} aria-controls="lesson-outline" onClick={() => setOutlineOpen((o) => !o)}>
+          <button ref={outlineToggle} type="button" className="secondary outline-toggle" aria-expanded={outlineOpen} aria-controls="lesson-outline" onClick={() => setOutlineOpen((o) => !o)}>
             <ListChecks size={16} aria-hidden="true" /> <span>Steps</span>
           </button>
           <ThemeToggle />
         </header>
         {outlineOpen ? (
-          <nav id="lesson-outline" className="outline" aria-label="All steps in this module">
+          <nav ref={outlineList} id="lesson-outline" className="outline" aria-label="All steps in this module">
             <ol>
               {screens.map((s, i) => {
                 const reachable = i <= Math.max(reachedIndex, index);
@@ -104,10 +119,12 @@ export function LessonStage(props: {
                       type="button"
                       className={`outline-item${i === index ? " here" : ""}`}
                       disabled={!reachable}
+                      aria-label={`Step ${i + 1} of ${total}: ${s.title}. ${state}`}
                       aria-current={i === index ? "step" : undefined}
                       onClick={() => {
                         onIndex(i);
                         setOutlineOpen(false);
+                        outlineToggle.current?.focus();
                       }}
                     >
                       <span className="outline-num">{i + 1}</span>

@@ -389,3 +389,19 @@ a.mod-link:focus-visible { outline: 3px solid var(--ring); outline-offset: -3px;
 .mod-chip.inline.locked { background: rgb(31 21 53 / 0.85); color: #fff; }
 /* The status chips carry the class "progress", which also names the thin progress bar (height 8px, overflow hidden): undo that for chips */
 .mod-chip.progress { height: auto; overflow: visible; line-height: 1.3; }
+
+/* A short screen (a phone with its keyboard open, or turned sideways): give the lesson text the room. The header, the step bar and the
+   footer get tighter and the reading-time note shrinks; nothing is hidden. */
+@media (max-height: 540px) {
+  .stage-head { padding: 0.3rem 0.75rem; border-bottom-width: 3px; }
+  .stage-close { width: 2rem; height: 2rem; }
+  .stage-title strong, .stage-title h1 { font-size: 0.95rem; line-clamp: 1; -webkit-line-clamp: 1; }
+  .journey { padding-top: 0.2rem; }
+  .journey-step { height: 24px; }
+  .journey-step::before { inset: 8px 1px; }
+  .stage-body { padding-top: 0.4rem; }
+  .stage-foot { padding-top: 0.35rem; padding-bottom: calc(0.35rem + env(safe-area-inset-bottom)); }
+  .stage-btn { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+  .stage-notes, .stage-hint { font-size: 0.75rem; margin: 0.15rem 0 0; line-height: 1.25; }
+  .outline { max-height: 60vh; }
+}
