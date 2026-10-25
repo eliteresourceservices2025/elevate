@@ -64,7 +64,7 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
         ) : (
           <>
             <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-              <Table>
+              <Table stack>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Person</TableHead>
@@ -78,15 +78,15 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
                   {w.rows.map((r) => (
                     <TableRow key={r.employeeId}>
                       <TableCell className="font-medium">{r.name}</TableCell>
-                      <TableCell>{r.team ?? "No team"}</TableCell>
-                      <TableCell className="space-x-1">
+                      <TableCell label="Team">{r.team ?? "No team"}</TableCell>
+                      <TableCell label="Status" className="space-x-1">
                         <Badge variant={r.state === "break" ? "secondary" : "default"}>{r.state === "break" ? "On break" : "Working"}</Badge>
                         {r.outsideRange ? <Badge variant="outline">Outside IP range</Badge> : null}
                         {r.longOpen ? <Badge variant="destructive">Over 12 hours</Badge> : null}
                         {r.possiblyOffline ? <Badge variant="outline">Possibly offline</Badge> : null}
                       </TableCell>
-                      <TableCell>{formatInZone(r.sinceMs, undefined, "MMM d, h:mm a")}</TableCell>
-                      <TableCell>{r.lastSeenMs ? formatInZone(r.lastSeenMs, undefined, "h:mm a") : "-"}</TableCell>
+                      <TableCell label="Since">{formatInZone(r.sinceMs, undefined, "MMM d, h:mm a")}</TableCell>
+                      <TableCell label="Last seen">{r.lastSeenMs ? formatInZone(r.lastSeenMs, undefined, "h:mm a") : "-"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -105,11 +105,11 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
         ) : (
           <>
             <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-              <Table>
+              <Table stack>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Day</TableHead>
                     <TableHead>Person</TableHead>
+                    <TableHead>Day</TableHead>
                     <TableHead>Flags</TableHead>
                     <TableHead className="text-right">Worked</TableHead>
                   </TableRow>
@@ -117,9 +117,9 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
                 <TableBody>
                   {f.rows.map((r) => (
                     <TableRow key={`${r.employeeId}-${r.date}`}>
-                      <TableCell>{formatDateOnly(r.date)}</TableCell>
                       <TableCell className="font-medium">{r.name}</TableCell>
-                      <TableCell className="space-x-1">
+                      <TableCell label="Day">{formatDateOnly(r.date)}</TableCell>
+                      <TableCell label="Flags" className="flex-wrap space-x-1">
                         {r.flags.map((fl) => (
                           <Badge key={fl} variant="outline">
                             {fl === "overbreak" && r.overbreakMinutes
@@ -134,7 +134,7 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
                           </Badge>
                         ))}
                       </TableCell>
-                      <TableCell className="text-right">{formatDuration(r.workedMinutes * MINUTE)}</TableCell>
+                      <TableCell label="Worked" className="text-right">{formatDuration(r.workedMinutes * MINUTE)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

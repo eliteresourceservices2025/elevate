@@ -123,7 +123,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
       {rows.length === 0 ? (
         <p className="rounded-xl border p-6 text-sm text-muted-foreground">No one matches. {counts.people === 0 ? "Training is shown for people with an ELEVATE account." : ""}</p>
       ) : (
-        <Table>
+        <Table stack>
           <TableHeader>
             <TableRow>
               <TableHead>Person</TableHead>
@@ -131,9 +131,9 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
               <TableHead>Track</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Due</TableHead>
-              <TableHead>Certificate until</TableHead>
+              <TableHead className="whitespace-normal">Certificate until</TableHead>
               {canSeeResults ? <TableHead>Tries</TableHead> : null}
-              {canSeeResults ? <TableHead>Latest score</TableHead> : null}
+              {canSeeResults ? <TableHead className="whitespace-normal">Latest score</TableHead> : null}
               {canManage ? <TableHead>Actions</TableHead> : null}
             </TableRow>
           </TableHeader>
@@ -141,17 +141,26 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
             {rows.map((r) => (
               <TableRow key={r.employeeId}>
                 <TableCell className="font-medium">{r.name}</TableCell>
-                <TableCell>{r.team ?? "-"}</TableCell>
-                <TableCell>{r.track ? TRACK[r.track] ?? r.track : "-"}</TableCell>
-                <TableCell>
+                <TableCell label="Team">{r.team ?? "-"}</TableCell>
+                <TableCell label="Track">{r.track ? TRACK[r.track] ?? r.track : "-"}</TableCell>
+                <TableCell label="Status" className="whitespace-normal">
                   <span className={r.state === "overdue" ? "font-medium text-destructive" : r.state === "passed" ? "font-medium" : undefined}>{r.label}</span>
                 </TableCell>
-                <TableCell>{r.dueText ? `${r.dueOn} (${r.dueText})` : "-"}</TableCell>
-                <TableCell>{r.certificateEndsOn ?? "-"}</TableCell>
-                {canSeeResults ? <TableCell>{r.attempts ?? "-"}</TableCell> : null}
-                {canSeeResults ? <TableCell>{r.lastScore === null ? "-" : `${r.lastScore}%`}</TableCell> : null}
+                <TableCell label="Due">
+                  {r.dueText ? (
+                    <>
+                      {r.dueOn}
+                      <span className="block text-xs text-muted-foreground">{r.dueText}</span>
+                    </>
+                  ) : (
+                    "-"
+                  )}
+                </TableCell>
+                <TableCell label="Certificate until">{r.certificateEndsOn ?? "-"}</TableCell>
+                {canSeeResults ? <TableCell label="Tries">{r.attempts ?? "-"}</TableCell> : null}
+                {canSeeResults ? <TableCell label="Latest score">{r.lastScore === null ? "-" : `${r.lastScore}%`}</TableCell> : null}
                 {canManage ? (
-                  <TableCell>
+                  <TableCell label="Actions" className="whitespace-normal">
                     <TrainingRowActions course={course} fixedTrack={fixedTrack} userId={r.userId} employeeId={r.employeeId} queued={r.state === "queued"} assignmentId={r.state === "open" || r.state === "overdue" ? r.assignmentId : null} canAssign={canManage} canGrant={canManage} />
                   </TableCell>
                 ) : null}

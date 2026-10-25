@@ -16,7 +16,7 @@ export function CaseTable({ rows, kind, page, pageSize, basePath }: { rows: Case
   return (
     <div className="space-y-2">
       <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-        <Table>
+        <Table stack>
           <TableHeader>
             <TableRow>
               <TableHead>Person</TableHead>
@@ -35,13 +35,13 @@ export function CaseTable({ rows, kind, page, pageSize, basePath }: { rows: Case
                   </Link>
                   {r.position ? <p className="text-xs text-muted-foreground">{r.position}</p> : null}
                 </TableCell>
-                <TableCell>{formatDateOnly(r.date)}</TableCell>
-                {kind === "offboarding" ? <TableCell>{r.reason ? LEAVING_LABELS[r.reason as LeavingReason] : ""}</TableCell> : null}
-                <TableCell>
+                <TableCell label={kind === "onboarding" ? "Start date" : "Last working day"}>{formatDateOnly(r.date)}</TableCell>
+                {kind === "offboarding" ? <TableCell label="Reason">{r.reason ? LEAVING_LABELS[r.reason as LeavingReason] : ""}</TableCell> : null}
+                <TableCell label="Progress">
                   {r.done} of {r.total} done
                   {r.overdue > 0 && r.status === "open" ? <Badge variant="destructive" className="ml-2">{r.overdue} late</Badge> : null}
                 </TableCell>
-                <TableCell>
+                <TableCell label="Status">
                   <Badge variant={r.status === "open" ? "secondary" : "outline"}>{STATUS[r.status] ?? r.status}</Badge>
                   {r.accessRemoved && r.status === "open" ? <span className="ml-2 text-xs text-muted-foreground">Access removed</span> : null}
                 </TableCell>

@@ -24,7 +24,7 @@ export default async function OpeningPage({ params }: PageProps<"/recruiting/[id
   const board = await orNotFound(getOpeningBoard(id));
   const { opening } = board;
   return (
-    <PageContainer>
+    <PageContainer width="canvas">
       <PageHeader
         title={opening.title}
         breadcrumbs={[{ label: "Recruiting", href: "/recruiting" }, { label: opening.title }]}

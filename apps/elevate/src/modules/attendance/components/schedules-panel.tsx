@@ -215,7 +215,7 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
           </div>
         </div>
         <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-          <Table>
+          <Table stack>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">
@@ -233,12 +233,12 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
             <TableBody>
               {paged.rows.map((r) => (
                 <TableRow key={r.employeeId}>
-                  <TableCell>
+                  <TableCell data-select="">
                     <input type="checkbox" aria-label={`Select ${r.name}`} className="size-4 accent-primary" checked={picked.has(r.employeeId)} onChange={() => toggle(r.employeeId)} />
                   </TableCell>
                   <TableCell className="font-medium">{r.name}</TableCell>
-                  <TableCell>{r.team ?? "No team"}</TableCell>
-                  <TableCell>
+                  <TableCell label="Team">{r.team ?? "No team"}</TableCell>
+                  <TableCell label="Schedule">
                     {r.current ? (
                       <span>
                         {r.current.days}, {r.current.client}
@@ -253,8 +253,8 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
                       </span>
                     ) : null}
                   </TableCell>
-                  <TableCell>{r.current?.manila ?? "-"}</TableCell>
-                  <TableCell className="space-x-1 whitespace-nowrap">
+                  <TableCell label="In Manila">{r.current?.manila ?? "-"}</TableCell>
+                  <TableCell label="" className="flex-wrap justify-end space-x-1">
                     {r.correctable ? (
                       <Button size="sm" variant="outline" disabled={pending} onClick={() => openFix(r)}>
                         Correct

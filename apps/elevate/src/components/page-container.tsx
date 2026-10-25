@@ -1,9 +1,14 @@
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-/** The standard page widths. List and detail pages fill the shell ("full"); reading pages and forms keep a readable line length. */
+/**
+ * The standard page widths. List and detail pages ("full") fill the shell up to 105rem (1680 px): beyond that a table only spreads its
+ * columns apart, so related facts end up a screen away from each other. A page that really uses more room (the org chart, a pipeline
+ * board, charts) asks for "canvas". Reading pages and forms keep a readable line length.
+ */
 const WIDTHS = {
-  full: "",
+  full: "max-w-[105rem]",
+  canvas: "",
   wide: "max-w-6xl",
   medium: "max-w-4xl",
   form: "max-w-3xl",

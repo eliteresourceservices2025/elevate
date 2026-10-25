@@ -103,7 +103,7 @@ export function InvitationsPanel({ invitations, now, canAssign }: { invitations:
         email is set up. If they do not receive it, tell them to use <strong>Accept an invite</strong> on the sign-in page with this exact
         address.
       </p>
-      <Table containerClassName="[--shadow-cover:var(--background)]">
+      <Table stack containerClassName="[--shadow-cover:var(--background)]">
         <TableHeader>
           <TableRow>
             <TableHead>Email</TableHead>
@@ -127,13 +127,13 @@ export function InvitationsPanel({ invitations, now, canAssign }: { invitations:
             return (
               <TableRow key={row.id}>
                 <TableCell className="font-medium">{row.email}</TableCell>
-                <TableCell>
+                <TableCell label="Status">
                   <Badge variant={s.variant}>{s.label}</Badge>
                 </TableCell>
-                <TableCell>{row.invitedByEmail ?? "—"}</TableCell>
+                <TableCell label="Invited by">{row.invitedByEmail ?? "—"}</TableCell>
                 {canAssign ? (
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
+                  <TableCell label="Gets on sign-in">
+                    <div className="flex flex-wrap justify-end gap-1">
                       {row.roles.map((r) => (
                         <Badge key={r} variant="outline">
                           {roleLabel(r as never)}
@@ -144,8 +144,8 @@ export function InvitationsPanel({ invitations, now, canAssign }: { invitations:
                     </div>
                   </TableCell>
                 ) : null}
-                <TableCell>{formatInZone(row.expiresAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}</TableCell>
-                <TableCell className="text-right">{row.acceptedAt ? null : <RevokeButton row={row} />}</TableCell>
+                <TableCell label="Expires">{formatInZone(row.expiresAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}</TableCell>
+                <TableCell label="" className="text-right">{row.acceptedAt ? null : <RevokeButton row={row} />}</TableCell>
               </TableRow>
             );
           })}
