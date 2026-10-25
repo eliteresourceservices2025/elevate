@@ -23,7 +23,9 @@ export default async function ExamPage({ params }: { params: Promise<{ attemptId
 
   const result = view.result!;
   // a course with a mock call needs it passed too before the statement and the certificate
-  const overview = result.passed ? await getOverview(getSql(), session.userId, view.assignmentId) : null;
+  const overview = await getOverview(getSql(), session.userId, view.assignmentId);
+  // After the last try there is nothing to retry: say so instead of offering a button that only refuses.
+  const outOfTries = !result.passed && Boolean(overview) && overview!.exam.attempts.filter((x) => x.status === "submitted").length >= overview!.exam.triesAllowed;
   // Only while the call itself is still to pass: a passed call with a record that has not caught up must not say "pass the mock call too".
   const callPending = Boolean(overview?.call) && overview?.assignment.status !== "passed" && !overview?.call?.attempts.some((x) => x.passed === true);
   const missed = view.review.filter((r) => !r.isCorrect);
@@ -65,7 +67,7 @@ export default async function ExamPage({ params }: { params: Promise<{ attemptId
       ) : (
         <>
           <h2>Topics to review</h2>
-          <p>These are the modules where you missed questions. Open them again, then try the exam once more.</p>
+          <p>{outOfTries ? "These are the modules where you missed questions." : "These are the modules where you missed questions. Open them again, then try the exam once more."}</p>
           <ul>
             {modules.map(([key, title]) => (
               <li key={key}>
@@ -73,7 +75,13 @@ export default async function ExamPage({ params }: { params: Promise<{ attemptId
               </li>
             ))}
           </ul>
-          <StartExamButton assignmentId={view.assignmentId} label="Try the exam again" />
+          {outOfTries ? (
+            <p className="feedback bad" role="status">
+              You have used all your tries. Please contact HR: they can give you more.
+            </p>
+          ) : (
+            <StartExamButton assignmentId={view.assignmentId} label="Try the exam again" />
+          )}
         </>
       )}
     </>

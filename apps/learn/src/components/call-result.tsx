@@ -16,7 +16,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
  * the review shows every step with what was picked, the best reply and why; after a failed one there is no review, only the skills
  * to work on (the server sends nothing more).
  */
-export function CallResult({ view }: { view: CallView }) {
+export function CallResult({ view, outOfTries = false }: { view: CallView; outOfTries?: boolean }) {
   const result = view.result;
   if (!result) return null;
   const rows = Object.entries(result.categories);
@@ -77,11 +77,17 @@ export function CallResult({ view }: { view: CallView }) {
         </>
       ) : (
         <>
-          <p>These are the skills to practise. Open the modules again, then try the mock call once more.</p>
+          <p>{outOfTries ? "These are the skills to practise." : "These are the skills to practise. Open the modules again, then try the mock call once more."}</p>
           <p>
             <Link href={`/course/${view.assignmentId}`}>Back to the course</Link>
           </p>
-          <StartCallButton assignmentId={view.assignmentId} label="Try the mock call again" />
+          {outOfTries ? (
+            <p className="feedback bad" role="status">
+              You have used all your tries. Please contact HR: they can give you more.
+            </p>
+          ) : (
+            <StartCallButton assignmentId={view.assignmentId} label="Try the mock call again" />
+          )}
         </>
       )}
     </>

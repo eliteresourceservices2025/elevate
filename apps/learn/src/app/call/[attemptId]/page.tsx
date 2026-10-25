@@ -5,7 +5,7 @@ import { CallResult } from "@/components/call-result";
 import { CallRunner } from "@/components/call-runner";
 import { requireSession } from "@/lib/auth";
 import { getSql } from "@/lib/db";
-import { getCallView } from "@/lib/queries";
+import { getCallView, getOverview } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Mock call" };
 export const dynamic = "force-dynamic";
@@ -31,5 +31,8 @@ export default async function CallPage({ params }: { params: Promise<{ attemptId
     );
   }
 
-  return <CallResult view={view} />;
+  // After the last try there is nothing to retry: the result says so instead of offering a button that only refuses.
+  const overview = view.result?.passed ? null : await getOverview(getSql(), session.userId, view.assignmentId);
+  const outOfTries = Boolean(overview?.call) && overview!.call!.attempts.filter((x) => x.status === "submitted").length >= overview!.call!.triesAllowed;
+  return <CallResult view={view} outOfTries={outOfTries} />;
 }
