@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ListChecks, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Screen } from "@/content/schema";
@@ -46,6 +46,8 @@ export function LessonStage(props: {
     setPrev(index);
   }
   const bodyRef = useRef<HTMLDivElement>(null);
+  // The outline: every step by name, with where you are and which ones you can open.
+  const [outlineOpen, setOutlineOpen] = useState(false);
   // Next waits for every quiz, game or sort on the slide to be answered. A slide the person already finished stays open if they come back.
   const { pending, total: blockCount, gate } = useGateState(screen.id);
   const [finished, setFinished] = useState<string[]>([]);
@@ -85,8 +87,39 @@ export function LessonStage(props: {
               Step {index + 1} of {total}
             </span>
           </div>
+          <button type="button" className="secondary outline-toggle" aria-expanded={outlineOpen} aria-controls="lesson-outline" onClick={() => setOutlineOpen((o) => !o)}>
+            <ListChecks size={16} aria-hidden="true" /> <span>Steps</span>
+          </button>
           <ThemeToggle />
         </header>
+        {outlineOpen ? (
+          <nav id="lesson-outline" className="outline" aria-label="All steps in this module">
+            <ol>
+              {screens.map((s, i) => {
+                const reachable = i <= Math.max(reachedIndex, index);
+                const state = i === index ? "You are here" : i <= reachedIndex ? "Seen" : "Opens after the steps before it";
+                return (
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      className={`outline-item${i === index ? " here" : ""}`}
+                      disabled={!reachable}
+                      aria-current={i === index ? "step" : undefined}
+                      onClick={() => {
+                        onIndex(i);
+                        setOutlineOpen(false);
+                      }}
+                    >
+                      <span className="outline-num">{i + 1}</span>
+                      <span className="outline-title">{s.title}</span>
+                      <span className="outline-state muted small">{state}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        ) : null}
         <nav className="journey" aria-label="Steps in this module">
           {screens.map((s, i) => {
             const reachable = i <= Math.max(reachedIndex, index);

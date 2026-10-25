@@ -1,3 +1,4 @@
+import { retryAtIso } from "./retry-at";
 import { z } from "zod";
 import { withUser, type Sql } from "./db";
 import { resolveSession, type Deps } from "./handlers";
@@ -123,7 +124,7 @@ const ACTIONS: Record<string, { schema: z.ZodType; run: (ctx: Ctx, input: never)
         return { body: { ok: true, attemptId: row.id as string } };
       } catch (error) {
         const c = codeOf(error);
-        if (c?.code === "wait_after_fail") throw new ApiError("wait_after_fail", { retryAt: c.detail ?? null });
+        if (c?.code === "wait_after_fail") throw new ApiError("wait_after_fail", { retryAt: retryAtIso(c.detail) });
         throw error;
       }
     },
@@ -151,7 +152,7 @@ const ACTIONS: Record<string, { schema: z.ZodType; run: (ctx: Ctx, input: never)
         return { body: { ok: true, attemptId: row.id as string } };
       } catch (error) {
         const c = codeOf(error);
-        if (c?.code === "wait_after_fail") throw new ApiError("wait_after_fail", { retryAt: c.detail ?? null });
+        if (c?.code === "wait_after_fail") throw new ApiError("wait_after_fail", { retryAt: retryAtIso(c.detail) });
         throw error;
       }
     },

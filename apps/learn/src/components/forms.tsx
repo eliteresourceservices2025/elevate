@@ -19,7 +19,9 @@ export function StartExamButton({ assignmentId, label }: { assignmentId: string;
     }
     setBusy(false);
     const when = typeof r.retryAt === "string" ? ` You can try again at ${new Date(r.retryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.` : "";
-    setMessage(`${r.error ?? "Please try again."}${when}`);
+    // The server already says "You can try again after the wait." when it has no time; with a time, say the time instead.
+    const base = when ? (r.error ?? "Please try again.").replace(/\s*You can try again after the wait\.?$/, "") : (r.error ?? "Please try again.");
+    setMessage(`${base}${when}`);
   };
   return (
     <div>
@@ -49,7 +51,9 @@ export function StartCallButton({ assignmentId, label }: { assignmentId: string;
     }
     setBusy(false);
     const when = typeof r.retryAt === "string" ? ` You can try again at ${new Date(r.retryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.` : "";
-    setMessage(`${r.error ?? "Please try again."}${when}`);
+    // The server already says "You can try again after the wait." when it has no time; with a time, say the time instead.
+    const base = when ? (r.error ?? "Please try again.").replace(/\s*You can try again after the wait\.?$/, "") : (r.error ?? "Please try again.");
+    setMessage(`${base}${when}`);
   };
   return (
     <div>
