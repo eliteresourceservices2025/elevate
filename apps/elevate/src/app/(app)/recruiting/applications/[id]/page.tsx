@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { requireUser } from "@/lib/auth";
+import { returnCrumb, safeReturnTo } from "@/lib/return-to";
 import { orNotFound } from "@/lib/or-not-found";
 import { formatInZone, SECONDARY_TIMEZONE } from "@/lib/time";
 import { CancelInterviewButton, InterviewForm, DeleteApplicationForm, MoveControls, NoteForm, RejectForm, ResumeViewer, ScorecardForm } from "@/modules/recruiting/components/application-panels";
@@ -20,9 +21,10 @@ export const metadata: Metadata = { title: "Applicant" };
 
 const REC_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = { strong_yes: "default", yes: "default", no: "secondary", strong_no: "destructive" };
 
-export default async function ApplicationPage({ params }: PageProps<"/recruiting/applications/[id]">) {
+export default async function ApplicationPage({ params, searchParams }: PageProps<"/recruiting/applications/[id]">) {
   const user = await requireUser();
   const { id } = await params;
+  const back = returnCrumb(safeReturnTo((await searchParams).from));
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const data = await orNotFound(getApplication(id));
   const { application: app, candidate, opening } = data;
@@ -54,7 +56,7 @@ export default async function ApplicationPage({ params }: PageProps<"/recruiting
             </p>
           </>
         }
-        breadcrumbs={[{ label: `${opening.title}`, href: `/recruiting/${opening.id}` }, { label: name }]}
+        breadcrumbs={back ? [back, { label: name }] : [{ label: `${opening.title}`, href: `/recruiting/${opening.id}` }, { label: name }]}
       />
 
       <section aria-label="Applicant" className="space-y-2 rounded-xl border bg-card p-4">

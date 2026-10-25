@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import { toast } from "sonner";
 import { FormSection, SelectField, TextField } from "@/components/form-fields";
+import { FormErrorSummary, errorItems } from "@/components/form-error-summary";
 import { PersonPicker, type PickerOption } from "@/components/person-picker";
 import { Button } from "@/components/ui/button";
 import { useUnsavedChanges } from "@/components/unsaved-changes";
@@ -47,7 +48,7 @@ export function EmployeeForm(props: Props) {
     handleSubmit,
     control,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, submitCount },
   } = useForm<FormValues>({
     resolver,
     defaultValues: { status: "onboarding", workerType: "contractor", country: "PH", ...props.defaults },
@@ -80,6 +81,7 @@ export function EmployeeForm(props: Props) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+      {submitCount > 0 ? <FormErrorSummary items={errorItems(errors)} /> : null}
       <FormSection title="Name">
         <TextField id="legalFirstName" label="Legal first name" error={errors.legalFirstName?.message} {...register("legalFirstName")} />
         <TextField id="legalMiddleName" label="Legal middle name" error={errors.legalMiddleName?.message} {...register("legalMiddleName")} />
