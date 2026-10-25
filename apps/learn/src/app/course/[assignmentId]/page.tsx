@@ -35,7 +35,7 @@ export default async function CoursePage({ params }: { params: Promise<{ assignm
         <div className="course-head">
           <div>
             <h1>{assignment.isUpdate ? `${assignment.courseTitle}: update` : assignment.courseTitle}</h1>
-            {assignment.isUpdate ? <p>Some lessons changed since you were certified. Read the ones below, then answer a few questions. Your certificate stays valid.</p> : null}
+            {assignment.isUpdate ? <p>{finished ? "You are up to date. The lessons below are here to read again whenever you like. Your certificate stays valid." : "Some lessons changed since you were certified. Read the ones below, then answer a few questions. Your certificate stays valid."}</p> : null}
             {finished ? (
               <p className="feedback good">
                 You passed this course. {certificate ? <Link href={`/certificate/${assignment.id}`}>View my certificate</Link> : null}

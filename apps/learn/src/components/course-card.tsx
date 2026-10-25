@@ -30,7 +30,7 @@ export const homeStatus = (status: string): HomeStatus => (status === "passed" ?
 export function CourseCard(props: { slug: string; title: string; track: string; status: string; dueOn: string; isUpdate: boolean; reason?: string; href: string }) {
   const status = homeStatus(props.status);
   const Icon = status === "new" ? Play : status === "done" ? Award : ArrowRight;
-  const blurb = props.isUpdate ? "Some lessons changed. Read only what is new, then answer a few questions. Your certificate stays valid." : (Object.hasOwn(BLURB, props.slug) ? BLURB[props.slug] : "Training from ELEVATE Learn.");
+  const blurb = props.isUpdate ? (status === "done" ? "You are up to date. Your certificate stays valid." : "Some lessons changed. Read only what is new, then answer a few questions. Your certificate stays valid.") : (Object.hasOwn(BLURB, props.slug) ? BLURB[props.slug] : "Training from ELEVATE Learn.");
   return (
     <li className={`mod-card${status === "done" ? " done" : ""}`}>
       <Link href={props.href} className="mod-link">

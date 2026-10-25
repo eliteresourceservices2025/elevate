@@ -43,6 +43,12 @@ describe("the course picture cards on the home page", () => {
     expect(card("assigned")).toContain("Full course"); // no reason given: the track alone, as before
   });
 
+  it("say a finished update is finished, not that lessons still need reading", () => {
+    const html = card("passed", { isUpdate: true, reason: "update" });
+    expect(html).toContain("You are up to date.");
+    expect(html).not.toContain("Read only what is new");
+  });
+
   it("hide the picture from screen readers and add no scripts or raw HTML", () => {
     const html = card("assigned");
     expect(html).toContain('aria-hidden="true"');
