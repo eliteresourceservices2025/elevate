@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { PAGE_SIZES, type PageInfo } from "@/lib/pagination";
-import { cn } from "@/lib/utils";
+import { PAGER_BUTTON, PAGER_OFF, sizeChip } from "./pager-style";
 
-const linkClass = "rounded-lg border px-3 py-1 text-sm hover:bg-secondary/50";
-const off = "pointer-events-none rounded-lg border px-3 py-1 text-sm bg-muted/40 text-muted-foreground";
+const linkClass = PAGER_BUTTON;
+const off = PAGER_OFF;
 
 /**
  * Pager for server-rendered lists. Page and size live in the address, under names that can be changed
@@ -27,7 +27,7 @@ export function PagerLinks({ info, basePath, query = {}, pageKey = "page", sizeK
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">Per page</span>
         {PAGE_SIZES.map((s) => (
-          <Link key={s} href={href(1, s)} aria-current={s === info.pageSize ? "true" : undefined} className={cn("inline-flex min-h-8 min-w-8 items-center justify-center rounded-md px-2 text-xs max-sm:min-h-10 max-sm:min-w-10", s === info.pageSize ? "bg-primary text-primary-foreground" : "hover:bg-secondary/50")}>
+          <Link key={s} href={href(1, s)} aria-current={s === info.pageSize ? "true" : undefined} className={sizeChip(s === info.pageSize)}>
             {s}
           </Link>
         ))}

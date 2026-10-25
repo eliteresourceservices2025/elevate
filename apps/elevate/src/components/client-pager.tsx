@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PAGE_SIZES, DEFAULT_PAGE_SIZE, paginate, type PageInfo } from "@/lib/pagination";
+import { PAGER_BUTTON, PAGER_OFF, sizeChip } from "./pager-style";
 
 /** State for a list that is already in the browser (filtering happens first, then this cuts one page). Changing `resetKey` (say, the filter text) goes back to page 1. */
 export function usePaged<T>(rows: readonly T[], resetKey: string = "", defaultSize: number = DEFAULT_PAGE_SIZE) {
@@ -25,21 +26,31 @@ export function ClientPager({ info, onPage, onSize, label = "rows" }: { info: Pa
         Showing {info.from} to {info.to} of {info.total} {label}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-1 text-xs text-muted-foreground">
-          Per page
-          <select className="rounded-md border bg-background px-1 py-0.5 text-sm text-foreground" value={info.pageSize} onChange={(e) => onSize(Number(e.target.value))}>
-            {PAGE_SIZES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </label>
-        <button type="button" className="rounded-lg border px-3 py-1 text-sm hover:bg-secondary/50 disabled:pointer-events-none disabled:opacity-50" disabled={info.page <= 1} onClick={() => onPage(info.page - 1)}>
-          Previous
-        </button>
+        <span className="text-xs text-muted-foreground">Per page</span>
+        {PAGE_SIZES.map((n) => (
+          <button key={n} type="button" aria-current={n === info.pageSize ? "true" : undefined} className={sizeChip(n === info.pageSize)} onClick={() => onSize(n)}>
+            {n}
+          </button>
+        ))}
+        {info.page > 1 ? (
+          <button type="button" className={PAGER_BUTTON} aria-label="Previous page" onClick={() => onPage(info.page - 1)}>
+            Previous
+          </button>
+        ) : (
+          <span className={PAGER_OFF} aria-hidden>
+            Previous
+          </span>
+        )}
         <span>Page {info.page} of {info.pages}</span>
-        <button type="button" className="rounded-lg border px-3 py-1 text-sm hover:bg-secondary/50 disabled:pointer-events-none disabled:opacity-50" disabled={info.page >= info.pages} onClick={() => onPage(info.page + 1)}>
-          Next
-        </button>
+        {info.page < info.pages ? (
+          <button type="button" className={PAGER_BUTTON} aria-label="Next page" onClick={() => onPage(info.page + 1)}>
+            Next
+          </button>
+        ) : (
+          <span className={PAGER_OFF} aria-hidden>
+            Next
+          </span>
+        )}
       </div>
     </nav>
   );
