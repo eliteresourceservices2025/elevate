@@ -78,7 +78,15 @@ export function DocumentLibrary({ employeeId, rows, folders, canOrganize, viewer
       <div role="group" aria-label="Folders" className="flex flex-wrap items-center gap-2">
         {chip(ALL, "All", rows.length)}
         {folders.length > 0 || unfiled > 0 ? chip(NONE, "No folder", unfiled) : null}
-        {folders.map((f) => chip(f.id, f.name, countIn(f.id), true))}
+        {folders.length > 5 ? (
+          <div className="flex min-w-0 items-center gap-2">
+            <Label htmlFor="document-folder" className="sr-only">Choose folder</Label>
+            <select id="document-folder" className="h-(--control-h) max-w-64 min-w-0 rounded-md border bg-background px-2 text-sm" value={folder?.id ?? ""} onChange={(e) => { setView(e.target.value || ALL); setRenaming(false); }}>
+              <option value="">Choose folder</option>
+              {folders.map((f) => <option key={f.id} value={f.id}>{f.name} ({countIn(f.id)})</option>)}
+            </select>
+          </div>
+        ) : folders.map((f) => chip(f.id, f.name, countIn(f.id), true))}
         {canOrganize ? (
           <Button type="button" variant="outline" size="sm" onClick={() => setAdding((v) => !v)} aria-expanded={adding}>
             <FolderPlus aria-hidden /> New folder

@@ -60,6 +60,32 @@ const mine = async (u: TestUser) => {
 };
 
 describe("sign-in pop-ups", () => {
+  it("excludes the author even though HR can open the announcement page", async () => {
+    const recipient = await person("pop-author-check");
+    const id = await queuedAnnouncement({ requiresAck: false });
+    expect((await mine(hr)).some((p) => p.subjectId === id)).toBe(false);
+    expect((await mine(recipient)).some((p) => p.subjectId === id)).toBe(true);
+    const [count] = await rows<{ n: number }>(sql`select count(*)::int as n from docs.announcement_recipients r join core.employees e on e.id = r.employee_id where r.announcement_id = ${id}::uuid and e.user_id = ${hr.id}`);
+    expect(count.n).toBe(0);
+  });
+
+  it("changing a queued announcement's date does not reset an earlier dismissal or acknowledgment", async () => {
+    const recipient = await person("pop-requeue");
+    const closable = await queuedAnnouncement({ requiresAck: false });
+    const required = await queuedAnnouncement({ requiresAck: true });
+    as(recipient);
+    expect((await popupActions.dismissPopup({ kind: "announcement", id: closable })).ok).toBe(true);
+    expect((await actions.acknowledge({ kind: "announcement", id: required })).ok).toBe(true);
+    as(hr);
+    for (const id of [closable, required]) {
+      expect((await popupActions.setPopup({ kind: "announcement", itemId: id, enabled: true, showFrom: addDays(today, 1) })).ok).toBe(true);
+      expect((await popupActions.setPopup({ kind: "announcement", itemId: id, enabled: true, showFrom: today })).ok).toBe(true);
+    }
+    const ids = (await mine(recipient)).map((p) => p.subjectId);
+    expect(ids).not.toContain(closable);
+    expect(ids).not.toContain(required);
+  });
+
   it("shows queued items in line order, only once their date has come, and not to people it was not sent to", async () => {
     const a = await person("pop-a");
     const first = await queuedAnnouncement({ requiresAck: false });

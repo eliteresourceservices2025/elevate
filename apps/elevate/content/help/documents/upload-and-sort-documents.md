@@ -4,7 +4,7 @@ summary: Add a file to someone's record, give it a type, put it in a folder and 
 category: documents
 audience: super_admin, hr_admin
 order: 1
-updated: 2026-10-21
+updated: 2026-10-26
 ---
 
 Each person has their own documents on their profile. HR can see everyone's. People see and add their own.
@@ -20,31 +20,35 @@ PDF, JPG, PNG, WEBP, DOC and DOCX, up to 10 MB each. ELEVATE checks the real typ
 # Upload one document
 
 1. Open the person's profile from **People** and click the **Documents** tab.
-2. Choose **Upload** to add a document.
-3. Fill in the **Title**, the **Document type** and, if it expires, the **Expiry date (optional)**.
-4. Choose **Who can read it**: **HR only** or **All staff**.
-5. Choose a **Folder (optional)**.
-6. Pick the file and save. A message says **Document saved.**
+2. Click **Upload a document** above the file list. In the window that opens, choose the **Document type** and fill in the **Title** and, if it expires, the **Expiry date (optional)**.
+3. Choose a **Folder (optional)** if folders are available.
+4. Pick the file, confirm it contains no client or patient information, and click **Upload**. A message says **Document saved.**
 
 ![A person's Documents tab: folders, the list of files and the upload buttons.](help:upload-and-sort-documents/02-person-documents.png)
+
+From **Documents**, you can also click **Upload employee files**, choose a person and use **One document** or **Many files**. For company files, open **Company documents** and use its upload buttons.
+
+# Upload many files
+
+Click **Upload many files** above the person's file list. Choose or drop up to 50 files, confirm that none contain client or patient information, and start the upload. The window shows the result for each file. Files are saved as **Unsorted**; use **More**, then **Set type** afterwards. Keep the window open until the transfer finishes.
 
 # Sort into folders
 
 Folders keep a person's documents tidy.
 
 1. On the **Documents** tab, add a folder. Use a plain name such as "Contracts". Do not put private details or client names in a folder name. A message says **Folder created.**
-2. On a document's row, use **Move to** to choose a folder. A message says **Document moved.**
+2. On a document's row, open **More**, then **Move to folder**. Choose the folder and click **Move document**. A message says **Document moved.**
 3. You can rename or remove a folder. Removing it keeps the documents under **No folder**.
 
 A person can have up to 30 folders, and a document can only go into a folder of the same person.
 
 # Verify a document
 
-HR checks that the document is correct and real. Click **Verify** on its row. A message says **Marked as verified.** Click **Unverify** to take it off.
+HR checks that the document is correct and real. Open **More** on its row, then **Verify**. A message says **Marked as verified.** Use **More**, then **Unverify** to take it off.
 
 # Archive a document
 
-Use the archive action. A message says **Document archived.** The file is kept until the retention periods are approved.
+Open **More**, then **Archive**, and confirm. A message says **Document archived.** The file is kept until the retention periods are approved.
 
 # See what is missing or expiring
 
@@ -59,7 +63,7 @@ A download opens a link that works for 60 seconds. Every download is recorded.
 # Common mistakes
 
 - **Choosing the wrong person.** Check the name at the top of the profile.
-- **Setting a type later.** Files uploaded in bulk are **Unsorted**. Set their type from the list.
+- **Setting a type later.** Files uploaded in bulk are **Unsorted**. Open **More**, then **Set type** on each row.
 
 # Try it yourself
 

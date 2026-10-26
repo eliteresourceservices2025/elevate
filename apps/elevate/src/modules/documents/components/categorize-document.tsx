@@ -22,10 +22,10 @@ function groupTypes(types: TypeOption[]): { category: DocumentCategory; types: T
 }
 
 /** A button on a document row that opens "Set type": the real type, the title, and the expiry date or client that type needs. */
-export function CategorizeDocument({ row, options }: { row: DocumentRow; options: CategorizeOptions }) {
+export function CategorizeDocument({ row, options, open, onOpenChange }: { row: DocumentRow; options: CategorizeOptions; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const unsorted = UNSORTED.has(row.typeSlug);
   return (
-    <FormDialog label={unsorted ? "Set type" : "Change type"} title={unsorted ? "Set the type" : "Change the type"} description={row.fileName} variant={unsorted ? "default" : "outline"}>
+    <FormDialog label={unsorted ? "Set type" : "Change type"} title={unsorted ? "Set the type" : "Change the type"} description={row.fileName} variant={unsorted ? "default" : "outline"} open={open} onOpenChange={onOpenChange} hideTrigger={open !== undefined}>
       <CategorizeForm row={row} options={options} />
     </FormDialog>
   );

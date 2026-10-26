@@ -6,6 +6,7 @@ import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
+import { useFormDialogWork } from "@/components/form-dialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cancelUpload, finalizeUpload, requestUpload } from "../actions";
 import { ALLOWED_MIME_TYPES, ALLOWED_TYPES_TEXT, MAX_FILE_BYTES, formatBytes } from "../files";
@@ -47,6 +48,8 @@ export function UploadForm({ target, employeeId, types, clients, folders = [], t
   const [folderId, setFolderId] = useState("");
   const [audience, setAudience] = useState<"all_staff" | "hr_only">("all_staff");
   const [acknowledged, setAcknowledged] = useState(false);
+  const [hasFile, setHasFile] = useState(false);
+  const dialog = useFormDialogWork({ dirty: Boolean(typeId || title || expiresOn || clientId || folderId || acknowledged || hasFile || audience !== "all_staff"), busy: pending });
 
   const type = types.find((t) => t.id === typeId);
 
@@ -58,6 +61,7 @@ export function UploadForm({ target, employeeId, types, clients, folders = [], t
     if (!ALLOWED_MIME_TYPES.includes(file.type)) return void toast.error(`Only ${ALLOWED_TYPES_TEXT} files are allowed.`);
 
     startTransition(async () => {
+      try {
       setStatus("Preparing…");
       const ticket = await requestUpload({
         target,
@@ -98,14 +102,24 @@ export function UploadForm({ target, employeeId, types, clients, folders = [], t
       setTitle("");
       setExpiresOn("");
       setClientId("");
+      setFolderId("");
+      setAudience("all_staff");
       setAcknowledged(false);
+      setHasFile(false);
       if (fileInput.current) fileInput.current.value = "";
+      await dialog?.close(true);
       router.refresh();
+      } catch {
+        toast.error("Could not reach ELEVATE. Try the upload again.");
+      } finally {
+        setStatus("");
+      }
     });
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-xl border bg-card p-4" noValidate>
+    <form onSubmit={submit} className="space-y-4 rounded-xl border bg-card p-4" noValidate aria-busy={pending}>
+      <fieldset disabled={pending} className="space-y-4">
       <div role="note" className="flex gap-2 rounded-lg border border-brand-gold bg-brand-gold/10 p-3 text-sm">
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-brand-gold-deep dark:text-brand-gold-light" aria-hidden />
         <p>
@@ -169,6 +183,7 @@ export function UploadForm({ target, employeeId, types, clients, folders = [], t
           id="up-file"
           type="file"
           accept={ACCEPT}
+          onChange={(e) => setHasFile(Boolean(e.target.files?.length))}
           className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:bg-secondary file:px-3 file:py-1.5 file:text-sm"
           required
         />
@@ -190,6 +205,7 @@ export function UploadForm({ target, employeeId, types, clients, folders = [], t
           </span>
         ) : null}
       </div>
+      </fieldset>
     </form>
   );
 }

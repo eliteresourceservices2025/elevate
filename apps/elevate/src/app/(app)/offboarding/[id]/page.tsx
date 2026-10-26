@@ -9,6 +9,7 @@ import { getOffboardingCase } from "@/modules/onboarding/queries";
 import { syncCase } from "@/modules/onboarding/service";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
+import { FormDialog } from "@/components/form-dialog";
 
 export const metadata: Metadata = { title: "Offboarding" };
 
@@ -41,12 +42,12 @@ export default async function OffboardingCasePage({ params }: PageProps<"/offboa
           </>
         }
         breadcrumbs={[{ label: "All offboarding", href: "/offboarding" }, { label: `Offboarding: ${c.name}` }]}
+        actions={c.isPerson && open && !c.accessRemovedAt && !c.exitSubmitted ? <FormDialog label="Complete exit interview" title="Exit interview" description="Private: only HR reads it." size="lg"><ExitInterviewForm caseId={c.id} /></FormDialog> : null}
       />
 
       {c.canManage ? <OffboardingControls caseId={c.id} employeeId={c.employeeId} accessRemoved={Boolean(c.accessRemovedAt)} open={open} ready={c.progress.ready} /> : null}
       <TaskList tasks={c.tasks} canManage={c.canManage} open={open} />
 
-      {c.isPerson && open && !c.accessRemovedAt && !c.exitSubmitted ? <ExitInterviewForm caseId={c.id} /> : null}
       {c.isPerson && c.exitSubmitted ? <p className="text-sm text-muted-foreground">Your exit interview was submitted. Only HR can read it.</p> : null}
 
       {c.exitInterview ? (

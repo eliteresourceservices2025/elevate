@@ -4,7 +4,7 @@ import { fromZonedTime } from "date-fns-tz";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SelectField, TextField } from "@/components/form-fields";
-import { useFormDialog } from "@/components/form-dialog";
+import { useFormDialogWork } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,7 @@ const KINDS = Object.entries(ISSUE_KIND_LABELS) as [keyof typeof ISSUE_KIND_LABE
 /** Report a problem with the clock, Jibble, the connection or a device. It changes no clock events and no hours: it tells the lead and HR. */
 export function ReportIssueForm({ zone }: { zone: string }) {
   const { run, pending } = useRun();
-  const dialog = useFormDialog();
+  const dialog = useFormDialogWork({ busy: pending });
   const [kind, setKind] = useState<keyof typeof ISSUE_KIND_LABELS>("clock");
   const [when, setWhen] = useState(() => formatInZone(Date.now(), zone, "yyyy-MM-dd'T'HH:mm"));
   const [details, setDetails] = useState("");
@@ -43,6 +43,7 @@ export function ReportIssueForm({ zone }: { zone: string }) {
         );
       }}
     >
+      <fieldset disabled={pending} className="space-y-3">
       <p className="text-sm text-muted-foreground">
         This does not change your clock or your hours; it lets your lead and HR know what happened. If time is missing from your record, ask for a time correction instead (you can do both).
       </p>
@@ -67,6 +68,7 @@ export function ReportIssueForm({ zone }: { zone: string }) {
       <Button type="submit" disabled={pending || details.trim().length < 5 || files.length === 0}>
         Send report
       </Button>
+      </fieldset>
     </form>
   );
 }

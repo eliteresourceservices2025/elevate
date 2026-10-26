@@ -1,7 +1,8 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
+import { DocumentBulkBar } from "./document-bulk-bar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -63,7 +64,15 @@ export function DocumentFilterBar({ filters, canGroupByFolder = false }: { filte
           </NativeSelect>
         </div>
       </div>
-      {types.length > 1 ? (
+      {types.length > 6 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor="document-type-filter" className="text-xs">Document type</Label>
+          <NativeSelect id="document-type-filter" value={type} onChange={(e) => setType(e.target.value)} className="max-w-full">
+            <option value="all">All types</option>
+            {types.map((t) => <option key={t.slug} value={t.slug}>{t.name} ({t.count})</option>)}
+          </NativeSelect>
+        </div>
+      ) : types.length > 1 ? (
         <div role="group" aria-label="Types" className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -108,6 +117,7 @@ export function GroupedDocuments({
   emptyText: string;
   categorize?: CategorizeOptions;
 }) {
+  const formId = `grouped-docs-${useId()}`;
   const sections = useMemo(() => {
     const map = new Map<string, { key: string; label: string; slug?: string; rows: DocumentRow[] }>();
     for (const r of rows) {
@@ -122,14 +132,15 @@ export function GroupedDocuments({
   }, [rows, group, folders]);
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{emptyText}</p>;
   return (
-    <div className="space-y-5">
+    <div key={rows.map((r) => r.id).join(",")} className="space-y-5">
+      {viewerIsHr ? <DocumentBulkBar formId={formId} scopeLabel="shown documents" /> : null}
       {sections.map((s) => (
         <section key={s.key} aria-label={s.label} className="space-y-2">
           <h3 className="flex items-center gap-2 text-sm font-semibold">
             {s.slug ? <TypeBadge slug={s.slug} name={s.label} /> : s.label}
             <span className="text-xs font-normal text-muted-foreground">{s.rows.length}</span>
           </h3>
-          <DocumentList rows={s.rows} viewerIsHr={viewerIsHr} showAudience={showAudience} folders={folders} emptyText={emptyText} categorize={categorize} />
+          <DocumentList rows={s.rows} viewerIsHr={viewerIsHr} showAudience={showAudience} folders={folders} emptyText={emptyText} categorize={categorize} bulkFormId={formId} />
         </section>
       ))}
     </div>

@@ -65,15 +65,16 @@ export default async function HelpPage({ searchParams }: PageProps<"/help">) {
       ) : categories.length === 0 ? (
         <EmptyState icon={BookOpen} title="No guides for you yet" description="New guides will show up here." />
       ) : (
-        <section aria-label="Topics" className="grid gap-4 sm:grid-cols-2">
+        <section aria-label="Topics" className="grid auto-rows-fr gap-4 sm:grid-cols-2">
           {categories.map((c) => (
-            <Link key={c.slug} href={`/help/${c.slug}`} className="flex gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/50">
+            <Link key={c.slug} href={`/help/${c.slug}`} className="group flex min-h-36 gap-3 rounded-xl border bg-card p-5 outline-none transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring">
               <BookOpen className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
-              <span>
+              <span className="flex min-w-0 flex-1 flex-col">
                 <span className="block font-semibold">{c.title}</span>
                 <span className="block text-sm text-muted-foreground">{c.description}</span>
-                <span className="mt-1 block text-xs text-muted-foreground">
+                <span className="mt-auto flex items-center justify-between gap-3 pt-3 text-xs text-muted-foreground">
                   {c.count} {c.count === 1 ? "guide" : "guides"}
+                  <ChevronRight className="size-4 shrink-0 text-primary transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden />
                 </span>
               </span>
             </Link>

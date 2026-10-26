@@ -12,6 +12,7 @@ import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { AckBanner } from "@/modules/announcements/components/ack-display";
 import { listMyPending } from "@/modules/announcements/queries";
 import { listMyPopups } from "@/modules/announcements/popup-queries";
+import { PopupLoadNotice } from "@/modules/announcements/components/popup-load-notice";
 import type { PopupItem } from "@/modules/announcements/components/popup-queue";
 import { ContentVideo } from "@/modules/announcements/components/content-file-list";
 import { dueState } from "@/modules/announcements/due";
@@ -36,7 +37,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     console.error("layout read skipped:", error instanceof Error ? error.name : "unknown error");
     return fallback;
   });
-  const [gate, unread, pending, clock, accountName, tourAutoStart, photoVersion, queued] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null), optional(tourStartsByItself(), false), optional(getMyPhotoVersion(), null), optional(listMyPopups(), [])]);
+  const [gate, unread, pending, clock, accountName, tourAutoStart, photoVersion, popupRead] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null), optional(tourStartsByItself(), false), optional(getMyPhotoVersion(), null), optional(listMyPopups().then((items) => ({ items, failed: false })), { items: [], failed: true })]);
   if (gate) {
     return (
       <PrivacyGate versionId={gate.versionId} title={gate.title} updated={gate.updated} changeNote={gate.changeNote}>
@@ -47,7 +48,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   const today = todayInZone();
   // Queued announcements and policies, shown before the page (the text is rendered here, on the server).
-  const popups: PopupItem[] = queued.map((p) => {
+  const popups: PopupItem[] = popupRead.items.map((p) => {
     const due = p.requiresAck && p.dueOn ? dueState(p.dueOn, today) : "none";
     return {
       subjectId: p.subjectId,
@@ -76,7 +77,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <AppShell
       initialCollapsed={initialCollapsed}
-      tourAutoStart={tourAutoStart}
+      tourAutoStart={tourAutoStart && !popupRead.failed}
       popups={popups}
       hiddenNav={hiddenNav}
       searchPages={ALL_NAV_ITEMS.filter((i) => !hiddenNav.includes(i.href)).map((i) => ({ href: i.href, label: i.label, description: i.description }))}
@@ -89,7 +90,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       roles={user.roles.filter((r) => r !== "employee").map(roleLabel)}
       unread={unread}
       clock={clock}
-      banner={<AckBanner items={pending} today={today} />}
+      banner={<><AckBanner items={pending} today={today} />{popupRead.failed ? <PopupLoadNotice /> : null}</>}
     >
       {children}
     </AppShell>

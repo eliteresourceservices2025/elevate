@@ -11,6 +11,7 @@ import { listRequestsFor } from "@/modules/timeoff/request-queries";
 import { todayInZone } from "@/modules/org/service";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
+import { FormDialog } from "@/components/form-dialog";
 
 export const metadata: Metadata = { title: "Prize days" };
 
@@ -31,18 +32,20 @@ export default async function PersonTimeOffPage({ params }: PageProps<"/time-off
           </>
         }
         breadcrumbs={[{ label: "All balances", href: "/time-off?tab=balances" }, { label: data.name }]}
+        actions={options && options.types.length > 0 ? <>
+          <FormDialog label="Award prize days" title="Award prize days" description={data.name} size="lg">
+            <AwardForm people={options.people} types={options.types} today={todayInZone()} fixedEmployee={data.employeeId} />
+          </FormDialog>
+          <FormDialog label="Adjust balance" title="Adjust balance" description={data.name} size="lg" variant="outline">
+            <AdjustForm people={options.people} types={options.types} fixedEmployee={data.employeeId} />
+          </FormDialog>
+        </> : null}
       />
       <BalanceView data={data} />
       <section aria-label="Requests" className="space-y-2">
         <h2 className="text-lg font-semibold">Requests</h2>
         <RequestList items={requests} empty="No requests yet." />
       </section>
-      {options && options.types.length > 0 ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <AwardForm people={options.people} types={options.types} today={todayInZone()} fixedEmployee={data.employeeId} />
-          <AdjustForm people={options.people} types={options.types} fixedEmployee={data.employeeId} />
-        </div>
-      ) : null}
     </PageContainer>
   );
 }

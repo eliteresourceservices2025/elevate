@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useFormDialogWork } from "@/components/form-dialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import { cancelUpload, finalizeUpload, requestUpload } from "../actions";
@@ -29,6 +30,7 @@ export function BulkUpload({ target, employeeId, types }: { target: "employee" |
   const [over, setOver] = useState(false);
   const [running, setRunning] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const dialog = useFormDialogWork({ dirty: items.length > 0 ? items.some((i) => i.state !== "done") : acknowledged, busy: running });
 
   const unsorted = types.find((t) => t.slug === `unsorted_${target}`);
   if (!unsorted) return null;
@@ -91,7 +93,7 @@ export function BulkUpload({ target, employeeId, types }: { target: "employee" |
   return (
     <div className="space-y-3 rounded-xl border bg-card p-4">
       <div>
-        <h3 className="text-base font-semibold">Upload many files</h3>
+        {dialog ? null : <h3 className="text-base font-semibold">Upload many files</h3>}
         <p className="text-sm text-muted-foreground">Drop the files here. They are saved as &ldquo;Unsorted&rdquo;; give each its type afterwards from the list.</p>
       </div>
       <div
@@ -116,6 +118,7 @@ export function BulkUpload({ target, employeeId, types }: { target: "employee" |
           ref={input}
           type="file"
           multiple
+          disabled={running}
           accept={ACCEPT}
           aria-label="Choose files to upload"
           className="sr-only"
@@ -132,10 +135,10 @@ export function BulkUpload({ target, employeeId, types }: { target: "employee" |
       {items.length > 0 ? (
         <ul className="divide-y rounded-lg border text-sm" aria-label="Files to upload">
           {items.map((i) => (
-            <li key={i.key} className="flex items-center gap-2 px-3 py-2">
+            <li key={i.key} className="flex flex-wrap items-center gap-2 px-3 py-2">
               {i.state === "uploading" ? <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden /> : i.state === "done" ? <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden /> : i.state === "failed" ? <CircleAlert className="size-4 shrink-0 text-destructive" aria-hidden /> : <span className="size-4 shrink-0" aria-hidden />}
               <span className="min-w-0 flex-1 truncate">{i.file.name}</span>
-              <span className={cn("shrink-0 text-xs", i.state === "failed" ? "text-destructive" : "text-muted-foreground")}>
+              <span className={cn("max-w-full text-xs [overflow-wrap:anywhere] sm:max-w-56", i.state === "failed" ? "text-destructive" : "text-muted-foreground")}>
                 {i.state === "waiting" ? formatBytes(i.file.size) : i.state === "uploading" ? "Uploading…" : i.state === "done" ? "Saved" : i.message}
               </span>
               {i.state === "waiting" && !running ? (
@@ -149,7 +152,7 @@ export function BulkUpload({ target, employeeId, types }: { target: "employee" |
       ) : null}
 
       <label className="flex items-start gap-2 text-sm">
-        <input type="checkbox" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} className="mt-0.5 size-4 accent-primary" />
+        <input type="checkbox" checked={acknowledged} disabled={running} onChange={(e) => setAcknowledged(e.target.checked)} className="mt-0.5 size-4 accent-primary" />
         These files contain no client or patient information.
       </label>
       <div className="flex flex-wrap items-center gap-3">
@@ -157,7 +160,7 @@ export function BulkUpload({ target, employeeId, types }: { target: "employee" |
           {waiting > 0 ? `Upload ${waiting} file${waiting === 1 ? "" : "s"}` : "Upload files"}
         </Button>
         {items.length > 0 && !running ? (
-          <Button type="button" variant="outline" onClick={() => setItems([])}>
+          <Button type="button" variant="outline" onClick={() => { setItems([]); setAcknowledged(false); }}>
             Clear list
           </Button>
         ) : null}

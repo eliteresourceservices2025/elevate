@@ -8,15 +8,15 @@ import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatDateOnly, formatInZone } from "@/lib/time";
-import { cn } from "@/lib/utils";
+import { TabNav } from "@/components/tab-nav";
+import { buttonVariants } from "@/components/ui/button";
 import { CompanyDocuments } from "@/modules/documents/components/company-documents";
 import { DocumentBulkBar } from "@/modules/documents/components/document-bulk-bar";
 import { bulkBoxProps } from "@/modules/documents/bulk-box";
 import { ExpiryBadge } from "@/modules/documents/components/document-list";
 import { TypeBadge } from "@/modules/documents/components/type-badge";
 import { NewTypeForm, TypeRow } from "@/modules/documents/components/type-admin";
-import { BulkUpload } from "@/modules/documents/components/bulk-upload";
-import { UploadForm } from "@/modules/documents/components/upload-form";
+import { DocumentUploadActions } from "@/modules/documents/components/document-upload-actions";
 import { getDocumentOverview, getUploadOptions, listAllEmployeeDocuments, listCompanyDocuments, listDocumentTypes } from "@/modules/documents/queries";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
@@ -64,6 +64,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
     <PageContainer>
       <PageHeader
         title="Documents"
+        actions={companyUpload ? <DocumentUploadActions target="company" types={companyUpload.types} clients={[]} today={today} /> : isHr && can(user, "documents.upload") ? <Link href="/documents/upload" className={buttonVariants()}>Upload employee files</Link> : null}
         description={
           <>
             {isHr
@@ -80,21 +81,11 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
       />
 
       {isHr ? (
-        <nav aria-label="Documents sections" className="flex flex-wrap gap-1 border-b">
-          {HR_TABS.map((t) => (
-            <Link
-              key={t.key}
-              href={`/documents?tab=${t.key}`}
-              aria-current={t.key === tab ? "page" : undefined}
-              className={cn("-mb-px rounded-t-lg border-b-2 px-3 py-2 text-sm", t.key === tab ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}
-            >
-              {t.label}
-              {overview && t.key === "attention" ? <Badge variant="secondary" className="ml-2">{overview.attention.length}</Badge> : null}
-              {overview && t.key === "missing" ? <Badge variant="secondary" className="ml-2">{overview.missing.length}</Badge> : null}
-              {overview && t.key === "verify" ? <Badge variant="secondary" className="ml-2">{overview.unverified.length}</Badge> : null}
-            </Link>
-          ))}
-        </nav>
+        <TabNav label="Documents sections" current={tab} items={HR_TABS.map((t) => ({
+          key: t.key,
+          href: `/documents?tab=${t.key}`,
+          label: <>{t.label}{overview && t.key === "attention" ? <Badge variant="secondary" className="ml-2">{overview.attention.length}</Badge> : null}{overview && t.key === "missing" ? <Badge variant="secondary" className="ml-2">{overview.missing.length}</Badge> : null}{overview && t.key === "verify" ? <Badge variant="secondary" className="ml-2">{overview.unverified.length}</Badge> : null}</>,
+        }))} />
       ) : null}
 
       {overview && tab === "attention" ? (
@@ -103,7 +94,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
         ) : (
           <>
           <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-            <Table>
+            <Table stack>
               <TableHeader>
                 <TableRow>
                   <TableHead>Person</TableHead>
@@ -116,9 +107,9 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
                 {attention?.rows.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell><PersonLink id={r.employeeId} name={r.employeeName} number={r.employeeNumber} /></TableCell>
-                    <TableCell>{r.typeName}<div className="text-xs text-muted-foreground">{r.title}</div></TableCell>
-                    <TableCell><ExpiryBadge status={r.expiry} expiresOn={r.expiresOn} /></TableCell>
-                    <TableCell>{r.daysLeft < 0 ? `${-r.daysLeft} overdue` : r.daysLeft}</TableCell>
+                    <TableCell label="Document" className="whitespace-normal [overflow-wrap:anywhere]"><div>{r.typeName}<div className="text-xs text-muted-foreground">{r.title}</div></div></TableCell>
+                    <TableCell label="Expiry"><ExpiryBadge status={r.expiry} expiresOn={r.expiresOn} /></TableCell>
+                    <TableCell label="Days left">{r.daysLeft < 0 ? `${-r.daysLeft} overdue` : r.daysLeft}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -135,7 +126,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
         ) : (
           <>
           <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-            <Table>
+            <Table stack>
               <TableHeader>
                 <TableRow>
                   <TableHead>Person</TableHead>
@@ -147,8 +138,8 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
                 {missing?.rows.map((r, i) => (
                   <TableRow key={`${r.employeeId}-${r.typeName}-${i}`}>
                     <TableCell><PersonLink id={r.employeeId} name={r.employeeName} number={r.employeeNumber} /></TableCell>
-                    <TableCell>{r.typeName}</TableCell>
-                    <TableCell>{r.reason === "expired" ? <Badge variant="destructive">Expired</Badge> : <Badge variant="outline">Not uploaded</Badge>}</TableCell>
+                    <TableCell label="Missing">{r.typeName}</TableCell>
+                    <TableCell label="Why">{r.reason === "expired" ? <Badge variant="destructive">Expired</Badge> : <Badge variant="outline">Not uploaded</Badge>}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -165,7 +156,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
         ) : (
           <>
           <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-            <Table>
+            <Table stack>
               <TableHeader>
                 <TableRow>
                   <TableHead>Person</TableHead>
@@ -177,8 +168,8 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
                 {unverified?.rows.map((r) => (
                   <TableRow key={r.documentId}>
                     <TableCell><PersonLink id={r.employeeId} name={r.employeeName} number={r.employeeNumber} /></TableCell>
-                    <TableCell>{r.typeName}<div className="text-xs text-muted-foreground">{r.title}</div></TableCell>
-                    <TableCell>{formatInZone(r.uploadedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}</TableCell>
+                    <TableCell label="Document" className="whitespace-normal [overflow-wrap:anywhere]"><div>{r.typeName}<div className="text-xs text-muted-foreground">{r.title}</div></div></TableCell>
+                    <TableCell label="Uploaded">{formatInZone(r.uploadedAt, DEFAULT_TIMEZONE, "MMM d, yyyy")}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -225,7 +216,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
             <p className="text-muted-foreground">No document matches.</p>
           ) : (
             <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-              <Table>
+              <Table stack>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8"><span className="sr-only">Select</span></TableHead>
@@ -240,24 +231,25 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
                 <TableBody>
                   {files.rows.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell>
+                      <TableCell data-select>
                         <input {...bulkBoxProps("files-bulk")} value={r.id} aria-label={`Select ${r.title}`} className="size-4 accent-primary" />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-normal max-md:pr-7 [overflow-wrap:anywhere]">
                         <PersonLink id={r.employeeId} name={r.employeeName} number={r.employeeNumber} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell label="Type">
                         <TypeBadge slug={r.typeSlug} name={r.typeName} />
                       </TableCell>
-                      <TableCell>
-                        {r.title}
+                      <TableCell label="Document" className="whitespace-normal [overflow-wrap:anywhere]">
+                        <div className="min-w-0">{r.title}
                         <div className="text-xs text-muted-foreground">{r.fileName}</div>
+                        </div>
                       </TableCell>
-                      <TableCell>{r.folderName ?? <span className="text-muted-foreground">No folder</span>}</TableCell>
-                      <TableCell>
+                      <TableCell label="Folder">{r.folderName ?? <span className="text-muted-foreground">No folder</span>}</TableCell>
+                      <TableCell label="Expiry">
                         <ExpiryBadge status={r.expiry} expiresOn={r.expiresOn} />
                       </TableCell>
-                      <TableCell>{r.verified ? <Badge variant="secondary">Verified</Badge> : <Badge variant="outline">Not verified</Badge>}</TableCell>
+                      <TableCell label="Status">{r.verified ? <Badge variant="secondary">Verified</Badge> : <Badge variant="outline">Not verified</Badge>}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -272,13 +264,6 @@ export default async function DocumentsPage({ searchParams }: PageProps<"/docume
       {company ? (
         <div className="space-y-6">
           <CompanyDocuments rows={company} viewerIsHr={can(user, "documents.manage_company")} showAudience={can(user, "documents.manage_company")} categorize={companyUpload ? { types: companyUpload.types, clients: [], today, withAudience: true } : undefined} />
-          {companyUpload ? (
-            <section className="space-y-3">
-              <h2 className="text-lg font-semibold">Add a company document</h2>
-              <UploadForm target="company" types={companyUpload.types} clients={[]} today={today} />
-              <BulkUpload target="company" types={companyUpload.types} />
-            </section>
-          ) : null}
         </div>
       ) : null}
 

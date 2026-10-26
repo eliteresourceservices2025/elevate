@@ -10,9 +10,9 @@ import { renameDocument } from "../actions";
 import type { DocumentRow } from "../queries";
 
 /** HR: edit the file name. The extension (.pdf, .docx ...) always follows the real file type. */
-export function RenameDocument({ row }: { row: DocumentRow }) {
+export function RenameDocument({ row, open, onOpenChange }: { row: DocumentRow; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   return (
-    <FormDialog label="Rename" title="Rename the file" description={row.fileName} variant="outline">
+    <FormDialog label="Rename" title="Rename the file" description={row.fileName} variant="outline" open={open} onOpenChange={onOpenChange} hideTrigger={open !== undefined}>
       <RenameForm row={row} />
     </FormDialog>
   );

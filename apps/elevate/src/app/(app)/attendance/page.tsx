@@ -67,20 +67,19 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
         title="Attendance"
         description="The time clock is in the header. ELEVATE is the only source of your hours."
         actions={
-          mine ? (
-            <>
+          <>
+            {mine ? <>
               <FormDialog label="Ask for a correction" title="Ask for a time correction" variant="outline" size="lg">
                 <CorrectionForm zone={mine.zone} />
               </FormDialog>
               <FormDialog label="Clock settings" title="Your clock settings" variant="outline">
                 <PreferencesForm shareLocation={mine.prefs.shareLocation} timeZone={mine.prefs.timeZone} monitoringPublished={mine.monitoringPublished} />
               </FormDialog>
-            </>
-          ) : (
-            <FormDialog label="Report a technical issue" title="Report a technical issue" description="The clock or Jibble not working, an outage, a failed device. Your lead and HR are told." variant="outline">
-              <ReportIssueForm zone={myIssues?.zone ?? "America/Phoenix"} />
+            </> : null}
+            <FormDialog label="Report a technical issue" title="Report a technical issue" description="The clock or Jibble not working, an outage, a failed device. A screenshot is required. Your lead and HR are told." variant="outline">
+              <ReportIssueForm zone={mine?.zone ?? myIssues?.zone ?? "America/Phoenix"} />
             </FormDialog>
-          )
+          </>
         }
       />
 
@@ -116,9 +115,6 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
               <section aria-label="My technical issue reports" className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-lg font-semibold">My technical issue reports</h2>
-                  <FormDialog label="Report a technical issue" title="Report a technical issue" description="The clock or Jibble not working, an outage, a failed device. A screenshot is required. Your lead and HR are told." variant="outline">
-                    <ReportIssueForm zone={mine.zone} />
-                  </FormDialog>
                 </div>
                 {myIssues ? <IssueList items={myIssues.items.slice(0, 5)} zone={myIssues.zone} mode="mine" empty="You have not reported any technical issues." /> : null}
                 {myIssues && myIssues.items.length > 5 ? (
