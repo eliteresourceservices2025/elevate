@@ -15,6 +15,7 @@ import { ComposeEditor } from "./compose-editor";
 import { BUILTIN_TEMPLATES } from "../builtin-templates";
 import { SEND_FIELDS, fieldsUsed, sendFieldsUsed } from "../merge";
 import { useAsk } from "@/components/confirm-dialog";
+import { useFormDialogWork } from "@/components/form-dialog";
 
 import { Textarea } from "@/components/ui/textarea";
 
@@ -487,6 +488,7 @@ export function NewTemplateForm() {
   const [roles, setRoles] = useState("Contractor, ERS representative");
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const dialog = useFormDialogWork({ dirty: Boolean(name || description || file || roles !== "Contractor, ERS representative"), busy: saving });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -505,6 +507,7 @@ export function NewTemplateForm() {
       setName("");
       setDescription("");
       setFile(null);
+      await dialog?.close(true);
       router.refresh();
     } catch {
       toast.error("No connection. Try again.");
@@ -515,7 +518,8 @@ export function NewTemplateForm() {
 
   return (
     <form onSubmit={submit} className="space-y-3 rounded-xl border bg-card p-4">
-      <h3 className="font-semibold">Save a template</h3>
+      <fieldset disabled={saving} className="space-y-3">
+      {dialog ? null : <h3 className="font-semibold">Save a template</h3>}
       <div className="grid gap-3 sm:grid-cols-2">
         <TextField id="tpl-name" label="Template name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required />
         <TextField id="tpl-roles" label="Signee roles, in order, separated by commas" value={roles} onChange={(e) => setRoles(e.target.value)} />
@@ -528,6 +532,7 @@ export function NewTemplateForm() {
       <Button type="submit" size="sm" disabled={saving}>
         Save template
       </Button>
+      </fieldset>
     </form>
   );
 }

@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
-import { Alert } from "@/components/ui/alert";
+import { useOperationResult } from "@/components/operation-result";
+import { documentOperationResult } from "../operation-result";
 import { Button } from "@/components/ui/button";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { bulkUpdateDocuments, type BulkDocumentsResult } from "../actions";
@@ -16,13 +17,13 @@ const ACTIONS = [
 type ActionValue = (typeof ACTIONS)[number]["value"];
 
 /** HR only. The checkboxes live in the list (`form={formId}`); this reads which are ticked and runs one action on all of them. */
-export function DocumentBulkBar({ formId }: { formId: string }) {
+export function DocumentBulkBar({ formId, scopeLabel = "this page" }: { formId: string; scopeLabel?: string }) {
   const { run, pending } = useRun();
   const confirm = useConfirm();
+  const showResult = useOperationResult();
   const [selected, setSelected] = useState(0);
   const [action, setAction] = useState<ActionValue | "">("");
   const [reason, setReason] = useState("");
-  const [result, setResult] = useState<BulkDocumentsResult | null>(null);
 
   const boxes = () => Array.from(document.querySelectorAll<HTMLInputElement>(`input[type="checkbox"][form="${formId}"][name="document"]`));
   // A document can be in the page twice (table and phone card), so count and send each id once.
@@ -41,7 +42,7 @@ export function DocumentBulkBar({ formId }: { formId: string }) {
   function toggleAll() {
     const all = boxes();
     const visible = all.filter((b) => b.offsetParent !== null);
-    const next = !visible.every((b) => b.checked);
+    const next = !visible.some((b) => b.checked);
     for (const b of all) b.checked = next;
     setSelected(next ? new Set(all.map((b) => b.value)).size : 0);
   }
@@ -59,13 +60,13 @@ export function DocumentBulkBar({ formId }: { formId: string }) {
           : { title: `Delete ${count} for good?`, description: "The files are removed and this cannot be undone.", confirmLabel: `Delete ${count}`, destructive: true },
     );
     if (!ok) return;
-    setResult(null);
+    const labels = new Map(boxes().map((box) => [box.value, box.getAttribute("aria-label")?.replace(/^Select /, "") ?? "A selected document"]));
     const input = action === "delete" ? { action, documentIds: ids, reason } : { action, documentIds: ids };
     run<BulkDocumentsResult>(
       () => bulkUpdateDocuments(input),
-      (data) => (data ? `${data.done} of ${data.requested} done.` : "Done."),
+      "",
       (data) => {
-        setResult(data ?? null);
+        if (data) showResult(documentOperationResult(action, data, labels));
         for (const b of boxes()) b.checked = false;
         setSelected(0);
         setReason("");
@@ -78,14 +79,14 @@ export function DocumentBulkBar({ formId }: { formId: string }) {
   return (
     <section aria-label="Actions for the selected documents" className="space-y-3 rounded-xl border bg-card p-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="outline" size="sm" onClick={toggleAll}>
-          Select or clear this page
+        <Button type="button" variant="outline" size="sm" disabled={pending} onClick={toggleAll}>
+          {selected > 0 ? `Clear selection (${scopeLabel})` : `Select ${scopeLabel}`}
         </Button>
         <p className="text-sm text-muted-foreground" aria-live="polite">
           {selected === 0 ? "Tick documents in the list to act on several at once." : `${selected} selected`}
         </p>
       </div>
-      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {selected > 0 ? <form onSubmit={submit} className="flex flex-wrap items-end gap-3 [&>div:first-child]:min-w-[min(100%,16rem)]">
         <SelectField id={`${formId}-action`} label="Do this" value={action} onChange={(e) => setAction(e.target.value as ActionValue | "")}>
           <option value="">Choose an action</option>
           {ACTIONS.map((a) => (
@@ -100,21 +101,7 @@ export function DocumentBulkBar({ formId }: { formId: string }) {
             Apply to {selected || "selected"}
           </Button>
         </div>
-      </form>
-      {result && result.failed.length > 0 ? (
-        <Alert variant="warning" role="status" className="text-sm">
-          <p className="font-medium">
-            {result.failed.length} could not change; the other {result.done} did.
-          </p>
-          <ul className="mt-1 list-disc pl-5">
-            {Array.from(new Set(result.failed.map((f) => f.reason))).map((reason) => (
-              <li key={reason}>
-                {reason} ({result.failed.filter((f) => f.reason === reason).length})
-              </li>
-            ))}
-          </ul>
-        </Alert>
-      ) : null}
+      </form> : null}
     </section>
   );
 }

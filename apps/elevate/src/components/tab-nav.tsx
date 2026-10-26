@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-export type TabItem = { key: string; label: string; href: string };
+export type TabItem = { key: string; label: ReactNode; href: string };
 
 /**
  * The tab bar of a page whose tabs are addresses (`?tab=...`): underlined links in one row that scrolls sideways on a narrow screen,

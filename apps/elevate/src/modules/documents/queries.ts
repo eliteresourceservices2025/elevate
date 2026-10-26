@@ -132,10 +132,12 @@ export type TypeOption = { id: string; slug: string; name: string; requiresExpir
 /** What the upload form offers: active types for the target, and the clients the person may choose. */
 export async function getUploadOptions(target: "employee" | "company", employeeId?: string) {
   const user = await requireUser();
+  let employee: { id: string; name: string; number: string } | null = null;
   if (target === "company") await authorize(user, "documents.manage_company");
   else {
-    const [owner] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, employeeId ?? "00000000-0000-0000-0000-000000000000")).limit(1);
+    const [owner] = await db.select({ userId: employees.userId, id: employees.id, first: employees.legalFirstName, last: employees.legalLastName, number: employees.employeeNumber }).from(employees).where(eq(employees.id, employeeId ?? "00000000-0000-0000-0000-000000000000")).limit(1);
     await authorize(user, "documents.upload", { ownerUserId: owner?.userId ?? undefined });
+    if (owner) employee = { id: owner.id, name: `${owner.first} ${owner.last}`, number: owner.number };
   }
 
   const types = await db
@@ -145,7 +147,7 @@ export async function getUploadOptions(target: "employee" | "company", employeeI
     .orderBy(documentTypes.name);
 
   const clientOptions = target === "employee" && employeeId ? await clientChoices(user, employeeId) : [];
-  return { types, clients: clientOptions };
+  return { types, clients: clientOptions, employee };
 }
 
 export type AttentionRow = DocumentRow & { employeeId: string; employeeName: string; employeeNumber: string; daysLeft: number };

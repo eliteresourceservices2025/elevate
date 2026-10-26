@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatDateOnly } from "@/lib/time";
+import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatDateOnly, formatInZone } from "@/lib/time";
+import { popupStartsAt } from "../popup-schedule";
 import { movePopup, setPopup } from "../popup-actions";
 import type { PopupQueueRow } from "../popup-queries";
 
@@ -20,6 +21,7 @@ function PopupForm({ kind, itemId, current, today }: { kind: "announcement" | "p
   const [pending, start] = useTransition();
   const [enabled, setEnabled] = useState(current !== null);
   const [showFrom, setShowFrom] = useState(current?.showFrom ?? today);
+  const startsAt = popupStartsAt(showFrom);
   return (
     <form
       className="space-y-4"
@@ -44,8 +46,10 @@ function PopupForm({ kind, itemId, current, today }: { kind: "announcement" | "p
       </label>
       {enabled ? (
         <div className="space-y-1">
-          <Label htmlFor="popup-from">Show from</Label>
+          <Label htmlFor="popup-from">Show from (Phoenix date)</Label>
           <Input id="popup-from" type="date" value={showFrom} onChange={(e) => setShowFrom(e.target.value)} required className="max-w-48" />
+          <p className="text-xs text-muted-foreground">Starts at midnight in {DEFAULT_TIMEZONE}.</p>
+          {startsAt ? <p className="text-sm">In Manila: <strong>{formatInZone(startsAt, SECONDARY_TIMEZONE, "MMM d, yyyy, h:mm a")}</strong>.</p> : null}
           <p className="text-xs text-muted-foreground">
             It joins the end of the line. Change the order under Announcements, Pop-up queue. {kind === "policy" ? "A new published version pops up again for everyone." : ""}
           </p>
@@ -64,10 +68,11 @@ export function PopupControl({ kind, itemId, current, today }: { kind: "announce
     <FormDialog
       label={current ? `Pop-up: from ${formatDateOnly(current.showFrom)}` : "Show as a pop-up"}
       title="Sign-in pop-up"
-      description="People see queued items one at a time right after they sign in, before the page they opened. One that needs acknowledgment stays until they acknowledge it; any other can be closed."
+      description="Eligible recipients see queued items one at a time when they sign in. An item they already acknowledged or closed is not shown again. Changing its start date does not reset that history."
       variant="outline"
     >
       <PopupForm kind={kind} itemId={itemId} current={current} today={today} />
+      {kind === "announcement" ? <p className="text-xs text-muted-foreground">Only the announcement&apos;s original recipients see it. The account that posted it is not a recipient.</p> : null}
     </FormDialog>
   );
 }
@@ -101,7 +106,7 @@ export function PopupQueueAdmin({ rows }: { rows: PopupQueueRow[] }) {
   return (
     <section aria-label="Pop-up queue" className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        These show as a pop-up when people sign in, one at a time, in this order (the first is shown first), starting on their date. After the last one, new accounts get the quick tour.
+        Eligible recipients see these one at a time, in this order, starting on their date in {DEFAULT_TIMEZONE}. Live means that date has started; previously acknowledged or closed items stay hidden for that person. After the last one, new accounts get the quick tour.
         Add an item from its own page with &quot;Show as a pop-up&quot;.
       </p>
       {rows.length === 0 ? (

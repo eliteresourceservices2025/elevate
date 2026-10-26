@@ -5,7 +5,7 @@ category: my-profile
 audience: all
 order: 2
 video: upload-your-documents
-updated: 2026-10-22
+updated: 2026-10-26
 ---
 
 Your documents are kept in a private vault on your profile. You and HR can see them. Nobody else can.
@@ -17,7 +17,7 @@ The page says it clearly: **Do not upload client records or patient information.
 # Upload one document
 
 1. Click **My profile** in the left menu, then open the **Documents** tab.
-2. Under **Upload a document**, choose the **Document type**, for example **Government ID**, **NBI clearance**, **HIPAA training certificate**, **Contract** or **Resume**.
+2. Click **Upload a document** above your file list. In the window that opens, choose the **Document type**, for example **Government ID**, **NBI clearance**, **HIPAA training certificate**, **Contract** or **Resume**.
 3. Type a **Title**, such as "NBI clearance 2026".
 4. Add an **Expiry date (optional)** if the document expires.
 5. Choose the **File**. It can be a PDF, JPG, PNG, WEBP, DOC or DOCX, up to 10 MB.
@@ -28,11 +28,11 @@ The page says it clearly: **Do not upload client records or patient information.
 
 # Upload many files
 
-Use **Upload many files** to drag in up to 50 files at once. They are saved as **Unsorted**. Give each one its type afterwards from the list.
+Click **Upload many files** above your file list to choose or drag in up to 50 files at once. Keep the window open until the uploads finish. They are saved as **Unsorted**. Open **More**, then **Set type** on each file to give it a type afterwards.
 
 # Sort into folders
 
-Click **New folder** to make a folder with a plain name, such as "Contracts". Then use **Move to** on a document. Do not put private details or client names in a folder name.
+Click **New folder** to make a folder with a plain name, such as "Contracts". Then open **More** on a document, choose **Move to folder**, select the folder and click **Move document**. Do not put private details or client names in a folder name.
 
 # After you upload
 
@@ -40,7 +40,7 @@ HR can verify a document. A document that expires is listed for HR, and you get 
 
 # Common mistakes
 
-- **Choosing the wrong type.** HR may not count it. Fix the type from the list.
+- **Choosing the wrong type.** HR may not count it. Open **More**, then **Change type** to fix it before HR verifies the file.
 - **A big scan.** Files over 10 MB are refused. Make the file smaller.
 - **A screenshot with client information.** Do not upload it.
 

@@ -3,11 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShieldQuestion } from "lucide-react";
+import { ChevronDown, ShieldQuestion } from "lucide-react";
+import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { NAV_GROUPS } from "@/lib/nav";
 import { APP_VERSION } from "@/lib/releases";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // The longest matching link wins, so "/people/me" does not also light up "/people".
 function activeHref(pathname: string) {
@@ -19,6 +21,7 @@ function activeHref(pathname: string) {
 export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, collapsed = false }: { onNavigate?: () => void; hidden?: string[]; safeVoiceUrl?: string | null; collapsed?: boolean }) {
   const pathname = usePathname();
   const current = activeHref(pathname);
+  const accordionName = useId();
 
   const groupLabel = "px-2 pb-1 text-[0.7rem] font-semibold uppercase tracking-wider text-sidebar-foreground/75";
   const linkBase = "flex items-center rounded-lg text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring";
@@ -37,20 +40,22 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
           </div>
         )}
       </div>
-      <nav id="main-nav" aria-label="Main" className={cn("flex-1 space-y-5 overflow-y-auto overflow-x-hidden pb-6", collapsed ? "px-2" : "px-3")}>
-        {NAV_GROUPS.map((group, index) => (
-          <div key={group.label}>
+      <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-thumb]]:bg-sidebar-foreground/40 [&_[data-slot=scroll-area-scrollbar]]:w-1.5">
+      <nav id="main-nav" aria-label="Main" className={cn("space-y-2 pb-4", collapsed ? "px-2" : "px-3")}>
+        {NAV_GROUPS.map((group) => ({ ...group, items: group.items.filter((i) => !hidden.includes(i.href)) })).filter((group) => group.items.length > 0 || (group.label === "Speak up" && safeVoiceUrl)).map((group, index) => {
+          const expandable = !collapsed && group.items.length > 1 && group.label !== "Speak up";
+          const contents = <>
             {collapsed ? (
               // A thin line stands in for the group name; the name stays available to screen readers.
               <>
                 <p className="sr-only">{group.label}</p>
                 {index > 0 ? <div aria-hidden className="mx-2 mb-2 border-t border-sidebar-foreground/15" /> : null}
               </>
-            ) : (
+            ) : !expandable ? (
               <p className={groupLabel}>{group.label}</p>
-            )}
+            ) : null}
             <ul className="space-y-0.5">
-              {group.items.filter((i) => !hidden.includes(i.href)).map(({ href, label, icon: Icon }) => {
+              {group.items.map(({ href, label, icon: Icon }) => {
                 const active = href === current;
                 return (
                   <li key={href}>
@@ -92,9 +97,18 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
             {collapsed ? null : <p className="px-2.5 pt-1 text-xs text-sidebar-foreground/80">Anonymous: no sign-in, nothing links it to you.</p>}
           </div>
             ) : null}
-          </div>
-        ))}
+          </>;
+          return expandable ? (
+            <details key={`${pathname}-${group.label}`} name={accordionName} open={group.items.some((i) => i.href === current)} className="group/nav rounded-lg">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-2.5 py-2.5 text-sm font-semibold hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring [&::-webkit-details-marker]:hidden">
+                {group.label}<ChevronDown aria-hidden className="size-4 shrink-0 transition-transform group-open/nav:rotate-180 motion-reduce:transition-none" />
+              </summary>
+              <div className="mt-1 border-l border-sidebar-foreground/20 pl-2 ml-2">{contents}</div>
+            </details>
+          ) : <div key={group.label}>{contents}</div>;
+        })}
       </nav>
+      </ScrollArea>
       {collapsed ? null : (
         <Link href="/whats-new" onClick={onNavigate} className="shrink-0 px-5 py-3 text-xs text-sidebar-foreground/80 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-sidebar-ring">
           ELEVATE {APP_VERSION}

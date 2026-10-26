@@ -11,7 +11,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { cancelOffboarding, completeOffboarding, completeOnboarding, issueCertificate, removeAccessNow, startOffboarding, startOnboarding, submitExitInterview } from "../actions";
-import { FormDialog, useFormDialog } from "@/components/form-dialog";
+import { FormDialog, useFormDialog, useFormDialogWork } from "@/components/form-dialog";
 import { PeoplePicker } from "./people-picker";
 import { LEAVING_LABELS, LEAVING_REASONS, type LeavingReason } from "../constants";
 import { useAsk } from "@/components/confirm-dialog";
@@ -275,6 +275,7 @@ export function StartOffboardingForm({ people, today }: { people: { id: string; 
 
 export function ExitInterviewForm({ caseId }: { caseId: string }) {
   const { run, pending } = useRun();
+  const dialog = useFormDialogWork({ busy: pending });
   const [reasonForLeaving, setReason] = useState("");
   const [wentWell, setWell] = useState("");
   const [toImprove, setImprove] = useState("");
@@ -284,10 +285,11 @@ export function ExitInterviewForm({ caseId }: { caseId: string }) {
       className="space-y-3 rounded-xl border bg-card p-4"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => submitExitInterview({ caseId, reasonForLeaving, wentWell, toImprove, wouldReturn }), "Thank you. Your exit interview was sent to HR.");
+          run(() => submitExitInterview({ caseId, reasonForLeaving, wentWell, toImprove, wouldReturn }), "Thank you. Your exit interview was sent to HR.", () => { void dialog?.close(true); });
       }}
     >
-      <h2 className="text-lg font-semibold">Exit interview</h2>
+      <fieldset disabled={pending} className="space-y-3">
+      {dialog ? null : <h2 className="text-lg font-semibold">Exit interview</h2>}
       <p className="text-sm text-muted-foreground">Private: only HR reads it. Please do not include client or patient information.</p>
       <div className="space-y-1">
         <Label htmlFor="x-reason">Main reason for leaving</Label>
@@ -312,6 +314,7 @@ export function ExitInterviewForm({ caseId }: { caseId: string }) {
       <Button type="submit" disabled={pending || reasonForLeaving.trim().length < 3}>
         Submit
       </Button>
+      </fieldset>
     </form>
   );
 }

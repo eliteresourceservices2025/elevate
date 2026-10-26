@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useState, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { ConfirmProvider } from "@/components/confirm-dialog";
+import { OperationResultProvider } from "@/components/operation-result";
 import { UnsavedChangesProvider } from "@/components/unsaved-changes";
 import { PopupQueue, type PopupItem } from "@/modules/announcements/components/popup-queue";
 import { AppHeader } from "./app-header";
@@ -60,11 +61,13 @@ export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [],
           {banner}
           {/* Side padding: 16px on a phone, 40px on a tablet or laptop, 48px on a large screen. Pages fill the width between. */}
           <ConfirmProvider>
+            <OperationResultProvider>
             <UnsavedChangesProvider>
               <main id="main" tabIndex={-1} className="px-4 py-5 md:px-10 md:py-6 2xl:px-12 print:p-0 focus:outline-none">
                 {children}
               </main>
             </UnsavedChangesProvider>
+            </OperationResultProvider>
           </ConfirmProvider>
         </div>
       </div>

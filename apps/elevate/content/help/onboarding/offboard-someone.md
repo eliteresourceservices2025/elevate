@@ -5,7 +5,7 @@ category: onboarding
 audience: super_admin, hr_admin, team_lead
 order: 3
 video: offboard-someone
-updated: 2026-10-21
+updated: 2026-10-26
 ---
 
 Offboarding is the checklist for someone who is leaving: handover, equipment, final hours and removing their access.
@@ -43,7 +43,7 @@ Open the case from the **Offboarding cases** list. The default tasks are:
 
 # The exit interview
 
-The person fills in a short private form. It asks the main reason for leaving, *What went well*, *What could be better* and *Would you work with ERS again?* **Only HR can read the answers.** The page says so, and asks people not to include client or patient information.
+The person uses **Complete exit interview** at the top of their case to open a short private form. It asks the main reason for leaving, *What went well*, *What could be better* and *Would you work with ERS again?* **Only HR can read the answers.** The page says so, and asks people not to include client or patient information.
 
 # Removing access
 

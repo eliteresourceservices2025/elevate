@@ -16,6 +16,7 @@ import { listEnvelopes, listMySigning, listTemplates, type EnvelopeFilter } from
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
 import { Alert } from "@/components/ui/alert";
+import { FormDialog } from "@/components/form-dialog";
 
 export const metadata: Metadata = { title: "Signing" };
 
@@ -58,6 +59,7 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
                 Send a document
               </Link>
             ) : null}
+            {manage && tab === "templates" ? <FormDialog label="Save a template" title="Save a template" size="lg" variant="outline"><NewTemplateForm /></FormDialog> : null}
           </>
         }
       />
@@ -198,7 +200,6 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
               </li>
             ))}
           </ul>
-          <NewTemplateForm />
         </section>
       ) : null}
     </PageContainer>

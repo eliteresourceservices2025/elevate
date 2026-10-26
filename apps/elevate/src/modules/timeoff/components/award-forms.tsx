@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { PersonPicker, type PickerOption } from "@/components/person-picker";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
+import { useFormDialogWork } from "@/components/form-dialog";
 import { adjustBalance, awardDays } from "../actions";
 
 type Option = { id: string; name: string };
@@ -13,21 +14,23 @@ type Option = { id: string; name: string };
 function useRun() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const dialog = useFormDialogWork({ busy: pending });
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string, after?: () => void) =>
     startTransition(async () => {
       const result = await fn();
       if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
       toast.success(success);
       after?.();
+      await dialog?.close(true);
       router.refresh();
     });
-  return { run, pending };
+  return { run, pending, dialog };
 }
 
 const DAY_STEPS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
 
 export function AwardForm({ people, types, today, fixedEmployee }: { people: PickerOption[]; types: Option[]; today: string; fixedEmployee?: string }) {
-  const { run, pending } = useRun();
+  const { run, pending, dialog } = useRun();
   const [employeeId, setEmployeeId] = useState<string | undefined>(fixedEmployee);
   const [leaveTypeId, setLeaveTypeId] = useState(types[0]?.id ?? "");
   const [days, setDays] = useState("1");
@@ -47,7 +50,8 @@ export function AwardForm({ people, types, today, fixedEmployee }: { people: Pic
         });
       }}
     >
-      <h2 className="text-base font-semibold">Award prize days</h2>
+      <fieldset disabled={pending} className="space-y-3">
+      {dialog ? null : <h2 className="text-base font-semibold">Award prize days</h2>}
       <div className="grid gap-4 sm:grid-cols-2">
         {fixedEmployee ? null : (
           <PersonPicker id="aw-person" label="Person" options={people} value={employeeId} onChange={setEmployeeId} error={invalidPerson ? "Choose a person from the list" : undefined} />
@@ -72,12 +76,13 @@ export function AwardForm({ people, types, today, fixedEmployee }: { people: Pic
       <Button type="submit" disabled={pending || !employeeId || invalidPerson || !leaveTypeId}>
         Award
       </Button>
+      </fieldset>
     </form>
   );
 }
 
 export function AdjustForm({ people, types, fixedEmployee }: { people: PickerOption[]; types: Option[]; fixedEmployee?: string }) {
-  const { run, pending } = useRun();
+  const { run, pending, dialog } = useRun();
   const [employeeId, setEmployeeId] = useState<string | undefined>(fixedEmployee);
   const [leaveTypeId, setLeaveTypeId] = useState(types[0]?.id ?? "");
   const [days, setDays] = useState("-1");
@@ -92,7 +97,8 @@ export function AdjustForm({ people, types, fixedEmployee }: { people: PickerOpt
         run(() => adjustBalance({ employeeId, leaveTypeId, days, reason }), "Balance corrected.", () => setReason(""));
       }}
     >
-      <h2 className="text-base font-semibold">Correct a balance</h2>
+      <fieldset disabled={pending} className="space-y-3">
+      {dialog ? null : <h2 className="text-base font-semibold">Correct a balance</h2>}
       <p className="text-sm text-muted-foreground">For mistakes only. Use a minus sign to remove days. The balance cannot go below zero.</p>
       <div className="grid gap-4 sm:grid-cols-2">
         {fixedEmployee ? null : (
@@ -111,6 +117,7 @@ export function AdjustForm({ people, types, fixedEmployee }: { people: PickerOpt
       <Button type="submit" variant="outline" disabled={pending || !employeeId || invalidPerson || !leaveTypeId}>
         Save correction
       </Button>
+      </fieldset>
     </form>
   );
 }

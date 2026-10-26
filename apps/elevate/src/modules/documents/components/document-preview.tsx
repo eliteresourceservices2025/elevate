@@ -13,7 +13,7 @@ export function PreviewButton({ documentId, title }: { documentId: string; title
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button type="button" variant="ghost" size="xs" aria-label={`View ${title}`} onClick={() => setOpen(true)}>
+      <Button type="button" variant="ghost" size="sm" aria-label={`View ${title}`} onClick={() => setOpen(true)}>
         <Eye aria-hidden /> View
       </Button>
       {open ? (

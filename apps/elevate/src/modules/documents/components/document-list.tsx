@@ -1,25 +1,19 @@
 "use client";
 
-import { Download, File, FileImage, FileText } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useId, useTransition } from "react";
-import { toast } from "sonner";
-import type { ActionResult } from "@/lib/run-action";
+import { File, FileImage, FileText } from "lucide-react";
+import { useId } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateOnly } from "@/lib/time";
-import { CategorizeDocument, type CategorizeOptions } from "./categorize-document";
-import { archiveDocument, bulkUpdateDocuments, getDownloadUrl, moveDocument, verifyDocument, type BulkDocumentsResult } from "../actions";
+import { type CategorizeOptions } from "./categorize-document";
 import { DocumentBulkBar } from "./document-bulk-bar";
 import { bulkBoxProps } from "../bulk-box";
-import { RenameDocument } from "./rename-document";
 import type { ExpiryStatus } from "../expiry";
-import { canPreview, formatBytes } from "../files";
+import { formatBytes } from "../files";
 import type { DocumentRow, FolderRow } from "../queries";
-import { PreviewButton } from "./document-preview";
+import { DocumentRowActions } from "./document-row-actions";
 import { TypeBadge } from "./type-badge";
-import { useAsk } from "@/components/confirm-dialog";
+export { DownloadButton } from "./download-button";
 
 /** A small icon for the kind of file (PDF, picture, Word), so the file name line reads at a glance. */
 function FileKindIcon({ mime }: { mime: string | null }) {
@@ -41,29 +35,6 @@ export function ExpiryBadge({ status, expiresOn }: { status: ExpiryStatus; expir
   );
 }
 
-export function DownloadButton({ documentId, label }: { documentId: string; label: string }) {
-  const [pending, startTransition] = useTransition();
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="xs"
-      disabled={pending}
-      aria-label={`Download ${label}`}
-      onClick={() =>
-        startTransition(async () => {
-          const result = await getDownloadUrl({ documentId });
-          if (!result.ok) return void toast.error(result.error);
-          // The link is valid for 60 seconds and saves the file instead of opening it.
-          window.location.assign(result.data.url);
-        })
-      }
-    >
-      <Download aria-hidden /> Download
-    </Button>
-  );
-}
-
 /** A person's or the company's documents, with the actions the viewer is allowed to take. */
 export function DocumentList({
   rows,
@@ -72,7 +43,9 @@ export function DocumentList({
   emptyText = "No documents yet.",
   folders,
   categorize,
+  bulkFormId,
 }: {
+  bulkFormId?: string;
   rows: DocumentRow[];
   viewerIsHr: boolean;
   showAudience?: boolean;
@@ -82,65 +55,54 @@ export function DocumentList({
   /** When given, each open document gets a "Set type" / "Change type" button. */
   categorize?: CategorizeOptions;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const ask = useAsk();
-  const formId = `docs-bulk-${useId()}`;
-  /** A bulk call for one file: its single failure reason becomes the error. */
-  const single = (r: ActionResult<BulkDocumentsResult>): { ok: boolean; error?: string } =>
-    !r.ok ? r : r.data.failed.length > 0 ? { ok: false, error: r.data.failed[0].reason } : { ok: true };
-
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string) =>
-    startTransition(async () => {
-      const result = await fn();
-      if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
-      toast.success(success);
-      router.refresh();
-    });
+  const localFormId = `docs-bulk-${useId()}`;
+  const formId = bulkFormId ?? localFormId;
 
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{emptyText}</p>;
 
   return (
-    <div className="space-y-3">
-    {viewerIsHr ? <DocumentBulkBar formId={formId} /> : null}
+    <div key={rows.map((r) => r.id).join(",")} className="space-y-3">
+    {viewerIsHr && !bulkFormId ? <DocumentBulkBar formId={formId} /> : null}
     <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
-      <Table>
+      <Table stack className="table-fixed">
         <TableHeader>
           <TableRow>
             {viewerIsHr ? <TableHead className="w-8"><span className="sr-only">Select</span></TableHead> : null}
-            <TableHead>Type</TableHead>
+            <TableHead className="w-[18%]">Type</TableHead>
             <TableHead>Document</TableHead>
-            <TableHead>Expiry</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead className="w-28">Expiry</TableHead>
+            <TableHead className="w-28">Status</TableHead>
+            <TableHead className="w-56 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((r) => (
             <TableRow key={r.id} className={r.archived ? "opacity-60" : undefined}>
               {viewerIsHr ? (
-                <TableCell>
+                <TableCell data-select>
                   <input {...bulkBoxProps(formId)} value={r.id} aria-label={`Select ${r.title}`} className="size-4 accent-primary" />
                 </TableCell>
               ) : null}
-              <TableCell>
+              <TableCell label="Type" className="whitespace-normal max-md:pr-7 [&_span]:whitespace-normal">
                 <TypeBadge slug={r.typeSlug} name={r.typeName} />
               </TableCell>
-              <TableCell>
+              <TableCell className="whitespace-normal [overflow-wrap:anywhere] max-md:pr-7">
+                <div className="min-w-0">
                 <div className="font-medium">{r.title}</div>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="mt-1 flex items-start gap-1.5 text-xs font-normal text-muted-foreground" title={r.fileName}>
                   <FileKindIcon mime={r.mimeType} />
                   <span>
                     {r.clientName ? `${r.clientName} · ` : ""}
-                    {r.fileName}
+                    {r.fileName !== r.title ? r.fileName : "File"}
                     {r.sizeBytes ? ` (${formatBytes(r.sizeBytes)})` : ""}
                   </span>
                 </div>
+                </div>
               </TableCell>
-              <TableCell>
+              <TableCell label="Expiry">
                 <ExpiryBadge status={r.expiry} expiresOn={r.expiresOn} />
               </TableCell>
-              <TableCell>
+              <TableCell label="Status">
                 <div className="flex flex-wrap gap-1">
                   {r.archived ? <Badge variant="outline">Archived</Badge> : null}
                   {showAudience ? (
@@ -152,62 +114,8 @@ export function DocumentList({
                   )}
                 </div>
               </TableCell>
-              <TableCell className="text-right">
-                <div className="flex flex-wrap justify-end gap-1">
-                  {folders && !r.archived ? (
-                    <select
-                      aria-label={`Move ${r.title} to a folder`}
-                      className="h-6 max-w-44 rounded-md border bg-background px-1 text-xs"
-                      value={r.folderId && folders.some((f) => f.id === r.folderId) ? r.folderId : ""}
-                      disabled={pending}
-                      onChange={(e) => run(() => moveDocument({ documentId: r.id, folderId: e.target.value || null }), "Document moved.")}
-                    >
-                      <option value="">No folder</option>
-                      {folders.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                  {categorize && !r.archived && (viewerIsHr || !r.verified) ? <CategorizeDocument row={r} options={categorize} /> : null}
-                  {canPreview(r.mimeType, r.fileName) ? <PreviewButton documentId={r.id} title={r.title} /> : null}
-                  <DownloadButton documentId={r.id} label={r.title} />
-                  {viewerIsHr && !showAudience && !r.archived ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      disabled={pending}
-                      onClick={() => run(() => verifyDocument({ documentId: r.id, verified: !r.verified }), r.verified ? "Verification removed." : "Marked as verified.")}
-                    >
-                      {r.verified ? "Unverify" : "Verify"}
-                    </Button>
-                  ) : null}
-                  {viewerIsHr && !r.archived ? <RenameDocument row={r} /> : null}
-                  {!r.archived && (viewerIsHr || !r.verified) ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      disabled={pending}
-                      onClick={async () => (await ask(`Archive "${r.title}"? It is hidden from lists. The file is kept.`)) && run(() => archiveDocument({ documentId: r.id }), "Document archived.")}
-                    >
-                      Archive
-                    </Button>
-                  ) : null}
-                  {viewerIsHr && r.archived ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      disabled={pending}
-                      onClick={() => run(() => bulkUpdateDocuments({ action: "restore", documentIds: [r.id] }).then(single), "Document restored.")}
-                    >
-                      Restore
-                    </Button>
-                  ) : null}
-                </div>
+              <TableCell label="" className="text-right max-md:pt-3">
+                <DocumentRowActions row={r} viewerIsHr={viewerIsHr} showAudience={showAudience} folders={folders} categorize={categorize} />
               </TableCell>
             </TableRow>
           ))}
