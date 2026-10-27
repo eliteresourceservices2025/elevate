@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { resolveTimeZone } from "@/lib/time";
+import { pageInfo } from "@/lib/pagination";
 import { monitoringPolicyPublished } from "@/modules/attendance/service";
 import { reportName } from "@/modules/org/service";
 import { breakMode, getJibbleClient, mirrorSendsEnabled, mismatchToleranceMinutes, selfTestEmails } from "./client";
@@ -14,6 +16,8 @@ export type LogRow = { id: string; name: string; action: string; status: string;
 export type ShiftRow = { id: string; name: string; clockIn: string; clockOut: string | null };
 
 export type JibbleOverview = {
+  /** The viewer's attendance preference, falling back to the company timezone. */
+  viewerTimeZone: string;
   configured: boolean;
   /** mirror = ELEVATE tells Jibble when to run; fallback = people clock into both and ELEVATE only compares. */
   mode: "mirror" | "fallback";
@@ -32,22 +36,36 @@ export type JibbleOverview = {
   counts: { queued: number; failed: number; sent24h: number };
   people: JibblePersonRow[];
   log: LogRow[];
+  callHistory: { search: string; status: string; page: number; pages: number; total: number; from: number; to: number };
   shifts: ShiftRow[];
 };
 
 /** The Jibble page: connection state, who is matched, and the latest calls. HR only. */
-export async function getJibbleOverview(): Promise<JibbleOverview> {
+export async function getJibbleOverview(filters: { search?: string; status?: string; page?: string } = {}): Promise<JibbleOverview> {
   const user = await requireUser();
   await authorize(user, "jibble.manage");
+
+  const [viewer] = (await db.execute(sql`
+    select p.time_zone from core.employees e left join time.clock_prefs p on p.employee_id = e.id
+    where e.user_id = ${user.id} and e.archived_at is null and e.status <> 'separated' limit 1`)) as unknown as { time_zone: string | null }[];
 
   const people = (await db.execute(sql`
     select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, e.work_email as email, t.name as team, p.jibble_person_id, p.matched_by
     from core.employees e left join core.teams t on t.id = e.team_id left join time.jibble_people p on p.employee_id = e.id
     where e.archived_at is null and e.status <> 'separated' order by (p.jibble_person_id is not null), e.legal_last_name, e.legal_first_name limit 1000`)) as unknown as { id: string; first: string; last: string; preferred: string | null; email: string | null; team: string | null; jibble_person_id: string | null; matched_by: string | null }[];
 
+  const search = typeof filters.search === "string" ? filters.search.trim().slice(0, 100) : "";
+  const status = ["queued", "sent", "failed", "skipped"].includes(filters.status ?? "") ? filters.status! : "all";
+  const pageNumber = Number(filters.page);
+  const requestedPage = Number.isSafeInteger(pageNumber) && pageNumber > 0 ? pageNumber : 1;
+  const searchPattern = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
+  const filter = sql`${status === "all" ? sql`true` : sql`l.status = ${status}`} and ${search ? sql`(concat_ws(' ', coalesce(nullif(trim(e.preferred_name), ''), e.legal_first_name), e.legal_last_name) ilike ${searchPattern} escape '\\' or concat_ws(' ', e.legal_first_name, e.legal_last_name) ilike ${searchPattern} escape '\\')` : sql`true`}`;
+  const [logCount] = (await db.execute(sql`select count(*)::int as total from time.jibble_link_log l join core.employees e on e.id = l.employee_id where ${filter}`)) as unknown as { total: number }[];
+  const callPage = pageInfo(logCount?.total ?? 0, requestedPage, 25);
   const log = (await db.execute(sql`
     select l.id, l.action, l.status, l.attempts, l.last_error, l.created_at, l.sent_at, l.source, l.fallback, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
-    from time.jibble_link_log l join core.employees e on e.id = l.employee_id order by l.created_at desc limit 100`)) as unknown as { id: string; action: string; status: string; attempts: number; last_error: string | null; created_at: string | Date; sent_at: string | Date | null; source: string; fallback: boolean; first: string; last: string; preferred: string | null }[];
+    from time.jibble_link_log l join core.employees e on e.id = l.employee_id where ${filter}
+    order by l.created_at desc, l.id desc limit ${callPage.pageSize} offset ${callPage.offset}`)) as unknown as { id: string; action: string; status: string; attempts: number; last_error: string | null; created_at: string | Date; sent_at: string | Date | null; source: string; fallback: boolean; first: string; last: string; preferred: string | null }[];
 
   // Pair actual ELEVATE shift events, not Jibble calls (which can also represent breaks or repairs).
   const shifts = (await db.execute(sql`
@@ -74,6 +92,7 @@ export async function getJibbleOverview(): Promise<JibbleOverview> {
   const [state] = (await db.execute(sql`select (select paused from time.jibble_settings where id = 1) as paused, (select extract(epoch from now() - min(created_at)) / 60 from time.jibble_link_log where status = 'queued')::float8 as oldest`)) as unknown as { paused: boolean | null; oldest: number | null }[];
 
   return {
+    viewerTimeZone: resolveTimeZone(viewer?.time_zone),
     configured: getJibbleClient() !== null,
     mode: mirrorSendsEnabled() ? "mirror" : "fallback",
     breakMode: breakMode(),
@@ -85,6 +104,7 @@ export async function getJibbleOverview(): Promise<JibbleOverview> {
     paused: Boolean(state?.paused),
     oldestQueuedMinutes: state?.oldest === null || state?.oldest === undefined ? null : Math.round(Number(state.oldest)),
     counts,
+    callHistory: { search, status, page: callPage.page, pages: callPage.pages, total: callPage.total, from: callPage.from, to: callPage.to },
     people: people.map((p) => ({ employeeId: p.id, name: reportName({ first: p.first, last: p.last, preferred: p.preferred }), email: p.email, team: p.team, jibblePersonId: p.jibble_person_id, matchedBy: p.matched_by })),
     log: log.map((l) => ({ id: l.id, name: reportName({ first: l.first, last: l.last, preferred: l.preferred }), action: l.action, status: l.status, attempts: l.attempts, lastError: l.last_error, createdAt: new Date(l.created_at).toISOString(), sentAt: l.sent_at ? new Date(l.sent_at).toISOString() : null, source: l.source, fallback: l.fallback })),
     shifts: shifts.map((s) => ({ id: s.id, name: reportName({ first: s.first, last: s.last, preferred: s.preferred }), clockIn: new Date(s.clock_in).toISOString(), clockOut: s.clock_out ? new Date(s.clock_out).toISOString() : null })),

@@ -541,6 +541,35 @@ describe("matching people to Jibble accounts", () => {
     expect(shift?.clockIn).toBeTruthy();
     expect(shift?.clockOut).not.toBeNull();
   });
+
+  it("uses the viewer's saved time zone and falls back to Phoenix", async () => {
+    as(hr);
+    const [viewer] = await rows<{ id: string }>(sql`select id from core.employees where user_id = ${hr.id} and archived_at is null limit 1`);
+    await db.execute(sql`insert into time.clock_prefs (employee_id, time_zone) values (${viewer.id}, 'Asia/Manila') on conflict (employee_id) do update set time_zone = excluded.time_zone`);
+    try {
+      expect((await queries.getJibbleOverview()).viewerTimeZone).toBe("Asia/Manila");
+      await db.execute(sql`update time.clock_prefs set time_zone = null where employee_id = ${viewer.id}`);
+      expect((await queries.getJibbleOverview()).viewerTimeZone).toBe("America/Phoenix");
+    } finally {
+      await db.execute(sql`delete from time.clock_prefs where employee_id = ${viewer.id}`);
+    }
+  });
+
+  it("filters and pages retained call history beyond the most recent 100 calls", async () => {
+    const p = await person("HistoryFilter");
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, action, status, source, created_at)
+      select ${p.employeeId}, 'In', 'failed', 'repair', now() - n * interval '1 second' from generate_series(1, 110) n`);
+    as(hr);
+    const page = await queries.getJibbleOverview({ search: "HistoryFilter", status: "failed", page: "5" });
+    expect(page.callHistory).toMatchObject({ total: 110, page: 5, pages: 5, from: 101, to: 110 });
+    expect(page.log).toHaveLength(10);
+    expect(page.log.every((l) => l.name.includes("HistoryFilter") && l.status === "failed")).toBe(true);
+    const none = await queries.getJibbleOverview({ search: "HistoryFilter%", status: "failed" });
+    expect(none.callHistory.total).toBe(0);
+    const [employee] = await rows<{ last: string }>(sql`update core.employees set preferred_name = 'HistoryPreferred' where id = ${p.employeeId} returning legal_last_name as last`);
+    expect((await queries.getJibbleOverview({ search: `HistoryPreferred ${employee.last}`, status: "failed" })).callHistory.total).toBe(110);
+    expect((await queries.getJibbleOverview({ search: `HistoryFilter ${employee.last}`, status: "failed" })).callHistory.total).toBe(110);
+  });
 });
 
 describe("the nightly comparison", () => {
