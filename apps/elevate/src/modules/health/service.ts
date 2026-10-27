@@ -80,7 +80,7 @@ export async function runHealthCheck(now = new Date()): Promise<HealthCheck> {
     const parts = [
       late.length > 0 ? `${late.length} scheduled ${late.length === 1 ? "job has" : "jobs have"} stopped running: ${late.slice(0, 5).map((j) => j.label).join(", ")}${late.length > 5 ? ", and more" : ""}.` : null,
       queueLate ? `A clock call to Jibble has waited ${queueMinutes} minutes.` : null,
-      slowSends ? "Clock calls are reaching Jibble late (more than 3 minutes), so screenshots start and stop late. Check the job service's event key." : null,
+      slowSends ? "Clock calls are reaching Jibble late (more than 3 minutes). Check delivery times, the job service and host logs; screenshots also depend on the desktop app." : null,
     ].filter(Boolean);
     alerted = await alertHr("ELEVATE needs a look", `${parts.join(" ")} See the Health tab.`, 6);
   }

@@ -349,11 +349,13 @@ describe("sending to Jibble", () => {
 
     // it comes back: the first call goes through, and the second follows in the same run
     fake.fail = () => null;
+    fake.states.set(p.jibbleId, "out");
     await jobs.processMirrorQueue(new Date(start.getTime() + 2 * MIN));
     expect((await logOf(p.employeeId)).map((l) => l.status)).toEqual(["sent", "sent"]);
 
     // a call that never works is given up on after six tries
     const q = await queued("GiveUp", ["In"]);
+    fake.states.set(q.jibbleId, "out");
     fake.fail = (id) => (id === q.jibbleId ? new JibbleError(503, "request refused") : null);
     let at = Date.now() + MIN;
     for (let i = 0; i < 6; i++) {
@@ -368,9 +370,10 @@ describe("sending to Jibble", () => {
   it("treats 'already in that state' as sent, and a refusal as final", async () => {
     const dup = await queued("Dup", ["In"]);
     const refused = await queued("Refused", ["In"]);
+    fake.states.set(dup.jibbleId, "in");
     fake.fail = (id) => (id === dup.jibbleId ? new JibbleError(409, "conflict") : id === refused.jibbleId ? new JibbleError(400, "request refused") : null);
     await jobs.processMirrorQueue();
-    expect((await logOf(dup.employeeId))[0]).toMatchObject({ status: "sent", last_error: "already in that state" });
+    expect((await logOf(dup.employeeId))[0]).toMatchObject({ status: "sent", last_error: "already in that state (checked)" });
     expect((await logOf(refused.employeeId))[0]).toMatchObject({ status: "failed", attempts: 1 });
   });
 
@@ -386,11 +389,31 @@ describe("sending to Jibble", () => {
 
     const [row] = await rows<{ id: string }>(sql`select id from time.jibble_link_log where employee_id = ${p.employeeId}`);
     as(hr);
-    expect(await actions.retryJibbleSend({ logId: randomUUID() })).toEqual({ ok: false, error: "That call was not found." });
+    expect(await actions.retryJibbleSend({ logId: randomUUID() })).toEqual({ ok: false, error: "This call cannot be retried. Check the person's current status in ELEVATE and Jibble." });
     fake.fail = () => null;
+    fake.states.set(p.jibbleId, "out");
     expect((await actions.retryJibbleSend({ logId: row.id })).ok).toBe(true);
     expect((await logOf(p.employeeId))[0]).toMatchObject({ status: "sent" });
+    expect((await actions.retryJibbleSend({ logId: row.id })).ok).toBe(false);
     expect(await rows(sql`select 1 from ops.audit_log where action = 'jibble.retry' and actor_user_id = ${hr.id}`)).toHaveLength(1);
+  });
+
+  it("refuses to replay a stale failed call", async () => {
+    const p = await queued("OldRetry", ["Out"]);
+    const [row] = await rows<{ id: string }>(sql`update time.jibble_link_log set status = 'failed', attempts = 1, created_at = now() - interval '11 minutes' where employee_id = ${p.employeeId} returning id`);
+    as(hr);
+    expect((await actions.retryJibbleSend({ logId: row.id })).ok).toBe(false);
+    expect((await logOf(p.employeeId))[0].status).toBe("failed");
+    expect(fake.calls.filter((c) => c.personId === p.jibbleId)).toHaveLength(0);
+  });
+
+  it("does not retry when another call has the same creation timestamp", async () => {
+    const p = await queued("SameTimeRetry", ["In", "Out"]);
+    const [row] = await rows<{ id: string }>(sql`update time.jibble_link_log set status = 'failed', attempts = 1 where employee_id = ${p.employeeId} and action = 'In' returning id`);
+    await db.execute(sql`update time.jibble_link_log set created_at = now() where employee_id = ${p.employeeId}`);
+    as(hr);
+    expect((await actions.retryJibbleSend({ logId: row.id })).ok).toBe(false);
+    expect(fake.calls.filter((c) => c.personId === p.jibbleId)).toHaveLength(0);
   });
 });
 
@@ -506,6 +529,17 @@ describe("matching people to Jibble accounts", () => {
     setJibbleClient(null);
     expect((await queries.getJibbleOverview()).configured).toBe(false);
     expect(await actions.testJibbleConnection()).toEqual({ ok: false, error: "Jibble is not set up yet. Add the access token on the server first." });
+  });
+
+  it("shows ELEVATE clock-in and clock-out together without treating breaks as shifts", async () => {
+    const p = await person("ShiftSummary");
+    const [start] = await rows<{ id: string }>(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', ${iso(3 * HOUR)}) returning id`);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'break_start', ${iso(2 * HOUR)}), (${p.employeeId}, 'break_end', ${iso(2 * HOUR - 15 * MIN)}), (${p.employeeId}, 'clock_out', ${iso(HOUR)})`);
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, status) values (${p.employeeId}, ${start.id}, 'In', 'sent')`);
+    as(hr);
+    const shift = (await queries.getJibbleOverview()).shifts.find((s) => s.id === start.id);
+    expect(shift?.clockIn).toBeTruthy();
+    expect(shift?.clockOut).not.toBeNull();
   });
 });
 
@@ -706,9 +740,10 @@ describe("retries are careful", () => {
 
     const r = await queuedRows("CarefulUnknown", ["In"]);
     await db.execute(sql`update time.jibble_link_log set attempts = 1 where employee_id = ${r.employeeId}`);
-    fake.stateFails = true; // cannot look: send it (a 409 would still be handled)
+    fake.stateFails = true; // cannot establish whether the previous call went through
     await jobs.processMirrorQueue();
-    expect(fake.calls.filter((c) => c.personId === fayJibbleId(r.employeeId))).toHaveLength(1);
+    expect(fake.calls.filter((c) => c.personId === fayJibbleId(r.employeeId))).toHaveLength(0);
+    expect((await logOf(r.employeeId))[0]).toMatchObject({ status: "queued", attempts: 2 });
   });
 
   it("waits as long as Jibble asks when it says to slow down", async () => {

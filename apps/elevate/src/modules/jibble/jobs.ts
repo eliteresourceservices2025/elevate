@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { formatInZone } from "@/lib/time";
 import { MINUTE, replayClock } from "@/modules/attendance/clock";
@@ -48,7 +48,7 @@ export type MirrorRun = { sent: number; retrying: number; failed: number; skippe
  * Sends the waiting calls to Jibble, one person at a time and in the order the clicks happened (a later call waits for an earlier
  * one that is retrying). A refusal is final; network trouble, rate limits and server errors are retried with a growing delay
  * (about an hour in all, longer if Jibble says to wait), then marked failed. A retry first checks Jibble's state, so a call that
- * actually went through is not sent twice. "Already in that state" (409) counts as sent. A break start that Jibble refuses (no break
+ * actually went through is not sent twice. A 409 counts as sent only when a state check confirms it. A break start that Jibble refuses (no break
  * set up for the person, or already used) clocks them out instead, so screenshots still stop, and its end clocks them back in.
  * Nothing is sent while paused, or outside production except to named test people. Jibble being down never touches the clock.
  */
@@ -92,8 +92,10 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
       try {
         // A retry: the earlier try may have gone through even though we never heard back. Look before sending again.
         if (row.attempts > 0) {
-          const state = await client.latestState(row.jibble_person_id).catch(() => null);
-          if (state !== null && state === targetState(row.action)) {
+          // A previous request may have succeeded despite a timeout. Do not send again if its outcome cannot be checked.
+          const state = await client.latestState(row.jibble_person_id);
+          if (state === null) throw new JibbleError(null, "cannot confirm Jibble state");
+          if (state === targetState(row.action)) {
             await markSent(row.id, row.attempts + 1, null, "already in that state (checked)");
             run.sent += 1;
             continue;
@@ -127,9 +129,13 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
       } catch (error) {
         const e = error instanceof JibbleError ? error : new JibbleError(null, "unexpected");
         if (e.status === 409) {
-          await markSent(row.id, row.attempts + 1, null, "already in that state");
-          run.sent += 1;
-          continue;
+          // A conflict can have more than one cause; only mark it sent if Jibble confirms the intended state.
+          const state = await client.latestState(row.jibble_person_id).catch(() => null);
+          if (state !== null && state === targetState(row.action)) {
+            await markSent(row.id, row.attempts + 1, null, "already in that state (checked)");
+            run.sent += 1;
+            continue;
+          }
         }
         if (e.status === 401 || e.status === 403) authProblem = true;
         const attempts = row.attempts + 1;

@@ -11,6 +11,7 @@ import type { BreakMode } from "./mirror-rules";
 
 export type JibblePersonRow = { employeeId: string; name: string; email: string | null; team: string | null; jibblePersonId: string | null; matchedBy: string | null };
 export type LogRow = { id: string; name: string; action: string; status: string; attempts: number; lastError: string | null; createdAt: string; sentAt: string | null; source: string; fallback: boolean };
+export type ShiftRow = { id: string; name: string; clockIn: string; clockOut: string | null };
 
 export type JibbleOverview = {
   configured: boolean;
@@ -31,6 +32,7 @@ export type JibbleOverview = {
   counts: { queued: number; failed: number; sent24h: number };
   people: JibblePersonRow[];
   log: LogRow[];
+  shifts: ShiftRow[];
 };
 
 /** The Jibble page: connection state, who is matched, and the latest calls. HR only. */
@@ -46,6 +48,21 @@ export async function getJibbleOverview(): Promise<JibbleOverview> {
   const log = (await db.execute(sql`
     select l.id, l.action, l.status, l.attempts, l.last_error, l.created_at, l.sent_at, l.source, l.fallback, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
     from time.jibble_link_log l join core.employees e on e.id = l.employee_id order by l.created_at desc limit 100`)) as unknown as { id: string; action: string; status: string; attempts: number; last_error: string | null; created_at: string | Date; sent_at: string | Date | null; source: string; fallback: boolean; first: string; last: string; preferred: string | null }[];
+
+  // Pair actual ELEVATE shift events, not Jibble calls (which can also represent breaks or repairs).
+  const shifts = (await db.execute(sql`
+    with events as (
+      select c.id, c.employee_id, c.type, c.occurred_at,
+        lead(c.type) over (partition by c.employee_id order by c.occurred_at, c.created_at, c.id) as next_type,
+        lead(c.occurred_at) over (partition by c.employee_id order by c.occurred_at, c.created_at, c.id) as next_at,
+        lead(c.id) over (partition by c.employee_id order by c.occurred_at, c.created_at, c.id) as next_id
+      from time.v_clock_events c where c.type in ('clock_in', 'clock_out')
+    )
+    select ev.id, ev.occurred_at as clock_in, case when ev.next_type = 'clock_out' then ev.next_at end as clock_out,
+      e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
+    from events ev join core.employees e on e.id = ev.employee_id
+    where ev.type = 'clock_in' and exists (select 1 from time.jibble_link_log l where l.event_id = ev.id or (ev.next_type = 'clock_out' and l.event_id = ev.next_id))
+    order by ev.occurred_at desc limit 100`)) as unknown as { id: string; clock_in: string | Date; clock_out: string | Date | null; first: string; last: string; preferred: string | null }[];
 
   const [counts] = (await db.execute(sql`
     select count(*) filter (where status = 'queued')::int as queued, count(*) filter (where status = 'failed')::int as failed,
@@ -70,5 +87,6 @@ export async function getJibbleOverview(): Promise<JibbleOverview> {
     counts,
     people: people.map((p) => ({ employeeId: p.id, name: reportName({ first: p.first, last: p.last, preferred: p.preferred }), email: p.email, team: p.team, jibblePersonId: p.jibble_person_id, matchedBy: p.matched_by })),
     log: log.map((l) => ({ id: l.id, name: reportName({ first: l.first, last: l.last, preferred: l.preferred }), action: l.action, status: l.status, attempts: l.attempts, lastError: l.last_error, createdAt: new Date(l.created_at).toISOString(), sentAt: l.sent_at ? new Date(l.sent_at).toISOString() : null, source: l.source, fallback: l.fallback })),
+    shifts: shifts.map((s) => ({ id: s.id, name: reportName({ first: s.first, last: s.last, preferred: s.preferred }), clockIn: new Date(s.clock_in).toISOString(), clockOut: s.clock_out ? new Date(s.clock_out).toISOString() : null })),
   };
 }

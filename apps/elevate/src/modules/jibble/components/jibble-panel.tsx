@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatInZone } from "@/lib/time";
 import { retryJibbleSend, setJibblePaused, setJibblePerson, syncJibblePeopleNow, testJibbleConnection } from "../actions";
 import { SLOW_SEND_MINUTES, isSendingSlow } from "../mirror-rules";
@@ -23,6 +24,16 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [manual, setManual] = useState<Record<string, string>>({});
+  const [tab, setTab] = useState("shifts");
+  useEffect(() => {
+    const sync = () => {
+      const name = window.location.hash.replace("#jibble-", "");
+      if (["shifts", "calls", "people"].includes(name)) setTab(name);
+    };
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: (data: unknown) => string) =>
     startTransition(async () => {
       try {
@@ -39,6 +50,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
   const [onlyUnmatched, setOnlyUnmatched] = useState(false);
   const peopleShown = onlyUnmatched ? unmatched : overview.people;
   const logPaged = usePaged(overview.log);
+  const shiftsPaged = usePaged(overview.shifts);
   const peoplePaged = usePaged(peopleShown, String(onlyUnmatched));
   return (
     <div className="space-y-6">
@@ -50,7 +62,7 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
       {isSendingSlow(overview.sendDelay.slow, overview.sendDelay.total) ? (
         <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
           <strong>Calls are reaching Jibble late.</strong> {overview.sendDelay.slow} of the last {overview.sendDelay.total} waited over {SLOW_SEND_MINUTES} minutes, so screenshots start and stop late.
-          The usual cause is the job service&apos;s event key (INNGEST_EVENT_KEY) missing or from the wrong environment in the host settings. Check Settings &gt; Go-live, then the events in the job service.
+          Check the delivery times below, the job service and the host logs. The desktop app must also be running for screenshots to be captured.
         </Alert>
       ) : null}
       {!overview.paused && overview.oldestQueuedMinutes !== null && overview.oldestQueuedMinutes >= 15 ? (
@@ -64,10 +76,14 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
           <Badge variant={overview.configured ? "default" : "destructive"}>{overview.configured ? "Token set" : "Not set up"}</Badge>
           <Badge variant="outline">{overview.mode === "mirror" ? "ELEVATE starts and stops Jibble" : "Fallback: people clock into both apps"}</Badge>
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="hidden text-sm text-muted-foreground sm:block">
           ELEVATE is the time clock and the only source of hours. Jibble is used only for screenshots; they stay in Jibble and are never copied here. {BREAK_TEXT[overview.breakMode]}. Mirroring works for a team once the monitoring
           policy is published{overview.monitoringPublished ? " (it is)" : " (it is not yet)"} and the switch for the team is on in the Rules tab ({overview.teamsOn} {overview.teamsOn === 1 ? "team is" : "teams are"} on). Each night ELEVATE compares totals and flags days that differ by more than {overview.toleranceMinutes} minutes.
         </p>
+        <details className="text-sm text-muted-foreground sm:hidden">
+          <summary className="cursor-pointer font-medium text-foreground">About the Jibble link</summary>
+          <p className="mt-2">ELEVATE is the time clock and the only source of hours. Jibble is used only for screenshots; they stay in Jibble and are never copied here. {BREAK_TEXT[overview.breakMode]}. Mirroring works for a team once the monitoring policy is published{overview.monitoringPublished ? " (it is)" : " (it is not yet)"} and the team switch is on in the Rules tab ({overview.teamsOn} {overview.teamsOn === 1 ? "team is" : "teams are"} on). Each night ELEVATE compares totals and flags days that differ by more than {overview.toleranceMinutes} minutes.</p>
+        </details>
         {overview.selfTestPeople > 0 ? (
           <Alert variant="warning" role="status" className="rounded-lg p-3 text-sm">
             <strong>Self-test is on</strong> for {overview.selfTestPeople} {overview.selfTestPeople === 1 ? "person" : "people"} (set in the host settings as JIBBLE_SELF_TEST_EMAILS). Their clock is mirrored to Jibble even
@@ -90,8 +106,43 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
         </p>
       </section>
 
-      <section aria-label="Recent calls" className="space-y-2">
-        <h2 className="text-lg font-semibold">Recent calls to Jibble</h2>
+      <Tabs value={tab} onValueChange={(value) => {
+        if (typeof value !== "string") return;
+        setTab(value);
+        window.history.replaceState(null, "", `#jibble-${value}`);
+      }} className="gap-4">
+        <div>
+          <TabsList aria-label="Jibble sections" className="!h-auto min-h-11 w-full flex-wrap justify-start gap-1 p-1 sm:w-fit">
+            <TabsTrigger value="shifts" className="min-h-9 px-3">Recent shifts</TabsTrigger>
+            <TabsTrigger value="calls" className="min-h-9 px-3">Call history{overview.counts.failed > 0 ? ` (${overview.counts.failed} failed)` : ""}</TabsTrigger>
+            <TabsTrigger value="people" className="min-h-9 px-3">People matching{unmatched.length > 0 ? ` (${unmatched.length} unmatched)` : ""}</TabsTrigger>
+          </TabsList>
+        </div>
+      <TabsContent value="shifts">
+      <section id="jibble-shifts" aria-label="Recent shifts" className="scroll-mt-20 space-y-2">
+        <h2 className="text-lg font-semibold">Recent shifts</h2>
+        <p className="text-sm text-muted-foreground">Clock-in and clock-out times from ELEVATE for shifts with Jibble calls. Check call history for delivery status, breaks and repairs.</p>
+        <>
+          <div className="scroll-shadow-x overflow-x-auto rounded-xl border bg-card shadow-sm">
+            <Table stack>
+              <TableHeader><TableRow><TableHead>Person</TableHead><TableHead>Clock in</TableHead><TableHead>Clock out</TableHead></TableRow></TableHeader>
+              <TableBody>{shiftsPaged.rows.map((shift) => <TableRow key={shift.id}>
+                <TableCell className="font-medium">{shift.name}</TableCell>
+                <TableCell label="Clock in">{formatInZone(shift.clockIn, undefined, "MMM d, h:mm a")}</TableCell>
+                <TableCell label="Clock out">{shift.clockOut ? formatInZone(shift.clockOut, undefined, "MMM d, h:mm a") : "No clock-out recorded"}</TableCell>
+              </TableRow>)}{overview.shifts.length === 0 ? <TableRow><TableCell colSpan={3} className="text-muted-foreground">No shifts with Jibble calls yet.</TableCell></TableRow> : null}</TableBody>
+            </Table>
+          </div>
+          {overview.shifts.length > 0 ? <ClientPager info={shiftsPaged.info} onPage={shiftsPaged.setPage} onSize={shiftsPaged.setPageSize} label="shifts" /> : null}
+        </>
+      </section>
+      </TabsContent>
+
+      <TabsContent value="calls">
+      <section id="jibble-calls" aria-label="Call history" className="scroll-mt-20 space-y-2">
+        <h2 className="text-lg font-semibold">Call history</h2>
+        <p className="text-sm text-muted-foreground">Each row is one call, including breaks and repairs. Sent time shows when ELEVATE marked the call sent, which can include a state check; it does not confirm when the desktop app began taking screenshots.</p>
+        {overview.counts.failed > 0 ? <Alert variant="warning" className="rounded-lg p-3 text-sm">Before retrying, check the person&apos;s current status in ELEVATE and Jibble. Older or superseded calls cannot be retried here.</Alert> : null}
         {overview.log.length === 0 ? (
           <p className="text-muted-foreground">Nothing has been sent yet.</p>
         ) : (
@@ -103,8 +154,9 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
                   <TableHead>Person</TableHead>
                   <TableHead>Call</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Sent at</TableHead>
                   <TableHead>Note</TableHead>
-                  <TableHead />
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -120,10 +172,11 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
                     <TableCell label="Status">
                       <Badge variant={STATUS_VARIANT.get(l.status) ?? "outline"}>{l.status}</Badge>
                     </TableCell>
+                    <TableCell label="Sent at" className="text-sm">{l.sentAt ? formatInZone(l.sentAt, undefined, "MMM d, h:mm a") : "—"}</TableCell>
                     <TableCell label="Note" className="text-xs text-muted-foreground">{l.lastError ?? (l.attempts > 1 ? `${l.attempts} tries` : "")}</TableCell>
-                    <TableCell label="">
+                    <TableCell label="Actions">
                       {l.status === "failed" ? (
-                        <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => retryJibbleSend({ logId: l.id }), () => "Sent again.")}>
+                        <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => retryJibbleSend({ logId: l.id }), () => "Retry requested. Check the call status.")}>
                           Retry
                         </Button>
                       ) : null}
@@ -136,10 +189,12 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
         )}
         {overview.log.length > 0 ? <ClientPager info={logPaged.info} onPage={logPaged.setPage} onSize={logPaged.setPageSize} label="calls" /> : null}
       </section>
+      </TabsContent>
 
-      <section aria-label="People" className="space-y-2">
+      <TabsContent value="people">
+      <section id="jibble-people" aria-label="People matching" className="scroll-mt-20 space-y-2">
         <h2 className="text-lg font-semibold">
-          People <span className="text-sm font-normal text-muted-foreground">({overview.people.length - unmatched.length} matched, {unmatched.length} not matched)</span>
+          People matching <span className="text-sm font-normal text-muted-foreground">({overview.people.length - unmatched.length} matched, {unmatched.length} not matched)</span>
         </h2>
         <p className="text-sm text-muted-foreground">Matched automatically by work email. If someone uses a different email in Jibble, type the email they use in Jibble or their Jibble member code (as in Jibble&apos;s exports) to match them by hand. People with no match are skipped.</p>
         <label htmlFor="jp-unmatched" className="flex items-center gap-1.5 text-sm">
@@ -162,12 +217,12 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell label="Team">{p.team ?? "No team"}</TableCell>
                   <TableCell label="Jibble">{p.jibblePersonId ? <Badge variant="default">Matched by {p.matchedBy}</Badge> : <Badge variant="outline">Not matched</Badge>}</TableCell>
-                  <TableCell label="Match by hand">
-                    <div className="flex flex-wrap items-center justify-end gap-2">
+                  <TableCell label="Match by hand" className="max-md:!flex-col max-md:!items-stretch max-md:!gap-1">
+                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 max-md:w-full max-md:justify-start">
                       <Label htmlFor={`jp-${p.employeeId}`} className="sr-only">
                         Email in Jibble or member code for {p.name}
                       </Label>
-                      <Input id={`jp-${p.employeeId}`} className="h-8 w-64 max-w-full" placeholder="Email in Jibble or member code" value={manual[p.employeeId] ?? ""} onChange={(e) => setManual((m) => ({ ...m, [p.employeeId]: e.target.value }))} />
+                      <Input id={`jp-${p.employeeId}`} className="h-8 w-64 max-w-full min-w-0 max-lg:w-36 max-md:flex-1" placeholder="Email in Jibble or member code" value={manual[p.employeeId] ?? ""} onChange={(e) => setManual((m) => ({ ...m, [p.employeeId]: e.target.value }))} />
                       <Button size="sm" variant="outline" disabled={pending || !(manual[p.employeeId] ?? "").trim()} onClick={() => run(() => setJibblePerson({ employeeId: p.employeeId, jibblePersonId: manual[p.employeeId] }), () => "Matched.")}>
                         Save
                       </Button>
@@ -185,6 +240,8 @@ export function JibblePanel({ overview }: { overview: JibbleOverview }) {
         </div>
         <ClientPager info={peoplePaged.info} onPage={peoplePaged.setPage} onSize={peoplePaged.setPageSize} label="people" />
       </section>
+      </TabsContent>
+      </Tabs>
     </div>
   );
 }

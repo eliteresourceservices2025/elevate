@@ -18,7 +18,7 @@ import { pauseSchema, retrySchema, setPersonSchema } from "./validators";
 
 const NOT_SET_UP = "Jibble is not set up yet. Add the access token on the server first.";
 const BAD = "Check the request and try again.";
-const refresh = () => revalidatePath("/attendance");
+const refresh = () => { revalidatePath("/attendance"); revalidatePath("/jibble"); };
 
 const friendly = (e: unknown) =>
   e instanceof JibbleError ? (e.status === 401 ? "Jibble rejected the access token. It may have expired." : e.status === 403 ? "Jibble says this token is not allowed to do that." : `Jibble did not answer properly (${e.message}).`) : "Could not reach Jibble.";
@@ -118,11 +118,19 @@ export async function retryJibbleSend(input: unknown): Promise<ActionResult> {
     await authorize(actor, "jibble.manage");
     const parsed = retrySchema.safeParse(input);
     if (!parsed.success) return fail(BAD);
-    const done = await db.update(jibbleLinkLog).set({ status: "queued", attempts: 0, nextAttemptAt: new Date(), lastError: null }).where(eq(jibbleLinkLog.id, parsed.data.logId)).returning({ id: jibbleLinkLog.id });
-    if (done.length === 0) return fail("That call was not found.");
+    // Never replay an old or superseded action against a person's current session.
+    const done = (await db.execute(sql`update time.jibble_link_log l
+      set status = 'queued', attempts = greatest(l.attempts, 1), next_attempt_at = now(), last_error = null
+      where l.id = ${parsed.data.logId}::uuid and l.status = 'failed' and l.source = 'event'
+        and l.created_at >= now() - interval '10 minutes'
+        and not exists (select 1 from time.jibble_link_log later where later.employee_id = l.employee_id and later.id <> l.id and later.created_at >= l.created_at)
+      returning l.id, l.employee_id`)) as unknown as { id: string; employee_id: string }[];
+    if (done.length === 0) return fail("This call cannot be retried. Check the person's current status in ELEVATE and Jibble.");
     await writeAudit({ actor, action: "jibble.retry", targetType: "integration", metadata: { logId: parsed.data.logId } });
-    await processMirrorQueue();
+    await processMirrorQueue(new Date(), undefined, { employeeId: done[0].employee_id });
     refresh();
+    const [result] = await db.select({ status: jibbleLinkLog.status }).from(jibbleLinkLog).where(eq(jibbleLinkLog.id, parsed.data.logId));
+    if (result?.status !== "sent") return fail(result?.status === "queued" ? "The call is waiting. Check its status again shortly." : "Jibble did not accept the call. Check the person's current status.");
     return { ok: true, data: undefined };
   });
 }
