@@ -45,7 +45,7 @@ describe("contact support", () => {
       if (!result.ok) return;
       expect(result.data.emailed).toBe(true);
       expect(sent).toHaveLength(1);
-      expect(sent[0]).toMatchObject({ to: "eliteresourceservices2025@gmail.com", replyTo: ana.email });
+      expect(sent[0]).toMatchObject({ to: "elitehelpdesk@ersva.com", replyTo: ana.email });
       expect(sent[0].subject).toContain("Clock-in did not save");
       expect(sent[0].text).toContain("I clocked in at 9");
 

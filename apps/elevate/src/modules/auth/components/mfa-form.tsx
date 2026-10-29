@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { Button } from "@/components/ui/button";
 import { startTotpEnrollment, verifyTotp, type EnrollData } from "../actions";
 import { mfaCodeSchema, type MfaCodeInput } from "../validators";

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { Folder, FolderPlus } from "lucide-react";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { Button } from "@/components/ui/button";

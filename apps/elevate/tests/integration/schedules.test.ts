@@ -118,6 +118,7 @@ describe("assigning schedules", () => {
     await scheduleActions.assignSchedule({ ...base, effectiveFrom: day(-2), employeeIds: [p.employeeId], zone: PHX });
     expect(await scheduleActions.endSchedule({ employeeId: p.employeeId, endDate: day(0) })).toEqual({ ok: true, data: undefined });
     expect((await rows<{ effective_to: string }>(sql`select effective_to::text from time.schedules where employee_id = ${p.employeeId}`))[0].effective_to).toBe(day(0));
+    expect(await rows(sql`select 1 from ops.notifications where user_id = ${p.user.id} and title = 'Your schedule ended' and body like '%attendance flags%'`)).toHaveLength(1);
     expect(await scheduleActions.endSchedule({ employeeId: p.employeeId, endDate: day(0) })).toEqual({ ok: true, data: undefined }); // still open? no: ended today, ending again today is allowed
     expect((await scheduleActions.endSchedule({ employeeId: randomUUID(), endDate: day(0) })).ok).toBe(false);
 

@@ -24,6 +24,14 @@ export type IncidentRow = {
   client: string | null;
 };
 
+/** Count only, for the privacy team's navigation badge. */
+export async function countOpenIncidents(): Promise<number> {
+  const user = await requireUser();
+  await authorize(user, "incidents.handle");
+  const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(privacyIncidents).where(sql`${privacyIncidents.status} <> 'closed'`);
+  return total ?? 0;
+}
+
 const status = (s: string): IncidentStatus => (s === "closed" ? "closed" : s === "in_review" ? "in_review" : "new");
 
 /** The signed-in person's own reports, newest first. */

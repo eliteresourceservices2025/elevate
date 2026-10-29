@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Pin } from "lucide-react";
 import { PagerLinks } from "@/components/pager";
+import { TabNav } from "@/components/tab-nav";
 import { paginate, parsePaging } from "@/lib/pagination";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -9,7 +10,6 @@ import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
-import { cn } from "@/lib/utils";
 import { DueBadge } from "@/modules/announcements/components/ack-display";
 import { FormDialog } from "@/components/form-dialog";
 import { NewPolicyForm } from "@/modules/announcements/components/policy-editor";
@@ -71,18 +71,7 @@ export default async function AnnouncementsPage({ searchParams }: PageProps<"/an
         }
       />
 
-      <nav aria-label="Announcements sections" className="flex gap-1 border-b">
-        {TABS.filter((t) => t.key !== "popups" || isHr).map((t) => (
-          <Link
-            key={t.key}
-            href={`/announcements?tab=${t.key}`}
-            aria-current={t.key === tab ? "page" : undefined}
-            className={cn("-mb-px rounded-t-lg border-b-2 px-3 py-2 text-sm", t.key === tab ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}
-          >
-            {t.label}
-          </Link>
-        ))}
-      </nav>
+      <TabNav label="Announcements sections" current={tab} items={TABS.filter((t) => t.key !== "popups" || isHr).map((t) => ({ ...t, href: `/announcements?tab=${t.key}` }))} />
 
       {itemPage ? (
         itemPage.info.total === 0 ? (

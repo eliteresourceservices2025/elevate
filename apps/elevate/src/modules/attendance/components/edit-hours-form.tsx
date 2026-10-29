@@ -2,7 +2,7 @@
 
 import { fromZonedTime } from "date-fns-tz";
 import { useMemo, useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { useFormDialog } from "@/components/form-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Badge } from "@/components/ui/badge";

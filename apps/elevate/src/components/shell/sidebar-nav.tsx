@@ -18,7 +18,7 @@ function activeHref(pathname: string) {
 }
 
 /** `collapsed` narrows the menu to its icons (desktop only; each icon keeps its name for screen readers and as a hover tip). */
-export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, collapsed = false }: { onNavigate?: () => void; hidden?: string[]; safeVoiceUrl?: string | null; collapsed?: boolean }) {
+export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, collapsed = false, workCounts = {} }: { onNavigate?: () => void; hidden?: string[]; safeVoiceUrl?: string | null; collapsed?: boolean; workCounts?: Partial<Record<string, number>> }) {
   const pathname = usePathname();
   const current = activeHref(pathname);
   const accordionName = useId();
@@ -57,6 +57,8 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
             <ul className="space-y-0.5">
               {group.items.map(({ href, label, icon: Icon }) => {
                 const active = href === current;
+                // eslint-disable-next-line security/detect-object-injection -- href is from the fixed navigation registry.
+                const count = workCounts[href] ?? 0;
                 return (
                   <li key={href}>
                     <Link
@@ -73,7 +75,12 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
                       )}
                     >
                       <Icon className={cn("shrink-0", collapsed ? "size-5" : "size-4")} aria-hidden />
-                      {collapsed ? <span className="sr-only">{label}</span> : label}
+                      {collapsed ? <span className="sr-only">{label}</span> : <span className="min-w-0 flex-1 truncate">{label}</span>}
+                      {count > 0 ? (
+                        <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-sidebar-primary px-1.5 text-[0.7rem] font-semibold text-sidebar-primary-foreground" aria-label={`${count} item${count === 1 ? "" : "s"} need attention`}>
+                          {count > 99 ? "99+" : count}
+                        </span>
+                      ) : null}
                     </Link>
                   </li>
                 );

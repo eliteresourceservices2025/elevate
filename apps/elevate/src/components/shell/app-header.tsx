@@ -30,8 +30,10 @@ export function AppHeader({
   collapsed = false,
   onToggleSidebar,
   searchPages = [],
+  workCounts = {},
 }: {
   searchPages?: PageEntry[];
+  workCounts?: Partial<Record<string, number>>;
   safeVoiceUrl?: string | null;
   hiddenNav?: string[];
   zone?: string | null;
@@ -82,7 +84,7 @@ export function AppHeader({
         <SheetContent side="left" className="w-72 gap-0 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <div className="min-h-0 flex-1">
-            <SidebarNav hidden={hiddenNav} safeVoiceUrl={safeVoiceUrl} onNavigate={() => setOpen(false)} />
+            <SidebarNav hidden={hiddenNav} safeVoiceUrl={safeVoiceUrl} workCounts={workCounts} onNavigate={() => setOpen(false)} />
           </div>
           {/* The theme buttons leave the header on a phone (no room) and live at the bottom of the menu instead */}
           <div className="flex shrink-0 items-center justify-between gap-3 border-t border-sidebar-foreground/15 bg-sidebar px-4 py-3 text-sm text-sidebar-foreground">

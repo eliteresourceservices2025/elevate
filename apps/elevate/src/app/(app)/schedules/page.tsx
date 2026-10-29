@@ -17,14 +17,31 @@ export const metadata: Metadata = { title: "Schedules" };
 
 function Line({ s, label }: { s: ScheduleLine; label?: string }) {
   return (
-    <p className="text-sm">
-      {label ? <span className="font-semibold">{label} </span> : null}
-      {s.days}, {s.client} ({s.zone}), which is <strong>{s.manila}</strong> in Manila. Unpaid break {s.breakMinutes} min.{" "}
-      <span className="text-muted-foreground">
-        From {formatDateOnly(s.from)}
-        {s.to ? ` to ${formatDateOnly(s.to)}` : ""}.
-      </span>
-    </p>
+    <div className="rounded-lg border bg-background p-3 text-sm">
+      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+        {label ? <span className="font-semibold">{label}</span> : null}
+        <span className="font-medium">{s.days}</span>
+        <span className="text-muted-foreground">
+          From {formatDateOnly(s.from)}
+          {s.to ? ` to ${formatDateOnly(s.to)}` : ""}
+        </span>
+      </div>
+      <dl className="grid gap-2 text-sm sm:grid-cols-3">
+        <div>
+          <dt className="text-xs text-muted-foreground">Client time</dt>
+          <dd>{s.client}</dd>
+          <dd className="text-xs text-muted-foreground">{s.zone}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Manila time</dt>
+          <dd>{s.manila}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Unpaid break</dt>
+          <dd>{s.breakMinutes} min</dd>
+        </div>
+      </dl>
+    </div>
   );
 }
 
@@ -47,12 +64,15 @@ export default async function SchedulesPage({ searchParams }: PageProps<"/schedu
         description="Shifts in the client's time zone, also shown in Manila time. Your time clock uses them to flag late arrivals, early leaves, absences and extra hours."
       />
 
-      <section aria-label="My schedule" className="space-y-2 rounded-xl border bg-card p-4">
-        <h2 className="text-lg font-semibold">My schedule</h2>
+      <section aria-label="My schedule" className="space-y-3 rounded-xl border bg-card p-4">
+        <div>
+          <h2 className="text-lg font-semibold">My schedule</h2>
+          <p className="text-sm text-muted-foreground">Your schedule sets the expected workdays and the attendance checks for your shift.</p>
+        </div>
         {!mine ? (
           <p className="text-sm text-muted-foreground">You do not have a people record yet, so there is no schedule to show. Ask HR.</p>
         ) : mine.current ? (
-          <Line s={mine.current} />
+          <Line s={mine.current} label="Current" />
         ) : (
           <p className="text-sm text-muted-foreground">You have no schedule yet, so late, early and extra hours are not tracked. HR sets schedules.</p>
         )}

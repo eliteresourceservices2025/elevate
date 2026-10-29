@@ -23,6 +23,7 @@ import {
   UserPlus,
   Users,
   Camera,
+  CheckCheck,
   Award,
   Clock,
   Hourglass,
@@ -44,6 +45,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, description: "Your day at a glance." },
+      { href: "/approvals", label: "Approvals", icon: CheckCheck, description: "Requests and hours waiting for your decision." },
     ],
   },
   {

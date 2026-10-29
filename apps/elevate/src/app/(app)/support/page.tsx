@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import { orNotFound } from "@/lib/or-not-found";
 import { FormDialog } from "@/components/form-dialog";
+import { TabNav } from "@/components/tab-nav";
 import { SupportForm, SupportList } from "@/modules/support/components/support-panels";
 import { listMySupportRequests, listSupportInbox } from "@/modules/support/queries";
 import { supportEmail } from "@/modules/support/service";
@@ -16,7 +17,8 @@ export default async function SupportPage({ searchParams }: PageProps<"/support"
   const params = await searchParams;
   const from = typeof params.from === "string" && /^\/(?!\/)[A-Za-z0-9/_\-.?=&%#]{0,199}$/.test(params.from) ? params.from : null;
   const isManager = can(user, "support.manage");
-  const [mine, inbox] = await Promise.all([orNotFound(listMySupportRequests()), isManager ? orNotFound(listSupportInbox()) : Promise.resolve(null)]);
+  const tab = isManager && params.tab !== "mine" ? "inbox" : "mine";
+  const [mine, inbox] = await Promise.all([tab === "mine" ? orNotFound(listMySupportRequests()) : Promise.resolve(null), tab === "inbox" && isManager ? orNotFound(listSupportInbox()) : Promise.resolve(null)]);
   const open = inbox?.filter((r) => r.status === "open") ?? [];
   const handled = inbox?.filter((r) => r.status === "closed") ?? [];
 
@@ -43,10 +45,14 @@ export default async function SupportPage({ searchParams }: PageProps<"/support"
         }
       />
 
-      <section aria-label="Your requests" className="space-y-3">
-        <h2 className="text-lg font-semibold">Your requests</h2>
-        <SupportList rows={mine} canManage={false} empty="You have not sent any requests." />
-      </section>
+      {isManager ? <TabNav label="Contact support sections" current={tab} items={[{ key: "inbox", label: "Support inbox", href: "/support" }, { key: "mine", label: "My requests", href: "/support?tab=mine" }]} /> : null}
+
+      {mine ? (
+        <section aria-label="Your requests" className="space-y-3">
+          <h2 className="text-lg font-semibold">Your requests</h2>
+          <SupportList rows={mine} canManage={false} empty="You have not sent any requests." />
+        </section>
+      ) : null}
 
       {inbox ? (
         <section aria-label="Support inbox" className="space-y-3">

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";

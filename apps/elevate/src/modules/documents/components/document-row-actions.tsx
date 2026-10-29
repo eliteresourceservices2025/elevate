@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { RowActions } from "@/components/row-actions";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";

@@ -53,6 +53,11 @@ export async function approvePersonWeek(actor: Actor, employeeId: string, weekSt
     await lockEmployeeClock(tx, employeeId);
     const rows = (await attendanceRows(tx, [employeeId], dates[0], dates[dates.length - 1])).filter((r) => r.sessions > 0 || r.scheduledMinutes !== null);
     if (options.onlyIfClean && rows.some((r) => r.flags.some((f) => !CLEAN_FLAGS.has(f)))) return { approved: 0, skipped: "flags" as const };
+    // A reviewer may still approve an exceptional week, but never by accident.
+    // The note is retained in the immutable approval record and audit log.
+    if (!options.onlyIfClean && rows.some((r) => r.flags.some((f) => !CLEAN_FLAGS.has(f))) && (!note || note.trim().length < 5)) {
+      throw new ActionFailure("Review the flagged days and write a short approval note before approving this week.");
+    }
     const current = await latestApprovals(tx, [employeeId], dates[0], dates[dates.length - 1]);
     const todo = rows.filter((r) => dayState(r, current.get(approvalKey(r.employeeId, r.date))) !== "approved");
     if (todo.length === 0) return { approved: 0, skipped: null };

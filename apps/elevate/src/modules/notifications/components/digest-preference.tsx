@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { setDigestOptOut } from "../actions";
 
 /** One checkbox: get (or skip) the weekday summary email. Emails about something you must acknowledge always come. */

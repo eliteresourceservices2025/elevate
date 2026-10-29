@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { clearMySelfIdentification, saveMySelfIdentification } from "../actions";

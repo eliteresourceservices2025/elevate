@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { ImageUp } from "lucide-react";
 import { MarkdownField } from "@/components/markdown-field";
 import { TextField } from "@/components/form-fields";

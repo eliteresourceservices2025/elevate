@@ -4,7 +4,7 @@ import { ChevronDown, Clock, Coffee, LogOut, Play, WifiOff } from "lucide-react"
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { fromZonedTime } from "date-fns-tz";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";

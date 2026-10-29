@@ -8,6 +8,14 @@ import { supportRequests } from "./schema";
 
 export type SupportRow = { id: string; topic: string; subject: string; message: string; page: string | null; status: "open" | "closed"; emailed: boolean; createdAt: string; closedAt: string | null; from: string | null };
 
+/** Count only, for an authorized handler's navigation badge. */
+export async function countOpenSupportRequests(): Promise<number> {
+  const user = await requireUser();
+  await authorize(user, "support.manage");
+  const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(supportRequests).where(eq(supportRequests.status, "open"));
+  return total ?? 0;
+}
+
 const toRow = (r: { id: string; topic: string; subject: string; message: string; page: string | null; status: string; emailed: boolean; createdAt: Date; closedAt: Date | null }, from: string | null): SupportRow => ({
   id: r.id,
   topic: r.topic,

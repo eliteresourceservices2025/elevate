@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { Badge } from "@/components/ui/badge";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { Button } from "@/components/ui/button";

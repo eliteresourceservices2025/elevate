@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { FileText, ImageUp, Paperclip, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { referencedFileIds } from "@/lib/markdown";

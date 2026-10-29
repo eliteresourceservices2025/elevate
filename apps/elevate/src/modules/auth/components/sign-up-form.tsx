@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { Button } from "@/components/ui/button";
 import { signUpWithInvite } from "../actions";
 import { PASSWORD_MIN_LENGTH, signUpSchema, type SignUpInput } from "../validators";

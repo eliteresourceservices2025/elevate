@@ -158,13 +158,33 @@ export async function endSchedule(input: unknown): Promise<ActionResult> {
     const { employeeId, endDate } = parsed.data;
     if (endDate < addDays(todayInZone(), -MAX_BACKDATE_DAYS)) return fail(`A schedule cannot end more than ${MAX_BACKDATE_DAYS} days ago.`);
     await db.transaction(async (tx) => {
+      const [person] = await tx
+        .select({ userId: employees.userId })
+        .from(employees)
+        .where(and(eq(employees.id, employeeId), isNull(employees.archivedAt), sql`${employees.status} <> 'separated'`));
+      if (!person) throw new ActionFailure("That person was not found.");
       await lockEmployeeClock(tx, employeeId);
       const open = (await loadSchedules(tx, employeeId)).find((s) => s.effectiveTo === null || s.effectiveTo >= endDate);
       if (!open) throw new ActionFailure("They have no schedule to end.");
       if (endDate < open.effectiveFrom) throw new ActionFailure("The end date is before the schedule started.");
       await tx.update(schedules).set({ effectiveTo: endDate }).where(eq(schedules.id, open.id));
       await writeAudit({ actor, action: "schedule.end", targetType: "employee", targetId: employeeId, before: { effectiveTo: open.effectiveTo }, after: { effectiveTo: endDate } }, tx);
+      if (person.userId) {
+        await notify(tx, {
+          userId: person.userId,
+          kind: "schedule.assigned",
+          title: "Your schedule ended",
+          body: `Your schedule ends after ${formatDateOnly(endDate)}. ELEVATE will no longer use it for attendance flags after that date.`,
+          link: "/schedules",
+        });
+      }
     });
+    try {
+      const days = Math.max(1, Math.round((Date.parse(`${todayInZone()}T00:00:00Z`) - Date.parse(`${endDate}T00:00:00Z`)) / 86_400_000) + 1);
+      await rebuildAttendanceDays(new Date(), Math.min(days, 14), employeeId);
+    } catch {
+      // The nightly job rebuilds attendance if an immediate refresh is unavailable.
+    }
     refresh();
     return { ok: true, data: undefined };
   });

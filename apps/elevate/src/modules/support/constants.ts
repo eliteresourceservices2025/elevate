@@ -15,7 +15,7 @@ export const SUBJECT_MAX = 120;
 export const MESSAGE_MAX = 2000;
 
 /** Where support requests are emailed (and shown publicly as "email us"). A deployment can change it with SUPPORT_EMAIL. */
-export const DEFAULT_SUPPORT_EMAIL = "eliteresourceservices2025@gmail.com";
+export const DEFAULT_SUPPORT_EMAIL = "elitehelpdesk@ersva.com";
 
 /** The support address for this deployment (SUPPORT_EMAIL), else the default. Safe in server and client components. */
 export const supportAddress = (): string => process.env.SUPPORT_EMAIL?.trim() || DEFAULT_SUPPORT_EMAIL;

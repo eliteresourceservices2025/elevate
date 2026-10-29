@@ -22,6 +22,6 @@ describe("support constants", () => {
   it("names topics and has the agreed address", () => {
     expect(topicLabel("jibble")).toBe("Jibble or screenshots");
     expect(topicLabel("unknown")).toBe("unknown");
-    expect(DEFAULT_SUPPORT_EMAIL).toBe("eliteresourceservices2025@gmail.com");
+    expect(DEFAULT_SUPPORT_EMAIL).toBe("elitehelpdesk@ersva.com");
   });
 });
