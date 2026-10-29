@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { useFormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";

@@ -2,7 +2,7 @@
 
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { Button } from "@/components/ui/button";
 import { revealSensitiveField } from "../actions";
 import type { SensitiveField } from "../constants";

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PagerLinks } from "@/components/pager";
+import { TabNav } from "@/components/tab-nav";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -60,13 +61,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         actions={<>{facts ? <LearnerInstructions courseLabel={courseLabel} text={buildLearnerInstructions(facts)} /> : null}</>}
       />
 
-      <nav aria-label="Course" className="flex flex-wrap gap-2 text-sm">
-        {courses.map((c) => (
-          <Link key={c.slug} href={c.slug === "hipaa" ? "/training" : `/training?course=${c.slug}`} aria-current={c.slug === course ? "true" : undefined} className="rounded-lg border px-3 py-1.5 font-medium hover:bg-secondary/50 aria-[current=true]:bg-primary aria-[current=true]:text-primary-foreground">
-            {c.label}
-          </Link>
-        ))}
-      </nav>
+      <TabNav label="Course" current={course} items={courses.map((c) => ({ key: c.slug, label: c.label, href: c.slug === "hipaa" ? "/training" : `/training?course=${c.slug}` }))} />
       {courses.find((c) => c.slug === course)?.kind === "client_addon" ? (
         <p className="max-w-3xl text-sm text-muted-foreground">
           A client add-on: it is for the people currently assigned to that client, and the list shows only them (and anyone you added by hand). It is assigned

@@ -25,6 +25,7 @@ import { getMyPhotoVersion } from "@/modules/people/photo-queries";
 import { roleLabel } from "@/lib/roles";
 import { PrivacyGate } from "@/modules/privacy/components/privacy-gate";
 import { getPrivacyGate } from "@/modules/privacy/queries";
+import { getNavWorkCounts } from "@/modules/dashboard/nav-work-counts";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   // AAL2 or redirect. Pages and actions still call requireUser() and authorize() themselves.
@@ -37,7 +38,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     console.error("layout read skipped:", error instanceof Error ? error.name : "unknown error");
     return fallback;
   });
-  const [gate, unread, pending, clock, accountName, tourAutoStart, photoVersion, popupRead] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null), optional(tourStartsByItself(), false), optional(getMyPhotoVersion(), null), optional(listMyPopups().then((items) => ({ items, failed: false })), { items: [], failed: true })]);
+  const [gate, unread, pending, clock, accountName, tourAutoStart, photoVersion, popupRead, workCounts] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null), optional(tourStartsByItself(), false), optional(getMyPhotoVersion(), null), optional(listMyPopups().then((items) => ({ items, failed: false })), { items: [], failed: true }), optional(getNavWorkCounts(), {})]);
   if (gate) {
     return (
       <PrivacyGate versionId={gate.versionId} title={gate.title} updated={gate.updated} changeNote={gate.changeNote}>
@@ -80,6 +81,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       tourAutoStart={tourAutoStart && !popupRead.failed}
       popups={popups}
       hiddenNav={hiddenNav}
+      workCounts={workCounts}
       searchPages={ALL_NAV_ITEMS.filter((i) => !hiddenNav.includes(i.href)).map((i) => ({ href: i.href, label: i.label, description: i.description }))}
       safeVoiceUrl={safeVoiceUrl}
       zone={DEFAULT_TIMEZONE}

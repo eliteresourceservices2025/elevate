@@ -55,6 +55,7 @@ export function FormDialog({
   size = "md",
   defaultOpen = false,
   icon,
+  triggerSize = "default",
   disabled = false,
   hint,
   open: openProp,
@@ -69,6 +70,8 @@ export function FormDialog({
   size?: keyof typeof WIDTH;
   defaultOpen?: boolean;
   icon?: ReactNode;
+  /** Use the compact trigger where the dialog appears inside a dense table or action bar. */
+  triggerSize?: "default" | "sm";
   /** The button is greyed out (it says why in `hint`, shown as its tooltip). */
   disabled?: boolean;
   hint?: string;
@@ -115,7 +118,7 @@ export function FormDialog({
   return (
     <>
       {hideTrigger ? null : (
-        <Button type="button" variant={variant} disabled={disabled} title={disabled ? hint : undefined} onClick={() => setOpen(true)}>
+        <Button type="button" size={triggerSize} variant={variant} disabled={disabled} title={disabled ? hint : undefined} onClick={() => setOpen(true)}>
           {icon}
           {label}
         </Button>

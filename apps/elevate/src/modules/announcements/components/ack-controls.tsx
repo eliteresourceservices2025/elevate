@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { acknowledge, archiveAnnouncement, archivePolicy, deleteAnnouncement, exportAcknowledgments, sendReminder } from "../actions";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

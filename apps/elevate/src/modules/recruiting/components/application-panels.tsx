@@ -3,7 +3,7 @@
 /* eslint-disable security/detect-object-injection -- keys are typed criteria, stage and interview-kind names */
 
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { DocumentViewer } from "@/components/document-viewer";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";

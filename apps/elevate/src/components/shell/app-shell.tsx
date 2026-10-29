@@ -53,7 +53,7 @@ export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [],
           collapsed ? "w-16" : "w-64",
         )}
       >
-        <SidebarNav hidden={header.hiddenNav} safeVoiceUrl={header.safeVoiceUrl} collapsed={collapsed} />
+        <SidebarNav hidden={header.hiddenNav} safeVoiceUrl={header.safeVoiceUrl} workCounts={header.workCounts} collapsed={collapsed} />
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
         <AppHeader {...header} collapsed={collapsed} onToggleSidebar={toggle} />

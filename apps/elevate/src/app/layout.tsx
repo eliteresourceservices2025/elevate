@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Source_Sans_3 } from "next/font/google";
+import { FeedbackProvider } from "@/components/feedback-dialog";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -25,7 +25,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           <TooltipProvider>{children}</TooltipProvider>
-          <Toaster richColors />
+          <FeedbackProvider />
         </ThemeProvider>
       </body>
     </html>

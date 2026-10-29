@@ -49,11 +49,14 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
   if (scopeFor(user, "health.view")) allowed.add("health");
   const tabs = ALL_TABS.filter((t) => allowed.has(t.key));
   const tab = tabs.find((t) => t.key === params.tab)?.key ?? "mine";
+  // A handler's inbox and their own reports are separate views. Mixing both created a long,
+  // ambiguous list and made it too easy to miss a report that needed handling.
+  const issueView = tab === "issues" && canHandleIssues && params.issueView !== "mine" ? "inbox" : "mine";
 
   const mine = tab === "mine" ? await orNotFound(getMyTime(typeof params.week === "string" ? params.week : undefined)) : null;
   // The person's own reports: read once, for the list on the Technical issues tab and the zone the report form shows times in.
   const myIssues = await orNotFound(listMyIssues());
-  const issueQueue = tab === "issues" && canHandleIssues ? await orNotFound(listIssueQueue()) : null;
+  const issueQueue = tab === "issues" && issueView === "inbox" && canHandleIssues ? await orNotFound(listIssueQueue()) : null;
   const queue = tab === "corrections" ? await orNotFound(listCorrectionQueue()) : null;
   const filable = tab === "corrections" && ["all", "team"].includes(String(scopeFor(user, "attendance.file_for_others"))) ? await orNotFound(listFilablePeople()) : null;
   const hoursSettings = tab === "export" ? await orNotFound(getHoursSettings()) : null;
@@ -87,13 +90,16 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
 
       {tab === "issues" ? (
         <div className="space-y-6">
-          <section aria-label="My technical issue reports" className="space-y-3">
-            <h2 className="text-lg font-semibold">My reports</h2>
-            {myIssues ? <IssueList items={myIssues.items} zone={myIssues.zone} mode="mine" empty="You have not reported any technical issues." /> : <p className="text-sm text-muted-foreground">You do not have a people record yet. Ask HR.</p>}
-          </section>
+          {canHandleIssues ? <TabNav label="Technical issue sections" current={issueView} items={[{ key: "inbox", label: "Issue inbox", href: "/attendance?tab=issues" }, { key: "mine", label: "My reports", href: "/attendance?tab=issues&issueView=mine" }]} /> : null}
+          {issueView === "mine" ? (
+            <section aria-label="My technical issue reports" className="space-y-3">
+              <h2 className="text-lg font-semibold">My reports</h2>
+              {myIssues ? <IssueList items={myIssues.items} zone={myIssues.zone} mode="mine" empty="You have not reported any technical issues." /> : <p className="text-sm text-muted-foreground">You do not have a people record yet. Ask HR.</p>}
+            </section>
+          ) : null}
           {issueQueue ? (
             <section aria-label="Technical issue reports to handle" className="space-y-3">
-              <h2 className="text-lg font-semibold">{issueQueue.scope === "team" ? "Your team's reports" : "All reports"}</h2>
+              <h2 className="text-lg font-semibold">{issueQueue.scope === "team" ? "Your team's issue inbox" : "Issue inbox"}</h2>
               <IssueList items={issueQueue.items} zone="America/Phoenix" mode="queue" empty="No technical issues are waiting." />
             </section>
           ) : null}

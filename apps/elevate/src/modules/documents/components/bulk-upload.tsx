@@ -3,7 +3,7 @@
 import { CheckCircle2, CircleAlert, Loader2, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { Button } from "@/components/ui/button";
 import { useFormDialogWork } from "@/components/form-dialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";

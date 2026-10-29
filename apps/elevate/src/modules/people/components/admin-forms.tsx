@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { TimeZonePicker } from "@/components/time-zone-picker";
 import { Button } from "@/components/ui/button";

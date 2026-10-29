@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PagerLinks } from "@/components/pager";
+import { TabNav } from "@/components/tab-nav";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -64,15 +65,7 @@ export default async function SigningPage({ searchParams }: PageProps<"/signing"
         }
       />
 
-      {tabs.length > 1 ? (
-        <nav aria-label="Signing sections" className="flex flex-wrap gap-1 border-b">
-          {tabs.map((t) => (
-            <Link key={t.key} href={`/signing?tab=${t.key}`} aria-current={t.key === tab ? "page" : undefined} className={cn("-mb-px rounded-t-lg border-b-2 px-3 py-2 text-sm", t.key === tab ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
-              {t.label}
-            </Link>
-          ))}
-        </nav>
-      ) : null}
+      {tabs.length > 1 ? <TabNav label="Signing sections" current={tab} items={tabs.map((t) => ({ ...t, href: `/signing?tab=${t.key}` }))} /> : null}
 
       {minePage && mine ? (
         <section aria-label="Documents to sign" className="space-y-2">

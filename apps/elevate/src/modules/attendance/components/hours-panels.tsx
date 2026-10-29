@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { formatDateOnly, formatInZone } from "@/lib/time";
 import { MINUTE, formatDuration } from "../clock";
 import { approveCleanWeeks, approveHoursWeek, clearTestDay, exportHours, markTestDay, savePayPeriod } from "../hours-actions";
@@ -19,6 +21,23 @@ import { Alert } from "@/components/ui/alert";
 const STATE_TEXT: Record<ReviewRow["state"], string> = { approved: "Approved", partly: "Partly approved", changed: "Changed after approval", none: "Not approved", empty: "Nothing to approve yet" };
 const STATE_VARIANT: Record<ReviewRow["state"], "default" | "secondary" | "outline" | "destructive"> = { approved: "default", partly: "secondary", changed: "destructive", none: "outline", empty: "outline" };
 const hours = (minutes: number) => (minutes ? formatDuration(minutes * MINUTE) : "-");
+const CLEAN_FLAG = new Set(["on_leave", "corrected", "extra_hours"]);
+const BLOCKING_FLAG = new Set(["open_session", "absent", "unapproved_extra"]);
+
+type ReviewFilter = "all" | "ready" | "review" | "blocked" | "approved";
+
+function flagLevel(row: ReviewRow): "ready" | "review" | "blocked" | "approved" {
+  if (row.state === "approved") return "approved";
+  if (row.flags.some((flag) => BLOCKING_FLAG.has(flag))) return "blocked";
+  if (row.flags.some((flag) => !CLEAN_FLAG.has(flag))) return "review";
+  return "ready";
+}
+
+function primaryFlag(row: ReviewRow, label: (flag: string) => string) {
+  const flags = [...row.flags].sort((a, b) => Number(BLOCKING_FLAG.has(b)) - Number(BLOCKING_FLAG.has(a)) || a.localeCompare(b));
+  if (flags.length === 0) return null;
+  return `${label(flags[0])}${flags.length > 1 ? ` +${flags.length - 1}` : ""}`;
+}
 
 function useRun() {
   const router = useRouter();
@@ -79,12 +98,70 @@ function MarkTestButton({ employeeId, date, name }: { employeeId: string; date: 
   );
 }
 
+/** Approval is deliberately a two-step action when the week has exceptions. */
+function WeekApproval({ row, pending, previewMode = false, onApprove }: { row: ReviewRow; pending: boolean; previewMode?: boolean; onApprove: (note?: string) => void }) {
+  const [reviewing, setReviewing] = useState(false);
+  const [note, setNote] = useState("");
+  const exceptional = row.flags.some((flag) => !CLEAN_FLAG.has(flag));
+  if (!row.canApprove) return null;
+  if (!exceptional) {
+    return <Button size="sm" disabled={pending || previewMode} onClick={() => onApprove()}>Approve week</Button>;
+  }
+  if (!reviewing) {
+    return <Button size="sm" variant="outline" disabled={pending || previewMode} onClick={() => setReviewing(true)}>Review week</Button>;
+  }
+  return (
+    <Dialog open={reviewing} onOpenChange={(open) => !pending && setReviewing(open)}>
+      <DialogContent>
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onApprove(note);
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Review {row.name}&apos;s week</DialogTitle>
+            <DialogDescription>
+              This week has {row.flags.length} signal{row.flags.length === 1 ? "" : "s"}. Review the daily detail first, then record why the week can be approved. The note is retained in the approval history.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="block space-y-1.5 text-sm font-medium">
+            Approval note
+            <Textarea
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              minLength={5}
+              maxLength={300}
+              required
+              autoFocus
+              rows={4}
+              placeholder="What did you review or approve as an exception?"
+            />
+          </label>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={pending} onClick={() => setReviewing(false)}>Cancel</Button>
+            <Button type="submit" disabled={pending || note.trim().length < 5}>Approve with note</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** A lead (their team) or HR (everyone) reviews a week and approves it person by person, or everyone with no flags at once. */
-export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review: TeamReview; prevHref: string; nextHref: string; flagLabels: Record<string, string> }) {
+export function ReviewPanel({ review, prevHref, nextHref, flagLabels, previewMode = false }: { review: TeamReview; prevHref: string; nextHref: string; flagLabels: Record<string, string>; previewMode?: boolean }) {
   const { run, pending } = useRun();
   const labels = new Map(Object.entries(flagLabels));
   const label = (f: string) => labels.get(f) ?? f;
-  const paged = usePaged(review.rows, review.weekStart);
+  const [filter, setFilter] = useState<ReviewFilter>("all");
+  const counts = review.rows.reduce<Record<ReviewFilter, number>>((all, row) => {
+    all.all += 1;
+    all[flagLevel(row)] += 1;
+    return all;
+  }, { all: 0, ready: 0, review: 0, blocked: 0, approved: 0 });
+  const filtered = review.rows.filter((row) => filter === "all" || flagLevel(row) === filter);
+  const paged = usePaged(filtered, `${review.weekStart}:${filter}`);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -100,7 +177,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
           </Link>
           <Button
             size="sm"
-            disabled={pending || review.pending === 0}
+            disabled={pending || previewMode || review.pending === 0}
             onClick={() => run<{ approved: number; withFlags: number; skipped: number }>(() => approveCleanWeeks({ weekStart: review.weekStart }), (d) => `Approved ${d?.approved ?? 0} ${(d?.approved ?? 0) === 1 ? "person" : "people"}. ${d?.withFlags ?? 0} with flags are waiting for you to look.`)}
           >
             Approve everyone without flags
@@ -111,6 +188,27 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
         You approve the days that have finished. Approved hours are saved as they were: if a correction changes a day later, it shows as changed and needs approving again. HR exports approved hours for payroll.
         {review.scope === "team" ? " These are people on your team." : ""}
       </p>
+      <section aria-label="Review summary" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        {([
+          ["all", "All people"],
+          ["ready", "Ready to approve"],
+          ["review", "Needs review"],
+          ["blocked", "Blocked"],
+          ["approved", "Approved"],
+        ] as const).map(([key, text]) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={filter === key}
+            onClick={() => setFilter(key)}
+            className={`rounded-xl border p-3 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring ${filter === key ? "border-primary bg-primary/5" : "bg-card hover:bg-secondary/40"}`}
+          >
+            {/* eslint-disable-next-line security/detect-object-injection -- key comes from the fixed tuple above. */}
+            <span className="block text-2xl font-semibold tabular-nums">{counts[key]}</span>
+            <span className="text-sm text-muted-foreground">{text}</span>
+          </button>
+        ))}
+      </section>
       {review.rows.length === 0 ? (
         <p className="text-muted-foreground">Nobody has hours or a scheduled day that week.</p>
       ) : (
@@ -122,9 +220,9 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
                 <TableHead className="text-right">Scheduled</TableHead>
                 <TableHead className="text-right">Worked</TableHead>
                 <TableHead className="text-right">Extra</TableHead>
-                <TableHead>Flags</TableHead>
+                <TableHead>Review status</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead />
+                <TableHead>Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -147,28 +245,29 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels }: { review
                         "-"
                       )}
                     </TableCell>
-                    <TableCell label="Flags" className="flex-wrap space-x-1">
-                      {r.flags.length === 0 ? "-" : r.flags.map((f) => (
-                        <Badge key={f} variant="outline">
-                          {label(f)}
+                    <TableCell label="Review status">
+                      {primaryFlag(r, label) ? (
+                        <Badge variant={flagLevel(r) === "blocked" ? "destructive" : flagLevel(r) === "review" ? "warning" : "outline"}>
+                          {primaryFlag(r, label)}
                         </Badge>
-                      ))}
+                      ) : <span className="text-muted-foreground">Ready</span>}
                     </TableCell>
                     <TableCell label="Status">
                       <Badge variant={STATE_VARIANT[r.state]}>{STATE_TEXT[r.state]}</Badge>
                     </TableCell>
-                    <TableCell label="">
-                      {r.canApprove ? (
-                        <Button size="sm" disabled={pending} onClick={() => run<{ approved: number }>(() => approveHoursWeek({ employeeId: r.employeeId, weekStart: review.weekStart }), (d) => `Approved ${d?.approved ?? 0} ${(d?.approved ?? 0) === 1 ? "day" : "days"} for ${r.name}.`)}>
-                          Approve week
-                        </Button>
-                      ) : null}
+                    <TableCell label="Action">
+                      <WeekApproval
+                        row={r}
+                        pending={pending}
+                        previewMode={previewMode}
+                        onApprove={(note) => run<{ approved: number }>(() => approveHoursWeek({ employeeId: r.employeeId, weekStart: review.weekStart, note }), (d) => `Approved ${d?.approved ?? 0} ${(d?.approved ?? 0) === 1 ? "day" : "days"} for ${r.name}.`)}
+                      />
                     </TableCell>
                   </TableRow>
                   <TableRow data-detail="" className="bg-muted/30 text-xs">
                     <TableCell colSpan={7} className="py-1">
                       <details>
-                        <summary className="cursor-pointer text-muted-foreground">Days ({r.days.length})</summary>
+                        <summary className="cursor-pointer font-medium text-foreground">Review daily detail ({r.days.length} days)</summary>
                         <ul className="mt-2 space-y-1">
                           {r.days.map((d) => (
                             <li key={d.date} className="flex flex-wrap items-center gap-x-4 gap-y-1">

@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { useFieldArray, useForm, useWatch, type Resolver } from "react-hook-form";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { TextField } from "@/components/form-fields";
 import { Button } from "@/components/ui/button";
 import { requestBankChange, requestContactChange, requestEmergencyContactsChange } from "../actions";

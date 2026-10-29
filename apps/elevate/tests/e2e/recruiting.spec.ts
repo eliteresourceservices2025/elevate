@@ -240,7 +240,7 @@ test("HR edits the careers page wording and banner, and the public page shows th
   await expect(anon.getByText("growing", { exact: false })).toBeVisible();
   // Questions about applying go to the recruiting address, never the technical support one
   await expect(anon.getByRole("link", { name: "elitetsp@ersva.com" })).toBeVisible();
-  await expect(anon.getByText("eliteresourceservices2025@gmail.com")).toHaveCount(0);
+  await expect(anon.getByText("elitehelpdesk@ersva.com")).toHaveCount(0);
   const served = await anon.request.get("/api/careers/banner");
   expect(served.status()).toBe(200);
   expect(served.headers()["content-type"]).toBe("image/jpeg");

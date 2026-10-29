@@ -3,7 +3,7 @@
 import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition, type ReactNode } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { Button } from "@/components/ui/button";
 import { acknowledge } from "@/modules/announcements/actions";
 import { signOut } from "@/modules/auth/actions";

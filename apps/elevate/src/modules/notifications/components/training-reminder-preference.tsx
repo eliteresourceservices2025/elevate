@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { setTrainingReminderOptOut } from "../actions";
 
 /** One checkbox: get (or skip) emails reminding you that assigned training is due or overdue. In-app reminders are not affected. */

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

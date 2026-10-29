@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PagerLinks } from "@/components/pager";
+import { TabNav } from "@/components/tab-nav";
 import { paginate, parsePaging } from "@/lib/pagination";
 import { Badge } from "@/components/ui/badge";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
-import { cn } from "@/lib/utils";
 import { CHANGE_CATEGORY_LABELS, CHANGE_STATUSES, DATA_RIGHTS_LABELS, type ChangeStatus, type DataRightsKind } from "@/modules/people/constants";
 import { RequestReview } from "@/modules/people/components/request-review";
 import { listChangeRequests } from "@/modules/people/queries";
@@ -83,18 +83,7 @@ export default async function RequestsPage({ searchParams }: PageProps<"/people/
         breadcrumbs={[{ label: "People", href: "/people" }, { label: "Change requests" }]}
       />
 
-      <nav aria-label="Status" className="flex gap-1 border-b">
-        {(["pending", "approved", "rejected"] as const).map((s) => (
-          <Link
-            key={s}
-            href={`/people/requests?status=${s}`}
-            aria-current={s === status ? "page" : undefined}
-            className={cn("-mb-px border-b-2 px-3 py-2 text-sm capitalize", s === status ? "border-primary font-medium text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}
-          >
-            {s}
-          </Link>
-        ))}
-      </nav>
+      <TabNav label="Status" current={status} items={(["pending", "approved", "rejected"] as const).map((s) => ({ key: s, label: s[0].toUpperCase() + s.slice(1), href: `/people/requests?status=${s}` }))} />
 
       {requests.length === 0 ? <p className="text-muted-foreground">Nothing here.</p> : null}
       <ul className="space-y-4">

@@ -3,7 +3,7 @@
 import { Bell } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { loadNotifications, markAllNotificationsRead, markNotificationRead } from "../actions";

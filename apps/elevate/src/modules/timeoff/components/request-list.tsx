@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/feedback-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { PagerLinks } from "@/components/pager";
+import { TabNav } from "@/components/tab-nav";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import { orNotFound } from "@/lib/or-not-found";
@@ -9,7 +9,6 @@ import { FormDialog } from "@/components/form-dialog";
 import { AddPrivacyOfficerForm, IncidentForm, IncidentList, PrivacyOfficerCard } from "@/modules/incidents/components/incident-panels";
 import { listClientChoices, listIncidentInbox, listMyIncidents, listPrivacyOfficers } from "@/modules/incidents/queries";
 import { STATUSES, type IncidentStatus } from "@/modules/incidents/constants";
-import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
 
@@ -25,12 +24,13 @@ export default async function IncidentsPage({ searchParams }: PageProps<"/incide
 
   const raw = one(params.status);
   const status: IncidentStatus | "open" | undefined = raw === "open" ? "open" : (STATUSES as readonly string[]).includes(raw ?? "") ? (raw as IncidentStatus) : isHandler && !raw ? "open" : undefined;
+  const tab = isHandler && params.tab !== "mine" ? "inbox" : "mine";
   const paging = parsePaging({ page: one(params.page), size: one(params.size) });
 
   const [mine, clients, inbox, officers] = await Promise.all([
-    orNotFound(listMyIncidents()),
+    tab === "mine" ? orNotFound(listMyIncidents()) : Promise.resolve(null),
     orNotFound(listClientChoices()),
-    isHandler ? orNotFound(listIncidentInbox({ status: raw === "all" ? undefined : status, ...paging })) : Promise.resolve(null),
+    tab === "inbox" && isHandler ? orNotFound(listIncidentInbox({ status: raw === "all" ? undefined : status, ...paging })) : Promise.resolve(null),
     canDesignate ? orNotFound(listPrivacyOfficers()) : Promise.resolve(null),
   ]);
 
@@ -61,26 +61,17 @@ export default async function IncidentsPage({ searchParams }: PageProps<"/incide
         }
       />
 
-      <section aria-label="Your reports" className="space-y-3">
+      {isHandler ? <TabNav label="Privacy incident sections" current={tab} items={[{ key: "inbox", label: "Inbox", href: "/incidents" }, { key: "mine", label: "My reports", href: "/incidents?tab=mine" }]} /> : null}
+
+      {mine ? <section aria-label="Your reports" className="space-y-3">
         <h2 className="text-lg font-semibold">Your reports</h2>
         <IncidentList rows={mine} empty="You have not filed any reports." />
-      </section>
+      </section> : null}
 
       {inbox ? (
         <section aria-label="Inbox" className="space-y-3">
           <h2 className="text-lg font-semibold">Inbox ({inbox.openCount} open)</h2>
-          <nav aria-label="Filter" className="flex flex-wrap gap-1.5 text-sm">
-            {tabs.map((t) => (
-              <Link
-                key={t.key}
-                href={t.key === "open" ? "/incidents" : `/incidents?status=${t.key}`}
-                aria-current={activeTab === t.key ? "true" : undefined}
-                className={cn("rounded-md border px-2.5 py-1", activeTab === t.key ? "bg-primary text-primary-foreground" : "hover:bg-secondary/50")}
-              >
-                {t.label}
-              </Link>
-            ))}
-          </nav>
+          <TabNav label="Filter" current={activeTab} items={tabs.map((t) => ({ ...t, href: t.key === "open" ? "/incidents" : `/incidents?status=${t.key}` }))} />
           <IncidentList rows={inbox.rows} empty="Nothing here." />
           <PagerLinks info={inbox.info} basePath="/incidents" query={{ status: raw }} label="reports" />
         </section>
