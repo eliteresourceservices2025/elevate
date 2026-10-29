@@ -165,6 +165,7 @@ settings:
 overrides:
   source-map-js: '>=1.2.2'
   body-parser: '>=2.4.0'
+  systeminformation: '>=5.33.16'
 
 importers:
 
@@ -5926,8 +5927,8 @@ packages:
   svg-arc-to-cubic-bezier@3.2.0:
     resolution: {integrity: sha512-djbJ/vZKZO+gPoSDThGNpKDO+o+bAeA4XQKovvkNCqnIS2t+S4qnLAGQhyyrulhCFRl1WWzAp0wUDV8PpTVU3g==}
 
-  systeminformation@5.33.14:
-    resolution: {integrity: sha512-9liS0hutibZOitbibm90AK3WZe/1rGhNGZSw+/4TbY5moax6KkWwv1TKJmk9uSOD4bvPPg57VAuuNN+4edIpBg==}
+  systeminformation@5.33.17:
+    resolution: {integrity: sha512-rHj5RG1XHWNSZrwr6hJqxlu3Lq/srdyFEKcLTRCwwXd38qL8fZ/jDyoBKWpYBrb8w9KjgQJnHFQybYYHP353rg==}
     engines: {node: '>=10.0.0'}
     os: [darwin, linux, win32, freebsd, openbsd, netbsd, sunos, android]
     hasBin: true
@@ -6639,7 +6640,7 @@ snapshots:
       object-treeify: 1.1.33
       open: 8.4.2
       picomatch: 4.0.7
-      systeminformation: 5.33.14
+      systeminformation: 5.33.17
       undici: 7.30.0
       which: 4.0.0
       yocto-spinner: 1.2.2
@@ -7532,7 +7533,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/instrumentation': 0.222.0(@opentelemetry/api@1.9.1)(supports-color@7.2.0)
-      systeminformation: 5.33.14
+      systeminformation: 5.33.17
     transitivePeerDependencies:
       - supports-color
 
@@ -11780,7 +11781,7 @@ snapshots:
 
   svg-arc-to-cubic-bezier@3.2.0: {}
 
-  systeminformation@5.33.14: {}
+  systeminformation@5.33.17: {}
 
   tailwind-merge@3.7.0: {}
 
