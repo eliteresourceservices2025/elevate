@@ -122,6 +122,8 @@ export type CorrectionItem = {
   evidence: EvidenceItem[];
   /** The name of the lead or HR person who filed it for them, or null when the person filed it themselves. */
   filedBy: string | null;
+  /** Distinguishes a system proposal from a request submitted by a person. */
+  origin?: "human" | "jibble";
   /** What the person first asked for, when the reviewer changed the times. */
   originalProposed: { type: string; at: string }[] | null;
   /** Clock events this change removes (a lead's or HR's edit of someone's time), with their times. */
@@ -200,7 +202,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
   const current = scheduleFor(schedules, weekStart) ?? scheduleFor(schedules, addDays(weekStart, 6));
 
   const rows = (await db.execute(sql`
-    select c.id, c.employee_id, c.reason, c.proposed, c.status, c.decision_note, c.created_at, c.kind, c.original_proposed, c.requested_by, c.void_event_ids,
+    select c.id, c.employee_id, c.reason, c.proposed, c.status, c.decision_note, c.created_at, c.kind, c.origin, c.original_proposed, c.requested_by, c.void_event_ids,
            (select e2.legal_first_name || ' ' || e2.legal_last_name from core.employees e2 where e2.user_id = c.requested_by and c.requested_by <> ${user.id}) as filed_by
     from time.clock_corrections c where c.employee_id = ${me.id} order by c.created_at desc limit 20`)) as unknown as Row[];
   const evidence = await evidenceFor(rows.map((r) => String(r.id)));
@@ -231,6 +233,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
       kind: String(r.kind),
       evidence: evidence.get(String(r.id)) ?? [],
       filedBy: (r.filed_by as string | null) ?? null,
+      origin: r.origin === "jibble" ? "jibble" : "human",
       originalProposed: (r.original_proposed as { type: string; at: string }[] | null) ?? null,
       removes: ((r.void_event_ids as string[] | null) ?? []).flatMap((id) => removed.get(id) ?? []),
       hrOnly: false,
@@ -315,7 +318,7 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
   if (restrict && restrict.length === 0) return { items: [], scope };
   const filter = restrict ? sql`and c.employee_id in (${list(restrict)})` : sql``;
   const rows = (await db.execute(sql`
-    select c.id, c.employee_id, c.reason, c.proposed, c.status, c.decision_note, c.created_at, c.requested_by, c.kind, c.original_proposed, c.void_event_ids,
+    select c.id, c.employee_id, c.reason, c.proposed, c.status, c.decision_note, c.created_at, c.requested_by, c.kind, c.origin, c.original_proposed, c.void_event_ids,
            (select e2.legal_first_name || ' ' || e2.legal_last_name from core.employees e2 where e2.user_id = c.requested_by and c.requested_by is distinct from e.user_id limit 1) as filed_by,
            e.user_id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
     from time.clock_corrections c join core.employees e on e.id = c.employee_id
@@ -328,7 +331,7 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
     const own = r.user_id === user.id || r.requested_by === user.id;
     // A lead decides for people below them; HR may decide for anyone. Filed-for-them and older-than-a-week ones are HR only.
     const proposed = r.proposed as { type: string; at: string }[];
-    const filedFor = r.requested_by !== r.user_id;
+    const filedFor = r.origin === "jibble" || r.requested_by !== r.user_id;
     const hrOnly = filedFor || needsHrDecision(Math.min(...proposed.map((p) => Date.parse(p.at))), new Date(r.created_at as string | Date).getTime());
     const allowed = scope === "all" || (!hrOnly && (await timeChainUserIds(db, String(r.employee_id))).includes(user.id));
     items.push({
@@ -344,6 +347,7 @@ export async function listCorrectionQueue(): Promise<{ items: CorrectionItem[]; 
       kind: String(r.kind),
       evidence: evidence.get(String(r.id)) ?? [],
       filedBy: (r.filed_by as string | null) ?? null,
+      origin: r.origin === "jibble" ? "jibble" : "human",
       originalProposed: (r.original_proposed as { type: string; at: string }[] | null) ?? null,
       removes: ((r.void_event_ids as string[] | null) ?? []).flatMap((id) => removed.get(id) ?? []),
       hrOnly,

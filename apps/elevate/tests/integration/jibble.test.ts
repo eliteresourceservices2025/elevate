@@ -24,6 +24,7 @@ const { JibbleError } = await import("@/modules/jibble/http-client");
 type JibbleClient = import("@/modules/jibble/http-client").JibbleClient;
 type JibblePerson = import("@/modules/jibble/http-client").JibblePerson;
 type JibbleDay = import("@/modules/jibble/http-client").JibbleDay;
+type JibbleEntryEvidence = import("@/modules/jibble/http-client").JibbleEntryEvidence;
 
 type TestUser = { id: string; email: string; roles: RoleSlug[] };
 const NO_ACCESS = "You do not have access to do that.";
@@ -40,12 +41,13 @@ const DAY = 86_400_000;
 const iso = (agoMs: number) => new Date(Date.now() - agoMs).toISOString();
 
 class FakeJibble implements JibbleClient {
-  calls: { personId: string; action: string; options?: { breakMinutes?: number | null; previousEntryId?: string | null } }[] = [];
+  calls: { personId: string; action: string; options?: { breakMinutes?: number | null; previousEntryId?: string | null; requestId?: string } }[] = [];
   breaks: { id: string; name: string; durationMinutes: number | null }[] = [];
   people: JibblePerson[] = [];
   tracked: JibbleDay[] = [];
   /** Where each Jibble person is right now, for the state checks (null = no entry). A person not listed has no entry. */
   states = new Map<string, "in" | "break" | "out" | null>();
+  evidence = new Map<string, JibbleEntryEvidence>();
   /** Make the state lookup fail. */
   stateFails = false;
   /** Return an error to make a call fail. */
@@ -60,7 +62,11 @@ class FakeJibble implements JibbleClient {
     if (this.stateFails) throw new JibbleError(503, "request refused");
     return this.states.get(personId) ?? null;
   }
-  async clock(personId: string, action: string, options?: { breakMinutes?: number | null; previousEntryId?: string | null }) {
+  async entryEvidence(personId: string, entryId: string) {
+    const evidence = this.evidence.get(entryId);
+    return evidence?.personId === personId ? evidence : null;
+  }
+  async clock(personId: string, action: string, options?: { breakMinutes?: number | null; previousEntryId?: string | null; requestId?: string }) {
     const f = this.fail(personId, action);
     if (f) throw f;
     this.calls.push({ personId, action, options });
@@ -123,6 +129,7 @@ beforeEach(() => {
   process.env.ELEVATE_ENV = "production"; // the safety lock lets the fake send
   delete process.env.JIBBLE_TEST_PERSON_IDS;
   fake.states = new Map();
+  fake.evidence = new Map();
   fake.stateFails = false;
   fake.calls = [];
   fake.breaks = [];
@@ -132,6 +139,8 @@ beforeEach(() => {
   setJibbleClient(fake);
   delete process.env.JIBBLE_MIRROR_ENABLED;
   delete process.env.JIBBLE_BREAK_MODE;
+  delete process.env.JIBBLE_COORDINATION_ENABLED;
+  delete process.env.JIBBLE_SELF_TEST_EMAILS;
 });
 afterAll(() => {
   delete process.env.ELEVATE_ENV;
@@ -308,6 +317,289 @@ describe("when a clock click is queued for Jibble", () => {
 });
 
 describe("sending to Jibble", () => {
+  it("serializes simultaneous guarded senders for the same person", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const team = await makeTeam();
+    await db.execute(sql`insert into time.clock_rules (team_id, jibble_mirror) values (${team}, true)`);
+    const p = await person("GuardedSend", { teamId: team });
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', now() - interval '30 minutes')`);
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, action, status) values (${p.employeeId}, 'In', 'queued')`);
+    let resume!: () => void;
+    let started!: () => void;
+    const waiting = new Promise<void>((resolve) => { resume = resolve; });
+    const called = new Promise<void>((resolve) => { started = resolve; });
+    const clock = vi.spyOn(fake, "clock").mockImplementation(async () => { started(); await waiting; return { entryId: "guarded-entry" }; });
+    try {
+      const first = jobs.processMirrorQueue(new Date(), fake, { employeeId: p.employeeId });
+      await called;
+      await jobs.processMirrorQueue(new Date(), fake, { employeeId: p.employeeId });
+      await jobs.runJibbleRepair(new Date(), fake);
+      expect(clock).toHaveBeenCalledTimes(1);
+      const [guard] = await rows<{ request_id: string }>(sql`select request_id from time.jibble_operation_guard where employee_id = ${p.employeeId}`);
+      expect(clock.mock.calls[0][2]?.requestId).toBe(guard.request_id);
+      resume();
+      await first;
+      expect((await logOf(p.employeeId))[0].status).toBe("sent");
+      expect(await rows(sql`select 1 from time.jibble_operation_guard where employee_id = ${p.employeeId}`)).toHaveLength(0);
+    } finally { resume(); clock.mockRestore(); delete process.env.JIBBLE_COORDINATION_ENABLED; delete process.env.JIBBLE_SELF_TEST_EMAILS; }
+  });
+
+  it("keeps an ambiguous guarded send blocked instead of sending it again", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("GuardedTimeout");
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', now() - interval '30 minutes')`);
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, action, status) values (${p.employeeId}, 'In', 'queued')`);
+    const clock = vi.spyOn(fake, "clock").mockRejectedValue(new JibbleError(null, "timeout"));
+    try {
+      await jobs.processMirrorQueue(new Date(), fake, { employeeId: p.employeeId });
+      await jobs.processMirrorQueue(new Date(), fake, { employeeId: p.employeeId });
+      expect(clock).toHaveBeenCalledTimes(1);
+      expect(await rows(sql`select 1 from time.jibble_operation_guard where employee_id = ${p.employeeId} and phase = 'uncertain'`)).toHaveLength(1);
+    } finally {
+      clock.mockRestore(); delete process.env.JIBBLE_COORDINATION_ENABLED; delete process.env.JIBBLE_SELF_TEST_EMAILS;
+      await db.execute(sql`delete from time.jibble_operation_guard where employee_id = ${p.employeeId}`);
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+    }
+  });
+
+  it("records the actual fallback request ID before sending a guarded break clock-out", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("GuardedFallback");
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', now() - interval '30 minutes'), (${p.employeeId}, 'break_start', now() - interval '5 minutes')`);
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, action, status) values (${p.employeeId}, 'StartBreak', 'queued')`);
+    let started!: () => void;
+    let resume!: () => void;
+    const called = new Promise<void>((resolve) => { started = resolve; });
+    const waiting = new Promise<void>((resolve) => { resume = resolve; });
+    const clock = vi.spyOn(fake, "clock").mockImplementation(async (_personId, action) => {
+      if (action === "StartBreak") throw new JibbleError(422, "no break available");
+      started(); await waiting; return { entryId: randomUUID() };
+    });
+    const running = jobs.processMirrorQueue(new Date(), fake, { employeeId: p.employeeId });
+    try {
+      await called;
+      const [guard] = await rows<{ action: string; request_id: string }>(sql`select action, request_id from time.jibble_operation_guard where employee_id = ${p.employeeId}`);
+      expect(guard.action).toBe("Out");
+      expect(clock.mock.calls[1][2]?.requestId).toBe(guard.request_id);
+    } finally { resume(); await running; clock.mockRestore(); delete process.env.JIBBLE_COORDINATION_ENABLED; delete process.env.JIBBLE_SELF_TEST_EMAILS; }
+    expect((await logOf(p.employeeId))[0].status).toBe("sent");
+  });
+
+  it("does not send a queued call after the person's monitoring permission is unavailable", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("GuardedNoPermission");
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, action, status) values (${p.employeeId}, 'In', 'queued')`);
+    try {
+      await jobs.processMirrorQueue(new Date(), fake, { employeeId: p.employeeId });
+      expect(fake.calls.filter((call) => call.personId === p.jibbleId)).toHaveLength(0);
+      expect((await logOf(p.employeeId))[0]).toMatchObject({ status: "queued", last_error: "sending permission changed: review required" });
+    } finally {
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+    }
+  });
+
+  it("rechecks permission after a slow status lookup before sending", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("GuardedPermissionChange");
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', now() - interval '30 minutes')`);
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, action, status, attempts) values (${p.employeeId}, 'In', 'queued', 1)`);
+    const lookup = vi.spyOn(fake, "latestState").mockImplementation(async () => { delete process.env.JIBBLE_SELF_TEST_EMAILS; return "out"; });
+    try {
+      await jobs.processMirrorQueue(new Date(), fake, { employeeId: p.employeeId });
+      expect(fake.calls.filter((call) => call.personId === p.jibbleId)).toHaveLength(0);
+      expect((await logOf(p.employeeId))[0]).toMatchObject({ status: "queued", last_error: "sending permission changed: review required" });
+    } finally {
+      lookup.mockRestore();
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+      delete process.env.JIBBLE_SELF_TEST_EMAILS;
+    }
+  });
+
+  it("does not replay a queued clock-in after ELEVATE has already clocked out", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("GuardedSuperseded");
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    const events = await rows<{ id: string; type: string }>(sql`insert into time.clock_events (employee_id, type, occurred_at)
+      values (${p.employeeId}, 'clock_in', now() - interval '2 minutes'), (${p.employeeId}, 'clock_out', now() - interval '1 minute') returning id, type`);
+    for (const event of events) await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, status) values (${p.employeeId}, ${event.id}, ${event.type === "clock_in" ? "In" : "Out"}, 'queued')`);
+    try {
+      await jobs.processMirrorQueue(new Date(), fake, { employeeId: p.employeeId });
+      expect(fake.calls.filter((call) => call.personId === p.jibbleId).map((call) => call.action)).toEqual(["Out"]);
+      expect((await logOf(p.employeeId)).find((call) => call.action === "In")).toMatchObject({ status: "skipped", last_error: "superseded by current ELEVATE status" });
+    } finally {
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+      delete process.env.JIBBLE_SELF_TEST_EMAILS;
+    }
+  });
+
+  it("drains a newer clock-out queued while a guarded clock-in is in flight", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("GuardedNewEvent");
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    const [start] = await rows<{ id: string }>(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', now() - interval '1 minute') returning id`);
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, status) values (${p.employeeId}, ${start.id}, 'In', 'queued')`);
+    let started!: () => void;
+    let resume!: () => void;
+    const called = new Promise<void>((resolve) => { started = resolve; });
+    const waiting = new Promise<void>((resolve) => { resume = resolve; });
+    const seen: string[] = [];
+    const clock = vi.spyOn(fake, "clock").mockImplementation(async (_personId, action) => {
+      seen.push(action);
+      if (action === "In") { started(); await waiting; }
+      return { entryId: randomUUID() };
+    });
+    const running = jobs.processMirrorQueue(new Date(), fake, { employeeId: p.employeeId });
+    try {
+      await called;
+      const [end] = await rows<{ id: string }>(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_out', now()) returning id`);
+      await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, status) values (${p.employeeId}, ${end.id}, 'Out', 'queued')`);
+    } finally { resume(); }
+    try {
+      await running;
+      expect(seen).toEqual(["In", "Out"]);
+      expect((await logOf(p.employeeId)).map((item) => item.status)).toEqual(["sent", "sent"]);
+    } finally {
+      clock.mockRestore();
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+      delete process.env.JIBBLE_SELF_TEST_EMAILS;
+    }
+  });
+
+  it("does not requeue a failed call when another operation needs review", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("GuardedRetry");
+    const [row] = await rows<{ id: string }>(sql`insert into time.jibble_link_log (employee_id, action, status, source) values (${p.employeeId}, 'In', 'failed', 'event') returning id`);
+    const { claimJibbleOperation, finishJibbleOperation } = await import("@/modules/jibble/operation-guard");
+    const token = (await claimJibbleOperation(p.employeeId, { kind: "send" }))!;
+    try {
+      as(hr);
+      expect((await actions.retryJibbleSend({ logId: row.id })).ok).toBe(false);
+      expect((await logOf(p.employeeId))[0].status).toBe("failed");
+    } finally {
+      await finishJibbleOperation(p.employeeId, token);
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+    }
+  });
+
+  it("confirms an uncertain request only by its exact Jibble entry, without replaying it", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("ConfirmGuarded");
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    const [log] = await rows<{ id: string }>(sql`insert into time.jibble_link_log (employee_id, action, status) values (${p.employeeId}, 'In', 'queued') returning id`);
+    const requestId = randomUUID();
+    const { claimJibbleOperation, markJibbleInFlight, markJibbleUncertain } = await import("@/modules/jibble/operation-guard");
+    const token = (await claimJibbleOperation(p.employeeId, { kind: "send" }))!;
+    await markJibbleInFlight(p.employeeId, token, { action: "In", jibblePersonId: p.jibbleId, logId: log.id, requestId });
+    try {
+      as(hr);
+      expect((await actions.confirmUncertainJibbleOperation({ employeeId: p.employeeId })).ok).toBe(false); // Still in flight.
+      await markJibbleUncertain(p.employeeId, token);
+      as(p.user);
+      expect((await actions.confirmUncertainJibbleOperation({ employeeId: p.employeeId })).ok).toBe(false);
+      as(hr);
+      expect((await actions.confirmUncertainJibbleOperation({ employeeId: p.employeeId })).ok).toBe(false); // Not found is not proof of failure.
+      expect(await rows(sql`select 1 from time.jibble_operation_guard where employee_id = ${p.employeeId}`)).toHaveLength(1);
+      const at = new Date().toISOString();
+      fake.evidence.set(requestId, { id: requestId, personId: p.jibbleId, state: "in", time: at, createdAt: at, updatedAt: at, clientType: "Web", elevateOrigin: true, hasDeviceEvidence: true });
+      expect((await actions.confirmUncertainJibbleOperation({ employeeId: p.employeeId })).ok).toBe(true);
+      expect(await rows(sql`select 1 from time.jibble_operation_guard where employee_id = ${p.employeeId}`)).toHaveLength(0);
+      expect((await logOf(p.employeeId))[0].status).toBe("sent");
+      expect(fake.calls.filter((call) => call.personId === p.jibbleId)).toHaveLength(0);
+      expect(await rows(sql`select 1 from ops.audit_log where action = 'jibble.operation_confirmed' and target_id = ${p.employeeId}`)).toHaveLength(1);
+    } finally {
+      await db.execute(sql`delete from time.jibble_operation_guard where employee_id = ${p.employeeId}`);
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+      delete process.env.JIBBLE_SELF_TEST_EMAILS;
+    }
+  });
+
+  it("preserves a guarded old call when HR resumes sending", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("GuardedResume");
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, action, status, created_at) values (${p.employeeId}, 'In', 'queued', now() - interval '20 minutes')`);
+    const { claimJibbleOperation, finishJibbleOperation } = await import("@/modules/jibble/operation-guard");
+    const token = (await claimJibbleOperation(p.employeeId, { kind: "send" }))!;
+    try {
+      as(hr);
+      expect((await actions.setJibblePaused({ paused: false })).ok).toBe(true);
+      expect((await logOf(p.employeeId))[0].status).toBe("queued");
+    } finally {
+      await finishJibbleOperation(p.employeeId, token);
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+    }
+  });
+
+  it("holds a stale call for review rather than replaying it on resume", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("StaleResume");
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, action, status, created_at) values (${p.employeeId}, 'In', 'queued', now() - interval '20 minutes')`);
+    try {
+      as(hr);
+      expect((await actions.setJibblePaused({ paused: false })).ok).toBe(true);
+      expect((await logOf(p.employeeId))[0]).toMatchObject({ status: "queued", last_error: "stale call: review current status" });
+      expect(fake.calls.filter((call) => call.personId === p.jibbleId)).toHaveLength(0);
+    } finally {
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+    }
+  });
+
+  it("records a failed call as reviewed only when fresh statuses match, without changing its failure", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("ReviewFailure");
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    const [row] = await rows<{ id: string }>(sql`insert into time.jibble_link_log (employee_id, action, status, source) values (${p.employeeId}, 'Out', 'failed', 'event') returning id`);
+    try {
+      as(p.user);
+      expect((await actions.reviewFailedJibbleCall({ logId: row.id })).ok).toBe(false);
+      as(hr);
+      fake.states.set(p.jibbleId, "in");
+      expect((await actions.reviewFailedJibbleCall({ logId: row.id })).ok).toBe(false);
+      fake.states.set(p.jibbleId, "out");
+      expect((await actions.reviewFailedJibbleCall({ logId: row.id })).ok).toBe(true);
+      expect((await actions.reviewFailedJibbleCall({ logId: row.id })).ok).toBe(false);
+      expect((await logOf(p.employeeId))[0].status).toBe("failed");
+      expect(await rows(sql`select 1 from time.jibble_call_reviews where log_id = ${row.id}`)).toHaveLength(1);
+      expect(await rows(sql`select 1 from ops.audit_log where action = 'jibble.failure_reviewed' and target_id = ${p.employeeId}`)).toHaveLength(1);
+      expect((await queries.getJibbleOverview({ search: "ReviewFailure", status: "failed" })).log.find((l) => l.id === row.id)?.reviewed).toBe(true);
+    } finally {
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+      delete process.env.JIBBLE_SELF_TEST_EMAILS;
+    }
+  });
+
+  it("does not mark a failed call reviewed when ELEVATE changes during the Jibble lookup", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("ReviewChanged");
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    const [row] = await rows<{ id: string }>(sql`insert into time.jibble_link_log (employee_id, action, status, source) values (${p.employeeId}, 'Out', 'failed', 'event') returning id`);
+    const state = vi.spyOn(fake, "latestState").mockImplementation(async () => {
+      await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', now())`);
+      return "out";
+    });
+    try {
+      as(hr);
+      expect((await actions.reviewFailedJibbleCall({ logId: row.id })).ok).toBe(false);
+      expect(await rows(sql`select 1 from time.jibble_call_reviews where log_id = ${row.id}`)).toHaveLength(0);
+    } finally {
+      state.mockRestore();
+      await db.execute(sql`delete from time.jibble_link_log where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+      delete process.env.JIBBLE_SELF_TEST_EMAILS;
+    }
+  });
   async function queued(label: string, steps: string[]) {
     const team = await makeTeam();
     const p = await person(label, { teamId: team });
@@ -349,11 +641,13 @@ describe("sending to Jibble", () => {
 
     // it comes back: the first call goes through, and the second follows in the same run
     fake.fail = () => null;
+    fake.states.set(p.jibbleId, "out");
     await jobs.processMirrorQueue(new Date(start.getTime() + 2 * MIN));
     expect((await logOf(p.employeeId)).map((l) => l.status)).toEqual(["sent", "sent"]);
 
     // a call that never works is given up on after six tries
     const q = await queued("GiveUp", ["In"]);
+    fake.states.set(q.jibbleId, "out");
     fake.fail = (id) => (id === q.jibbleId ? new JibbleError(503, "request refused") : null);
     let at = Date.now() + MIN;
     for (let i = 0; i < 6; i++) {
@@ -368,9 +662,10 @@ describe("sending to Jibble", () => {
   it("treats 'already in that state' as sent, and a refusal as final", async () => {
     const dup = await queued("Dup", ["In"]);
     const refused = await queued("Refused", ["In"]);
+    fake.states.set(dup.jibbleId, "in");
     fake.fail = (id) => (id === dup.jibbleId ? new JibbleError(409, "conflict") : id === refused.jibbleId ? new JibbleError(400, "request refused") : null);
     await jobs.processMirrorQueue();
-    expect((await logOf(dup.employeeId))[0]).toMatchObject({ status: "sent", last_error: "already in that state" });
+    expect((await logOf(dup.employeeId))[0]).toMatchObject({ status: "sent", last_error: "already in that state (checked)" });
     expect((await logOf(refused.employeeId))[0]).toMatchObject({ status: "failed", attempts: 1 });
   });
 
@@ -386,15 +681,187 @@ describe("sending to Jibble", () => {
 
     const [row] = await rows<{ id: string }>(sql`select id from time.jibble_link_log where employee_id = ${p.employeeId}`);
     as(hr);
-    expect(await actions.retryJibbleSend({ logId: randomUUID() })).toEqual({ ok: false, error: "That call was not found." });
+    expect(await actions.retryJibbleSend({ logId: randomUUID() })).toEqual({ ok: false, error: "This call cannot be retried. Check the person's current status in ELEVATE and Jibble." });
     fake.fail = () => null;
+    fake.states.set(p.jibbleId, "out");
     expect((await actions.retryJibbleSend({ logId: row.id })).ok).toBe(true);
     expect((await logOf(p.employeeId))[0]).toMatchObject({ status: "sent" });
+    expect((await actions.retryJibbleSend({ logId: row.id })).ok).toBe(false);
     expect(await rows(sql`select 1 from ops.audit_log where action = 'jibble.retry' and actor_user_id = ${hr.id}`)).toHaveLength(1);
+  });
+
+  it("refuses to replay a stale failed call", async () => {
+    const p = await queued("OldRetry", ["Out"]);
+    const [row] = await rows<{ id: string }>(sql`update time.jibble_link_log set status = 'failed', attempts = 1, created_at = now() - interval '11 minutes' where employee_id = ${p.employeeId} returning id`);
+    as(hr);
+    expect((await actions.retryJibbleSend({ logId: row.id })).ok).toBe(false);
+    expect((await logOf(p.employeeId))[0].status).toBe("failed");
+    expect(fake.calls.filter((c) => c.personId === p.jibbleId)).toHaveLength(0);
+  });
+
+  it("does not retry when another call has the same creation timestamp", async () => {
+    const p = await queued("SameTimeRetry", ["In", "Out"]);
+    const [row] = await rows<{ id: string }>(sql`update time.jibble_link_log set status = 'failed', attempts = 1 where employee_id = ${p.employeeId} and action = 'In' returning id`);
+    await db.execute(sql`update time.jibble_link_log set created_at = now() where employee_id = ${p.employeeId}`);
+    as(hr);
+    expect((await actions.retryJibbleSend({ logId: row.id })).ok).toBe(false);
+    expect(fake.calls.filter((c) => c.personId === p.jibbleId)).toHaveLength(0);
   });
 });
 
 describe("matching people to Jibble accounts", () => {
+  it("requires HR approval for a system-origin Jibble proposal and prevents duplicate entry proposals", async () => {
+    const p = await person("SystemCorrection");
+    const lead = await person("SystemCorrectionLead");
+    await db.execute(sql`insert into core.user_roles (user_id, role_slug) values (${lead.user.id}, 'team_lead')`);
+    await db.execute(sql`update core.employees set manager_id = ${lead.employeeId} where id = ${p.employeeId}`);
+    const entryId = randomUUID();
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    const at = iso(30 * MIN);
+    const proposed = JSON.stringify([{ type: "clock_in", at }]);
+    fake.evidence.set(entryId, { id: entryId, personId: p.jibbleId, state: "in", time: at, createdAt: at, updatedAt: at, clientType: "Desktop", elevateOrigin: false, hasDeviceEvidence: true });
+    fake.states.set(p.jibbleId, "in");
+    const [correction] = await rows<{ id: string }>(sql`insert into time.clock_corrections
+      (employee_id, requested_by, origin, source_jibble_person_id, source_jibble_entry_id, reason, proposed)
+      values (${p.employeeId}, null, 'jibble', ${p.jibbleId}, ${entryId}, 'Jibble time entry for review', ${proposed}::jsonb) returning id`);
+    expect(await rows(sql`select 1 from time.v_clock_events where employee_id = ${p.employeeId}`)).toHaveLength(0);
+    await expect(db.execute(sql`insert into time.clock_corrections (employee_id, requested_by, origin, source_jibble_person_id, source_jibble_entry_id, reason, proposed)
+      values (${p.employeeId}, null, 'jibble', ${p.jibbleId}, ${entryId}, 'Duplicate', ${proposed}::jsonb)`)).rejects.toThrow();
+    await expect(db.execute(sql`insert into time.clock_corrections (employee_id, requested_by, origin, source_jibble_person_id, source_jibble_entry_id, reason, proposed)
+      values (${p.employeeId}, ${hr.id}, 'jibble', ${p.jibbleId}, ${randomUUID()}, 'Invalid requester', ${proposed}::jsonb)`)).rejects.toThrow();
+    await expect(db.execute(sql`insert into time.clock_corrections (employee_id, requested_by, origin, reason, proposed)
+      values (${p.employeeId}, null, 'jibble', 'Missing source', ${proposed}::jsonb)`)).rejects.toThrow();
+    as({ ...lead.user, roles: ["team_lead", "employee"] });
+    expect((await attendance.decideCorrection({ correctionId: correction.id, decision: "approve" })).ok).toBe(false);
+    as(hr);
+    fake.evidence.set(entryId, { ...fake.evidence.get(entryId)!, updatedAt: new Date(Date.parse(at) + 1000).toISOString() });
+    expect((await attendance.decideCorrection({ correctionId: correction.id, decision: "approve" })).ok).toBe(false);
+    fake.evidence.set(entryId, { ...fake.evidence.get(entryId)!, updatedAt: at });
+    fake.states.set(p.jibbleId, "out");
+    expect((await attendance.decideCorrection({ correctionId: correction.id, decision: "approve" })).ok).toBe(false);
+    fake.states.set(p.jibbleId, "in");
+    expect((await attendance.decideCorrection({ correctionId: correction.id, decision: "approve" })).ok).toBe(true);
+    expect(await rows(sql`select 1 from time.v_clock_events where employee_id = ${p.employeeId} and source = 'admin_correction'`)).toHaveLength(1);
+  });
+  it("shows guarded operations and open mismatches separately from historical call failures", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("ExceptionList");
+    const { claimJibbleOperation, finishJibbleOperation } = await import("@/modules/jibble/operation-guard");
+    const token = (await claimJibbleOperation(p.employeeId, { kind: "send" }))!;
+    await db.execute(sql`insert into time.jibble_mismatches (employee_id, kind) values (${p.employeeId}, 'working_jibble_out')`);
+    try {
+      as(hr);
+      const overview = await queries.getJibbleOverview();
+      expect(overview.exceptions.rows.filter((item) => item.name.startsWith("ExceptionList")).map((item) => item.category).sort()).toEqual(["mismatch", "operation"]);
+    } finally {
+      await finishJibbleOperation(p.employeeId, token);
+      await db.execute(sql`delete from time.jibble_mismatches where employee_id = ${p.employeeId}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+    }
+  });
+
+  it("paginates open exceptions beyond the first page", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const label = uniq("ExceptionBatch");
+    await db.execute(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status)
+      select ${label}, n::text, ${label} || n::text || '@example.com', 'active' from generate_series(1, 30) n`);
+    await db.execute(sql`insert into time.jibble_mismatches (employee_id, kind)
+      select id, 'working_jibble_out' from core.employees where legal_first_name = ${label}`);
+    try {
+      as(hr);
+      const first = (await queries.getJibbleOverview({ exceptionPage: "1" })).exceptions;
+      const second = (await queries.getJibbleOverview({ exceptionPage: "2" })).exceptions;
+      expect(first.total).toBeGreaterThanOrEqual(30);
+      expect(first.rows.length).toBe(25);
+      const matches = [...first.rows, ...second.rows].filter((item) => item.name.startsWith(label));
+      expect(matches).toHaveLength(30);
+      expect(new Set(matches.map((item) => item.id)).size).toBe(30);
+    } finally {
+      await db.execute(sql`delete from time.jibble_mismatches where employee_id in (select id from core.employees where legal_first_name = ${label})`);
+      await db.execute(sql`delete from core.employees where legal_first_name = ${label}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+    }
+  });
+
+  it("lets HR review an open mismatch only after current statuses align", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("MismatchReview");
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', now() - interval '30 minutes')`);
+    const [issue] = await rows<{ id: string }>(sql`insert into time.jibble_mismatches (employee_id, kind) values (${p.employeeId}, 'working_jibble_out') returning id`);
+    try {
+      as(p.user);
+      expect((await actions.reviewJibbleMismatch({ mismatchId: issue.id })).ok).toBe(false);
+      as(hr);
+      fake.states.set(p.jibbleId, "out");
+      expect((await actions.reviewJibbleMismatch({ mismatchId: issue.id })).ok).toBe(false);
+      fake.states.set(p.jibbleId, "in");
+      expect((await actions.reviewJibbleMismatch({ mismatchId: issue.id })).ok).toBe(true);
+      expect(await rows(sql`select 1 from time.jibble_mismatches where id = ${issue.id} and resolved_by = ${hr.id} and resolved_at is not null`)).toHaveLength(1);
+      expect(await rows(sql`select 1 from ops.audit_log where action = 'jibble.mismatch_reviewed' and target_id = ${p.employeeId}`)).toHaveLength(1);
+    } finally {
+      await db.execute(sql`delete from time.jibble_mismatches where id = ${issue.id}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+      delete process.env.JIBBLE_SELF_TEST_EMAILS;
+    }
+  });
+  it("requires documented HR review and no pending correction for a Jibble-only incident", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("JibbleOnlyReview");
+    process.env.JIBBLE_SELF_TEST_EMAILS = p.user.email;
+    const [issue] = await rows<{ id: string }>(sql`insert into time.jibble_mismatches (employee_id, kind, family) values (${p.employeeId}, 'possible_jibble_only', 'out') returning id`);
+    const [correction] = await rows<{ id: string }>(sql`insert into time.clock_corrections (employee_id, requested_by, reason, proposed) values (${p.employeeId}, ${p.user.id}, 'Review requested', '[]'::jsonb) returning id`);
+    const note = "Checked the Jibble entry and time correction.";
+    try {
+      fake.states.set(p.jibbleId, "out");
+      as(p.user);
+      expect((await actions.reviewJibbleMismatch({ mismatchId: issue.id, note })).ok).toBe(false);
+      as(hr);
+      expect((await actions.reviewJibbleMismatch({ mismatchId: issue.id })).ok).toBe(false);
+      expect((await actions.reviewJibbleMismatch({ mismatchId: issue.id, note })).ok).toBe(false);
+      await db.execute(sql`update time.clock_corrections set status = 'rejected' where id = ${correction.id}`);
+      fake.states.set(p.jibbleId, "in");
+      expect((await actions.reviewJibbleMismatch({ mismatchId: issue.id, note })).ok).toBe(false);
+      fake.states.set(p.jibbleId, "out");
+      expect((await actions.reviewJibbleMismatch({ mismatchId: issue.id, note })).ok).toBe(true);
+      expect(await rows(sql`select 1 from time.jibble_mismatches where id = ${issue.id} and resolved_by = ${hr.id} and resolution = ${`reviewed: ${note}`}`)).toHaveLength(1);
+      expect(await rows(sql`select 1 from ops.audit_log where action = 'jibble.mismatch_reviewed' and target_id = ${p.employeeId} and metadata->>'note' = ${note}`)).toHaveLength(1);
+    } finally {
+      await db.execute(sql`delete from time.clock_corrections where id = ${correction.id}`);
+      await db.execute(sql`delete from time.jibble_mismatches where id = ${issue.id}`);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+      delete process.env.JIBBLE_SELF_TEST_EMAILS;
+    }
+  });
+  it("does not change a person's match while a guarded operation is active", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("GuardedMapping");
+    const { claimJibbleOperation, finishJibbleOperation } = await import("@/modules/jibble/operation-guard");
+    const token = (await claimJibbleOperation(p.employeeId, { kind: "send" }))!;
+    try {
+      as(hr);
+      expect((await actions.setJibblePerson({ employeeId: p.employeeId, jibblePersonId: "" })).ok).toBe(false);
+      expect(await rows(sql`select 1 from time.jibble_people where employee_id = ${p.employeeId} and jibble_person_id = ${p.jibbleId}`)).toHaveLength(1);
+    } finally {
+      await finishJibbleOperation(p.employeeId, token);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+    }
+  });
+
+  it("does not automatically match a person with a guarded operation", async () => {
+    process.env.JIBBLE_COORDINATION_ENABLED = "true";
+    const p = await person("GuardedSync", { mapped: false });
+    fake.people = [{ id: p.jibbleId, email: p.user.email, fullName: "Guarded Sync", status: "Active" }];
+    const { claimJibbleOperation, finishJibbleOperation } = await import("@/modules/jibble/operation-guard");
+    const token = (await claimJibbleOperation(p.employeeId, { kind: "send" }))!;
+    try {
+      await jobs.syncJibblePeople(fake);
+      expect(await rows(sql`select 1 from time.jibble_people where employee_id = ${p.employeeId}`)).toHaveLength(0);
+    } finally {
+      await finishJibbleOperation(p.employeeId, token);
+      delete process.env.JIBBLE_COORDINATION_ENABLED;
+    }
+  });
   it("matches by work email regardless of case, keeps hand-made matches, and never gives one Jibble account to two people", async () => {
     const a = await person("MatchA", { mapped: false });
     const b = await person("MatchB", { mapped: false });
@@ -506,6 +973,46 @@ describe("matching people to Jibble accounts", () => {
     setJibbleClient(null);
     expect((await queries.getJibbleOverview()).configured).toBe(false);
     expect(await actions.testJibbleConnection()).toEqual({ ok: false, error: "Jibble is not set up yet. Add the access token on the server first." });
+  });
+
+  it("shows ELEVATE clock-in and clock-out together without treating breaks as shifts", async () => {
+    const p = await person("ShiftSummary");
+    const [start] = await rows<{ id: string }>(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'clock_in', ${iso(3 * HOUR)}) returning id`);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${p.employeeId}, 'break_start', ${iso(2 * HOUR)}), (${p.employeeId}, 'break_end', ${iso(2 * HOUR - 15 * MIN)}), (${p.employeeId}, 'clock_out', ${iso(HOUR)})`);
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, event_id, action, status) values (${p.employeeId}, ${start.id}, 'In', 'sent')`);
+    as(hr);
+    const shift = (await queries.getJibbleOverview()).shifts.find((s) => s.id === start.id);
+    expect(shift?.clockIn).toBeTruthy();
+    expect(shift?.clockOut).not.toBeNull();
+  });
+
+  it("uses the viewer's saved time zone and falls back to Phoenix", async () => {
+    as(hr);
+    const [viewer] = await rows<{ id: string }>(sql`select id from core.employees where user_id = ${hr.id} and archived_at is null limit 1`);
+    await db.execute(sql`insert into time.clock_prefs (employee_id, time_zone) values (${viewer.id}, 'Asia/Manila') on conflict (employee_id) do update set time_zone = excluded.time_zone`);
+    try {
+      expect((await queries.getJibbleOverview()).viewerTimeZone).toBe("Asia/Manila");
+      await db.execute(sql`update time.clock_prefs set time_zone = null where employee_id = ${viewer.id}`);
+      expect((await queries.getJibbleOverview()).viewerTimeZone).toBe("America/Phoenix");
+    } finally {
+      await db.execute(sql`delete from time.clock_prefs where employee_id = ${viewer.id}`);
+    }
+  });
+
+  it("filters and pages retained call history beyond the most recent 100 calls", async () => {
+    const p = await person("HistoryFilter");
+    await db.execute(sql`insert into time.jibble_link_log (employee_id, action, status, source, created_at)
+      select ${p.employeeId}, 'In', 'failed', 'repair', now() - n * interval '1 second' from generate_series(1, 110) n`);
+    as(hr);
+    const page = await queries.getJibbleOverview({ search: "HistoryFilter", status: "failed", page: "5" });
+    expect(page.callHistory).toMatchObject({ total: 110, page: 5, pages: 5, from: 101, to: 110 });
+    expect(page.log).toHaveLength(10);
+    expect(page.log.every((l) => l.name.includes("HistoryFilter") && l.status === "failed")).toBe(true);
+    const none = await queries.getJibbleOverview({ search: "HistoryFilter%", status: "failed" });
+    expect(none.callHistory.total).toBe(0);
+    const [employee] = await rows<{ last: string }>(sql`update core.employees set preferred_name = 'HistoryPreferred' where id = ${p.employeeId} returning legal_last_name as last`);
+    expect((await queries.getJibbleOverview({ search: `HistoryPreferred ${employee.last}`, status: "failed" })).callHistory.total).toBe(110);
+    expect((await queries.getJibbleOverview({ search: `HistoryFilter ${employee.last}`, status: "failed" })).callHistory.total).toBe(110);
   });
 });
 
@@ -631,6 +1138,7 @@ describe("the safety lock", () => {
 
 describe("the pause switch", () => {
   it("holds everything while paused, drops stale calls on resume, and is HR only", async () => {
+    const beforeAudit = await rows(sql`select 1 from ops.audit_log where action in ('jibble.pause', 'jibble.resume') and actor_user_id = ${hr.id}`);
     const fresh = await queuedRows("PauseFresh", ["In"]);
     const old = await queuedRows("PauseOld", ["In"]);
     await db.execute(sql`update time.jibble_link_log set created_at = now() - interval '30 minutes' where employee_id = ${old.employeeId}`);
@@ -645,7 +1153,7 @@ describe("the pause switch", () => {
     expect(resumed.ok && resumed.data.dropped).toBeGreaterThanOrEqual(1);
     expect((await logOf(old.employeeId))[0]).toMatchObject({ status: "skipped", last_error: "dropped: waited too long while paused" });
     expect((await logOf(fresh.employeeId))[0].status).toBe("sent"); // the recent one went out on resume
-    expect(await rows(sql`select 1 from ops.audit_log where action in ('jibble.pause', 'jibble.resume') and actor_user_id = ${hr.id}`)).toHaveLength(2);
+    expect(await rows(sql`select 1 from ops.audit_log where action in ('jibble.pause', 'jibble.resume') and actor_user_id = ${hr.id}`)).toHaveLength(beforeAudit.length + 2);
 
     for (const role of ["team_lead", "recruiter", "executive", "employee"] as RoleSlug[]) {
       as(await makeUser("nopause", [role]));
@@ -706,9 +1214,10 @@ describe("retries are careful", () => {
 
     const r = await queuedRows("CarefulUnknown", ["In"]);
     await db.execute(sql`update time.jibble_link_log set attempts = 1 where employee_id = ${r.employeeId}`);
-    fake.stateFails = true; // cannot look: send it (a 409 would still be handled)
+    fake.stateFails = true; // cannot establish whether the previous call went through
     await jobs.processMirrorQueue();
-    expect(fake.calls.filter((c) => c.personId === fayJibbleId(r.employeeId))).toHaveLength(1);
+    expect(fake.calls.filter((c) => c.personId === fayJibbleId(r.employeeId))).toHaveLength(0);
+    expect((await logOf(r.employeeId))[0]).toMatchObject({ status: "queued", attempts: 2 });
   });
 
   it("waits as long as Jibble asks when it says to slow down", async () => {
@@ -817,7 +1326,7 @@ describe("the repair job", () => {
 });
 
 describe("people who clock in without a Jibble account", () => {
-  it("gives HR one list of who worked without screenshots, and nothing when everyone is matched", async () => {
+  it("asks HR to check screenshot coverage for unmatched clock calls", async () => {
     await db.execute(sql`delete from ops.notifications where kind = 'jibble.unmatched'`);
     await db.execute(sql`update time.jibble_link_log set created_at = now() - interval '3 days' where status = 'skipped' and last_error = 'no Jibble person matched'`);
     expect((await jobs.runJibbleUnmatchedReport()).people).toBe(0);
@@ -836,8 +1345,9 @@ describe("people who clock in without a Jibble account", () => {
     const run = await jobs.runJibbleUnmatchedReport();
     expect(run.people).toBe(2);
     const [n] = await rows<{ title: string; body: string }>(sql`select title, body from ops.notifications where user_id = ${hr.id} and kind = 'jibble.unmatched'`);
-    expect(n.title).toContain("2 people clocked in with no Jibble account");
+    expect(n.title).toContain("2 people clocked in without a Jibble match");
     expect(n.body).toContain("NoMatchOne");
+    expect(n.body).toContain("Check screenshot coverage");
   });
 
   it("flags the day for the lead when screenshots could not run, but not when the only reason was the safety lock", async () => {

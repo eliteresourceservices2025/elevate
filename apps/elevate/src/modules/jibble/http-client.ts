@@ -9,14 +9,20 @@ import { describeFailure, isRetryable, parseDuration, pickBreak, type JibbleActi
 /** `code` is the member code shown in Jibble's exports (for example "MB-1"); null when Jibble does not give one. */
 export type JibblePerson = { id: string; email: string | null; fullName: string; status: string | null; code?: string | null };
 export type JibbleDay = { personId: string; date: string; trackedMinutes: number };
+/** Minimal evidence from a time entry; this alone does not prove who created it or whether it was edited. */
+export type JibbleEntry = { id: string; state: JibbleState; time: string };
+/** Minimal source facts for a candidate correction. Device identifiers are not returned or stored. */
+export type JibbleEntryEvidence = JibbleEntry & { personId: string; createdAt: string; updatedAt: string; clientType: string; elevateOrigin: boolean; hasDeviceEvidence: boolean };
 
 /** Extra facts for a break call: the length ELEVATE's break was set to (to pick the matching Jibble break), and the entry that started it. */
-export type ClockOptions = { breakMinutes?: number | null; previousEntryId?: string | null };
+export type ClockOptions = { breakMinutes?: number | null; previousEntryId?: string | null; requestId?: string };
 
 export interface JibbleClient {
   listPeople(): Promise<JibblePerson[]>;
   /** Where a person is in Jibble right now (from their latest time entry); null when they have none. */
   latestState(personId: string): Promise<JibbleState | null>;
+  latestEntry?(personId: string): Promise<JibbleEntry | null>;
+  entryEvidence?(personId: string, entryId: string): Promise<JibbleEntryEvidence | null>;
   /** The breaks available to one person in Jibble (they come from the person's schedule). */
   listBreaks(personId: string): Promise<JibbleBreak[]>;
   /** Sends one clock action for a person. Returns the new time entry's id when Jibble gives one. */
@@ -181,6 +187,34 @@ export class JibbleHttpClient implements JibbleClient {
     return entry.type === "In" ? "in" : entry.type === "StartBreak" ? "break" : entry.type === "Out" ? "out" : null;
   }
 
+  async latestEntry(personId: string): Promise<JibbleEntry | null> {
+    const entry = (await this.send("GET", `${this.config.timeTrackingUrl}/v1/People(${encodeURIComponent(personId)})/LatestTimeEntry?$select=id,type,time`)) as Json;
+    const state = entry.type === "In" ? "in" : entry.type === "StartBreak" ? "break" : entry.type === "Out" ? "out" : null;
+    const id = typeof entry.id === "string" ? entry.id.trim() : "";
+    const time = typeof entry.time === "string" ? entry.time : "";
+    const instant = /(?:Z|[+-]\d{2}:\d{2})$/i.test(time) ? Date.parse(time) : Number.NaN;
+    if (!state || !id || id.length > 120 || !Number.isFinite(instant)) return null;
+    return { id, state, time: new Date(instant).toISOString() };
+  }
+
+  async entryEvidence(personId: string, entryId: string): Promise<JibbleEntryEvidence | null> {
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuid.test(personId) || !uuid.test(entryId)) return null;
+    const params = new URLSearchParams({ "$filter": `(id eq ${entryId} and personId eq ${personId})`, "$select": "id,type,time,personId,createdAt,updatedAt,clientType,platform,status", "$top": "2" });
+    const answer = (await this.send("GET", `${this.config.timeTrackingUrl}/v1/TimeEntries?${params}`)) as { value?: Json[] };
+    if (!Array.isArray(answer.value) || answer.value.length !== 1) return null;
+    const entry = answer.value[0];
+    const state = entry.type === "In" ? "in" : entry.type === "StartBreak" ? "break" : entry.type === "Out" ? "out" : null;
+    const time = typeof entry.time === "string" ? entry.time : "";
+    const created = typeof entry.createdAt === "string" ? entry.createdAt : "";
+    const updated = typeof entry.updatedAt === "string" ? entry.updatedAt : "";
+    const instant = (value: string) => /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? Date.parse(value) : Number.NaN;
+    const values = [instant(time), instant(created), instant(updated)];
+    if (!state || entry.id !== entryId || entry.personId !== personId || entry.status !== "Active" || typeof entry.clientType !== "string" || values.some((value) => !Number.isFinite(value))) return null;
+    const platform = entry.platform && typeof entry.platform === "object" ? entry.platform as Json : null;
+    return { id: entryId, personId, state, time: new Date(values[0]).toISOString(), createdAt: new Date(values[1]).toISOString(), updatedAt: new Date(values[2]).toISOString(), clientType: entry.clientType, elevateOrigin: platform?.deviceId === "elevate-server" && platform?.clientVersion === "elevate", hasDeviceEvidence: typeof platform?.deviceId === "string" && platform.deviceId.length > 0 && typeof platform.clientVersion === "string" && platform.clientVersion.length > 0 };
+  }
+
   async listBreaks(personId: string): Promise<JibbleBreak[]> {
     const answer = (await this.send("GET", `${this.config.timeTrackingUrl}/v1/GetBreaks(personId=${encodeURIComponent(personId)},time=${encodeURIComponent(new Date().toISOString())})`)) as Json[] | { value?: Json[] };
     const list = Array.isArray(answer) ? answer : (answer.value ?? []);
@@ -205,6 +239,7 @@ export class JibbleHttpClient implements JibbleClient {
   async clock(personId: string, action: JibbleAction, options: ClockOptions = {}): Promise<{ entryId: string | null }> {
     // clientType "Web" because the entry is made by a server on the person's behalf; Jibble stamps the time itself.
     let entry: Record<string, unknown> = { personId, type: action === "EndBreak" ? "In" : action, clientType: "Web", platform: PLATFORM };
+    if (options.requestId) entry.id = options.requestId;
     if (action === "StartBreak") {
       // Jibble starts one of the person's breaks: pick the one that fits the length chosen in ELEVATE.
       const chosen = pickBreak(await this.breaksFor(personId), options.breakMinutes ?? null);

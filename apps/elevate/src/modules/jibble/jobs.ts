@@ -1,15 +1,18 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { formatInZone } from "@/lib/time";
 import { MINUTE, replayClock } from "@/modules/attendance/clock";
-import { loadRecentEvents, prefsFor } from "@/modules/attendance/service";
+import { loadRecentEvents, monitoringPolicyPublished, prefsFor } from "@/modules/attendance/service";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { reportName } from "@/modules/org/service";
 import { breakMode, getJibbleClient, mirrorSendsEnabled, mismatchToleranceMinutes, selfTestEmails, sendsAllowed } from "./client";
 import { JibbleError, type JibbleClient } from "./http-client";
 import { MAX_ATTEMPTS, backoffMs, isMismatch, repairAction, targetState, type JibbleAction } from "./mirror-rules";
-import { jibbleDaily, jibbleLinkLog, jibblePeople } from "./schema";
+import { jibbleCheckCursor, jibbleDaily, jibbleLinkLog, jibblePeople } from "./schema";
+import { claimJibbleOperation, finishJibbleOperation, runGuardedJibbleEffect, updateJibbleInFlightAction } from "./operation-guard";
+import { checkWorkingMismatch } from "./working-mismatch-check";
 
 // Background work for the Jibble link. src/inngest wraps these in scheduled functions.
 
@@ -20,6 +23,7 @@ type Due = {
   employee_id: string;
   action: JibbleAction;
   attempts: number;
+  created_at: Date;
   next_attempt_at: Date;
   jibble_person_id: string | null;
   planned: number | null;
@@ -44,20 +48,32 @@ export async function jibblePaused(): Promise<boolean> {
 
 export type MirrorRun = { sent: number; retrying: number; failed: number; skipped: number };
 
+/** A queued event does not grant ongoing permission after a mapping, policy or team rule changes. */
+export async function maySendNow(employeeId: string, personId: string): Promise<boolean> {
+  if (!mirrorSendsEnabled() || !sendsAllowed(personId)) return false;
+  const [row] = (await db.execute(sql`select p.jibble_person_id, u.email, coalesce(r.jibble_mirror, false) as enabled
+    from core.employees e join time.jibble_people p on p.employee_id = e.id
+    left join core.users u on u.id = e.user_id left join time.clock_rules r on r.team_id = e.team_id
+    where e.id = ${employeeId} and e.archived_at is null and e.status <> 'separated'`)) as unknown as { jibble_person_id: string; email: string | null; enabled: boolean }[];
+  if (!row || row.jibble_person_id !== personId) return false;
+  if (row.email && selfTestEmails().includes(row.email.trim().toLowerCase())) return true;
+  return row.enabled && await monitoringPolicyPublished(db);
+}
+
 /**
  * Sends the waiting calls to Jibble, one person at a time and in the order the clicks happened (a later call waits for an earlier
  * one that is retrying). A refusal is final; network trouble, rate limits and server errors are retried with a growing delay
  * (about an hour in all, longer if Jibble says to wait), then marked failed. A retry first checks Jibble's state, so a call that
- * actually went through is not sent twice. "Already in that state" (409) counts as sent. A break start that Jibble refuses (no break
+ * actually went through is not sent twice. A 409 counts as sent only when a state check confirms it. A break start that Jibble refuses (no break
  * set up for the person, or already used) clocks them out instead, so screenshots still stop, and its end clocks them back in.
  * Nothing is sent while paused, or outside production except to named test people. Jibble being down never touches the clock.
  */
-export async function processMirrorQueue(now = new Date(), client: JibbleClient | null = getJibbleClient(), only?: { employeeId: string }): Promise<MirrorRun> {
+export async function processMirrorQueue(now = new Date(), client: JibbleClient | null = getJibbleClient(), only?: { employeeId: string }, guardToken?: string, pass = 0): Promise<MirrorRun> {
   const run: MirrorRun = { sent: 0, retrying: 0, failed: 0, skipped: 0 };
   if (!client || (await jibblePaused())) return run;
 
   const rows = (await db.execute(sql`
-    select l.id, l.employee_id, l.action, l.attempts, l.next_attempt_at, p.jibble_person_id, ev.planned_break_minutes as planned,
+    select l.id, l.employee_id, l.action, l.attempts, l.created_at, l.next_attempt_at, p.jibble_person_id, ev.planned_break_minutes as planned,
       -- the break start sent before this call: its entry (so ending the break can point at it) and whether it fell back to a clock-out
       (select l2.jibble_entry_id from time.jibble_link_log l2 where l2.employee_id = l.employee_id and l2.action = 'StartBreak' and l2.status = 'sent' and l2.created_at < l.created_at
         order by l2.created_at desc limit 1) as previous_entry,
@@ -69,6 +85,22 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
   const byPerson = new Map<string, Due[]>();
   for (const r of rows) byPerson.set(r.employee_id, [...(byPerson.get(r.employee_id) ?? []), r]);
 
+  // Claim first, then read each person's queue again inside the reservation. A snapshot taken by a competing worker may be stale.
+  if (!guardToken && process.env.JIBBLE_COORDINATION_ENABLED === "true") {
+    for (const employeeId of byPerson.keys()) {
+      const token = await claimJibbleOperation(employeeId, { kind: "send" });
+      if (!token) continue;
+      try {
+        const personRun = await processMirrorQueue(now, client, { employeeId }, token);
+        run.sent += personRun.sent; run.retrying += personRun.retrying; run.failed += personRun.failed; run.skipped += personRun.skipped;
+      } finally {
+        // This fails closed if a request was left in flight or uncertain.
+        await finishJibbleOperation(employeeId, token);
+      }
+    }
+    return run;
+  }
+
   let authProblem = false;
   /** What an earlier call in this same run did for a person's break (the database list above was read before it was sent). */
   const startedBreak = new Map<string, { entryId: string | null; fellBack: boolean }>();
@@ -78,6 +110,15 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
 
   for (const list of byPerson.values()) {
     for (const row of list) {
+      const [fresh] = (await db.execute(sql`select l.status, p.jibble_person_id from time.jibble_link_log l
+        left join time.jibble_people p on p.employee_id = l.employee_id where l.id = ${row.id}::uuid`)) as unknown as { status: string; jibble_person_id: string | null }[];
+      if (!fresh || fresh.status !== "queued" || fresh.jibble_person_id !== row.jibble_person_id || await jibblePaused()) break;
+      if (guardToken && now.getTime() - new Date(row.created_at).getTime() > 10 * MINUTE) {
+        // A past action is not evidence of the state desired now. Hold it until current-state recovery is available.
+        await db.update(jibbleLinkLog).set({ lastError: "stale call: review current status" }).where(eq(jibbleLinkLog.id, row.id));
+        run.retrying += 1;
+        break;
+      }
       if (new Date(row.next_attempt_at).getTime() > now.getTime()) break; // an earlier call is waiting to retry: keep the order
       if (!row.jibble_person_id) {
         await db.update(jibbleLinkLog).set({ status: "skipped", lastError: "no Jibble person matched" }).where(eq(jibbleLinkLog.id, row.id));
@@ -89,11 +130,27 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
         run.skipped += 1;
         continue;
       }
+      if (guardToken && !(await maySendNow(row.employee_id, row.jibble_person_id))) {
+        await db.update(jibbleLinkLog).set({ lastError: "sending permission changed: review required" }).where(eq(jibbleLinkLog.id, row.id));
+        run.retrying += 1;
+        break;
+      }
+      if (guardToken) {
+        const current = replayClock(await loadRecentEvents(db, row.employee_id, 120)).state;
+        if ((row.action === "In" && current === "out") || (row.action === "Out" && current === "working") || (row.action === "StartBreak" && current !== "break") || (row.action === "EndBreak" && current === "break")) {
+          await db.update(jibbleLinkLog).set({ status: "skipped", lastError: "superseded by current ELEVATE status" }).where(eq(jibbleLinkLog.id, row.id));
+          run.skipped += 1;
+          continue;
+        }
+      }
+      let requestStarted = false;
       try {
         // A retry: the earlier try may have gone through even though we never heard back. Look before sending again.
         if (row.attempts > 0) {
-          const state = await client.latestState(row.jibble_person_id).catch(() => null);
-          if (state !== null && state === targetState(row.action)) {
+          // A previous request may have succeeded despite a timeout. Do not send again if its outcome cannot be checked.
+          const state = await client.latestState(row.jibble_person_id);
+          if (state === null) throw new JibbleError(null, "cannot confirm Jibble state");
+          if (state === targetState(row.action)) {
             await markSent(row.id, row.attempts + 1, null, "already in that state (checked)");
             run.sent += 1;
             continue;
@@ -101,35 +158,68 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
         }
         const earlier = startedBreak.get(row.employee_id);
         const fellBackEarlier = earlier ? earlier.fellBack : row.previous_fallback === true;
-        let entryId: string | null;
-        let fallback = false;
-        if (row.action === "EndBreak" && fellBackEarlier) {
-          // The break was started by clocking out, so it ends by clocking back in.
-          ({ entryId } = await client.clock(row.jibble_person_id, "In"));
-          fallback = true;
-        } else if (row.action === "StartBreak") {
-          try {
-            ({ entryId } = await client.clock(row.jibble_person_id, "StartBreak", { breakMinutes: row.planned === null ? null : Number(row.planned) }));
-          } catch (error) {
-            const refused = error instanceof JibbleError && !error.retryable && error.status !== 401 && error.status !== 403 && error.status !== 409;
-            if (!refused) throw error;
-            ({ entryId } = await client.clock(row.jibble_person_id, "Out")); // screenshots must still stop for the break
-            fallback = true;
-          }
-          startedBreak.set(row.employee_id, { entryId, fellBack: fallback });
-        } else if (row.action === "EndBreak") {
-          ({ entryId } = await client.clock(row.jibble_person_id, "EndBreak", { previousEntryId: earlier?.entryId ?? row.previous_entry }));
-        } else {
-          ({ entryId } = await client.clock(row.jibble_person_id, row.action));
+        const personId = row.jibble_person_id;
+        // A status lookup can take time; check permission and pause again immediately before recording send intent.
+        if (guardToken && ((await jibblePaused()) || !(await maySendNow(row.employee_id, personId)))) {
+          await db.update(jibbleLinkLog).set({ lastError: "sending permission changed: review required" }).where(eq(jibbleLinkLog.id, row.id));
+          run.retrying += 1;
+          break;
         }
-        await markSent(row.id, row.attempts + 1, entryId, fallback && row.action === "StartBreak" ? "no Jibble break available: clocked out instead" : null, fallback);
+        const effectiveAction = row.action === "EndBreak" && fellBackEarlier ? "In" as const : row.action;
+        const requestId = guardToken && (effectiveAction === "In" || effectiveAction === "Out") ? randomUUID() : undefined;
+        const effect = {
+          employeeId: row.employee_id, token: guardToken ?? "",
+          operation: { action: effectiveAction, jibblePersonId: personId, logId: row.id, requestId },
+          send: async () => {
+            let entryId: string | null;
+            let fallback = false;
+            if (row.action === "EndBreak" && fellBackEarlier) {
+              ({ entryId } = await client.clock(personId, "In", requestId ? { requestId } : undefined));
+              fallback = true;
+            } else if (row.action === "StartBreak") {
+              try {
+                ({ entryId } = await client.clock(personId, "StartBreak", { breakMinutes: row.planned === null ? null : Number(row.planned) }));
+              } catch (error) {
+                const refused = error instanceof JibbleError && !error.retryable && error.status !== 401 && error.status !== 403 && error.status !== 409;
+                if (!refused) throw error;
+                const fallbackId = guardToken ? randomUUID() : undefined;
+                if (guardToken && fallbackId && !(await updateJibbleInFlightAction(row.employee_id, guardToken, "Out", fallbackId))) throw new Error("Jibble fallback intent could not be saved");
+                ({ entryId } = await client.clock(personId, "Out", fallbackId ? { requestId: fallbackId } : undefined));
+                fallback = true;
+              }
+            } else if (row.action === "EndBreak") {
+              ({ entryId } = await client.clock(personId, "EndBreak", { previousEntryId: earlier?.entryId ?? row.previous_entry }));
+            } else {
+              ({ entryId } = await client.clock(personId, row.action, requestId ? { requestId } : undefined));
+            }
+            return { entryId, fallback };
+          },
+          persist: async ({ entryId, fallback }: { entryId: string | null; fallback: boolean }) => { await markSent(row.id, row.attempts + 1, entryId, fallback && row.action === "StartBreak" ? "no Jibble break available: clocked out instead" : null, fallback); },
+        };
+        requestStarted = true;
+        const result = guardToken ? await runGuardedJibbleEffect(effect) : await effect.send().then(async (value) => { await effect.persist(value); return value; });
+        if (row.action === "StartBreak") startedBreak.set(row.employee_id, { entryId: result.entryId, fellBack: result.fallback });
         run.sent += 1;
       } catch (error) {
         const e = error instanceof JibbleError ? error : new JibbleError(null, "unexpected");
+        if (guardToken && requestStarted) {
+          // Any failed guarded request remains blocked for review; it must not be replayed or followed by another call.
+          // A reviewer may have confirmed this exact request while the failing worker was unwinding.
+          // Do not overwrite the confirmation or annotate a later operation owned by a different token.
+          await db.execute(sql`update time.jibble_link_log set last_error = 'outcome uncertain: review required'
+            where id = ${row.id}::uuid and status = 'queued'
+              and exists (select 1 from time.jibble_operation_guard where employee_id = ${row.employee_id}::uuid and token = ${guardToken}::uuid and phase = 'uncertain')`);
+          run.retrying += 1;
+          break;
+        }
         if (e.status === 409) {
-          await markSent(row.id, row.attempts + 1, null, "already in that state");
-          run.sent += 1;
-          continue;
+          // A conflict can have more than one cause; only mark it sent if Jibble confirms the intended state.
+          const state = await client.latestState(row.jibble_person_id).catch(() => null);
+          if (state !== null && state === targetState(row.action)) {
+            await markSent(row.id, row.attempts + 1, null, "already in that state (checked)");
+            run.sent += 1;
+            continue;
+          }
         }
         if (e.status === 401 || e.status === 403) authProblem = true;
         const attempts = row.attempts + 1;
@@ -145,11 +235,23 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
     }
   }
 
+  if (guardToken && only && pass < 2) {
+    const [guard] = (await db.execute(sql`select phase from time.jibble_operation_guard where employee_id = ${only.employeeId}::uuid and token = ${guardToken}::uuid`)) as unknown as { phase: string }[];
+    if (guard?.phase === "claimed") {
+      const known = new Set(rows.map((row) => row.id));
+      const pending = (await db.execute(sql`select id from time.jibble_link_log where employee_id = ${only.employeeId}::uuid and status = 'queued' order by created_at, id limit 500`)) as unknown as { id: string }[];
+      if (pending.some((row) => !known.has(row.id))) {
+        const next = await processMirrorQueue(new Date(Math.max(now.getTime(), Date.now())), client, only, guardToken, pass + 1);
+        run.sent += next.sent; run.retrying += next.retrying; run.failed += next.failed; run.skipped += next.skipped;
+      }
+    }
+  }
+
   if (authProblem) {
     await alertHr("jibble.auth", "ELEVATE cannot sign in to Jibble", "Jibble refused the access keys. Screenshots may not be starting. Check the keys (they may have been changed or the plan may have lapsed) in the Jibble page.", 2);
   } else if (terminal > 0) {
     const [{ n }] = (await db.execute(sql`select count(*)::int as n from time.jibble_link_log where status = 'failed' and created_at > now() - interval '2 hours'`)) as unknown as { n: number }[];
-    if (n >= 3) await alertHr("jibble.failing", "Jibble calls are failing", `${n} clock calls failed in the last 2 hours, so screenshots may not be starting for some people. See the Jibble page and retry them.`, 6);
+    if (n >= 3) await alertHr("jibble.failing", "Jibble calls are failing", `${n} clock calls failed in the last 2 hours, so screenshots may not be starting for some people. Review the calls and current status on the Jibble page.`, 6);
   }
   return run;
 }
@@ -157,10 +259,8 @@ export async function processMirrorQueue(now = new Date(), client: JibbleClient 
 export type RepairRun = { checked: number; repaired: number; failed: number };
 
 /**
- * Every 10 minutes: for people on teams that use Jibble who are working (or clocked out in the last half hour), compare what
- * ELEVATE says with what Jibble says and put Jibble right. ELEVATE is the source of truth. It leaves alone anyone with a call still
- * waiting, anyone who clocked a moment ago (the queue is on it), and anyone repaired in the last 9 minutes (so a Jibble that keeps
- * refusing is not hammered). At most 150 people a run.
+ * Legacy repair runs from a 30-minute schedule and a 15-minute backstop. The experimental coordination path only checks working
+ * mismatches and never restarts Jibble; the remaining guarded recovery workflow must be completed before enabling it in production.
  */
 export async function runJibbleRepair(now = new Date(), client: JibbleClient | null = getJibbleClient()): Promise<RepairRun> {
   const run: RepairRun = { checked: 0, repaired: 0, failed: 0 };
@@ -169,15 +269,36 @@ export async function runJibbleRepair(now = new Date(), client: JibbleClient | n
   // People on a team that uses Jibble, plus anyone listed for a self-test (JIBBLE_SELF_TEST_EMAILS).
   const selfTest = selfTestEmails();
   const selfTestMatch = selfTest.length > 0 ? sql`lower(u.email) in (${sql.join(selfTest.map((e) => sql`${e}`), sql`, `)})` : sql`false`;
+  const coordinating = process.env.JIBBLE_COORDINATION_ENABLED === "true";
   const candidates = (await db.execute(sql`
     select e.id as employee_id, p.jibble_person_id
     from core.employees e
     left join time.clock_rules r on r.team_id = e.team_id
     left join core.users u on u.id = e.user_id
     join time.jibble_people p on p.employee_id = e.id
+    ${coordinating ? sql`left join time.jibble_check_cursor scan_cursor on scan_cursor.employee_id = e.id` : sql``}
     where (coalesce(r.jibble_mirror, false) or ${selfTestMatch}) and e.archived_at is null and e.status <> 'separated'
-      and exists (select 1 from time.v_clock_events c where c.employee_id = e.id and c.occurred_at > ${new Date(now.getTime() - 2 * DAY_MS).toISOString()}::timestamptz)
-    limit 400`)) as unknown as { employee_id: string; jibble_person_id: string }[];
+      ${coordinating ? sql`` : sql`and exists (select 1 from time.v_clock_events c where c.employee_id = e.id and c.occurred_at > ${new Date(now.getTime() - 2 * DAY_MS).toISOString()}::timestamptz)`}
+    ${coordinating ? sql`order by scan_cursor.checked_at asc nulls first, e.id` : sql``}
+    limit ${coordinating ? 150 : 400}`)) as unknown as { employee_id: string; jibble_person_id: string }[];
+
+  if (coordinating) {
+    // Until guarded recovery is available, never let the legacy repair path race a guarded sender or restart Jibble.
+    for (const candidate of candidates) {
+      try {
+        const result = await checkWorkingMismatch(candidate.employee_id, client, now);
+        if (result === "checked") run.checked += 1;
+        else if (result === "unknown") run.failed += 1;
+      } catch (error) {
+        run.failed += 1;
+        console.error("jibble mismatch check failed:", error instanceof Error ? error.name : "unknown error");
+      } finally {
+        await db.insert(jibbleCheckCursor).values({ employeeId: candidate.employee_id, checkedAt: now })
+          .onConflictDoUpdate({ target: jibbleCheckCursor.employeeId, set: { checkedAt: now } });
+      }
+    }
+    return run;
+  }
 
   let authProblem = false;
   for (const c of candidates) {
@@ -224,8 +345,7 @@ export async function runJibbleRepair(now = new Date(), client: JibbleClient | n
 }
 
 /**
- * Daily: people on teams that use Jibble who clocked in with no matching Jibble account in the last day work without screenshots and
- * nobody would know. HR gets one list so they can fix the match or add the person in Jibble.
+ * Daily: notify HR about unmatched ELEVATE clock calls so they can check screenshot coverage and fix the match.
  */
 export async function runJibbleUnmatchedReport(now = new Date()): Promise<{ people: number }> {
   const since = new Date(now.getTime() - DAY_MS).toISOString();
@@ -237,7 +357,7 @@ export async function runJibbleUnmatchedReport(now = new Date()): Promise<{ peop
   const names = rows.map((r) => reportName({ first: r.first, last: r.last, preferred: r.preferred })).sort();
   const shown = names.slice(0, 10).join(", ");
   const hr = await hrUserIds();
-  await notify(db, hr.map((userId) => ({ userId, kind: "jibble.unmatched", title: `${rows.length} ${rows.length === 1 ? "person" : "people"} clocked in with no Jibble account`, body: `${shown}${names.length > 10 ? `, and ${names.length - 10} more` : ""}. No screenshots ran for them. Match them in the Jibble page or add them in Jibble.`, link: "/jibble" })));
+  await notify(db, hr.map((userId) => ({ userId, kind: "jibble.unmatched", title: `${rows.length} ${rows.length === 1 ? "person" : "people"} clocked in without a Jibble match`, body: `${shown}${names.length > 10 ? `, and ${names.length - 10} more` : ""}. ELEVATE could not send their clock calls to Jibble. Check screenshot coverage and match them on the Jibble page or add them in Jibble.`, link: "/jibble" })));
   return { people: rows.length };
 }
 
@@ -266,6 +386,14 @@ export async function syncJibblePeople(client: JibbleClient | null = getJibbleCl
       unmatched += 1;
       continue;
     }
+    const guardedMapping = process.env.JIBBLE_COORDINATION_ENABLED === "true";
+    const token = guardedMapping ? await claimJibbleOperation(e.id, { kind: "reconcile" }) : null;
+    if (guardedMapping && !token) { unmatched += 1; continue; }
+    try {
+    if (guardedMapping) {
+      const [current] = (await db.execute(sql`select matched_by from time.jibble_people where employee_id = ${e.id}::uuid`)) as unknown as { matched_by: string }[];
+      if (current?.matched_by === "manual") { matched += 1; continue; }
+    }
     // Who else holds this Jibble account? A record that was archived or has left no longer needs it (a duplicate after an import, a
     // person who left): its old link is dropped so the account goes to the current record. A current person's link is never taken.
     const holders = (await db.execute(sql`
@@ -276,12 +404,16 @@ export async function syncJibblePeople(client: JibbleClient | null = getJibbleCl
       unmatched += 1;
       continue;
     }
+    if (guardedMapping && holders.length) { unmatched += 1; continue; }
     for (const h of holders) await db.delete(jibblePeople).where(eq(jibblePeople.employeeId, h.id));
     await db
       .insert(jibblePeople)
       .values({ employeeId: e.id, jibblePersonId: found.id, matchedBy: "email" })
       .onConflictDoUpdate({ target: jibblePeople.employeeId, set: { jibblePersonId: found.id, matchedBy: "email", matchedAt: new Date() } });
     matched += 1;
+    } finally {
+      if (token) await finishJibbleOperation(e.id, token);
+    }
   }
   return { jibblePeople: people.length, matched, unmatched };
 }

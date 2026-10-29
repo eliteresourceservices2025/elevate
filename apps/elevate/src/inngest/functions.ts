@@ -169,9 +169,9 @@ export const jibbleMirror = inngest.createFunction(
   async ({ step }) => step.run("send", () => track("jibble-mirror", () => processMirrorQueue())),
 );
 
-/** Every 30 minutes: put Jibble back in step with ELEVATE for people who are working (or just clocked out) on teams that use Jibble. */
+/** The experimental checker targets five minutes; the legacy repair schedule remains every 30 minutes. */
 export const jibbleRepair = inngest.createFunction(
-  { id: "jibble-repair", triggers: { cron: "*/30 * * * *" } },
+  { id: "jibble-repair", triggers: { cron: process.env.JIBBLE_COORDINATION_ENABLED === "true" ? "*/5 * * * *" : "*/30 * * * *" } },
   async ({ step }) => step.run("repair", () => track("jibble-repair", () => runJibbleRepair())),
 );
 

@@ -40,7 +40,7 @@ export async function kickMirror(employeeId?: string): Promise<void> {
     after(async () => {
       try {
         const { processMirrorQueue } = await import("./jobs");
-        // Only this person's calls: another click at the same moment sends its own, so two runs never pick up the same rows.
+        // Scope to this person's calls. Other workers can still overlap; per-person coordination is needed before this is safe.
         await processMirrorQueue(new Date(), undefined, employeeId ? { employeeId } : undefined);
       } catch (error) {
         console.error("jibble immediate send failed:", error instanceof Error ? error.name : "unknown error");

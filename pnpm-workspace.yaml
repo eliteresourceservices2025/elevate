@@ -26,3 +26,4 @@ overrides:
   # Security: patched versions of build/dev-time transitive packages (pnpm audit, Oct 2026)
   source-map-js: ">=1.2.2"
   body-parser: ">=2.4.0"
+  systeminformation: ">=5.33.16"

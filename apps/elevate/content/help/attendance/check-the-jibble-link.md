@@ -4,7 +4,7 @@ summary: See whether Jibble is connected and match people it could not match by 
 category: attendance
 audience: super_admin, hr_admin, team_lead
 order: 6
-updated: 2026-10-21
+updated: 2026-10-27
 ---
 
 ELEVATE is the time clock and the only source of hours. **Jibble is used only for screenshots.** When someone clocks in or out, ELEVATE tells Jibble. Jibble hours are never used for payroll, and Jibble screenshots are never copied into ELEVATE.
@@ -27,19 +27,23 @@ The **Connection** section shows whether ELEVATE is connected. You may see:
 
 If Jibble is down, the ELEVATE clock keeps working. Nothing is blocked.
 
-# Recent calls to Jibble
+# Recent shifts and call history
 
-The list shows each call, the person, the status and the note. Use **Sent again** (resend) for a failed call.
+Open **Recent shifts** to see ELEVATE clock-in and clock-out times side by side. Open **Call history** to search retained calls by person and filter by status. Use the page controls to see older calls; completed and failed calls are normally retained for 90 days, while queued calls remain while waiting. Times use your attendance time-zone preference, or the company default if you have not set one. A sent call does not confirm that the Jibble desktop app captured screenshots.
+
+Before using **Retry** on a failed call, check the person's current status in both ELEVATE and Jibble. Older calls, repair calls and calls followed by another call cannot be retried here; an old clock-out must not be replayed against a newer session. Ask HR to investigate a failed or uncertain call.
 
 # People matching
 
 ELEVATE matches people to Jibble by work email. If someone uses a different email in Jibble:
 
-1. Find them in **People**. People with **Not matched** need a match.
+1. Open **People matching** and find the person. People with **Not matched** need a match.
 2. In **Match by hand**, type the email they use in Jibble, or their Jibble member code.
 3. Save. A message confirms it. You can remove a match later.
 
 People with no match are skipped.
+
+Use the search box to find a loaded person by name, email or team, and use **Unmatched only** to narrow the list. If the page indicates that only the first 1,000 people are loaded, the search covers that list only.
 
 # Privacy
 
