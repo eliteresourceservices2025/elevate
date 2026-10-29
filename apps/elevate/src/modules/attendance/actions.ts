@@ -15,6 +15,10 @@ import { hrUserIds, notify } from "@/modules/notifications/service";
 import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
+import { getJibbleClient, sendsAllowed } from "@/modules/jibble/client";
+import { canProposeJibbleStart } from "@/modules/jibble/jibble-proposal";
+import { maySendNow } from "@/modules/jibble/jobs";
+import type { JibbleEntryEvidence } from "@/modules/jibble/http-client";
 import { groupByPerson, parseCorrectionsCsv } from "./bulk-corrections";
 import { EOD_EDIT_WINDOW_MS, needsHrDecision, replayClock } from "./clock";
 import { clockCorrections, clockEvents, clockEventVoids, clockPrefs, clockRules, correctionEvidence, idlePrompts, shiftNotes } from "./schema";
@@ -40,7 +44,6 @@ import {
 
 const BAD = "Check the request and try again.";
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? BAD;
-const DAY_MS = 86_400_000;
 
 function refresh() {
   revalidatePath("/attendance");
@@ -289,6 +292,27 @@ export async function decideCorrection(input: unknown): Promise<ActionResult> {
     if (decision === "reject" && !note) return fail("Give a short reason so the person knows why.");
     if (events && decision !== "approve") return fail("Times can only be changed when approving.");
 
+    let sourceEvidence: JibbleEntryEvidence | null = null;
+    let currentJibbleState: "in" | "out" | "break" | null = null;
+    if (decision === "approve") {
+      const [source] = await db.select({ origin: clockCorrections.origin, employeeId: clockCorrections.employeeId, personId: clockCorrections.sourceJibblePersonId, entryId: clockCorrections.sourceJibbleEntryId })
+        .from(clockCorrections).where(eq(clockCorrections.id, correctionId)).limit(1);
+      if (source?.origin === "jibble") {
+        if (scopeFor(actor, "attendance.approve_correction") !== "all") return fail("Only HR can decide this request.");
+        const [person] = await db.select({ userId: employees.userId }).from(employees).where(eq(employees.id, source.employeeId)).limit(1);
+        if (person?.userId === actor.id) return fail("Someone else must decide on your own request.");
+        const client = getJibbleClient();
+        if (!source.personId || !source.entryId || !sendsAllowed(source.personId) || !client?.entryEvidence) return fail("The Jibble source cannot be verified in this environment.");
+        if (!(await maySendNow(source.employeeId, source.personId))) return fail("Monitoring is not enabled for this person. The Jibble source was not read.");
+        try {
+          sourceEvidence = await client.entryEvidence(source.personId, source.entryId);
+          currentJibbleState = await client.latestState(source.personId);
+        } catch { return fail("Jibble source verification is unavailable. Try again before approving."); }
+        if (!sourceEvidence || !canProposeJibbleStart(sourceEvidence, new Date(), null, MAX_EDIT_AGE_MS)) return fail("The Jibble source entry is unavailable or has changed. Investigate before approving.");
+        if (currentJibbleState === null) return fail("Jibble's current status is unknown. Investigate before approving.");
+      }
+    }
+
     let earliestMs = Date.now();
     let employeeToRebuild: string | null = null;
     await db.transaction(async (tx) => {
@@ -300,12 +324,19 @@ export async function decideCorrection(input: unknown): Promise<ActionResult> {
       await authorize(actor, "attendance.approve_correction", { ownerUserId: person.userId ?? undefined, managerChainUserIds: await timeChainUserIds(tx, c.employeeId) });
       // Something filed by a lead or HR for the person, or older than a week when it was filed, is decided by HR only.
       const original = c.proposed as Proposed;
-      const hrOnly = c.requestedBy !== person.userId || needsHrDecision(Math.min(...original.map((p) => Date.parse(p.at))), c.createdAt.getTime());
+      if (decision === "approve" && c.origin === "jibble" && (!sourceEvidence || sourceEvidence.personId !== c.sourceJibblePersonId || sourceEvidence.id !== c.sourceJibbleEntryId || !original.some((event) => event.type === "clock_in" && event.at === sourceEvidence?.time))) throw new ActionFailure("The Jibble source or proposed time changed. Investigate before approving.");
+      const hrOnly = c.origin === "jibble" || c.requestedBy !== person.userId || needsHrDecision(Math.min(...original.map((p) => Date.parse(p.at))), c.createdAt.getTime());
       if (hrOnly && scopeFor(actor, "attendance.approve_correction") !== "all") throw new ActionFailure("Only HR can decide this request.");
 
       const adjusted = events ? (events.map((e) => ({ type: e.type, at: new Date(e.at).toISOString() })) as Proposed) : null;
       const changed = adjusted !== null && JSON.stringify(adjusted) !== JSON.stringify(original);
       const proposed = adjusted ?? original;
+
+      if (decision === "approve" && c.origin === "jibble" && sourceEvidence) {
+        const startMs = Date.parse(sourceEvidence.time);
+        if (currentJibbleState === "out" && !proposed.some((event) => event.type === "clock_out" && Date.parse(event.at) > startMs)) throw new ActionFailure("Jibble is clocked out. Add a verified clock-out time before approving this proposal.");
+        if (currentJibbleState === "break" && !proposed.some((event) => event.type === "break_start" && Date.parse(event.at) > startMs)) throw new ActionFailure("Jibble is on a break. Add the verified break start before approving this proposal.");
+      }
 
       if (decision === "approve") {
         await lockEmployeeClock(tx, c.employeeId);

@@ -1,0 +1,2 @@
+DROP INDEX "time"."clock_corrections_jibble_entry_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "clock_corrections_jibble_entry_idx" ON "time"."clock_corrections" USING btree ("source_jibble_entry_id") WHERE "time"."clock_corrections"."origin" = 'jibble';

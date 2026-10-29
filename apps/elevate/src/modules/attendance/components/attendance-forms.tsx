@@ -279,7 +279,7 @@ export function CorrectionList({ items, zone, mode, empty }: { items: Correction
             </p>
           ) : null}
           <p className="text-sm text-muted-foreground">{c.reason}</p>
-          {c.filedBy ? <p className="text-xs text-muted-foreground">Filed for them by {c.filedBy}.</p> : null}
+          {c.origin === "jibble" ? <p className="text-xs text-muted-foreground">System proposal based on a Jibble time entry; HR approval is required.</p> : c.filedBy ? <p className="text-xs text-muted-foreground">Filed for them by {c.filedBy}.</p> : null}
           {c.evidence.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
               {c.evidence.map((ev, i) =>

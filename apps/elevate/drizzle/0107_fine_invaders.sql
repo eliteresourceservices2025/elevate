@@ -1,0 +1,2 @@
+DROP INDEX "time"."jibble_mismatch_open_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "jibble_mismatch_open_idx" ON "time"."jibble_mismatches" USING btree ("employee_id") WHERE "time"."jibble_mismatches"."resolved_at" is null;

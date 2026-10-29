@@ -6,4 +6,6 @@ export const setPersonSchema = z.object({
   jibblePersonId: z.preprocess((v) => (typeof v === "string" ? (v.trim() === "" ? null : v.trim()) : v), z.string().max(120, "That is too long").nullable()),
 });
 export const retrySchema = z.object({ logId: z.uuid() });
+export const mismatchReviewSchema = z.object({ mismatchId: z.uuid(), note: z.string().trim().max(300).optional() });
+export const operationRecoverySchema = z.object({ employeeId: z.uuid() });
 export const pauseSchema = z.object({ paused: z.boolean() });

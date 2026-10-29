@@ -138,7 +138,11 @@ export const clockCorrections = time
       employeeId: uuid("employee_id")
         .notNull()
         .references(() => employees.id),
-      requestedBy: uuid("requested_by").notNull(),
+      requestedBy: uuid("requested_by"),
+      /** Jibble proposals have no human requester and must retain the source entry identity. */
+      origin: text("origin").notNull().default("human"),
+      sourceJibblePersonId: text("source_jibble_person_id"),
+      sourceJibbleEntryId: text("source_jibble_entry_id"),
       reason: text("reason").notNull(),
       /** The events to add: [{ type, at (ISO instant) }]. */
       proposed: jsonb("proposed").$type<{ type: string; at: string }[]>().notNull(),
@@ -160,6 +164,8 @@ export const clockCorrections = time
       index("clock_corrections_status_idx").on(t.status, t.createdAt),
       index("clock_corrections_employee_idx").on(t.employeeId, t.createdAt),
       index("clock_corrections_batch_idx").on(t.batchId),
+      uniqueIndex("clock_corrections_jibble_entry_idx").on(t.sourceJibbleEntryId).where(sql`${t.origin} = 'jibble'`),
+      check("clock_corrections_origin_chk", sql`(${t.origin} = 'human' and ${t.requestedBy} is not null and ${t.sourceJibblePersonId} is null and ${t.sourceJibbleEntryId} is null) or (${t.origin} = 'jibble' and ${t.requestedBy} is null and ${t.sourceJibblePersonId} is not null and ${t.sourceJibbleEntryId} is not null and length(trim(${t.sourceJibblePersonId})) > 0 and length(trim(${t.sourceJibbleEntryId})) > 0)`),
       check("clock_corrections_status_chk", sql`${t.status} in ('pending','approved','rejected','cancelled')`),
       check("clock_corrections_kind_chk", sql`${t.kind} in ('forgot','connection_problem','device_problem','other')`),
     ],

@@ -8,10 +8,10 @@ import { PageContainer } from "@/components/page-container";
 
 export const metadata: Metadata = { title: "Jibble" };
 
-export default async function JibblePage({ searchParams }: { searchParams: Promise<{ preview?: string; callSearch?: string; callStatus?: string; callPage?: string }> }) {
+export default async function JibblePage({ searchParams }: { searchParams: Promise<{ preview?: string; callSearch?: string; callStatus?: string; callPage?: string; exceptionPage?: string }> }) {
   await requireUser();
   const params = await searchParams;
-  const overview = await orNotFound(getJibbleOverview({ search: params.callSearch, status: params.callStatus, page: params.callPage }));
+  const overview = await orNotFound(getJibbleOverview({ search: params.callSearch, status: params.callStatus, page: params.callPage, exceptionPage: params.exceptionPage }));
   const requestedPreview = params.preview;
   const preview = process.env.NODE_ENV === "development" && (requestedPreview === "shifts" || requestedPreview === "shifts50");
   const exampleShifts = [
@@ -31,7 +31,7 @@ export default async function JibblePage({ searchParams }: { searchParams: Promi
     { id: "preview-call-5", name: "Sample Person E", action: "Out", status: "failed", attempts: 1, lastError: "http 400: request refused", createdAt: "2026-10-26T20:00:00.000Z", sentAt: null, source: "repair", fallback: false },
   ];
   const sampleLog = exampleCalls.filter((call) => (overview.callHistory.status === "all" || call.status === overview.callHistory.status) && call.name.toLowerCase().includes(overview.callHistory.search.toLowerCase()));
-  const display = preview ? { ...overview, shifts: requestedPreview === "shifts50" ? fiftyShifts : exampleShifts, log: sampleLog, counts: { queued: 1, sent24h: 2, failed: 2 }, callHistory: { ...overview.callHistory, page: 1, pages: 1, total: sampleLog.length, from: sampleLog.length ? 1 : 0, to: sampleLog.length } } : overview;
+  const display = preview ? { ...overview, shifts: requestedPreview === "shifts50" ? fiftyShifts : exampleShifts, log: sampleLog.map((call) => ({ ...call, reviewed: false })), counts: { queued: 1, sent24h: 2, failed: 2 }, callHistory: { ...overview.callHistory, page: 1, pages: 1, total: sampleLog.length, from: sampleLog.length ? 1 : 0, to: sampleLog.length } } : overview;
   return (
     <PageContainer>
       <PageHeader title="Jibble" description="Connection status, people matching and the latest calls." />

@@ -139,6 +139,13 @@ describe("Jibble HTTP client", () => {
     expect(JSON.parse(calls[0].body!).platform).toMatchObject({ deviceName: "ELEVATE", isQrKiosk: false });
   });
 
+  it("sends a caller-supplied entry ID when requested", async () => {
+    const id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    answer([{ json: { id } }]);
+    expect(await token.clock("person-1", "In", { requestId: id })).toEqual({ entryId: id });
+    expect(JSON.parse(calls[0].body!).id).toBe(id);
+  });
+
   it("keeps what Jibble said was wrong for the probe, but not in the message that gets stored", async () => {
     answer([{ status: 400, json: { errors: { Platform: ["The Platform field is required."] }, title: "One or more validation errors occurred." } }]);
     const err = (await token.clock("person-1", "In").catch((e: unknown) => e)) as JibbleError;
@@ -157,6 +164,26 @@ describe("Jibble HTTP client", () => {
     expect(await token.latestState("p1")).toBe("out");
     expect(await token.latestState("p1")).toBeNull();
     expect(calls[0].url).toContain("/v1/People(p1)/LatestTimeEntry");
+  });
+
+  it("reads only valid, timezone-qualified latest entry evidence", async () => {
+    answer([{ json: { id: "entry-1", type: "In", time: "2026-10-26T13:03:00-07:00" } }, { json: { id: "entry-2", type: "In", time: "2026-10-26T13:03:00" } }, { json: { type: "Out", time: "2026-10-26T20:03:00Z" } }]);
+    expect(await token.latestEntry("p1")).toEqual({ id: "entry-1", state: "in", time: "2026-10-26T20:03:00.000Z" });
+    expect(await token.latestEntry("p1")).toBeNull();
+    expect(await token.latestEntry("p1")).toBeNull();
+    expect(calls[0].url).toContain("$select=id,type,time");
+  });
+
+  it("looks up one person's active entry without exposing device identifiers", async () => {
+    const person = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const entry = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    answer([{ json: { value: [{ id: entry, personId: person, type: "In", time: "2026-10-26T20:03:00Z", createdAt: "2026-10-26T20:03:01Z", updatedAt: "2026-10-26T20:03:01Z", clientType: "Desktop", platform: { deviceId: "private-device", clientVersion: "desktop" }, status: "Active" }] } }]);
+    const result = await token.entryEvidence(person, entry);
+    expect(result).toMatchObject({ id: entry, personId: person, state: "in", clientType: "Desktop", elevateOrigin: false, hasDeviceEvidence: true });
+    expect(JSON.stringify(result)).not.toContain("private-device");
+    expect(new URL(calls[0].url).searchParams.get("$filter")).toBe(`(id eq ${entry} and personId eq ${person})`);
+    expect(await token.entryEvidence("invalid", entry)).toBeNull();
+    expect(calls).toHaveLength(1);
   });
 
   it("keeps how long Jibble asked us to wait when it says to slow down", async () => {
