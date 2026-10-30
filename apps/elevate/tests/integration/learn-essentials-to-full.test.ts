@@ -118,3 +118,32 @@ describe("moving HIPAA Essentials to Full", () => {
     expect((await actions.convertLearnEssentialsToFull({ assignmentId: full.id, reason: REASON })).ok).toBe(false);
   });
 });
+
+describe("accepting with a middle name", () => {
+  it("accepts first+last or first+middle+last, rejects others, and prints the middle name", async () => {
+    const v = await hipaaVersion();
+    const userId = await makeUser("mid", false);
+    await db.execute(sql`insert into core.employees (user_id, legal_first_name, legal_middle_name, legal_last_name, work_email, status, start_date) values (${userId}, 'Careen', 'Buen', 'Bayani', ${`mid${Date.now().toString(36)}@example.com`}, 'active', '2026-01-05')`);
+    const accept = (assignmentId: string, name: string) => rows(sql`select * from learn.accept_and_certify(${userId}::uuid, ${assignmentId}::uuid, 'v1', ${name}, '203.0.113.9', ${"{password}"}::text[])`);
+    const passed = async () => {
+      const a = await essentialsAssignment(userId, v);
+      await db.execute(sql`update learn.assignments set status = 'passed', passed_at = now() where id = ${a.id}`);
+      return a.id;
+    };
+
+    const first = await passed();
+    expect(await accept(first, "Careen Reyes Bayani").catch((e: { cause?: { message?: string } }) => e.cause?.message)).toMatch(/name_mismatch/);
+    expect(await accept(first, "Careen Bayani Buen").catch((e: { cause?: { message?: string } }) => e.cause?.message)).toMatch(/name_mismatch/);
+    const withMiddle = await accept(first, "  careen   BUEN bayani ");
+    expect(withMiddle).toHaveLength(1);
+    const [cert] = await rows<{ holder_name: string }>(sql`select holder_name from learn.certificates where assignment_id = ${first}`);
+    expect(cert.holder_name).toBe("Careen Buen Bayani");
+
+    // without the middle name is still accepted, and the certificate still prints the full legal name
+    await db.execute(sql`update learn.assignments set status = 'expired' where id = ${first}`);
+    const second = await passed();
+    expect(await accept(second, "Careen Bayani")).toHaveLength(1);
+    const [cert2] = await rows<{ holder_name: string }>(sql`select holder_name from learn.certificates where assignment_id = ${second}`);
+    expect(cert2.holder_name).toBe("Careen Buen Bayani");
+  });
+});
