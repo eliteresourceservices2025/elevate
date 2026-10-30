@@ -26,7 +26,12 @@ export async function convertEssentialsToFull(tx: Tx, actor: Actor, p: { assignm
   const old = found[0];
   if (!old) throw new ActionFailure("That training was not found.");
   if (old.slug !== HIPAA_SLUG || old.track !== "essentials") throw new ActionFailure("Only a HIPAA Essentials assignment can be moved to Full.");
-  if (!["assigned", "in_progress"].includes(old.status)) throw new ActionFailure("Only open training can be moved to Full.");
+  // Open training, or an exam passed whose acknowledgement was never completed (no certificate yet). A certificate is never replaced here.
+  const open = ["assigned", "in_progress"].includes(old.status);
+  if (!open) {
+    const certified = (await tx.execute(sql`select 1 from learn.certificates where assignment_id = ${p.assignmentId}`)) as unknown as unknown[];
+    if (old.status !== "passed" || certified.length > 0) throw new ActionFailure("Only open training, or a passed exam with no certificate yet, can be moved to Full.");
+  }
   if (old.user_id === actor.id) throw new ActionFailure("Another HR admin has to change your own training.");
 
   const published = (await tx.execute(sql`
@@ -42,7 +47,8 @@ export async function convertEssentialsToFull(tx: Tx, actor: Actor, p: { assignm
   if (person.length === 0) throw new ActionFailure("That person is not an active team member with an account.");
 
   // Close the old one first: only one assignment per person and course may be open.
-  await tx.execute(sql`update learn.assignments set status = 'cancelled' where id = ${p.assignmentId}`);
+  // A passed one can only move on to 'expired' (a database guard), which also stops it from ever issuing an Essentials certificate.
+  await tx.execute(sql`update learn.assignments set status = ${open ? "cancelled" : "expired"} where id = ${p.assignmentId}`);
   const made = (await tx.execute(sql`
     insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on, created_by)
     values (${old.user_id}, ${old.course_id}, ${old.version_id}, 'full', 'manual', ${addDays(todayInZone(), 30)}::date, ${actor.id})

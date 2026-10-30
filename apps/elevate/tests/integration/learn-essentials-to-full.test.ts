@@ -77,6 +77,24 @@ describe("moving HIPAA Essentials to Full", () => {
     expect(await rows(sql`select 1 from ops.audit_log where action = 'learn.convert_essentials_to_full' and target_id = ${open[0].id}`)).toHaveLength(1);
   });
 
+  it("also handles an exam passed whose acknowledgement was never finished, and never one with a certificate", async () => {
+    const v = await hipaaVersion();
+    const learner = await makeUser("stuck");
+    const old = await essentialsAssignment(learner, v);
+    await db.execute(sql`update learn.assignments set status = 'passed', passed_at = now() where id = ${old.id}`);
+    current.user = await hrUser();
+    expect((await actions.convertLearnEssentialsToFull({ assignmentId: old.id, reason: REASON })).ok).toBe(true);
+    const [was] = await rows<{ status: string }>(sql`select status from learn.assignments where id = ${old.id}`);
+    expect(was.status).toBe("expired");
+    expect(await rows(sql`select 1 from learn.assignments where user_id = ${learner} and track = 'full' and status = 'assigned'`)).toHaveLength(1);
+
+    const certified = await makeUser("certified");
+    const done = await essentialsAssignment(certified, v);
+    await db.execute(sql`update learn.assignments set status = 'passed', passed_at = now() where id = ${done.id}`);
+    await db.execute(sql`insert into learn.certificates (reference, user_id, assignment_id, version_id, track, holder_name, issued_on, ends_on) values (${`HC-2026-${String(100000 + (Date.now() % 800000)).replace(/[01]/g, "7")}`}, ${certified}, ${done.id}, ${v.versionId}, 'essentials', 'Test Learner', '2026-10-01', '2027-10-01')`);
+    expect((await actions.convertLearnEssentialsToFull({ assignmentId: done.id, reason: REASON })).ok).toBe(false);
+  });
+
   it("refuses a second conversion, a Full assignment, your own assignment and other roles", async () => {
     const v = await hipaaVersion();
     const learner = await makeUser("learner");
