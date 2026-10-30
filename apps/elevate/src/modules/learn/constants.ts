@@ -22,7 +22,9 @@ export type LearnCourseInfo = {
  * they are listed here; client add-ons are rows in `learn.courses` and come from `listLearnCourses` (course-catalog.ts).
  */
 export const CORE_COURSES: readonly LearnCourseInfo[] = [
-  { slug: HIPAA_SLUG, label: "HIPAA", noun: "HIPAA training", fixedTrack: null, kind: "core", clientId: null },
+  // HIPAA is complete workforce training: every new assignment uses the Full track.
+  // Older Essentials records remain readable as historical evidence, but cannot be assigned again.
+  { slug: HIPAA_SLUG, label: "HIPAA", noun: "HIPAA training", fixedTrack: "full", kind: "core", clientId: null },
   { slug: CYBERSECURITY_SLUG, label: "Cybersecurity basics", noun: "Cybersecurity basics training", fixedTrack: "full", kind: "core", clientId: null },
   { slug: CUSTOMER_SERVICE_SLUG, label: "Customer service", noun: "Customer service certification", fixedTrack: "full", kind: "core", clientId: null },
 ];

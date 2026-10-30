@@ -86,10 +86,11 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
   for (const q of queued) {
     const need = assignmentNeed({ today, startDate: q.start_date, openAssignment: false, latestCertificateEndsOn: null, assignedToPhiClient: false });
     if (!need.assign) continue;
+    const track = info.fixedTrack ?? q.track;
     const made = await db.transaction(async (tx) => {
       const inserted = (await tx.execute(sql`
         insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on)
-        select ${q.user_id}, ${version.course_id}, ${version.version_id}, ${q.track}, ${need.reason}, ${need.dueOn}::date
+        select ${q.user_id}, ${version.course_id}, ${version.version_id}, ${track}, ${need.reason}, ${need.dueOn}::date
         where not exists (select 1 from learn.assignments a where a.user_id = ${q.user_id} and a.course_id = ${version.course_id} and a.status in ('assigned', 'in_progress'))
         returning id`)) as unknown as { id: string }[];
       await tx.execute(sql`delete from learn.pending_assignments where employee_id = ${q.employee_id}::uuid and course_id = ${version.course_id}`);

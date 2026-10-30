@@ -22,9 +22,9 @@ describe("dates", () => {
 });
 
 describe("tracks", () => {
-  it("puts people on client work that handles patient information on Full, everyone else on Essentials", () => {
+  it("assigns the complete HIPAA course to everyone", () => {
     expect(trackFor(true)).toBe("full");
-    expect(trackFor(false)).toBe("essentials");
+    expect(trackFor(false)).toBe("full");
   });
 });
 
@@ -35,9 +35,9 @@ describe("who needs an assignment", () => {
     expect(assignmentNeed({ ...base, latestCertificateEndsOn: addDays(TODAY, 61) })).toEqual({ assign: false });
   });
 
-  it("gives a new hire 30 days from their start, on the track their client work needs", () => {
+  it("gives a new hire 30 days from their start on the Full track", () => {
     expect(assignmentNeed({ ...base, startDate: "2026-10-05", assignedToPhiClient: true })).toEqual({ assign: true, reason: "new_hire", track: "full", dueOn: "2026-11-04" });
-    expect(assignmentNeed({ ...base, startDate: "2026-10-05" })).toEqual({ assign: true, reason: "new_hire", track: "essentials", dueOn: "2026-11-04" });
+    expect(assignmentNeed({ ...base, startDate: "2026-10-05" })).toEqual({ assign: true, reason: "new_hire", track: "full", dueOn: "2026-11-04" });
     // starts in the future
     expect(assignmentNeed({ ...base, startDate: "2026-10-20" })).toMatchObject({ reason: "new_hire", dueOn: "2026-11-19" });
   });

@@ -1,6 +1,6 @@
 "use server";
 
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -9,13 +9,16 @@ import { allowRequest } from "@/lib/rate-limit";
 import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { notify } from "@/modules/notifications/service";
+import { todayInZone } from "@/modules/org/service";
+import { moveLearnHistory } from "@/modules/people/duplicates-service";
+import { employees } from "@/modules/people/schema";
 import { currentSignInMethods } from "@/modules/signing/session";
 import { describeCourse, findLearnCourse } from "./course-catalog";
 import { createLaunchToken } from "./service";
 import { handoffUrl, learnBaseUrl } from "./token";
 import { buildClientEvidence } from "./evidence";
 import { evidenceCsv, evidencePdf, summarize } from "./evidence-format";
-import { assignTrainingSchema, autoAssignSchema, evidenceExportSchema, grantRetrySchema } from "./validators";
+import { assignTrainingSchema, autoAssignSchema, changeDueDateSchema, evidenceExportSchema, grantRetrySchema, repairLearnHistorySchema } from "./validators";
 
 /**
  * Starts the sign-in handoff to ELEVATE Learn: makes a one-time token (60 seconds, stored only as a hash) and returns it with the
@@ -75,6 +78,85 @@ export async function grantLearnRetry(input: unknown): Promise<ActionResult> {
     });
     revalidatePath("/training");
     return { ok: true, data: undefined };
+  });
+}
+
+/**
+ * HR changes the effective deadline of an open training. The assignment keeps
+ * the new date for learner views and reminders, while the old date and reason
+ * are retained in `assignment_due_changes` and the audit log.
+ */
+export async function changeLearnDueDate(input: unknown): Promise<ActionResult<{ changed: boolean }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.assign");
+    const parsed = changeDueDateSchema.safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the form and try again.");
+    const v = parsed.data;
+    if (v.dueOn < todayInZone()) return fail("The new due date cannot be in the past.");
+
+    const changed = await db.transaction(async (tx) => {
+      const found = (await tx.execute(sql`
+        select a.user_id, a.status, a.due_on::text as due_on, c.slug
+        from learn.assignments a join learn.courses c on c.id = a.course_id
+        where a.id = ${v.assignmentId} for update of a`)) as unknown as { user_id: string; status: string; due_on: string; slug: string }[];
+      const a = found[0];
+      if (!a) throw new ActionFailure("That training was not found.");
+      if (a.user_id === actor.id) throw new ActionFailure("Another HR admin has to change your own training deadline.");
+      if (!['assigned', 'in_progress'].includes(a.status)) throw new ActionFailure("Only open training has a due date to change.");
+      if (a.due_on === v.dueOn) return false;
+
+      await tx.execute(sql`update learn.assignments set due_on = ${v.dueOn}::date where id = ${v.assignmentId}`);
+      await tx.execute(sql`
+        insert into learn.assignment_due_changes (assignment_id, previous_due_on, due_on, reason, changed_by)
+        values (${v.assignmentId}, ${a.due_on}::date, ${v.dueOn}::date, ${v.reason}, ${actor.id})`);
+      await writeAudit({ actor, action: "learn.change_due_date", targetType: "learn_assignment", targetId: v.assignmentId, before: { dueOn: a.due_on }, after: { dueOn: v.dueOn }, metadata: { reason: v.reason, course: a.slug } }, tx);
+      const courseLabel = (await describeCourse(tx, a.slug)).label;
+      await notify(tx, {
+        userId: a.user_id,
+        kind: "learn.due_date_changed",
+        title: `Your ${courseLabel} due date changed`,
+        body: `Please finish it by ${v.dueOn}.`,
+        link: "/learn",
+      });
+      return true;
+    });
+    revalidatePath("/training");
+    return { ok: true, data: { changed } };
+  });
+}
+
+/**
+ * Transfers assignment-based history from an account with no current employee
+ * record to a verified current profile. This is deliberately separate from
+ * the merge workflow so historic data is never matched by name alone.
+ */
+export async function repairOrphanedLearnHistory(input: unknown): Promise<ActionResult<{ assignmentsMoved: number; assignmentsSkipped: number; certificatesMoved: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "people.merge");
+    const parsed = repairLearnHistorySchema.safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the form and try again.");
+    const v = parsed.data;
+    const result = await db.transaction(async (tx) => {
+      const source = (await tx.execute(sql`
+        select u.id
+        from core.users u
+        where u.id = ${v.sourceUserId} and u.archived_at is null
+          and not exists (select 1 from core.employees e where e.user_id = u.id and e.archived_at is null)
+        for update`)) as unknown as { id: string }[];
+      if (!source[0]) throw new ActionFailure("That learning account is no longer eligible for repair.");
+      const [target] = await tx.select({ userId: employees.userId, archivedAt: employees.archivedAt }).from(employees).where(eq(employees.id, v.targetEmployeeId)).for("update");
+      if (!target || target.archivedAt || !target.userId) throw new ActionFailure("Choose a current employee with a sign-in account.");
+      if (target.userId === v.sourceUserId) throw new ActionFailure("That account already belongs to this employee.");
+      const moved = await moveLearnHistory(tx, v.sourceUserId, target.userId);
+      if (moved.assignmentsMoved === 0 && moved.certificatesMoved === 0) throw new ActionFailure("No transferable learning history was found for that account.");
+      await writeAudit({ actor, action: "learn.repair_orphaned_history", targetType: "employee", targetId: v.targetEmployeeId, before: { sourceUserId: v.sourceUserId }, after: moved, metadata: { reason: v.reason } }, tx);
+      return moved;
+    });
+    revalidatePath("/training");
+    revalidatePath(`/people/${v.targetEmployeeId}`);
+    return { ok: true, data: result };
   });
 }
 

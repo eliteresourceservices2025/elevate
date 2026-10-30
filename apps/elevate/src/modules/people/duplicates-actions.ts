@@ -14,7 +14,7 @@ const refresh = () => {
 };
 
 /** HR: two records are the same person. The duplicate is archived; the sign-in account (and, if asked, the work email) goes to the record that stays. */
-export async function mergeDuplicate(input: unknown): Promise<ActionResult<{ accountMoved: boolean; rolesCopied: number; reportsMoved: number; emailAdopted: boolean }>> {
+export async function mergeDuplicate(input: unknown): Promise<ActionResult<{ accountMoved: boolean; rolesCopied: number; reportsMoved: number; emailAdopted: boolean; learning: { assignmentsMoved: number; assignmentsSkipped: number; certificatesMoved: number } | null }>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "people.merge");

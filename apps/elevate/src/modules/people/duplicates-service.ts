@@ -11,7 +11,8 @@ import { employees } from "./schema";
 import { recordHistory, type Tx } from "./service";
 
 // Putting two records of the same person right. Nothing is deleted: the duplicate is archived (so it leaves the directory and the
-// org chart) and its sign-in account, if it had one, moves to the record that stays. All its history stays on the archived record.
+// org chart) and its sign-in account, if it had one, moves to the record that stays. When that replaces an existing account on the
+// keeper, assignment-based Learn history follows the person instead of becoming invisible on the detached account.
 
 type Reader = Pick<typeof db, "select">;
 
@@ -54,6 +55,62 @@ export async function accountsWithoutRecord(tx: Reader): Promise<{ userId: strin
 
 type EmployeeRow = typeof employees.$inferSelect;
 
+type LearnHistoryMove = { assignmentsMoved: number; assignmentsSkipped: number; certificatesMoved: number };
+
+/**
+ * The duplicate account is the person's active account after a merge. If the
+ * keeper had an older account, move its non-conflicting assignment history to
+ * the active account. Open assignments for the same course are intentionally
+ * left alone: choosing which in-progress attempt wins requires HR review.
+ */
+export async function moveLearnHistory(tx: Tx, fromUserId: string, toUserId: string): Promise<LearnHistoryMove> {
+  const skipped = (await tx.execute(sql`
+    select count(*)::int as n
+    from learn.assignments source
+    where source.user_id = ${fromUserId}
+      and source.status in ('assigned', 'in_progress')
+      and exists (
+        select 1 from learn.assignments target
+        where target.user_id = ${toUserId}
+          and target.course_id = source.course_id
+          and target.status in ('assigned', 'in_progress')
+      )`)) as unknown as { n: number }[];
+  const moved = (await tx.execute(sql`
+    update learn.assignments source
+    set user_id = ${toUserId}
+    where source.user_id = ${fromUserId}
+      and not (
+        source.status in ('assigned', 'in_progress')
+        and exists (
+          select 1 from learn.assignments target
+          where target.user_id = ${toUserId}
+            and target.course_id = source.course_id
+            and target.status in ('assigned', 'in_progress')
+        )
+    returning source.id`)) as unknown as { id: string }[];
+
+  // These tables duplicate user_id for authorization and reporting. Keep it in
+  // sync with the assignment after moving history to the account in use.
+  for (const table of ["module_screens", "module_time", "module_completions", "retry_grants", "exam_attempts", "attestations", "call_attempts"]) {
+    await tx.execute(sql`
+      update learn.${sql.identifier(table)} child
+      set user_id = ${toUserId}
+      from learn.assignments assignment
+      where child.assignment_id = assignment.id
+        and assignment.user_id = ${toUserId}
+        and child.user_id = ${fromUserId}`);
+  }
+  const certificates = (await tx.execute(sql`
+    update learn.certificates certificate
+    set user_id = ${toUserId}
+    from learn.assignments assignment
+    where certificate.assignment_id = assignment.id
+      and assignment.user_id = ${toUserId}
+      and certificate.user_id = ${fromUserId}
+    returning certificate.id`)) as unknown as { id: string }[];
+  return { assignmentsMoved: moved.length, assignmentsSkipped: skipped[0]?.n ?? 0, certificatesMoved: certificates.length };
+}
+
 /**
  * Records merged into another one point at it (`merged_into_id`). An import that finds an archived duplicate by its email or TalentHR id
  * must act on the record it was merged into, not bring the duplicate back. Returns each given record's final record (itself, if never merged).
@@ -78,7 +135,7 @@ type Actor = { id: string; email: string; roles?: readonly string[] };
  * nothing is lost; Super Admin only when the actor is one). With `adoptEmail` the keeper takes the duplicate's work email (the
  * address the person now uses); the duplicate gets a placeholder so the address is free. Direct reports move to the keeper.
  */
-export async function mergeEmployees(tx: Tx, actor: Actor, p: { keepId: string; duplicateId: string; adoptEmail: boolean }): Promise<{ accountMoved: boolean; rolesCopied: number; reportsMoved: number; emailAdopted: boolean }> {
+export async function mergeEmployees(tx: Tx, actor: Actor, p: { keepId: string; duplicateId: string; adoptEmail: boolean }): Promise<{ accountMoved: boolean; rolesCopied: number; reportsMoved: number; emailAdopted: boolean; learning: LearnHistoryMove | null }> {
   if (p.keepId === p.duplicateId) throw new ActionFailure("Choose two different records.");
   // Lock both in a fixed order so two people merging the same pair cannot deadlock
   const [a, b] = p.keepId < p.duplicateId ? [p.keepId, p.duplicateId] : [p.duplicateId, p.keepId];
@@ -97,6 +154,7 @@ export async function mergeEmployees(tx: Tx, actor: Actor, p: { keepId: string; 
   // The account in use follows the person
   let accountMoved = false;
   let rolesCopied = 0;
+  let learning: LearnHistoryMove | null = null;
   if (dup.userId) {
     const inUse = dup.userId;
     const oldKeepUser = keep.userId;
@@ -113,6 +171,7 @@ export async function mergeEmployees(tx: Tx, actor: Actor, p: { keepId: string; 
         await tx.insert(userRoles).values({ userId: inUse, roleSlug: r.roleSlug, grantedBy: actor.id }).onConflictDoNothing();
         rolesCopied += 1;
       }
+      learning = await moveLearnHistory(tx, oldKeepUser, inUse);
     }
   }
 
@@ -142,10 +201,10 @@ export async function mergeEmployees(tx: Tx, actor: Actor, p: { keepId: string; 
   await recordHistory(tx, { employeeId: dup.id, eventType: "archived", summary: "Merged into another record of the same person and archived", changedBy: actor.id });
   await recordHistory(tx, { employeeId: keep.id, eventType: "merged", summary: `A duplicate record was merged in${accountMoved ? "; the sign-in account now belongs to this record" : ""}`, changedBy: actor.id });
   await writeAudit(
-    { actor, action: "people.merge", targetType: "employee", targetId: keep.id, after: { mergedFrom: dup.id, accountMoved, emailAdopted, reportsMoved: reports.length, rolesCopied } },
+    { actor, action: "people.merge", targetType: "employee", targetId: keep.id, after: { mergedFrom: dup.id, accountMoved, emailAdopted, reportsMoved: reports.length, rolesCopied, learning } },
     tx,
   );
-  return { accountMoved, rolesCopied, reportsMoved: reports.length, emailAdopted };
+  return { accountMoved, rolesCopied, reportsMoved: reports.length, emailAdopted, learning };
 }
 
 /**

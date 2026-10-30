@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
+import { ForbiddenError, authorize, can, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { pageInfo, type PageInfo } from "@/lib/pagination";
@@ -25,6 +25,10 @@ export type TrainingRow = {
   team: string | null;
   assignmentId: string | null;
   track: string | null;
+  assignmentReason: string | null;
+  /** Only update assignments have this: the changed modules a certified person must revisit. */
+  updateModules: string[] | null;
+  dueChanged: boolean;
   state: TrainingState;
   /** Plain words for the state: "Passed", "Not yet", "Overdue", "Not assigned". */
   label: string;
@@ -38,6 +42,14 @@ export type TrainingRow = {
 
 export type TrainingCounts = { people: number; passed: number; open: number; overdue: number; none: number };
 
+/** Records that need an HR decision; this query never changes training data. */
+export type TrainingRemediationReview = {
+  essentialsAssignments: { assignmentId: string; name: string; dueOn: string; status: string }[];
+  orphanedCertificates: { certificateId: string; sourceUserId: string; reference: string; holderName: string; course: string; endsOn: string; sourceEmail: string }[];
+  canRepair: boolean;
+  repairTargets: { employeeId: string; name: string }[];
+};
+
 const LABEL: Record<TrainingState, string> = { none: "Not assigned", open: "Not yet", overdue: "Overdue", passed: "Passed", expired: "Expired", cancelled: "Closed", no_account: "Not signed in yet", queued: "Queued" };
 
 type Raw = {
@@ -48,6 +60,9 @@ type Raw = {
   team_name: string | null;
   assignment_id: string | null;
   track: string | null;
+  reason: string | null;
+  update_modules: string[] | null;
+  due_changed: boolean;
   status: string | null;
   due_on: string | null;
   cert_ends: string | null;
@@ -87,7 +102,9 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
     select e.id as employee_id, u.id as user_id,
            exists (select 1 from learn.pending_assignments pa join learn.courses pc on pc.id = pa.course_id where pa.employee_id = e.id and pc.slug = ${course}) as queued,
            coalesce(nullif(btrim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), e.work_email) as name,
-           tm.name as team_name, l.id as assignment_id, l.track, l.status, l.due_on::text as due_on,
+           tm.name as team_name, l.id as assignment_id, l.track, l.reason, l.status, l.due_on::text as due_on,
+           us.module_keys as update_modules,
+           exists (select 1 from learn.assignment_due_changes dc where dc.assignment_id = l.id) as due_changed,
            (select max(c.ends_on)::text from learn.certificates c join learn.assignments ca on ca.id = c.assignment_id join learn.courses cc on cc.id = ca.course_id
               where c.user_id = u.id and cc.slug = ${course}
               and not exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id)) as cert_ends,
@@ -97,6 +114,7 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
     left join core.users u on u.id = e.user_id
     left join core.teams tm on tm.id = e.team_id
     left join latest l on l.user_id = u.id
+    left join learn.update_scopes us on us.assignment_id = l.id
     where e.archived_at is null and (u.id is null or u.archived_at is null) and e.status in ('onboarding', 'active', 'probation', 'on_leave')
       ${picked.kind === "client_addon" && picked.clientId
         ? sql`and (l.id is not null or exists (select 1 from core.client_assignments cx where cx.employee_id = e.id and cx.client_id = ${picked.clientId}::uuid and cx.end_date is null))`
@@ -114,6 +132,9 @@ export async function listTrainingStatus(rawFilters: unknown, paging: { page: nu
       team: r.team_name,
       assignmentId: r.assignment_id,
       track: r.track,
+      assignmentReason: r.reason,
+      updateModules: r.update_modules,
+      dueChanged: r.due_changed,
       state,
       label: LABEL[state],
       dueOn: r.due_on,
@@ -160,6 +181,59 @@ export async function getAutoAssign(courseSlug: string): Promise<{ rule: AutoAss
   return {
     rule: rule[0] ? { mode: rule[0].mode, teamIds: rule[0].team_ids, updatedAt: rule[0].updated_at, configured: true } : { mode: "all", teamIds: [], updatedAt: null, configured: false },
     teams,
+  };
+}
+
+/**
+ * Read-only reconciliation queue for HR. Essentials assignments were created
+ * under the retired policy, while an orphaned valid certificate belongs to an
+ * account that is no longer linked to a current employee record. Neither is
+ * changed here: each needs an accountable HR decision.
+ */
+export async function getTrainingRemediationReview(): Promise<TrainingRemediationReview> {
+  const user = await requireUser();
+  await authorize(user, "learn.assign");
+  const today = todayInZone();
+  const canRepair = can(user, "people.merge");
+  const [essentialsAssignments, orphanedCertificates, repairTargets] = await Promise.all([
+    db.execute(sql`
+      select a.id as assignment_id,
+             coalesce(nullif(btrim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), u.email) as name,
+             a.due_on::text as due_on, a.status
+      from learn.assignments a
+      join learn.courses c on c.id = a.course_id
+      join core.users u on u.id = a.user_id
+      left join core.employees e on e.user_id = u.id and e.archived_at is null
+      where c.slug = 'hipaa' and a.track = 'essentials' and a.status in ('assigned', 'in_progress')
+      order by a.due_on asc, name asc
+      limit 50`),
+    db.execute(sql`
+      select certificate.id as certificate_id, certificate.user_id as source_user_id, certificate.reference, certificate.holder_name,
+             course.title as course, certificate.ends_on::text as ends_on, source.email as source_email
+      from learn.certificates certificate
+      join learn.assignments assignment on assignment.id = certificate.assignment_id
+      join learn.courses course on course.id = assignment.course_id
+      join core.users source on source.id = certificate.user_id
+      where certificate.ends_on >= ${today}::date
+        and source.archived_at is null
+        and not exists (select 1 from learn.certificate_revocations revoked where revoked.certificate_id = certificate.id)
+        and not exists (select 1 from core.employees employee where employee.user_id = certificate.user_id and employee.archived_at is null)
+      order by certificate.ends_on desc, certificate.holder_name asc
+      limit 50`),
+    canRepair
+      ? db.execute(sql`
+          select e.id as employee_id,
+                 coalesce(nullif(btrim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), u.email) as name
+          from core.employees e join core.users u on u.id = e.user_id
+          where e.archived_at is null and u.archived_at is null
+          order by name asc`)
+      : Promise.resolve([]),
+  ]);
+  return {
+    essentialsAssignments: essentialsAssignments as unknown as TrainingRemediationReview["essentialsAssignments"],
+    orphanedCertificates: orphanedCertificates as unknown as TrainingRemediationReview["orphanedCertificates"],
+    canRepair,
+    repairTargets: repairTargets as unknown as TrainingRemediationReview["repairTargets"],
   };
 }
 

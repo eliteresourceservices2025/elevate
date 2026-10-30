@@ -4,6 +4,11 @@ import { COURSE_SLUG_PATTERN } from "./constants";
 const uuid = z.string().uuid("That does not look right. Please try again.");
 /** A course address. Whether the course exists is checked against the catalog on the server (client add-ons are data). */
 const courseSlug = z.string().max(80).regex(COURSE_SLUG_PATTERN, "That course was not found.");
+const date = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date")
+  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v), "Choose a real date");
 
 /** HR gives someone more tries, or more time for the exam, with a reason. The database limits the amounts too. */
 export const grantRetrySchema = z.discriminatedUnion("kind", [
@@ -21,6 +26,20 @@ export const assignTrainingSchema = z
     course: courseSlug.default("hipaa"),
   })
   .refine((v) => Boolean(v.userId) !== Boolean(v.employeeId), { message: "Choose one person." });
+
+/** An HR adjustment to a course deadline. The original deadline is retained in the audit trail. */
+export const changeDueDateSchema = z.object({
+  assignmentId: uuid,
+  dueOn: date,
+  reason: z.string().trim().min(3, "Give a short reason.").max(500),
+});
+
+/** A reviewed transfer from an orphaned learning account to a current profile. */
+export const repairLearnHistorySchema = z.object({
+  sourceUserId: uuid,
+  targetEmployeeId: uuid,
+  reason: z.string().trim().min(10, "Explain how you verified this is the same person.").max(500),
+});
 
 /** HR chooses who a course is assigned to automatically. Teams are needed (and only used) for the "teams" mode. */
 export const autoAssignSchema = z
