@@ -34,6 +34,12 @@ export const changeDueDateSchema = z.object({
   reason: z.string().trim().min(3, "Give a short reason.").max(500),
 });
 
+/** HR moves a legacy HIPAA Essentials assignment to Full, with a reason kept in the audit trail. */
+export const convertEssentialsSchema = z.object({
+  assignmentId: uuid,
+  reason: z.string().trim().min(10, "Give a short reason (at least 10 characters).").max(500),
+});
+
 /** A reviewed transfer from an orphaned learning account to a current profile. */
 export const repairLearnHistorySchema = z.object({
   sourceUserId: uuid,

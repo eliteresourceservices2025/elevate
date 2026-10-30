@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
 import { TrainingRowActions } from "@/modules/learn/components/training-actions";
+import { EssentialsConversionForm } from "@/modules/learn/components/essentials-conversion-form";
 import { OrphanedCertificateRepair } from "@/modules/learn/components/orphaned-certificate-repair";
 import { AutoAssignCard } from "@/modules/learn/components/auto-assign-card";
 import { EvidenceCard } from "@/modules/learn/components/evidence-card";
@@ -95,9 +96,9 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
             {remediation.essentialsAssignments.length > 0 ? (
               <div>
                 <p className="font-medium">Open HIPAA Essentials assignments</p>
-                <p className="text-muted-foreground">New Essentials assignments are blocked. Review these legacy assignments before closing or replacing them.</p>
+                <p className="text-muted-foreground">New Essentials assignments are blocked. Move each one to the full course: the Essentials assignment is kept as history and the modules already finished are carried over.</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {remediation.essentialsAssignments.map((item) => <li key={item.assignmentId}>{item.name} — due {item.dueOn} ({item.status.replace("_", " ")})</li>)}
+                  {remediation.essentialsAssignments.map((item) => <li key={item.assignmentId}>{item.name} — due {item.dueOn} ({item.status.replace("_", " ")})<EssentialsConversionForm assignmentId={item.assignmentId} /></li>)}
                 </ul>
               </div>
             ) : null}

@@ -18,7 +18,8 @@ import { createLaunchToken } from "./service";
 import { handoffUrl, learnBaseUrl } from "./token";
 import { buildClientEvidence } from "./evidence";
 import { evidenceCsv, evidencePdf, summarize } from "./evidence-format";
-import { assignTrainingSchema, autoAssignSchema, changeDueDateSchema, evidenceExportSchema, grantRetrySchema, repairLearnHistorySchema } from "./validators";
+import { convertEssentialsToFull } from "./essentials-conversion";
+import { assignTrainingSchema, autoAssignSchema, changeDueDateSchema, convertEssentialsSchema, evidenceExportSchema, grantRetrySchema, repairLearnHistorySchema } from "./validators";
 
 /**
  * Starts the sign-in handoff to ELEVATE Learn: makes a one-time token (60 seconds, stored only as a hash) and returns it with the
@@ -123,6 +124,19 @@ export async function changeLearnDueDate(input: unknown): Promise<ActionResult<{
     });
     revalidatePath("/training");
     return { ok: true, data: { changed } };
+  });
+}
+
+/** HR replaces a legacy HIPAA Essentials assignment with the Full course, keeping the modules already completed. */
+export async function convertLearnEssentialsToFull(input: unknown): Promise<ActionResult<{ creditedModules: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.assign");
+    const parsed = convertEssentialsSchema.safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the form and try again.");
+    const result = await db.transaction((tx) => convertEssentialsToFull(tx, actor, parsed.data));
+    revalidatePath("/training");
+    return { ok: true, data: { creditedModules: result.creditedModules } };
   });
 }
 
