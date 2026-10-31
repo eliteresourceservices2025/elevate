@@ -231,11 +231,21 @@ export async function getTrainingRemediationReview(): Promise<TrainingRemediatio
           order by name asc`)
       : Promise.resolve([]),
   ]);
+  // The database returns snake_case columns; the page and the forms use these camelCase names.
+  type Row = Record<string, string>;
   return {
-    essentialsAssignments: essentialsAssignments as unknown as TrainingRemediationReview["essentialsAssignments"],
-    orphanedCertificates: orphanedCertificates as unknown as TrainingRemediationReview["orphanedCertificates"],
+    essentialsAssignments: (essentialsAssignments as unknown as Row[]).map((r) => ({ assignmentId: r.assignment_id, name: r.name, dueOn: r.due_on, status: r.status })),
+    orphanedCertificates: (orphanedCertificates as unknown as Row[]).map((r) => ({
+      certificateId: r.certificate_id,
+      sourceUserId: r.source_user_id,
+      reference: r.reference,
+      holderName: r.holder_name,
+      course: r.course,
+      endsOn: r.ends_on,
+      sourceEmail: r.source_email,
+    })),
     canRepair,
-    repairTargets: repairTargets as unknown as TrainingRemediationReview["repairTargets"],
+    repairTargets: (repairTargets as unknown as Row[]).map((r) => ({ employeeId: r.employee_id, name: r.name })),
   };
 }
 

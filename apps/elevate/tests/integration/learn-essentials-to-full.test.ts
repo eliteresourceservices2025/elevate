@@ -157,3 +157,28 @@ describe("accepting with a middle name", () => {
     expect(cert2.holder_name).toBe("Careen Buen Bayani");
   });
 });
+
+describe("the training data review list", () => {
+  it("gives the page camelCase fields (an id the Move to Full form can send), for Essentials rows and orphaned certificates", async () => {
+    const queries = await import("@/modules/learn/queries");
+    const v = await hipaaVersion();
+    const learner = await makeUser("review");
+    const a = await essentialsAssignment(learner, v);
+    // an orphaned account: a valid certificate on a user with no current employee record
+    const orphan = await makeUser("orphan", false);
+    const oa = await essentialsAssignment(orphan, v);
+    await db.execute(sql`update learn.assignments set status = 'passed', passed_at = now() where id = ${oa.id}`);
+    await db.execute(sql`insert into learn.certificates (reference, user_id, assignment_id, version_id, track, holder_name, issued_on, ends_on) values (${`HC-2026-${String(300000 + (Date.now() % 600000)).replace(/[01]/g, "7")}`}, ${orphan}, ${oa.id}, ${v.versionId}, 'essentials', 'Orphan Holder', '2026-10-01', '2099-10-01')`);
+
+    current.user = await hrUser();
+    const review = await queries.getTrainingRemediationReview();
+    const row = review.essentialsAssignments.find((r) => r.assignmentId === a.id);
+    expect(row, "the Essentials row is keyed by assignmentId").toBeDefined();
+    expect(row).toMatchObject({ dueOn: "2026-12-01", status: "in_progress" });
+    expect(typeof row!.name).toBe("string");
+    const cert = review.orphanedCertificates.find((c) => c.sourceUserId === orphan);
+    expect(cert).toMatchObject({ holderName: "Orphan Holder", endsOn: "2099-10-01" });
+    expect(typeof cert!.certificateId).toBe("string");
+    expect(review.repairTargets.every((t) => typeof t.employeeId === "string")).toBe(true);
+  });
+});
