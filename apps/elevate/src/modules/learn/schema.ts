@@ -195,6 +195,34 @@ export const assignments = learn
   )
   .enableRLS();
 
+/**
+ * Every HR deadline adjustment. `assignments.due_on` is the effective date;
+ * this append-only log preserves what changed, why, and who made the change.
+ */
+export const assignmentDueChanges = learn
+  .table(
+    "assignment_due_changes",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      assignmentId: uuid("assignment_id")
+        .notNull()
+        .references(() => assignments.id),
+      previousDueOn: date("previous_due_on", { mode: "string" }).notNull(),
+      dueOn: date("due_on", { mode: "string" }).notNull(),
+      reason: text("reason").notNull(),
+      changedBy: uuid("changed_by")
+        .notNull()
+        .references(() => users.id),
+      changedAt: stamp("changed_at"),
+    },
+    (t) => [
+      index("assignment_due_changes_assignment_idx").on(t.assignmentId, t.changedAt),
+      check("assignment_due_changes_reason_chk", sql`char_length(${t.reason}) between 3 and 500`),
+      check("assignment_due_changes_date_chk", sql`${t.previousDueOn} <> ${t.dueOn}`),
+    ],
+  )
+  .enableRLS();
+
 /** A screen the person opened (so a module cannot complete until every screen was seen). */
 export const moduleScreens = learn
   .table(

@@ -71,7 +71,7 @@ export function StartCallButton({ assignmentId, label }: { assignmentId: string;
 }
 
 /** The responsibility statement, accepted by typing the person's full name. Issues the certificate once. */
-export function AcceptForm({ assignmentId, statementVersion, statement }: { assignmentId: string; statementVersion: string; statement: string }) {
+export function AcceptForm({ assignmentId, statementVersion, statement, expectedName = null }: { assignmentId: string; statementVersion: string; statement: string; expectedName?: string | null }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -94,7 +94,11 @@ export function AcceptForm({ assignmentId, statementVersion, statement }: { assi
       <blockquote>{statement}</blockquote>
       <label htmlFor="typed-name">Type your full name to accept</label>
       <input id="typed-name" name="typedName" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={120} />
-      <p className="muted">It must match your name in ELEVATE.</p>
+      <p className="muted">
+        {expectedName
+          ? `Your name in ELEVATE is ${expectedName}. Type it that way (or without the middle name). It is printed on your certificate. If it is wrong, ask HR to correct it first.`
+          : "It must match your name in ELEVATE."}
+      </p>
       <button type="submit" disabled={busy || name.trim().length < 2}>
         {busy ? "Saving..." : "I accept and get my certificate"}
       </button>

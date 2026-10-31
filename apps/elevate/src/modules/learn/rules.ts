@@ -13,8 +13,15 @@ const ms = (iso: string) => Date.parse(`${iso}T00:00:00Z`);
 export const addDays = (iso: string, days: number): string => new Date(ms(iso) + days * DAY).toISOString().slice(0, 10);
 export const daysBetween = (from: string, to: string): number => Math.round((ms(to) - ms(from)) / DAY);
 
-/** Full for anyone assigned to a client that handles patient information; Essentials for everyone else. */
-export const trackFor = (assignedToPhiClient: boolean): Track => (assignedToPhiClient ? "full" : "essentials");
+/**
+ * HIPAA is complete workforce training. `assignedToPhiClient` remains in the
+ * function signature so callers do not accidentally regain the old
+ * Essentials split; it no longer changes the required track.
+ */
+export const trackFor = (_assignedToPhiClient: boolean): Track => {
+  void _assignedToPhiClient;
+  return "full";
+};
 
 export type AssignmentNeed =
   | { assign: false }

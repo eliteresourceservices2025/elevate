@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AcceptForm, PrintButton } from "@/components/forms";
 import { requireSession } from "@/lib/auth";
-import { getSql } from "@/lib/db";
+import { getSql, withUser } from "@/lib/db";
 import { getOverview } from "@/lib/queries";
 import type { Metadata } from "next";
 
@@ -61,6 +61,8 @@ export default async function CertificatePage({ params }: { params: Promise<{ as
   const readyWithoutExam = !overview.requiresExam && overview.allModulesDone && ["assigned", "in_progress"].includes(assignment.status);
   if ((assignment.status !== "passed" && !readyWithoutExam) || (assignment.isUpdate && assignment.accepted)) redirect(`/course/${assignment.id}`);
 
+  const person = await withUser(getSql(), session.userId, async (tx) => (await tx`select legal_full_name from learn.v_learners`)[0] as { legal_full_name: string | null } | undefined);
+
   return (
     <>
       <p className="muted">
@@ -68,7 +70,7 @@ export default async function CertificatePage({ params }: { params: Promise<{ as
       </p>
       <h1>One last step</h1>
       <p>{assignment.isUpdate ? "You passed. Read the statement and accept it to finish the update. Your certificate stays as it is." : readyWithoutExam ? "You have read every module. Read the statement and accept it to receive your certificate." : "You passed. Read the statement and accept it to receive your certificate."}</p>
-      <AcceptForm assignmentId={assignment.id} statementVersion={attestation.version} statement={attestation.text} />
+      <AcceptForm assignmentId={assignment.id} statementVersion={attestation.version} statement={attestation.text} expectedName={person?.legal_full_name ?? null} />
     </>
   );
 }

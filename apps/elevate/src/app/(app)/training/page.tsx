@@ -9,11 +9,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
 import { TrainingRowActions } from "@/modules/learn/components/training-actions";
+import { EssentialsConversionForm } from "@/modules/learn/components/essentials-conversion-form";
+import { OrphanedCertificateRepair } from "@/modules/learn/components/orphaned-certificate-repair";
 import { AutoAssignCard } from "@/modules/learn/components/auto-assign-card";
 import { EvidenceCard } from "@/modules/learn/components/evidence-card";
 import { LearnerInstructions } from "@/modules/learn/components/learner-instructions";
 import { buildLearnerInstructions } from "@/modules/learn/instructions";
-import { getAutoAssign, getInstructionFacts, listEvidenceClients, listTrainingStatus } from "@/modules/learn/queries";
+import { getAutoAssign, getInstructionFacts, getTrainingRemediationReview, listEvidenceClients, listTrainingStatus } from "@/modules/learn/queries";
 import { todayInZone } from "@/modules/org/service";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
@@ -23,6 +25,7 @@ export const metadata: Metadata = { title: "Training status" };
 
 const one = (v: string | string[] | undefined) => (typeof v === "string" && v !== "" ? v : undefined);
 const TRACK: Record<string, string> = { full: "Full", essentials: "Essentials", refresher: "Refresher" };
+const ASSIGNMENT_TYPE: Record<string, string> = { new_hire: "New hire", renewal: "Renewal", update: "Content update", manual: "Manual" };
 
 export default async function TrainingPage({ searchParams }: PageProps<"/training">) {
   const params = await searchParams;
@@ -30,8 +33,10 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
   const paging = parsePaging({ page: one(params.page), size: one(params.size) });
   const { rows, counts, info, canSeeResults, canManage, course, courseLabel, courses, fixedTrack, published } = await orNotFound(listTrainingStatus(filters, paging));
   const auto = canManage ? await orNotFound(getAutoAssign(course)) : null;
+  const remediation = canManage ? await orNotFound(getTrainingRemediationReview()) : null;
   const facts = await orNotFound(getInstructionFacts(course));
   const evidenceClients = canManage ? await orNotFound(listEvidenceClients()) : null;
+  const today = todayInZone();
   const withCourse = (extra: Record<string, string | undefined>) => {
     const q = new URLSearchParams();
     if (course !== "hipaa") q.set("course", course);
@@ -84,6 +89,37 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         </>
       ) : null}
 
+      {remediation && (remediation.essentialsAssignments.length > 0 || remediation.orphanedCertificates.length > 0) ? (
+        <details className="rounded-xl border border-warning/40 bg-warning/5 p-4">
+          <summary className="cursor-pointer text-sm font-medium">Training data review: {remediation.essentialsAssignments.length} Essentials assignment{remediation.essentialsAssignments.length === 1 ? "" : "s"}, {remediation.orphanedCertificates.length} certificate{remediation.orphanedCertificates.length === 1 ? "" : "s"} outside a current profile</summary>
+          <div className="mt-3 space-y-4 text-sm">
+            {remediation.essentialsAssignments.length > 0 ? (
+              <div>
+                <p className="font-medium">Open HIPAA Essentials assignments</p>
+                <p className="text-muted-foreground">New Essentials assignments are blocked. Move each one to the full course: the Essentials assignment is kept as history and the modules already finished are carried over.</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {remediation.essentialsAssignments.map((item) => <li key={item.assignmentId}>{item.name} — due {item.dueOn} ({item.status.replace("_", " ")})<EssentialsConversionForm assignmentId={item.assignmentId} /></li>)}
+                </ul>
+              </div>
+            ) : null}
+            {remediation.orphanedCertificates.length > 0 ? (
+              <div>
+                <p className="font-medium">Valid certificates outside a current profile</p>
+                <p className="text-muted-foreground">Match each record to the correct person before transferring it; this list is read-only.</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {remediation.orphanedCertificates.map((item) => (
+                    <li key={item.certificateId}>
+                      {item.holderName} — {item.course}, {item.reference}, valid until {item.endsOn} (account: {item.sourceEmail})
+                      {remediation.canRepair ? <OrphanedCertificateRepair sourceUserId={item.sourceUserId} targets={remediation.repairTargets} /> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </details>
+      ) : null}
+
       <ul className="flex flex-wrap gap-2 text-sm" aria-label="Filter by status">
         {chips.map((c) => (
           <li key={c.label}>
@@ -124,6 +160,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
               <TableHead>Person</TableHead>
               <TableHead>Team</TableHead>
               <TableHead>Track</TableHead>
+              <TableHead className="whitespace-normal">Assignment</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Due</TableHead>
               <TableHead className="whitespace-normal">Certificate until</TableHead>
@@ -138,6 +175,18 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
                 <TableCell className="font-medium">{r.name}</TableCell>
                 <TableCell label="Team">{r.team ?? "-"}</TableCell>
                 <TableCell label="Track">{r.track ? TRACK[r.track] ?? r.track : "-"}</TableCell>
+                <TableCell label="Assignment" className="whitespace-normal">
+                  {r.assignmentReason === "update" ? (
+                    <>
+                      <span className="font-medium">Content update</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {r.updateModules?.length ?? 0} changed {r.updateModules?.length === 1 ? "module" : "modules"}
+                      </span>
+                    </>
+                  ) : (
+                    r.assignmentReason ? ASSIGNMENT_TYPE[r.assignmentReason] ?? r.assignmentReason : "-"
+                  )}
+                </TableCell>
                 <TableCell label="Status" className="whitespace-normal">
                   <span className={r.state === "overdue" ? "font-medium text-destructive" : r.state === "passed" ? "font-medium" : undefined}>{r.label}</span>
                 </TableCell>
@@ -145,7 +194,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
                   {r.dueText ? (
                     <>
                       {r.dueOn}
-                      <span className="block text-xs text-muted-foreground">{r.dueText}</span>
+                      <span className="block text-xs text-muted-foreground">{r.dueText}{r.dueChanged ? " · adjusted" : ""}</span>
                     </>
                   ) : (
                     "-"
@@ -156,7 +205,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
                 {canSeeResults ? <TableCell label="Latest score">{r.lastScore === null ? "-" : `${r.lastScore}%`}</TableCell> : null}
                 {canManage ? (
                   <TableCell label="Actions" className="whitespace-normal">
-                    <TrainingRowActions course={course} fixedTrack={fixedTrack} userId={r.userId} employeeId={r.employeeId} queued={r.state === "queued"} assignmentId={r.state === "open" || r.state === "overdue" ? r.assignmentId : null} canAssign={canManage} canGrant={canManage} />
+                    <TrainingRowActions course={course} fixedTrack={fixedTrack} userId={r.userId} employeeId={r.employeeId} queued={r.state === "queued"} assignmentId={r.state === "open" || r.state === "overdue" ? r.assignmentId : null} dueOn={r.state === "open" || r.state === "overdue" ? r.dueOn : null} minDueOn={today} canAssign={canManage} canGrant={canManage} />
                   </TableCell>
                 ) : null}
               </TableRow>
@@ -186,7 +235,7 @@ export default async function TrainingPage({ searchParams }: PageProps<"/trainin
         <details className="rounded-xl border bg-card p-4">
           <summary className="cursor-pointer text-sm font-medium">Client evidence report</summary>
           <div className="mt-3">
-          <EvidenceCard clients={evidenceClients} today={todayInZone()} />
+          <EvidenceCard clients={evidenceClients} today={today} />
           </div>
         </details>
       ) : null}
