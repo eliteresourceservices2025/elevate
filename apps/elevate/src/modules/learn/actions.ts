@@ -18,6 +18,7 @@ import { createLaunchToken } from "./service";
 import { handoffUrl, learnBaseUrl } from "./token";
 import { buildClientEvidence } from "./evidence";
 import { evidenceCsv, evidencePdf, summarize } from "./evidence-format";
+import { HIPAA_SLUG } from "./constants";
 import { convertEssentialsToFull } from "./essentials-conversion";
 import { assignTrainingSchema, autoAssignSchema, changeDueDateSchema, convertEssentialsSchema, evidenceExportSchema, grantRetrySchema, repairLearnHistorySchema } from "./validators";
 
@@ -184,7 +185,8 @@ export async function assignLearnTraining(input: unknown): Promise<ActionResult<
     const { course } = parsed.data;
     const info = await findLearnCourse(db, course);
     if (!info) return fail("That course was not found.");
-    const track = info.fixedTrack ?? parsed.data.track;
+    // HIPAA is Full or Refresher: a requested Refresher is kept, anything else (including the retired Essentials) becomes Full.
+    const track = info.slug === HIPAA_SLUG ? (parsed.data.track === "refresher" ? "refresher" : "full") : (info.fixedTrack ?? parsed.data.track);
 
     // A person given by their record may have no account yet (a new hire who was invited and has not signed in). An assignment needs an
     // account, so the request waits in a queue and the nightly run turns it into an assignment once they have signed in.

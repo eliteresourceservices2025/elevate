@@ -98,7 +98,10 @@ describe("quarterly practice and cards", () => {
 
   it("lists the key points of the person's own modules as cards", async () => {
     const learner = await makePerson();
-    await assignCourse(admin, { userId: learner, track: "essentials" });
+    // Essentials can no longer be assigned, but older Essentials assignments still show their cards, so this one is made directly.
+    await admin`
+      insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on)
+      select ${learner}, c.id, v.id, 'essentials', 'manual', '2026-12-01' from learn.courses c join learn.course_versions v on v.course_id = c.id and v.status = 'published' where c.slug = 'hipaa'`;
     const cards = await getCards(app, learner);
     const hipaa = cards.find((c) => c.courseSlug === "hipaa")!;
     expect(hipaa.modules.length).toBeGreaterThan(0);

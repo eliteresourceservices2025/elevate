@@ -310,7 +310,7 @@ describe("the nightly assignment", () => {
     expect(run).toMatchObject({ skipped: false, assigned: 3 });
 
     expect(await assignmentOf(newFull.id)).toMatchObject({ track: "full", reason: "new_hire", due_on: plus(TODAY, 25) });
-    expect(await assignmentOf(newEssentials.id)).toMatchObject({ track: "essentials", reason: "new_hire", due_on: plus(TODAY, 25) });
+    expect(await assignmentOf(newEssentials.id)).toMatchObject({ track: "full", reason: "new_hire", due_on: plus(TODAY, 25) });
     expect(await assignmentOf(longTime.id)).toMatchObject({ track: "full", reason: "manual", due_on: plus(TODAY, 30) });
     expect(await assignmentOf(left.id)).toBeUndefined();
     expect(await assignmentOf(archived.id)).toBeUndefined();
@@ -651,7 +651,7 @@ describe("the Training status page and HR's actions", () => {
     as(hr);
     const first = await actions.assignLearnTraining({ userId: person.id, track: "essentials" });
     expect(first).toEqual({ ok: true, data: { created: true } });
-    expect(await assignmentOf(person.id)).toMatchObject({ track: "essentials", reason: "manual" });
+    expect(await assignmentOf(person.id)).toMatchObject({ track: "full", reason: "manual" });
     expect(await actions.assignLearnTraining({ userId: person.id, track: "full" })).toEqual({ ok: true, data: { created: false } });
     const gone = await makePerson({ status: "separated" });
     expect(await actions.assignLearnTraining({ userId: gone.id, track: "full" })).toEqual({ ok: false, error: "That person is not an active team member with an account." });

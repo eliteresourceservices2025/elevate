@@ -87,6 +87,7 @@ export async function moveLearnHistory(tx: Tx, fromUserId: string, toUserId: str
             and target.course_id = source.course_id
             and target.status in ('assigned', 'in_progress')
         )
+      )
     returning source.id`)) as unknown as { id: string }[];
 
   // These tables duplicate user_id for authorization and reporting. Keep it in

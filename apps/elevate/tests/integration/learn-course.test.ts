@@ -324,7 +324,12 @@ describe("a learner going through the course", () => {
 
   it("shows only the topics to review after a failed try, never the answers", async () => {
     const p = await makePerson("Ben", "Reyes");
-    const { assignmentId } = await assignCourse(admin, { userId: p.id, track: "essentials" });
+    // Essentials can no longer be assigned, but older Essentials assignments still play, so this one is made directly.
+    const [legacy] = await admin`
+      insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on)
+      select ${p.id}, c.id, v.id, 'essentials', 'manual', '2026-12-01' from learn.courses c join learn.course_versions v on v.course_id = c.id and v.status = 'published' where c.slug = 'hipaa'
+      returning id`;
+    const assignmentId = legacy.id as string;
     const cookie = await signIn(p.id);
     const required = hipaaCourse.modules.filter((m) => m.tracks.includes("essentials"));
     for (const m of required) {

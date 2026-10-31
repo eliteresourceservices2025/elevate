@@ -46,6 +46,11 @@ export async function convertEssentialsToFull(tx: Tx, actor: Actor, p: { assignm
       and exists (select 1 from core.employees e where e.user_id = u.id and e.archived_at is null and e.status <> 'separated')`)) as unknown as unknown[];
   if (person.length === 0) throw new ActionFailure("That person is not an active team member with an account.");
 
+  // A passed exam is not "open", so the person may already hold another open assignment for this course; say so instead of failing on the index.
+  const alreadyOpen = (await tx.execute(sql`
+    select 1 from learn.assignments where user_id = ${old.user_id} and course_id = ${old.course_id} and status in ('assigned', 'in_progress') and id <> ${p.assignmentId}`)) as unknown as unknown[];
+  if (alreadyOpen.length > 0) throw new ActionFailure("This person already has another open HIPAA assignment. Close it first.");
+
   // Close the old one first: only one assignment per person and course may be open.
   // A passed one can only move on to 'expired' (a database guard), which also stops it from ever issuing an Essentials certificate.
   await tx.execute(sql`update learn.assignments set status = ${open ? "cancelled" : "expired"} where id = ${p.assignmentId}`);

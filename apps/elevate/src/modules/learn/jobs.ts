@@ -130,7 +130,8 @@ export async function runLearnAssign(today: string, scope?: Scope, courseSlug: s
       ? addonNeed({ today, joinedOn: p.joined_on, openAssignment: p.open_id !== null, latestCertificateEndsOn: p.cert_ends })
       : assignmentNeed({ today, startDate: p.start_date, openAssignment: p.open_id !== null, latestCertificateEndsOn: p.cert_ends, assignedToPhiClient: p.phi });
     if (!need.assign) continue;
-    const track = info.fixedTrack ?? need.track;
+    // HIPAA renewals stay on the Refresher track; everything else new is Full (Essentials is retired). Other fixed-track courses stay fixed.
+    const track = need.reason === "renewal" && info.slug === HIPAA_SLUG ? need.track : (info.fixedTrack ?? need.track);
     const made = await db.transaction(async (tx) => {
       const inserted = (await tx.execute(sql`
         insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on)

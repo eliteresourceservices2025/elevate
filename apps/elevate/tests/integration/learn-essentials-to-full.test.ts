@@ -88,6 +88,16 @@ describe("moving HIPAA Essentials to Full", () => {
     expect(was.status).toBe("expired");
     expect(await rows(sql`select 1 from learn.assignments where user_id = ${learner} and track = 'full' and status = 'assigned'`)).toHaveLength(1);
 
+    // a passed Essentials plus another open assignment: refused with a clear message, nothing changes
+    const busy = await makeUser("busy");
+    const passedOld = await essentialsAssignment(busy, v);
+    await db.execute(sql`update learn.assignments set status = 'passed', passed_at = now() where id = ${passedOld.id}`);
+    await db.execute(sql`insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${busy}, ${v.courseId}, ${v.versionId}, 'full', 'manual', '2026-12-01')`);
+    const refused = await actions.convertLearnEssentialsToFull({ assignmentId: passedOld.id, reason: REASON });
+    expect(refused).toEqual({ ok: false, error: "This person already has another open HIPAA assignment. Close it first." });
+    const [still] = await rows<{ status: string }>(sql`select status from learn.assignments where id = ${passedOld.id}`);
+    expect(still.status).toBe("passed");
+
     const certified = await makeUser("certified");
     const done = await essentialsAssignment(certified, v);
     await db.execute(sql`update learn.assignments set status = 'passed', passed_at = now() where id = ${done.id}`);
