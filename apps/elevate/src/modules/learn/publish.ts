@@ -186,6 +186,9 @@ export type AssignOptions = { userId: string; track: "full" | "essentials" | "re
 /** Gives a person the published course on a track. One open assignment per person and course: asking again returns it. */
 export async function assignCourse(sql: Sql, o: AssignOptions): Promise<{ assignmentId: string; created: boolean; dueOn: string }> {
   const slug = o.courseSlug ?? HIPAA_COURSE_SLUG;
+  // Keep this policy at the service boundary too: scripts and future callers
+  // cannot accidentally create a new Essentials HIPAA assignment.
+  const track = slug === HIPAA_COURSE_SLUG && o.track === "essentials" ? "full" : o.track;
   const [version] = await sql`
     select v.id, v.course_id from learn.course_versions v join learn.courses c on c.id = v.course_id
     where c.slug = ${slug} and v.status = 'published'`;
@@ -194,7 +197,7 @@ export async function assignCourse(sql: Sql, o: AssignOptions): Promise<{ assign
   if (open) return { assignmentId: open.id as string, created: false, dueOn: open.due_on as string };
   const [row] = await sql`
     insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on, created_by)
-    values (${o.userId}, ${version.course_id}, ${version.id}, ${o.track}, ${o.reason ?? "manual"},
+    values (${o.userId}, ${version.course_id}, ${version.id}, ${track}, ${o.reason ?? "manual"},
             ${o.dueOn ?? sql`((now() at time zone 'America/Phoenix')::date + 30)`}, ${o.createdBy ?? null})
     returning id, due_on::text as due_on`;
   return { assignmentId: row.id as string, created: true, dueOn: row.due_on as string };

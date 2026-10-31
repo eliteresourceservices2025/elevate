@@ -6,17 +6,18 @@ import { toast } from "@/components/feedback-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
-import { assignLearnTraining, grantLearnRetry } from "../actions";
+import { assignLearnTraining, changeLearnDueDate, grantLearnRetry } from "../actions";
 
 /** What HR can do for one person: put them on the training, or give more tries or more exam time (with a reason). */
-export function TrainingRowActions({ userId, employeeId, queued = false, assignmentId, canAssign, canGrant, course = "hipaa", fixedTrack = false }: { userId: string | null; employeeId: string; queued?: boolean; assignmentId: string | null; canAssign: boolean; canGrant: boolean; course?: string; fixedTrack?: boolean }) {
+export function TrainingRowActions({ userId, employeeId, queued = false, assignmentId, dueOn, minDueOn, canAssign, canGrant, course = "hipaa", fixedTrack = false }: { userId: string | null; employeeId: string; queued?: boolean; assignmentId: string | null; dueOn: string | null; minDueOn: string; canAssign: boolean; canGrant: boolean; course?: string; fixedTrack?: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"grant" | "due" | null>(null);
   const [track, setTrack] = useState<"full" | "essentials" | "refresher">("full");
   const [kind, setKind] = useState<"tries" | "time">("tries");
   const [amount, setAmount] = useState(1);
   const [reason, setReason] = useState("");
+  const [newDueOn, setNewDueOn] = useState(dueOn ?? "");
 
   const assign = () =>
     start(async () => {
@@ -32,7 +33,18 @@ export function TrainingRowActions({ userId, employeeId, queued = false, assignm
       const r = await grantLearnRetry(kind === "tries" ? { kind, assignmentId, amount, reason } : { kind, assignmentId, amount, reason });
       if (!r.ok) return void toast.error(r.error);
       toast.success(kind === "tries" ? "More tries given." : "Extra time given.");
-      setOpen(false);
+      setMode(null);
+      setReason("");
+      router.refresh();
+    });
+
+  const changeDue = () =>
+    start(async () => {
+      if (!assignmentId) return;
+      const r = await changeLearnDueDate({ assignmentId, dueOn: newDueOn, reason });
+      if (!r.ok) return void toast.error(r.error);
+      toast.success(r.data.changed ? "Due date changed." : "The due date is already set to that day.");
+      setMode(null);
       setReason("");
       router.refresh();
     });
@@ -57,15 +69,39 @@ export function TrainingRowActions({ userId, employeeId, queued = false, assignm
   }
 
   if (!canGrant) return null;
-  if (!open)
+  if (!mode)
     return (
       <span className="flex items-center gap-1">
         <span className="text-xs text-muted-foreground">Already assigned</span>
-        <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
-          More tries or time
+        <Button size="sm" variant="ghost" onClick={() => setMode("due")}>
+          Change due date
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setMode("grant")}>
+          More tries
         </Button>
       </span>
     );
+
+  if (mode === "due")
+    return (
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          changeDue();
+        }}
+      >
+        <Input aria-label="New due date" type="date" value={newDueOn} min={minDueOn} onChange={(e) => setNewDueOn(e.target.value)} className="h-8 w-36 text-xs" required />
+        <Input aria-label="Reason" placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} className="h-8 w-44 text-xs" required minLength={3} maxLength={500} />
+        <Button size="sm" type="submit" disabled={pending || !newDueOn || reason.trim().length < 3}>
+          Save
+        </Button>
+        <Button size="sm" type="button" variant="ghost" onClick={() => setMode(null)}>
+          Cancel
+        </Button>
+      </form>
+    );
+
   return (
     <form
       className="flex flex-wrap items-end gap-2"
@@ -82,7 +118,7 @@ export function TrainingRowActions({ userId, employeeId, queued = false, assignm
       <Button size="sm" type="submit" disabled={pending || reason.trim().length < 3}>
         Give
       </Button>
-      <Button size="sm" type="button" variant="ghost" onClick={() => setOpen(false)}>
+      <Button size="sm" type="button" variant="ghost" onClick={() => setMode(null)}>
         Cancel
       </Button>
     </form>

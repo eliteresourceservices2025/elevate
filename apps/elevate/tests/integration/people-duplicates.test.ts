@@ -115,7 +115,7 @@ describe("merging two records of the same person", () => {
     const group = found.groups.find((g) => g.people.some((p) => p.id === keep.id));
     expect(group?.people.map((p) => p.id)).toEqual([keep.id, dup.id]); // older first (the default choice)
 
-    expect(await m.mergeDuplicate({ keepId: keep.id, duplicateId: dup.id, adoptEmail: true })).toEqual({ ok: true, data: { accountMoved: true, rolesCopied: 1, reportsMoved: 0, emailAdopted: true } });
+    expect(await m.mergeDuplicate({ keepId: keep.id, duplicateId: dup.id, adoptEmail: true })).toEqual({ ok: true, data: { accountMoved: true, rolesCopied: 1, reportsMoved: 0, emailAdopted: true, learning: { assignmentsMoved: 0, assignmentsSkipped: 0, certificatesMoved: 0 } } });
     const kept = await record(keep.id);
     const gone = await record(dup.id);
     expect(kept).toMatchObject({ user_id: newUser.id, work_email: newUser.email });
