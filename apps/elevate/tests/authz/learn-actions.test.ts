@@ -50,6 +50,12 @@ describe("HR's training actions and the status list, every role", () => {
       if (hr) expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
       else expect(result).toEqual({ ok: false, error: NO_ACCESS });
     });
+    it(`${role}: ${hr ? "may move Essentials to Full" : "is refused moving Essentials to Full"}`, async () => {
+      as(role);
+      const result = await actions.convertLearnEssentialsToFull({ assignmentId: ID, reason: "Assigned Essentials by mistake" });
+      if (hr) expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
+      else expect(result).toEqual({ ok: false, error: NO_ACCESS });
+    });
     it(`${role}: ${hr ? "may assign the training" : "is refused assigning the training"}`, async () => {
       as(role);
       const result = await actions.assignLearnTraining({ userId: ID, track: "full" });

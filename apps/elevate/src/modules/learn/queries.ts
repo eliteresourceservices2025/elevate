@@ -204,7 +204,9 @@ export async function getTrainingRemediationReview(): Promise<TrainingRemediatio
       join learn.courses c on c.id = a.course_id
       join core.users u on u.id = a.user_id
       left join core.employees e on e.user_id = u.id and e.archived_at is null
-      where c.slug = 'hipaa' and a.track = 'essentials' and a.status in ('assigned', 'in_progress')
+      where c.slug = 'hipaa' and a.track = 'essentials'
+        and (a.status in ('assigned', 'in_progress')
+          or (a.status = 'passed' and not exists (select 1 from learn.certificates cert where cert.assignment_id = a.id)))
       order by a.due_on asc, name asc
       limit 50`),
     db.execute(sql`

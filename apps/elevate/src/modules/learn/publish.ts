@@ -188,7 +188,7 @@ export async function assignCourse(sql: Sql, o: AssignOptions): Promise<{ assign
   const slug = o.courseSlug ?? HIPAA_COURSE_SLUG;
   // Keep this policy at the service boundary too: scripts and future callers
   // cannot accidentally create a new Essentials HIPAA assignment.
-  const track = slug === HIPAA_COURSE_SLUG ? "full" : o.track;
+  const track = slug === HIPAA_COURSE_SLUG && o.track === "essentials" ? "full" : o.track;
   const [version] = await sql`
     select v.id, v.course_id from learn.course_versions v join learn.courses c on c.id = v.course_id
     where c.slug = ${slug} and v.status = 'published'`;

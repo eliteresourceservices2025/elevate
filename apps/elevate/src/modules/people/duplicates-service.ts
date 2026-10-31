@@ -58,57 +58,17 @@ type EmployeeRow = typeof employees.$inferSelect;
 type LearnHistoryMove = { assignmentsMoved: number; assignmentsSkipped: number; certificatesMoved: number };
 
 /**
- * The duplicate account is the person's active account after a merge. If the
- * keeper had an older account, move its non-conflicting assignment history to
- * the active account. Open assignments for the same course are intentionally
- * left alone: choosing which in-progress attempt wins requires HR review.
+ * The duplicate account is the person's active account after a merge. If the keeper had an older account, its assignment-based
+ * history follows the person to the active account through `learn.transfer_history` (the one database path allowed to change an
+ * evidence record's owner; it logs the transfer). Open assignments for a course the active account already has open are left
+ * alone: choosing which in-progress attempt wins requires HR review.
  */
-export async function moveLearnHistory(tx: Tx, fromUserId: string, toUserId: string): Promise<LearnHistoryMove> {
-  const skipped = (await tx.execute(sql`
-    select count(*)::int as n
-    from learn.assignments source
-    where source.user_id = ${fromUserId}
-      and source.status in ('assigned', 'in_progress')
-      and exists (
-        select 1 from learn.assignments target
-        where target.user_id = ${toUserId}
-          and target.course_id = source.course_id
-          and target.status in ('assigned', 'in_progress')
-      )`)) as unknown as { n: number }[];
-  const moved = (await tx.execute(sql`
-    update learn.assignments source
-    set user_id = ${toUserId}
-    where source.user_id = ${fromUserId}
-      and not (
-        source.status in ('assigned', 'in_progress')
-        and exists (
-          select 1 from learn.assignments target
-          where target.user_id = ${toUserId}
-            and target.course_id = source.course_id
-            and target.status in ('assigned', 'in_progress')
-        )
-    returning source.id`)) as unknown as { id: string }[];
-
-  // These tables duplicate user_id for authorization and reporting. Keep it in
-  // sync with the assignment after moving history to the account in use.
-  for (const table of ["module_screens", "module_time", "module_completions", "retry_grants", "exam_attempts", "attestations", "call_attempts"]) {
-    await tx.execute(sql`
-      update learn.${sql.identifier(table)} child
-      set user_id = ${toUserId}
-      from learn.assignments assignment
-      where child.assignment_id = assignment.id
-        and assignment.user_id = ${toUserId}
-        and child.user_id = ${fromUserId}`);
-  }
-  const certificates = (await tx.execute(sql`
-    update learn.certificates certificate
-    set user_id = ${toUserId}
-    from learn.assignments assignment
-    where certificate.assignment_id = assignment.id
-      and assignment.user_id = ${toUserId}
-      and certificate.user_id = ${fromUserId}
-    returning certificate.id`)) as unknown as { id: string }[];
-  return { assignmentsMoved: moved.length, assignmentsSkipped: skipped[0]?.n ?? 0, certificatesMoved: certificates.length };
+export async function moveLearnHistory(tx: Tx, p: { fromUserId: string; toUserId: string; actorId: string; reason: string }): Promise<LearnHistoryMove> {
+  const rows = (await tx.execute(sql`
+    select assignments_moved, assignments_skipped, certificates_moved
+    from learn.transfer_history(${p.fromUserId}::uuid, ${p.toUserId}::uuid, ${p.actorId}::uuid, ${p.reason})`)) as unknown as { assignments_moved: number; assignments_skipped: number; certificates_moved: number }[];
+  const r = rows[0];
+  return { assignmentsMoved: r?.assignments_moved ?? 0, assignmentsSkipped: r?.assignments_skipped ?? 0, certificatesMoved: r?.certificates_moved ?? 0 };
 }
 
 /**
@@ -171,7 +131,7 @@ export async function mergeEmployees(tx: Tx, actor: Actor, p: { keepId: string; 
         await tx.insert(userRoles).values({ userId: inUse, roleSlug: r.roleSlug, grantedBy: actor.id }).onConflictDoNothing();
         rolesCopied += 1;
       }
-      learning = await moveLearnHistory(tx, oldKeepUser, inUse);
+      learning = await moveLearnHistory(tx, { fromUserId: oldKeepUser, toUserId: inUse, actorId: actor.id, reason: "Merged records of the same person" });
     }
   }
 

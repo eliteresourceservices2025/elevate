@@ -18,7 +18,9 @@ import { createLaunchToken } from "./service";
 import { handoffUrl, learnBaseUrl } from "./token";
 import { buildClientEvidence } from "./evidence";
 import { evidenceCsv, evidencePdf, summarize } from "./evidence-format";
-import { assignTrainingSchema, autoAssignSchema, changeDueDateSchema, evidenceExportSchema, grantRetrySchema, repairLearnHistorySchema } from "./validators";
+import { HIPAA_SLUG } from "./constants";
+import { convertEssentialsToFull } from "./essentials-conversion";
+import { assignTrainingSchema, autoAssignSchema, changeDueDateSchema, convertEssentialsSchema, evidenceExportSchema, grantRetrySchema, repairLearnHistorySchema } from "./validators";
 
 /**
  * Starts the sign-in handoff to ELEVATE Learn: makes a one-time token (60 seconds, stored only as a hash) and returns it with the
@@ -126,6 +128,19 @@ export async function changeLearnDueDate(input: unknown): Promise<ActionResult<{
   });
 }
 
+/** HR replaces a legacy HIPAA Essentials assignment with the Full course, keeping the modules already completed. */
+export async function convertLearnEssentialsToFull(input: unknown): Promise<ActionResult<{ creditedModules: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "learn.assign");
+    const parsed = convertEssentialsSchema.safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the form and try again.");
+    const result = await db.transaction((tx) => convertEssentialsToFull(tx, actor, parsed.data));
+    revalidatePath("/training");
+    return { ok: true, data: { creditedModules: result.creditedModules } };
+  });
+}
+
 /**
  * Transfers assignment-based history from an account with no current employee
  * record to a verified current profile. This is deliberately separate from
@@ -149,7 +164,7 @@ export async function repairOrphanedLearnHistory(input: unknown): Promise<Action
       const [target] = await tx.select({ userId: employees.userId, archivedAt: employees.archivedAt }).from(employees).where(eq(employees.id, v.targetEmployeeId)).for("update");
       if (!target || target.archivedAt || !target.userId) throw new ActionFailure("Choose a current employee with a sign-in account.");
       if (target.userId === v.sourceUserId) throw new ActionFailure("That account already belongs to this employee.");
-      const moved = await moveLearnHistory(tx, v.sourceUserId, target.userId);
+      const moved = await moveLearnHistory(tx, { fromUserId: v.sourceUserId, toUserId: target.userId, actorId: actor.id, reason: v.reason });
       if (moved.assignmentsMoved === 0 && moved.certificatesMoved === 0) throw new ActionFailure("No transferable learning history was found for that account.");
       await writeAudit({ actor, action: "learn.repair_orphaned_history", targetType: "employee", targetId: v.targetEmployeeId, before: { sourceUserId: v.sourceUserId }, after: moved, metadata: { reason: v.reason } }, tx);
       return moved;
@@ -170,7 +185,8 @@ export async function assignLearnTraining(input: unknown): Promise<ActionResult<
     const { course } = parsed.data;
     const info = await findLearnCourse(db, course);
     if (!info) return fail("That course was not found.");
-    const track = info.fixedTrack ?? parsed.data.track;
+    // HIPAA is Full or Refresher: a requested Refresher is kept, anything else (including the retired Essentials) becomes Full.
+    const track = info.slug === HIPAA_SLUG ? (parsed.data.track === "refresher" ? "refresher" : "full") : (info.fixedTrack ?? parsed.data.track);
 
     // A person given by their record may have no account yet (a new hire who was invited and has not signed in). An assignment needs an
     // account, so the request waits in a queue and the nightly run turns it into an assignment once they have signed in.
