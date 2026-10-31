@@ -164,7 +164,7 @@ export async function repairOrphanedLearnHistory(input: unknown): Promise<Action
       const [target] = await tx.select({ userId: employees.userId, archivedAt: employees.archivedAt }).from(employees).where(eq(employees.id, v.targetEmployeeId)).for("update");
       if (!target || target.archivedAt || !target.userId) throw new ActionFailure("Choose a current employee with a sign-in account.");
       if (target.userId === v.sourceUserId) throw new ActionFailure("That account already belongs to this employee.");
-      const moved = await moveLearnHistory(tx, v.sourceUserId, target.userId);
+      const moved = await moveLearnHistory(tx, { fromUserId: v.sourceUserId, toUserId: target.userId, actorId: actor.id, reason: v.reason });
       if (moved.assignmentsMoved === 0 && moved.certificatesMoved === 0) throw new ActionFailure("No transferable learning history was found for that account.");
       await writeAudit({ actor, action: "learn.repair_orphaned_history", targetType: "employee", targetId: v.targetEmployeeId, before: { sourceUserId: v.sourceUserId }, after: moved, metadata: { reason: v.reason } }, tx);
       return moved;
