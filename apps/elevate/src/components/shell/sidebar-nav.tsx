@@ -63,6 +63,10 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
                   <li key={href}>
                     <Link
                       href={href}
+                      // Each destination runs the authenticated app layout and its database reads.
+                      // This menu can show many links at once, so loading them before intent competes
+                      // with the page the person is actually using.
+                      prefetch={false}
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       title={collapsed ? label : undefined}
@@ -117,7 +121,7 @@ export function SidebarNav({ onNavigate, hidden = [], safeVoiceUrl = null, colla
       </nav>
       </ScrollArea>
       {collapsed ? null : (
-        <Link href="/whats-new" onClick={onNavigate} className="shrink-0 px-5 py-3 text-xs text-sidebar-foreground/80 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-sidebar-ring">
+        <Link href="/whats-new" prefetch={false} onClick={onNavigate} className="shrink-0 px-5 py-3 text-xs text-sidebar-foreground/80 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-sidebar-ring">
           ELEVATE {APP_VERSION}
         </Link>
       )}
