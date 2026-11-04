@@ -16,7 +16,7 @@ const { db } = await import("@/lib/db");
 const { formatInZone } = await import("@/lib/time");
 const scheduleActions = await import("@/modules/attendance/schedule-actions");
 const { workingWeekdaysFor } = await import("@/modules/attendance/schedule-service");
-const { isoWeekday } = await import("@/modules/attendance/schedule");
+const { describeSchedule, isoWeekday } = await import("@/modules/attendance/schedule");
 const attendanceActions = await import("@/modules/attendance/actions");
 const queries = await import("@/modules/attendance/queries");
 const jobs = await import("@/modules/attendance/jobs");
@@ -80,7 +80,10 @@ describe("assigning schedules", () => {
     expect(await rows(sql`select 1 from ops.audit_log where action = 'schedule.assign' and target_id = ${ana.employeeId}`)).toHaveLength(1);
     const body = (await rows<{ body: string }>(sql`select body from ops.notifications where user_id = ${ana.user.id} and kind = 'schedule.assigned'`))[0].body;
     expect(body).toContain("Mon to Fri");
-    expect(body).toContain("9:00 PM - 5:00 AM"); // Manila
+    // New York's offset changes with daylight saving, so calculate the Manila range
+    // for this test's actual effective date rather than fixing it to an EDT value.
+    const manila = describeSchedule({ effectiveFrom: base.effectiveFrom, effectiveTo: null, startTime: base.startTime, endTime: base.endTime, weekdays: base.weekdays, breakMinutes: base.breakMinutes, zone: "America/New_York" }, base.effectiveFrom).manila;
+    expect(body).toContain(manila);
   });
 
   it("closes the person's old schedule the day before a new one starts, and refuses a start that overlaps one", async () => {
