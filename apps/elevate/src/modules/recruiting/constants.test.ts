@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applySchema, interviewSchema, moveSchema, rejectSchema, scorecardSchema } from "./validators";
-import { averageRating, canMove, isApplyable, retentionMonths } from "./constants";
+import { STAGE_LABELS, averageRating, canMove, isApplyable, isTerminalStage, retentionMonths, retentionMonthsForStage } from "./constants";
 import { buildInterviewIcs, interviewMail, receivedMail, rejectionMail } from "./mail";
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -17,6 +17,11 @@ describe("canMove", () => {
   it("makes you reopen a rejected application before hiring it", () => {
     expect(canMove("rejected", "hired").ok).toBe(false);
     expect(canMove("rejected", "screening")).toEqual({ ok: true });
+  });
+  it("allows an applicant to be assigned one of the visible terminal outcomes", () => {
+    expect(canMove("interview", "no_show")).toEqual({ ok: true });
+    expect(canMove("failed", "hired").ok).toBe(false);
+    expect(canMove("failed", "screening")).toEqual({ ok: true });
   });
 });
 
@@ -37,6 +42,12 @@ describe("helpers", () => {
     expect(retentionMonths("not_qualified", s)).toBe(12);
     expect(retentionMonths("withdrawn", s)).toBe(6);
     expect(retentionMonths(null, s)).toBeNull();
+    expect(retentionMonthsForStage("unsuitable", null, s)).toBe(12);
+    expect(retentionMonthsForStage("no_show", null, s)).toBe(12);
+    expect(retentionMonthsForStage("withdrew", null, s)).toBe(6);
+    expect(retentionMonthsForStage("failed", null, s)).toBe(12);
+    expect(isTerminalStage("failed")).toBe(true);
+    expect(STAGE_LABELS.withdrew).toBe("Withdrew application");
   });
 });
 
@@ -58,6 +69,7 @@ describe("other validators", () => {
     expect(rejectSchema.safeParse({ applicationId: ID, reason: "" }).success).toBe(false);
     expect(rejectSchema.safeParse({ applicationId: ID, reason: "No fit" }).success).toBe(true);
     expect(moveSchema.safeParse({ applicationId: ID, to: "rejected" }).success).toBe(false);
+    expect(moveSchema.safeParse({ applicationId: ID, to: "unsuitable" }).success).toBe(true);
   });
   it("an interview needs a future time, interviewers and a place", () => {
     const base = { applicationId: ID, minutes: 30, location: "Meet link", interviewerUserIds: [ID] };

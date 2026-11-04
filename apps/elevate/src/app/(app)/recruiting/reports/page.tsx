@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { orNotFound } from "@/lib/or-not-found";
-import { CLOSE_KIND_LABELS, SOURCE_LABELS, STAGE_LABELS } from "@/modules/recruiting/constants";
+import { CLOSE_KIND_LABELS, SOURCE_LABELS, STAGE_LABELS, type CloseKind, type Stage } from "@/modules/recruiting/constants";
 import { getRecruitingReport, REPORT_STALE_DAYS } from "@/modules/recruiting/queries";
 import { formatDays } from "@/modules/recruiting/report-math";
 
@@ -140,7 +140,7 @@ export default async function RecruitingReportsPage({ searchParams }: PageProps<
               <ul className="space-y-1 text-sm">
                 {report.closed.map((c) => (
                   <li key={c.kind ?? "other"} className="flex items-center justify-between rounded-md border px-3 py-1.5">
-                    <span>{c.kind ? CLOSE_KIND_LABELS[c.kind] : "Closed"}</span>
+                    <span>{c.kind ? ((CLOSE_KIND_LABELS as Record<string, string>)[c.kind as CloseKind] ?? STAGE_LABELS[c.kind as Stage]) : "Closed"}</span>
                     <span className="font-medium tabular-nums">{c.n}</span>
                   </li>
                 ))}

@@ -1,0 +1,2 @@
+ALTER TABLE "talent"."applications" DROP CONSTRAINT "applications_stage_chk";--> statement-breakpoint
+ALTER TABLE "talent"."applications" ADD CONSTRAINT "applications_stage_chk" CHECK ("talent"."applications"."stage" in ('applied','screening','interview','assessment','offer','hired','unsuitable','no_show','withdrew','failed','rejected'));

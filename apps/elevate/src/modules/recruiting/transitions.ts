@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import type { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
-import { canMove, type CloseKind, type Stage } from "./constants";
+import { canMove, isTerminalStage, type CloseKind, type Stage } from "./constants";
 import { notQualifiedMail, rejectionMail } from "./mail";
 import { applicationStageHistory, applications, candidates, jobOpenings } from "./schema";
 import { loadTemplate, queueCandidateEmail } from "./service";
@@ -21,10 +21,16 @@ export async function moveInTx(tx: Tx, actor: Actor, v: { applicationId: string;
   if (!app) throw new ActionFailure("That application was not found.");
   const rule = canMove(app.stage as Stage, v.to);
   if (!rule.ok) throw new ActionFailure(rule.reason);
-  const reopening = app.stage === "rejected";
+  const reopening = isTerminalStage(app.stage as Stage);
   await tx
     .update(applications)
-    .set({ stage: v.to, stageChangedAt: new Date(), ...(reopening ? { closeKind: null, closeReason: null, closedAt: null } : {}), ...(v.to === "hired" ? { closedAt: new Date() } : {}) })
+    .set({
+      stage: v.to,
+      stageChangedAt: new Date(),
+      ...(app.stage === "rejected" && v.to !== "rejected" ? { closeKind: null, closeReason: null } : {}),
+      ...(reopening && !isTerminalStage(v.to) ? { closedAt: null } : {}),
+      ...(isTerminalStage(v.to) ? { closedAt: new Date() } : {}),
+    })
     .where(eq(applications.id, v.applicationId));
   await tx.insert(applicationStageHistory).values({ applicationId: v.applicationId, fromStage: app.stage, toStage: v.to, byUserId: actor.id, note: v.note ?? null });
   await writeAudit({ actor, action: "recruiting.move", targetType: "application", targetId: v.applicationId, before: { stage: app.stage }, after: { stage: v.to } }, tx);
@@ -44,7 +50,7 @@ export async function closeInTx(tx: Tx, actor: Actor, v: { applicationId: string
   const [locked] = await tx.select().from(applications).where(eq(applications.id, v.applicationId)).for("update");
   row.app = locked;
   if (row.app.stage === "hired") throw new ActionFailure("A hired person cannot be rejected.");
-  if (row.app.stage === "rejected") throw new ActionFailure("They are already closed.");
+  if (isTerminalStage(row.app.stage as Stage)) throw new ActionFailure("They are already closed.");
   await tx.update(applications).set({ stage: "rejected", closeKind: v.kind, closeReason: v.reason, closedAt: new Date(), stageChangedAt: new Date() }).where(eq(applications.id, v.applicationId));
   await tx.insert(applicationStageHistory).values({
     applicationId: v.applicationId,

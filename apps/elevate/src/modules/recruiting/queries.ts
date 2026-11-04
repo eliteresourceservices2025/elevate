@@ -8,7 +8,7 @@ import { teams } from "@/modules/org/schema";
 import { users, userRoles } from "@/modules/core/schema";
 import { reportName } from "@/modules/org/service";
 import { getPrivacyNotice } from "@/modules/privacy/queries";
-import { BOARD_STAGES, STAGES, type CloseKind, type CriterionKey, type Source, type Stage } from "./constants";
+import { BOARD_STAGES, STAGES, TERMINAL_STAGES, type CloseKind, type CriterionKey, type Source, type Stage } from "./constants";
 import { escapeLike, type ApplicantFilters } from "./applicant-filters";
 import { groupDuplicates } from "./duplicates";
 import { BUILT_IN_TEMPLATES, TEMPLATE_KINDS, TEMPLATE_LABELS, TEMPLATE_WHEN, type MailTemplate, type TemplateKind } from "./mail";
@@ -328,7 +328,7 @@ export async function listApplicants(filters: ApplicantFilters, paging: { page: 
   const teamOnly = scope === "team" ? inArray(jobOpenings.id, db.select({ id: openingHiringTeam.openingId }).from(openingHiringTeam).where(eq(openingHiringTeam.userId, user.id))) : undefined;
   const conditions = [isNull(jobOpenings.archivedAt), teamOnly];
   if (filters.openingId) conditions.push(eq(applications.openingId, filters.openingId));
-  if (filters.stage === "open") conditions.push(notInArray(applications.stage, ["hired", "rejected"]));
+  if (filters.stage === "open") conditions.push(notInArray(applications.stage, [...TERMINAL_STAGES]));
   else if (filters.stage !== "all") conditions.push(eq(applications.stage, filters.stage));
   if (filters.closeKind !== "all") conditions.push(eq(applications.closeKind, filters.closeKind));
   if (filters.source === "none") conditions.push(isNull(applications.source));
@@ -496,7 +496,7 @@ export type RecruitingReport = {
   range: { from: string; to: string };
   total: number;
   funnel: { stage: FunnelStage; reached: number; ofApplied: number | null; ofPrevious: number | null }[];
-  closed: { kind: CloseKind | null; n: number }[];
+  closed: { kind: CloseKind | Stage | null; n: number }[];
   timeInStage: { stage: Stage; medianDays: number | null; n: number }[];
   sources: { source: Source | null; total: number; interviews: number; hired: number }[];
   stale: { openingId: string; title: string; n: number }[];
@@ -529,7 +529,7 @@ export async function getRecruitingReport(f: ReportFilters): Promise<RecruitingR
   const reached = reachedCounts(Object.fromEntries(reach.map((r) => [r.idx, r.n])));
   const total = reached[0];
 
-  const closed = await q<{ kind: string | null; n: number }>(sql`select a.close_kind as kind, count(*)::int as n from talent.applications a where ${inRange} and a.stage = 'rejected' group by a.close_kind order by n desc`);
+  const closed = await q<{ kind: string | null; n: number }>(sql`select case when a.stage = 'rejected' then a.close_kind else a.stage end as kind, count(*)::int as n from talent.applications a where ${inRange} and a.stage in ('rejected','unsuitable','no_show','withdrew','failed') group by 1 order by n desc`);
   const timing = await q<{ stage: string; n: number; median_days: number | null }>(sql`
     with s as (
       select h.application_id, h.to_stage as stage, h.at, lead(h.at) over (partition by h.application_id order by h.at, h.id) as next_at
@@ -542,7 +542,7 @@ export async function getRecruitingReport(f: ReportFilters): Promise<RecruitingR
     from talent.applications a left join ${furthest} m on m.application_id = a.id where ${inRange} group by a.source order by total desc`);
   const stale = await q<{ opening_id: string; title: string; n: number }>(sql`
     select j.id as opening_id, j.title, count(*)::int as n from talent.applications a join talent.job_openings j on j.id = a.opening_id
-    where a.stage not in ('hired','rejected') and a.stage_changed_at < now() - ${`${STALE_DAYS} days`}::interval and j.archived_at is null ${job}
+    where a.stage not in ('hired','rejected','unsuitable','no_show','withdrew','failed') and a.stage_changed_at < now() - ${`${STALE_DAYS} days`}::interval and j.archived_at is null ${job}
     group by j.id, j.title order by n desc, j.title limit 10`);
   const openings = await db.select({ id: jobOpenings.id, title: jobOpenings.title }).from(jobOpenings).where(isNull(jobOpenings.archivedAt)).orderBy(asc(jobOpenings.title));
 
@@ -550,7 +550,7 @@ export async function getRecruitingReport(f: ReportFilters): Promise<RecruitingR
     range,
     total,
     funnel: FUNNEL_STAGES.map((stage, i) => ({ stage, reached: reached[i], ofApplied: percent(reached[i], total), ofPrevious: i === 0 ? null : percent(reached[i], reached[i - 1]) })),
-    closed: closed.map((c) => ({ kind: c.kind as CloseKind | null, n: c.n })),
+    closed: closed.map((c) => ({ kind: c.kind as CloseKind | Stage | null, n: c.n })),
     timeInStage: (["applied", "screening", "interview", "assessment", "offer"] as const).map((stage) => {
       const row = timing.find((t) => t.stage === stage);
       return { stage, medianDays: row?.median_days === null || row?.median_days === undefined ? null : Number(row.median_days), n: row?.n ?? 0 };

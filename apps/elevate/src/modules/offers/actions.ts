@@ -12,6 +12,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { openOnboardingCase } from "@/modules/onboarding/service";
 import { createEmployeeRecord } from "@/modules/people/create";
 import { createEmployeeSchema } from "@/modules/people/validators";
+import { isTerminalStage, type Stage } from "@/modules/recruiting/constants";
 import { authorizeForOpening, markHired } from "@/modules/recruiting/service";
 import { sendInvitationEmail } from "@/modules/settings/invitation-email";
 import { ensureInvitation } from "@/modules/settings/invite";
@@ -227,7 +228,7 @@ export async function hireCandidate(input: unknown): Promise<ActionResult<{ empl
     if (!applicant) return fail("That application was not found.");
     if (applicant.anonymized) return fail("This applicant's data was removed, so they cannot be hired.");
     if (applicant.app.stage === "hired") return fail("They were already hired.");
-    if (applicant.app.stage === "rejected") return fail("Reopen the application before hiring.");
+    if (isTerminalStage(applicant.app.stage as Stage)) return fail("Reopen the application before hiring.");
     const signed = await latestSigned(v.applicationId);
     if (!signed && !v.withoutOfferReason) return fail("There is no signed offer. Give a reason to hire without one.");
 

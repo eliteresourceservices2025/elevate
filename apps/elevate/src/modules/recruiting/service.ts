@@ -10,7 +10,7 @@ import { saveApplicantSelfId } from "@/modules/demographics/service";
 import { sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { notify } from "@/modules/notifications/service";
-import { POOL_MONTHS, RESUME_KINDS, RESUME_MAX_BYTES, addMonthsUtc, isApplyable, type OpeningStatus } from "./constants";
+import { POOL_MONTHS, RESUME_KINDS, RESUME_MAX_BYTES, addMonthsUtc, isApplyable, isTerminalStage, type OpeningStatus, type Stage } from "./constants";
 import { keywordColumns } from "./keywords";
 import { BUILT_IN_TEMPLATES, receivedMail, type MailTemplate, type TemplateKind } from "./mail";
 import { extractResumeText } from "./resume-text";
@@ -56,13 +56,13 @@ export async function queueCandidateEmail(executor: Executor, mail: { applicatio
 
 /**
  * Marks an application Hired inside the caller's transaction (stage, stage history, audit). Only offers/hiring calls this, after it
- * has authorized. A hire is final; an already hired or rejected application is refused.
+ * has authorized. A hire is final; an already hired or terminal application is refused.
  */
 export async function markHired(tx: Executor, actor: { id: string; email: string }, applicationId: string): Promise<void> {
   const [app] = await tx.select().from(applications).where(eq(applications.id, applicationId)).for("update");
   if (!app) throw new ActionFailure("That application was not found.");
   if (app.stage === "hired") throw new ActionFailure("They were already hired.");
-  if (app.stage === "rejected") throw new ActionFailure("Reopen the application before hiring.");
+  if (isTerminalStage(app.stage as Stage)) throw new ActionFailure("Reopen the application before hiring.");
   await tx.update(applications).set({ stage: "hired", stageChangedAt: new Date(), closedAt: new Date() }).where(eq(applications.id, applicationId));
   await tx.insert(applicationStageHistory).values({ applicationId, fromStage: app.stage, toStage: "hired", byUserId: actor.id, note: "Hired" });
   await writeAudit({ actor, action: "recruiting.move", targetType: "application", targetId: applicationId, before: { stage: app.stage }, after: { stage: "hired" } }, tx);
