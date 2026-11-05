@@ -168,7 +168,7 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       break;
     case "payment_marked":
       facts.push(...fact(H.paidOn, detail.paidOn));
-      if (detail.correction === true) facts.push({ label: H.correction, value: "Yes" });
+      if (detail.correction === true) facts.push({ label: H.correction, value: H.yes });
       break;
     case "list_exported":
       facts.push(...fact(H.rows, detail.rows));

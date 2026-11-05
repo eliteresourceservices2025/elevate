@@ -8,7 +8,7 @@ video: approve-weekly-hours
 updated: 2026-10-21
 ---
 
-ELEVATE is the time clock and the only source of hours. Each week, a lead checks the hours and approves them. Approved hours are what HR exports for payroll. ELEVATE never works out pay.
+ELEVATE is the time clock and the only source of hours. Each week, a lead checks the hours and approves them. Approved hours are what HR exports for payroll. Approving hours computes nothing; pay is worked out in the Payroll module.
 
 # Open Hours review
 

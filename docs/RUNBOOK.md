@@ -214,6 +214,26 @@ Counts shown to the Executive hide any category with fewer than 5 reports. Handl
 
 Assets hold no prices or values. Item notes are for HR only: never put passwords, client names or patient information in them. Labels print from Assets > Print labels (or "Print this label" on an item); set margins to default and turn off headers and footers in the print window.
 
+## 5e2. Payroll problems
+
+Who can do what: only people a Super Admin chose (Settings > Payroll access) as Preparer, Approver or Viewer. No role has payroll, not even Super Admin. Module notes: `docs/modules/payroll.md`.
+
+| What you see | What it means | What to do |
+|---|---|---|
+| The run has the wrong period, or "The pay lines changed after this run was created" | A run's period and lines are fixed when it is created. | Cancel the draft (Cancel run, with a reason) and create it again. The cancelled run stays on record and frees its period. An approved run is never edited: fix a mistake with an adjustment or other deduction on the next run. |
+| "Can't be read" on a line, a payslip or the history | The stored figures could not be decrypted. This is an encryption key problem, not bad data. | **Stop.** Do not change rates or approve. Check that `FIELD_ENCRYPTION_KEYS` on the host still holds every key ever used (old keys must stay: approved pay rows cannot be re-encrypted), then tell the developer. |
+| "Your own line needs a confirmation from another Preparer" | Nobody confirms or approves their own pay. | A different Preparer opens the run and presses Mark as checked on that line. |
+| "You prepared or changed this run, or wrote a rate it pays" | The approver cannot be anyone who created, changed or confirmed anything on the run, or who wrote one of its rates. | Another Approver approves. If there is none, a Super Admin chooses one (Settings > Payroll access) who did not write the rates. |
+| "This payroll changed. Reload and review it again." | Something changed after the Approver opened the page. | Reload, read the run again, approve again. |
+| The Remitly list will not download | The run is not approved yet, or has no dollar rate, or a line is unreadable or negative. | Approve the run, set the Dollar rate on the run, then download. |
+| Two people appear with the same name on the Remitly list | The list has one row per person, ordered by name. | Tell them apart by the Alias column and the order, and check before paying. |
+| Someone cannot see their payslip | A payslip appears only after the whole run is marked paid, and only to the person it belongs to. | Check every person on the run has a recorded payment. A person with no ELEVATE account has no payslip page. |
+| A name with non-Latin letters shows "?" on the PDF | The payslip uses a standard font. | Known limit. The page shows the name correctly. |
+
+**Reading the change history** (Payroll > History): newest first; filter by run, person, who changed it and dates. Each row says who did what and shows the old and the new value side by side with the reason. Only the people with a payroll level can read it, and every page view is written to the audit log (a count only). A row shown as "Can't be read" is a key problem (above). Rows can never be edited or deleted.
+
+**Payments are recorded, not made:** ELEVATE sends no money. A Preparer pays in Remitly, then records each reference (Mark paid). A wrong reference is fixed with Correct on the same person: a newer record replaces it and the old one stays in the history.
+
 ## 5f. HIPAA training problems (ELEVATE Learn)
 
 - **"HIPAA training is not available yet" in ELEVATE:** `NEXT_PUBLIC_LEARN_URL` is missing on ELEVATE, or ELEVATE was not redeployed after setting it (docs/DEPLOY.md Part 5b).

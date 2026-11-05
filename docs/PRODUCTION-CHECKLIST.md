@@ -99,6 +99,17 @@ You proved the API clock-in works with `pnpm jibble:probe`. For the real link al
 - [ ] **No patient data**: remind HR and leads (the upload screens already warn). Jibble screenshots can contain client data, which is why ELEVATE never copies them.
 - [ ] Data-processing terms with each vendor (Supabase, Vercel, Brevo, Resend, Upstash, Inngest, Jibble) kept on file, since they handle personal data for ERS.
 
+### 6b. Payroll (before any real pay data)
+
+- [ ] **Publish the updated privacy notice first** (Settings > Policies). It carries the Pay point (who can see pay). Real pay data must not enter ELEVATE until it is published.
+- [ ] **Choose at least 2 Preparers and at least 2 Approvers** (Settings > Payroll access, Super Admin only). Make sure the Approvers did **not** write the rates: anyone who wrote a rate a run pays can never approve that run. If the only Approver also wrote the only rates, nobody can approve until another Approver exists, or another Preparer writes new versions of those rates (which forces cancelling and recreating the run).
+- [ ] **Enter the extra-time multipliers and the cutoff divisor** in Payroll > Settings, from the sheet owner (never guessed). Until they are set, any extra hours block sending for review.
+- [ ] **Keep EVERY old `FIELD_ENCRYPTION_KEYS` entry, forever.** Approved pay rows are frozen and cannot be re-encrypted. No re-encrypt job exists in the code, although CLAUDE.md describes one for other fields. Dropping an old key makes old pay unreadable.
+- [ ] **Parallel run, at least 2 cutoffs:** prepare each cutoff in ELEVATE beside the sheet, compare line by line to the centavo, and explain every difference before retiring the sheet (steps in `docs/modules/payroll.md`).
+- [ ] After the parallel run, **remove the old `payRate` field from profiles** as a separate small change (until then HR Admins and Super Admins can still see it, which the privacy notice says).
+- [ ] **Counsel:** 1099 wording; whether paying premiums (extra hours) and making deductions affects contractor status; the retention period for pay records (none is set, nothing is deleted).
+- [ ] Run `docs/RUNBOOK.md` section 5e2 past the people who will prepare and approve.
+
 ## 7. Set up the live app (first sign-in as Super Admin)
 
 - [ ] **People with roles**: use Settings > Invitations to invite HR admins, leads and recruiters with their roles in the invitation (Super Admin only). Check Settings > Roles afterwards.

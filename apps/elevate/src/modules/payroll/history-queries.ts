@@ -125,6 +125,12 @@ export async function getPayrollHistory(filters: HistoryFilters): Promise<Histor
     }
   }
 
+  // The audit row is written as soon as details are decrypted and before any name lookup, so a failing lookup still leaves the record
+  // that figures were opened. Count = details decrypted (ids and counts only).
+  if (details.size > 0) {
+    await writeAudit({ actor, action: "sensitive.view", targetType: "pay_change_log", metadata: { fields: ["change details"], count: details.size } });
+  }
+
   // Names for the people mentioned inside details (the person whose payroll access changed, the client of a line).
   const userIds = new Set<string>();
   const clientIds = new Set<string>();
@@ -151,7 +157,6 @@ export async function getPayrollHistory(filters: HistoryFilters): Promise<Histor
   }
   const names = { user: (id: string) => userNames.get(id) ?? null, client: (id: string) => clientNames.get(id) ?? null };
 
-  let shown = 0;
   const rows: HistoryRow[] = page.map((r) => {
     const base = {
       id: r.id,
@@ -164,12 +169,14 @@ export async function getPayrollHistory(filters: HistoryFilters): Promise<Histor
       runLabel: r.periodStart ? `${r.periodStart} to ${r.periodEnd}` : null,
     };
     const detail = details.get(r.id);
-    if (!detail || !(r.action in CHANGE_ACTION_LABELS)) {
-      return { ...base, unreadable: !detail, changes: [], facts: [] };
+    if (!detail) return { ...base, unreadable: true, changes: [], facts: [] };
+    if (!(r.action in CHANGE_ACTION_LABELS)) {
+      // An action this version does not know (a newer release wrote it): show nothing from it and mark it, never a bare "-".
+      console.error("payroll change unreadable:", { rowId: r.id, error: "UnknownAction" });
+      return { ...base, unreadable: true, changes: [], facts: [] };
     }
     try {
       const shownDetail = describeChange(r.action as ChangeAction, detail, names);
-      shown++;
       return { ...base, unreadable: false, ...shownDetail };
     } catch (error) {
       console.error("payroll change unreadable:", { rowId: r.id, error: error instanceof Error ? error.name : "UnknownError" });
@@ -177,9 +184,6 @@ export async function getPayrollHistory(filters: HistoryFilters): Promise<Histor
     }
   });
 
-  if (shown > 0) {
-    await writeAudit({ actor, action: "sensitive.view", targetType: "pay_change_log", metadata: { fields: ["change details"], count: shown } });
-  }
   return { rows, total, page: info.page, pageSize: info.pageSize, error: null };
 }
 

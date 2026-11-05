@@ -17,7 +17,7 @@ import { hoursSettings } from "./schema";
 import { setTestMark } from "./hours-marks";
 import { approveCleanSchema, approveWeekSchema, clearTestDaySchema, exportHoursSchema, markTestDaySchema, payPeriodSchema } from "./validators";
 
-// Hours approval (lead or HR, per person and week) and the payroll export (HR). ELEVATE labels and totals hours; it never computes pay.
+// Hours approval (lead or HR, per person and week) and the payroll export (HR). ELEVATE labels and totals hours; the export computes nothing (pay is computed in the Payroll module).
 
 const BAD = "Check the request and try again.";
 const first = (e: { issues: { message: string }[] }) => e.issues[0]?.message ?? BAD;

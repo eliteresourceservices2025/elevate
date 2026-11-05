@@ -41,6 +41,12 @@ work with ERS (contractors, 1099) and for people who apply to work with ERS.
 - Gains a short Training records point, a longer Job applications point (source, tags, keyword counting as a reading aid with no stored resume text, the 12-month
   "keep my details" choice) and the training retention periods.
 
+### 7. Pay and payroll (added with the payroll module, November 2026)
+- **Before:** government IDs, bank details and the pay rate were described as encrypted and visible only to the person and to the HR and administrator roles.
+- **Now:** a new **Pay** point under "Who can see it": pay is visible to the person and to staff individually chosen to run payroll; HR and administrator roles can also see the pay rate held on the person's record (the old rate field, kept as reference until the payroll parallel run ends); payroll figures are encrypted and every change is kept in a permanent history. The line under "Sensitive details" keeps IDs and bank details as they were and points to the Pay point, so the two do not contradict.
+- **Facts behind it:** no role grants payroll, not even Super Admin; a Super Admin chooses people one by one as Preparer, Approver or Viewer. Each person reads only their own payslips. The old rate field is removed from profiles after the parallel run; the sentence about HR and administrator roles then overstates access and can be dropped at the next version.
+- **Please check:** the wording on paying premiums (extra hours) and making deductions for 1099 contractors, and the retention period for pay records (none is set; nothing is deleted).
+
 ## Questions for counsel
 1. Is the wording on automated scoring (item 2) adequate under the Data Privacy Act, or does the notice need a plain statement and a way to ask for review?
 2. Is it acceptable to record the network address at acceptance of a training statement, on the basis already stated for training records?

@@ -21,7 +21,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ run
   const { runId } = await params;
   if (!z.uuid().safeParse(runId).success) return notFound();
   try {
-    if (!(await allowRequest("download", actor.id))) return new Response("Too many requests", { status: 429 });
+    if (!(await allowRequest("download", actor.id))) return new Response("Too many requests", { status: 429, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
     const slip = await getMyPayslip(actor, runId);
     if (!slip) return notFound();
     const pdf = await renderOfferPdf({ title: L.documentTitle, blocks: parseMarkdown(payslipMarkdown(slip)), footer: `${L.footer} ${slip.periodStart} to ${slip.periodEnd}` });

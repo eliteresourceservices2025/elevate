@@ -13,6 +13,7 @@ vi.mock("@/lib/rate-limit", () => ({ allowRequest: vi.fn(async () => true) }));
 vi.mock("@/modules/audit/write", () => ({ writeAudit: vi.fn() }));
 vi.mock("server-only", () => ({}));
 
+const { allowRequest } = await import("@/lib/rate-limit");
 const { listMyPayslips, countMyPayslips, getMyPayslip } = await import("@/modules/payroll/payslip-queries");
 const { GET } = await import("@/app/api/payroll/payslips/[runId]/route");
 
@@ -67,6 +68,15 @@ describe("the payslip route", () => {
     as(["super_admin"], null);
     await expect(call(RUN_ID)).rejects.toThrow("database touched");
     await expect(getMyPayslip(currentUser.value as never, RUN_ID)).rejects.toThrow("database touched");
+  });
+
+  it("answers 429 with no-store and nosniff headers when the rate limit is hit", async () => {
+    as(["employee"], null);
+    vi.mocked(allowRequest).mockResolvedValueOnce(false);
+    const res = await call(RUN_ID);
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
   });
 
   it("answers 404 to a user with no role, without reading data", async () => {

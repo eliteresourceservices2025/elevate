@@ -28,7 +28,7 @@ export function runHash(lines: { id: string; payload: unknown }[], usdRateE4: nu
 
 export type ApprovalInput = {
   approverId: string;
-  /** Everyone who prepared or changed the run (from the change history), whatever their level is now. */
+  /** Everyone who prepared or changed the run (creator, submitter, item enterers, line confirmers, other actors in its change log) and the authors of the pay-line versions it pays, whatever their level is now. */
   touchedBy: string[];
   /** The approver's own lines on the run. */
   ownLines: { confirmedBy: string | null }[];
@@ -37,7 +37,7 @@ export type ApprovalInput = {
 
 /** Why this person may not approve this run, or null when they may. There is no bypass. */
 export function approvalRefusal(input: ApprovalInput): string | null {
-  if (input.touchedBy.includes(input.approverId)) return "You prepared or changed this run, so someone else must approve it.";
+  if (input.touchedBy.includes(input.approverId)) return "You prepared or changed this run, or wrote a rate it pays, so someone else must approve it.";
   if (input.ownLines.some((l) => l.confirmedBy === null || l.confirmedBy === input.approverId)) {
     return "Your own line on this run must be checked by a Preparer other than you before you can approve it. Send the run back to ask for that.";
   }

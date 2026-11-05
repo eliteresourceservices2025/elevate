@@ -203,6 +203,7 @@ export const HISTORY_LABELS = {
   items: "Amounts written",
   paidOn: "Paid on",
   correction: "Correction of an earlier payment",
+  yes: "Yes",
   period: "Pay period",
   settingsFrom: "Settings start on",
   removed: "Removed",

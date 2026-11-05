@@ -45,6 +45,7 @@ async function advance(runId: string, to: string) {
   const order = ["in_review", "approved", "paid"];
   for (const s of order.slice(0, order.indexOf(to) + 1)) await db.execute(sql`update payroll.pay_runs set status = ${s} where id = ${runId}`);
 }
+// Slot coupling: these runs sit on the first days of each month of 2030; payroll-history.test.ts uses the 17th to the 28th (e.g. 2030-05-17) so the two files never collide.
 async function newRun(status = "draft") {
   const start = `2030-${String(1 + (counter % 12)).padStart(2, "0")}-${String(1 + Math.floor(counter / 12)).padStart(2, "0")}`;
   counter++;

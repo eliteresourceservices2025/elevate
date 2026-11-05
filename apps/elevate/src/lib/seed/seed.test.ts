@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSeedDataset } from "./data";
+import { buildSeedDataset, SEED_PAY_LINES, SEED_PAYROLL_LEVELS } from "./data";
 import { assertSeedAllowed } from "./guard";
 
 describe("seed dataset", () => {
@@ -45,6 +45,25 @@ describe("seed dataset", () => {
     expect(names).toContain("Santos");
     expect(names).toContain("Miller");
     for (const e of data.employees) expect(Number.isNaN(Date.parse(e.startDate))).toBe(false);
+  });
+});
+
+describe("seed payroll data", () => {
+  it("gives one Preparer, one Approver and one Viewer, none of them the Super Admin account", () => {
+    expect(SEED_PAYROLL_LEVELS.map((l) => l.level).sort()).toEqual(["approver", "preparer", "viewer"]);
+    expect(SEED_PAYROLL_LEVELS.some((l) => (l.role as string) === "super_admin")).toBe(false);
+  });
+
+  it("keeps pay lines off the people who hold a level (their own line would block approval) and uses whole invented centavos", () => {
+    const accountIndexOf: Record<string, number> = { super_admin: 0, hr_admin: 1, team_lead: 2, recruiter: 3, executive: 4, employee: 5 };
+    const holders = SEED_PAYROLL_LEVELS.map((l) => accountIndexOf[l.role]);
+    for (const l of SEED_PAY_LINES) {
+      expect(holders).not.toContain(l.employeeIndex);
+      expect(l.employeeIndex).toBeLessThan(40);
+      for (const v of [l.monthlyCentavos, l.pesoAllowanceCentavos, l.dollarAllowanceCents]) expect(v).toMatch(/^\d+$/);
+      expect(l.hoursPerDay).toBeGreaterThanOrEqual(1);
+    }
+    expect(new Set(SEED_PAY_LINES.map((l) => l.employeeIndex)).size).toBe(SEED_PAY_LINES.length);
   });
 });
 

@@ -9,7 +9,7 @@ import { endPayrollLinesWhenDone } from "./payroll-test-helpers";
 // The first describe is the completeness test: one full cycle through the real actions, then the set of distinct `action` values in
 // `pay_change_log` must equal CHANGE_ACTIONS, so a flow that forgot `logChange` fails here.
 
-const current = vi.hoisted(() => ({ user: null as unknown, decrypts: 0 }));
+const current = vi.hoisted(() => ({ user: null as unknown, decrypts: 0, failNames: false }));
 vi.mock("@/lib/auth", () => ({ requireUser: vi.fn(async () => current.user) }));
 vi.mock("@/lib/rate-limit", () => ({ allowRequest: vi.fn(async () => true) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -23,6 +23,18 @@ vi.mock("@/modules/payroll/changes", async (original) => {
     readChangeDetail: (row: Parameters<typeof actual.readChangeDetail>[0]) => {
       current.decrypts++;
       return actual.readChangeDetail(row);
+    },
+  };
+});
+
+// A switch that makes the name lookups fail, to prove the audit row is written before them.
+vi.mock("@/modules/payroll/remitly", async (original) => {
+  const actual = await original<typeof import("@/modules/payroll/remitly")>();
+  return {
+    ...actual,
+    personName: (r: Parameters<typeof actual.personName>[0]) => {
+      if (current.failNames) throw new Error("name lookup failed");
+      return actual.personName(r);
     },
   };
 });
@@ -202,7 +214,7 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     ok(await confirmSuggestion({ runId, itemId: forA[0].id, runLineId: lineOf(empA) }), "confirm suggestion A");
     for (const s of forA.slice(1)) ok(await assignSuggestion({ runId, itemId: s.id, runLineId: lineOf(empA) }), "assign suggestion A");
     // B: suggestions already sit on the line; confirm each.
-    for (const s of forB) ok(await confirmSuggestion({ runId, itemId: s.id, runLineId: lineOf(empB), ...(s.run_line_id ? {} : {}) }), "confirm suggestion B");
+    for (const s of forB) ok(await confirmSuggestion({ runId, itemId: s.id, runLineId: lineOf(empB) }), "confirm suggestion B");
 
     ok(await savePayItem({ runId, employeeId: empB, runLineId: lineOf(empB), type: "loan", value: "2,000", reason: reasonOf(2) }), "save loan");
     const [loan] = await rows<{ id: string }>(sql`select id from payroll.pay_run_items where run_id = ${runId} and employee_id = ${empB} and type = 'loan' order by created_at desc limit 1`);
@@ -457,6 +469,47 @@ describe("paging and decrypting", () => {
       errors.mockRestore();
       await setDetail(victim.detail_enc);
     }
+  });
+  it("marks a row whose action this version does not know as unreadable, not as a blank line", async () => {
+    const stranger = await account(null);
+    const id = randomUUID();
+    const enc = (await import("@/lib/crypto")).fieldCrypto().encrypt(JSON.stringify({}), `pay_change:${id}`);
+    await db.execute(sql`insert into payroll.pay_change_log (id, actor_id, action, detail_enc) values (${id}, ${stranger.id}, 'action_from_a_newer_release', ${enc})`);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      as(viewer);
+      const r = await all({ actorId: stranger.id });
+      expect(r.rows).toHaveLength(1);
+      expect(r.rows[0].unreadable).toBe(true);
+      expect(r.rows[0].changes).toEqual([]);
+      expect(JSON.stringify(errors.mock.calls)).toContain(id);
+    } finally {
+      errors.mockRestore();
+      // Put the log back as it was: remove the test row as the database owner, with the append-only trigger off for the statement.
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`set local session_replication_role = replica`);
+        await tx.execute(sql`delete from payroll.pay_change_log where id = ${id}`);
+      });
+    }
+  });
+
+  it("still leaves the sensitive.view audit row when the name lookups fail", async () => {
+    const target = await account(null, "employee", { first: "Nena", last: uniq("Lookupcruz") });
+    as(superAdmin);
+    ok(await setPayrollAccess({ userId: target.id, level: "viewer" }), "access for lookup test");
+    const reader = await account("viewer");
+    as(reader);
+    current.failNames = true;
+    try {
+      await expect(all({ actorId: superAdmin.id })).rejects.toThrow("name lookup failed");
+    } finally {
+      current.failNames = false;
+    }
+    const audits = await rows<{ metadata: { count: number } }>(sql`select metadata from ops.audit_log where actor_user_id = ${reader.id} and action = 'sensitive.view'`);
+    expect(audits).toHaveLength(1);
+    expect(audits[0].metadata.count).toBeGreaterThan(0);
+    as(superAdmin);
+    ok(await setPayrollAccess({ userId: target.id, level: null }), "remove lookup test access");
   });
 });
 

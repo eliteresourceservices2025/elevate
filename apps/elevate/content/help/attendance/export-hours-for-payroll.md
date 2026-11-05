@@ -8,7 +8,7 @@ video: export-hours-for-payroll
 updated: 2026-10-21
 ---
 
-HR exports the approved hours for each pay period. The file shows hours only. ELEVATE does not compute pay.
+HR exports the approved hours for each pay period. The file shows hours only. The export computes nothing; pay is worked out in the Payroll module.
 
 # Before you start
 

@@ -9,6 +9,7 @@ export const HELP_CATEGORIES = [
   { slug: "documents", title: "Documents and signing", description: "Files, folders, policies and ELEVATE Sign." },
   { slug: "reports", title: "Reports and analytics", description: "Headcount, attendance and hiring numbers." },
   { slug: "settings", title: "Settings and support", description: "Roles and access, support requests and privacy incident reports." },
+  { slug: "payroll", title: "Payroll and payslips", description: "Prepare and approve pay runs (people chosen for payroll) and read your own payslips." },
   // For everyone: what a person does for themselves
   { slug: "my-time", title: "Your time and clock", description: "Clock in and out, corrections, extra hours, time off and your schedule." },
   { slug: "my-profile", title: "Your profile and documents", description: "Your details, your files, your onboarding checklist and what you read and acknowledge." },
