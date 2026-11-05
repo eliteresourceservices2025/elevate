@@ -513,5 +513,110 @@
     "article": "talent-pool",
     "file": "01-pool-panel.png",
     "alt": "On an applicant's page: the talent pool panel."
+  },
+  {
+    "article": "read-your-payslip",
+    "file": "01-no-payslip-yet.png",
+    "alt": "My pay before a pay run is paid: it says there are no payslips yet."
+  },
+  {
+    "article": "how-payroll-works",
+    "file": "02-choose-who-has-access.png",
+    "alt": "Settings, Payroll access: a Super Admin picks a level for one person. The list is filtered to that person."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "01-settings.png",
+    "alt": "Payroll, Settings: the cutoff divisor and the rates for extra hours."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "02-change-settings.png",
+    "alt": "The Change settings window: the date the new rates start and the rate for extra hours on a regular day."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "03-rates.png",
+    "alt": "Payroll, Rates: one row for each pay line, with the Add pay line button."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "04-add-pay-line.png",
+    "alt": "The Add pay line window: the person, the monthly rate in pesos and the date it starts."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "05-new-run.png",
+    "alt": "The New run window: the first and last day of one cutoff."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "06-worksheet.png",
+    "alt": "A new run: the checks above the worksheet, and one line for each person."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "07-amounts.png",
+    "alt": "The Amounts window: what to enter, and the amount (here 120 minutes of extra hours)."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "08-dollar-rate.png",
+    "alt": "The Dollar rate window: how many pesos one dollar is worth for this run."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "09-ready.png",
+    "alt": "Every line checked and the dollar rate set: Send for review is ready."
+  },
+  {
+    "article": "approve-a-pay-run",
+    "file": "01-in-review.png",
+    "alt": "A run in review as the Approver sees it: the status, the checks and the worksheet with every line."
+  },
+  {
+    "article": "approve-a-pay-run",
+    "file": "02-approve-bar.png",
+    "alt": "The bottom of the run: Approve and Send back."
+  },
+  {
+    "article": "approve-a-pay-run",
+    "file": "03-send-back.png",
+    "alt": "The Send back window: a short note about what needs to change."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "10-payment.png",
+    "alt": "An approved run: the Payment section with Download Remitly list and a Mark paid button for each person."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "11-mark-paid.png",
+    "alt": "The Mark paid window: the Remitly reference and the date it was paid."
+  },
+  {
+    "article": "prepare-a-pay-run",
+    "file": "12-all-paid.png",
+    "alt": "Everyone on the run is paid: the run is now Paid."
+  },
+  {
+    "article": "read-your-payslip",
+    "file": "02-my-pay.png",
+    "alt": "My pay after the run is paid: the pay period, the net pay and Download PDF."
+  },
+  {
+    "article": "read-your-payslip",
+    "file": "03-notice.png",
+    "alt": "The bell in the header shows the notice: Your payslip is ready."
+  },
+  {
+    "article": "approve-a-pay-run",
+    "file": "04-history.png",
+    "alt": "Payroll, History, filtered to one run: who changed what and when, with the old and new values."
+  },
+  {
+    "article": "how-payroll-works",
+    "file": "01-menu.png",
+    "alt": "The left menu for a Preparer or Approver: Payroll under Admin. The Runs tab lists each run with its period and status."
   }
 ]

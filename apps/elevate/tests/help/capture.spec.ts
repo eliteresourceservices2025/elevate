@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { test, type BrowserContext, type Locator, type Page } from "@playwright/test";
+import { test, type BrowserContext } from "@playwright/test";
 import { signInEnrollingMfa } from "../e2e/helpers";
 import { ensureShotAccount } from "./accounts";
 import { seedDemoData, startDemoCases } from "./demo-data";
+import { dress } from "./dress";
+import { PAYROLL_ARTICLES } from "./payroll-articles";
 import { SHOTS, type RoleKey, type Shot } from "./shots";
 
 // Takes the screenshots listed in shots.ts. See docs/modules/help-center.md. Local database only (the e2e helpers refuse anything else).
@@ -19,22 +21,11 @@ const PEOPLE: Record<RoleKey, { first: string; last: string; roles: string[] }> 
   employee: { first: "Joy", last: "Villanueva", roles: [] },
 };
 
-/** Hides what is not part of the product screen (the dev server's badge) and draws the gold frames. */
-async function dress(page: Page, highlight: Locator[]) {
-  await page.addStyleTag({ content: "nextjs-portal, [data-nextjs-dev-tools-button], [data-nextjs-toast] { display: none !important; }" });
-  for (const target of highlight) {
-    await target.first().evaluate((el) => {
-      const node = el as HTMLElement;
-      node.style.outline = "4px solid #E2BE2B";
-      node.style.outlineOffset = "3px";
-      node.style.borderRadius = "8px";
-      node.style.boxShadow = "0 0 0 8px rgba(226, 190, 43, 0.28)";
-    });
-  }
-}
-
 test("take the Help center screenshots", async ({ browser }) => {
   const only = (process.env.HELP_ONLY ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  // The payroll guides have their own capture (capture-payroll.spec.ts); a run for only those leaves this one alone, so it neither
+  // resets the shared screenshot accounts nor adds demo data.
+  test.skip(only.length > 0 && only.every((name) => (PAYROLL_ARTICLES as readonly string[]).includes(name)), "Only payroll guides were asked for.");
   const shots: Shot[] = only.length ? SHOTS.filter((s) => only.includes(s.article)) : SHOTS;
   if (shots.length === 0) throw new Error(`No screenshot is listed for: ${only.join(", ")}`);
 

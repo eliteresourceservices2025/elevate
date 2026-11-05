@@ -3,21 +3,29 @@ title: Read your payslip
 summary: Open My pay to see your payslips and download them as a PDF once a pay run is paid.
 category: payroll
 audience: all
-order: 3
+order: 4
 updated: 2026-11-05
 ---
 
-Your payslip shows how your pay for a pay period was worked out. Only you can open your payslips. Not even a Super Admin can read yours. All names and amounts in this guide are made up.
+Your payslip shows how your pay for a pay period was worked out. Only you can open your payslips. Not even a Super Admin can read yours. All names and amounts in this guide and its pictures are made up.
 
 # When it appears
 
 A payslip appears after the whole pay run it belongs to has been paid. You get a notice that says **Your payslip is ready**. Before that, **My pay** shows **No payslips yet**.
 
+![My pay before a pay run is paid: it says there are no payslips yet.](help:read-your-payslip/01-no-payslip-yet.png)
+
 # Steps
 
-1. Click **My pay** in the left menu.
+1. Click **My pay** under **Core HR** in the left menu. You can also click the bell at the top and open the notice **Your payslip is ready**.
 2. Find the **Pay period** you want. The **Net pay** is shown beside it.
 3. Click **Download PDF**. It opens in a new tab. You can save or print it.
+
+![My pay after the run is paid: the pay period, the net pay and Download PDF.](help:read-your-payslip/02-my-pay.png)
+
+The bell shows the notice. It never shows an amount.
+
+![The bell in the header shows the notice: Your payslip is ready.](help:read-your-payslip/03-notice.png)
 
 # What is on it
 
