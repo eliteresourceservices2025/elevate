@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { addNote, cancelInterview, deleteApplication, getResumeLink, moveApplication, rejectApplication, scheduleInterview, submitScorecard } from "../actions";
-import { BOARD_STAGES, CRITERIA, INTERVIEW_KINDS, INTERVIEW_KIND_LABELS, RECOMMENDATIONS, RECOMMENDATION_LABELS, STAGE_LABELS, type CloseKind, type CriterionKey, type Stage } from "../constants";
+import { BOARD_STAGES, CRITERIA, INTERVIEW_KINDS, INTERVIEW_KIND_LABELS, RECOMMENDATIONS, RECOMMENDATION_LABELS, STAGE_LABELS, isTerminalStage, type CloseKind, type CriterionKey, type Stage } from "../constants";
 import type { PersonChoice } from "../queries";
 import { useRun } from "./use-run";
 import { useAsk } from "@/components/confirm-dialog";
@@ -70,7 +70,7 @@ export function MoveControls({ applicationId, stage }: { applicationId: string; 
       }}
     >
       <div className="w-48">
-        <SelectField id="mv-to" label={stage === "rejected" ? "Reopen into" : "Move to"} value={to} onChange={(e) => setTo(e.target.value)}>
+        <SelectField id="mv-to" label={isTerminalStage(stage) ? "Reopen into" : "Move to"} value={to} onChange={(e) => setTo(e.target.value)}>
           <option value="">Choose a stage</option>
           {options.map((s) => (
             <option key={s} value={s}>

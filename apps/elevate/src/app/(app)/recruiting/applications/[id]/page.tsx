@@ -9,7 +9,7 @@ import { returnCrumb, safeReturnTo } from "@/lib/return-to";
 import { orNotFound } from "@/lib/or-not-found";
 import { formatInZone, SECONDARY_TIMEZONE } from "@/lib/time";
 import { CancelInterviewButton, InterviewForm, DeleteApplicationForm, MoveControls, NoteForm, RejectForm, ResumeViewer, ScorecardForm } from "@/modules/recruiting/components/application-panels";
-import { CRITERIA, INTERVIEW_KIND_LABELS, RECOMMENDATION_LABELS, STAGE_LABELS, averageRating, type Recommendation } from "@/modules/recruiting/constants";
+import { CRITERIA, INTERVIEW_KIND_LABELS, RECOMMENDATION_LABELS, STAGE_LABELS, averageRating, isTerminalStage, type Recommendation } from "@/modules/recruiting/constants";
 import { scopeFor } from "@/lib/authz";
 import { OfferPanel } from "@/modules/offers/components/offer-panel";
 import { getOfferPanel } from "@/modules/offers/queries";
@@ -28,7 +28,7 @@ export default async function ApplicationPage({ params, searchParams }: PageProp
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const data = await orNotFound(getApplication(id));
   const { application: app, candidate, opening } = data;
-  const open = app.stage !== "rejected" && app.stage !== "hired";
+  const open = !isTerminalStage(app.stage);
   const people = data.canInterview ? await orNotFound(listInterviewerChoices()) : [];
   // The scheduler's own Google Calendar connection (only HR, Super Admin and recruiters can have one)
   const calendar = data.canInterview && scopeFor(user, "recruiting.connect_calendar") ? await orNotFound(getCalendarCard()) : { connected: false, needsReconnect: false };
@@ -41,7 +41,7 @@ export default async function ApplicationPage({ params, searchParams }: PageProp
         title={
           <span className="flex flex-wrap items-center gap-2">
             {name}
-            <Badge variant={app.stage === "hired" ? "default" : app.stage === "rejected" ? "destructive" : "secondary"}>
+            <Badge variant={app.stage === "hired" ? "default" : isTerminalStage(app.stage) ? "destructive" : "secondary"}>
               {STAGE_LABELS[app.stage]}
             </Badge>
           </span>

@@ -5,7 +5,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { deleteApplicantSelfId } from "@/modules/demographics/service";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { getEmailSender } from "@/modules/notifications/email";
-import { retentionMonths, type CloseKind } from "./constants";
+import { retentionMonthsForStage, type CloseKind, type Stage } from "./constants";
 import { applicationStageHistory, applications, candidateEmails, candidateNotes, candidates, scorecards } from "./schema";
 import { getRetentionSettings } from "./service";
 
@@ -84,7 +84,7 @@ const addMonths = (d: Date, n: number) => {
 };
 
 /**
- * Removes the personal data of applicants whose every application ended without a hire (rejected or withdrawn) longer ago than
+ * Removes the personal data of applicants whose every application ended without a hire longer ago than
  * the retention period. Does nothing until HR switches it on (the periods are for counsel to confirm). The candidate row stays
  * (name and email replaced, resume deleted) so counts and stage history still add up; notes, applicant emails and the free text
  * of scorecards are erased. Someone who was hired is never touched here.
@@ -95,12 +95,12 @@ export async function runRecruitingRetention(now = new Date()) {
   if (!settings.retentionEnabled) return { enabled: false, candidates: 0 };
 
   const closed = await db
-    .select({ candidateId: applications.candidateId, closeKind: applications.closeKind, closedAt: applications.closedAt })
+    .select({ candidateId: applications.candidateId, stage: applications.stage, closeKind: applications.closeKind, closedAt: applications.closedAt })
     .from(applications)
     .innerJoin(candidates, eq(candidates.id, applications.candidateId))
     .where(
       and(
-        eq(applications.stage, "rejected"),
+        inArray(applications.stage, ["rejected", "unsuitable", "no_show", "withdrew", "failed"]),
         sql`${applications.closedAt} is not null`,
         isNull(candidates.anonymizedAt),
         // Someone in the talent pool, whose consent to keep their details has not run out, is kept.
@@ -109,7 +109,7 @@ export async function runRecruitingRetention(now = new Date()) {
     );
   const expired = new Set<string>();
   for (const c of closed) {
-    const months = retentionMonths(c.closeKind as CloseKind | null, settings);
+    const months = retentionMonthsForStage(c.stage as Stage, c.closeKind as CloseKind | null, settings);
     if (months !== null && c.closedAt && addMonths(c.closedAt, months) <= now) expired.add(c.candidateId);
   }
   if (expired.size === 0) return { enabled: true, candidates: 0 };
@@ -123,7 +123,7 @@ export async function runRecruitingRetention(now = new Date()) {
     keep
       .filter((a) => a.candidateId === id)
       .every((a) => {
-        const months = a.stage === "rejected" ? retentionMonths(a.closeKind as CloseKind | null, settings) : null;
+        const months = retentionMonthsForStage(a.stage as Stage, a.closeKind as CloseKind | null, settings);
         return months !== null && a.closedAt !== null && addMonths(a.closedAt, months) <= now;
       }),
   );

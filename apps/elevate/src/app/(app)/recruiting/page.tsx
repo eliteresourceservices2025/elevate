@@ -14,7 +14,7 @@ import { paginate, parsePaging } from "@/lib/pagination";
 import { formatInZone } from "@/lib/time";
 import { CalendarCard } from "@/modules/recruiting/components/calendar-card";
 import { RecruitingMenu } from "@/modules/recruiting/components/recruiting-menu";
-import { STAGE_LABELS, STAGES } from "@/modules/recruiting/constants";
+import { STAGE_LABELS, STAGES, isTerminalStage } from "@/modules/recruiting/constants";
 import { getCalendarCard, getRecruitingSummary, getRetentionView, listOpenings } from "@/modules/recruiting/queries";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
@@ -79,7 +79,7 @@ export default async function RecruitingPage({ searchParams }: PageProps<"/recru
                 ["Open jobs", summary.openJobs],
                 ["Applications, last 30 days", summary.applicationsLast30Days],
                 ["Hired, last 90 days", summary.hiredLast90Days],
-                ["In the pipeline", STAGES.filter((s) => s !== "hired" && s !== "rejected").reduce((n, s) => n + summary.counts[s], 0)],
+                ["In the pipeline", STAGES.filter((s) => !isTerminalStage(s)).reduce((n, s) => n + summary.counts[s], 0)],
               ] as const
             ).map(([label, value]) => (
               <div key={label} className="rounded-xl border bg-card p-3 sm:p-4">

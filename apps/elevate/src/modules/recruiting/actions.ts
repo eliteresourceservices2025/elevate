@@ -25,7 +25,7 @@ import { applicationStageHistory, applicationTagLinks, emailTemplates, applicati
 import { sendRecruitingEmailsNow } from "./immediate";
 import { authorizeForOpening, freeSlug, hiringTeamIds, openingIdOfApplication, queueCandidateEmail, slugTaken } from "./service";
 import { clearBanner } from "./careers-banner";
-import { MAX_TAGS_PER_APPLICATION, isApplyable, type OpeningStatus } from "./constants";
+import { MAX_TAGS_PER_APPLICATION, isApplyable, isTerminalStage, type OpeningStatus, type Stage } from "./constants";
 import { keywordColumns, keywordSetKey, parseKeywordList } from "./keywords";
 import { extractResumeText } from "./resume-text";
 import { resetTemplateSchema, saveTemplateSchema, mergeSchema, poolSchema, poolToOpeningSchema, rescoreSchema, archiveTagSchema, bulkSchema, createTagSchema, setSourceSchema, setTagsSchema, careersPageSchema, cancelInterviewSchema, deleteApplicationSchema, deleteOpeningSchema, interviewSchema, moveSchema, noteSchema, openingSchema, rejectSchema, resumeSchema, retentionSchema, scorecardSchema, setOpeningStatusSchema } from "./validators";
@@ -284,7 +284,7 @@ export async function scheduleInterview(input: unknown): Promise<ActionResult<{ 
       .innerJoin(candidates, eq(candidates.id, applications.candidateId))
       .where(eq(applications.id, v.applicationId));
     if (!row) return fail("That application was not found.");
-    if (row.app.stage === "rejected" || row.app.stage === "hired") return fail("This application is closed.");
+    if (isTerminalStage(row.app.stage as Stage)) return fail("This application is closed.");
     const eligible = await db.select({ userId: userRoles.userId }).from(userRoles).where(and(inArray(userRoles.userId, panel), inArray(userRoles.roleSlug, ELIGIBLE_INTERVIEWER_ROLES)));
     if (new Set(eligible.map((e) => e.userId)).size !== panel.length) return fail("One of the interviewers cannot take part in hiring.");
     const panelUsers = await db.select({ email: users.email }).from(users).where(inArray(users.id, panel));
@@ -305,7 +305,7 @@ export async function scheduleInterview(input: unknown): Promise<ActionResult<{ 
     try {
       await db.transaction(async (tx) => {
         const [fresh] = await tx.select({ stage: applications.stage }).from(applications).where(eq(applications.id, v.applicationId));
-        if (!fresh || fresh.stage === "rejected" || fresh.stage === "hired") throw new ActionFailure("This application is closed.");
+        if (!fresh || isTerminalStage(fresh.stage as Stage)) throw new ActionFailure("This application is closed.");
         await tx.insert(interviews).values({
           id: interviewId,
           applicationId: v.applicationId,

@@ -101,7 +101,7 @@ function Column({ stage, cards, canMoveCards, pending, move }: { stage: Stage; c
 
 /**
  * The pipeline. Drag a card by its grip with a mouse, a finger or the keyboard (space, arrow keys, space), or use the "Move to"
- * menu on the card. Rejecting is done on the person's page because it needs a reason.
+ * menu on the card. The legacy detailed rejection flow remains on the person's page because it needs a reason.
  */
 export function PipelineBoard({ columns, canMoveCards, rejected }: { columns: Record<Stage, BoardCard[]>; canMoveCards: boolean; rejected: BoardCard[] }) {
   const { run, pending } = useRun();

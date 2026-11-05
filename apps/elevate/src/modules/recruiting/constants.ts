@@ -1,7 +1,12 @@
 // Pure rules for the applicant tracking system (C1). No database, no server-only: used by the board, the actions and the tests.
 
-export const STAGES = ["applied", "screening", "interview", "assessment", "offer", "hired", "rejected"] as const;
+export const STAGES = ["applied", "screening", "interview", "assessment", "offer", "hired", "unsuitable", "no_show", "withdrew", "failed", "rejected"] as const;
 export type Stage = (typeof STAGES)[number];
+
+/** Outcomes that end an application. Rejected remains for existing detailed close records. */
+export const TERMINAL_STAGES = ["hired", "unsuitable", "no_show", "withdrew", "failed", "rejected"] as const;
+export type TerminalStage = (typeof TERMINAL_STAGES)[number];
+export const isTerminalStage = (stage: Stage): stage is TerminalStage => (TERMINAL_STAGES as readonly string[]).includes(stage);
 
 export const STAGE_LABELS: Record<Stage, string> = {
   applied: "Applied",
@@ -10,10 +15,14 @@ export const STAGE_LABELS: Record<Stage, string> = {
   assessment: "Assessment",
   offer: "Offer",
   hired: "Hired",
+  unsuitable: "Unsuitable",
+  no_show: "No-show",
+  withdrew: "Withdrew application",
+  failed: "Failed",
   rejected: "Rejected",
 };
 
-/** Columns on the board: rejected people are listed apart from the active pipeline. */
+/** Board columns. Older detailed rejections stay in the closed-applications list. */
 export const BOARD_STAGES = STAGES.filter((s) => s !== "rejected");
 
 export const OPENING_STATUSES = ["draft", "open", "closed"] as const;
@@ -59,7 +68,7 @@ export const DEFAULT_RETENTION = { rejectedMonths: 12, withdrawnMonths: 6 } as c
 export function canMove(from: Stage, to: Stage): { ok: true } | { ok: false; reason: string } {
   if (from === to) return { ok: false, reason: "They are already in that stage." };
   if (from === "hired") return { ok: false, reason: "A hired person cannot be moved." };
-  if (from === "rejected" && to === "hired") return { ok: false, reason: "Reopen the application first (move it to a stage), then hire." };
+  if (isTerminalStage(from) && to === "hired") return { ok: false, reason: "Reopen the application first (move it to a stage), then hire." };
   return { ok: true };
 }
 
@@ -77,6 +86,14 @@ export function averageRating(ratings: Partial<Record<CriterionKey, number>>): n
 export function retentionMonths(kind: CloseKind | null, settings: { rejectedMonths: number; withdrawnMonths: number }): number | null {
   if (kind === "rejected" || kind === "not_qualified") return settings.rejectedMonths;
   if (kind === "withdrawn") return settings.withdrawnMonths;
+  return null;
+}
+
+/** The board outcomes use the same retention periods as their comparable existing close outcomes. */
+export function retentionMonthsForStage(stage: Stage, kind: CloseKind | null, settings: { rejectedMonths: number; withdrawnMonths: number }): number | null {
+  if (stage === "rejected") return retentionMonths(kind, settings);
+  if (stage === "withdrew") return settings.withdrawnMonths;
+  if (stage === "unsuitable" || stage === "no_show" || stage === "failed") return settings.rejectedMonths;
   return null;
 }
 

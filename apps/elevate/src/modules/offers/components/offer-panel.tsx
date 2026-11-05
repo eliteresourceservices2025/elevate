@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Markdown } from "@/components/markdown";
 import { formatInZone } from "@/lib/time";
+import { isTerminalStage, type Stage } from "@/modules/recruiting/constants";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { hireCandidate, makeOffer, previewOffer, resendOfferLink, sendOffer, withdrawOffer } from "../actions";
 import type { OfferRow } from "../queries";
@@ -207,7 +208,7 @@ function HireForm({ applicationId, panel }: { applicationId: string; panel: Pane
 
 /** Offers and hiring on the applicant page. */
 export function OfferPanel({ applicationId, panel }: { applicationId: string; panel: Panel }) {
-  const open = panel.stage !== "hired" && panel.stage !== "rejected";
+  const open = !isTerminalStage(panel.stage as Stage);
   return (
     <section aria-label="Offers and hiring" className="space-y-4 rounded-xl border bg-card p-4">
       <h2 className="text-lg font-semibold">Offer and hiring</h2>
