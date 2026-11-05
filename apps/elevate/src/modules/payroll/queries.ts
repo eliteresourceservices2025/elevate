@@ -10,7 +10,8 @@ import { z } from "zod";
 import type { PaymentMethod, RunStatus } from "./constants";
 import { lineLastDay, resolveLines } from "./lines";
 import { formatPesos } from "./money";
-import { buildWorksheet, type Worksheet } from "./runs";
+import { countAwaiting, hashOf, latestSendBackNote, refusalFor } from "./approval";
+import { readRun, worksheetOf, type Worksheet } from "./runs";
 import { logChange } from "./changes";
 import { payLines, payRuns, paySettings } from "./schema";
 import { decryptLineAmounts, payrollToday, snapshotOf } from "./service";
@@ -177,7 +178,16 @@ export async function getRuns(paging: { page: number; pageSize: number }): Promi
   };
 }
 
-export type WorksheetView = Worksheet & { canPrepare: boolean };
+export type WorksheetView = Worksheet & {
+  canPrepare: boolean;
+  canApprove: boolean;
+  /** Only for an Approver looking at a run in review: the hash of exactly the figures shown, which an approval must name. */
+  expectedHash: string | null;
+  /** Only for an Approver looking at a run in review: why they may not approve it, or null when they may. */
+  approvalRefusal: string | null;
+  /** The note of the latest send-back, while the run is back in draft. */
+  sentBackNote: string | null;
+};
 
 /**
  * The worksheet of a run, decrypted, or null when there is no such run. Opening it is a sensitive read: one `sensitive.view` audit row
@@ -187,14 +197,41 @@ export async function getWorksheet(runId: string): Promise<WorksheetView | null>
   const actor = await requireUser();
   await authorize(actor, "payroll.view");
   if (!z.uuid().safeParse(runId).success) return null;
+  const canPrepare = can(actor, "payroll.prepare");
+  const canApprove = can(actor, "payroll.approve");
 
-  const sheet = await buildWorksheet(actor, runId);
-  if (!sheet) return null;
+  // One snapshot: the figures shown and the hash handed to an Approver come from the same reads, so the hash can never stand for
+  // figures the page did not show.
+  const view = await db.transaction(
+    async (tx): Promise<WorksheetView | null> => {
+      const data = await readRun(tx, runId);
+      if (!data) return null;
+      const sheet = await worksheetOf(tx, { id: actor.id, canPrepare }, data);
+      const deciding = canApprove && data.run.status === "in_review";
+      return {
+        ...sheet,
+        canPrepare,
+        canApprove,
+        expectedHash: deciding ? await hashOf(tx, data) : null,
+        approvalRefusal: deciding ? await refusalFor(tx, data, actor.id) : null,
+        sentBackNote: await latestSendBackNote(tx, data.run),
+      };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
+  if (!view) return null;
   await db.transaction(async (tx) => {
-    await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["pay figures"], count: sheet.lines.length } }, tx);
+    await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["pay figures"], count: view.lines.length } }, tx);
     await logChange(tx, actor, { action: "run_viewed", runId });
   });
-  return { ...sheet, canPrepare: can(actor, "payroll.prepare") };
+  return view;
+}
+
+/** How many runs in review this Approver could decide (none they prepared or changed). A count only, for the dashboard. */
+export async function payrollRunsAwaitingApproval(): Promise<number> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.approve");
+  return countAwaiting(db, actor.id);
 }
 
 export type SettingsVersion = SettingsSnapshot & { effectiveFrom: string };

@@ -51,7 +51,9 @@ describe("setPayrollAccess, every role", () => {
 // a valid request from a Preparer reaches the (mocked, throwing) database, so it ends in the generic message.
 const { createPayLine, updatePayLine, endPayLine, savePaySettings } = await import("@/modules/payroll/actions");
 const { getRates, getPaySettings, getRuns, getWorksheet } = await import("@/modules/payroll/queries");
-const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion } = await import("@/modules/payroll/actions");
+const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun } =
+  await import("@/modules/payroll/actions");
+const { payrollRunsAwaitingApproval } = await import("@/modules/payroll/queries");
 
 const LEVELS = [null, "viewer", "approver", "preparer"] as const;
 const GENERIC = "Something went wrong. Try again.";
@@ -77,6 +79,7 @@ const calls: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   refreshSuggestions: () => refreshSuggestions({ runId: RUN_ID }),
   confirmSuggestion: () => confirmSuggestion({ runId: RUN_ID, itemId: LINE_KEY, runLineId: LINE_KEY }),
   assignSuggestion: () => assignSuggestion({ runId: RUN_ID, itemId: LINE_KEY, runLineId: LINE_KEY }),
+  submitRun: () => submitRun({ runId: RUN_ID }),
 };
 
 describe.each(Object.keys(calls))("%s, every role at every payroll level", (name) => {
@@ -88,6 +91,55 @@ describe.each(Object.keys(calls))("%s, every role at every payroll level", (name
         const result = await calls[name]();
         expect(result.ok).toBe(false);
         expect(result.error).toBe(allowed ? GENERIC : NO_ACCESS);
+      });
+    }
+  }
+});
+
+// Deciding a run: only an Approver passes authorize(). Who touched the run is checked after that, against the database.
+const HASH = "a".repeat(64);
+const decisions: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
+  approveRun: () => approveRun({ runId: RUN_ID, expectedHash: HASH }),
+  sendBackRun: () => sendBackRun({ runId: RUN_ID, note: "Check the late minutes" }),
+};
+
+describe.each(Object.keys(decisions))("%s, every role at every payroll level", (name) => {
+  for (const role of ROLE_SLUGS) {
+    for (const level of LEVELS) {
+      const allowed = level === "approver";
+      it(`${role} (${level ?? "no level"}): ${allowed ? "passes authorize()" : "is refused"}`, async () => {
+        asLevel(role, level);
+        const result = await decisions[name]();
+        expect(result.ok).toBe(false);
+        expect(result.error).toBe(allowed ? GENERIC : NO_ACCESS);
+      });
+    }
+  }
+});
+
+describe("decisions are checked on the server", () => {
+  const BAD = "Check the request and try again.";
+  it("refuses a missing note, a malformed hash and a bad run id before touching data", async () => {
+    asLevel("employee", "approver");
+    expect(await sendBackRun({ runId: RUN_ID, note: "   " })).toEqual({ ok: false, error: BAD });
+    expect(await sendBackRun({ runId: RUN_ID })).toEqual({ ok: false, error: BAD });
+    for (const expectedHash of ["", "abc", "A".repeat(64), "g".repeat(64), undefined]) {
+      expect(await approveRun({ runId: RUN_ID, expectedHash })).toEqual({ ok: false, error: BAD });
+    }
+    expect(await approveRun({ runId: "nope", expectedHash: HASH })).toEqual({ ok: false, error: BAD });
+    asLevel("employee", "preparer");
+    expect(await submitRun({ runId: "nope" })).toEqual({ ok: false, error: BAD });
+  });
+});
+
+describe("the awaiting-approval count, every role at every payroll level", () => {
+  for (const role of ROLE_SLUGS) {
+    for (const level of LEVELS) {
+      const allowed = level === "approver";
+      it(`${role} (${level ?? "no level"}): ${allowed ? "passes authorize()" : "is refused"}`, async () => {
+        asLevel(role, level);
+        if (allowed) await expect(payrollRunsAwaitingApproval()).rejects.toThrow("database touched");
+        else await expect(payrollRunsAwaitingApproval()).rejects.toMatchObject({ name: "ForbiddenError" });
       });
     }
   }

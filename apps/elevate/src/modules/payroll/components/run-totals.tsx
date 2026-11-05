@@ -2,7 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { WORKSHEET_LABELS as L } from "../constants";
 import type { Worksheet } from "../runs";
 
-// Peso totals for the whole run, and FTE, client hours and net pay for each client. Withheld when any line can't be read.
+// Peso and dollar totals for the whole run, and FTE, client hours and net pay for each client. Withheld when any line can't be read.
 
 export function RunTotals({ sheet }: { sheet: Worksheet }) {
   if (!sheet.totals || !sheet.byClient) return null;
@@ -12,14 +12,15 @@ export function RunTotals({ sheet }: { sheet: Worksheet }) {
       <h2 id="run-totals" className="text-lg font-semibold">
         {L.totals}
       </h2>
-      <dl className="grid gap-3 sm:grid-cols-3">
+      <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          [L.gross, t.gross],
-          [L.dollarAllowancePesos, t.dollarAllowancePesos],
-          [L.net, t.net],
+          [`${L.gross} (pesos)`, t.gross],
+          [L.dollarTotal, t.dollarAllowance],
+          [`${L.dollarAllowancePesos} (pesos)`, t.dollarAllowancePesos],
+          [`${L.net} (pesos)`, t.net],
         ].map(([label, value]) => (
           <div key={label} className="rounded-xl border bg-card p-3">
-            <dt className="text-xs text-muted-foreground">{label} (pesos)</dt>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
             <dd className="text-xl font-semibold tabular-nums">{value}</dd>
           </div>
         ))}

@@ -17,7 +17,11 @@ import { payLines, paySettings } from "./schema";
 import { amountsToJson, assertNotOwnEmployee, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
 import { cancelRun, confirmLine, createRun, dismissItem, saveItem, setUsdRate } from "./runs";
 import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
+import { approve, sendBack, submit } from "./approval";
 import {
+  approveRunSchema,
+  sendBackRunSchema,
+  submitRunSchema,
   assignSuggestionSchema,
   confirmSuggestionSchema,
   refreshSuggestionsSchema,
@@ -379,6 +383,57 @@ export async function confirmRunLine(input: unknown): Promise<ActionResult> {
     await db.transaction((tx) => confirmLine(tx, actor, parsed.data.runLineId));
     refreshedRun();
     revalidatePath("/payroll/[runId]", "page");
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Sends a draft for review. Refused while any check blocks; the checks are worked out again under the run lock. */
+export async function submitRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = submitRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => submit(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Returns a run in review to draft with a note for the Preparer. */
+export async function sendBackRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.approve");
+
+    const parsed = sendBackRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => sendBack(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/**
+ * Approves a run in review, against the hash the page was given. Refused for anyone who prepared or changed the run, and when the run
+ * changed since the page loaded ("This payroll changed. Reload and review it again.").
+ */
+export async function approveRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.approve");
+
+    const parsed = approveRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => approve(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
     return { ok: true, data: undefined } as const;
   });
 }

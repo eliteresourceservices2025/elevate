@@ -10,6 +10,7 @@ import { ApprovalQueue } from "@/modules/dashboard/components/approval-queue";
 import { AttentionFeed } from "@/modules/dashboard/components/attention-feed";
 import { GreetingHeader } from "@/modules/dashboard/components/greeting-header";
 import { KpiCards, KpiCardsSkeleton } from "@/modules/dashboard/components/kpi-cards";
+import { PayrollApprovals } from "@/modules/dashboard/components/payroll-approvals";
 import { QuickActions } from "@/modules/dashboard/components/quick-actions";
 import { RiskCards } from "@/modules/dashboard/components/risk-cards";
 import { Tracker } from "@/modules/dashboard/components/tracker";
@@ -60,6 +61,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
+          {/* Payroll access is a level chosen per person, not a role, so it is not tied to a view. */}
+          <Suspense fallback={null}>
+            <PayrollApprovals />
+          </Suspense>
           {showApprovals ? (
             <Suspense fallback={<Loading />}>
               <ApprovalQueue />

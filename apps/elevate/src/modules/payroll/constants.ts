@@ -180,7 +180,33 @@ export const WORKSHEET_LABELS = {
   lines: "Lines",
   newRun: "New run",
   noClient: "No client",
+  netChange: "Change from last run",
+  dollarTotal: "Dollar allowances (dollars)",
+  corrects: "Corrects the run of",
 } as const;
+
+/** Wording of sending a run for review and deciding it. Notices never carry an amount, a name or the note. */
+export const APPROVAL_LABELS = {
+  submit: "Send for review",
+  submitted: "Sent for review. The Approvers have been told.",
+  submitBlocked: "Fix the problems above before sending this run for review.",
+  approve: "Approve",
+  approved: "Run approved.",
+  sendBack: "Send back",
+  sendBackTitle: "Send this run back to the Preparer",
+  sendBackNote: "What needs to change",
+  sendBackHint: "Kept in the change history and shown on the run. Never sent in a notice. Don't write client or patient details.",
+  sentBack: "Run sent back.",
+  sentBackNotice: "This run was sent back",
+  inReview: "This run is waiting for approval. It can't be changed while it is in review.",
+  approveHint: "Approving confirms every figure on this page as shown. If anything changes before you approve, you'll be asked to reload.",
+  approvedNotice: "This run is approved. It can no longer change; a mistake is corrected with an adjustment on a later run.",
+  correctionNone: "Not a correction",
+  correctionHint: "Choose the approved run this adjustment corrects. A reason is needed.",
+} as const;
+
+/** The "own line" check as an Approver or Viewer sees it: it is about the person who sent the run, not about them. */
+export const OWN_LINE_OF_SUBMITTER = "The line of the person who sent this run needs a confirmation from another Preparer";
 
 /** Wording of the suggestions from approved hours. */
 export const SUGGESTION_LABELS = {

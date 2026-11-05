@@ -79,6 +79,8 @@ export const savePayItemSchema = z
     type: z.enum(PAY_ITEM_TYPES),
     value: z.string().trim(),
     reason: optionalReason,
+    /** An adjustment that corrects an earlier approved or paid run; blank for none. */
+    correctsRunId: z.preprocess((v) => (v === "" || v === null ? undefined : v), uuid.optional()),
   })
   .superRefine((v, ctx) => {
     if (parseItemValue(v.type, v.value) === null) ctx.addIssue({ code: "custom", path: ["value"], message: ITEM_UNIT_HINTS[itemUnit(v.type)] });
@@ -112,6 +114,14 @@ export const confirmSuggestionSchema = z.object({
 });
 
 export const assignSuggestionSchema = z.object({ runId: uuid, itemId: uuid, runLineId: uuid });
+
+export const submitRunSchema = z.object({ runId: uuid });
+
+/** A send-back always says why. Kept encrypted in the change history; never in a notice. */
+export const sendBackRunSchema = z.object({ runId: uuid, note: z.string().trim().min(1, "Say what needs to change").max(1000) });
+
+/** The hash the page was given when it loaded (64 lowercase hex characters). */
+export const approveRunSchema = z.object({ runId: uuid, expectedHash: z.string().regex(/^[0-9a-f]{64}$/) });
 
 export type PayLineInput = z.input<typeof createPayLineSchema>;
 export type UpdatePayLineInput = z.input<typeof updatePayLineSchema>;

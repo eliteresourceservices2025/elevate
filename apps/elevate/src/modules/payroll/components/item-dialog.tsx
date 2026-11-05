@@ -10,7 +10,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { confirmRunLine, dismissPayItem, savePayItem } from "../actions";
-import { PAY_ITEM_LABELS, PAY_ITEM_TYPES, REASON_REQUIRED_TYPES, type PayItemType } from "../constants";
+import { APPROVAL_LABELS, PAY_ITEM_LABELS, PAY_ITEM_TYPES, REASON_REQUIRED_TYPES, WORKSHEET_LABELS, type PayItemType } from "../constants";
 import { ITEM_UNIT_HINTS, itemUnit, parseItemValue } from "../items";
 import type { WorksheetLine } from "../runs";
 import { ConfirmSuggestionButton } from "./suggestion-controls";
@@ -65,18 +65,22 @@ function ExistingItem({ runId, runLineId, item }: { runId: string; runLineId: st
   );
 }
 
-function ItemForm({ runId, line }: { runId: string; line: WorksheetLine }) {
+type CorrectableRun = { id: string; label: string };
+
+function ItemForm({ runId, line, correctableRuns }: { runId: string; line: WorksheetLine; correctableRuns: CorrectableRun[] }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const [type, setType] = useState<PayItemType>("late_minutes");
   const current = line.items.find((i) => i.type === type && i.state !== "dismissed");
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
-  // The same rule as the server: a reason for a deduction, or when the amount differs from a suggestion. (Cutting an allowance below
-  // the line's own also needs one; the server says so if it is missing.)
+  const [corrects, setCorrects] = useState("");
+  const correction = type === "adjustment" ? corrects : "";
+  // The same rule as the server: a reason for a deduction, a correction, or when the amount differs from a suggestion. (Cutting an
+  // allowance below the line's own also needs one; the server says so if it is missing.)
   const typed = parseItemValue(type, value);
   const suggestedValue = current?.state === "suggested" ? parseItemValue(type, current.value) : null;
-  const needsReason = REASON_REQUIRED_TYPES.includes(type) || (suggestedValue !== null && typed !== suggestedValue);
+  const needsReason = REASON_REQUIRED_TYPES.includes(type) || correction !== "" || (suggestedValue !== null && typed !== suggestedValue);
 
   return (
     <div className="space-y-4">
@@ -94,9 +98,10 @@ function ItemForm({ runId, line }: { runId: string; line: WorksheetLine }) {
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          run(() => savePayItem({ runId, employeeId: line.employeeId, runLineId: line.runLineId, type, value, reason }), "Amount saved.", () => {
+          run(() => savePayItem({ runId, employeeId: line.employeeId, runLineId: line.runLineId, type, value, reason, correctsRunId: correction }), "Amount saved.", () => {
             setValue("");
             setReason("");
+            setCorrects("");
             dialog?.close(true);
           });
         }}
@@ -116,6 +121,20 @@ function ItemForm({ runId, line }: { runId: string; line: WorksheetLine }) {
           <Input id={`item-value-${line.runLineId}`} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} required />
           <p className="text-xs text-muted-foreground">{ITEM_UNIT_HINTS[itemUnit(type)]} A reduction is entered as a loan or other deduction, never as a negative amount.</p>
         </div>
+        {type === "adjustment" && correctableRuns.length > 0 ? (
+          <div className="space-y-1">
+            <Label htmlFor={`item-corrects-${line.runLineId}`}>{WORKSHEET_LABELS.corrects}</Label>
+            <NativeSelect id={`item-corrects-${line.runLineId}`} value={corrects} onChange={(e) => setCorrects(e.target.value)}>
+              <option value="">{APPROVAL_LABELS.correctionNone}</option>
+              {correctableRuns.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))}
+            </NativeSelect>
+            <p className="text-xs text-muted-foreground">{APPROVAL_LABELS.correctionHint}</p>
+          </div>
+        ) : null}
         <div className="space-y-1">
           <Label htmlFor={`item-reason-${line.runLineId}`}>{needsReason ? "Reason" : "Reason (optional)"}</Label>
           <Textarea id={`item-reason-${line.runLineId}`} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} required={needsReason} />
@@ -129,10 +148,10 @@ function ItemForm({ runId, line }: { runId: string; line: WorksheetLine }) {
   );
 }
 
-export function ItemDialog({ runId, line }: { runId: string; line: WorksheetLine }) {
+export function ItemDialog({ runId, line, correctableRuns = [] }: { runId: string; line: WorksheetLine; correctableRuns?: CorrectableRun[] }) {
   return (
     <FormDialog label="Amounts" title={`Amounts for ${line.name}`} description="Saving recomputes this person's pay and asks for a new check of the line." variant="outline" triggerSize="sm" size="lg" disabled={line.unreadable} hint="This line can't be read, so it can't be changed from here.">
-      <ItemForm runId={runId} line={line} />
+      <ItemForm runId={runId} line={line} correctableRuns={correctableRuns} />
     </FormDialog>
   );
 }

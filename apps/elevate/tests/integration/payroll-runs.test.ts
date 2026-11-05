@@ -656,13 +656,15 @@ describe("a run whose pay lines changed after it was built", () => {
     expect(await outOfDate(runId)).toBe(true);
   });
 
-  it("is not raised for a run that is no longer a draft", async () => {
+  it("is still raised while the run waits for approval (it stops the approval), but not once it is approved", async () => {
     const emp = await person();
     await giveLine(preparer, emp);
     const runId = await newRun(preparer, { periodStart: "2025-12-29", periodEnd: "2025-12-31" });
     await giveLine(preparer, await person());
     await db.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
     current.user = preparer;
+    expect(await outOfDate(runId)).toBe(true);
+    await db.execute(sql`update payroll.pay_runs set status = 'approved' where id = ${runId}`);
     expect(await outOfDate(runId)).toBe(false);
   });
 });

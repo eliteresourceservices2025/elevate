@@ -95,7 +95,14 @@ export const encryptRunLine = (id: string, p: RunLinePayload): string => fieldCr
 export const decryptRunLine = (id: string, stored: string): RunLinePayload => JSON.parse(fieldCrypto().decrypt(stored, runLineContext(id)), bigReviver) as RunLinePayload;
 
 /** What `pay_run_items.value_enc` holds: the value in the item's smallest unit, and the reason. */
-export type ItemValue = { value: bigint; reason: string | null; /** Written by the system (a refresh, an assignment), not by a Preparer. */ system?: true };
+export type ItemValue = {
+  value: bigint;
+  reason: string | null;
+  /** Written by the system (a refresh, an assignment), not by a Preparer. */
+  system?: true;
+  /** An adjustment that corrects an earlier approved or paid run names that run. */
+  correctsRunId?: string;
+};
 export const encryptItemValue = (id: string, v: ItemValue): string => fieldCrypto().encrypt(JSON.stringify(v, bigReplacer), runItemContext(id));
 export const decryptItemValue = (id: string, stored: string): ItemValue => JSON.parse(fieldCrypto().decrypt(stored, runItemContext(id)), bigReviver) as ItemValue;
 

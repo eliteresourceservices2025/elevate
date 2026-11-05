@@ -10,7 +10,7 @@ import { clients, employeeSensitive, employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
 import { calculateLine, EXTRA_KEYS, type ExtraKey, type SettingsSnapshot } from "./calculate";
 import { logChange } from "./changes";
-import { runChecks, type CheckLine, type RunCheck } from "./checks";
+import { runChecks, type CheckLine, type ChecksInput, type RunCheck } from "./checks";
 import { REASON_REQUIRED_TYPES, type PayItemState, type PayItemType, type RunStatus } from "./constants";
 import { buildLineInput, formatItemValue, formatUsdRate, parseItemValue } from "./items";
 import { resolveLines } from "./lines";
@@ -28,6 +28,7 @@ import {
   payloadText,
   payrollToday,
   settingsInForce,
+  type ItemValue,
   type RunLinePayload,
 } from "./service";
 
@@ -212,8 +213,23 @@ export async function cancelRun(tx: Tx, actor: Actor, v: { runId: string; reason
 const itemDetail = (row: ItemRow | undefined) => {
   if (!row) return null;
   const v = decryptItemValue(row.id, row.valueEnc);
-  return { state: row.state, value: v.value.toString(), reason: v.reason };
+  return { state: row.state, value: v.value.toString(), reason: v.reason, ...(v.correctsRunId ? { correctsRunId: v.correctsRunId } : {}) };
 };
+
+/**
+ * An approved run never changes: a mistake in it is fixed by an adjustment on a later run that names it. Refuses anything but an
+ * adjustment, and any run that is not an approved or paid run with an earlier period.
+ */
+async function checkCorrection(tx: Tx, runId: string, type: PayItemType, correctsRunId: string): Promise<void> {
+  if (type !== "adjustment") throw new ActionFailure("Only an adjustment can correct an earlier run.");
+  const [run] = await tx.select({ periodStart: payRuns.periodStart }).from(payRuns).where(eq(payRuns.id, runId)).limit(1);
+  const [target] = await tx
+    .select({ id: payRuns.id })
+    .from(payRuns)
+    .where(and(eq(payRuns.id, correctsRunId), inArray(payRuns.status, ["approved", "paid"]), lt(payRuns.periodStart, run?.periodStart ?? "0000-01-01")))
+    .limit(1);
+  if (!target) throw new ActionFailure("A correction must name an approved or paid earlier run.");
+}
 
 /** The newest suggested value for this type on this line, or the person's unassigned one, in the full item history; null when there never was one. */
 export async function suggestedValue(tx: Tx, runId: string, employeeId: string, runLineId: string | null, type: string): Promise<bigint | null> {
@@ -243,11 +259,14 @@ async function belowLineAllowance(tx: Tx, lineId: string, type: PayItemType, val
   return value < (type === "peso_allowance" ? rate.pesoAllowanceCentavos : rate.dollarAllowanceCents);
 }
 
-/** Confirms an amount for one line (or overrides a suggestion). Reasons are required for deductions and for overriding a suggestion. */
+/**
+ * Confirms an amount for one line (or overrides a suggestion). Reasons are required for deductions, for overriding a suggestion and
+ * for a correction of an earlier run (`correctsRunId`, adjustments only).
+ */
 export async function saveItem(
   tx: Tx,
   actor: Actor,
-  v: { runId: string; employeeId: string; runLineId: string; type: PayItemType; value: string; reason?: string },
+  v: { runId: string; employeeId: string; runLineId: string; type: PayItemType; value: string; reason?: string; correctsRunId?: string },
 ): Promise<void> {
   await lockDraftRun(tx, v.runId);
   await assertNotOwnEmployee(actor, v.employeeId, tx);
@@ -259,6 +278,8 @@ export async function saveItem(
   if (!line) throw new ActionFailure("That line is not on this run.");
   const value = parseItemValue(v.type, v.value);
   if (value === null) throw new ActionFailure("Check the amount and try again.");
+  const correctsRunId = v.correctsRunId ?? null;
+  if (correctsRunId) await checkCorrection(tx, v.runId, v.type, correctsRunId);
 
   const all = await latestItems(tx, v.runId);
   const prior = all.find((i) => itemKey(i) === itemKey({ runLineId: v.runLineId, employeeId: v.employeeId, type: v.type }));
@@ -268,7 +289,7 @@ export async function saveItem(
   const overriding = suggested !== null && suggested !== value;
   const cutsAllowance = await belowLineAllowance(tx, line.lineId, v.type, value);
   const reason = v.reason?.trim() || null;
-  if ((REASON_REQUIRED_TYPES.includes(v.type) || overriding || cutsAllowance) && !reason) throw new ActionFailure("Give a reason for this amount.");
+  if ((REASON_REQUIRED_TYPES.includes(v.type) || overriding || cutsAllowance || correctsRunId) && !reason) throw new ActionFailure("Give a reason for this amount.");
 
   const id = randomUUID();
   await tx.insert(payRunItems).values({
@@ -278,17 +299,26 @@ export async function saveItem(
     runLineId: v.runLineId,
     type: v.type,
     state: "confirmed",
-    valueEnc: encryptItemValue(id, { value, reason }),
+    valueEnc: encryptItemValue(id, { value, reason, ...(correctsRunId ? { correctsRunId } : {}) }),
     enteredBy: actor.id,
     createdAt: sql`clock_timestamp()`,
   });
   await recomputeRun(tx, v.runId, { employeeId: v.employeeId, clearConfirmationFor: [v.runLineId] });
-  await writeAudit({ actor, action: "payroll.item.save", targetType: "pay_run", targetId: v.runId, metadata: { employeeId: v.employeeId, type: v.type } }, tx);
+  await writeAudit(
+    { actor, action: "payroll.item.save", targetType: "pay_run", targetId: v.runId, metadata: { employeeId: v.employeeId, type: v.type, ...(correctsRunId ? { correctsRunId } : {}) } },
+    tx,
+  );
   await logChange(tx, actor, {
     action: "item_saved",
     runId: v.runId,
     employeeId: v.employeeId,
-    detail: { runLineId: v.runLineId, type: v.type, old: itemDetail(prior), new: { state: "confirmed", value: value.toString(), reason } },
+    detail: {
+      runLineId: v.runLineId,
+      type: v.type,
+      ...(correctsRunId ? { correctsRunId } : {}),
+      old: itemDetail(prior),
+      new: { state: "confirmed", value: value.toString(), reason, ...(correctsRunId ? { correctsRunId } : {}) },
+    },
   });
 }
 
@@ -364,7 +394,16 @@ export async function confirmLine(tx: Tx, actor: Actor, runLineId: string): Prom
 
 // ---- Reading a run ----
 
-export type WorksheetItem = { id: string; type: PayItemType; state: PayItemState; /** As typed: "1.5", "1,250.50". */ value: string; reason: string | null };
+export type WorksheetItem = {
+  id: string;
+  type: PayItemType;
+  state: PayItemState;
+  /** As typed: "1.5", "1,250.50". */
+  value: string;
+  reason: string | null;
+  /** An adjustment that corrects an earlier approved or paid run names that run. */
+  correctsRunId: string | null;
+};
 
 export type WorksheetFigures = {
   monthly: string;
@@ -383,6 +422,8 @@ export type WorksheetFigures = {
   otherDeductions: string;
   net: string;
   clientHours: string;
+  /** Net pay minus the same line's net in the last approved or paid run ("+1,250.00"); null when there is none to compare with. */
+  netChange: string | null;
 };
 
 export type WorksheetLine = {
@@ -411,20 +452,24 @@ export type Worksheet = {
   lines: WorksheetLine[];
   /** Suggestions no pay line has been chosen for. */
   unassigned: { employeeId: string; name: string; items: WorksheetItem[] }[];
-  /** Null when any line can't be read: a partial total is never shown. */
-  totals: { gross: string; dollarAllowancePesos: string; net: string } | null;
+  /** Null when any line can't be read: a partial total is never shown. `dollarAllowance` is in dollars, the rest in pesos. */
+  totals: { gross: string; dollarAllowance: string; dollarAllowancePesos: string; net: string } | null;
   byClient: ClientTotals[] | null;
   checks: { blocking: RunCheck[]; warnings: RunCheck[] };
+  /** True when the "own line" check above is about the viewer (a Preparer about to send the run); otherwise it is about the submitter. */
+  checksAreMine: boolean;
   unreadableCount: number;
+  /** Approved or paid earlier runs a correction on this draft may name, newest first. */
+  correctableRuns: { id: string; label: string }[];
 };
 
 /** Finished days in the period with hours that are not approved (or changed after approval), for each person. Reads through the attendance module. */
-export async function unapprovedDaysByPerson(employeeIds: string[], from: string, to: string): Promise<Map<string, number>> {
+export async function unapprovedDaysByPerson(executor: Executor, employeeIds: string[], from: string, to: string): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (employeeIds.length === 0) return out;
   const today = payrollToday();
-  const days = await attendanceRows(db, employeeIds, from, to);
-  const approvals = await latestApprovals(db, employeeIds, from, to);
+  const days = await attendanceRows(executor, employeeIds, from, to);
+  const approvals = await latestApprovals(executor, employeeIds, from, to);
   for (const d of days) {
     if (!(d.sessions > 0 || d.scheduledMinutes !== null) || d.date >= today) continue;
     if (dayState(d, approvals.get(approvalKey(d.employeeId, d.date))) === "approved") continue;
@@ -434,26 +479,49 @@ export async function unapprovedDaysByPerson(employeeIds: string[], from: string
 }
 
 /** Who has payout details on file, from the stored masks only. Nothing is decrypted. */
-async function payoutReady(employeeIds: string[]): Promise<Set<string>> {
+async function payoutReady(executor: Reader, employeeIds: string[]): Promise<Set<string>> {
   if (employeeIds.length === 0) return new Set();
-  const rows = await db.select({ id: employeeSensitive.employeeId, masks: employeeSensitive.masks }).from(employeeSensitive).where(inArray(employeeSensitive.employeeId, employeeIds));
+  const rows = await executor.select({ id: employeeSensitive.employeeId, masks: employeeSensitive.masks }).from(employeeSensitive).where(inArray(employeeSensitive.employeeId, employeeIds));
   return new Set(rows.filter((r) => r.masks.bankName && r.masks.bankAccountName && r.masks.bankAccountNumber).map((r) => r.id));
 }
 
 const fteHundredths = (fte: string) => Math.round(Number(fte) * 100);
 /** Hundredths as two decimals ("0.50"), the way a line shows its FTE. */
 const showHundredths = (n: number) => `${Math.floor(n / 100)}.${String(n % 100).padStart(2, "0")}`;
+const signedPesos = (n: bigint) => (n > 0n ? `+${formatPesos(n)}` : formatPesos(n));
+
+/** Reads with `select` and runs raw SQL (the attendance module's readers need both). A transaction qualifies. */
+export type Executor = Pick<typeof db, "select" | "selectDistinct" | "execute">;
+
+type RunRow = { runLine: typeof payRunLines.$inferSelect; lineKey: string; first: string; last: string; preferred: string | null; userId: string | null; clientName: string | null };
+
+/** Everything about a run, decrypted once, for the worksheet, the checks before review and the approval hash. */
+export type RunData = {
+  run: typeof payRuns.$inferSelect;
+  rows: RunRow[];
+  /** The newest item per line and type. */
+  items: ItemRow[];
+  /** Every item row the run has ever had (the history is append-only, so a new row always shows here). */
+  itemIds: string[];
+  /** Decrypted line payloads; null when a line can't be read. */
+  payloads: Map<string, RunLinePayload | null>;
+  /** Decrypted newest items; null when one can't be read. */
+  values: Map<string, ItemValue | null>;
+  previousNets: Map<string, bigint>;
+  linesOutOfDate: boolean;
+  unapproved: Map<string, number>;
+  ready: Set<string>;
+};
 
 /**
- * Everything the worksheet shows, decrypted. The caller has already authorized and writes the audit row. A line or amount that can't
- * be read is listed as unreadable (with the line id and error class logged, never a figure) and blocks review; totals are then withheld.
+ * Reads and decrypts a run, or null when there is no such run. A line or amount that can't be read is kept as null (the line id and the
+ * error class are logged, never a figure) and blocks review. The caller has already authorized.
  */
-export async function buildWorksheet(viewer: { id: string }, runId: string): Promise<Worksheet | null> {
-  const [run] = await db.select().from(payRuns).where(eq(payRuns.id, runId)).limit(1);
+export async function readRun(executor: Executor, runId: string): Promise<RunData | null> {
+  const [run] = await executor.select().from(payRuns).where(eq(payRuns.id, runId)).limit(1);
   if (!run) return null;
-  const snapshot = run.settingsSnapshot as SettingsSnapshot;
 
-  const rows = await db
+  const rows = await executor
     .select({
       runLine: payRunLines,
       lineKey: payLines.lineKey,
@@ -470,15 +538,39 @@ export async function buildWorksheet(viewer: { id: string }, runId: string): Pro
     .where(eq(payRunLines.runId, runId))
     .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName), asc(payRunLines.alias), asc(payRunLines.id));
 
-  const items = await latestItems(db, runId);
+  const items = await latestItems(executor, runId);
+  const itemIds = (await executor.select({ id: payRunItems.id }).from(payRunItems).where(eq(payRunItems.runId, runId))).map((r) => r.id).sort();
   const employeeIds = [...new Set(rows.map((r) => r.runLine.employeeId))];
-  const submitterEmployeeId = await employeeIdForUser(db, viewer.id);
 
-  // The latest approved or paid earlier run (a draft is unreviewed), for the "net changed" check.
-  const [previous] = await db.select({ id: payRuns.id }).from(payRuns).where(and(lt(payRuns.periodStart, run.periodStart), inArray(payRuns.status, ["approved", "paid"]))).orderBy(desc(payRuns.periodStart)).limit(1);
+  const payloads = new Map<string, RunLinePayload | null>();
+  for (const r of rows) {
+    try {
+      payloads.set(r.runLine.id, decryptRunLine(r.runLine.id, r.runLine.payloadEnc));
+    } catch (error) {
+      console.error("payroll run line unreadable:", { runLineId: r.runLine.id, error: error instanceof Error ? error.name : "UnknownError" });
+      payloads.set(r.runLine.id, null);
+    }
+  }
+  const values = new Map<string, ItemValue | null>();
+  for (const i of items) {
+    try {
+      values.set(i.id, decryptItemValue(i.id, i.valueEnc));
+    } catch (error) {
+      console.error("payroll item unreadable:", { itemId: i.id, error: error instanceof Error ? error.name : "UnknownError" });
+      values.set(i.id, null);
+    }
+  }
+
+  // The latest approved or paid earlier run (a draft is unreviewed), for the "net changed" check and the change column.
+  const [previous] = await executor
+    .select({ id: payRuns.id })
+    .from(payRuns)
+    .where(and(lt(payRuns.periodStart, run.periodStart), inArray(payRuns.status, ["approved", "paid"])))
+    .orderBy(desc(payRuns.periodStart))
+    .limit(1);
   const previousNets = new Map<string, bigint>();
   if (previous) {
-    const prevRows = await db
+    const prevRows = await executor
       .select({ id: payRunLines.id, payloadEnc: payRunLines.payloadEnc, lineKey: payLines.lineKey })
       .from(payRunLines)
       .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
@@ -492,21 +584,81 @@ export async function buildWorksheet(viewer: { id: string }, runId: string): Pro
     }
   }
 
-  // A draft is compared with what a run built now would contain; any difference means it was built from out-of-date pay lines.
+  // A draft, or a run waiting for approval, is compared with what a run built now would contain; any difference means it was built
+  // from out-of-date pay lines (someone added or changed since would be paid wrongly or not at all).
   let linesOutOfDate = false;
-  if (run.status === "draft") {
-    const now = await linesNowInForce(db, { start: run.periodStart, end: run.periodEnd });
+  if (run.status === "draft" || run.status === "in_review") {
+    const now = await linesNowInForce(executor, { start: run.periodStart, end: run.periodEnd });
     const built = new Set(rows.map((r) => `${r.runLine.lineId}|${r.runLine.flags.filter((f) => f !== "person_left").sort().join(",")}`));
     linesOutOfDate = now.size !== built.size || [...now].some((k) => !built.has(k));
   }
 
-  const unapproved = await unapprovedDaysByPerson(employeeIds, run.periodStart, run.periodEnd);
-  const ready = await payoutReady(employeeIds);
+  const unapproved = await unapprovedDaysByPerson(executor, employeeIds, run.periodStart, run.periodEnd);
+  const ready = await payoutReady(executor, employeeIds);
+  return { run, rows, items, itemIds, payloads, values, previousNets, linesOutOfDate, unapproved, ready };
+}
+
+const lineUnreadable = (data: RunData, runLineId: string) =>
+  data.payloads.get(runLineId) == null || data.items.some((i) => i.runLineId === runLineId && data.values.get(i.id) == null);
+
+/** The unassigned suggestions, by person (unreadable ones are left out of the count of the person's items but still block as unreadable). */
+function unassignedOf(data: RunData): { employeeId: string; rows: ItemRow[] }[] {
+  const byPerson = new Map<string, ItemRow[]>();
+  for (const i of data.items) if (i.runLineId === null && i.state === "suggested") byPerson.set(i.employeeId, [...(byPerson.get(i.employeeId) ?? []), i]);
+  return [...byPerson].map(([employeeId, rows]) => ({ employeeId, rows }));
+}
+
+/**
+ * What the checks before review need, relative to the person sending the run (`submitter`): only their own line needs someone else's
+ * confirmation. Pass null for no submitter (the own-line check is then skipped).
+ */
+export async function checkInputsOf(executor: Executor, data: RunData, submitterUserId: string | null): Promise<ChecksInput> {
+  const submitterEmployeeId = submitterUserId ? await employeeIdForUser(executor, submitterUserId) : null;
+  const lines: CheckLine[] = data.rows.map((r) => {
+    const payload = data.payloads.get(r.runLine.id) ?? null;
+    const unreadable = lineUnreadable(data, r.runLine.id);
+    return {
+      runLineId: r.runLine.id,
+      employeeId: r.runLine.employeeId,
+      name: nameOf(r),
+      unreadable,
+      issues: payload?.result.issues ?? [],
+      flags: r.runLine.flags,
+      net: payload && !unreadable ? payload.result.net : null,
+      previousNet: data.previousNets.get(r.lineKey) ?? null,
+      unapprovedDays: data.unapproved.get(r.runLine.employeeId) ?? 0,
+      payoutReady: data.ready.has(r.runLine.employeeId),
+      pendingSuggestions: data.items.filter((i) => i.runLineId === r.runLine.id && i.state === "suggested").length,
+      confirmedBy: r.runLine.confirmedBy,
+    };
+  });
+  const names = new Map(data.rows.map((r) => [r.runLine.employeeId, nameOf(r)]));
+  return {
+    lines,
+    unassigned: unassignedOf(data).map((u) => ({ employeeId: u.employeeId, name: names.get(u.employeeId) ?? "Someone", count: u.rows.length })),
+    submitter: { userId: submitterUserId ?? "", employeeId: submitterEmployeeId },
+    changeWarnBp: (data.run.settingsSnapshot as SettingsSnapshot).changeWarnBp,
+    linesOutOfDate: data.linesOutOfDate,
+  };
+}
+
+/** The checks for a run, read fresh through `executor` (inside a transaction when deciding), relative to `submitterUserId`. */
+export async function loadCheckInputs(executor: Executor, runId: string, submitterUserId: string | null): Promise<ChecksInput | null> {
+  const data = await readRun(executor, runId);
+  return data ? checkInputsOf(executor, data, submitterUserId) : null;
+}
+
+/**
+ * The worksheet, from data read by `readRun`. The checks are about the viewer while a Preparer looks at a draft (they are the one who
+ * would send it) and about the submitter once it has been sent, so an Approver never sees "your own line" about someone else's line.
+ */
+export async function worksheetOf(executor: Executor, viewer: { id: string; canPrepare: boolean }, data: RunData): Promise<Worksheet> {
+  const { run, rows } = data;
 
   const confirmerIds = [...new Set(rows.map((r) => r.runLine.confirmedBy).filter((x): x is string => x !== null))];
   const confirmerNames = new Map<string, string>();
   if (confirmerIds.length > 0) {
-    const people = await db
+    const people = await executor
       .select({ id: users.id, email: users.email, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
       .from(users)
       .leftJoin(employees, eq(employees.userId, users.id))
@@ -515,41 +667,30 @@ export async function buildWorksheet(viewer: { id: string }, runId: string): Pro
   }
 
   const displayItem = (row: ItemRow): WorksheetItem | null => {
-    try {
-      const v = decryptItemValue(row.id, row.valueEnc);
-      return { id: row.id, type: row.type as PayItemType, state: row.state as PayItemState, value: formatItemValue(row.type as PayItemType, v.value), reason: v.reason };
-    } catch (error) {
-      console.error("payroll item unreadable:", { itemId: row.id, error: error instanceof Error ? error.name : "UnknownError" });
-      return null;
-    }
+    const v = data.values.get(row.id);
+    if (!v) return null;
+    return { id: row.id, type: row.type as PayItemType, state: row.state as PayItemState, value: formatItemValue(row.type as PayItemType, v.value), reason: v.reason, correctsRunId: v.correctsRunId ?? null };
   };
 
-  const checkLines: CheckLine[] = [];
   const lines: WorksheetLine[] = [];
   const clientTotals = new Map<string, { clientId: string | null; clientName: string; lines: number; fte: number; hours: bigint; net: bigint }>();
   let gross = 0n;
+  let dollars = 0n;
   let dollarPesos = 0n;
   let net = 0n;
   let unreadableCount = 0;
 
   for (const r of rows) {
-    const mine = items.filter((i) => i.runLineId === r.runLine.id);
-    const shown = mine.map(displayItem);
-    let payload: RunLinePayload | null = null;
-    try {
-      payload = decryptRunLine(r.runLine.id, r.runLine.payloadEnc);
-    } catch (error) {
-      console.error("payroll run line unreadable:", { runLineId: r.runLine.id, error: error instanceof Error ? error.name : "UnknownError" });
-    }
-    const unreadable = payload === null || shown.some((s) => s === null);
+    const payload = data.payloads.get(r.runLine.id) ?? null;
+    const unreadable = lineUnreadable(data, r.runLine.id);
     if (unreadable) unreadableCount += 1;
-    const name = nameOf(r);
 
     let figures: WorksheetFigures | null = null;
     if (payload && !unreadable) {
       const x = payload.result;
       const extra = {} as Record<ExtraKey, string>;
       for (const key of EXTRA_KEYS) extra[key] = formatPesos(x.extra[key]); // eslint-disable-line security/detect-object-injection
+      const previousNet = data.previousNets.get(r.lineKey);
       figures = {
         monthly: formatPesos(payload.rate.monthlyCentavos),
         cutoff: formatPesos(x.cutoff),
@@ -566,8 +707,10 @@ export async function buildWorksheet(viewer: { id: string }, runId: string): Pro
         otherDeductions: formatPesos(payload.input.otherDeductions),
         net: formatPesos(x.net),
         clientHours: formatItemValue("client_hours", payload.clientHoursHundredths),
+        netChange: previousNet === undefined ? null : signedPesos(x.net - previousNet),
       };
       gross += x.gross;
+      dollars += payload.input.dollarAllowanceCents;
       dollarPesos += x.dollarAllowancePesos;
       net += x.net;
       const key = r.runLine.clientId ?? "none";
@@ -582,7 +725,7 @@ export async function buildWorksheet(viewer: { id: string }, runId: string): Pro
     lines.push({
       runLineId: r.runLine.id,
       employeeId: r.runLine.employeeId,
-      name,
+      name: nameOf(r),
       isOwn: r.userId === viewer.id,
       clientId: r.runLine.clientId,
       clientName: r.clientName,
@@ -594,54 +737,48 @@ export async function buildWorksheet(viewer: { id: string }, runId: string): Pro
       confirmedByName: r.runLine.confirmedBy ? (confirmerNames.get(r.runLine.confirmedBy) ?? "Someone") : null,
       confirmedByMe: r.runLine.confirmedBy === viewer.id,
       figures,
-      items: shown.filter((s): s is WorksheetItem => s !== null),
-    });
-    checkLines.push({
-      runLineId: r.runLine.id,
-      employeeId: r.runLine.employeeId,
-      name,
-      unreadable,
-      issues: payload?.result.issues ?? [],
-      flags: r.runLine.flags,
-      net: payload && !unreadable ? payload.result.net : null,
-      previousNet: previousNets.get(r.lineKey) ?? null,
-      unapprovedDays: unapproved.get(r.runLine.employeeId) ?? 0,
-      payoutReady: ready.has(r.runLine.employeeId),
-      pendingSuggestions: mine.filter((i) => i.state === "suggested").length,
-      confirmedBy: r.runLine.confirmedBy,
+      items: data.items
+        .filter((i) => i.runLineId === r.runLine.id)
+        .map(displayItem)
+        .filter((s): s is WorksheetItem => s !== null),
     });
   }
 
-  // Suggestions that no line has been chosen for.
   const names = new Map(rows.map((r) => [r.runLine.employeeId, nameOf(r)]));
-  const unassignedByPerson = new Map<string, ItemRow[]>();
-  for (const i of items) if (i.runLineId === null && i.state === "suggested") unassignedByPerson.set(i.employeeId, [...(unassignedByPerson.get(i.employeeId) ?? []), i]);
-  const unassigned = [...unassignedByPerson].map(([employeeId, list]) => ({
-    employeeId,
-    name: names.get(employeeId) ?? "Someone",
-    items: list.map(displayItem).filter((s): s is WorksheetItem => s !== null),
+  const unassigned = unassignedOf(data).map((u) => ({
+    employeeId: u.employeeId,
+    name: names.get(u.employeeId) ?? "Someone",
+    items: u.rows.map(displayItem).filter((s): s is WorksheetItem => s !== null),
   }));
 
-  const checks = runChecks({
-    lines: checkLines,
-    unassigned: unassigned.map((u) => ({ employeeId: u.employeeId, name: u.name, count: u.items.length })),
-    submitter: { userId: viewer.id, employeeId: submitterEmployeeId },
-    changeWarnBp: snapshot.changeWarnBp,
-    linesOutOfDate,
-  });
+  const checksAs = run.status === "draft" ? (viewer.canPrepare ? viewer.id : null) : run.submittedBy;
+  const checks = runChecks(await checkInputsOf(executor, data, checksAs));
+
+  let correctableRuns: { id: string; label: string }[] = [];
+  if (run.status === "draft" && viewer.canPrepare) {
+    const earlier = await executor
+      .select({ id: payRuns.id, periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd })
+      .from(payRuns)
+      .where(and(lt(payRuns.periodStart, run.periodStart), inArray(payRuns.status, ["approved", "paid"])))
+      .orderBy(desc(payRuns.periodStart))
+      .limit(24);
+    correctableRuns = earlier.map((e) => ({ id: e.id, label: `${e.periodStart} to ${e.periodEnd}` }));
+  }
 
   const complete = unreadableCount === 0;
   return {
     run: { id: run.id, periodStart: run.periodStart, periodEnd: run.periodEnd, status: run.status as RunStatus, usdRate: run.usdRateE4 === null ? null : formatUsdRate(run.usdRateE4) },
     lines,
     unassigned,
-    totals: complete ? { gross: formatPesos(gross), dollarAllowancePesos: formatPesos(dollarPesos), net: formatPesos(net) } : null,
+    totals: complete ? { gross: formatPesos(gross), dollarAllowance: formatPesos(dollars), dollarAllowancePesos: formatPesos(dollarPesos), net: formatPesos(net) } : null,
     byClient: complete
       ? [...clientTotals.values()]
           .sort((a, b) => a.clientName.localeCompare(b.clientName))
           .map((t) => ({ clientId: t.clientId, clientName: t.clientName, lines: t.lines, fte: showHundredths(t.fte), clientHours: formatItemValue("client_hours", t.hours), net: formatPesos(t.net) }))
       : null,
     checks,
+    checksAreMine: checksAs !== null && checksAs === viewer.id,
     unreadableCount,
+    correctableRuns,
   };
 }

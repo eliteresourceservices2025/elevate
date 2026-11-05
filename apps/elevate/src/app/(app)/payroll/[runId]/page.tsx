@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { pageInfo, parsePaging } from "@/lib/pagination";
 import { RUN_STATUS_LABELS } from "@/modules/payroll/constants";
+import { ApprovalBar } from "@/modules/payroll/components/approval-bar";
 import { RunChecks } from "@/modules/payroll/components/run-checks";
 import { CancelRunDialog, UsdRateDialog } from "@/modules/payroll/components/run-dialogs";
 import { RefreshSuggestionsButton, UnassignedSuggestions } from "@/modules/payroll/components/suggestion-controls";
@@ -53,13 +54,29 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
           ) : undefined
         }
       />
-      {run.status === "draft" ? (
-        <RunChecks blocking={sheet.checks.blocking} warnings={sheet.checks.warnings} unreadableCount={sheet.unreadableCount} />
+      {run.status === "draft" || run.status === "in_review" ? (
+        <RunChecks
+          blocking={sheet.checks.blocking}
+          warnings={sheet.checks.warnings}
+          unreadableCount={sheet.unreadableCount}
+          stage={run.status === "draft" ? "draft" : "review"}
+          checksAreMine={sheet.checksAreMine}
+        />
       ) : null}
       <UnassignedSuggestions sheet={sheet} canPrepare={sheet.canPrepare} />
       <Worksheet sheet={sheet} lines={shown} canPrepare={sheet.canPrepare} />
       <PagerLinks info={info} basePath={`/payroll/${run.id}`} defaultSize={DEFAULT_SIZE} label="lines" />
       <RunTotals sheet={sheet} />
+      <ApprovalBar
+        runId={run.id}
+        status={run.status}
+        canPrepare={sheet.canPrepare}
+        canApprove={sheet.canApprove}
+        blocking={sheet.checks.blocking.length + sheet.unreadableCount}
+        expectedHash={sheet.expectedHash}
+        refusal={sheet.approvalRefusal}
+        sentBackNote={sheet.sentBackNote}
+      />
     </PageContainer>
   );
 }

@@ -32,7 +32,7 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
             <TableHead colSpan={EXTRA_KEYS.length}>{L.groups.extra}</TableHead>
             <TableHead colSpan={3}>{L.groups.allowances}</TableHead>
             <TableHead colSpan={3}>{L.groups.adjustments}</TableHead>
-            <TableHead colSpan={2}>{L.groups.result}</TableHead>
+            <TableHead colSpan={3}>{L.groups.result}</TableHead>
             <TableHead colSpan={1}>{L.groups.reference}</TableHead>
             <TableHead colSpan={2}>
               <span className="sr-only">{L.actions}</span>
@@ -60,6 +60,7 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
             <TableHead className={`${head} ${num}`}>{L.otherDeductions}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.gross}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.net}</TableHead>
+            <TableHead className={`${head} ${num}`}>{L.netChange}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.clientHours}</TableHead>
             <TableHead className={head}>{L.confirmation}</TableHead>
             <TableHead>
@@ -87,12 +88,15 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
                     </Badge>
                   ))}
                   <Pending line={line} />
+                  {line.items.some((i) => i.correctsRunId && i.state === "confirmed") ? (
+                    <span className="block text-xs font-normal text-muted-foreground">Includes a correction of an earlier run</span>
+                  ) : null}
                 </TableCell>
                 <TableCell label={L.client} className={`${FROZEN} md:left-44 border-r`}>
                   {line.clientName ?? L.noClient}
                 </TableCell>
                 {line.unreadable ? (
-                  <TableCell label={L.net} colSpan={20} className="text-destructive">
+                  <TableCell label={L.net} colSpan={21} className="text-destructive">
                     {L.unreadable}
                   </TableCell>
                 ) : (
@@ -116,6 +120,7 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
                     {cell(f?.otherDeductions, L.otherDeductions)}
                     {cell(f?.gross, L.gross)}
                     {cell(f?.net, L.net, "font-semibold")}
+                    {cell(f ? (f.netChange ?? "") : undefined, L.netChange, "text-muted-foreground")}
                     {cell(f?.clientHours, L.clientHours)}
                   </>
                 )}
@@ -123,7 +128,7 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
                 <TableCell label={L.actions}>
                   {canPrepare && draft ? (
                     <div className="flex flex-wrap gap-2">
-                      {line.isOwn ? null : <ItemDialog runId={sheet.run.id} line={line} />}
+                      {line.isOwn ? null : <ItemDialog runId={sheet.run.id} line={line} correctableRuns={sheet.correctableRuns} />}
                       <ConfirmLineButton line={line} />
                     </div>
                   ) : null}
