@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bell, Compass, FileText, FileUp, History, LifeBuoy, ListChecks, Mail, ShieldCheck } from "lucide-react";
+import { Bell, Compass, FileText, FileUp, History, LifeBuoy, ListChecks, Mail, ShieldCheck, Wallet } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -37,6 +37,13 @@ const SECTIONS = [
     icon: ShieldCheck,
     title: "Roles and access",
     description: "Assign roles, name Safe Voice handlers, reset an authenticator.",
+  },
+  {
+    href: "/settings/payroll-access",
+    action: "settings.set_payroll_access",
+    icon: Wallet,
+    title: "Payroll access",
+    description: "Choose who can prepare, approve or view payroll. No role grants it.",
   },
   {
     href: "/settings/invitations",

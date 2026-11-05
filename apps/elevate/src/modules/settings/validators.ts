@@ -11,6 +11,8 @@ export const setUserRolesSchema = z.object({
 
 export const setSafevoiceHandlerSchema = z.object({ userId, enabled: z.boolean() });
 
+export const setPayrollAccessSchema = z.object({ userId, level: z.enum(["preparer", "approver", "viewer"]).nullable() });
+
 export const resetAuthenticatorSchema = z.object({ userId });
 
 export const accountSchema = z.object({ userId });
