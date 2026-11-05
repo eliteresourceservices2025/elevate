@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calculateLine, EXTRA_KEYS, type LineInput, type SettingsSnapshot } from "./calculate";
 import { PAY_ITEM_LABELS } from "./constants";
+import { formatPesos } from "./money";
 import { payslipMarkdown, stripMarkdown, type PayslipInput } from "./payslip";
 
 // Invented person and figures. Money is bigint centavos.
@@ -37,29 +38,26 @@ const slip = (lines: PayslipInput["lines"], over: Partial<PayslipInput> = {}): P
 
 describe("payslipMarkdown", () => {
   it("shows the person's figures, the period and the dollar rate, with labels from the constants", () => {
-    const md = payslipMarkdown(
-      slip([
-        lineOf(null, {
-          absenceDayHundredths: 100,
-          lateMinutes: 30,
-          extra: { regular: 90, holiday: 0, restDay: 0, restDayOver8: 0, holidayPay: 0 },
-          pesoAllowance: 100_000n,
-          dollarAllowanceCents: 2_000n,
-          adjustment: 25_000n,
-          loan: 50_000n,
-          otherDeductions: 10_000n,
-        }),
-      ]),
-    );
+    const line = lineOf(null, {
+      absenceDayHundredths: 100,
+      lateMinutes: 30,
+      extra: { regular: 90, holiday: 0, restDay: 0, restDayOver8: 0, holidayPay: 0 },
+      pesoAllowance: 100_000n,
+      dollarAllowanceCents: 2_000n,
+      adjustment: 25_000n,
+      loan: 50_000n,
+      otherDeductions: 10_000n,
+    });
+    const md = payslipMarkdown(slip([line]));
+    expect(md).toContain(`Net pay: **${formatPesos(line.result.net)}**`);
+    expect(md).toContain(formatPesos(line.result.base));
+    expect(md).toContain(formatPesos(line.result.dollarAllowancePesos));
     expect(md).toContain("Liza Testreyes");
     expect(md).toContain("2029-01-01 to 2029-01-15");
     expect(md).toContain("58.50");
     for (const t of ["absence_days", "late_minutes", "extra_regular", "peso_allowance", "dollar_allowance", "adjustment", "loan", "other_deduction"] as const) {
       expect(md).toContain(PAY_ITEM_LABELS[t]);
     }
-    const result = lineOf(null, { pesoAllowance: 100_000n }).result;
-    expect(result.net).toBeGreaterThan(0n);
-    expect(md).toMatch(/Net pay/);
   });
 
   it("leaves out items that are zero, and never says overtime or PTO", () => {

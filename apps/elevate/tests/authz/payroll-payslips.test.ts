@@ -54,6 +54,21 @@ describe("the payslip route", () => {
     }
   });
 
+  for (const role of ROLE_SLUGS) {
+    for (const level of LEVELS) {
+      it(`${role} (${level ?? "no level"}): a valid run id passes authorize() and goes to the caller's own record lookup`, async () => {
+        as([role], level);
+        await expect(call(RUN_ID)).rejects.toThrow("database touched");
+      });
+    }
+  }
+
+  it("a Super Admin with no payroll level is scoped the same way as everyone else", async () => {
+    as(["super_admin"], null);
+    await expect(call(RUN_ID)).rejects.toThrow("database touched");
+    await expect(getMyPayslip(currentUser.value as never, RUN_ID)).rejects.toThrow("database touched");
+  });
+
   it("answers 404 to a user with no role, without reading data", async () => {
     as([]);
     expect((await call(RUN_ID)).status).toBe(404);

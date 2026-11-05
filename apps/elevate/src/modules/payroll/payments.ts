@@ -1,10 +1,11 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { fieldCrypto } from "@/lib/crypto";
 import { toCsv } from "@/lib/csv";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
+import { users } from "@/modules/core/schema";
 import { notify } from "@/modules/notifications/service";
 import { employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
@@ -103,7 +104,8 @@ async function notifyPayslipsReady(tx: Tx, runId: string): Promise<void> {
     .selectDistinct({ userId: employees.userId })
     .from(payRunLines)
     .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
-    .where(and(eq(payRunLines.runId, runId), isNotNull(employees.userId)));
+    .innerJoin(users, eq(users.id, employees.userId))
+    .where(and(eq(payRunLines.runId, runId), isNotNull(employees.userId), isNull(users.archivedAt)));
   await notify(
     tx,
     people.flatMap((p) =>

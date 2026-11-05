@@ -83,7 +83,7 @@ export async function listMyPayslips(paging?: { page: number; pageSize: number }
     if (ok) shown++;
     return { runId: r.id, periodLabel: `${r.periodStart} to ${r.periodEnd}`, net: ok ? formatPesos(net) : L.unreadable };
   });
-  if (shown > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_payslips", metadata: { fields: ["payslip net"], count: shown } });
+  if (shown > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_payslips", targetId: employeeId, metadata: { fields: ["payslip net"], count: shown } });
   return out;
 }
 

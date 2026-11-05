@@ -212,16 +212,54 @@ describe("the payslip is the person's own", () => {
     const p = slot(6);
     await giveLine(emp, p, { alias: "Front desk" });
     await giveLine(emp, p, { alias: "*Billing*", monthly: "10,000" });
+    // A second person on the same run, with a recognizable name, alias and amount.
+    const second = await account();
+    const secondEmp = await person(second.id, "Zzsecretlast");
+    await giveLine(secondEmp, p, { alias: "Zzsecretalias", monthly: "31,415.92" });
     const runId = await approvedRun(p);
-    await payAll(runId, [emp]);
+    await payAll(runId, [emp, secondEmp]);
     as(owner);
     const list = await listMyPayslips();
     expect(list).toHaveLength(1);
     expect(list[0].net).toBe(formatPesos(await netOf(runId, emp)));
     expect((await rows(sql`select 1 from payroll.pay_run_lines where run_id = ${runId} and employee_id = ${emp}`)).length).toBe(2);
     const { getMyPayslip } = await import("@/modules/payroll/payslip-queries");
+    const { payslipMarkdown } = await import("@/modules/payroll/payslip");
     const slip = await getMyPayslip(owner as never, runId);
     expect(slip?.lines).toHaveLength(2);
+    const md = payslipMarkdown(slip!);
+    expect(md).not.toMatch(/Zzsecret/);
+    expect(md).not.toContain(formatPesos(await netOf(runId, secondEmp)));
+    expect(md).toContain(formatPesos(await netOf(runId, emp)));
+    // The second person sees only their own line.
+    as(second);
+    expect((await getMyPayslip(second as never, runId))!.lines).toHaveLength(1);
+  });
+
+  it("gives a signed-in user with no people record an empty list and a 404", async () => {
+    const owner = await account();
+    const emp = await person(owner.id);
+    const runId = await paidRun(slot(15), [emp]);
+    const nobody = await account();
+    as(nobody);
+    expect(await listMyPayslips()).toEqual([]);
+    expect(await countMyPayslips()).toBe(0);
+    const r = await call(runId);
+    expect(r.status).toBe(404);
+    expect(r.headers.get("cache-control")).toBe("private, no-store");
+    expect(await rows(sql`select 1 from ops.audit_log where actor_user_id = ${nobody.id}`)).toHaveLength(0);
+  });
+
+  it("audits a list view against the viewer's own people record, with no amount", async () => {
+    const owner = await account();
+    const emp = await person(owner.id);
+    const runId = await paidRun(slot(16), [emp]);
+    as(owner);
+    await listMyPayslips();
+    const audit = await rows<{ target_id: string; metadata: unknown }>(sql`select target_id, metadata from ops.audit_log where actor_user_id = ${owner.id} and action = 'sensitive.view'`);
+    expect(audit).toHaveLength(1);
+    expect(audit[0].target_id).toBe(emp);
+    expect(JSON.stringify(audit)).not.toContain(formatPesos(await netOf(runId, emp)));
   });
 
   it("pages the list, newest period first", async () => {
@@ -296,6 +334,9 @@ describe("the PDF", () => {
       const text = await r.text();
       expect(text).toMatch(/can't be read/i);
       expect(text).not.toMatch(/Error|stack|at /);
+      expect(r.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(r.headers.get("cache-control")).toBe("private, no-store");
       expect(await rows(sql`select 1 from ops.audit_log where actor_user_id = ${owner.id} and action = 'sensitive.view'`)).toHaveLength(0);
       const list = await listMyPayslips();
       expect(list.find((x) => x.runId === runId)!.net).toBe("Can't be read");
@@ -337,6 +378,18 @@ describe("the notification when a run is paid", () => {
     // A correction after the run is paid sends nothing more.
     expect(await markPaid({ runId, employeeId: empA, reference: "RMT-N-9", paidOn: today() })).toMatchObject({ ok: true });
     expect(await slipNotices(a.id)).toHaveLength(1);
+  });
+
+  it("skips an archived account", async () => {
+    const live = await account();
+    const gone = await account();
+    const empLive = await person(live.id);
+    const empGone = await person(gone.id);
+    await db.execute(sql`update core.users set archived_at = now() where id = ${gone.id}`);
+    const runId = await paidRun(slot(17), [empLive, empGone]);
+    expect(await slipNotices(live.id)).toHaveLength(1);
+    expect(await slipNotices(gone.id)).toHaveLength(0);
+    expect(await rows(sql`select 1 from payroll.pay_runs where id = ${runId} and status = 'paid'`)).toHaveLength(1);
   });
 
   it("goes once to a person with two lines", async () => {

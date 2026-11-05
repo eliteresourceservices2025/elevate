@@ -14,7 +14,7 @@ import { getMyPayslip, PayslipUnreadable } from "@/modules/payroll/payslip-queri
 // A person's own payslip as a PDF. Only a paid run has one; someone else's run, an unpaid run and a run that does not exist all
 // answer the same 404. Audited with the run id only (never an amount), rate-limited, never cached.
 
-const notFound = () => new Response("Not found", { status: 404 });
+const notFound = () => new Response("Not found", { status: 404, headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
 
 export async function GET(_request: Request, { params }: { params: Promise<{ runId: string }> }) {
   const actor = await requireUser();
@@ -40,7 +40,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ run
     });
   } catch (error) {
     if (error instanceof ForbiddenError) return notFound();
-    if (error instanceof PayslipUnreadable) return new Response(L.unreadableDownload, { status: 500, headers: { "Cache-Control": "private, no-store" } });
+    if (error instanceof PayslipUnreadable) return new Response(L.unreadableDownload, { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
     throw error;
   }
 }
