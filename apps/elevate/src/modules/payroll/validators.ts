@@ -96,6 +96,8 @@ export const setRunUsdRateSchema = z.object({
     .transform((s) => (s === "" ? null : parseUsdRate(s))),
 });
 
+export const cancelPayRunSchema = z.object({ runId: uuid, reason });
+
 export const confirmRunLineSchema = z.object({ runLineId: uuid });
 
 export type PayLineInput = z.input<typeof createPayLineSchema>;

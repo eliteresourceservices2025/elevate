@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { pageInfo, parsePaging } from "@/lib/pagination";
-import { addDays, recentPeriods } from "@/modules/attendance/pay-periods";
+import { recentPeriods } from "@/modules/attendance/pay-periods";
 import { RUN_STATUS_LABELS, WORKSHEET_LABELS as L } from "@/modules/payroll/constants";
 import { NewRunDialog } from "@/modules/payroll/components/run-dialogs";
 import { PayrollTabs } from "@/modules/payroll/components/payroll-tabs";
@@ -28,7 +28,7 @@ export default async function PayrollRunsPage({ searchParams }: PageProps<"/payr
   const list = await orNotFound(getRuns(paging)); // authorize("payroll.view") inside
   const info = pageInfo(list.total, paging.page, paging.pageSize);
   // The pay period that ended most recently (twice a month by default); the person can change either date.
-  const last = recentPeriods("semi_monthly", addDays(payrollToday(), 0), 2)[1];
+  const last = recentPeriods("semi_monthly", payrollToday(), 2)[1];
 
   return (
     <PageContainer width="full">
@@ -59,7 +59,7 @@ export default async function PayrollRunsPage({ searchParams }: PageProps<"/payr
                     </Link>
                   </TableCell>
                   <TableCell label={L.status}>
-                    <Badge variant={r.status === "draft" ? "outline" : r.status === "paid" ? "success" : "info"}>{RUN_STATUS_LABELS[r.status]}</Badge>
+                    <Badge variant={r.status === "draft" || r.status === "cancelled" ? "outline" : r.status === "paid" ? "success" : "info"}>{RUN_STATUS_LABELS[r.status]}</Badge>
                   </TableCell>
                   <TableCell label={L.lines} className="text-right tabular-nums">
                     {r.lineCount}

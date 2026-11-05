@@ -51,7 +51,7 @@ describe("setPayrollAccess, every role", () => {
 // a valid request from a Preparer reaches the (mocked, throwing) database, so it ends in the generic message.
 const { createPayLine, updatePayLine, endPayLine, savePaySettings } = await import("@/modules/payroll/actions");
 const { getRates, getPaySettings, getRuns, getWorksheet } = await import("@/modules/payroll/queries");
-const { createPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine } = await import("@/modules/payroll/actions");
+const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine } = await import("@/modules/payroll/actions");
 
 const LEVELS = [null, "viewer", "approver", "preparer"] as const;
 const GENERIC = "Something went wrong. Try again.";
@@ -73,6 +73,7 @@ const calls: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   dismissPayItem: () => dismissPayItem({ runId: RUN_ID, itemId: LINE_KEY }),
   setRunUsdRate: () => setRunUsdRate({ runId: RUN_ID, rate: "58.50" }),
   confirmRunLine: () => confirmRunLine({ runLineId: LINE_KEY }),
+  cancelPayRun: () => cancelPayRun({ runId: RUN_ID, reason: "Pay lines changed" }),
 };
 
 describe.each(Object.keys(calls))("%s, every role at every payroll level", (name) => {
@@ -142,6 +143,7 @@ describe("run input is checked on the server", () => {
     asLevel("employee", "preparer");
     expect(await createPayRun({ periodStart: "2030-11-15", periodEnd: "2030-11-01" })).toEqual({ ok: false, error: BAD });
     expect(await createPayRun({ periodStart: "2030-11-01", periodEnd: "2031-01-15" })).toEqual({ ok: false, error: BAD });
+    expect(await cancelPayRun({ runId: RUN_ID, reason: "  " })).toEqual({ ok: false, error: BAD });
     for (const rate of ["0", "-1", "$58", "58.12345"]) expect(await setRunUsdRate({ runId: RUN_ID, rate })).toEqual({ ok: false, error: BAD });
   });
 

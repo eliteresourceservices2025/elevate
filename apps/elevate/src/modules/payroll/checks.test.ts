@@ -26,6 +26,7 @@ const input = (lines: CheckLine[], over: Partial<ChecksInput> = {}): ChecksInput
   unassigned: [],
   submitter: { userId: ME, employeeId: EMP_ME },
   changeWarnBp: 1000,
+  linesOutOfDate: false,
   ...over,
 });
 const codes = (r: { code: string }[]) => r.map((c) => c.code);
@@ -96,6 +97,12 @@ describe("runChecks", () => {
     const r = runChecks(input([line({ unreadable: true, net: null, previousNet: 5n, payoutReady: false })]));
     expect(codes(r.blocking)).toEqual(["unreadable_line"]);
     expect(codes(r.warnings)).toEqual(["no_payout_details"]);
+  });
+
+  it("blocks, for the whole run, when the pay lines changed after the run was created", () => {
+    const r = runChecks(input([line()], { linesOutOfDate: true }));
+    expect(r.blocking).toEqual([expect.objectContaining({ code: "lines_out_of_date", employeeId: null, runLineId: null })]);
+    expect(runChecks(input([line()], { linesOutOfDate: false })).blocking).toEqual([]);
   });
 
   it("never puts an amount in a message", () => {

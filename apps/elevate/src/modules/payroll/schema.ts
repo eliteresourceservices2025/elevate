@@ -68,7 +68,7 @@ export const payLines = payroll
   )
   .enableRLS();
 
-/** Status moves only draft -> in_review -> (draft | approved) -> paid, by trigger. The rate and snapshot change only in draft. */
+/** Status moves only draft -> in_review -> (draft | approved) -> paid, or draft -> cancelled (a cancelled run is frozen, never deleted), by trigger. The rate and snapshot change only in draft. */
 export const payRuns = payroll
   .table(
     "pay_runs",
@@ -88,8 +88,8 @@ export const payRuns = payroll
       createdAt: createdAt(),
     },
     (t) => [
-      uniqueIndex("pay_runs_period_idx").on(t.periodStart, t.periodEnd),
-      check("pay_runs_status_chk", sql`${t.status} in ('draft','in_review','approved','paid')`),
+      uniqueIndex("pay_runs_period_idx").on(t.periodStart, t.periodEnd).where(sql`${t.status} <> 'cancelled'`),
+      check("pay_runs_status_chk", sql`${t.status} in ('draft','in_review','approved','paid','cancelled')`),
       check("pay_runs_rate_chk", sql`${t.usdRateE4} is null or ${t.usdRateE4} > 0`),
       check("pay_runs_period_chk", sql`${t.periodEnd} >= ${t.periodStart}`),
     ],

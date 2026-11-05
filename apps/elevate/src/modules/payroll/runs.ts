@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
@@ -123,7 +123,8 @@ export async function recomputeRun(tx: Tx, runId: string, options: { employeeId?
     let before: string | null = null;
     try {
       before = payloadText(decryptRunLine(runLine.id, runLine.payloadEnc));
-    } catch {
+    } catch (error) {
+      console.error("payroll run line unreadable:", { runLineId: runLine.id, error: error instanceof Error ? error.name : "UnknownError" });
       before = null; // unreadable before: rewritten now
     }
     const changed = before !== payloadText(next);
@@ -145,7 +146,7 @@ export async function createRun(tx: Tx, actor: Actor, period: { periodStart: str
   const [clash] = await tx
     .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd })
     .from(payRuns)
-    .where(and(lte(payRuns.periodStart, period.periodEnd), gte(payRuns.periodEnd, period.periodStart)))
+    .where(and(ne(payRuns.status, "cancelled"), lte(payRuns.periodStart, period.periodEnd), gte(payRuns.periodEnd, period.periodStart)))
     .limit(1);
   if (clash) {
     const same = clash.periodStart === period.periodStart && clash.periodEnd === period.periodEnd;
@@ -191,6 +192,21 @@ export async function createRun(tx: Tx, actor: Actor, period: { periodStart: str
   return { runId, lineCount: prepared.length };
 }
 
+/** Which version of which pay line applies to a period, with its flags: what a run built now would contain. */
+async function linesNowInForce(executor: Reader, period: { start: string; end: string }): Promise<Set<string>> {
+  const all = await executor.select().from(payLines);
+  return new Set(resolveLines(all, period).map((r) => `${r.version.id}|${[...r.flags].sort().join(",")}`));
+}
+
+/** Cancels a draft run. The run stays on record, frozen; its period is free for a new run. */
+export async function cancelRun(tx: Tx, actor: Actor, v: { runId: string; reason: string }): Promise<void> {
+  await lockDraftRun(tx, v.runId);
+  const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(payRunLines).where(eq(payRunLines.runId, v.runId));
+  await tx.update(payRuns).set({ status: "cancelled" }).where(eq(payRuns.id, v.runId));
+  await writeAudit({ actor, action: "payroll.run.cancel", targetType: "pay_run", targetId: v.runId, metadata: { lines: n } }, tx);
+  await logChange(tx, actor, { action: "run_cancelled", runId: v.runId, detail: { reason: v.reason, lines: n } });
+}
+
 // ---- Changing a draft run ----
 
 const itemDetail = (row: ItemRow | undefined) => {
@@ -198,6 +214,34 @@ const itemDetail = (row: ItemRow | undefined) => {
   const v = decryptItemValue(row.id, row.valueEnc);
   return { state: row.state, value: v.value.toString(), reason: v.reason };
 };
+
+/** The newest suggested value for this type on this line, or the person's unassigned one, in the full item history; null when there never was one. */
+async function suggestedValue(tx: Tx, runId: string, employeeId: string, runLineId: string | null, type: string): Promise<bigint | null> {
+  const [row] = await tx
+    .select()
+    .from(payRunItems)
+    .where(
+      and(
+        eq(payRunItems.runId, runId),
+        eq(payRunItems.employeeId, employeeId),
+        eq(payRunItems.type, type),
+        eq(payRunItems.state, "suggested"),
+        runLineId ? or(eq(payRunItems.runLineId, runLineId), isNull(payRunItems.runLineId)) : isNull(payRunItems.runLineId),
+      ),
+    )
+    .orderBy(desc(payRunItems.createdAt))
+    .limit(1);
+  return row ? decryptItemValue(row.id, row.valueEnc).value : null;
+}
+
+/** True when a peso or dollar allowance for this run is set below the line's own allowance (it cuts pay, so it needs a reason). */
+async function belowLineAllowance(tx: Tx, lineId: string, type: PayItemType, value: bigint): Promise<boolean> {
+  if (type !== "peso_allowance" && type !== "dollar_allowance") return false;
+  const [version] = await tx.select().from(payLines).where(eq(payLines.id, lineId)).limit(1);
+  if (!version) return false;
+  const rate = readRate(version.id, version.amountsEnc);
+  return value < (type === "peso_allowance" ? rate.pesoAllowanceCentavos : rate.dollarAllowanceCents);
+}
 
 /** Confirms an amount for one line (or overrides a suggestion). Reasons are required for deductions and for overriding a suggestion. */
 export async function saveItem(
@@ -208,7 +252,7 @@ export async function saveItem(
   await lockDraftRun(tx, v.runId);
   await assertNotOwnEmployee(actor, v.employeeId, tx);
   const [line] = await tx
-    .select({ id: payRunLines.id })
+    .select({ id: payRunLines.id, lineId: payRunLines.lineId })
     .from(payRunLines)
     .where(and(eq(payRunLines.id, v.runLineId), eq(payRunLines.runId, v.runId), eq(payRunLines.employeeId, v.employeeId)))
     .limit(1);
@@ -218,10 +262,13 @@ export async function saveItem(
 
   const all = await latestItems(tx, v.runId);
   const prior = all.find((i) => itemKey(i) === itemKey({ runLineId: v.runLineId, employeeId: v.employeeId, type: v.type }));
-  const suggestion = prior?.state === "suggested" ? prior : all.find((i) => i.runLineId === null && i.employeeId === v.employeeId && i.type === v.type && i.state === "suggested");
-  const overriding = suggestion !== undefined && decryptItemValue(suggestion.id, suggestion.valueEnc).value !== value;
+  // Compared with the newest suggestion in the whole history, not just the latest row: confirming the suggested value and then
+  // changing it must still need a reason.
+  const suggested = await suggestedValue(tx, v.runId, v.employeeId, v.runLineId, v.type);
+  const overriding = suggested !== null && suggested !== value;
+  const cutsAllowance = await belowLineAllowance(tx, line.lineId, v.type, value);
   const reason = v.reason?.trim() || null;
-  if ((REASON_REQUIRED_TYPES.includes(v.type) || overriding) && !reason) throw new ActionFailure("Give a reason for this amount.");
+  if ((REASON_REQUIRED_TYPES.includes(v.type) || overriding || cutsAllowance) && !reason) throw new ActionFailure("Give a reason for this amount.");
 
   const id = randomUUID();
   await tx.insert(payRunItems).values({
@@ -256,7 +303,8 @@ export async function dismissItem(tx: Tx, actor: Actor, v: { runId: string; item
   if (item.state === "dismissed") throw new ActionFailure("That amount is already removed.");
 
   const reason = v.reason?.trim() || null;
-  if ((REASON_REQUIRED_TYPES.includes(item.type as PayItemType) || item.state === "suggested") && !reason) throw new ActionFailure("Give a reason for removing this amount.");
+  const hadSuggestion = item.state === "suggested" || (await suggestedValue(tx, v.runId, item.employeeId, item.runLineId, item.type)) !== null;
+  if ((REASON_REQUIRED_TYPES.includes(item.type as PayItemType) || hadSuggestion) && !reason) throw new ActionFailure("Give a reason for removing this amount.");
 
   const old = decryptItemValue(item.id, item.valueEnc);
   const id = randomUUID();
@@ -393,7 +441,8 @@ async function payoutReady(employeeIds: string[]): Promise<Set<string>> {
 }
 
 const fteHundredths = (fte: string) => Math.round(Number(fte) * 100);
-const showHundredths = (n: number) => formatItemValue("client_hours", BigInt(n));
+/** Hundredths as two decimals ("0.50"), the way a line shows its FTE. */
+const showHundredths = (n: number) => `${Math.floor(n / 100)}.${String(n % 100).padStart(2, "0")}`;
 
 /**
  * Everything the worksheet shows, decrypted. The caller has already authorized and writes the audit row. A line or amount that can't
@@ -425,8 +474,8 @@ export async function buildWorksheet(viewer: { id: string }, runId: string): Pro
   const employeeIds = [...new Set(rows.map((r) => r.runLine.employeeId))];
   const submitterEmployeeId = await employeeIdForUser(db, viewer.id);
 
-  // The most recent earlier run, for the "net changed" check.
-  const [previous] = await db.select({ id: payRuns.id }).from(payRuns).where(lt(payRuns.periodStart, run.periodStart)).orderBy(desc(payRuns.periodStart)).limit(1);
+  // The latest approved or paid earlier run (a draft is unreviewed), for the "net changed" check.
+  const [previous] = await db.select({ id: payRuns.id }).from(payRuns).where(and(lt(payRuns.periodStart, run.periodStart), inArray(payRuns.status, ["approved", "paid"]))).orderBy(desc(payRuns.periodStart)).limit(1);
   const previousNets = new Map<string, bigint>();
   if (previous) {
     const prevRows = await db
@@ -441,6 +490,14 @@ export async function buildWorksheet(viewer: { id: string }, runId: string): Pro
         console.error("payroll earlier run line unreadable:", { runLineId: p.id, error: error instanceof Error ? error.name : "UnknownError" });
       }
     }
+  }
+
+  // A draft is compared with what a run built now would contain; any difference means it was built from out-of-date pay lines.
+  let linesOutOfDate = false;
+  if (run.status === "draft") {
+    const now = await linesNowInForce(db, { start: run.periodStart, end: run.periodEnd });
+    const built = new Set(rows.map((r) => `${r.runLine.lineId}|${r.runLine.flags.filter((f) => f !== "person_left").sort().join(",")}`));
+    linesOutOfDate = now.size !== built.size || [...now].some((k) => !built.has(k));
   }
 
   const unapproved = await unapprovedDaysByPerson(employeeIds, run.periodStart, run.periodEnd);
@@ -570,6 +627,7 @@ export async function buildWorksheet(viewer: { id: string }, runId: string): Pro
     unassigned: unassigned.map((u) => ({ employeeId: u.employeeId, name: u.name, count: u.items.length })),
     submitter: { userId: viewer.id, employeeId: submitterEmployeeId },
     changeWarnBp: snapshot.changeWarnBp,
+    linesOutOfDate,
   });
 
   const complete = unreadableCount === 0;

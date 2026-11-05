@@ -12,7 +12,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
-const { createPayLine, updatePayLine, savePaySettings, createPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine } = await import("@/modules/payroll/actions");
+const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine } = await import("@/modules/payroll/actions");
 const { getWorksheet, getRuns } = await import("@/modules/payroll/queries");
 const { decryptRunLine, encryptItemValue, settingsInForce } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
@@ -128,7 +128,13 @@ describe("creating a run", () => {
     expect(overlap.ok).toBe(false);
     expect(!overlap.ok && overlap.error).toMatch(/overlaps/);
     expect((await createPayRun({ periodStart: "2025-01-15", periodEnd: "2025-01-16" })).ok).toBe(false);
+    // Nested inside, starting on the last day, and wrapping around the whole run are all overlaps.
+    for (const [s, e] of [["2025-01-05", "2025-01-10"], ["2025-01-15", "2025-01-20"], ["2024-12-25", "2025-01-20"]]) {
+      expect((await createPayRun({ periodStart: s, periodEnd: e })).ok, `${s} to ${e}`).toBe(false);
+    }
     expect(await createPayRun({ periodStart: "2025-01-16", periodEnd: "2025-01-10" })).toEqual({ ok: false, error: "Check the request and try again." });
+    // The day after the run's last day is free.
+    expect((await createPayRun({ periodStart: "2025-01-16", periodEnd: "2025-01-20" })).ok).toBe(true);
     // A neighbouring period is fine, and a period nobody is paid in is refused.
     expect((await createPayRun({ periodStart: "2024-12-20", periodEnd: "2024-12-31" })).ok).toBe(true);
     const none = await createPayRun({ periodStart: "2019-01-01", periodEnd: "2019-01-15" });
@@ -210,7 +216,6 @@ describe("items", () => {
     const lines = await runLines(runId, emp);
     const first = lines.find((l) => l.alias === "First")!;
     const second = lines.find((l) => l.alias === "Second")!;
-    const before = second.payload_enc;
     current.user = preparer;
     expect(await item(runId, emp, first.id, "loan", "500", "Cash advance")).toMatchObject({ ok: true });
     const f = decryptRunLine(first.id, (await runLines(runId, emp)).find((l) => l.id === first.id)!.payload_enc);
@@ -218,7 +223,6 @@ describe("items", () => {
     expect(f.result.net).toBe(1_200_000n - 50_000n);
     expect(s.result.net).toBe(550_000n);
     expect(s.input.loan).toBe(0n);
-    void before;
   });
 
   it("asks for a reason only for a deduction or when overriding a suggestion", async () => {
@@ -412,7 +416,7 @@ describe("the worksheet", () => {
     expect(mine.figures).toMatchObject({ gross: "12,000.00", net: "12,100.00", clientHours: "86.5" });
     expect(mine.fte).toBe("0.50");
     const group = first.byClient!.find((c) => c.clientId === client.id)!;
-    expect(group).toEqual({ clientId: client.id, clientName: client.name, lines: 1, fte: "0.5", clientHours: "86.5", net: "12,100.00" });
+    expect(group).toEqual({ clientId: client.id, clientName: client.name, lines: 1, fte: "0.50", clientHours: "86.5", net: "12,100.00" });
     expect(first.totals).not.toBeNull();
     // The calculator never saw the client hours: net is the same without them.
     expect(first.canPrepare).toBe(false);
@@ -466,9 +470,197 @@ describe("the worksheet", () => {
     expect(forPerson(sheet.checks.warnings, emp)).not.toContain("large_change");
     await updatePayLine({ ...lineBase(emp, { monthly: "33,000" }), lineKey: key, effectiveFrom: "2025-07-29", reason: "Raise" });
     const second = await newRun(preparer, { periodStart: "2025-07-29", periodEnd: "2025-07-31" });
+    // The earlier run is still a draft (unreviewed), so there is nothing to compare with yet.
+    sheet = (await getWorksheet(second))!;
+    expect(forPerson(sheet.checks.warnings, emp)).not.toContain("large_change");
+    await db.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${first}`);
+    sheet = (await getWorksheet(second))!;
+    expect(forPerson(sheet.checks.warnings, emp)).not.toContain("large_change");
+    await db.execute(sql`update payroll.pay_runs set status = 'approved' where id = ${first}`);
     sheet = (await getWorksheet(second))!;
     expect(forPerson(sheet.checks.warnings, emp)).toContain("large_change");
     expect(forPerson(sheet.checks.warnings, withPayout)).toEqual([]);
     expect(JSON.stringify(sheet.checks)).not.toMatch(/\d,\d{3}\.\d\d/);
+  });
+});
+
+async function suggest(runId: string, employeeId: string, runLineId: string | null, type: string, value: bigint) {
+  const id = randomUUID();
+  await db.execute(sql`insert into payroll.pay_run_items (id, run_id, employee_id, run_line_id, type, state, value_enc, entered_by)
+    values (${id}, ${runId}, ${employeeId}, ${runLineId}, ${type}, 'suggested', ${encryptItemValue(id, { value, reason: null })}, ${preparer.id})`);
+}
+const needReason = { ok: false, error: "Give a reason for this amount." };
+
+describe("reasons cannot be sidestepped", () => {
+  it("overriding a suggestion needs a reason even after the suggested value was confirmed first", async () => {
+    const emp = await person();
+    await giveLine(preparer, emp);
+    const runId = await newRun(preparer, period(2, 2));
+    const [line] = await runLines(runId, emp);
+    current.user = preparer;
+    await suggest(runId, emp, line.id, "late_minutes", 30n);
+    expect(await item(runId, emp, line.id, "late_minutes", "30")).toMatchObject({ ok: true }); // the suggested value itself: no reason
+    expect(await item(runId, emp, line.id, "late_minutes", "45")).toEqual(needReason); // the latest row is now confirmed, the suggestion still counts
+    expect(await item(runId, emp, line.id, "late_minutes", "45", "Client agreed")).toMatchObject({ ok: true });
+    expect(await item(runId, emp, line.id, "late_minutes", "30")).toMatchObject({ ok: true }); // back to the suggestion
+  });
+
+  it("an unassigned suggestion counts too, and removing a confirmed suggestion needs a reason", async () => {
+    const emp = await person();
+    await giveLine(preparer, emp);
+    const runId = await newRun(preparer, { periodStart: "2025-04-29", periodEnd: "2025-04-30" });
+    const [line] = await runLines(runId, emp);
+    current.user = preparer;
+    await suggest(runId, emp, null, "absence_days", 100n);
+    expect(await item(runId, emp, line.id, "absence_days", "2")).toEqual(needReason);
+    expect(await item(runId, emp, line.id, "absence_days", "1")).toMatchObject({ ok: true });
+
+    await suggest(runId, emp, line.id, "late_minutes", 20n);
+    expect(await item(runId, emp, line.id, "late_minutes", "20")).toMatchObject({ ok: true });
+    const [confirmed] = await rows<{ id: string }>(sql`select id from payroll.pay_run_items where run_id = ${runId} and employee_id = ${emp} and type = 'late_minutes' and state = 'confirmed'`);
+    expect(await dismissPayItem({ runId, itemId: confirmed.id })).toEqual({ ok: false, error: "Give a reason for removing this amount." });
+    expect(await dismissPayItem({ runId, itemId: confirmed.id, reason: "Client waived it" })).toMatchObject({ ok: true });
+  });
+
+  it("setting an allowance below the line's own needs a reason; keeping or raising it does not", async () => {
+    const emp = await person();
+    await giveLine(preparer, emp, { pesoAllowance: "1,000", dollarAllowance: "10" });
+    const runId = await newRun(preparer, { periodStart: "2025-05-29", periodEnd: "2025-05-31" });
+    const [line] = await runLines(runId, emp);
+    current.user = preparer;
+    expect(await item(runId, emp, line.id, "peso_allowance", "500")).toEqual(needReason);
+    expect(await item(runId, emp, line.id, "dollar_allowance", "0")).toEqual(needReason);
+    expect(await item(runId, emp, line.id, "peso_allowance", "500", "Half month")).toMatchObject({ ok: true });
+    expect(await item(runId, emp, line.id, "peso_allowance", "1,000")).toMatchObject({ ok: true });
+    expect(await item(runId, emp, line.id, "peso_allowance", "1,500")).toMatchObject({ ok: true });
+  });
+});
+
+describe("net pay below zero", () => {
+  it("blocks a loan or another deduction bigger than the pay, and unblocks when it is taken off", async () => {
+    const a = await person();
+    const b = await person();
+    await giveLine(preparer, a);
+    await giveLine(preparer, b);
+    const runId = await newRun(preparer, period(4, 2));
+    const [la] = await runLines(runId, a);
+    const [lb] = await runLines(runId, b);
+    current.user = preparer;
+
+    expect(await item(runId, a, la.id, "loan", "20,000", "Large advance")).toMatchObject({ ok: true });
+    expect(await item(runId, b, lb.id, "other_deduction", "15,000.01", "Damaged equipment")).toMatchObject({ ok: true });
+    let sheet = (await getWorksheet(runId))!;
+    expect(sheet.lines.find((l) => l.employeeId === a)!.figures!.net).toBe("-8,000.00");
+    expect(forPerson(sheet.checks.blocking, a)).toEqual(["negative_net"]);
+    expect(forPerson(sheet.checks.blocking, b)).toEqual(["negative_net"]);
+    expect(sheet.checks.blocking.length).toBeGreaterThan(0); // nothing can be sent for review while this stands
+
+    const [loan] = await rows<{ id: string }>(sql`select id from payroll.pay_run_items where run_id = ${runId} and employee_id = ${a}`);
+    expect(await dismissPayItem({ runId, itemId: loan.id, reason: "Corrected" })).toMatchObject({ ok: true });
+    expect(await item(runId, b, lb.id, "other_deduction", "5,000", "Corrected")).toMatchObject({ ok: true });
+    sheet = (await getWorksheet(runId))!;
+    expect(forPerson(sheet.checks.blocking, a)).toEqual([]);
+    expect(forPerson(sheet.checks.blocking, b)).toEqual([]);
+  });
+});
+
+describe("cancelling a draft run", () => {
+  it("freezes the run, records why, and frees the period for a new run", async () => {
+    const emp = await person();
+    await giveLine(preparer, emp);
+    const maker = await account();
+    const p = period(5, 2);
+    const runId = await newRun(maker, p);
+    const [line] = await runLines(runId, emp);
+
+    current.user = maker;
+    expect(await cancelPayRun({ runId, reason: "" })).toEqual({ ok: false, error: "Check the request and try again." });
+    expect((await createPayRun(p)).ok).toBe(false); // still taken
+    expect(await cancelPayRun({ runId, reason: "Pay lines changed" })).toMatchObject({ ok: true });
+
+    const [run] = await rows<{ status: string }>(sql`select status from payroll.pay_runs where id = ${runId}`);
+    expect(run.status).toBe("cancelled");
+    const frozen = { ok: false, error: "This run is no longer a draft, so it can't be changed." };
+    expect(await cancelPayRun({ runId, reason: "Again" })).toEqual(frozen);
+    current.user = preparer;
+    expect(await item(runId, emp, line.id, "adjustment", "100")).toEqual(frozen);
+    expect(await setRunUsdRate({ runId, rate: "58" })).toEqual(frozen);
+    expect(await confirmRunLine({ runLineId: line.id })).toEqual(frozen);
+
+    const [log] = await rows<{ id: string; detail_enc: string }>(sql`select id, detail_enc from payroll.pay_change_log where run_id = ${runId} and action = 'run_cancelled'`);
+    expect(readChangeDetail(log)).toMatchObject({ reason: "Pay lines changed" });
+    const audit = await rows<Row>(sql`select * from ops.audit_log where actor_user_id = ${maker.id} and action = 'payroll.run.cancel'`);
+    expect(audit).toHaveLength(1);
+    expect(JSON.stringify(audit)).not.toContain("Pay lines changed");
+
+    // Nothing is deleted, the old run is still readable, and the period can be run again.
+    expect((await getWorksheet(runId))!.run.status).toBe("cancelled");
+    const again = await createPayRun(p);
+    expect(again.ok).toBe(true);
+    expect(again.ok && again.data.runId).not.toBe(runId);
+  });
+
+  it("refuses to cancel a run that is no longer a draft", async () => {
+    const emp = await person();
+    await giveLine(preparer, emp);
+    const runId = await newRun(preparer, period(11, 2));
+    await db.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
+    current.user = preparer;
+    expect(await cancelPayRun({ runId, reason: "Mistake" })).toEqual({ ok: false, error: "This run is no longer a draft, so it can't be changed." });
+    const [run] = await rows<{ status: string }>(sql`select status from payroll.pay_runs where id = ${runId}`);
+    expect(run.status).toBe("in_review");
+  });
+});
+
+describe("a run whose pay lines changed after it was built", () => {
+  const outOfDate = async (runId: string) => (await getWorksheet(runId))!.checks.blocking.some((c) => c.code === "lines_out_of_date");
+
+  it("blocks when a line is added, and is fine again after cancelling and recreating", async () => {
+    const emp = await person();
+    await giveLine(preparer, emp);
+    const p = period(6, 2);
+    const runId = await newRun(preparer, p);
+    current.user = preparer;
+    expect(await outOfDate(runId)).toBe(false);
+    const late = await person();
+    await giveLine(preparer, late);
+    expect(await outOfDate(runId)).toBe(true);
+    const blocked = (await getWorksheet(runId))!.checks.blocking.find((c) => c.code === "lines_out_of_date")!;
+    expect(blocked).toMatchObject({ employeeId: null, runLineId: null });
+
+    expect(await cancelPayRun({ runId, reason: "New hire added" })).toMatchObject({ ok: true });
+    const fresh = await newRun(preparer, p);
+    expect(await runLines(fresh, late)).toHaveLength(1);
+    expect(await outOfDate(fresh)).toBe(false);
+  });
+
+  it("blocks when a line is ended before the period", async () => {
+    const emp = await person();
+    const key = await giveLine(preparer, emp);
+    const runId = await newRun(preparer, period(8, 2));
+    current.user = preparer;
+    expect(await outOfDate(runId)).toBe(false);
+    expect(await endPayLine({ lineKey: key, endsOn: "2025-08-01", reason: "Left" })).toMatchObject({ ok: true });
+    expect(await outOfDate(runId)).toBe(true);
+  });
+
+  it("blocks when a version is added inside the period", async () => {
+    const emp = await person();
+    const key = await giveLine(preparer, emp);
+    const runId = await newRun(preparer, period(10, 2));
+    current.user = preparer;
+    expect(await outOfDate(runId)).toBe(false);
+    expect(await updatePayLine({ ...lineBase(emp, { monthly: "30,000" }), lineKey: key, effectiveFrom: "2025-10-20", reason: "Raise" })).toMatchObject({ ok: true });
+    expect(await outOfDate(runId)).toBe(true);
+  });
+
+  it("is not raised for a run that is no longer a draft", async () => {
+    const emp = await person();
+    await giveLine(preparer, emp);
+    const runId = await newRun(preparer, { periodStart: "2025-12-29", periodEnd: "2025-12-31" });
+    await giveLine(preparer, await person());
+    await db.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
+    current.user = preparer;
+    expect(await outOfDate(runId)).toBe(false);
   });
 });

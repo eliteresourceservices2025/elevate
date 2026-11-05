@@ -7,8 +7,9 @@ import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { createPayRun, setRunUsdRate } from "../actions";
+import { cancelPayRun, createPayRun, setRunUsdRate } from "../actions";
 import { WORKSHEET_LABELS as L } from "../constants";
 
 function NewRunForm({ suggestedStart, suggestedEnd }: { suggestedStart: string; suggestedEnd: string }) {
@@ -54,6 +55,42 @@ export function NewRunDialog({ suggestedStart, suggestedEnd }: { suggestedStart:
   return (
     <FormDialog label={L.newRun} title="Start a pay run" icon={<Plus className="size-4" aria-hidden />}>
       <NewRunForm suggestedStart={suggestedStart} suggestedEnd={suggestedEnd} />
+    </FormDialog>
+  );
+}
+
+function CancelRunForm({ runId }: { runId: string }) {
+  const { run, pending } = useRun();
+  const router = useRouter();
+  const dialog = useFormDialog();
+  const [reason, setReason] = useState("");
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => cancelPayRun({ runId, reason }), "Run cancelled.", () => {
+          dialog?.close(true);
+          router.push("/payroll");
+        });
+      }}
+    >
+      <p className="text-sm text-muted-foreground">The run stays on record but can no longer be changed or sent. Its period is free for a new run.</p>
+      <div className="space-y-1">
+        <Label htmlFor="cancel-reason">Reason</Label>
+        <Textarea id="cancel-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} required />
+      </div>
+      <Button type="submit" variant="destructive" disabled={pending}>
+        Cancel this run
+      </Button>
+    </form>
+  );
+}
+
+export function CancelRunDialog({ runId }: { runId: string }) {
+  return (
+    <FormDialog label="Cancel run" title="Cancel this run" variant="outline">
+      <CancelRunForm runId={runId} />
     </FormDialog>
   );
 }

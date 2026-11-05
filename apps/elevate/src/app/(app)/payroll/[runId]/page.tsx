@@ -10,7 +10,7 @@ import { orNotFound } from "@/lib/or-not-found";
 import { pageInfo, parsePaging } from "@/lib/pagination";
 import { RUN_STATUS_LABELS } from "@/modules/payroll/constants";
 import { RunChecks } from "@/modules/payroll/components/run-checks";
-import { UsdRateDialog } from "@/modules/payroll/components/run-dialogs";
+import { CancelRunDialog, UsdRateDialog } from "@/modules/payroll/components/run-dialogs";
 import { RunTotals } from "@/modules/payroll/components/run-totals";
 import { Worksheet } from "@/modules/payroll/components/worksheet";
 import { getWorksheet } from "@/modules/payroll/queries";
@@ -43,7 +43,14 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
             <span>Opening this page is written to the audit log. Figures are never sent in notices.</span>
           </p>
         }
-        actions={sheet.canPrepare && run.status === "draft" ? <UsdRateDialog runId={run.id} current={run.usdRate} /> : undefined}
+        actions={
+          sheet.canPrepare && run.status === "draft" ? (
+            <>
+              <UsdRateDialog runId={run.id} current={run.usdRate} />
+              <CancelRunDialog runId={run.id} />
+            </>
+          ) : undefined
+        }
       />
       {run.status === "draft" ? (
         <RunChecks blocking={sheet.checks.blocking} warnings={sheet.checks.warnings} unreadableCount={sheet.unreadableCount} />

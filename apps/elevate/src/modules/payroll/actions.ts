@@ -15,8 +15,9 @@ import { lineLastDay } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, assertNotOwnEmployee, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
-import { confirmLine, createRun, dismissItem, saveItem, setUsdRate } from "./runs";
+import { cancelRun, confirmLine, createRun, dismissItem, saveItem, setUsdRate } from "./runs";
 import {
+  cancelPayRunSchema,
   confirmRunLineSchema,
   createPayLineSchema,
   createPayRunSchema,
@@ -292,6 +293,22 @@ export async function setRunUsdRate(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return fail(BAD_REQUEST);
 
     await db.transaction((tx) => setUsdRate(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Cancels a draft run (for example when pay lines changed after it was built). The run stays on record and its period is free again. */
+export async function cancelPayRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = cancelPayRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => cancelRun(tx, actor, parsed.data));
     refreshedRun(parsed.data.runId);
     return { ok: true, data: undefined } as const;
   });

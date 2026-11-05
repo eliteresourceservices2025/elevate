@@ -154,6 +154,19 @@ describe("run status transitions", () => {
     await raises(db.execute(sql`update payroll.pay_runs set submitted_by = ${actorId} where id = ${runId}`), /paid/);
   });
 
+  it("only a draft can be cancelled, and a cancelled run is frozen and can't be removed", async () => {
+    const reviewed = await newRun("in_review");
+    await raises(to(reviewed, "cancelled"), /transition/);
+    const runId = await newRun();
+    const { id: lineId } = await addRunLine(runId);
+    await to(runId, "cancelled");
+    await raises(db.execute(sql`update payroll.pay_runs set usd_rate_e4 = 1 where id = ${runId}`), /cancelled/);
+    await raises(to(runId, "draft"), /cancelled/);
+    await raises(db.execute(sql`delete from payroll.pay_runs where id = ${runId}`), /cannot be removed/);
+    await raises(db.execute(sql`update payroll.pay_run_lines set flags = '{x}' where id = ${lineId}`), /frozen/);
+    await raises(itemInsert(runId), /frozen/);
+  });
+
   it("usd_rate_e4 and settings_snapshot change only in draft", async () => {
     const runId = await newRun();
     await db.execute(sql`update payroll.pay_runs set usd_rate_e4 = 585000, settings_snapshot = '{"a":1}'::jsonb where id = ${runId}`);

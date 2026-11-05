@@ -11,46 +11,77 @@ import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { confirmRunLine, dismissPayItem, savePayItem } from "../actions";
 import { PAY_ITEM_LABELS, PAY_ITEM_TYPES, REASON_REQUIRED_TYPES, type PayItemType } from "../constants";
-import { ITEM_UNIT_HINTS, itemUnit } from "../items";
+import { ITEM_UNIT_HINTS, itemUnit, parseItemValue } from "../items";
 import type { WorksheetLine } from "../runs";
 
 // Amounts for one line of a draft run. Reasons are kept in the change history, never in notices.
+
+function ExistingItem({ runId, item }: { runId: string; item: WorksheetLine["items"][number] }) {
+  const { run, pending } = useRun();
+  const [asking, setAsking] = useState(false);
+  const [why, setWhy] = useState("");
+  const needsWhy = REASON_REQUIRED_TYPES.includes(item.type) || item.state === "suggested";
+  return (
+    <li className="space-y-2 rounded-lg border p-2 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span>
+          <span className="font-medium">{PAY_ITEM_LABELS[item.type]}</span>: {item.value}
+          {item.state === "suggested" ? <span className="ml-2 text-xs text-muted-foreground">Suggested, not yet confirmed</span> : null}
+        </span>
+        {asking ? null : (
+          <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => setAsking(true)}>
+            Remove
+          </Button>
+        )}
+      </div>
+      {asking ? (
+        <div className="space-y-2">
+          <Label htmlFor={`remove-reason-${item.id}`}>{needsWhy ? "Reason for removing" : "Reason for removing (optional)"}</Label>
+          <Input id={`remove-reason-${item.id}`} value={why} onChange={(e) => setWhy(e.target.value)} maxLength={500} autoComplete="off" />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={pending}
+              onClick={() => {
+                if (needsWhy && why.trim() === "") return void toast.error("Give a reason for removing this amount.");
+                run(() => dismissPayItem({ runId, itemId: item.id, reason: why }), "Amount removed.");
+              }}
+            >
+              Remove amount
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setAsking(false)}>
+              Keep it
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </li>
+  );
+}
 
 function ItemForm({ runId, line }: { runId: string; line: WorksheetLine }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const [type, setType] = useState<PayItemType>("late_minutes");
   const current = line.items.find((i) => i.type === type && i.state !== "dismissed");
-  const suggested = current?.state === "suggested";
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
-  const needsReason = REASON_REQUIRED_TYPES.includes(type) || suggested;
+  // The same rule as the server: a reason for a deduction, or when the amount differs from a suggestion. (Cutting an allowance below
+  // the line's own also needs one; the server says so if it is missing.)
+  const typed = parseItemValue(type, value);
+  const suggestedValue = current?.state === "suggested" ? parseItemValue(type, current.value) : null;
+  const needsReason = REASON_REQUIRED_TYPES.includes(type) || (suggestedValue !== null && typed !== suggestedValue);
 
   return (
     <div className="space-y-4">
-      {line.items.filter((i) => i.state !== "dismissed").length > 0 ? (
+      {line.items.some((i) => i.state !== "dismissed") ? (
         <ul className="space-y-2" aria-label="Amounts on this line">
           {line.items
             .filter((i) => i.state !== "dismissed")
             .map((i) => (
-              <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2 text-sm">
-                <span>
-                  <span className="font-medium">{PAY_ITEM_LABELS[i.type]}</span>: {i.value}
-                  {i.state === "suggested" ? <span className="ml-2 text-xs text-muted-foreground">Suggested, not yet confirmed</span> : null}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={pending}
-                  onClick={() => {
-                    if ((REASON_REQUIRED_TYPES.includes(i.type) || i.state === "suggested") && reason.trim() === "") return void toast.error("Write the reason in the Reason box first.");
-                    run(() => dismissPayItem({ runId, itemId: i.id, reason }), "Amount removed.");
-                  }}
-                >
-                  Remove
-                </Button>
-              </li>
+              <ExistingItem key={i.id} runId={runId} item={i} />
             ))}
         </ul>
       ) : null}

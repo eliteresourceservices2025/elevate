@@ -29,6 +29,8 @@ export type ChecksInput = {
   unassigned: { employeeId: string; name: string; count: number }[];
   submitter: { userId: string; employeeId: string | null };
   changeWarnBp: number;
+  /** The pay lines now in force for the period differ from the lines this run was built with. */
+  linesOutOfDate: boolean;
 };
 
 const BLOCKING: ReadonlySet<string> = new Set(BLOCKING_CHECKS);
@@ -70,6 +72,7 @@ export function runChecks(input: ChecksInput): { blocking: RunCheck[]; warnings:
     if (l.flags.includes("rate_change_mid_period")) add(l, "rate_change_mid_period");
     if (l.pendingSuggestions > 0) add(l, "pending_suggestions", String(l.pendingSuggestions));
   }
+  if (input.linesOutOfDate) found.push({ code: "lines_out_of_date", employeeId: null, runLineId: null, name: "This run" });
   for (const u of input.unassigned) {
     found.push({ code: "unassigned_suggestion", employeeId: u.employeeId, runLineId: null, name: u.name, detail: String(u.count) });
   }

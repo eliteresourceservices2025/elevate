@@ -102,7 +102,7 @@ export const SETTINGS_LABELS = {
   noneDescription: "No version of the pay settings is dated today or earlier. A Preparer adds one.",
 } as const;
 
-export const RUN_STATUSES =["draft", "in_review", "approved", "paid"] as const;
+export const RUN_STATUSES = ["draft", "in_review", "approved", "paid", "cancelled"] as const;
 export type RunStatus = (typeof RUN_STATUSES)[number];
 
 export const PAYROLL_LEVEL_LABELS: Record<PayrollLevel, string> = {
@@ -132,6 +132,7 @@ export const CHANGE_ACTIONS = [
   "list_exported",
   "payslip_downloaded",
   "run_viewed",
+  "run_cancelled",
 ] as const;
 export type ChangeAction = (typeof CHANGE_ACTIONS)[number];
 
@@ -143,6 +144,7 @@ export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
   in_review: "In review",
   approved: "Approved",
   paid: "Paid",
+  cancelled: "Cancelled",
 };
 
 /** Headings and wording of the runs list and the worksheet. */
@@ -183,7 +185,7 @@ export const WORKSHEET_LABELS = {
 /** Deductions entered by hand need a reason, as does overriding a suggestion. */
 export const REASON_REQUIRED_TYPES: readonly PayItemType[] = ["loan", "other_deduction"];
 
-export const BLOCKING_CHECKS = ["missing_usd_rate", "missing_multiplier", "negative_net", "unassigned_suggestion", "own_line_unconfirmed", "unreadable_line"] as const;
+export const BLOCKING_CHECKS = ["missing_usd_rate", "missing_multiplier", "negative_net", "unassigned_suggestion", "own_line_unconfirmed", "unreadable_line", "lines_out_of_date"] as const;
 export const WARNING_CHECKS = ["unapproved_days", "no_payout_details", "new_or_leaving", "rate_change_mid_period", "pending_suggestions", "large_change"] as const;
 export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
 
@@ -194,6 +196,7 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   unassigned_suggestion: "Suggested amounts are not assigned to a pay line",
   own_line_unconfirmed: "Your own line needs a confirmation from another Preparer",
   unreadable_line: "This line can't be read",
+  lines_out_of_date: "The pay lines changed after this run was created. Cancel the run and create it again.",
   unapproved_days: "Some days in the period are not approved",
   no_payout_details: "No payout details on file",
   new_or_leaving: "Starts, ends or has left during this period",

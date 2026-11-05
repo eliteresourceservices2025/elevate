@@ -48,7 +48,7 @@ A new `payroll` schema. Every table enables RLS with no public policies. Each en
 |---|---|---|
 | `pay_settings` | Cutoff divisor, extra-time multipliers, change-warning threshold, each with an effective date | Append-only |
 | `pay_lines` | One per person and role: client (optional), alias (optional), encrypted monthly rate, hours per day, FTE, client hours, payment method, effective dates | Append-only; a raise is a new dated row |
-| `pay_runs` | Period, status, dollar rate, preparer | One run per period |
+| `pay_runs` | Period, status (`draft`, `in_review`, `approved`, `paid`, `cancelled`), dollar rate, preparer | One live run per period; a cancelled run is kept and no longer holds its period |
 | `pay_run_lines` | Frozen copy of the line's rate, inputs and results as one encrypted payload (context `pay_run_line:<id>`) | Trigger blocks changes once the run is approved |
 | `pay_run_items` | Each confirmed or overridden amount and adjustment: type, encrypted amount, reason, who, when | Append-only; newest per line and type wins |
 | `pay_approvals` | Who approved which encrypted run hash, and when; also send-backs with a note | Append-only |
@@ -82,10 +82,10 @@ net           = gross + reimbursement/bonus/adjustment + (dollar allowance x run
 
 ## 6. Workflow
 
-Run status moves: `draft` → `in_review` → `approved` → `paid`. A send-back returns `in_review` to `draft`.
+Run status moves: `draft` → `in_review` → `approved` → `paid`. A send-back returns `in_review` to `draft`. A draft may be cancelled (with a reason); a cancelled run is frozen like a paid one, is never deleted, and frees its period for a new run. Nothing else can be cancelled.
 
 1. **Setup (Preparer):** create lines and dated rates.
-2. **Create run (Preparer):** choose the period and ELEVATE builds the lines. Periods use `pay-periods.ts`. A rate change that starts mid-period is flagged, and the Preparer decides by entering a partial cutoff or an adjustment; it is never silently split.
+2. **Create run (Preparer):** choose the period and ELEVATE builds the lines. Periods use `pay-periods.ts`. A rate change that starts mid-period is flagged, and the Preparer decides by entering a partial cutoff or an adjustment; it is never silently split. If the pay lines change after the run was created (a person or version added, removed or changed), the run is blocked from review and the Preparer cancels it and creates it again.
 3. **Suggestions:** ELEVATE reads approved hours through the attendance module's exported functions and suggests absences, lates and approved extra hours. Nothing is deducted until a Preparer confirms it, and an override needs a reason. Attendance is per person, so for someone with several lines the Preparer chooses the line.
 4. **Checks before review:** unapproved days, no payout details on file (read from stored masks, no decrypt), missing dollar rate, a new hire or leaver in the period, unassigned suggestions on a multi-line person, and net pay changed from the last run by more than the threshold (10% by default). Checks warn, except a missing dollar rate and unassigned suggestions, which block sending for review.
 5. **Approve:** the approver sees every line, the change from the last run, totals by client, and peso and dollar totals. They approve or send back with a note.
