@@ -39,7 +39,16 @@ export const PAY_ITEM_LABELS: Record<PayItemType, string> = {
   client_hours: "Client hours (reference only)",
 };
 
-export const RUN_STATUSES = ["draft", "in_review", "approved", "paid"] as const;
+export const PAYMENT_METHODS = ["remitly", "bank_transfer", "other"] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  remitly: "Remitly",
+  bank_transfer: "Bank transfer",
+  other: "Other",
+};
+
+export const RUN_STATUSES =["draft", "in_review", "approved", "paid"] as const;
 export type RunStatus = (typeof RUN_STATUSES)[number];
 
 export const PAYROLL_LEVEL_LABELS: Record<PayrollLevel, string> = {
