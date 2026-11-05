@@ -68,6 +68,8 @@ export function calculateLine(
       half * hpd * 100n * 60n,
     );
   const base = input.partial ? partialPay(input.partial) : cutoff;
+  // A partial cutoff never pays more than a full one ("15" typed for "1.5" days would otherwise overpay).
+  if (input.partial && base > cutoff) issues.push("partial_exceeds_cutoff");
 
   const absences = divRoundHalfUp(monthly * BigInt(input.absenceDayHundredths), half * 100n);
   const late = divRoundHalfUp(monthly * BigInt(input.lateMinutes) * 100n, hourDen * 60n);

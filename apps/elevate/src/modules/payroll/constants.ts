@@ -368,14 +368,15 @@ export const SUGGESTION_LABELS = {
 /** Deductions entered by hand need a reason, as does overriding a suggestion. */
 export const REASON_REQUIRED_TYPES: readonly PayItemType[] = ["loan", "other_deduction"];
 
-export const BLOCKING_CHECKS = ["missing_usd_rate", "missing_multiplier", "negative_net", "unassigned_suggestion", "own_line_unconfirmed", "unreadable_line", "lines_out_of_date"] as const;
+export const BLOCKING_CHECKS = ["missing_usd_rate", "missing_multiplier", "negative_net", "partial_exceeds_cutoff", "unassigned_suggestion", "own_line_unconfirmed", "unreadable_line", "lines_out_of_date"] as const;
 export const WARNING_CHECKS = ["unapproved_days", "no_payout_details", "new_or_leaving", "rate_change_mid_period", "pending_suggestions", "large_change"] as const;
 export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
 
 export const CHECK_LABELS: Record<CheckCode, string> = {
-  missing_usd_rate: "A dollar allowance needs this run's dollar rate",
+  missing_usd_rate: "Set this run's dollar rate. The Remitly list needs it, even when nobody has a dollar allowance.",
   missing_multiplier: "An extra-hours rate is not set in the settings",
   negative_net: "Net pay is below zero",
+  partial_exceeds_cutoff: "The days or hours worked pay more than a full cutoff. Check the amount entered.",
   unassigned_suggestion: "Suggested amounts are not assigned to a pay line",
   own_line_unconfirmed: "Your own line needs a confirmation from another Preparer",
   unreadable_line: "This line can't be read",

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { approvalKey, attendanceRows, dayState, latestApprovals } from "@/modules/attendance/hours-service";
+import { periodContaining } from "@/modules/attendance/pay-periods";
 import { users } from "@/modules/core/schema";
 import { clients, employeeSensitive, employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
@@ -141,8 +142,20 @@ export async function recomputeRun(tx: Tx, runId: string, options: { employeeId?
 
 // ---- Creating a run ----
 
-/** Builds a draft run for a period: one line for each pay line in force. Refuses any period that overlaps an existing run. */
+const NOT_A_CUTOFF = "A pay run covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month.";
+
+/** True when the period is exactly one cutoff (1st to 15th, or 16th to the end of the month), whatever the hours export uses. */
+function isCutoff(period: { periodStart: string; periodEnd: string }): boolean {
+  const cutoff = periodContaining("semi_monthly", period.periodStart);
+  return cutoff.start === period.periodStart && cutoff.end === period.periodEnd;
+}
+
+/**
+ * Builds a draft run for a period: one line for each pay line in force. The calculator always pays half a month, so only one cutoff
+ * is accepted (never the company's hours pay-period setting). Refuses any period that overlaps an existing run.
+ */
 export async function createRun(tx: Tx, actor: Actor, period: { periodStart: string; periodEnd: string }): Promise<{ runId: string; lineCount: number }> {
+  if (!isCutoff(period)) throw new ActionFailure(NOT_A_CUTOFF);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('pay_runs'))`);
   const [clash] = await tx
     .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd })
@@ -647,6 +660,7 @@ export async function checkInputsOf(executor: Executor, data: RunData, submitter
     submitter: { userId: submitterUserId ?? "", employeeId: submitterEmployeeId },
     changeWarnBp: (data.run.settingsSnapshot as SettingsSnapshot).changeWarnBp,
     linesOutOfDate: data.linesOutOfDate,
+    usdRateSet: data.run.usdRateE4 !== null,
   };
 }
 

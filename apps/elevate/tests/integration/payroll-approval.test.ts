@@ -15,7 +15,7 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, setRunUsdRate, confirmRunLine, submitRun, sendBackRun, approveRun } = await import(
+const { createPayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, setRunUsdRate, confirmRunLine, submitRun, sendBackRun, approveRun } = await import(
   "@/modules/payroll/actions"
 );
 const { getWorksheet, payrollRunsAwaitingApproval } = await import("@/modules/payroll/queries");
@@ -74,10 +74,15 @@ async function giveLine(employeeId: string, p: { periodStart: string; periodEnd:
   if (!r.ok) throw new Error(`line failed: ${r.error}`);
   return r.data.lineKey;
 }
-async function newRun(p: { periodStart: string; periodEnd: string }, who: unknown = preparer) {
+/** A draft run for `p`, created by `who`, who also sets the dollar rate (every run needs one before review) unless `rate` is null. */
+async function newRun(p: { periodStart: string; periodEnd: string }, who: unknown = preparer, rate: string | null = "58.50") {
   current.user = who;
   const r = await createPayRun(p);
   if (!r.ok) throw new Error(`run failed: ${r.error}`);
+  if (rate !== null) {
+    const set = await setRunUsdRate({ runId: r.data.runId, rate });
+    if (!set.ok) throw new Error(`rate failed: ${set.error}`);
+  }
   return r.data.runId;
 }
 const runLines = (runId: string, employeeId: string) =>
@@ -159,8 +164,20 @@ describe("submitRun refuses a run that is not ready", () => {
     const p = slot(2);
     const emp = await person();
     await giveLine(emp, p, { dollarAllowance: "12.50" });
-    const runId = await newRun(p);
+    const runId = await newRun(p, preparer, null);
     await refused(runId, blocked, "missing_usd_rate");
+    expect(await setRunUsdRate({ runId, rate: "58.50" })).toMatchObject({ ok: true });
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+  });
+
+  it("a missing dollar rate on a run paid in pesos only (the Remitly list always needs it)", async () => {
+    const p = slot(19);
+    const emp = await person();
+    await giveLine(emp, p); // no dollar allowance
+    const runId = await newRun(p, preparer, null);
+    await refused(runId, blocked, "missing_usd_rate");
+    const shown = (await getWorksheet(runId))!.checks.blocking;
+    expect(shown).toEqual([expect.objectContaining({ code: "missing_usd_rate", employeeId: null, runLineId: null })]);
     expect(await setRunUsdRate({ runId, rate: "58.50" })).toMatchObject({ ok: true });
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
   });
@@ -308,7 +325,7 @@ describe("review, send back and approve", () => {
     as(approver);
     expect(await approveRun({ runId, expectedHash: fresh })).toMatchObject({ ok: true });
     expect(await status(runId)).toBe("approved");
-    expect(await logActions(runId)).toEqual(["run_created", "run_submitted", "run_sent_back", "item_saved", "run_submitted", "run_approved"]);
+    expect(await logActions(runId)).toEqual(["run_created", "usd_rate_changed", "run_submitted", "run_sent_back", "item_saved", "run_submitted", "run_approved"]);
 
     const approvals = await rows<{ id: string; decision: string; run_hash_enc: string; decided_by: string }>(
       sql`select id, decision, run_hash_enc, decided_by from payroll.pay_approvals where run_id = ${runId} order by created_at`,
@@ -456,7 +473,7 @@ describe("everyone who touched a run", () => {
     const fresh = await account("approver");
     const emp = await person();
     await giveLine(emp, p, { dollarAllowance: "10" }, rateAuthor); // wrote the rate the run pays
-    const runId = await newRun(p, creator);
+    const runId = await newRun(p, creator, null);
     as(rateSetter);
     expect(await setRunUsdRate({ runId, rate: "58.50" })).toMatchObject({ ok: true });
     const [line] = await runLines(runId, emp);
@@ -487,6 +504,46 @@ describe("everyone who touched a run", () => {
       } finally {
         await db.execute(sql`update core.users set payroll_access = 'preparer' where id = ${who.id}`);
       }
+    }
+    expect(await status(runId)).toBe("in_review");
+    as(fresh);
+    expect(await approveRun({ runId, expectedHash: hash })).toMatchObject({ ok: true });
+  });
+});
+
+describe("ending a line does not hide who wrote its rate", () => {
+  it("someone who wrote the rate, after another Preparer ended the line, is refused once made an Approver", async () => {
+    const p = slot(18);
+    const [writer, ender] = await Promise.all([account("preparer"), account("preparer")]);
+    const fresh = await account("approver");
+    const emp = await person();
+    // The writer types the rate; the ender ends the line. The end is a new version with the same start, authored by the ender,
+    // and it is the version the run pays, with the writer's amounts copied into it.
+    const lineKey = await giveLine(emp, p, { endsOn: undefined }, writer);
+    as(ender);
+    expect(await endPayLine({ lineKey, endsOn: p.periodEnd, reason: "Contract ends" })).toMatchObject({ ok: true });
+    const runId = await newRun(p);
+    const [paid] = await rows<{ created_by: string }>(sql`select v.created_by from payroll.pay_run_lines l join payroll.pay_lines v on v.id = l.line_id where l.run_id = ${runId}`);
+    expect(paid.created_by).toBe(ender.id);
+    as(preparer);
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+
+    const touched = await touchedBy(db, runId);
+    for (const [label, who] of Object.entries({ writer, ender })) {
+      expect(touched, label).toContain(who.id);
+      expect(await countAwaiting(db, who.id, [runId]), label).toBe(0);
+    }
+    expect(touched).not.toContain(fresh.id);
+    expect(await countAwaiting(db, fresh.id, [runId])).toBe(1);
+
+    const hash = (await hashFor(runId, fresh))!;
+    await db.execute(sql`update core.users set payroll_access = 'approver' where id = ${writer.id}`);
+    try {
+      as({ ...writer, payrollAccess: "approver" });
+      const r = await approveRun({ runId, expectedHash: hash });
+      expect(!r.ok && r.error).toMatch(/prepared or changed this run/);
+    } finally {
+      await db.execute(sql`update core.users set payroll_access = 'preparer' where id = ${writer.id}`);
     }
     expect(await status(runId)).toBe("in_review");
     as(fresh);
@@ -530,7 +587,7 @@ describe("the approval hash", () => {
     const p = slot(11);
     const emp = await person();
     await giveLine(emp, p, { dollarAllowance: "10" });
-    const runId = await newRun(p);
+    const runId = await newRun(p, preparer, null);
     const [line] = await runLines(runId, emp);
     const seen = new Set<string>();
     const take = async () => {

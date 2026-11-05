@@ -33,7 +33,9 @@ function NewRunForm({ suggestedStart, suggestedEnd }: { suggestedStart: string; 
         );
       }}
     >
-      <p className="text-sm text-muted-foreground">One line is made for each pay line in force during the period. A period can&apos;t overlap another run.</p>
+      <p className="text-sm text-muted-foreground">
+        A run covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month. One line is made for each pay line in force during it.
+      </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="run-start">First day</Label>

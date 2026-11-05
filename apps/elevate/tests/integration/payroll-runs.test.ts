@@ -4,7 +4,8 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { endPayrollLinesWhenDone } from "./payroll-test-helpers";
 
 // Real-database test: draft runs, items, the worksheet and the checks. Invented names and figures only.
-// Periods are in 2025 and lines start in 2024, clear of the leftovers other payroll test files keep in the same throwaway database.
+// Periods are the cutoffs of 2025 (all 24 are used) and August to December 2024; lines start in 2024, clear of the leftovers other
+// payroll test files keep in the same throwaway database.
 
 const current = vi.hoisted(() => ({ user: null as unknown }));
 vi.mock("@/lib/auth", () => ({ requireUser: vi.fn(async () => current.user) }));
@@ -55,10 +56,12 @@ async function giveLine(who: unknown, employeeId: string, over: Record<string, u
   if (!r.ok) throw new Error(`line failed: ${r.error}`);
   return r.data.lineKey;
 }
+/** A cutoff of 2025: the 1st to the 15th (half 1) or the 16th to the last day of the month (half 2). */
 const period = (month: number, half: 1 | 2 = 1) => ({
   periodStart: `2025-${String(month).padStart(2, "0")}-${half === 1 ? "01" : "16"}`,
-  periodEnd: `2025-${String(month).padStart(2, "0")}-${half === 1 ? "15" : "28"}`,
+  periodEnd: `2025-${String(month).padStart(2, "0")}-${half === 1 ? "15" : String(new Date(Date.UTC(2025, month, 0)).getUTCDate())}`,
 });
+const NOT_A_CUTOFF = { ok: false, error: "A pay run covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month." };
 async function newRun(who: unknown, p: { periodStart: string; periodEnd: string }) {
   current.user = who;
   const r = await createPayRun(p);
@@ -126,21 +129,31 @@ describe("creating a run", () => {
 
     const same = await createPayRun(p);
     expect(same).toEqual({ ok: false, error: `There is already a pay run for ${p.periodStart} to ${p.periodEnd}.` });
-    const overlap = await createPayRun({ periodStart: "2025-01-10", periodEnd: "2025-01-20" });
-    expect(overlap.ok).toBe(false);
-    expect(!overlap.ok && overlap.error).toMatch(/overlaps/);
-    expect((await createPayRun({ periodStart: "2025-01-15", periodEnd: "2025-01-16" })).ok).toBe(false);
-    // Nested inside, starting on the last day, and wrapping around the whole run are all overlaps.
-    for (const [s, e] of [["2025-01-05", "2025-01-10"], ["2025-01-15", "2025-01-20"], ["2024-12-25", "2025-01-20"]]) {
-      expect((await createPayRun({ periodStart: s, periodEnd: e })).ok, `${s} to ${e}`).toBe(false);
+    // Pay is always half a month, so only a cutoff is accepted: anything else (overlapping or not, a whole month, a week, a cutoff cut
+    // short or run long) is refused before anything is written. Cutoffs tile the calendar, so two of them never overlap.
+    for (const [s, e] of [
+      ["2025-01-10", "2025-01-20"],
+      ["2025-01-15", "2025-01-16"],
+      ["2025-01-05", "2025-01-10"],
+      ["2024-12-25", "2025-01-20"],
+      ["2025-01-16", "2025-01-20"],
+      ["2025-01-01", "2025-01-31"],
+      ["2025-01-06", "2025-01-12"],
+      ["2025-01-16", "2025-01-30"],
+      ["2025-01-02", "2025-01-15"],
+      ["2025-02-16", "2025-03-01"],
+    ]) {
+      expect(await createPayRun({ periodStart: s, periodEnd: e }), `${s} to ${e}`).toEqual(NOT_A_CUTOFF);
     }
     expect(await createPayRun({ periodStart: "2025-01-16", periodEnd: "2025-01-10" })).toEqual({ ok: false, error: "Check the request and try again." });
-    // The day after the run's last day is free.
-    expect((await createPayRun({ periodStart: "2025-01-16", periodEnd: "2025-01-20" })).ok).toBe(true);
-    // A neighbouring period is fine, and a period nobody is paid in is refused.
-    expect((await createPayRun({ periodStart: "2024-12-20", periodEnd: "2024-12-31" })).ok).toBe(true);
+    // The next cutoff is free, and so is the one before.
+    expect((await createPayRun({ periodStart: "2025-01-16", periodEnd: "2025-01-31" })).ok).toBe(true);
+    expect((await createPayRun({ periodStart: "2024-12-16", periodEnd: "2024-12-31" })).ok).toBe(true);
+    // A cutoff nobody is paid in is refused.
     const none = await createPayRun({ periodStart: "2019-01-01", periodEnd: "2019-01-15" });
-    expect(none.ok).toBe(false);
+    expect(none).toEqual({ ok: false, error: "Nobody has a pay line in that period. Add pay lines on the Rates tab first." });
+    const created = await rows<{ n: number }>(sql`select count(*)::int as n from payroll.pay_runs where period_start in ('2025-01-10', '2025-01-15', '2025-01-05', '2024-12-25', '2025-01-06', '2025-01-02')`);
+    expect(created[0].n).toBe(0);
 
     const [{ n }] = await rows<{ n: number }>(sql`select count(*)::int as n from payroll.pay_runs where period_start = ${p.periodStart} and period_end = ${p.periodEnd}`);
     expect(n).toBe(1);
@@ -345,11 +358,13 @@ describe("the dollar rate and the settings", () => {
     const runId = await newRun(preparer, period(11, 1));
     current.user = preparer;
     let sheet = (await getWorksheet(runId))!;
-    expect(forPerson(sheet.checks.blocking, emp)).toEqual(["missing_usd_rate"]);
+    // Shown once, for the whole run, not again on the line with the dollar allowance.
+    expect(sheet.checks.blocking.filter((c) => c.code === "missing_usd_rate")).toEqual([expect.objectContaining({ employeeId: null, runLineId: null })]);
+    expect(forPerson(sheet.checks.blocking, emp)).toEqual([]);
 
     expect(await setRunUsdRate({ runId, rate: "58.50" })).toMatchObject({ ok: true });
     sheet = (await getWorksheet(runId))!;
-    expect(forPerson(sheet.checks.blocking, emp)).toEqual([]);
+    expect(sheet.checks.blocking.map((c) => c.code)).not.toContain("missing_usd_rate");
     expect(sheet.run.usdRate).toBe("58.50");
     // 12.50 dollars at 58.50 is 731.25 pesos.
     expect(sheet.lines.find((l) => l.employeeId === emp)!.figures).toMatchObject({ dollarAllowance: "12.50", dollarAllowancePesos: "731.25", net: "12,731.25" });
@@ -451,17 +466,18 @@ describe("the worksheet", () => {
   });
 
   it("warns about unapproved days, missing payout details, a joiner, and a big change from the last run, and reads masks only", async () => {
+    // Two cutoffs in a row in October and November 2024 (every cutoff of 2025 is taken by another test in this file).
     const emp = await person();
-    const key = await giveLine(preparer, emp, { effectiveFrom: "2025-07-20" }); // starts inside the first run's period
+    const key = await giveLine(preparer, emp, { effectiveFrom: "2024-10-20" }); // starts inside the first run's period
     const withPayout = await person();
-    await giveLine(preparer, withPayout);
+    await giveLine(preparer, withPayout, { effectiveFrom: "2024-10-01" });
     await db.execute(sql`insert into core.employee_sensitive (employee_id, masks) values (${withPayout}, ${JSON.stringify({ bankName: "BDO", bankAccountName: "M T", bankAccountNumber: "****1234" })}::jsonb)`);
     // One finished day with hours nobody approved, one that was approved.
-    await db.execute(sql`insert into time.attendance_days (employee_id, date, sessions, worked_minutes, scheduled_minutes) values (${emp}, '2025-07-22', 1, 480, 480), (${emp}, '2025-07-23', 1, 480, 480)`);
+    await db.execute(sql`insert into time.attendance_days (employee_id, date, sessions, worked_minutes, scheduled_minutes) values (${emp}, '2024-10-22', 1, 480, 480), (${emp}, '2024-10-23', 1, 480, 480)`);
     await db.execute(sql`insert into time.hours_approvals (employee_id, date, scheduled_minutes, worked_minutes, break_minutes, extra_minutes, approved_extra_minutes, approved_by)
-      values (${emp}, '2025-07-23', 480, 480, 0, 0, 0, ${preparer.id})`);
+      values (${emp}, '2024-10-23', 480, 480, 0, 0, 0, ${preparer.id})`);
 
-    const first = await newRun(preparer, period(7, 2));
+    const first = await newRun(preparer, { periodStart: "2024-10-16", periodEnd: "2024-10-31" });
     current.user = preparer;
     let sheet = (await getWorksheet(first))!;
     expect(forPerson(sheet.checks.warnings, emp)).toEqual(["new_or_leaving", "no_payout_details", "unapproved_days"]);
@@ -470,8 +486,8 @@ describe("the worksheet", () => {
 
     // A raise of 50% in the next period moves net pay by more than the 10% default; the first run has nothing to compare with.
     expect(forPerson(sheet.checks.warnings, emp)).not.toContain("large_change");
-    await updatePayLine({ ...lineBase(emp, { monthly: "33,000" }), lineKey: key, effectiveFrom: "2025-07-29", reason: "Raise" });
-    const second = await newRun(preparer, { periodStart: "2025-07-29", periodEnd: "2025-07-31" });
+    await updatePayLine({ ...lineBase(emp, { monthly: "33,000" }), lineKey: key, effectiveFrom: "2024-11-01", reason: "Raise" });
+    const second = await newRun(preparer, { periodStart: "2024-11-01", periodEnd: "2024-11-15" });
     // The earlier run is still a draft (unreviewed), so there is nothing to compare with yet.
     sheet = (await getWorksheet(second))!;
     expect(forPerson(sheet.checks.warnings, emp)).not.toContain("large_change");
@@ -509,8 +525,8 @@ describe("reasons cannot be sidestepped", () => {
 
   it("an unassigned suggestion counts too, and removing a confirmed suggestion needs a reason", async () => {
     const emp = await person();
-    await giveLine(preparer, emp);
-    const runId = await newRun(preparer, { periodStart: "2025-04-29", periodEnd: "2025-04-30" });
+    await giveLine(preparer, emp, { effectiveFrom: "2024-09-01" });
+    const runId = await newRun(preparer, { periodStart: "2024-09-01", periodEnd: "2024-09-15" });
     const [line] = await runLines(runId, emp);
     current.user = preparer;
     await suggest(runId, emp, null, "absence_days", 100n);
@@ -526,8 +542,8 @@ describe("reasons cannot be sidestepped", () => {
 
   it("setting an allowance below the line's own needs a reason; keeping or raising it does not", async () => {
     const emp = await person();
-    await giveLine(preparer, emp, { pesoAllowance: "1,000", dollarAllowance: "10" });
-    const runId = await newRun(preparer, { periodStart: "2025-05-29", periodEnd: "2025-05-31" });
+    await giveLine(preparer, emp, { pesoAllowance: "1,000", dollarAllowance: "10", effectiveFrom: "2024-09-16" });
+    const runId = await newRun(preparer, { periodStart: "2024-09-16", periodEnd: "2024-09-30" });
     const [line] = await runLines(runId, emp);
     current.user = preparer;
     expect(await item(runId, emp, line.id, "peso_allowance", "500")).toEqual(needReason);
@@ -658,9 +674,9 @@ describe("a run whose pay lines changed after it was built", () => {
 
   it("is still raised while the run waits for approval (it stops the approval), but not once it is approved", async () => {
     const emp = await person();
-    await giveLine(preparer, emp);
-    const runId = await newRun(preparer, { periodStart: "2025-12-29", periodEnd: "2025-12-31" });
-    await giveLine(preparer, await person());
+    await giveLine(preparer, emp, { effectiveFrom: "2024-08-16" });
+    const runId = await newRun(preparer, { periodStart: "2024-08-16", periodEnd: "2024-08-31" });
+    await giveLine(preparer, await person(), { effectiveFrom: "2024-08-16" });
     await db.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
     current.user = preparer;
     expect(await outOfDate(runId)).toBe(true);

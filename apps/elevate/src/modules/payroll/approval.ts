@@ -39,8 +39,9 @@ const NOT_A_CHANGE: readonly ChangeAction[] = ["run_viewed", "run_sent_back", "r
 /**
  * The one definition of "prepared or changed this run", as SQL over a run id expression (a parameter, or a column of an outer query):
  * the run's creator and submitter, every actor in its change history except views and decisions, everyone who entered an amount on it
- * or confirmed a line, and the author of every pay-line version (the rate) it pays. Versions are append-only, so that names exactly
- * who wrote each rate in use. The payroll level is never consulted. `touchedBy` and `countAwaiting` both use it.
+ * or confirmed a line, and the author of every pay-line version (the rate) it pays together with the author of every other version of the
+ * same line with the same start date: ending a line copies the amounts into a new version with the same start, so the person who typed
+ * the rate is named as well as the person who ended it. The payroll level is never consulted. `touchedBy` and `countAwaiting` both use it.
  */
 function touchersOf(run: SQL): SQL {
   const decisions = sql.join(
@@ -53,7 +54,10 @@ function touchersOf(run: SQL): SQL {
     union select c.actor_id from payroll.pay_change_log c where c.run_id = ${run} and c.action not in (${decisions})
     union select i.entered_by from payroll.pay_run_items i where i.run_id = ${run}
     union select l.confirmed_by from payroll.pay_run_lines l where l.run_id = ${run}
-    union select v.created_by from payroll.pay_run_lines l join payroll.pay_lines v on v.id = l.line_id where l.run_id = ${run}`;
+    union select w.created_by from payroll.pay_run_lines l
+      join payroll.pay_lines v on v.id = l.line_id
+      join payroll.pay_lines w on w.line_key = v.line_key and w.effective_from = v.effective_from
+      where l.run_id = ${run}`;
 }
 
 /** Everyone who prepared or changed the run (see `touchersOf`), whatever their payroll level is now. */

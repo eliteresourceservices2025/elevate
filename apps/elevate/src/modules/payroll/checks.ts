@@ -31,6 +31,8 @@ export type ChecksInput = {
   changeWarnBp: number;
   /** The pay lines now in force for the period differ from the lines this run was built with. */
   linesOutOfDate: boolean;
+  /** The run has a dollar rate. Every run needs one: the Remitly list always has a dollars column. */
+  usdRateSet: boolean;
 };
 
 const BLOCKING: ReadonlySet<string> = new Set(BLOCKING_CHECKS);
@@ -52,8 +54,9 @@ export function runChecks(input: ChecksInput): { blocking: RunCheck[]; warnings:
     if (l.unreadable) add(l, "unreadable_line");
     else {
       for (const issue of l.issues) {
-        if (issue === "missing_usd_rate") add(l, "missing_usd_rate");
-        else if (issue === "negative_net") add(l, "negative_net");
+        // A line's missing_usd_rate (a dollar allowance, no rate) is covered by the run-level check below, so it is not shown twice.
+        if (issue === "negative_net") add(l, "negative_net");
+        else if (issue === "partial_exceeds_cutoff") add(l, "partial_exceeds_cutoff");
         else if (issue.startsWith("missing_multiplier:")) {
           const key = issue.slice("missing_multiplier:".length);
           const known = (EXTRA_KEYS as readonly string[]).includes(key);
@@ -72,6 +75,7 @@ export function runChecks(input: ChecksInput): { blocking: RunCheck[]; warnings:
     if (l.flags.includes("rate_change_mid_period")) add(l, "rate_change_mid_period");
     if (l.pendingSuggestions > 0) add(l, "pending_suggestions", String(l.pendingSuggestions));
   }
+  if (!input.usdRateSet) found.push({ code: "missing_usd_rate", employeeId: null, runLineId: null, name: "This run" });
   if (input.linesOutOfDate) found.push({ code: "lines_out_of_date", employeeId: null, runLineId: null, name: "This run" });
   for (const u of input.unassigned) {
     found.push({ code: "unassigned_suggestion", employeeId: u.employeeId, runLineId: null, name: u.name, detail: String(u.count) });

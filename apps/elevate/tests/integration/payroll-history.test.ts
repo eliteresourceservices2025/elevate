@@ -73,11 +73,16 @@ async function person(last: string, userId: string | null = null) {
     values ('Liza', ${last}, ${`${uniq("emp")}@example.com`}, 'active', ${userId}) returning id`);
   return e.id;
 }
-/** Period `n`: the 17th to the 28th of month n + 5 of 2030. The schema test owns the first days of every month of 2030 (an exact period match collides). */
+/**
+ * Period `n`: the second cutoff (16th to the last day) of month n + 10 of 2030 (October, November). The schema test inserts runs
+ * starting on the first or second day of every month of 2030, 15 days long (up to the 16th of January to July), and the leaver's line
+ * below is paid in August and September, so these periods meet neither.
+ */
 function slot(n: number) {
-  const mm = String(n + 5).padStart(2, "0");
+  const month = n + 10;
+  const mm = String(month).padStart(2, "0");
   const at = (i: number) => `2030-${mm}-${String(16 + i).padStart(2, "0")}`;
-  return { periodStart: at(1), periodEnd: at(12), day: at };
+  return { periodStart: at(0), periodEnd: `2030-${mm}-${new Date(Date.UTC(2030, month, 0)).getUTCDate()}`, day: at };
 }
 const as = (who: unknown) => {
   current.user = who;
@@ -251,7 +256,21 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     draftRunId = (second as { data: { runId: string } }).data.runId;
     ok(await cancelPayRun({ runId: draftRunId, reason: reasonOf(5) }), "cancel");
 
-    const seen = (await rows<{ action: string }>(sql`select distinct action from payroll.pay_change_log where created_at >= ${cycleStart}::timestamptz`)).map((r) => r.action).sort();
+    // Only this cycle's rows: written by this file's own accounts, about this cycle's runs or about no run (access, lines, settings).
+    // Other test files share the database, so a time filter alone could let their rows stand in for a missing action here.
+    const actors = sql.join(
+      [superAdmin, preparer, checker, approver, viewer, paidOwner].map((a) => sql`${a.id}::uuid`),
+      sql`, `,
+    );
+    const seen = (
+      await rows<{ action: string }>(sql`
+        select distinct action from payroll.pay_change_log
+        where created_at >= ${cycleStart}::timestamptz
+          and actor_id in (${actors})
+          and (run_id is null or run_id in (${runId}::uuid, ${draftRunId}::uuid))`)
+    )
+      .map((r) => r.action)
+      .sort();
     expect(seen).toEqual([...CHANGE_ACTIONS].sort());
   });
 
@@ -293,7 +312,7 @@ describe("what a row shows", () => {
     as(preparer);
     const r = await all({ runId });
     const created = r.rows.find((x) => x.action === "run_created")!;
-    expect(created.runLabel).toBe("2030-05-17 to 2030-05-28");
+    expect(created.runLabel).toBe("2030-10-16 to 2030-10-31");
     expect(created.actorName).toMatch(/^Paolo Preparerlim/);
     expect(created.actionLabel).toBe(CHANGE_ACTION_LABELS.run_created);
     expect(Number.isNaN(Date.parse(created.at))).toBe(false);
@@ -347,7 +366,7 @@ describe("filters", () => {
     as(preparer);
     const mine = await all({ runId });
     expect(mine.total).toBeGreaterThan(5);
-    expect(mine.rows.every((x) => x.runLabel === "2030-05-17 to 2030-05-28")).toBe(true);
+    expect(mine.rows.every((x) => x.runLabel === "2030-10-16 to 2030-10-31")).toBe(true);
     const cancelled = await all({ runId: draftRunId });
     expect(cancelled.rows.map((x) => x.action).sort()).toEqual(["run_cancelled", "run_created"]);
     expect((await all()).total).toBeGreaterThan(mine.total);
@@ -518,7 +537,7 @@ describe("the filter choices", () => {
     as(viewer);
     const o = await getHistoryFilterOptions();
     expect(o.runs.map((x) => x.id)).toEqual(expect.arrayContaining([runId, draftRunId]));
-    expect(o.runs.find((x) => x.id === runId)!.label).toBe("2030-05-17 to 2030-05-28");
+    expect(o.runs.find((x) => x.id === runId)!.label).toBe("2030-10-16 to 2030-10-31");
     expect(o.people.find((x) => x.id === empA)!.name).toBe(`Liza ${lastNameA}`);
     expect(o.actors.find((x) => x.id === approver.id)!.name).toMatch(/^Ariel Approvertan/);
     expect(JSON.stringify(o)).not.toMatch(/@example\.com/);

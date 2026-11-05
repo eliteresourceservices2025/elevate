@@ -41,12 +41,14 @@ async function giveLine(who: unknown, employeeId: string, over: Record<string, u
   if (!r.ok) throw new Error(`line failed: ${r.error}`);
 }
 
-/** Slot n is a half month of 2026: 0 = Jan 1-14, 1 = Jan 15-28, 2 = Feb 1-14 ... 19 = Oct 15-28. `day(i)` is the i-th day of it. */
+/** Slot n is a cutoff of 2026: 0 = Jan 1-15, 1 = Jan 16-31, 2 = Feb 1-15 ... 19 = Oct 16-31. `day(i)` is the i-th day of it. */
 function slot(n: number) {
-  const month = String(Math.floor(n / 2) + 1).padStart(2, "0");
-  const first = n % 2 === 0 ? 1 : 15;
-  const at = (i: number) => `2026-${month}-${String(first + i - 1).padStart(2, "0")}`;
-  return { periodStart: at(1), periodEnd: at(14), day: at };
+  const month = Math.floor(n / 2) + 1;
+  const mm = String(month).padStart(2, "0");
+  const first = n % 2 === 0 ? 1 : 16;
+  const at = (i: number) => `2026-${mm}-${String(first + i - 1).padStart(2, "0")}`;
+  const last = n % 2 === 0 ? 15 : new Date(Date.UTC(2026, month, 0)).getUTCDate();
+  return { periodStart: at(1), periodEnd: `2026-${mm}-${String(last).padStart(2, "0")}`, day: at };
 }
 async function newRun(who: unknown, period: { periodStart: string; periodEnd: string }) {
   current.user = who;
@@ -264,7 +266,7 @@ describe("holidays and rest days", () => {
     await giveLine(preparer, emp);
     // June 2024 is before the first rates: the starting settings have none.
     await addDay(emp, { date: "2024-06-04", worked: 540, extra: 60, approvedExtra: 60 }, lead.id);
-    const runId = await newRun(preparer, { periodStart: "2024-06-01", periodEnd: "2024-06-14" });
+    const runId = await newRun(preparer, { periodStart: "2024-06-01", periodEnd: "2024-06-15" });
     current.user = preparer;
     await refreshSuggestions({ runId });
     const s = (await suggestions(runId, emp))[0];

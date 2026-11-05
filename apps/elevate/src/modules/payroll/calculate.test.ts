@@ -88,6 +88,17 @@ describe("calculateLine", () => {
       null,
     );
     expect(f(r.base)).toBe("4,431.82");
+    expect(r.issues).toEqual([]);
+  });
+
+  it("flags a partial cutoff that pays more than a full cutoff, never one that pays exactly a full cutoff", () => {
+    // 11 days at the divisor of 11 is exactly half a month.
+    const exact = calculateLine(input({ partial: { dayHundredths: 1100, minutes: 0 } }), settings, null);
+    expect(f(exact.base)).toBe("15,000.00");
+    expect(exact.issues).toEqual([]);
+    // "15" typed for "1.5" days.
+    expect(calculateLine(input({ partial: { dayHundredths: 1500, minutes: 0 } }), settings, null).issues).toContain("partial_exceeds_cutoff");
+    expect(calculateLine(input({ partial: { dayHundredths: 1100, minutes: 1 } }), settings, null).issues).toContain("partial_exceeds_cutoff");
   });
 
   it("applies a multiplier", () => {

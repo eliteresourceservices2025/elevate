@@ -186,12 +186,27 @@ describe("the Remitly list", () => {
       error: NOT_APPROVED,
     });
 
+  });
+
+  it("a run paid in pesos only can't be sent without a dollar rate; with one it is approved and the list downloads", async () => {
     const r = slot(2);
-    await giveLine(await person(), r);
-    const noRate = await approvedRun(r, null);
+    const emp = await person(null, "Pesoonly");
+    await giveLine(emp, r); // no dollar allowance
+    const runId = await newRun(r, null);
     as(preparer);
-    const result = await exportRemitlyList({ runId: noRate });
-    expect(!result.ok && result.error).toMatch(/dollar rate/i);
+    const refused = await submitRun({ runId });
+    expect(!refused.ok && refused.error).toMatch(/can't be sent for review/);
+    expect(await status(runId)).toBe("draft");
+
+    expect(await setRunUsdRate({ runId, rate: "58.50" })).toMatchObject({ ok: true });
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+    as(approver);
+    expect(await approveRun({ runId, expectedHash: (await getWorksheet(runId))!.expectedHash! })).toMatchObject({ ok: true });
+    as(preparer);
+    const list = await exportRemitlyList({ runId });
+    expect(list).toMatchObject({ ok: true });
+    // 22,000 / 2 + 1,000 = 12,000.00 pesos; at 58.50 that is 205.13 dollars.
+    expect(list.ok && list.data.csv).toContain("12000.00,205.13");
   });
 
   it("gives one row per person, no bank column, neutralizes a formula alias, and is audited without amounts", async () => {

@@ -27,6 +27,7 @@ const input = (lines: CheckLine[], over: Partial<ChecksInput> = {}): ChecksInput
   submitter: { userId: ME, employeeId: EMP_ME },
   changeWarnBp: 1000,
   linesOutOfDate: false,
+  usdRateSet: true,
   ...over,
 });
 const codes = (r: { code: string }[]) => r.map((c) => c.code);
@@ -36,9 +37,20 @@ describe("runChecks", () => {
     expect(runChecks(input([line()]))).toEqual({ blocking: [], warnings: [] });
   });
 
-  it("blocks on a missing dollar rate, a missing multiplier and a negative net", () => {
-    const r = runChecks(input([line({ issues: ["missing_usd_rate", "missing_multiplier:restDay", "negative_net"] })]));
-    expect(codes(r.blocking).sort()).toEqual(["missing_multiplier", "missing_usd_rate", "negative_net"]);
+  it("blocks a run with no dollar rate once, for the whole run, even when nobody has a dollar allowance (the Remitly list needs it)", () => {
+    const r = runChecks(input([line(), line({ runLineId: "r2", employeeId: "e2", issues: ["missing_usd_rate"] })], { usdRateSet: false }));
+    expect(r.blocking).toEqual([{ code: "missing_usd_rate", employeeId: null, runLineId: null, name: "This run" }]);
+    expect(runChecks(input([line()], { usdRateSet: true })).blocking).toEqual([]);
+  });
+
+  it("blocks a partial cutoff that pays more than a full cutoff", () => {
+    const r = runChecks(input([line({ issues: ["partial_exceeds_cutoff"] })]));
+    expect(r.blocking).toEqual([expect.objectContaining({ code: "partial_exceeds_cutoff", employeeId: "e1", runLineId: "r1" })]);
+  });
+
+  it("blocks on a missing multiplier and a negative net", () => {
+    const r = runChecks(input([line({ issues: ["missing_multiplier:restDay", "negative_net"] })]));
+    expect(codes(r.blocking).sort()).toEqual(["missing_multiplier", "negative_net"]);
     expect(r.warnings).toEqual([]);
     const multiplier = r.blocking.find((c) => c.code === "missing_multiplier")!;
     expect(multiplier.name).toBe("Maria Testcruz");
