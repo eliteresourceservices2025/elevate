@@ -1,0 +1,215 @@
+import { sql } from "drizzle-orm";
+import { check, date, index, integer, jsonb, numeric, pgSchema, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { users } from "@/modules/core/schema";
+import { clients, employees } from "@/modules/people/schema";
+
+// Payroll: figures prepared and checked here, paid elsewhere. Nothing here computes tax or sends money.
+// Every amount, reason, hash and reference is encrypted (AES-256-GCM, `fieldCrypto()`); the context string is
+// "<table>:<row id>", so ids are generated in the app and the context is known before insert.
+// Append-only tables are enforced by database triggers (see the payroll triggers migration); a run's rows freeze once it leaves draft.
+
+export const payroll = pgSchema("payroll");
+
+const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
+
+/** Append-only: a change is a new row with a later `effective_from`; the newest row at or before a date applies. */
+export const paySettings = payroll
+  .table("pay_settings", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    effectiveFrom: date("effective_from").notNull(),
+    cutoffDivisor: smallint("cutoff_divisor").notNull(),
+    /** Basis points: 12500 = 1.25x. Null until counsel/owner supplies the rate. */
+    extraRegularBp: integer("extra_regular_bp"),
+    extraHolidayBp: integer("extra_holiday_bp"),
+    extraRestDayBp: integer("extra_rest_day_bp"),
+    extraRestDayOver8Bp: integer("extra_rest_day_over_8_bp"),
+    holidayBp: integer("holiday_bp"),
+    changeWarnBp: integer("change_warn_bp").notNull(),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: createdAt(),
+  })
+  .enableRLS();
+
+/** Append-only. A new version of a line shares the `line_key`; `amounts_enc` holds { monthlyCentavos, pesoAllowanceCentavos, dollarAllowanceCents } as strings. */
+export const payLines = payroll
+  .table(
+    "pay_lines",
+    {
+      id: uuid("id").primaryKey(),
+      lineKey: uuid("line_key").notNull(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      clientId: uuid("client_id").references(() => clients.id),
+      alias: text("alias"),
+      hoursPerDay: smallint("hours_per_day").notNull(),
+      fte: numeric("fte", { precision: 3, scale: 2 }).notNull(),
+      endsOn: date("ends_on"),
+      effectiveFrom: date("effective_from").notNull(),
+      amountsEnc: text("amounts_enc").notNull(),
+      createdBy: uuid("created_by")
+        .notNull()
+        .references(() => users.id),
+      createdAt: createdAt(),
+    },
+    (t) => [
+      index("pay_lines_employee_idx").on(t.employeeId, t.effectiveFrom),
+      index("pay_lines_key_idx").on(t.lineKey, t.effectiveFrom),
+      check("pay_lines_hours_chk", sql`${t.hoursPerDay} between 1 and 12`),
+    ],
+  )
+  .enableRLS();
+
+export const PAY_RUN_STATUS_VALUES = ["draft", "in_review", "approved", "paid"] as const;
+
+/** Status moves only draft -> in_review -> (draft | approved) -> paid, by trigger. The rate and snapshot change only in draft. */
+export const payRuns = payroll
+  .table(
+    "pay_runs",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      periodStart: date("period_start").notNull(),
+      periodEnd: date("period_end").notNull(),
+      status: text("status").notNull().default("draft"),
+      /** Dollar-to-peso rate times 10,000 (58.50 = 585000). */
+      usdRateE4: integer("usd_rate_e4"),
+      settingsSnapshot: jsonb("settings_snapshot").notNull(),
+      createdBy: uuid("created_by")
+        .notNull()
+        .references(() => users.id),
+      submittedBy: uuid("submitted_by").references(() => users.id),
+      decidedBy: uuid("decided_by").references(() => users.id),
+      createdAt: createdAt(),
+    },
+    (t) => [
+      uniqueIndex("pay_runs_period_idx").on(t.periodStart, t.periodEnd),
+      check("pay_runs_status_chk", sql`${t.status} in ('draft','in_review','approved','paid')`),
+      check("pay_runs_period_chk", sql`${t.periodEnd} >= ${t.periodStart}`),
+    ],
+  )
+  .enableRLS();
+
+/** Frozen with the run once it leaves draft. `payload_enc` is the computed pay for the line. */
+export const payRunLines = payroll
+  .table(
+    "pay_run_lines",
+    {
+      id: uuid("id").primaryKey(),
+      runId: uuid("run_id")
+        .notNull()
+        .references(() => payRuns.id),
+      lineId: uuid("line_id")
+        .notNull()
+        .references(() => payLines.id),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      clientId: uuid("client_id").references(() => clients.id),
+      alias: text("alias"),
+      flags: text("flags").array().notNull().default(sql`'{}'::text[]`),
+      payloadEnc: text("payload_enc").notNull(),
+      confirmedBy: uuid("confirmed_by").references(() => users.id),
+      confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    },
+    (t) => [index("pay_run_lines_run_idx").on(t.runId), uniqueIndex("pay_run_lines_run_line_idx").on(t.runId, t.lineId)],
+  )
+  .enableRLS();
+
+export const PAY_ITEM_STATES = ["suggested", "confirmed", "dismissed"] as const;
+
+/** Append-only: changing an item is a new row; the newest per run, person and type wins. `value_enc` includes the reason. */
+export const payRunItems = payroll
+  .table(
+    "pay_run_items",
+    {
+      id: uuid("id").primaryKey(),
+      runId: uuid("run_id")
+        .notNull()
+        .references(() => payRuns.id),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      runLineId: uuid("run_line_id").references(() => payRunLines.id),
+      type: text("type").notNull(),
+      state: text("state").notNull(),
+      valueEnc: text("value_enc").notNull(),
+      enteredBy: uuid("entered_by")
+        .notNull()
+        .references(() => users.id),
+      createdAt: createdAt(),
+    },
+    (t) => [
+      index("pay_run_items_run_idx").on(t.runId, t.employeeId, t.createdAt),
+      check("pay_run_items_state_chk", sql`${t.state} in ('suggested','confirmed','dismissed')`),
+    ],
+  )
+  .enableRLS();
+
+/** Append-only. `run_hash_enc` is encrypted on purpose: a plain hash of a small total can be guessed by anyone who can read the table. */
+export const payApprovals = payroll
+  .table(
+    "pay_approvals",
+    {
+      id: uuid("id").primaryKey(),
+      runId: uuid("run_id")
+        .notNull()
+        .references(() => payRuns.id),
+      decision: text("decision").notNull(),
+      runHashEnc: text("run_hash_enc").notNull(),
+      noteEnc: text("note_enc"),
+      decidedBy: uuid("decided_by")
+        .notNull()
+        .references(() => users.id),
+      createdAt: createdAt(),
+    },
+    (t) => [index("pay_approvals_run_idx").on(t.runId, t.createdAt), check("pay_approvals_decision_chk", sql`${t.decision} in ('approved','sent_back')`)],
+  )
+  .enableRLS();
+
+/** Append-only; the newest row per run and person wins. Records that someone was paid elsewhere; nothing here sends money. */
+export const payPayments = payroll
+  .table(
+    "pay_payments",
+    {
+      id: uuid("id").primaryKey(),
+      runId: uuid("run_id")
+        .notNull()
+        .references(() => payRuns.id),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      referenceEnc: text("reference_enc").notNull(),
+      paidOn: date("paid_on").notNull(),
+      markedBy: uuid("marked_by")
+        .notNull()
+        .references(() => users.id),
+      createdAt: createdAt(),
+    },
+    (t) => [index("pay_payments_run_idx").on(t.runId, t.employeeId, t.createdAt)],
+  )
+  .enableRLS();
+
+/** Append-only. Ids and an action name in the clear; anything else (amounts, reasons) only inside `detail_enc`. */
+export const payChangeLog = payroll
+  .table(
+    "pay_change_log",
+    {
+      id: uuid("id").primaryKey(),
+      actorId: uuid("actor_id")
+        .notNull()
+        .references(() => users.id),
+      action: text("action").notNull(),
+      runId: uuid("run_id").references(() => payRuns.id),
+      employeeId: uuid("employee_id").references(() => employees.id),
+      lineKey: uuid("line_key"),
+      detailEnc: text("detail_enc").notNull(),
+      /** Set only for run_viewed, so a person opening a run many times in a day leaves one row. */
+      viewDay: date("view_day"),
+      createdAt: createdAt(),
+    },
+    (t) => [
+      uniqueIndex("pay_change_log_view_idx").on(t.actorId, t.runId, t.viewDay).where(sql`${t.viewDay} is not null`),
+      index("pay_change_log_run_idx").on(t.runId, t.createdAt),
+    ],
+  )
+  .enableRLS();
