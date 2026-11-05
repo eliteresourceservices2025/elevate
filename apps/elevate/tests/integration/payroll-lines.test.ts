@@ -194,8 +194,54 @@ describe("pay lines", () => {
 
     await db.execute(sql`update core.employees set archived_at = now() where id = ${emp}`);
     expect(await updatePayLine({ ...base(emp), lineKey: first.line_key, effectiveFrom: "2030-11-16", reason: "x" })).toEqual({ ok: false, error: "That person was not found." });
-    expect(await endPayLine({ lineKey: first.line_key, endsOn: "2030-12-01", reason: "x" })).toEqual({ ok: false, error: "That person was not found." });
     expect(await lineRows(emp)).toHaveLength(1);
+    // Ending is what is done for a leaver, so an archived person's line can still be ended.
+    expect(await endPayLine({ lineKey: first.line_key, endsOn: "2030-12-01", reason: "Left" })).toMatchObject({ ok: true });
+    expect(await lineRows(emp)).toHaveLength(2);
+  });
+
+  it("still ends the line of a separated person", async () => {
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    await createPayLine(base(emp));
+    const [first] = await lineRows(emp);
+    await db.execute(sql`update core.employees set status = 'separated' where id = ${emp}`);
+    expect(await endPayLine({ lineKey: first.line_key, endsOn: "2030-12-01", reason: "Left" })).toMatchObject({ ok: true });
+    expect((await lineRows(emp)).at(-1)!.ends_on).toBe("2030-12-01");
+    // Changing a separated person's rate is still refused.
+    expect((await updatePayLine({ ...base(emp), lineKey: first.line_key, effectiveFrom: "2030-11-16", reason: "x" })).ok).toBe(false);
+  });
+
+  it("lists an unreadable row with a notice and a log, never a 500, and does not count it in the audit", async () => {
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    await createPayLine(base(emp, { effectiveFrom: "2026-01-01" }));
+    const badId = randomUUID();
+    const marker = `not-a-ciphertext-${randomUUID()}`;
+    await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, fte, effective_from, amounts_enc, created_by)
+      values (${badId}, ${randomUUID()}, ${emp}, 8, 1.00, '2026-01-01', ${marker}, ${preparer.id})`);
+
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const list = await getRates();
+    const logged = spy.mock.calls.filter((c) => c[0] === "payroll rate unreadable:").map((c) => c[1]);
+    spy.mockRestore();
+
+    const mine = list.filter((r) => r.employeeId === emp);
+    expect(mine.filter((r) => r.unreadable)).toHaveLength(1);
+    expect(mine.filter((r) => !r.unreadable)).toHaveLength(1);
+    expect(mine.find((r) => r.unreadable)!.monthly).toBe("Can't be read");
+
+    const entry = logged.find((l) => (l as { lineId: string }).lineId === badId);
+    expect(entry).toEqual({ lineId: badId, error: expect.any(String) });
+    expect(JSON.stringify(logged)).not.toContain(marker);
+
+    const readable = list.filter((r) => !r.unreadable).length;
+    const [audit] = await rows<{ metadata: { count: number } }>(
+      sql`select metadata from ops.audit_log where action = 'sensitive.view' and actor_user_id = ${preparer.id}`,
+    );
+    expect(audit.metadata.count).toBe(readable);
   });
 
   it("orders versions saved on one date by when they were really saved (clock_timestamp default)", async () => {

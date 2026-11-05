@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { createPayLine, endPayLine, updatePayLine } from "../actions";
-import { PAY_ITEM_LABELS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS, RATES_LABELS as L, type PaymentMethod } from "../constants";
+import { PAY_ITEM_LABELS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS, RATES_LABELS as L, UNREADABLE_HINT, unreadableNotice, type PaymentMethod } from "../constants";
 import type { RateOptions, RateRow } from "../queries";
 
 type Fields = {
@@ -218,6 +218,11 @@ export function RatesTable({ rows, options, today }: { rows: RateRow[]; options:
       <Alert variant="info" role="note" className="rounded-lg p-3 text-sm">
         These are pay figures. Opening this page is written to the audit log. A change is a new version with a start date, and the old one stays on record.
       </Alert>
+      {rows.some((r) => r.unreadable) ? (
+        <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
+          {unreadableNotice(rows.filter((r) => r.unreadable).length)}
+        </Alert>
+      ) : null}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <Label htmlFor="rates-filter" className="text-xs">
@@ -273,7 +278,7 @@ export function RatesTable({ rows, options, today }: { rows: RateRow[]; options:
                       <div className="flex flex-wrap gap-2">
                         {row.endsOn ? null : (
                           <>
-                            <FormDialog label="Change" title={`Change ${row.name}'s pay line`} description="Saved as a new version with its own start date." variant="outline" triggerSize="sm" size="lg">
+                            <FormDialog label="Change" title={`Change ${row.name}'s pay line`} description="Saved as a new version with its own start date." variant="outline" triggerSize="sm" size="lg" disabled={row.unreadable} hint={UNREADABLE_HINT}>
                               <ChangeLineForm row={row} options={options} today={today} />
                             </FormDialog>
                             <FormDialog label="End" title={`End ${row.name}'s pay line`} description="The line stays on record. It stops being paid after the last day." variant="outline" triggerSize="sm">

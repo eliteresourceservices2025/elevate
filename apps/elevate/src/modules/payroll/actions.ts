@@ -185,8 +185,7 @@ export async function endPayLine(input: unknown): Promise<ActionResult<{ lineKey
       if (versions.length === 0) return fail("That pay line was not found.");
       const employeeId = versions[0].employeeId;
       await assertNotOwnEmployee(actor, employeeId, tx);
-      const refused = await checkPersonAndClient(tx, employeeId, null);
-      if (refused) return refused;
+      // No status check here: ending a line is what is done for a leaver, who may already be separated or archived.
       if (lineLastDay(versions) !== null) return fail("This pay line has already ended.");
       // The end is dated like the version in force on the last day, so a version scheduled for after it is ignored.
       const latest = versions.find((x) => x.effectiveFrom <= endsOn);

@@ -18,7 +18,9 @@ const UNREADABLE = "Can't be read";
 function readableAmounts(id: string, stored: string) {
   try {
     return decryptLineAmounts(id, stored);
-  } catch {
+  } catch (error) {
+    // Only the line id and the kind of error: never an amount or the stored ciphertext.
+    console.error("payroll rate unreadable:", { lineId: id, error: error instanceof Error ? error.name : "UnknownError" });
     return null;
   }
 }
@@ -44,6 +46,8 @@ export type RateRow = {
   pesoAllowance: string;
   /** Dollars, "12.50". */
   dollarAllowance: string;
+  /** The stored amounts could not be decrypted (usually a wrong or rotated encryption key). The three amounts above then read "Can't be read". */
+  unreadable: boolean;
 };
 
 /**
@@ -104,15 +108,17 @@ export async function getRates(): Promise<RateRow[]> {
       monthly: amounts ? formatPesos(amounts.monthlyCentavos) : UNREADABLE,
       pesoAllowance: amounts ? formatPesos(amounts.pesoAllowanceCentavos) : UNREADABLE,
       dollarAllowance: amounts ? formatPesos(amounts.dollarAllowanceCents) : UNREADABLE,
+      unreadable: amounts === null,
     });
   }
 
-  if (out.length > 0) {
+  const shown = out.filter((r) => !r.unreadable).length;
+  if (shown > 0) {
     await writeAudit({
       actor,
       action: "sensitive.view",
       targetType: "pay_lines",
-      metadata: { fields: ["monthly rate", "allowances"], count: out.length },
+      metadata: { fields: ["monthly rate", "allowances"], count: shown },
     });
   }
   return out;

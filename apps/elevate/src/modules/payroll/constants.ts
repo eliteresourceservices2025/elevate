@@ -83,7 +83,12 @@ export const RATES_LABELS = {
   reasonForChange: "Reason for the change",
 } as const;
 
-/** Labels of the Settings tab (the five rates take theirs from PAY_ITEM_LABELS). */
+export const unreadableNotice = (n: number) =>
+  `${n} pay ${n === 1 ? "line" : "lines"} can't be read. This usually means a problem with the encryption key. Tell the system owner before changing any rates.`;
+
+export const UNREADABLE_HINT = "This line can't be read, so it can't be changed from here.";
+
+/** Labels of the Settings tab(the five rates take theirs from PAY_ITEM_LABELS). */
 export const SETTINGS_LABELS = {
   startsOn: "Starts on",
   divisor: "Cutoff divisor",
