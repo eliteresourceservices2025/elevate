@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EXTRA_KEYS } from "../calculate";
-import { EXTRA_KEY_ITEM, LINE_FLAG_LABELS, PAY_ITEM_LABELS, WORKSHEET_LABELS as L } from "../constants";
+import { EXTRA_KEY_ITEM, HISTORY_LABELS, LINE_FLAG_LABELS, PAY_ITEM_LABELS, WORKSHEET_LABELS as L } from "../constants";
 import type { Worksheet, WorksheetLine } from "../runs";
 import { ConfirmLineButton, ItemDialog } from "./item-dialog";
 
@@ -21,6 +22,11 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
   const draft = sheet.run.status === "draft";
   return (
     <div className="space-y-6">
+      <p className="text-sm">
+        <Link href={`/payroll/history?run=${sheet.run.id}`} className="underline underline-offset-2">
+          {HISTORY_LABELS.runHistory}
+        </Link>
+      </p>
       <Table stack>
         <TableHeader>
           <TableRow className="hover:bg-transparent">

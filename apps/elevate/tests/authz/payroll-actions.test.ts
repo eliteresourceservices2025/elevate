@@ -268,3 +268,31 @@ describe("getPayrollAccessList, every role", () => {
     });
   }
 });
+
+// The change history: Preparer, Approver and Viewer read it; every role with no level (a Super Admin included) is refused before any data is read.
+const { getPayrollHistory, getHistoryFilterOptions } = await import("@/modules/payroll/history-queries");
+
+describe("change history queries, every role at every payroll level", () => {
+  for (const role of ROLE_SLUGS) {
+    for (const level of LEVELS) {
+      const allowed = level !== null;
+      it(`${role} (${level ?? "no level"}): ${allowed ? "passes authorize()" : "is refused"}`, async () => {
+        asLevel(role, level);
+        const queries = [() => getPayrollHistory({ page: 1 }), () => getPayrollHistory({ runId: RUN_ID, page: 2, pageSize: 10 }), () => getHistoryFilterOptions()];
+        for (const query of queries) {
+          if (allowed) await expect(query()).rejects.toThrow("database touched");
+          else await expect(query()).rejects.toMatchObject({ name: "ForbiddenError" });
+        }
+      });
+    }
+  }
+
+  it("answers a bad filter with a message, before any data is read", async () => {
+    asLevel("employee", "viewer");
+    for (const bad of [{ runId: "nope" }, { from: "2030-02-30" }, { to: "soon" }]) {
+      const r = await getPayrollHistory({ ...bad, page: 1 });
+      expect(r.error).toEqual(expect.any(String));
+      expect(r.rows).toEqual([]);
+    }
+  });
+});
