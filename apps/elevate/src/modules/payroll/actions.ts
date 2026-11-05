@@ -11,6 +11,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { clients, employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
 import { logChange } from "./changes";
+import { lineLastDay } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, assertNotOwnEmployee, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
@@ -31,14 +32,24 @@ const lock = (tx: Tx, key: string) => tx.execute(sql`select pg_advisory_xact_loc
 
 type LineRow = typeof payLines.$inferSelect;
 
-async function latestVersion(tx: Tx, lineKey: string): Promise<LineRow | undefined> {
-  const [row] = await tx
-    .select()
-    .from(payLines)
-    .where(eq(payLines.lineKey, lineKey))
-    .orderBy(desc(payLines.effectiveFrom), desc(payLines.createdAt))
+/** Every version of a line, newest first (later effective date, then later created_at). */
+async function versionsOf(tx: Tx, lineKey: string): Promise<LineRow[]> {
+  return tx.select().from(payLines).where(eq(payLines.lineKey, lineKey)).orderBy(desc(payLines.effectiveFrom), desc(payLines.createdAt));
+}
+
+/** The person must still be active, and the client (when given) must not be archived. */
+async function checkPersonAndClient(tx: Tx, employeeId: string, clientId: string | null | undefined) {
+  const [person] = await tx
+    .select({ id: employees.id })
+    .from(employees)
+    .where(and(eq(employees.id, employeeId), isNull(employees.archivedAt), eq(employees.status, "active")))
     .limit(1);
-  return row;
+  if (!person) return fail("That person was not found.");
+  if (clientId) {
+    const [client] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.id, clientId), isNull(clients.archivedAt))).limit(1);
+    if (!client) return fail("That client was not found.");
+  }
+  return null;
 }
 
 const amountsOf = (v: { monthly: string; pesoAllowance: string; dollarAllowance: string }): LineAmounts => ({
@@ -70,13 +81,9 @@ export async function createPayLine(input: unknown): Promise<ActionResult<{ line
     const v = parsed.data;
 
     const result = await db.transaction(async (tx) => {
-      const [person] = await tx.select({ id: employees.id }).from(employees).where(and(eq(employees.id, v.employeeId), isNull(employees.archivedAt))).limit(1);
-      if (!person) return fail("That person was not found.");
+      const refused = await checkPersonAndClient(tx, v.employeeId, v.clientId);
+      if (refused) return refused;
       await assertNotOwnEmployee(actor, v.employeeId, tx);
-      if (v.clientId) {
-        const [client] = await tx.select({ id: clients.id }).from(clients).where(eq(clients.id, v.clientId)).limit(1);
-        if (!client) return fail("That client was not found.");
-      }
 
       const id = randomUUID();
       const lineKey = randomUUID();
@@ -119,15 +126,14 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
 
     const result = await db.transaction(async (tx) => {
       await lock(tx, `pay_line:${lineKey}`);
-      const latest = await latestVersion(tx, lineKey);
+      const versions = await versionsOf(tx, lineKey);
+      const latest = versions[0];
       if (!latest) return fail("That pay line was not found.");
       await assertNotOwnEmployee(actor, latest.employeeId, tx);
-      if (latest.endsOn) return fail("This pay line has ended. Add a new line instead.");
+      const refused = await checkPersonAndClient(tx, latest.employeeId, v.clientId);
+      if (refused) return refused;
+      if (lineLastDay(versions) !== null) return fail("This pay line has ended. Add a new line instead.");
       if (v.effectiveFrom < latest.effectiveFrom) return fail("The new version can't start before the current one does.");
-      if (v.clientId) {
-        const [client] = await tx.select({ id: clients.id }).from(clients).where(eq(clients.id, v.clientId)).limit(1);
-        if (!client) return fail("That client was not found.");
-      }
 
       const before = decryptLineAmounts(latest.id, latest.amountsEnc);
       const id = randomUUID();
@@ -175,18 +181,23 @@ export async function endPayLine(input: unknown): Promise<ActionResult<{ lineKey
 
     const result = await db.transaction(async (tx) => {
       await lock(tx, `pay_line:${lineKey}`);
-      const latest = await latestVersion(tx, lineKey);
-      if (!latest) return fail("That pay line was not found.");
-      await assertNotOwnEmployee(actor, latest.employeeId, tx);
-      if (latest.endsOn) return fail("This pay line has already ended.");
-      if (endsOn < latest.effectiveFrom) return fail("The last day can't be before the current version starts.");
+      const versions = await versionsOf(tx, lineKey);
+      if (versions.length === 0) return fail("That pay line was not found.");
+      const employeeId = versions[0].employeeId;
+      await assertNotOwnEmployee(actor, employeeId, tx);
+      const refused = await checkPersonAndClient(tx, employeeId, null);
+      if (refused) return refused;
+      if (lineLastDay(versions) !== null) return fail("This pay line has already ended.");
+      // The end is dated like the version in force on the last day, so a version scheduled for after it is ignored.
+      const latest = versions.find((x) => x.effectiveFrom <= endsOn);
+      if (!latest) return fail("The last day can't be before the line starts.");
 
       const amounts = decryptLineAmounts(latest.id, latest.amountsEnc);
       const id = randomUUID();
       await tx.insert(payLines).values({
         id,
         lineKey,
-        employeeId: latest.employeeId,
+        employeeId,
         clientId: latest.clientId,
         alias: latest.alias,
         hoursPerDay: latest.hoursPerDay,
@@ -197,8 +208,8 @@ export async function endPayLine(input: unknown): Promise<ActionResult<{ lineKey
         amountsEnc: encryptLineAmounts(id, amounts),
         createdBy: actor.id,
       });
-      await writeAudit({ actor, action: "payroll.line.end", targetType: "pay_line", targetId: lineKey, metadata: { employeeId: latest.employeeId } }, tx);
-      await logChange(tx, actor, { action: "line_ended", employeeId: latest.employeeId, lineKey, detail: { endsOn, reason } });
+      await writeAudit({ actor, action: "payroll.line.end", targetType: "pay_line", targetId: lineKey, metadata: { employeeId } }, tx);
+      await logChange(tx, actor, { action: "line_ended", employeeId, lineKey, detail: { old: detailOf(latest, amounts), endsOn, reason } });
       return { ok: true, data: { lineKey } } as const;
     });
 

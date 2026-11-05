@@ -82,4 +82,26 @@ describe("resolveLines", () => {
     const b = v("a", "2030-11-01", { createdAt: "2030-10-02T00:00:00Z" });
     expect(resolveLines([a, b], period)[0].version).toBe(b);
   });
+
+  it("keeps ends_mid_period when a raise inside the period comes before the end", () => {
+    const a = v("a", "2030-11-01");
+    const raise = v("a", "2030-11-20");
+    const end = v("a", "2030-11-20", { endsOn: "2030-11-25" });
+    const out = resolveLines([a, raise, end], period);
+    expect(out).toHaveLength(1);
+    expect(out[0].version).toBe(a);
+    expect(out[0].flags).toEqual(["rate_change_mid_period", "ends_mid_period"]);
+  });
+
+  it("ignores a version scheduled after the line's last day (a leaver with a raise saved for later)", () => {
+    const a = v("a", "2030-11-01");
+    const later = v("a", "2030-12-01");
+    const end = v("a", "2030-11-01", { endsOn: "2030-11-25" }); // dated like the version in force on the last day
+    const out = resolveLines([a, later, end], period);
+    expect(out).toHaveLength(1);
+    expect(out[0].version).toBe(end);
+    expect(out[0].flags).toEqual(["ends_mid_period"]);
+    // The period after the last day carries nothing, even though the later version starts inside it.
+    expect(resolveLines([a, later, end], { start: "2030-12-01", end: "2030-12-15" })).toEqual([]);
+  });
 });

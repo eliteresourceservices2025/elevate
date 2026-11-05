@@ -11,6 +11,13 @@ export type LineVersion = {
 
 export type ResolvedLine<V extends LineVersion = LineVersion> = { version: V; flags: LineFlag[] };
 
+/** The line's last day: the earliest end date on any of its versions, or null while it has not ended. */
+export function lineLastDay(versions: LineVersion[]): string | null {
+  let last: string | null = null;
+  for (const v of versions) if (v.endsOn !== null && (last === null || v.endsOn < last)) last = v.endsOn;
+  return last;
+}
+
 const stamp = (v: LineVersion) => new Date(v.createdAt).getTime();
 
 /** Newest first: later effective date, then later created_at. */
@@ -29,7 +36,10 @@ export function resolveLines<V extends LineVersion>(versions: V[], period: { sta
 
   const out: ResolvedLine<V>[] = [];
   for (const group of byKey.values()) {
-    const sorted = [...group].sort(newestFirst);
+    const lastDay = lineLastDay(group);
+    // A version dated after the line's last day never applies (a raise saved for later, then the person left).
+    const live = lastDay === null ? group : group.filter((v) => v.effectiveFrom <= lastDay);
+    const sorted = [...live].sort(newestFirst);
     const atStart = sorted.find((v) => v.effectiveFrom <= period.start);
     const inside = sorted.filter((v) => v.effectiveFrom > period.start && v.effectiveFrom <= period.end);
     const flags: LineFlag[] = [];
@@ -46,9 +56,9 @@ export function resolveLines<V extends LineVersion>(versions: V[], period: { sta
     }
     if (!chosen) continue;
 
-    if (chosen.endsOn !== null) {
-      if (chosen.endsOn < period.start) continue;
-      if (chosen.endsOn < period.end) flags.push("ends_mid_period");
+    if (lastDay !== null) {
+      if (lastDay < period.start) continue;
+      if (lastDay < period.end) flags.push("ends_mid_period");
     }
     out.push({ version: chosen, flags });
   }

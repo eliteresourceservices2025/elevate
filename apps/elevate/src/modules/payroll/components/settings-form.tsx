@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { EmptyState } from "@/components/empty-state";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,16 +12,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { savePaySettings } from "../actions";
 import { formatPesos } from "../money";
+import type { ExtraKey } from "../calculate";
+import { EXTRA_KEY_FORM, EXTRA_KEY_ITEM, PAY_ITEM_LABELS, SETTINGS_LABELS as S } from "../constants";
 import type { PaySettingsView, SettingsVersion } from "../queries";
 
-// Labels for the five rates the sheet owner supplies. Copy says "extra hours", never "overtime".
-const RATE_FIELDS = [
-  { key: "regular", form: "extraRegular", label: "Extra hours, regular day" },
-  { key: "holiday", form: "extraHoliday", label: "Extra hours, holiday" },
-  { key: "restDay", form: "extraRestDay", label: "Extra hours, rest day" },
-  { key: "restDayOver8", form: "extraRestDayOver8", label: "Extra hours, rest day past 8 hours" },
-  { key: "holidayPay", form: "holiday", label: "Holiday pay" },
-] as const;
+// The five rates the sheet owner supplies, with the label each one has on a pay run (one source: constants.ts).
+const RATE_FIELDS = (Object.keys(EXTRA_KEY_FORM) as ExtraKey[]).map((key) => ({ key, form: EXTRA_KEY_FORM[key], label: PAY_ITEM_LABELS[EXTRA_KEY_ITEM[key]] }));
 
 /** Basis points as a percent of the normal rate: 12500 -> "125". */
 const percentOf = (bp: number | null) => (bp === null ? "" : formatPesos(BigInt(bp)).replace(/\.00$/, ""));
@@ -47,20 +44,20 @@ function ChangeSettingsForm({ current, today }: { current: SettingsVersion; toda
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
-          <Label htmlFor="set-from">Starts on</Label>
+          <Label htmlFor="set-from">{S.startsOn}</Label>
           <Input id="set-from" type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} required />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="set-divisor">Cutoff divisor</Label>
+          <Label htmlFor="set-divisor">{S.divisor}</Label>
           <Input id="set-divisor" type="number" inputMode="numeric" min={1} max={31} step={1} value={divisor} onChange={(e) => setDivisor(e.target.value)} required />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="set-warn">Warn when net pay changes by more than (percent)</Label>
+          <Label htmlFor="set-warn">{S.warn}</Label>
           <Input id="set-warn" type="number" inputMode="numeric" min={1} max={100} step={1} value={warn} onChange={(e) => setWarn(e.target.value)} required />
         </div>
       </div>
       <fieldset className="grid gap-3 sm:grid-cols-2">
-        <legend className="mb-1 text-sm font-medium">Rates, as a percent of the normal hourly rate</legend>
+        <legend className="mb-1 text-sm font-medium">{S.ratesLegend}</legend>
         {RATE_FIELDS.map((f) => (
           <div key={f.form} className="space-y-1">
             <Label htmlFor={`set-${f.form}`}>{f.label}</Label>
@@ -77,7 +74,7 @@ function ChangeSettingsForm({ current, today }: { current: SettingsVersion; toda
         <p className="text-xs text-muted-foreground sm:col-span-2">125 means 1.25 times the normal rate. Leave blank until the figure is confirmed: a run that needs a missing rate is flagged, not guessed.</p>
       </fieldset>
       <div className="space-y-1">
-        <Label htmlFor="set-reason">Reason (optional)</Label>
+        <Label htmlFor="set-reason">{S.reasonOptional}</Label>
         <Textarea id="set-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} />
       </div>
       <Button type="submit" disabled={pending}>
@@ -91,6 +88,23 @@ const cell = (bp: number | null) => (bp === null ? "Not set" : `${percentOf(bp)}
 
 export function SettingsView({ view, today }: { view: PaySettingsView; today: string }) {
   const { current, history, canManage } = view;
+  if (!current) {
+    // No version is dated today or earlier (the first one is normally added by the migration).
+    const starter: SettingsVersion = { effectiveFrom: today, cutoffDivisor: 11, changeWarnBp: 1000, multipliersBp: { regular: null, holiday: null, restDay: null, restDayOver8: null, holidayPay: null } };
+    return (
+      <EmptyState
+        title={S.noneTitle}
+        description={S.noneDescription}
+        action={
+          canManage ? (
+            <FormDialog label={S.changeButton} title={S.changeTitle} size="lg">
+              <ChangeSettingsForm current={starter} today={today} />
+            </FormDialog>
+          ) : undefined
+        }
+      />
+    );
+  }
   const missing = RATE_FIELDS.filter((f) => current.multipliersBp[f.key] === null);
   return (
     <div className="space-y-4">
@@ -104,7 +118,7 @@ export function SettingsView({ view, today }: { view: PaySettingsView; today: st
           In force today: version starting {current.effectiveFrom}. Changes apply from their start date and old versions stay on record.
         </p>
         {canManage ? (
-          <FormDialog label="Change settings" title="Change pay settings" description="Saved as a new version with its own start date." size="lg">
+          <FormDialog label={S.changeButton} title={S.changeTitle} description="Saved as a new version with its own start date." size="lg">
             <ChangeSettingsForm current={current} today={today} />
           </FormDialog>
         ) : null}
@@ -112,9 +126,9 @@ export function SettingsView({ view, today }: { view: PaySettingsView; today: st
       <Table stack>
         <TableHeader>
           <TableRow>
-            <TableHead>Starts</TableHead>
-            <TableHead>Cutoff divisor</TableHead>
-            <TableHead>Warn at</TableHead>
+            <TableHead>{S.startsOn}</TableHead>
+            <TableHead>{S.divisor}</TableHead>
+            <TableHead>{S.warnShort}</TableHead>
             {RATE_FIELDS.map((f) => (
               <TableHead key={f.key}>{f.label}</TableHead>
             ))}
@@ -123,12 +137,12 @@ export function SettingsView({ view, today }: { view: PaySettingsView; today: st
         <TableBody>
           {history.map((h) => (
             <TableRow key={`${h.effectiveFrom}-${h.cutoffDivisor}-${h.changeWarnBp}-${RATE_FIELDS.map((f) => h.multipliersBp[f.key]).join("-")}`}>
-              <TableCell label="Starts" className="font-medium">
+              <TableCell label={S.startsOn} className="font-medium">
                 {h.effectiveFrom}
                 {h.effectiveFrom === current.effectiveFrom ? <span className="block text-xs text-muted-foreground">In force</span> : null}
               </TableCell>
-              <TableCell label="Cutoff divisor">{h.cutoffDivisor}</TableCell>
-              <TableCell label="Warn at">{h.changeWarnBp / 100}%</TableCell>
+              <TableCell label={S.divisor}>{h.cutoffDivisor}</TableCell>
+              <TableCell label={S.warnShort}>{h.changeWarnBp / 100}%</TableCell>
               {RATE_FIELDS.map((f) => (
                 <TableCell key={f.key} label={f.label}>
                   {cell(h.multipliersBp[f.key])}

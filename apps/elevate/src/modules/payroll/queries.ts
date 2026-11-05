@@ -7,12 +7,21 @@ import { writeAudit } from "@/modules/audit/write";
 import { clients, employees } from "@/modules/people/schema";
 import type { SettingsSnapshot } from "./calculate";
 import type { PaymentMethod } from "./constants";
-import { resolveLines } from "./lines";
+import { lineLastDay, resolveLines } from "./lines";
 import { formatPesos } from "./money";
 import { payLines, paySettings } from "./schema";
 import { decryptLineAmounts, payrollToday, snapshotOf } from "./service";
 
 const today = payrollToday;
+const UNREADABLE = "Can't be read";
+
+function readableAmounts(id: string, stored: string) {
+  try {
+    return decryptLineAmounts(id, stored);
+  } catch {
+    return null;
+  }
+}
 
 export type RateRow = {
   lineKey: string;
@@ -71,9 +80,11 @@ export async function getRates(): Promise<RateRow[]> {
     .map((key) => all.filter((l) => l.lineKey === key).sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : 0))[0]);
   for (const version of [...inForce, ...notStarted]) {
     const r = byId.get(version.id)!;
-    const amounts = decryptLineAmounts(version.id, version.amountsEnc);
+    // One row that cannot be read (wrong key, damaged data) must not take the whole page down: it is listed as unreadable.
+    const amounts = readableAmounts(version.id, version.amountsEnc);
+    const lastDay = lineLastDay(all.filter((l) => l.lineKey === version.lineKey));
     const upcoming = rows
-      .filter((x) => x.line.lineKey === version.lineKey && x.line.effectiveFrom > day)
+      .filter((x) => x.line.lineKey === version.lineKey && x.line.effectiveFrom > day && (lastDay === null || x.line.effectiveFrom <= lastDay))
       .map((x) => x.line.effectiveFrom)
       .sort()[0];
     out.push({
@@ -88,11 +99,11 @@ export async function getRates(): Promise<RateRow[]> {
       fte: version.fte,
       paymentMethod: version.paymentMethod as PaymentMethod,
       effectiveFrom: version.effectiveFrom,
-      endsOn: version.endsOn,
+      endsOn: lastDay,
       upcomingFrom: upcoming ?? null,
-      monthly: formatPesos(amounts.monthlyCentavos),
-      pesoAllowance: formatPesos(amounts.pesoAllowanceCentavos),
-      dollarAllowance: formatPesos(amounts.dollarAllowanceCents),
+      monthly: amounts ? formatPesos(amounts.monthlyCentavos) : UNREADABLE,
+      pesoAllowance: amounts ? formatPesos(amounts.pesoAllowanceCentavos) : UNREADABLE,
+      dollarAllowance: amounts ? formatPesos(amounts.dollarAllowanceCents) : UNREADABLE,
     });
   }
 
@@ -132,8 +143,8 @@ export async function getRateOptions(): Promise<RateOptions> {
 export type SettingsVersion = SettingsSnapshot & { effectiveFrom: string };
 
 export type PaySettingsView = {
-  /** In force today. */
-  current: SettingsVersion;
+  /** In force today; null when no version is dated today or earlier. */
+  current: SettingsVersion | null;
   /** Every version, newest first. */
   history: SettingsVersion[];
   canManage: boolean;
@@ -146,7 +157,6 @@ export async function getPaySettings(): Promise<PaySettingsView> {
   const rows = await db.select().from(paySettings).orderBy(desc(paySettings.effectiveFrom), desc(paySettings.createdAt));
   const history = rows.map((r) => ({ effectiveFrom: r.effectiveFrom, ...snapshotOf(r) }));
   // Newest first, so the first version dated today or earlier is the one in force (the same rule as settingsInForce).
-  const current = history.find((h) => h.effectiveFrom <= today());
-  if (!current) throw new Error("No pay settings are in force.");
+  const current = history.find((h) => h.effectiveFrom <= today()) ?? null;
   return { current, history, canManage: can(actor, "payroll.manage_rates") };
 }

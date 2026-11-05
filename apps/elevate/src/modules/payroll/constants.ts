@@ -1,4 +1,5 @@
 import type { PayrollLevel } from "@/lib/roles";
+import type { ExtraKey } from "./calculate";
 
 // Every payroll label lives here so a wording change from counsel is one edit. Copy says "extra hours", never "overtime".
 
@@ -39,14 +40,62 @@ export const PAY_ITEM_LABELS: Record<PayItemType, string> = {
   client_hours: "Client hours (reference only)",
 };
 
-export const PAYMENT_METHODS = ["remitly", "bank_transfer", "other"] as const;
+export const PAYMENT_METHODS = ["remitly"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   remitly: "Remitly",
-  bank_transfer: "Bank transfer",
-  other: "Other",
 };
+
+/** The five extra-time rates in `SettingsSnapshot.multipliersBp`, mapped to the pay item whose label names them (ruling R3). */
+export const EXTRA_KEY_ITEM: Record<ExtraKey, PayItemType> = {
+  regular: "extra_regular",
+  holiday: "extra_holiday",
+  restDay: "extra_rest_day",
+  restDayOver8: "extra_rest_day_over_8",
+  holidayPay: "holiday",
+};
+
+/** The matching field name in the settings form and `savePaySettingsSchema`. */
+export const EXTRA_KEY_FORM: Record<ExtraKey, "extraRegular" | "extraHoliday" | "extraRestDay" | "extraRestDayOver8" | "holiday"> = {
+  regular: "extraRegular",
+  holiday: "extraHoliday",
+  restDay: "extraRestDay",
+  restDayOver8: "extraRestDayOver8",
+  holidayPay: "holiday",
+};
+
+/** Column and field labels of the Rates tab. */
+export const RATES_LABELS = {
+  person: "Person",
+  client: "Client",
+  clientShort: "Client",
+  alias: "Alias",
+  aliasShort: "Alias",
+  hoursPerDay: "Hours per day",
+  fte: "FTE",
+  monthly: "Monthly rate (pesos)",
+  paymentMethod: "Payment method",
+  startsOn: "Starts on",
+  starts: "Starts",
+  lastDay: "Last day",
+  reason: "Reason",
+  reasonForChange: "Reason for the change",
+} as const;
+
+/** Labels of the Settings tab (the five rates take theirs from PAY_ITEM_LABELS). */
+export const SETTINGS_LABELS = {
+  startsOn: "Starts on",
+  divisor: "Cutoff divisor",
+  warn: "Warn when net pay changes by more than (percent)",
+  warnShort: "Warn at",
+  ratesLegend: "Rates, as a percent of the normal hourly rate",
+  reasonOptional: "Reason (optional)",
+  changeButton: "Change settings",
+  changeTitle: "Change pay settings",
+  noneTitle: "No settings in force",
+  noneDescription: "No version of the pay settings is dated today or earlier. A Preparer adds one.",
+} as const;
 
 export const RUN_STATUSES =["draft", "in_review", "approved", "paid"] as const;
 export type RunStatus = (typeof RUN_STATUSES)[number];

@@ -141,6 +141,70 @@ describe("pay lines", () => {
     expect(again.ok).toBe(false);
   });
 
+  it("ends a leaver's line before a raise already scheduled, and the later version stops applying", async () => {
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    await createPayLine(base(emp, { effectiveFrom: "2030-11-01", monthly: "20,000" }));
+    const [first] = await lineRows(emp);
+    await updatePayLine({ ...base(emp, { monthly: "30,000" }), lineKey: first.line_key, effectiveFrom: "2030-12-01", reason: "Scheduled raise" });
+
+    expect(await endPayLine({ lineKey: first.line_key, endsOn: "2030-11-25", reason: "Left" })).toMatchObject({ ok: true });
+    const versions = await lineRows(emp);
+    const end = versions.at(-1)!;
+    expect(end.ends_on).toBe("2030-11-25");
+    expect(end.effective_from).toBe("2030-11-01"); // dated like the version in force on the last day, not like the scheduled raise
+    expect(JSON.parse(fieldCrypto().decrypt(end.amounts_enc, `pay_line:${end.id}`)).monthlyCentavos).toBe("2000000");
+
+    const { resolveLines } = await import("@/modules/payroll/lines");
+    const resolved = resolveLines(
+      versions.map((r) => ({ lineKey: r.line_key, effectiveFrom: r.effective_from, endsOn: r.ends_on, createdAt: 0, id: r.id })),
+      { start: "2030-11-16", end: "2030-11-30" },
+    );
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0].flags).toEqual(["ends_mid_period"]);
+
+    // A second end, or a change, is refused.
+    expect((await endPayLine({ lineKey: first.line_key, endsOn: "2030-11-20", reason: "x" })).ok).toBe(false);
+    expect((await updatePayLine({ ...base(emp), lineKey: first.line_key, effectiveFrom: "2030-12-05", reason: "x" })).ok).toBe(false);
+
+    // The change log for the end carries the old version's details as well.
+    const [log] = await rows<{ id: string; detail_enc: string }>(
+      sql`select id, detail_enc from payroll.pay_change_log where line_key = ${first.line_key} and action = 'line_ended'`,
+    );
+    const detail = readChangeDetail(log) as { old: { monthlyCentavos: string; effectiveFrom: string }; endsOn: string };
+    expect(detail.old.monthlyCentavos).toBe("2000000");
+    expect(detail.old.effectiveFrom).toBe("2030-11-01");
+    expect(detail.endsOn).toBe("2030-11-25");
+  });
+
+  it("refuses to change or end a line of someone who is archived, and to use an archived client", async () => {
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    await createPayLine(base(emp));
+    const [first] = await lineRows(emp);
+
+    const [archivedClient] = await rows<{ id: string }>(sql`insert into core.clients (name, archived_at) values (${uniq("Archived Client ")}, now()) returning id`);
+    expect(await createPayLine(base(emp, { clientId: archivedClient.id }))).toEqual({ ok: false, error: "That client was not found." });
+    expect(await updatePayLine({ ...base(emp, { clientId: archivedClient.id }), lineKey: first.line_key, effectiveFrom: "2030-11-16", reason: "x" })).toEqual({
+      ok: false,
+      error: "That client was not found.",
+    });
+
+    await db.execute(sql`update core.employees set archived_at = now() where id = ${emp}`);
+    expect(await updatePayLine({ ...base(emp), lineKey: first.line_key, effectiveFrom: "2030-11-16", reason: "x" })).toEqual({ ok: false, error: "That person was not found." });
+    expect(await endPayLine({ lineKey: first.line_key, endsOn: "2030-12-01", reason: "x" })).toEqual({ ok: false, error: "That person was not found." });
+    expect(await lineRows(emp)).toHaveLength(1);
+  });
+
+  it("orders versions saved on one date by when they were really saved (clock_timestamp default)", async () => {
+    const [col] = await rows<{ column_default: string }>(
+      sql`select column_default from information_schema.columns where table_schema = 'payroll' and table_name = 'pay_lines' and column_name = 'created_at'`,
+    );
+    expect(col.column_default).toMatch(/clock_timestamp/);
+  });
+
   it("leaves the old profile pay rate untouched", async () => {
     const preparer = await account();
     const emp = await person();
@@ -191,7 +255,7 @@ describe("pay settings", () => {
     });
     const before = await settingsInForce(db as never, "2031-02-28");
     expect(before.cutoffDivisor).not.toBe(12);
-    expect((await getPaySettings()).current.cutoffDivisor).toBeDefined();
+    expect((await getPaySettings()).current?.cutoffDivisor).toBeDefined();
 
     const log = await rows<{ id: string; detail_enc: string }>(
       sql`select id, detail_enc from payroll.pay_change_log where actor_id = ${preparer.id} and action = 'settings_changed'`,

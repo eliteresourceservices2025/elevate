@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { createPayLine, endPayLine, updatePayLine } from "../actions";
-import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../constants";
+import { PAY_ITEM_LABELS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS, RATES_LABELS as L, type PaymentMethod } from "../constants";
 import type { RateOptions, RateRow } from "../queries";
 
 type Fields = {
@@ -46,7 +46,7 @@ function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onC
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-client`}>Client (optional)</Label>
+        <Label htmlFor={`${idPrefix}-client`}>{L.client} (optional)</Label>
         <NativeSelect id={`${idPrefix}-client`} value={value.clientId} onChange={(e) => set("clientId", e.target.value)}>
           <option value="">No client</option>
           {clients.map((c) => (
@@ -57,24 +57,24 @@ function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onC
         </NativeSelect>
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-alias`}>Alias (optional)</Label>
+        <Label htmlFor={`${idPrefix}-alias`}>{L.alias} (optional)</Label>
         <Input id={`${idPrefix}-alias`} value={value.alias} onChange={(e) => set("alias", e.target.value)} maxLength={80} />
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-hours`}>Hours per day</Label>
+        <Label htmlFor={`${idPrefix}-hours`}>{L.hoursPerDay}</Label>
         <Input id={`${idPrefix}-hours`} type="number" inputMode="numeric" min={1} max={12} step={1} value={value.hoursPerDay} onChange={(e) => set("hoursPerDay", e.target.value)} required />
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-fte`}>FTE</Label>
+        <Label htmlFor={`${idPrefix}-fte`}>{L.fte}</Label>
         <Input id={`${idPrefix}-fte`} inputMode="decimal" value={value.fte} onChange={(e) => set("fte", e.target.value)} required />
         <p className="text-xs text-muted-foreground">1 for full time, 0.5 for half.</p>
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-monthly`}>Monthly rate (pesos)</Label>
+        <Label htmlFor={`${idPrefix}-monthly`}>{L.monthly}</Label>
         <Input id={`${idPrefix}-monthly`} inputMode="decimal" value={value.monthly} onChange={(e) => set("monthly", e.target.value)} placeholder="25,000.00" autoComplete="off" required />
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-method`}>Payment method</Label>
+        <Label htmlFor={`${idPrefix}-method`}>{L.paymentMethod}</Label>
         <NativeSelect id={`${idPrefix}-method`} value={value.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value as PaymentMethod)}>
           {PAYMENT_METHODS.map((m) => (
             <option key={m} value={m}>
@@ -84,15 +84,15 @@ function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onC
         </NativeSelect>
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-peso`}>Allowance or fee each cutoff (pesos)</Label>
+        <Label htmlFor={`${idPrefix}-peso`}>{PAY_ITEM_LABELS.peso_allowance}</Label>
         <Input id={`${idPrefix}-peso`} inputMode="decimal" value={value.pesoAllowance} onChange={(e) => set("pesoAllowance", e.target.value)} autoComplete="off" />
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-usd`}>Allowance each cutoff (dollars)</Label>
+        <Label htmlFor={`${idPrefix}-usd`}>{PAY_ITEM_LABELS.dollar_allowance}</Label>
         <Input id={`${idPrefix}-usd`} inputMode="decimal" value={value.dollarAllowance} onChange={(e) => set("dollarAllowance", e.target.value)} autoComplete="off" />
       </div>
       <div className="space-y-1 sm:col-span-2">
-        <Label htmlFor={`${idPrefix}-from`}>Starts on</Label>
+        <Label htmlFor={`${idPrefix}-from`}>{L.startsOn}</Label>
         <Input id={`${idPrefix}-from`} type="date" value={value.effectiveFrom} onChange={(e) => set("effectiveFrom", e.target.value)} required />
       </div>
     </div>
@@ -125,7 +125,7 @@ function AddLineForm({ options, today }: { options: RateOptions; today: string }
       }}
     >
       <div className="space-y-1">
-        <Label htmlFor="add-person">Person</Label>
+        <Label htmlFor="add-person">{L.person}</Label>
         <NativeSelect id="add-person" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
           <option value="">Choose a person</option>
           {options.people.map((p) => (
@@ -168,7 +168,7 @@ function ChangeLineForm({ row, options, today }: { row: RateRow; options: RateOp
     >
       <LineFields value={fields} onChange={setFields} clients={options.clients} idPrefix={`chg-${row.lineKey}`} />
       <div className="space-y-1">
-        <Label htmlFor={`chg-${row.lineKey}-reason`}>Reason for the change</Label>
+        <Label htmlFor={`chg-${row.lineKey}-reason`}>{L.reasonForChange}</Label>
         <Textarea id={`chg-${row.lineKey}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} required />
         <p className="text-xs text-muted-foreground">Kept in the change history, never in notices.</p>
       </div>
@@ -193,11 +193,11 @@ function EndLineForm({ row, today }: { row: RateRow; today: string }) {
       }}
     >
       <div className="space-y-1">
-        <Label htmlFor={`end-${row.lineKey}-date`}>Last day</Label>
+        <Label htmlFor={`end-${row.lineKey}-date`}>{L.lastDay}</Label>
         <Input id={`end-${row.lineKey}-date`} type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} required />
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`end-${row.lineKey}-reason`}>Reason</Label>
+        <Label htmlFor={`end-${row.lineKey}-reason`}>{L.reason}</Label>
         <Textarea id={`end-${row.lineKey}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} required />
       </div>
       <Button type="submit" variant="destructive" disabled={pending}>
@@ -238,13 +238,13 @@ export function RatesTable({ rows, options, today }: { rows: RateRow[]; options:
           <Table stack>
             <TableHeader>
               <TableRow>
-                <TableHead>Person</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Alias</TableHead>
-                <TableHead>Hours per day</TableHead>
-                <TableHead>FTE</TableHead>
-                <TableHead>Monthly rate (pesos)</TableHead>
-                <TableHead>Starts</TableHead>
+                <TableHead>{L.person}</TableHead>
+                <TableHead>{L.clientShort}</TableHead>
+                <TableHead>{L.aliasShort}</TableHead>
+                <TableHead>{L.hoursPerDay}</TableHead>
+                <TableHead>{L.fte}</TableHead>
+                <TableHead>{L.monthly}</TableHead>
+                <TableHead>{L.starts}</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -253,17 +253,17 @@ export function RatesTable({ rows, options, today }: { rows: RateRow[]; options:
             <TableBody>
               {paged.rows.map((row) => (
                 <TableRow key={row.lineKey}>
-                  <TableCell label="Person" className="font-medium">
+                  <TableCell label={L.person} className="font-medium">
                     {row.name}
                   </TableCell>
-                  <TableCell label="Client">{row.clientName ?? "None"}</TableCell>
-                  <TableCell label="Alias">{row.alias ?? "None"}</TableCell>
-                  <TableCell label="Hours per day">{row.hoursPerDay}</TableCell>
-                  <TableCell label="FTE">{row.fte}</TableCell>
-                  <TableCell label="Monthly rate (pesos)" className="tabular-nums">
+                  <TableCell label={L.clientShort}>{row.clientName ?? "None"}</TableCell>
+                  <TableCell label={L.aliasShort}>{row.alias ?? "None"}</TableCell>
+                  <TableCell label={L.hoursPerDay}>{row.hoursPerDay}</TableCell>
+                  <TableCell label={L.fte}>{row.fte}</TableCell>
+                  <TableCell label={L.monthly} className="tabular-nums">
                     {row.monthly}
                   </TableCell>
-                  <TableCell label="Starts">
+                  <TableCell label={L.starts}>
                     {row.effectiveFrom}
                     {row.upcomingFrom ? <span className="block text-xs text-muted-foreground">Next change {row.upcomingFrom}</span> : null}
                     {row.endsOn ? <span className="block text-xs text-muted-foreground">Ends {row.endsOn}</span> : null}

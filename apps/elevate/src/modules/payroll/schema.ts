@@ -55,7 +55,8 @@ export const payLines = payroll
       createdBy: uuid("created_by")
         .notNull()
         .references(() => users.id),
-      createdAt: createdAt(),
+      // clock_timestamp(), not now(): ordering of versions on the same date follows the order the advisory lock let them in.
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
     },
     (t) => [
       index("pay_lines_employee_idx").on(t.employeeId, t.effectiveFrom),
