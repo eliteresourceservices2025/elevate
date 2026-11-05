@@ -90,7 +90,7 @@ Run status moves: `draft` → `in_review` → `approved` → `paid`. A send-back
 4. **Checks before review:** unapproved days, no payout details on file (read from stored masks, no decrypt), missing dollar rate, a new hire or leaver in the period, unassigned suggestions on a multi-line person, and net pay changed from the last run by more than the threshold (10% by default). Checks warn, except a missing dollar rate and unassigned suggestions, which block sending for review.
 5. **Approve:** the approver sees every line, the change from the last run, totals by client, and peso and dollar totals. They approve or send back with a note.
 6. **Pay (Preparer):** download the Remitly list (person, alias, pesos, dollars; never account numbers), pay outside ELEVATE, and record the references. When every person on the run is marked paid, the run becomes `paid` and payslips are released.
-7. **Corrections:** an approved run never changes. A mistake becomes an adjustment on the next run, linked to the original.
+7. **Corrections:** an approved run never changes. A mistake becomes an item on a later run, linked to the original: an adjustment for an underpayment, an other deduction for an overpayment. Amounts stay positive, a reason is required, the original must be approved or paid, and the person must have had a line on it.
 
 ## 7. Screens
 

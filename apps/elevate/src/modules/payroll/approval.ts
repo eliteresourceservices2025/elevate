@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNull, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { ForbiddenError } from "@/lib/authz";
 import { fieldCrypto } from "@/lib/crypto";
 import { ActionFailure } from "@/lib/run-action";
@@ -14,7 +14,7 @@ import { runChecks } from "./checks";
 import type { ChangeAction } from "./constants";
 import { approvalRefusal, runHash } from "./rules";
 import { checkInputsOf, readRun, recomputeRun, type Executor, type RunData } from "./runs";
-import { payApprovals, payChangeLog, payRunItems, payRunLines, payRuns } from "./schema";
+import { payApprovals, payChangeLog, payRunLines, payRuns } from "./schema";
 import { employeeIdForUser, lockDraftRun } from "./service";
 
 // Review and approval. A run is sent for review by a Preparer, then approved (or sent back with a note) by an Approver who never
@@ -34,21 +34,32 @@ const noteContext = (id: string) => `pay_approval_note:${id}`;
 export const decryptApprovalHash = (id: string, stored: string): string => fieldCrypto().decrypt(stored, hashContext(id));
 
 /** Deciding is not changing: a send-back or an approval does not stop that Approver from deciding the run again later. */
-const NOT_A_CHANGE: ChangeAction[] = ["run_viewed", "run_sent_back", "run_approved"];
+const NOT_A_CHANGE: readonly ChangeAction[] = ["run_viewed", "run_sent_back", "run_approved"];
 
 /**
- * Everyone who prepared or changed the run: every actor in its change history (except views and decisions), plus whoever created or
- * sent it, entered an amount on it or confirmed a line, whatever their payroll level is now.
+ * The one definition of "prepared or changed this run", as SQL over a run id expression (a parameter, or a column of an outer query):
+ * the run's creator and submitter, every actor in its change history except views and decisions, everyone who entered an amount on it
+ * or confirmed a line, and the author of every pay-line version (the rate) it pays. Versions are append-only, so that names exactly
+ * who wrote each rate in use. The payroll level is never consulted. `touchedBy` and `countAwaiting` both use it.
  */
-export async function touchedBy(executor: Executor, run: { id: string; createdBy: string; submittedBy: string | null }): Promise<string[]> {
-  const logged = await executor
-    .selectDistinct({ id: payChangeLog.actorId })
-    .from(payChangeLog)
-    .where(and(eq(payChangeLog.runId, run.id), notInArray(payChangeLog.action, NOT_A_CHANGE)));
-  const entered = await executor.selectDistinct({ id: payRunItems.enteredBy }).from(payRunItems).where(eq(payRunItems.runId, run.id));
-  const confirmed = await executor.selectDistinct({ id: payRunLines.confirmedBy }).from(payRunLines).where(eq(payRunLines.runId, run.id));
-  const all = [run.createdBy, run.submittedBy, ...logged.map((r) => r.id), ...entered.map((r) => r.id), ...confirmed.map((r) => r.id)];
-  return [...new Set(all.filter((x): x is string => x !== null))];
+function touchersOf(run: SQL): SQL {
+  const decisions = sql.join(
+    NOT_A_CHANGE.map((a) => sql`${a}`),
+    sql`, `,
+  );
+  return sql`
+    select r.created_by as id from payroll.pay_runs r where r.id = ${run}
+    union select r.submitted_by from payroll.pay_runs r where r.id = ${run}
+    union select c.actor_id from payroll.pay_change_log c where c.run_id = ${run} and c.action not in (${decisions})
+    union select i.entered_by from payroll.pay_run_items i where i.run_id = ${run}
+    union select l.confirmed_by from payroll.pay_run_lines l where l.run_id = ${run}
+    union select v.created_by from payroll.pay_run_lines l join payroll.pay_lines v on v.id = l.line_id where l.run_id = ${run}`;
+}
+
+/** Everyone who prepared or changed the run (see `touchersOf`), whatever their payroll level is now. */
+export async function touchedBy(executor: Executor, runId: string): Promise<string[]> {
+  const rows = (await executor.execute(sql`select distinct t.id from (${touchersOf(sql`${runId}::uuid`)}) t where t.id is not null`)) as unknown as { id: string }[];
+  return rows.map((r) => r.id);
 }
 
 /**
@@ -104,7 +115,7 @@ export async function refusalFor(executor: Executor, data: RunData, approverId: 
   const ownEmployeeId = await employeeIdForUser(executor, approverId);
   const ownLines = ownEmployeeId === null ? [] : data.rows.filter((r) => r.runLine.employeeId === ownEmployeeId).map((r) => ({ confirmedBy: r.runLine.confirmedBy }));
   const checks = runChecks(await checkInputsOf(executor, data, data.run.submittedBy));
-  return approvalRefusal({ approverId, touchedBy: await touchedBy(executor, data.run), ownLines, blockingChecks: checks.blocking.length });
+  return approvalRefusal({ approverId, touchedBy: await touchedBy(executor, data.run.id), ownLines, blockingChecks: checks.blocking.length });
 }
 
 /**
@@ -242,17 +253,16 @@ export async function latestSendBackNote(executor: Executor, run: { id: string; 
   }
 }
 
-/** Runs in review that this Approver could decide: none they created, sent, changed or entered an amount on. No figures. */
-export async function countAwaiting(executor: Executor, approverId: string): Promise<number> {
+/**
+ * Runs in review that this Approver did not prepare or change (the same definition as `touchedBy`). No figures. `onlyRunIds` narrows
+ * the count to those runs (used to check the two agree).
+ */
+export async function countAwaiting(executor: Executor, approverId: string, onlyRunIds?: string[]): Promise<number> {
+  if (onlyRunIds && onlyRunIds.length === 0) return 0;
+  const narrow = onlyRunIds ? sql`and p.id in (${sql.join(onlyRunIds.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``;
   const [row] = (await executor.execute(sql`
-    select count(*)::int as n from payroll.pay_runs r
-    where r.status = 'in_review'
-      and r.created_by is distinct from ${approverId}::uuid
-      and r.submitted_by is distinct from ${approverId}::uuid
-      and not exists (
-        select 1 from payroll.pay_change_log c
-        where c.run_id = r.id and c.actor_id = ${approverId}::uuid and c.action not in ('run_viewed', 'run_sent_back', 'run_approved'))
-      and not exists (select 1 from payroll.pay_run_items i where i.run_id = r.id and i.entered_by = ${approverId}::uuid)
-      and not exists (select 1 from payroll.pay_run_lines l where l.run_id = r.id and l.confirmed_by = ${approverId}::uuid)`)) as unknown as { n: number }[];
+    select count(*)::int as n from payroll.pay_runs p
+    where p.status = 'in_review' ${narrow}
+      and not exists (select 1 from (${touchersOf(sql`p.id`)}) t where t.id = ${approverId}::uuid)`)) as unknown as { n: number }[];
   return row?.n ?? 0;
 }

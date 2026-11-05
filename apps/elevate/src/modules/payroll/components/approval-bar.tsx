@@ -46,8 +46,11 @@ export function ApprovalBar({
   expectedHash,
   refusal,
   sentBackNote,
+  lineCount,
 }: {
   runId: string;
+  /** Every line of the run (the worksheet is paged; the approval covers them all). */
+  lineCount: number;
   status: RunStatus;
   canPrepare: boolean;
   canApprove: boolean;
@@ -110,6 +113,7 @@ export function ApprovalBar({
             >
               {A.approve}
             </Button>
+            <span className="text-sm text-muted-foreground">{A.approveCount(lineCount)}</span>
             <FormDialog label={A.sendBack} title={A.sendBackTitle} variant="outline">
               <SendBackForm runId={runId} />
             </FormDialog>

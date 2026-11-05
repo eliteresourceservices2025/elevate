@@ -103,13 +103,13 @@ const decisions: Record<string, () => Promise<{ ok: boolean; error?: string }>> 
   sendBackRun: () => sendBackRun({ runId: RUN_ID, note: "Check the late minutes" }),
 };
 
-describe.each(Object.keys(decisions))("%s, every role at every payroll level", (name) => {
+describe.each(Object.entries(decisions))("%s, every role at every payroll level", (_name, decide) => {
   for (const role of ROLE_SLUGS) {
     for (const level of LEVELS) {
       const allowed = level === "approver";
       it(`${role} (${level ?? "no level"}): ${allowed ? "passes authorize()" : "is refused"}`, async () => {
         asLevel(role, level);
-        const result = await decisions[name]();
+        const result = await decide();
         expect(result.ok).toBe(false);
         expect(result.error).toBe(allowed ? GENERIC : NO_ACCESS);
       });

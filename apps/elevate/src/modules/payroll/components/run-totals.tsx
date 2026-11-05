@@ -14,10 +14,10 @@ export function RunTotals({ sheet }: { sheet: Worksheet }) {
       </h2>
       <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          [`${L.gross} (pesos)`, t.gross],
+          [L.grossTotal, t.gross],
           [L.dollarTotal, t.dollarAllowance],
-          [`${L.dollarAllowancePesos} (pesos)`, t.dollarAllowancePesos],
-          [`${L.net} (pesos)`, t.net],
+          [L.dollarPesosTotal, t.dollarAllowancePesos],
+          [L.netTotal, t.net],
         ].map(([label, value]) => (
           <div key={label} className="rounded-xl border bg-card p-3">
             <dt className="text-xs text-muted-foreground">{label}</dt>

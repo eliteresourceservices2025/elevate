@@ -181,9 +181,16 @@ export const WORKSHEET_LABELS = {
   newRun: "New run",
   noClient: "No client",
   netChange: "Change from last run",
+  grossTotal: "Gross (pesos)",
   dollarTotal: "Dollar allowances (dollars)",
+  dollarPesosTotal: "Dollar allowance in pesos (pesos)",
+  netTotal: "Net (pesos)",
   corrects: "Corrects the run of",
+  hasCorrection: "Includes a correction of an earlier run",
 } as const;
+
+/** Item types that may name the earlier run they correct: an adjustment adds pay, an other deduction takes back an overpayment. */
+export const CORRECTION_TYPES: readonly PayItemType[] = ["adjustment", "other_deduction"];
 
 /** Wording of sending a run for review and deciding it. Notices never carry an amount, a name or the note. */
 export const APPROVAL_LABELS = {
@@ -199,10 +206,12 @@ export const APPROVAL_LABELS = {
   sentBack: "Run sent back.",
   sentBackNotice: "This run was sent back",
   inReview: "This run is waiting for approval. It can't be changed while it is in review.",
-  approveHint: "Approving confirms every figure on this page as shown. If anything changes before you approve, you'll be asked to reload.",
+  approveHint:
+    "Approving confirms every line of this run, on every page of the worksheet, as it was when this page loaded. If anything changes before you approve, you'll be asked to reload.",
+  approveCount: (n: number) => `${n} ${n === 1 ? "line" : "lines"} in this run`,
   approvedNotice: "This run is approved. It can no longer change; a mistake is corrected with an adjustment on a later run.",
   correctionNone: "Not a correction",
-  correctionHint: "Choose the approved run this adjustment corrects. A reason is needed.",
+  correctionHint: "Choose the approved run this corrects: an adjustment for an underpayment, an other deduction for an overpayment. A reason is needed.",
 } as const;
 
 /** The "own line" check as an Approver or Viewer sees it: it is about the person who sent the run, not about them. */

@@ -10,7 +10,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { confirmRunLine, dismissPayItem, savePayItem } from "../actions";
-import { APPROVAL_LABELS, PAY_ITEM_LABELS, PAY_ITEM_TYPES, REASON_REQUIRED_TYPES, WORKSHEET_LABELS, type PayItemType } from "../constants";
+import { APPROVAL_LABELS, CORRECTION_TYPES, PAY_ITEM_LABELS, PAY_ITEM_TYPES, REASON_REQUIRED_TYPES, WORKSHEET_LABELS, type PayItemType } from "../constants";
 import { ITEM_UNIT_HINTS, itemUnit, parseItemValue } from "../items";
 import type { WorksheetLine } from "../runs";
 import { ConfirmSuggestionButton } from "./suggestion-controls";
@@ -75,7 +75,8 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
   const [corrects, setCorrects] = useState("");
-  const correction = type === "adjustment" ? corrects : "";
+  const canCorrect = CORRECTION_TYPES.includes(type);
+  const correction = canCorrect ? corrects : "";
   // The same rule as the server: a reason for a deduction, a correction, or when the amount differs from a suggestion. (Cutting an
   // allowance below the line's own also needs one; the server says so if it is missing.)
   const typed = parseItemValue(type, value);
@@ -121,7 +122,7 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
           <Input id={`item-value-${line.runLineId}`} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} required />
           <p className="text-xs text-muted-foreground">{ITEM_UNIT_HINTS[itemUnit(type)]} A reduction is entered as a loan or other deduction, never as a negative amount.</p>
         </div>
-        {type === "adjustment" && correctableRuns.length > 0 ? (
+        {canCorrect && correctableRuns.length > 0 ? (
           <div className="space-y-1">
             <Label htmlFor={`item-corrects-${line.runLineId}`}>{WORKSHEET_LABELS.corrects}</Label>
             <NativeSelect id={`item-corrects-${line.runLineId}`} value={corrects} onChange={(e) => setCorrects(e.target.value)}>

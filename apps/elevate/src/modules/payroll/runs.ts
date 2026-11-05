@@ -11,7 +11,7 @@ import type { Tx } from "@/modules/people/service";
 import { calculateLine, EXTRA_KEYS, type ExtraKey, type SettingsSnapshot } from "./calculate";
 import { logChange } from "./changes";
 import { runChecks, type CheckLine, type ChecksInput, type RunCheck } from "./checks";
-import { REASON_REQUIRED_TYPES, type PayItemState, type PayItemType, type RunStatus } from "./constants";
+import { CORRECTION_TYPES, REASON_REQUIRED_TYPES, type PayItemState, type PayItemType, type RunStatus } from "./constants";
 import { buildLineInput, formatItemValue, formatUsdRate, parseItemValue } from "./items";
 import { resolveLines } from "./lines";
 import { formatPesos } from "./money";
@@ -216,19 +216,27 @@ const itemDetail = (row: ItemRow | undefined) => {
   return { state: row.state, value: v.value.toString(), reason: v.reason, ...(v.correctsRunId ? { correctsRunId: v.correctsRunId } : {}) };
 };
 
+
 /**
- * An approved run never changes: a mistake in it is fixed by an adjustment on a later run that names it. Refuses anything but an
- * adjustment, and any run that is not an approved or paid run with an earlier period.
+ * An approved run never changes: a mistake in it is fixed on a later run by an adjustment (underpaid) or an other deduction (overpaid)
+ * that names it; amounts stay positive. Refuses any other type, any run that is not an approved or paid run with an earlier period,
+ * and a person who had no line on that run.
  */
-async function checkCorrection(tx: Tx, runId: string, type: PayItemType, correctsRunId: string): Promise<void> {
-  if (type !== "adjustment") throw new ActionFailure("Only an adjustment can correct an earlier run.");
-  const [run] = await tx.select({ periodStart: payRuns.periodStart }).from(payRuns).where(eq(payRuns.id, runId)).limit(1);
+async function checkCorrection(tx: Tx, v: { runId: string; employeeId: string; type: PayItemType }, correctsRunId: string): Promise<void> {
+  if (!CORRECTION_TYPES.includes(v.type)) throw new ActionFailure("Only an adjustment or another deduction can correct an earlier run.");
+  const [run] = await tx.select({ periodStart: payRuns.periodStart }).from(payRuns).where(eq(payRuns.id, v.runId)).limit(1);
   const [target] = await tx
     .select({ id: payRuns.id })
     .from(payRuns)
     .where(and(eq(payRuns.id, correctsRunId), inArray(payRuns.status, ["approved", "paid"]), lt(payRuns.periodStart, run?.periodStart ?? "0000-01-01")))
     .limit(1);
   if (!target) throw new ActionFailure("A correction must name an approved or paid earlier run.");
+  const [had] = await tx
+    .select({ id: payRunLines.id })
+    .from(payRunLines)
+    .where(and(eq(payRunLines.runId, correctsRunId), eq(payRunLines.employeeId, v.employeeId)))
+    .limit(1);
+  if (!had) throw new ActionFailure("That person had no line on the run being corrected.");
 }
 
 /** The newest suggested value for this type on this line, or the person's unassigned one, in the full item history; null when there never was one. */
@@ -261,7 +269,7 @@ async function belowLineAllowance(tx: Tx, lineId: string, type: PayItemType, val
 
 /**
  * Confirms an amount for one line (or overrides a suggestion). Reasons are required for deductions, for overriding a suggestion and
- * for a correction of an earlier run (`correctsRunId`, adjustments only).
+ * for a correction of an earlier run (`correctsRunId`, adjustments and other deductions only).
  */
 export async function saveItem(
   tx: Tx,
@@ -279,7 +287,7 @@ export async function saveItem(
   const value = parseItemValue(v.type, v.value);
   if (value === null) throw new ActionFailure("Check the amount and try again.");
   const correctsRunId = v.correctsRunId ?? null;
-  if (correctsRunId) await checkCorrection(tx, v.runId, v.type, correctsRunId);
+  if (correctsRunId) await checkCorrection(tx, v, correctsRunId);
 
   const all = await latestItems(tx, v.runId);
   const prior = all.find((i) => itemKey(i) === itemKey({ runLineId: v.runLineId, employeeId: v.employeeId, type: v.type }));
@@ -640,12 +648,6 @@ export async function checkInputsOf(executor: Executor, data: RunData, submitter
     changeWarnBp: (data.run.settingsSnapshot as SettingsSnapshot).changeWarnBp,
     linesOutOfDate: data.linesOutOfDate,
   };
-}
-
-/** The checks for a run, read fresh through `executor` (inside a transaction when deciding), relative to `submitterUserId`. */
-export async function loadCheckInputs(executor: Executor, runId: string, submitterUserId: string | null): Promise<ChecksInput | null> {
-  const data = await readRun(executor, runId);
-  return data ? checkInputsOf(executor, data, submitterUserId) : null;
 }
 
 /**

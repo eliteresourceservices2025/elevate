@@ -76,6 +76,7 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
         expectedHash={sheet.expectedHash}
         refusal={sheet.approvalRefusal}
         sentBackNote={sheet.sentBackNote}
+        lineCount={sheet.lines.length}
       />
     </PageContainer>
   );

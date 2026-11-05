@@ -15,9 +15,11 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, savePaySettings, createPayRun, savePayItem, setRunUsdRate, confirmRunLine, submitRun, sendBackRun, approveRun } = await import("@/modules/payroll/actions");
+const { createPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, setRunUsdRate, confirmRunLine, submitRun, sendBackRun, approveRun } = await import(
+  "@/modules/payroll/actions"
+);
 const { getWorksheet, payrollRunsAwaitingApproval } = await import("@/modules/payroll/queries");
-const { computeRunHash, decryptApprovalHash } = await import("@/modules/payroll/approval");
+const { computeRunHash, countAwaiting, decryptApprovalHash, touchedBy } = await import("@/modules/payroll/approval");
 const { decryptItemValue, encryptItemValue } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
 
@@ -53,9 +55,9 @@ function slot(n: number) {
 }
 
 /** A line paid only during `p` (it starts on its first day and ends on its last). */
-async function giveLine(employeeId: string, p: { periodStart: string; periodEnd: string }, over: Record<string, unknown> = {}) {
+async function giveLine(employeeId: string, p: { periodStart: string; periodEnd: string }, over: Record<string, unknown> = {}, author: unknown = preparer) {
   const before = current.user;
-  current.user = preparer;
+  current.user = author;
   const r = await createPayLine({
     employeeId,
     hoursPerDay: 8,
@@ -249,7 +251,7 @@ describe("review, send back and approve", () => {
     const runId = await newRun(p);
     const [line] = await runLines(runId, emp);
 
-    // A Viewer and the Preparer see no hash to approve with; the run is a draft.
+    // A draft has no hash to approve with, even for an Approver.
     expect(await hashFor(runId, approver)).toBeNull();
 
     as(preparer);
@@ -358,13 +360,16 @@ describe("review, send back and approve", () => {
 
     // The checker saved an amount, then became an Approver: still refused.
     await db.execute(sql`update core.users set payroll_access = 'approver' where id = ${checker.id}`);
-    const turned = { ...checker, payrollAccess: "approver" };
-    as(turned);
-    const r = await approveRun({ runId, expectedHash: hash });
-    expect(!r.ok && r.error).toMatch(/prepared or changed this run/);
-    as(turned);
-    expect((await getWorksheet(runId))!.approvalRefusal).toMatch(/prepared or changed this run/);
-    await db.execute(sql`update core.users set payroll_access = 'preparer' where id = ${checker.id}`);
+    try {
+      const turned = { ...checker, payrollAccess: "approver" };
+      as(turned);
+      const r = await approveRun({ runId, expectedHash: hash });
+      expect(!r.ok && r.error).toMatch(/prepared or changed this run/);
+      as(turned);
+      expect((await getWorksheet(runId))!.approvalRefusal).toMatch(/prepared or changed this run/);
+    } finally {
+      await db.execute(sql`update core.users set payroll_access = 'preparer' where id = ${checker.id}`);
+    }
 
     // An Approver whose level is removed is refused on the very next call, even with the old level in hand.
     const leaving = await account("approver");
@@ -444,6 +449,82 @@ describe("review, send back and approve", () => {
   });
 });
 
+describe("everyone who touched a run", () => {
+  it("each source is refused through approveRun after becoming an Approver, and the dashboard count uses the same list", async () => {
+    const p = slot(16);
+    const [rateAuthor, creator, rateSetter, itemEnterer, confirmer, submitter] = await Promise.all([1, 2, 3, 4, 5, 6].map(() => account("preparer")));
+    const fresh = await account("approver");
+    const emp = await person();
+    await giveLine(emp, p, { dollarAllowance: "10" }, rateAuthor); // wrote the rate the run pays
+    const runId = await newRun(p, creator);
+    as(rateSetter);
+    expect(await setRunUsdRate({ runId, rate: "58.50" })).toMatchObject({ ok: true });
+    const [line] = await runLines(runId, emp);
+    as(itemEnterer);
+    expect(await savePayItem({ runId, employeeId: emp, runLineId: line.id, type: "adjustment", value: "100" })).toMatchObject({ ok: true });
+    as(confirmer);
+    expect(await confirmRunLine({ runLineId: line.id })).toMatchObject({ ok: true });
+    as(submitter);
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+
+    // touchedBy and the dashboard count agree, person by person, on this run.
+    const sources = { rateAuthor, creator, rateSetter, itemEnterer, confirmer, submitter };
+    const touched = await touchedBy(db, runId);
+    for (const [label, who] of Object.entries(sources)) {
+      expect(touched, label).toContain(who.id);
+      expect(await countAwaiting(db, who.id, [runId]), label).toBe(0);
+    }
+    expect(touched).not.toContain(fresh.id);
+    expect(await countAwaiting(db, fresh.id, [runId])).toBe(1);
+
+    const hash = (await hashFor(runId, fresh))!;
+    for (const [label, who] of Object.entries(sources)) {
+      await db.execute(sql`update core.users set payroll_access = 'approver' where id = ${who.id}`);
+      try {
+        as({ ...who, payrollAccess: "approver" });
+        const r = await approveRun({ runId, expectedHash: hash });
+        expect(!r.ok && r.error, label).toMatch(/prepared or changed this run/);
+      } finally {
+        await db.execute(sql`update core.users set payroll_access = 'preparer' where id = ${who.id}`);
+      }
+    }
+    expect(await status(runId)).toBe("in_review");
+    as(fresh);
+    expect(await approveRun({ runId, expectedHash: hash })).toMatchObject({ ok: true });
+  });
+});
+
+describe("recovering a run whose pay lines changed while in review", () => {
+  it("send back, cancel, create again, send and approve", async () => {
+    const p = slot(17);
+    const first = await person();
+    await giveLine(first, p);
+    const runId = await newRun(p);
+    as(preparer);
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+    const late = await person();
+    await giveLine(late, p); // added after the run was sent: approving would leave them unpaid
+
+    as(approver);
+    const sheet = (await getWorksheet(runId))!;
+    expect(sheet.approvalRefusal).toMatch(/must be fixed/);
+    expect(await sendBackRun({ runId, note: "Someone was added to this period" })).toMatchObject({ ok: true });
+    as(preparer);
+    expect(await cancelPayRun({ runId, reason: "Pay lines changed" })).toMatchObject({ ok: true });
+    expect(await status(runId)).toBe("cancelled");
+
+    const again = await newRun(p);
+    expect(await runLines(again, first)).toHaveLength(1);
+    expect(await runLines(again, late)).toHaveLength(1);
+    as(preparer);
+    expect(await submitRun({ runId: again })).toMatchObject({ ok: true });
+    const fresh = (await hashFor(again, approver))!;
+    as(approver);
+    expect(await approveRun({ runId: again, expectedHash: fresh })).toMatchObject({ ok: true });
+    expect(await status(again)).toBe("approved");
+  });
+});
+
 describe("the approval hash", () => {
   it("changes when a figure, an item, the dollar rate, a confirmation or the settings snapshot changes", async () => {
     const p = slot(11);
@@ -480,6 +561,8 @@ describe("corrections after approval", () => {
     const next = slot(13);
     const emp = await person();
     await giveLine(emp, { periodStart: first.periodStart, periodEnd: next.periodEnd });
+    const newcomer = await person(); // paid only from the next period: had no line on the run being corrected
+    await giveLine(newcomer, next);
     const approvedRun = await newRun(first);
     as(preparer);
     expect(await submitRun({ runId: approvedRun })).toMatchObject({ ok: true });
@@ -492,7 +575,7 @@ describe("corrections after approval", () => {
     const fix = { runId: nextRun, employeeId: emp, runLineId: line.id, type: "adjustment", value: "500", correctsRunId: approvedRun };
     // A correction needs a reason, must be an adjustment, and must name an approved or paid earlier run.
     expect(await savePayItem(fix)).toEqual({ ok: false, error: "Give a reason for this amount." });
-    expect(await savePayItem({ ...fix, type: "loan", reason: "x" })).toEqual({ ok: false, error: "Only an adjustment can correct an earlier run." });
+    expect(await savePayItem({ ...fix, type: "loan", reason: "x" })).toEqual({ ok: false, error: "Only an adjustment or another deduction can correct an earlier run." });
     expect(await savePayItem({ ...fix, correctsRunId: nextRun, reason: "x" })).toEqual({ ok: false, error: "A correction must name an approved or paid earlier run." });
     expect(await savePayItem({ ...fix, correctsRunId: randomUUID(), reason: "x" })).toEqual({ ok: false, error: "A correction must name an approved or paid earlier run." });
     expect(await savePayItem({ ...fix, correctsRunId: "nope", reason: "x" })).toEqual({ ok: false, error: BAD });
@@ -503,6 +586,20 @@ describe("corrections after approval", () => {
     const [log] = await rows<{ id: string; detail_enc: string }>(sql`select id, detail_enc from payroll.pay_change_log where run_id = ${nextRun} and action = 'item_saved'`);
     expect(readChangeDetail(log)).toMatchObject({ type: "adjustment", correctsRunId: approvedRun, new: { value: "50000", correctsRunId: approvedRun } });
     expect((await getWorksheet(nextRun))!.lines.find((l) => l.employeeId === emp)!.items).toContainEqual(expect.objectContaining({ type: "adjustment", correctsRunId: approvedRun }));
+    // An overpayment is corrected with a deduction that names the run; the amount stays positive.
+    const over = { runId: nextRun, employeeId: emp, runLineId: line.id, type: "other_deduction", value: "200", reason: "Paid twice for one day", correctsRunId: approvedRun };
+    expect(await savePayItem({ ...over, value: "-200" })).toEqual({ ok: false, error: BAD });
+    expect(await savePayItem(over)).toMatchObject({ ok: true });
+    const [deduction] = await rows<{ id: string; value_enc: string }>(sql`select id, value_enc from payroll.pay_run_items where run_id = ${nextRun} and type = 'other_deduction'`);
+    expect(decryptItemValue(deduction.id, deduction.value_enc)).toMatchObject({ value: 20_000n, correctsRunId: approvedRun });
+
+    // Someone who had no line on the corrected run can't be given a correction of it.
+    const [theirs] = await runLines(nextRun, newcomer);
+    expect(await savePayItem({ runId: nextRun, employeeId: newcomer, runLineId: theirs.id, type: "adjustment", value: "100", reason: "x", correctsRunId: approvedRun })).toEqual({
+      ok: false,
+      error: "That person had no line on the run being corrected.",
+    });
+
     // The approved run itself is untouched.
     expect(await rows(sql`select 1 from payroll.pay_run_items where run_id = ${approvedRun}`)).toHaveLength(0);
   });
@@ -523,11 +620,14 @@ describe("the dashboard count", () => {
     expect(await payrollRunsAwaitingApproval()).toBe(base + 1);
     // An Approver who prepared the run is not counted for it.
     await db.execute(sql`update core.users set payroll_access = 'approver' where id = ${preparer.id}`);
-    as({ ...preparer, payrollAccess: "approver" });
-    const forPreparer = await payrollRunsAwaitingApproval();
-    as(fresh);
-    expect(forPreparer).toBeLessThan(await payrollRunsAwaitingApproval());
-    await db.execute(sql`update core.users set payroll_access = 'preparer' where id = ${preparer.id}`);
+    try {
+      as({ ...preparer, payrollAccess: "approver" });
+      const forPreparer = await payrollRunsAwaitingApproval();
+      as(fresh);
+      expect(forPreparer).toBeLessThan(await payrollRunsAwaitingApproval());
+    } finally {
+      await db.execute(sql`update core.users set payroll_access = 'preparer' where id = ${preparer.id}`);
+    }
     as(preparer);
     await expect(payrollRunsAwaitingApproval()).rejects.toMatchObject({ name: "ForbiddenError" });
   });

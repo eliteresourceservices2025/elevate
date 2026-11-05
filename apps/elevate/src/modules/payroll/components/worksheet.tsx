@@ -89,7 +89,7 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
                   ))}
                   <Pending line={line} />
                   {line.items.some((i) => i.correctsRunId && i.state === "confirmed") ? (
-                    <span className="block text-xs font-normal text-muted-foreground">Includes a correction of an earlier run</span>
+                    <span className="block text-xs font-normal text-muted-foreground">{L.hasCorrection}</span>
                   ) : null}
                 </TableCell>
                 <TableCell label={L.client} className={`${FROZEN} md:left-44 border-r`}>
