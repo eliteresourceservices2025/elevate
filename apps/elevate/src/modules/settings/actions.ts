@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { isRoleSlug } from "@/lib/roles";
 import { notify } from "@/modules/notifications/service";
 import { logChange } from "@/modules/payroll/changes";
+import { PAYROLL_LEVEL_LABELS } from "@/modules/payroll/constants";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { writeAudit } from "@/modules/audit/write";
@@ -158,9 +159,20 @@ export async function setPayrollAccess(input: unknown): Promise<ActionResult> {
         .select({ level: users.payrollAccess })
         .from(users)
         .where(and(eq(users.id, userId), isNull(users.archivedAt)))
-        .limit(1);
+        .limit(1)
+        .for("update"); // two changes at once cannot both pass the "No change." check or log a stale "before"
       if (!target) return fail("That person was not found.");
       if ((target.level ?? null) === level) return fail("No change.");
+
+      const [profile] = await tx
+        .select({ first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName, email: users.email })
+        .from(users)
+        .leftJoin(employees, eq(employees.userId, users.id))
+        .where(eq(users.id, userId))
+        .limit(1);
+      const who = profile?.first ? `${profile.preferred?.trim() || profile.first} ${profile.last}` : (profile?.email ?? "A person");
+      const what = level ? `now has payroll access as ${PAYROLL_LEVEL_LABELS[level]}.` : "no longer has payroll access.";
+      const body = `${who} ${what}`;
 
       await tx.update(users).set({ payrollAccess: level }).where(eq(users.id, userId));
       await writeAudit(
@@ -193,7 +205,7 @@ export async function setPayrollAccess(input: unknown): Promise<ActionResult> {
           userId: id,
           kind: "payroll.access",
           title: "Payroll access was changed",
-          body: "A Super Admin changed who has payroll access.",
+          body,
           link: "/settings/payroll-access",
         })),
         ...[...personIds]
@@ -202,7 +214,7 @@ export async function setPayrollAccess(input: unknown): Promise<ActionResult> {
             userId: id,
             kind: "payroll.access",
             title: "Payroll access was changed",
-            body: "A Super Admin changed who has payroll access.",
+            body,
             link: "/payroll",
           })),
       ]);

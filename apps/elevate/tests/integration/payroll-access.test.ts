@@ -75,11 +75,32 @@ describe("choosing payroll access", () => {
     expect(forAdmin.link).toBe("/settings/payroll-access");
     const [forPerson] = await notesFor(person.id);
     expect(forPerson.link).toBe("/payroll");
-    for (const n of [forAdmin, forPerson]) expect(`${n.title} ${n.body ?? ""}`).not.toMatch(/\d/);
+    // Names the person and the new level, and never an amount (no currency sign, code or decimal figure).
+    for (const n of [forAdmin, forPerson]) {
+      expect(n.body).toBe(`${person.email} now has payroll access as Approver.`);
+      expect(`${n.title} ${n.body}`).not.toMatch(/[₱$€]|\b(PHP|USD)\b|\d+\.\d{2}/);
+    }
 
-    // Taking it away tells the person too.
+    // Taking it away tells the person too, and says so.
     expect(await setPayrollAccess({ userId: person.id, level: null })).toEqual({ ok: true, data: undefined });
-    expect(await notesFor(person.id)).toHaveLength(2);
+    const after = await notesFor(person.id);
+    expect(after).toHaveLength(2);
+    expect(after.map((n) => n.body)).toContain(`${person.email} no longer has payroll access.`);
+  });
+
+  it("also notifies existing level holders other than the target and the actor", async () => {
+    const admin = await account("super_admin");
+    const holder = await account("employee", "approver");
+    const target = await account("employee");
+    const bystander = await account("employee"); // no level, not a Super Admin: hears nothing
+    current.user = admin;
+    expect(await setPayrollAccess({ userId: target.id, level: "viewer" })).toEqual({ ok: true, data: undefined });
+
+    const [forHolder] = await notesFor(holder.id);
+    expect(forHolder.link).toBe("/payroll");
+    expect(forHolder.body).toBe(`${target.email} now has payroll access as Viewer.`);
+    expect(await notesFor(bystander.id)).toHaveLength(0);
+    expect(await notesFor(admin.id)).toHaveLength(0);
   });
 
   it("clearing the level means the next sign-in has no payroll access", async () => {
