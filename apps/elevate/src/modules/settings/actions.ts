@@ -9,6 +9,7 @@ import { isRoleSlug } from "@/lib/roles";
 import { notify } from "@/modules/notifications/service";
 import { logChange } from "@/modules/payroll/changes";
 import { PAYROLL_LEVEL_LABELS } from "@/modules/payroll/constants";
+import { saveSignatory } from "@/modules/payroll/signatory";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { writeAudit } from "@/modules/audit/write";
@@ -25,6 +26,7 @@ import {
   createInvitationSchema,
   resetAuthenticatorSchema,
   revokeInvitationSchema,
+  savePayrollSignatorySchema,
   setPayrollAccessSchema,
   setSafevoiceHandlerSchema,
   setUserRolesSchema,
@@ -227,6 +229,26 @@ export async function setPayrollAccess(input: unknown): Promise<ActionResult> {
       revalidatePath("/settings");
     }
     return result;
+  });
+}
+
+/**
+ * A Super Admin sets who signs the payslips: the name, the title and (optionally) a signature picture. Each save is a new version; a run
+ * keeps the version in force when it was paid. Not a pay figure, so it needs no payroll level.
+ */
+export async function savePayrollSignatory(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "settings.set_payroll_signatory");
+
+    const parsed = savePayrollSignatorySchema.safeParse(input);
+    if (!parsed.success) return fail("Check the name, the title and the picture, then try again.");
+    const { name, title, signature, removeSignature } = parsed.data;
+
+    await saveSignatory(actor, { name, title, signatureBase64: signature, removeSignature });
+    revalidatePath("/settings/payroll-signatory");
+    return { ok: true, data: undefined } as const;
   });
 }
 

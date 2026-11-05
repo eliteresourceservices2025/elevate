@@ -176,6 +176,15 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
     case "run_cancelled":
       facts.push(...fact(H.reason, detail.reason), ...fact(H.lines, detail.lines));
       break;
+    case "signatory_changed": {
+      // The picture itself is never in the detail, only whether there is one.
+      const picture = (v: Json | null) => (v ? (v.hasSignature === true ? H.onFile : H.none) : H.notSet);
+      const before = (key: string) => str(old?.[key]) ?? H.notSet;
+      if (str(old?.name) !== str(next?.name)) changes.push({ label: H.signatoryName, before: before("name"), after: str(next?.name) ?? H.notSet });
+      if (str(old?.title) !== str(next?.title)) changes.push({ label: H.signatoryTitle, before: before("title"), after: str(next?.title) ?? H.notSet });
+      if (detail.signatureChanged === true) changes.push({ label: H.signatoryPicture, before: picture(old), after: picture(next) });
+      break;
+    }
     case "line_confirmed":
     case "payslip_downloaded":
     case "run_viewed":

@@ -133,6 +133,7 @@ export const CHANGE_ACTIONS = [
   "payslip_downloaded",
   "run_viewed",
   "run_cancelled",
+  "signatory_changed",
 ] as const;
 export type ChangeAction = (typeof CHANGE_ACTIONS)[number];
 
@@ -158,6 +159,7 @@ export const CHANGE_ACTION_LABELS: Record<ChangeAction, string> = {
   payslip_downloaded: "Payslip downloaded",
   run_viewed: "Run opened",
   run_cancelled: "Run cancelled",
+  signatory_changed: "Payslip signatory changed",
 };
 
 /** Wording of the change history page. Figures and reasons are shown only there, never in the audit log, notices or logs. */
@@ -213,6 +215,10 @@ export const HISTORY_LABELS = {
   amountChanged: "Typed a different amount",
   amountAsSuggested: "Confirmed as suggested",
   amountKind: "Amount",
+  signatoryName: "Signatory name",
+  signatoryTitle: "Signatory title",
+  signatoryPicture: "Signature picture",
+  onFile: "On file",
 } as const;
 
 export const PAY_ITEM_STATES = ["suggested", "confirmed", "dismissed"] as const;
@@ -311,6 +317,25 @@ export const PAYSLIP_LABELS = {
   net: "Net pay",
   download: "Download PDF",
   documentTitle: "Payslip",
+  number: "Payslip number",
+  paidOn: "Paid on",
+  paidBy: "Paid by",
+  earnings: "Pay for the period",
+  gross: "Gross pay",
+  additions: "Added after gross pay",
+  deductions: "Deductions",
+  detailColumn: "Details",
+  amountColumn: "Amount (pesos)",
+  signedBy: "Authorized by",
+  signedOn: "Signed on",
+  notSigned: "Not signed",
+  footerNote: "A statement of pay for the period shown. It is not a tax document.",
+  view: "View",
+  back: "Back to My pay",
+  viewAction: (period: string) => `View the payslip for ${period}`,
+  pageHeading: (period: string) => `Payslip ${period}`,
+  viewDescription: "Only you can open this page. Download the PDF to keep or print a copy.",
+  unreadableView: "This payslip can't be read right now. Tell the system owner.",
   preparedFor: "Prepared for",
   details: "Pay details",
   lineHeading: (alias: string) => `Line: ${alias}`,
@@ -324,6 +349,24 @@ export const PAYSLIP_LABELS = {
   noticeTitle: "Your payslip is ready",
   noticeBody: "A payslip is ready for you. Open My pay to read it.",
   noticeLink: "/my-pay",
+} as const;
+
+/** Wording of the page where a Super Admin sets who signs the payslips. */
+export const SIGNATORY_LABELS = {
+  name: "Name",
+  title: "Title",
+  titleDefault: "Human Resources Director",
+  signature: "Signature picture",
+  signatureHint: "A clear picture of the signature on a white background. It is made small, kept private and printed above the name on every payslip. Nothing is stored about the file itself.",
+  choose: "Choose a picture",
+  current: "Signature now",
+  none: "No signature picture yet. Payslips will show the name and title with a line.",
+  remove: "Remove the signature picture",
+  save: "Save signatory",
+  saved: "Payslip signatory saved.",
+  unreadable: "The saved signature can't be read. Choose the picture again.",
+  fileError: "Choose a JPG, PNG or WEBP picture.",
+  notSetYet: "Nobody is set yet. Payments are never held up: a run paid before then shows Not signed on its payslips.",
 } as const;
 
 /** Wording of sending a run for review and deciding it. Notices never carry an amount, a name or the note. */

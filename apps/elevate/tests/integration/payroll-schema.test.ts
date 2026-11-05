@@ -80,7 +80,7 @@ const itemInsert = (runId: string) => {
 };
 
 describe("append-only tables", () => {
-  it("pay_settings, pay_lines, pay_run_items, pay_approvals, pay_payments and pay_change_log reject update and delete", async () => {
+  it("pay_settings, pay_lines, pay_run_items, pay_approvals, pay_payments, pay_change_log, pay_signatory and pay_run_signatures reject update and delete", async () => {
     const runId = await newRun();
     await addRunLine(runId);
     await itemInsert(runId);
@@ -91,6 +91,9 @@ describe("append-only tables", () => {
     await db.execute(sql`insert into payroll.pay_payments (id, run_id, employee_id, reference_enc, paid_on, marked_by)
       values (${paymentId}, ${runId}, ${employeeId}, ${enc("ref", `pay_payment:${paymentId}`)}, '2030-02-01', ${actorId})`);
     await logChange(db as never, { id: actorId }, { action: "run_created", runId });
+    const signatoryId = randomUUID();
+    await db.execute(sql`insert into payroll.pay_signatory (id, name, title, signature_enc, created_by) values (${signatoryId}, ${"Test Signatory"}, ${"Director"}, null, ${actorId})`);
+    await db.execute(sql`insert into payroll.pay_run_signatures (run_id, signatory_id, signed_on) values (${runId}, ${signatoryId}, ${"2030-02-01"})`);
 
     const checks: [string, string][] = [
       ["pay_settings", "cutoff_divisor = 12"],
@@ -99,6 +102,8 @@ describe("append-only tables", () => {
       ["pay_approvals", "decision = 'approved'"],
       ["pay_payments", "paid_on = '2030-03-01'"],
       ["pay_change_log", "action = 'run_paid'"],
+      ["pay_signatory", "title = 'x'"],
+      ["pay_run_signatures", "signed_on = '2030-03-01'"],
     ];
     for (const [table, setClause] of checks) {
       await raises(db.execute(sql.raw(`update payroll.${table} set ${setClause} where true`)), /append-only/);
@@ -293,8 +298,10 @@ describe("row level security", () => {
       "pay_payments",
       "pay_run_items",
       "pay_run_lines",
+      "pay_run_signatures",
       "pay_runs",
       "pay_settings",
+      "pay_signatory",
     ]);
     for (const t of tables) expect(t.relrowsecurity, t.relname).toBe(true);
     expect(await rows(sql`select 1 from pg_policies where schemaname = 'payroll'`)).toHaveLength(0);

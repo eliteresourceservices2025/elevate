@@ -1,0 +1,1 @@
+ALTER TABLE "payroll"."pay_signatory" ALTER COLUMN "created_at" SET DEFAULT clock_timestamp();

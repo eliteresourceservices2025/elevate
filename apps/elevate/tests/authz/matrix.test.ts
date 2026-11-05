@@ -173,6 +173,7 @@ const EXPECTED: Record<string, string> = {
   "settings.manage_roles": "A - - - - -",
   "settings.set_safevoice_handler": "A - - - - -",
   "settings.set_payroll_access": "A - - - - -",
+  "settings.set_payroll_signatory": "A - - - - -",
   "settings.reset_mfa": "A - - - - -",
   "settings.deactivate_account": "A - - - - -",
   "settings.view_audit": "A - - - - -",
@@ -317,6 +318,8 @@ describe("payroll access", () => {
 
   it("the level does not widen anything outside payroll", () => {
     expect(can({ id: "p", roles: ["employee"], payrollAccess: "preparer" }, "settings.set_payroll_access")).toBe(false);
+    expect(can({ id: "p", roles: ["employee"], payrollAccess: "preparer" }, "settings.set_payroll_signatory")).toBe(false);
+    expect(can({ id: "p", roles: ["super_admin"], payrollAccess: null }, "settings.set_payroll_signatory")).toBe(true);
     expect(can({ id: "p", roles: ["employee"], payrollAccess: "preparer" }, "people.view_sensitive", { ownerUserId: "x" })).toBe(false);
   });
 });

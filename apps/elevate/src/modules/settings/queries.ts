@@ -7,6 +7,7 @@ import { isRoleSlug, type PayrollLevel, type RoleSlug } from "@/lib/roles";
 import { employees } from "@/modules/people/schema";
 import { auditLog } from "@/modules/audit/schema";
 import { invitations, userRoles, users } from "@/modules/core/schema";
+import { currentSignatory } from "@/modules/payroll/signatory";
 import { auditQuerySchema } from "./validators";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 
@@ -105,6 +106,23 @@ export async function getPayrollAccessList(): Promise<PayrollAccessRow[]> {
     name: r.first ? `${r.preferred?.trim() || r.first} ${r.last}` : r.email,
     level: (r.level as PayrollLevel | null) ?? null,
   }));
+}
+
+export type PayrollSignatoryView = { name: string; title: string; signatureDataUrl: string | null; signatureUnreadable: boolean };
+
+/** The name, title and signature printed on payslips, for the Super Admin's page. Null when nobody has been set yet. */
+export async function getPayrollSignatory(): Promise<PayrollSignatoryView | null> {
+  const actor = await requireUser();
+  await authorize(actor, "settings.set_payroll_signatory");
+
+  const current = await currentSignatory(db);
+  if (!current) return null;
+  return {
+    name: current.name,
+    title: current.title,
+    signatureDataUrl: current.signatureBase64 ? `data:image/jpeg;base64,${current.signatureBase64}` : null,
+    signatureUnreadable: current.signatureUnreadable,
+  };
 }
 
 export async function listAuditEntries(rawQuery: unknown) {

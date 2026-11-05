@@ -224,10 +224,10 @@ describe("the payslip is the person's own", () => {
     expect(list[0].net).toBe(formatPesos(await netOf(runId, emp)));
     expect((await rows(sql`select 1 from payroll.pay_run_lines where run_id = ${runId} and employee_id = ${emp}`)).length).toBe(2);
     const { getMyPayslip } = await import("@/modules/payroll/payslip-queries");
-    const { payslipMarkdown } = await import("@/modules/payroll/payslip");
+    const { payslipView } = await import("@/modules/payroll/payslip");
     const slip = await getMyPayslip(owner as never, runId);
     expect(slip?.lines).toHaveLength(2);
-    const md = payslipMarkdown(slip!);
+    const md = JSON.stringify(payslipView(slip!));
     expect(md).not.toMatch(/Zzsecret/);
     expect(md).not.toContain(formatPesos(await netOf(runId, secondEmp)));
     expect(md).toContain(formatPesos(await netOf(runId, emp)));
@@ -401,5 +401,135 @@ describe("the notification when a run is paid", () => {
     const runId = await approvedRun(p);
     await payAll(runId, [emp]);
     expect(await slipNotices(owner.id)).toHaveLength(1);
+  });
+});
+
+// ---- who signs the payslips ----
+// Nobody is set when this file starts (the database is new for every run and only these tests set a signatory), so the first test sees a run
+// paid before anyone was set. Slots 18 to 21 of 2029 are used here.
+
+const { savePayrollSignatory } = await import("@/modules/settings/actions");
+const { getMyPayslip } = await import("@/modules/payroll/payslip-queries");
+const { payslipView } = await import("@/modules/payroll/payslip");
+const { currentSignatory } = await import("@/modules/payroll/signatory");
+const { readChangeDetail } = await import("@/modules/payroll/changes");
+
+const seg = (marker: number, body: number[]) => [0xff, marker, (body.length + 2) >> 8, (body.length + 2) & 0xff, ...body];
+/** A tiny structurally valid JPEG with fake camera and location data in it (the server reads structure and removes metadata). */
+function jpegBase64(width = 300, height = 100): string {
+  const bytes = [
+    0xff, 0xd8,
+    ...seg(0xe0, [0x4a, 0x46, 0x49, 0x46, 0]),
+    ...seg(0xe1, [...Buffer.from("Exif\0\0GPS-secret-location")]),
+    ...seg(0xdb, [0, ...new Array<number>(64).fill(8)]),
+    ...seg(0xc0, [8, height >> 8, height & 0xff, width >> 8, width & 0xff, 1, 1, 0x11, 0]),
+    ...seg(0xc4, [0, 1, ...new Array<number>(15).fill(0), 0]),
+    ...seg(0xda, [1, 1, 0, 0, 63, 0]),
+    0x12, 0xff, 0x00, 0x34, 0xff, 0xd0, 0x56,
+    0xff, 0xd9,
+  ];
+  return Buffer.from(bytes).toString("base64");
+}
+const refused = { ok: false, error: "You do not have access to do that." };
+
+describe("the signatory on payslips", () => {
+  let superAdmin: Awaited<ReturnType<typeof account>>;
+  beforeAll(async () => {
+    superAdmin = await account(null, ["super_admin"]);
+  });
+  const input = { name: "Carmen Dela Rosa", title: "Human Resources Director", signature: jpegBase64(), removeSignature: false };
+
+  it("says Not signed on the payslip of a run paid before anybody was set up", async () => {
+    expect(await rows(sql`select 1 from payroll.pay_signatory`)).toHaveLength(0);
+    const owner = await account();
+    const emp = await person(owner.id);
+    const runId = await paidRun(slot(18), [emp]);
+    expect(await rows(sql`select 1 from payroll.pay_run_signatures where run_id = ${runId}`)).toHaveLength(0);
+    as(owner);
+    const slip = await getMyPayslip(owner as never, runId);
+    expect(slip?.signatory).toBeNull();
+    expect(payslipView(slip!).signature).toBeNull();
+    expect((await call(runId)).status).toBe(200);
+  });
+
+  it("lets only a Super Admin set it, and refuses a picture that is not a small JPEG", async () => {
+    const hr = await account(null, ["hr_admin"]);
+    for (const who of [hr, preparer, approver, await account()]) {
+      as(who);
+      expect(await savePayrollSignatory(input)).toEqual(refused);
+    }
+    as(superAdmin);
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...new Array<number>(40).fill(0)]).toString("base64");
+    const huge = Buffer.concat([Buffer.from(jpegBase64(), "base64"), Buffer.alloc(160 * 1024)]).toString("base64");
+    for (const signature of [png, huge, "not base64!!", Buffer.from("hello").toString("base64"), jpegBase64(20, 20)]) {
+      expect(await savePayrollSignatory({ ...input, signature }), signature.slice(0, 12)).toMatchObject({ ok: false });
+    }
+    expect(await savePayrollSignatory({ ...input, name: "   " })).toMatchObject({ ok: false });
+    expect(await savePayrollSignatory({ ...input, title: "" })).toMatchObject({ ok: false });
+    expect(await rows(sql`select 1 from payroll.pay_signatory`)).toHaveLength(0);
+  });
+
+  it("keeps the signature private and clean, and the audit log never holds the name, title or picture", async () => {
+    as(superAdmin);
+    expect(await savePayrollSignatory(input)).toEqual({ ok: true, data: undefined });
+    const [row] = await rows<{ signature_enc: string }>(sql`select signature_enc from payroll.pay_signatory order by created_at desc limit 1`);
+    expect(row.signature_enc).not.toContain(jpegBase64().slice(0, 24));
+    const current = await currentSignatory(db);
+    expect(current).toMatchObject({ name: "Carmen Dela Rosa", title: "Human Resources Director", signatureUnreadable: false });
+    const bytes = Buffer.from(current!.signatureBase64!, "base64");
+    expect(bytes.includes(Buffer.from("GPS-secret-location"))).toBe(false);
+    expect(bytes.includes(Buffer.from("Exif"))).toBe(false);
+    expect([...bytes.subarray(0, 2)]).toEqual([0xff, 0xd8]);
+    const [audit] = await rows<{ j: unknown }>(sql`select to_jsonb(a) as j from ops.audit_log a where action = 'payroll.signatory.update' order by id desc limit 1`);
+    const text = JSON.stringify(audit.j);
+    expect(text).toContain("hasSignature");
+    expect(text).not.toMatch(/Carmen|Dela Rosa|Human Resources|GPS-secret|\/9j\//);
+    // The payroll change history records it too (detail encrypted, the picture never copied into it).
+    const [change] = await rows<{ id: string; actor_id: string; detail_enc: string }>(
+      sql`select id, actor_id, detail_enc from payroll.pay_change_log where action = 'signatory_changed' and actor_id = ${superAdmin.id} order by created_at desc limit 1`,
+    );
+    expect(change).toBeTruthy();
+    expect(change.detail_enc).not.toMatch(/Carmen|Dela Rosa/);
+    const detail = readChangeDetail(change);
+    expect(detail).toMatchObject({ new: { name: "Carmen Dela Rosa", title: "Human Resources Director", hasSignature: true }, signatureChanged: true });
+    expect(JSON.stringify(detail)).not.toMatch(/\/9j\//);
+    await expect(db.execute(sql`update payroll.pay_signatory set name = 'x'`)).rejects.toThrow();
+    await expect(db.execute(sql`delete from payroll.pay_signatory`)).rejects.toThrow();
+  });
+
+  it("keeps on each payslip the signatory in force when its run was paid", async () => {
+    const first = await account();
+    const second = await account();
+    const third = await account();
+    const [e1, e2, e3] = [await person(first.id), await person(second.id), await person(third.id)];
+
+    const run1 = await paidRun(slot(19), [e1]); // paid under Carmen, with her picture
+    as(superAdmin);
+    expect(await savePayrollSignatory({ name: "Elena Marquez", title: "Director of People", signature: null, removeSignature: false })).toMatchObject({ ok: true });
+    const run2 = await paidRun(slot(20), [e2]); // paid under Elena, who keeps the picture saved before
+    as(superAdmin);
+    expect(await savePayrollSignatory({ name: "Elena Marquez", title: "Director of People", signature: null, removeSignature: true })).toMatchObject({ ok: true });
+    const run3 = await paidRun(slot(21), [e3]); // paid under Elena with no picture
+
+    const view = async (who: { id: string }, runId: string) => {
+      as(who);
+      return payslipView((await getMyPayslip(who as never, runId))!).signature;
+    };
+    expect(await view(first, run1)).toMatchObject({ name: "Carmen Dela Rosa", title: "Human Resources Director", signedOn: "2029-12-30" });
+    expect((await view(first, run1))?.imageBase64).toBeTruthy();
+    expect(await view(second, run2)).toMatchObject({ name: "Elena Marquez", title: "Director of People" });
+    expect((await view(second, run2))?.imageBase64).toBeTruthy();
+    expect(await view(third, run3)).toMatchObject({ name: "Elena Marquez", imageBase64: null });
+    // Later changes never touch a payslip that was already made: the first one still says Carmen.
+    expect((await view(first, run1))?.name).toBe("Carmen Dela Rosa");
+
+    // The PDF draws with and without a picture.
+    for (const [who, runId] of [[first, run1], [third, run3]] as const) {
+      as(who);
+      const res = await call(runId);
+      expect(res.status).toBe(200);
+      expect(Buffer.from(await res.arrayBuffer()).subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    }
+    expect(await rows(sql`select 1 from payroll.pay_run_signatures where run_id in (${run1}, ${run2}, ${run3})`)).toHaveLength(3);
   });
 });

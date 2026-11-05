@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import postgres from "postgres";
@@ -173,6 +174,44 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     });
     await setLevel(adminPage, apprAccount.email, "Approver");
 
+    // The Super Admin sets who signs the payslips: a name, a title and a drawn demo signature (invented), through the real screen.
+    await adminPage.goto("/settings/payroll-signatory");
+    await waitForHydration(adminPage, "#signatory-name");
+    const signaturePng = await adminPage.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 520;
+      canvas.height = 150;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, 520, 150);
+      ctx.strokeStyle = "#1c2a6b";
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(30, 100);
+      ctx.bezierCurveTo(60, 20, 90, 20, 100, 90);
+      ctx.bezierCurveTo(110, 130, 140, 40, 175, 70);
+      ctx.bezierCurveTo(200, 95, 215, 95, 240, 60);
+      ctx.bezierCurveTo(262, 30, 270, 100, 300, 85);
+      ctx.bezierCurveTo(340, 65, 360, 110, 410, 80);
+      ctx.moveTo(30, 122);
+      ctx.bezierCurveTo(150, 110, 300, 135, 440, 118);
+      ctx.stroke();
+      return canvas.toDataURL("image/png").split(",")[1];
+    });
+    const signatureFile = `${os.tmpdir()}/help-demo-signature.png`;
+    writeFileSync(signatureFile, Buffer.from(signaturePng, "base64"));
+    await adminPage.locator("#signatory-name").fill("Carmen Dela Rosa");
+    await adminPage.locator("#signatory-title").fill("Human Resources Director");
+    await adminPage.locator("#signatory-picture").setInputFiles(signatureFile);
+    await expect(adminPage.locator("form img")).toBeVisible();
+    await snap(adminPage, "how-payroll-works", "03-payslip-signatory", "Settings, Payslip signatory: the name, the title and the signature picture that print on every payslip.", {
+      viewport: { width: 1280, height: 900 },
+      highlight: [adminPage.locator("#signatory-name"), adminPage.locator("#signatory-picture")],
+    });
+    await adminPage.getByRole("button", { name: "Save signatory" }).click();
+    await expect(adminPage.getByText("Payslip signatory saved.")).toBeVisible();
+
     // Settings: the extra-hours rate for this period.
     await prepPage.goto("/payroll/settings");
     await snap(prepPage, "prepare-a-pay-run", "01-settings", "Payroll, Settings: the cutoff divisor and the rates for extra hours.", {
@@ -325,15 +364,22 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     // Newest payslip first: earlier runs of this tool may have left older ones for the same person
     const link = workPage.getByRole("link", { name: "Download PDF" }).first();
     await expect(link).toBeVisible();
-    await snap(workPage, "read-your-payslip", "02-my-pay", "My pay after the run is paid: the pay period, the net pay and Download PDF.", { highlight: [link] });
+    const viewLink = workPage.getByRole("link", { name: /View the payslip for/ }).first();
+    await expect(viewLink).toBeVisible();
+    await snap(workPage, "read-your-payslip", "02-my-pay", "My pay after the run is paid: the pay period, the net pay, View and Download PDF.", { highlight: [viewLink, link] });
+    // The payslip on screen, for the run made here
+    await workPage.goto(`/my-pay/${runId}`);
+    await expect(workPage.getByText("Carmen Dela Rosa")).toBeVisible();
+    await snap(workPage, "read-your-payslip", "03-payslip", "A payslip on screen: the period, how it was paid, the pay line by line, the net pay and who signed it.", { viewport: { width: 1280, height: 960 } });
+    await workPage.goto("/my-pay");
     const bell = workPage.getByRole("button", { name: /notification/i }).first();
     if (await bell.count()) {
       await bell.click();
       await expect(workPage.getByText("Your payslip is ready").first()).toBeVisible();
-      await snap(workPage, "read-your-payslip", "03-notice", "The bell in the header shows the notice: Your payslip is ready.", { highlight: [workPage.getByText("Your payslip is ready").first()] });
+      await snap(workPage, "read-your-payslip", "04-notice", "The bell in the header shows the notice: Your payslip is ready.", { highlight: [workPage.getByText("Your payslip is ready").first()] });
       await workPage.keyboard.press("Escape");
     } else {
-      console.log("  note  read-your-payslip/03-notice: the notification button was not found");
+      console.log("  note  read-your-payslip/04-notice: the notification button was not found");
     }
 
     // The change history, and the list of runs.

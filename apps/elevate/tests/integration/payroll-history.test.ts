@@ -271,7 +271,9 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     )
       .map((r) => r.action)
       .sort();
-    expect(seen).toEqual([...CHANGE_ACTIONS].sort());
+    // "signatory_changed" is proved in payroll-payslips.test.ts: that file owns the payslip signatory table (it expects it empty at the
+    // start), so this file must not write a signatory.
+    expect(seen).toEqual(CHANGE_ACTIONS.filter((a) => a !== "signatory_changed").sort());
   });
 
   it("has a plain label for every kind of change, and none says overtime or PTO", () => {

@@ -47,6 +47,14 @@ A draft that was made for the wrong period, or that is out of date, can be **can
 
 If you cannot see **Payroll**, you have not been chosen. Ask a Super Admin if you should be.
 
+# Who signs the payslips
+
+Every payslip carries the name, title and signature of the Human Resources Director. A **Super Admin** sets them under **Settings**, then **Payslip signatory**: the name, the title (it starts as Human Resources Director) and a picture of the signature. This does not give anyone access to pay.
+
+![Settings, Payslip signatory: the name, the title and the signature picture that print on every payslip.](help:how-payroll-works/03-payslip-signatory.png)
+
+A pay run keeps the signatory in force on the day it is paid, so an earlier payslip never changes when the Human Resources Director changes. A run paid before anyone was set up still pays on time: its payslips say **Not signed**.
+
 # What is kept
 
 Every change is written to the change history: who made it, when, the old and new values and the reason. It cannot be edited or removed. Amounts are never sent in notices or emails, and pay is kept encrypted. A person's payslip can be opened only by that person.
@@ -61,7 +69,7 @@ Every change is written to the change history: who made it, when, the old and ne
 
 - **I am HR or a Super Admin and I cannot see Payroll.** That is on purpose. Ask a Super Admin to give you a level.
 - **Why can't I approve this run?** You prepared it, changed it, checked a line on it, or wrote a rate it uses. Another Approver must do it.
-- **Where is my payslip?** Open **My pay**. It appears only after the whole pay run it belongs to is paid.
+- **Where is my payslip?** Open **My pay**. It appears only after the whole pay run it belongs to is paid. Click **View** to read it on the page, or **Download PDF** to keep a copy.
 
 # Try it yourself
 

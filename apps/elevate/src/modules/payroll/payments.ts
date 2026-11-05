@@ -15,6 +15,7 @@ import { readRun, type Executor } from "./runs";
 import { buildRemitlyRows, personName } from "./remitly";
 import { payPayments, payRunLines, payRuns } from "./schema";
 import { assertNotOwnEmployee, payrollToday } from "./service";
+import { freezeRunSignatory } from "./signatory";
 
 // Paying: the Remitly list and the record of who was paid. ELEVATE sends no money; a Preparer pays in Remitly and records the reference.
 // Every function takes the acting user or a transaction, so it is called only from actions that already ran requireUser() and authorize().
@@ -198,6 +199,8 @@ export async function recordPayment(
         runId: v.runId,
         detail: { people: people.length },
       });
+      // The payslips carry whoever signs payslips today, kept with the run so they never change afterwards.
+      await freezeRunSignatory(tx, v.runId, payrollToday());
       await notifyPayslipsReady(tx, v.runId);
       runPaid = true;
     }

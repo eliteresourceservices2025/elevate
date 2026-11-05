@@ -10,8 +10,10 @@ import { PAYSLIP_LABELS as L } from "./constants";
 import { formatPesos } from "./money";
 import type { PayslipInput } from "./payslip";
 import { personName } from "./remitly";
-import { payRunLines, payRuns } from "./schema";
+import { payLines, payPayments, payRunLines, payRuns } from "./schema";
 import { decryptRunLine, employeeIdForUser } from "./service";
+import { runSignatory } from "./signatory";
+import type { SettingsSnapshot } from "./calculate";
 
 // A person's own payslips. Scoped through the signed-in person's own people record, never by a payroll level or a role: nobody, not even
 // a Super Admin, reads anyone else's. A payslip exists only for a run that is paid. Nothing here writes an amount to a log.
@@ -98,14 +100,15 @@ export async function getMyPayslip(actor: AuthzUser, runId: string): Promise<(Pa
   if (!employeeId) return null;
 
   const [run] = await db
-    .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, usdRateE4: payRuns.usdRateE4 })
+    .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, usdRateE4: payRuns.usdRateE4, settingsSnapshot: payRuns.settingsSnapshot })
     .from(payRuns)
     .where(and(eq(payRuns.id, runId), eq(payRuns.status, "paid")))
     .limit(1);
   if (!run) return null;
   const lines = await db
-    .select({ id: payRunLines.id, alias: payRunLines.alias, payloadEnc: payRunLines.payloadEnc })
+    .select({ id: payRunLines.id, alias: payRunLines.alias, payloadEnc: payRunLines.payloadEnc, paymentMethod: payLines.paymentMethod })
     .from(payRunLines)
+    .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
     .where(and(eq(payRunLines.runId, runId), eq(payRunLines.employeeId, employeeId)))
     .orderBy(asc(payRunLines.alias), asc(payRunLines.id));
   if (lines.length === 0) return null;
@@ -115,6 +118,17 @@ export async function getMyPayslip(actor: AuthzUser, runId: string): Promise<(Pa
     .where(eq(employees.id, employeeId))
     .limit(1);
 
+  // Independent of each other: asked together.
+  const [[payment], signatory] = await Promise.all([
+    db
+      .select({ paidOn: payPayments.paidOn })
+      .from(payPayments)
+      .where(and(eq(payPayments.runId, runId), eq(payPayments.employeeId, employeeId)))
+      .orderBy(desc(payPayments.createdAt))
+      .limit(1),
+    runSignatory(db, runId),
+  ]);
+
   const decrypted = lines.map((l) => ({ alias: l.alias, payload: readable(l.id, l.payloadEnc) }));
   if (decrypted.some((l) => l.payload === null)) throw new PayslipUnreadable();
   return {
@@ -123,6 +137,11 @@ export async function getMyPayslip(actor: AuthzUser, runId: string): Promise<(Pa
     periodStart: run.periodStart,
     periodEnd: run.periodEnd,
     usdRateE4: run.usdRateE4,
+    paidOn: payment?.paidOn ?? null,
+    payslipNumber: `PS-${runId.slice(0, 8).toUpperCase()}-${employeeId.slice(0, 4).toUpperCase()}`,
+    paymentMethods: lines.map((l) => l.paymentMethod),
+    multipliersBp: (run.settingsSnapshot as SettingsSnapshot | null)?.multipliersBp ?? null,
+    signatory,
     lines: decrypted.map((l) => ({ alias: l.alias, input: l.payload!.input, result: l.payload!.result })),
   };
 }

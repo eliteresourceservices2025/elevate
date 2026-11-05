@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageContainer } from "@/components/page-container";
@@ -51,9 +52,15 @@ export default async function MyPayPage({ searchParams }: PageProps<"/my-pay">) 
                     {r.net}
                   </TableCell>
                   <TableCell label={L.download} className="text-right">
-                    <a href={`/api/payroll/payslips/${r.runId}`} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                      {L.download}
-                    </a>
+                    <div className="flex justify-end gap-2">
+                      {/* No prefetch: opening a payslip page is audited, so only a real click may run it. */}
+                      <Link href={`/my-pay/${r.runId}`} prefetch={false} aria-label={L.viewAction(r.periodLabel)} className={buttonVariants({ variant: "default", size: "sm" })}>
+                        {L.view}
+                      </Link>
+                      <a href={`/api/payroll/payslips/${r.runId}`} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                        {L.download}
+                      </a>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

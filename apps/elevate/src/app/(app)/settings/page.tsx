@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bell, Compass, FileText, FileUp, History, LifeBuoy, ListChecks, Mail, ShieldCheck, Wallet } from "lucide-react";
+import { Bell, Compass, FileText, FileUp, History, LifeBuoy, ListChecks, Mail, PenLine, ShieldCheck, Wallet } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -44,6 +44,13 @@ const SECTIONS = [
     icon: Wallet,
     title: "Payroll access",
     description: "Choose who can prepare, approve or view payroll. No role grants it.",
+  },
+  {
+    href: "/settings/payroll-signatory",
+    action: "settings.set_payroll_signatory",
+    icon: PenLine,
+    title: "Payslip signatory",
+    description: "The name, title and signature of the Human Resources Director on every payslip.",
   },
   {
     href: "/settings/invitations",

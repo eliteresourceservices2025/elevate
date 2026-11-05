@@ -218,3 +218,37 @@ export const payChangeLog = payroll
     ],
   )
   .enableRLS();
+
+/**
+ * Who signs the payslips (the Human Resources Director): append-only versions, so a change is a new row and an old one never changes.
+ * The signature is a small JPEG, kept as base64 inside `signature_enc` (context `pay_signatory:<id>`). Only a Super Admin writes it.
+ */
+export const paySignatory = payroll
+  .table(
+    "pay_signatory",
+    {
+      id: uuid("id").primaryKey(),
+      name: text("name").notNull(),
+      title: text("title").notNull(),
+      signatureEnc: text("signature_enc"),
+      createdBy: uuid("created_by").references(() => users.id),
+      // clock_timestamp(), not now(): the newest version is picked by this, so it must follow the order the saves were made in.
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
+    },
+    (t) => [check("pay_signatory_text_chk", sql`char_length(${t.name}) between 1 and 120 and char_length(${t.title}) between 1 and 120`)],
+  )
+  .enableRLS();
+
+/** Append-only. The signatory version in force when the run became paid, kept so a payslip never changes. No row: it was paid unsigned. */
+export const payRunSignatures = payroll
+  .table("pay_run_signatures", {
+    runId: uuid("run_id")
+      .primaryKey()
+      .references(() => payRuns.id),
+    signatoryId: uuid("signatory_id")
+      .notNull()
+      .references(() => paySignatory.id),
+    signedOn: date("signed_on").notNull(),
+    createdAt: createdAt(),
+  })
+  .enableRLS();

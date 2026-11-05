@@ -166,10 +166,22 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
     expect(slip.headers()["content-type"]).toContain("application/pdf");
     expect((await slip.body()).subarray(0, 5).toString("latin1")).toBe("%PDF-");
 
+    // The worker can also read the payslip in the page. Whether it is signed depends on the settings of this database, so only the
+    // signature block is checked, not who signed.
+    const view = workPage.locator(`a[href="/my-pay/${runId}"]`);
+    await expect(view).toHaveCount(1);
+    await view.click();
+    await expect(workPage).toHaveURL(new RegExp(`/my-pay/${runId}$`));
+    await expect(workPage.getByRole("heading", { level: 1, name: /^Payslip \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}$/ })).toBeVisible();
+    await expect(workPage.getByText("Net pay").first()).toBeVisible();
+    await expect(workPage.getByText("Authorized by")).toBeVisible();
+    await expect(workPage.getByRole("link", { name: "Download PDF" })).toHaveAttribute("href", `/api/payroll/payslips/${runId}`);
+
     // Only their own payslip: another run id (a real one when the database has one) and a made-up one are both not found.
     const other = (await anotherPayRunId(runId)) ?? "00000000-0000-4000-8000-000000000000";
     for (const id of [other, "11111111-1111-4111-8111-111111111111"]) {
       expect((await workPage.context().request.get(`/api/payroll/payslips/${id}`)).status()).toBe(404);
+      expect((await workPage.goto(`/my-pay/${id}`))?.status()).toBe(404);
     }
     expect((await workPage.goto(`/payroll/${runId}`))?.status()).toBe(404);
 
