@@ -127,3 +127,70 @@ export async function hydrated(locator: Locator): Promise<Locator> {
   await expect.poll(() => locator.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
   return locator;
 }
+
+// ---- Payroll ----
+// Payroll tables are append-only and a run is unique per period, so a payroll test works in a made-up period long in the past (random,
+// checked free in the local database) and, when it is done, ends the pay lines it made so they never leak into a later test's run.
+
+const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * A two-day pay period between 2001 and 2019 where no live run exists, no pay line is in force and no pay settings version is dated on
+ * the start or on `later` (five days after the start). Pay settings are chosen by the day a period starts, so a test can save a version
+ * on `start` and one on `later` that puts the old values back, leaving today's settings as they were.
+ */
+export async function pickFreePayrollPeriod(): Promise<{ start: string; end: string; later: string }> {
+  assertLocal();
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const year = 2001 + (randomBytes(1)[0] % 19);
+      const month = 1 + (randomBytes(1)[0] % 12);
+      const day = 1 + (randomBytes(1)[0] % 20);
+      const start = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const end = addDays(start, 1);
+      const later = addDays(start, 5);
+      const [busy] = await sql<{ n: number }[]>`
+        select (
+          (select count(*) from payroll.pay_runs where status <> 'cancelled' and period_start <= ${end}::date and period_end >= ${start}::date)
+          + (select count(*) from payroll.pay_settings where effective_from in (${start}::date, ${later}::date))
+          + (select count(*) from (
+               select distinct on (line_key) ends_on, effective_from from payroll.pay_lines order by line_key, effective_from desc, created_at desc
+             ) l where l.effective_from <= ${end}::date and (l.ends_on is null or l.ends_on >= ${start}::date))
+        )::int as n`;
+      if (busy.n === 0) return { start, end, later };
+    }
+    throw new Error("Could not find a free pay period in the local database.");
+  } finally {
+    await sql.end();
+  }
+}
+
+/** Gives every pay line a person has an END version dated its first day (copied in SQL, ciphertext included), so it is never in force again. */
+export async function endPayLinesOf(employeeId: string): Promise<void> {
+  assertLocal();
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    await sql`
+      insert into payroll.pay_lines (id, line_key, employee_id, client_id, alias, hours_per_day, payment_method, fte, ends_on, effective_from, amounts_enc, created_by)
+      select gen_random_uuid(), l.line_key, l.employee_id, l.client_id, l.alias, l.hours_per_day, l.payment_method, l.fte, l.effective_from, l.effective_from, l.amounts_enc, l.created_by
+      from (
+        select distinct on (line_key) * from payroll.pay_lines where employee_id = ${employeeId} order by line_key, effective_from desc, created_at desc
+      ) l
+      where l.ends_on is null`;
+  } finally {
+    await sql.end();
+  }
+}
+
+/** Any other run than the given one, for "a payslip that is not yours" checks; null when the database has none. */
+export async function anotherPayRunId(notThis: string): Promise<string | null> {
+  assertLocal();
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    const [row] = await sql<{ id: string }[]>`select id from payroll.pay_runs where id <> ${notThis}::uuid order by created_at desc limit 1`;
+    return row?.id ?? null;
+  } finally {
+    await sql.end();
+  }
+}
