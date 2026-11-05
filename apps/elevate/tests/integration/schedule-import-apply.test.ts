@@ -190,6 +190,7 @@ describe("applying a schedule import", () => {
     const mine = preview.plan.rows.filter((r) => r.personId === p.id);
     expect(mine).toHaveLength(2);
     expect(mine.every((r) => r.hoursPerWeek === 40 && r.breakMinutes === 60)).toBe(true);
+    expect(mine.every((r) => r.status === "update")).toBe(true);
 
     const result = await apply.applyBatch(a, { batchId, digest: preview.digest, accepted: mine.map((r) => ({ key: r.key })), endAssignmentIds: [], endDate: null, acknowledgeBackdated: false });
     expect(result).toMatchObject({ assignmentsAdded: 1, assignmentsEnded: 0, hoursUpdated: 1, schedulesAdded: 1, rowsSkipped: [] });

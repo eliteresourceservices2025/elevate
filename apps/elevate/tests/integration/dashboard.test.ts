@@ -146,7 +146,8 @@ describe("onboarding tracker follows the same scope as the onboarding pages", ()
     const [opening] = await rows<{ id: string }>(sql`insert into talent.job_openings (title, description, status) values ('Dash tracker job', 'x', 'closed') returning id`);
     const [cand] = await rows<{ id: string }>(sql`insert into talent.candidates (email, full_name) values (${`${uniq("hire")}@example.com`}, ${first}) returning id`);
     const [app] = await rows<{ id: string }>(sql`insert into talent.applications (opening_id, candidate_id, stage) values (${opening.id}, ${cand.id}, 'hired') returning id`);
-    const [kase] = await rows<{ id: string }>(sql`insert into talent.onboarding_cases (employee_id, application_id, start_date, created_by, hired_without_offer_reason) values (${hireId}, ${app.id}, ${todayInZone()}, ${hr.id}, 'test fixture') returning id`);
+    // The dashboard intentionally shows only six cases. Give this fixture the earliest date so data left by other integration files cannot push it out of that list.
+    const [kase] = await rows<{ id: string }>(sql`insert into talent.onboarding_cases (employee_id, application_id, start_date, created_by, hired_without_offer_reason) values (${hireId}, ${app.id}, '1900-01-01', ${hr.id}, 'test fixture') returning id`);
     for (const [i, [title, status, due]] of ([["Done task", "done", "2026-01-01"], ["Overdue task", "todo", "2026-01-02"], ["Later task", "todo", "2099-01-01"]] as const).entries()) {
       await db.execute(sql`insert into talent.checklist_tasks (onboarding_case_id, employee_id, position, title, owner, due_on, status) values (${kase.id}, ${hireId}, ${i}, ${title}, 'hr', ${due}::date, ${status})`);
     }

@@ -259,7 +259,7 @@ export function buildPlan(observations: Observation[], live: LiveData, options: 
       if (openSchedule && useCombined && openSchedule.effectiveFrom > groupFirstDay && seg.key === ownerKey) attention.push(`The current schedule starts ${openSchedule.effectiveFrom}, later than the first day on the sheet.`);
       const show: Shift = useCombined ? shift : { startTime: seg.parsed.startTime, endTime: seg.parsed.endTime, zone: seg.parsed.zone, weekdays: seg.parsed.weekdays, breakMinutes: seg.breakMinutes };
       const firstDay = seg.key === ownerKey ? groupFirstDay : seg.firstDay;
-      const status = assignment === "keep" && ["same", "shared", "unset"].includes(schedule) && hoursNote !== "fill" ? "unchanged" : "update";
+      const status = assignment === "keep" && ["same", "shared", "unset"].includes(schedule) && hoursNote === null ? "unchanged" : "update";
       const siblings = segments.filter((s) => s.key !== seg.key);
       rows.push({
         key: seg.key, sheetName, sheetClient: seg.sheetClient, personId: person.id, personName: [person.first, person.last].filter(Boolean).join(" "), workEmail: person.workEmail,
