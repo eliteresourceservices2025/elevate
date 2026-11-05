@@ -7,6 +7,12 @@ import { endPayrollLinesWhenDone } from "./payroll-test-helpers";
 // Invented names and figures only.
 
 vi.mock("server-only", () => ({}));
+// Lets one test hand logChange the same row id twice, to show a conflict that is not a repeated view fails loudly.
+const fixedId = vi.hoisted(() => ({ value: null as string | null }));
+vi.mock("node:crypto", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:crypto")>();
+  return { ...real, randomUUID: () => fixedId.value ?? real.randomUUID() };
+});
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
@@ -45,7 +51,7 @@ async function advance(runId: string, to: string) {
   const order = ["in_review", "approved", "paid"];
   for (const s of order.slice(0, order.indexOf(to) + 1)) await db.execute(sql`update payroll.pay_runs set status = ${s} where id = ${runId}`);
 }
-// Slot coupling: these runs sit on the first days of each month of 2030; payroll-history.test.ts uses the 17th to the 28th (e.g. 2030-05-17) so the two files never collide.
+// Slot coupling: these runs sit on the first days of each month of 2030 (15 days long, so up to the 16th); payroll-history.test.ts uses the second cutoffs of October and November 2030 so the two files never collide.
 async function newRun(status = "draft") {
   const start = `2030-${String(1 + (counter % 12)).padStart(2, "0")}-${String(1 + Math.floor(counter / 12)).padStart(2, "0")}`;
   counter++;
@@ -248,6 +254,19 @@ describe("change log", () => {
     for (let i = 0; i < 3; i++) await logChange(db as never, { id: actorId }, { action: "run_viewed", runId });
     const found = await rows(sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'run_viewed'`);
     expect(found).toHaveLength(1);
+  });
+
+  it("only a repeated view is skipped: any other conflict fails loudly", async () => {
+    const runId = await newRun();
+    fixedId.value = randomUUID();
+    try {
+      await logChange(db as never, { id: actorId }, { action: "run_created", runId });
+      await raises(logChange(db as never, { id: actorId }, { action: "item_saved", runId }), /duplicate key|pay_change_log_pkey/);
+    } finally {
+      fixedId.value = null;
+    }
+    const found = await rows<{ action: string }>(sql`select action from payroll.pay_change_log where run_id = ${runId}`);
+    expect(found.map((r) => r.action)).toEqual(["run_created"]);
   });
 
   it("leaves no row when the transaction throws ActionFailure", async () => {

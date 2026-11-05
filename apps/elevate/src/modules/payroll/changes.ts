@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { fieldCrypto } from "@/lib/crypto";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import type { Tx } from "@/modules/people/service";
@@ -23,20 +24,26 @@ export async function logChange(tx: Tx, actor: { id: string }, entry: ChangeEntr
   const id = randomUUID();
   const detailEnc = fieldCrypto().encrypt(JSON.stringify(entry.detail ?? {}), contextFor(id));
   const isView = entry.action === "run_viewed";
-  await tx
-    .insert(payChangeLog)
-    .values({
-      id,
-      actorId: actor.id,
-      action: entry.action,
-      runId: entry.runId ?? null,
-      employeeId: entry.employeeId ?? null,
-      lineKey: entry.lineKey ?? null,
-      detailEnc,
-      // Opening a run is logged once per person, run and day (company time zone).
-      viewDay: isView ? formatInZone(Date.now(), DEFAULT_TIMEZONE, "yyyy-MM-dd") : null,
-    })
-    .onConflictDoNothing();
+  const insert = tx.insert(payChangeLog).values({
+    id,
+    actorId: actor.id,
+    action: entry.action,
+    runId: entry.runId ?? null,
+    employeeId: entry.employeeId ?? null,
+    lineKey: entry.lineKey ?? null,
+    detailEnc,
+    // Opening a run is logged once per person, run and day (company time zone).
+    viewDay: isView ? formatInZone(Date.now(), DEFAULT_TIMEZONE, "yyyy-MM-dd") : null,
+  });
+  // Only a repeated view is skipped (the view-row unique index, pay_change_log_view_idx); any other conflict is a real error and throws.
+  if (isView) {
+    await insert.onConflictDoNothing({
+      target: [payChangeLog.actorId, payChangeLog.runId, payChangeLog.viewDay],
+      where: sql`${payChangeLog.viewDay} is not null`,
+    });
+  } else {
+    await insert;
+  }
 }
 
 /** Decrypts a row's detail. Callers must already hold `payroll.view_history`. */

@@ -88,6 +88,8 @@ describe("choosing payroll access", () => {
     const after = await notesFor(person.id);
     expect(after).toHaveLength(2);
     expect(after.map((n) => n.body)).toContain(`${person.email} no longer has payroll access.`);
+    // ...and sends them to the dashboard, not to /payroll, which they can no longer open.
+    expect(after.find((n) => n.body === `${person.email} no longer has payroll access.`)!.link).toBe("/dashboard");
   });
 
   it("also notifies existing level holders other than the target and the actor", async () => {

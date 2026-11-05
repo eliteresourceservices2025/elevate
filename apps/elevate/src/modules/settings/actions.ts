@@ -215,7 +215,8 @@ export async function setPayrollAccess(input: unknown): Promise<ActionResult> {
             kind: "payroll.access",
             title: "Payroll access was changed",
             body,
-            link: "/payroll",
+            // The person whose access was just removed can no longer open /payroll.
+            link: id === userId && level === null ? "/dashboard" : "/payroll",
           })),
       ]);
       return { ok: true, data: undefined } as const;
@@ -310,6 +311,16 @@ export async function deactivateAccount(input: unknown): Promise<ActionResult> {
       await archiveUserAccount(tx, userId);
       await revokeSessions(tx, userId);
       await writeAudit({ actor, action: "user.deactivate", targetType: "user", targetId: userId, before: { email: target.email } }, tx);
+      // A payroll level does not survive deactivation, so switching the account back on never quietly restores it.
+      const [held] = await tx.select({ level: users.payrollAccess }).from(users).where(eq(users.id, userId)).limit(1).for("update");
+      if (held?.level) {
+        await tx.update(users).set({ payrollAccess: null }).where(eq(users.id, userId));
+        await writeAudit(
+          { actor, action: "user.payroll_access.update", targetType: "user", targetId: userId, before: { payrollAccess: held.level }, after: { payrollAccess: null }, metadata: { reason: "account_deactivated" } },
+          tx,
+        );
+        await logChange(tx, actor, { action: "access_changed", detail: { userId, from: held.level, to: null } });
+      }
     });
     revalidatePath("/settings/roles");
     return { ok: true, data: undefined };
