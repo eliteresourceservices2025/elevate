@@ -216,6 +216,8 @@ Assets hold no prices or values. Item notes are for HR only: never put passwords
 
 ## 5e2. Payroll problems
 
+Before real pay data: **Blocker: the privacy notice is currently over the 10,000-character policy limit** (`MARKDOWN_MAX_LENGTH`, enforced by `createPolicySchema` and the Markdown box) by about 200 characters, so it cannot be pasted into Settings > Policies as it is. Before publishing, the owner must either trim at least about 300 characters of counsel-approved wording or deliberately raise the policy limit (announcements module).
+
 Who can do what: only people a Super Admin chose (Settings > Payroll access) as Preparer, Approver or Viewer. No role has payroll, not even Super Admin. Module notes: `docs/modules/payroll.md`.
 
 | What you see | What it means | What to do |

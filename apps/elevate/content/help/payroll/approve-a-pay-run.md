@@ -53,5 +53,5 @@ Open the **History** tab to see every change: who did it, when, the old and new 
 
 # Try it yourself
 
-- Open a run that is paid and read one line against its **Net**.
-- Open **History** and filter by that run.
+- If there is a run waiting for approval, open it and read one line against its **Net**.
+- Open **History** and filter by a run.

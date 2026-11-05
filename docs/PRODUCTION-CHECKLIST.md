@@ -101,7 +101,7 @@ You proved the API clock-in works with `pnpm jibble:probe`. For the real link al
 
 ### 6b. Payroll (before any real pay data)
 
-- [ ] **Publish the updated privacy notice first** (Settings > Policies). It carries the Pay point (who can see pay). Real pay data must not enter ELEVATE until it is published.
+- [ ] **Publish the updated privacy notice first** (Settings > Policies). It carries the Pay point (who can see pay). Real pay data must not enter ELEVATE until it is published. **Blocker: the privacy notice is currently over the 10,000-character policy limit** (`MARKDOWN_MAX_LENGTH`, enforced by `createPolicySchema` and the Markdown box) by about 200 characters, so it cannot be pasted into Settings > Policies as it is. Before publishing, the owner must either trim at least about 300 characters of counsel-approved wording or deliberately raise the policy limit (announcements module).
 - [ ] **Choose at least 2 Preparers and at least 2 Approvers** (Settings > Payroll access, Super Admin only). Make sure the Approvers did **not** write the rates: anyone who wrote a rate a run pays can never approve that run. If the only Approver also wrote the only rates, nobody can approve until another Approver exists, or another Preparer writes new versions of those rates (which forces cancelling and recreating the run).
 - [ ] **Enter the extra-time multipliers and the cutoff divisor** in Payroll > Settings, from the sheet owner (never guessed). Until they are set, any extra hours block sending for review.
 - [ ] **Keep EVERY old `FIELD_ENCRYPTION_KEYS` entry, forever.** Approved pay rows are frozen and cannot be re-encrypted. No re-encrypt job exists in the code, although CLAUDE.md describes one for other fields. Dropping an old key makes old pay unreadable.

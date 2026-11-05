@@ -103,7 +103,7 @@ An approved run never changes. A mistake is fixed on a later run by an `adjustme
 
 ## Privacy and 1099
 
-- The privacy notice (draft, unpublished) has a **Pay** point: pay is visible to the person and to staff individually chosen for payroll; HR and administrator roles can also see the pay rate held on the record (the old field); payroll figures are encrypted and every change is kept in a permanent history. The "Sensitive details" line points to it so they do not contradict. Publish once, before real data (`docs/PRODUCTION-CHECKLIST.md`).
+- The privacy notice (draft, unpublished) has a **Pay** point: pay is visible to the person and to staff individually chosen for payroll; HR and administrator roles can also see the pay rate held on the record (the old field); payroll figures are encrypted and every change is kept in a permanent history. The "Sensitive details" line points to it so they do not contradict. Publish once, before real data (`docs/PRODUCTION-CHECKLIST.md`). **Blocker: the privacy notice is currently over the 10,000-character policy limit** (`MARKDOWN_MAX_LENGTH`, enforced by `createPolicySchema` and the Markdown box) by about 200 characters, so it cannot be pasted into Settings > Policies as it is. Before publishing, the owner must either trim at least about 300 characters of counsel-approved wording or deliberately raise the policy limit (announcements module).
 - 1099 contractors: no leave accrual or PTO; "extra hours" not "overtime". Counsel must confirm the wording and whether paying premiums and making deductions affects contractor status, and set the retention period for pay records.
 - No patient data in any reason or note; the forms say so.
 
@@ -117,7 +117,7 @@ Frozen pay rows (approved runs) cannot be re-encrypted, so **every old `FIELD_EN
 - Integration (`pnpm test:integration`, real Postgres): `tests/integration/payroll-*.test.ts` (access, lines, runs, suggestions, approval, payments, payslips, history, schema). Run the whole set twice in a row: a leftover from the first run must not break the second.
 - **Per-file year ranges:** payroll tables are append-only and a run is unique per period, so each integration file uses its own years inside 2024 to 2030 (history uses the 17th to the 28th of 2030 months; the schema test uses the first days of 2030 months). Before taking a period, grep the other files.
 - **`endPayrollLinesWhenDone(db)`** (`payroll-test-helpers.ts`): call once at the top of every payroll integration file. After the file it adds an END version, dated the line's first day, to every pay line the file created, so open-ended lines do not leak into runs built by later files.
-- Seed: `pnpm db:seed` (local only) gives the fake HR Admin account the Preparer level, the Executive account the Approver level and the Recruiter account the Viewer level, plus five invented pay lines. It sets no pay settings; enter fake rates in Payroll > Settings to try a run.
+- Seed: `pnpm db:seed` (local only) gives the fake HR Admin account the Preparer level, the Executive account the Approver level and the Recruiter account the Viewer level, plus five invented pay lines. The Super Admin seed account has no payroll level, so it sees no Payroll menu. It sets no pay settings; enter fake rates in Payroll > Settings to try a run.
 
 ## Parallel run (spec section 11, stage 7)
 

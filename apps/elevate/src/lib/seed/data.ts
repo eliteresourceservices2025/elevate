@@ -128,6 +128,9 @@ export function buildSeedDataset(count = 40, seed = 20260930): SeedDataset {
 // Invented levels and pay lines for the fake accounts, so the Payroll screens have something to show. Amounts are invented and
 // bear no relation to anyone. The seed script writes them encrypted, only where a person has no pay line yet.
 
+/** The fake sign-in accounts, in order: account i is the person at index i of the seeded people. */
+export const SEED_ACCOUNT_ROLES = ["super_admin", "hr_admin", "team_lead", "recruiter", "executive", "employee"] as const;
+
 /** Payroll levels for the fake sign-in accounts (by role). One of each level; the Super Admin account is left without a level on purpose. */
 export const SEED_PAYROLL_LEVELS = [
   { role: "hr_admin", level: "preparer" },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSeedDataset, SEED_PAY_LINES, SEED_PAYROLL_LEVELS } from "./data";
+import { buildSeedDataset, SEED_ACCOUNT_ROLES, SEED_PAY_LINES, SEED_PAYROLL_LEVELS } from "./data";
 import { assertSeedAllowed } from "./guard";
 
 describe("seed dataset", () => {
@@ -55,8 +55,7 @@ describe("seed payroll data", () => {
   });
 
   it("keeps pay lines off the people who hold a level (their own line would block approval) and uses whole invented centavos", () => {
-    const accountIndexOf: Record<string, number> = { super_admin: 0, hr_admin: 1, team_lead: 2, recruiter: 3, executive: 4, employee: 5 };
-    const holders = SEED_PAYROLL_LEVELS.map((l) => accountIndexOf[l.role]);
+    const holders = SEED_PAYROLL_LEVELS.map((l) => SEED_ACCOUNT_ROLES.indexOf(l.role));
     for (const l of SEED_PAY_LINES) {
       expect(holders).not.toContain(l.employeeIndex);
       expect(l.employeeIndex).toBeLessThan(40);

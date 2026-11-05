@@ -9,7 +9,7 @@ import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import postgres from "postgres";
 import { createFieldCrypto } from "@/lib/crypto-core";
-import { buildSeedDataset, SEED_PAY_LINES, SEED_PAYROLL_LEVELS, type SeedDataset } from "@/lib/seed/data";
+import { buildSeedDataset, SEED_ACCOUNT_ROLES, SEED_PAY_LINES, SEED_PAYROLL_LEVELS, type SeedDataset } from "@/lib/seed/data";
 import { assertSeedAllowed } from "@/lib/seed/guard";
 import { SENSITIVE_FIELDS, type SensitiveField } from "@/modules/people/constants";
 import { maskFor, sensitiveContext } from "@/modules/people/sensitive";
@@ -17,7 +17,7 @@ import { maskFor, sensitiveContext } from "@/modules/people/sensitive";
 config({ path: ".env.local" });
 assertSeedAllowed(process.env);
 
-const ROLES = ["super_admin", "hr_admin", "team_lead", "recruiter", "executive", "employee"] as const;
+const ROLES = SEED_ACCOUNT_ROLES;
 const CREDENTIALS_FILE = ".seed-credentials.local"; // git-ignored
 
 const url = process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL!;
