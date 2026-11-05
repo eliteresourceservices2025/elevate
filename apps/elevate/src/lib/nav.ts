@@ -30,6 +30,7 @@ import {
   GraduationCap,
   ListChecks,
   UsersRound,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -104,6 +105,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Admin",
     items: [
+      { href: "/payroll", label: "Payroll", icon: Wallet, description: "Pay runs, rates and settings for the people chosen to run payroll.", access: { action: "payroll.view", scopes: ["all"] } },
       { href: "/settings", label: "Settings", icon: Settings, description: "Roles, policies, templates, time zones and audit log." },
     ],
   },

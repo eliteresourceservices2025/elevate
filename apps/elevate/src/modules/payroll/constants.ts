@@ -137,3 +137,74 @@ export type ChangeAction = (typeof CHANGE_ACTIONS)[number];
 
 export const PAY_ITEM_STATES = ["suggested", "confirmed", "dismissed"] as const;
 export type PayItemState = (typeof PAY_ITEM_STATES)[number];
+
+export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
+  draft: "Draft",
+  in_review: "In review",
+  approved: "Approved",
+  paid: "Paid",
+};
+
+/** Headings and wording of the runs list and the worksheet. */
+export const WORKSHEET_LABELS = {
+  groups: { person: "Person", basis: "Pay basis", deductions: "Deductions", extra: "Extra hours", allowances: "Allowances", adjustments: "Adjustments", result: "Result", reference: "Reference only" },
+  person: "Person",
+  client: "Client",
+  hoursPerDay: "Hours per day",
+  fte: "FTE",
+  monthly: "Monthly rate",
+  base: "Cutoff pay",
+  absences: "Absences",
+  late: "Late and undertime",
+  pesoAllowance: "Allowance or fee (pesos)",
+  dollarAllowance: "Allowance (dollars)",
+  dollarAllowancePesos: "Dollar allowance in pesos",
+  adjustment: "Reimbursement, bonus or adjustment",
+  loan: "Loan",
+  otherDeductions: "Other deduction",
+  gross: "Gross",
+  net: "Net",
+  clientHours: "Client hours",
+  confirmation: "Checked by",
+  actions: "Actions",
+  unconfirmed: "Not yet",
+  unreadable: "Can't be read",
+  totals: "Totals",
+  byClient: "By client",
+  dollarRate: "Dollar rate",
+  noRate: "Not set",
+  period: "Period",
+  status: "Status",
+  lines: "Lines",
+  newRun: "New run",
+  noClient: "No client",
+} as const;
+
+/** Deductions entered by hand need a reason, as does overriding a suggestion. */
+export const REASON_REQUIRED_TYPES: readonly PayItemType[] = ["loan", "other_deduction"];
+
+export const BLOCKING_CHECKS = ["missing_usd_rate", "missing_multiplier", "negative_net", "unassigned_suggestion", "own_line_unconfirmed", "unreadable_line"] as const;
+export const WARNING_CHECKS = ["unapproved_days", "no_payout_details", "new_or_leaving", "rate_change_mid_period", "pending_suggestions", "large_change"] as const;
+export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
+
+export const CHECK_LABELS: Record<CheckCode, string> = {
+  missing_usd_rate: "A dollar allowance needs this run's dollar rate",
+  missing_multiplier: "An extra-hours rate is not set in the settings",
+  negative_net: "Net pay is below zero",
+  unassigned_suggestion: "Suggested amounts are not assigned to a pay line",
+  own_line_unconfirmed: "Your own line needs a confirmation from another Preparer",
+  unreadable_line: "This line can't be read",
+  unapproved_days: "Some days in the period are not approved",
+  no_payout_details: "No payout details on file",
+  new_or_leaving: "Starts, ends or has left during this period",
+  rate_change_mid_period: "The rate changes during this period",
+  pending_suggestions: "Suggested amounts are waiting for a decision",
+  large_change: "Net pay changed a lot from the last run",
+};
+
+export const LINE_FLAG_LABELS: Record<string, string> = {
+  rate_change_mid_period: "Rate changes in the period",
+  starts_mid_period: "Starts in the period",
+  ends_mid_period: "Ends in the period",
+  person_left: "Person has left",
+};

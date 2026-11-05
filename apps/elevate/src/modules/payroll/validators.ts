@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isoDate } from "@/modules/people/validators";
-import { PAYMENT_METHODS } from "./constants";
+import { PAY_ITEM_TYPES, PAYMENT_METHODS } from "./constants";
+import { ITEM_UNIT_HINTS, itemUnit, parseItemValue, parseUsdRate } from "./items";
 import { parseMoney } from "./money";
 
 // One schema per form, reused by the server action. Amounts arrive as typed strings and go through parseMoney: never negative,
@@ -58,6 +59,44 @@ export const savePaySettingsSchema = z.object({
   holiday: percentToBp,
   reason: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().trim().max(500).optional()),
 });
+
+const MAX_PERIOD_MS = 30 * 86_400_000; // 31 days, both ends counted
+const dayMs = (d: string) => Date.parse(`${d}T00:00:00Z`);
+
+export const createPayRunSchema = z
+  .object({ periodStart: isoDate, periodEnd: isoDate })
+  .refine((v) => v.periodEnd >= v.periodStart, { message: "The period can't end before it starts", path: ["periodEnd"] })
+  .refine((v) => dayMs(v.periodEnd) - dayMs(v.periodStart) <= MAX_PERIOD_MS, { message: "A pay period is at most 31 days", path: ["periodEnd"] });
+
+const optionalReason = z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().trim().max(500).optional());
+
+/** Whole minutes, day hundredths and non-negative money only: the calculator has no guards of its own. */
+export const savePayItemSchema = z
+  .object({
+    runId: uuid,
+    employeeId: uuid,
+    runLineId: uuid,
+    type: z.enum(PAY_ITEM_TYPES),
+    value: z.string().trim(),
+    reason: optionalReason,
+  })
+  .superRefine((v, ctx) => {
+    if (parseItemValue(v.type, v.value) === null) ctx.addIssue({ code: "custom", path: ["value"], message: ITEM_UNIT_HINTS[itemUnit(v.type)] });
+  });
+
+export const dismissPayItemSchema = z.object({ runId: uuid, itemId: uuid, reason: optionalReason });
+
+/** Blank clears the rate. */
+export const setRunUsdRateSchema = z.object({
+  runId: uuid,
+  rate: z
+    .string()
+    .trim()
+    .refine((s) => s === "" || parseUsdRate(s) !== null, "Enter a rate like 58.50")
+    .transform((s) => (s === "" ? null : parseUsdRate(s))),
+});
+
+export const confirmRunLineSchema = z.object({ runLineId: uuid });
 
 export type PayLineInput = z.input<typeof createPayLineSchema>;
 export type UpdatePayLineInput = z.input<typeof updatePayLineSchema>;

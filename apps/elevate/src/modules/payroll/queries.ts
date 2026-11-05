@@ -1,15 +1,18 @@
 import "server-only";
-import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/modules/audit/write";
 import { clients, employees } from "@/modules/people/schema";
 import type { SettingsSnapshot } from "./calculate";
-import type { PaymentMethod } from "./constants";
+import { z } from "zod";
+import type { PaymentMethod, RunStatus } from "./constants";
 import { lineLastDay, resolveLines } from "./lines";
 import { formatPesos } from "./money";
-import { payLines, paySettings } from "./schema";
+import { buildWorksheet, type Worksheet } from "./runs";
+import { logChange } from "./changes";
+import { payLines, payRuns, paySettings } from "./schema";
 import { decryptLineAmounts, payrollToday, snapshotOf } from "./service";
 
 const today = payrollToday;
@@ -144,6 +147,54 @@ export async function getRateOptions(): Promise<RateOptions> {
     people: people.map((p) => ({ id: p.id, name: `${p.preferred?.trim() || p.first} ${p.last}` })),
     clients: clientRows,
   };
+}
+
+export type RunListRow = { id: string; periodStart: string; periodEnd: string; status: RunStatus; lineCount: number; createdAt: string };
+
+/** One page of runs, newest period first. Shows no figures. */
+export async function getRuns(paging: { page: number; pageSize: number }): Promise<{ rows: RunListRow[]; total: number; canPrepare: boolean }> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.view");
+
+  const [{ total }] = await db.select({ total: count() }).from(payRuns);
+  const rows = await db
+    .select({
+      id: payRuns.id,
+      periodStart: payRuns.periodStart,
+      periodEnd: payRuns.periodEnd,
+      status: payRuns.status,
+      createdAt: payRuns.createdAt,
+      lineCount: sql<number>`(select count(*)::int from payroll.pay_run_lines l where l.run_id = ${payRuns.id})`,
+    })
+    .from(payRuns)
+    .orderBy(desc(payRuns.periodStart), desc(payRuns.createdAt))
+    .limit(paging.pageSize)
+    .offset((paging.page - 1) * paging.pageSize);
+  return {
+    rows: rows.map((r) => ({ ...r, status: r.status as RunStatus, createdAt: r.createdAt.toISOString() })),
+    total,
+    canPrepare: can(actor, "payroll.prepare"),
+  };
+}
+
+export type WorksheetView = Worksheet & { canPrepare: boolean };
+
+/**
+ * The worksheet of a run, decrypted, or null when there is no such run. Opening it is a sensitive read: one `sensitive.view` audit row
+ * per call (ids and a count, never a figure) and at most one change-log view row per person, run and day.
+ */
+export async function getWorksheet(runId: string): Promise<WorksheetView | null> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.view");
+  if (!z.uuid().safeParse(runId).success) return null;
+
+  const sheet = await buildWorksheet(actor, runId);
+  if (!sheet) return null;
+  await db.transaction(async (tx) => {
+    await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["pay figures"], count: sheet.lines.length } }, tx);
+    await logChange(tx, actor, { action: "run_viewed", runId });
+  });
+  return { ...sheet, canPrepare: can(actor, "payroll.prepare") };
 }
 
 export type SettingsVersion = SettingsSnapshot & { effectiveFrom: string };

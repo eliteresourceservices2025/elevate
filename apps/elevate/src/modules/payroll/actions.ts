@@ -15,7 +15,18 @@ import { lineLastDay } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, assertNotOwnEmployee, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
-import { createPayLineSchema, endPayLineSchema, savePaySettingsSchema, updatePayLineSchema } from "./validators";
+import { confirmLine, createRun, dismissItem, saveItem, setUsdRate } from "./runs";
+import {
+  confirmRunLineSchema,
+  createPayLineSchema,
+  createPayRunSchema,
+  dismissPayItemSchema,
+  endPayLineSchema,
+  savePayItemSchema,
+  savePaySettingsSchema,
+  setRunUsdRateSchema,
+  updatePayLineSchema,
+} from "./validators";
 
 // Every action: requireUser() first, then authorize() inside runAction, then Zod. Each change writes the payroll change log (amounts and
 // reasons only inside its encrypted detail) and an audit row (ids only) in the same transaction.
@@ -214,6 +225,92 @@ export async function endPayLine(input: unknown): Promise<ActionResult<{ lineKey
 
     if (result.ok) refreshed();
     return result;
+  });
+}
+
+const refreshedRun = (runId?: string) => {
+  revalidatePath("/payroll");
+  if (runId) revalidatePath(`/payroll/${runId}`);
+};
+
+/** Builds a draft run for a period. Refuses a period that overlaps an existing run. */
+export async function createPayRun(input: unknown): Promise<ActionResult<{ runId: string }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = createPayRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const created = await db.transaction((tx) => createRun(tx, actor, parsed.data));
+    refreshedRun();
+    return { ok: true, data: { runId: created.runId } } as const;
+  });
+}
+
+/** Confirms or overrides an amount for one line of a draft run, then recomputes that person's lines. */
+export async function savePayItem(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = savePayItemSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => saveItem(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Removes an amount from a line (a new "dismissed" row; the old one stays in the history). */
+export async function dismissPayItem(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = dismissPayItemSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => dismissItem(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** The dollar rate for the run; blank clears it. */
+export async function setRunUsdRate(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = setRunUsdRateSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => setUsdRate(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** A Preparer other than the line's owner checks the line. Any later change to the line clears the confirmation. */
+export async function confirmRunLine(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = confirmRunLineSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => confirmLine(tx, actor, parsed.data.runLineId));
+    refreshedRun();
+    revalidatePath("/payroll/[runId]", "page");
+    return { ok: true, data: undefined } as const;
   });
 }
 
