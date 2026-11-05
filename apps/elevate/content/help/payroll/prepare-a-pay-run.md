@@ -31,17 +31,18 @@ You cannot add or change your own pay line. Another Preparer does it.
 # Start a run
 
 1. Open the **Runs** tab and click **New run**.
-2. Check **First day** and **Last day**. They are filled in for the last pay period; change them if you need to.
+2. Check **First day** and **Last day**. They are filled in for the last cutoff; change them if you need to.
 3. Click **Create run**. ELEVATE opens the run with one line for each pay line in force during the period.
 
-A period cannot overlap another run. If you chose the wrong period, or the pay lines changed after you made the run, click **Cancel run**, give a **Reason**, and create it again.
+A run always covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month. Any other dates are refused. There is one run per cutoff. If you chose the wrong period, or the pay lines changed after you made the run, click **Cancel run**, give a **Reason**, and create it again.
 
 # Fill in the run
 
 - Click **Suggest from approved hours**. ELEVATE suggests absent days, late minutes and extra hours from hours a lead approved. Nothing changes pay until you confirm it.
 - Click **Confirm** to accept a suggestion. If a person has more than one pay line, choose the line first (**Assign to line**, or **Assign and confirm**). To use a different amount, enter it yourself and write a reason.
 - Click **Amounts** on a person's row to type anything else: a loan, another deduction, an allowance, or a reimbursement or bonus. Choose **What to enter**, type the **Amount** and click **Save amount**. A reduction is a loan or an other deduction, never a negative amount. A loan and an other deduction need a **Reason**.
-- If anyone has a dollar allowance, click the **Dollar rate** button and enter **Pesos for one dollar**, then click **Save rate**.
+- Click the **Dollar rate** button, enter **Pesos for one dollar**, then click **Save rate**. Every run needs it, even when nobody has a dollar allowance: the Remitly list shows each person's pay in dollars.
+- For someone paid for part of the cutoff, enter the days or hours they worked. These can never pay more than a full cutoff; if they do, check what you typed (for example "15" instead of "1.5").
 - Every line must be checked by a Preparer. Click **Mark as checked** on a line that is not yours. Your own line is checked by another Preparer, and any change to a line asks for a new check.
 
 # Fix a mistake from an earlier run
@@ -50,7 +51,7 @@ An approved run never changes. Open **Amounts** on the person's line in a later 
 
 # Send it for review
 
-The checks appear above the worksheet. Problems that **block** must be fixed first: a missing dollar rate, an extra-hours rate not set, pay below zero, a suggestion with no pay line, your own line not checked, a line that cannot be read, or pay lines that changed after the run was made. Warnings (for example days not approved yet) are for you to read; they do not stop you.
+The checks appear above the worksheet. Problems that **block** must be fixed first: a missing dollar rate, an extra-hours rate not set, pay below zero, days or hours worked that pay more than a full cutoff, a suggestion with no pay line, your own line not checked, a line that cannot be read, or pay lines that changed after the run was made. Warnings (for example days not approved yet) are for you to read; they do not stop you.
 
 Click **Send for review**. The Approvers are told that a run is waiting. You cannot change the run while it is in review. If it comes back, read the note and fix what it asks.
 
