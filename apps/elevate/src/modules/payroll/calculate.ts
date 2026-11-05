@@ -39,8 +39,9 @@ export type LineResult = {
 
 /**
  * Pure pay calculator. Every money result is one exact fraction of the unrounded
- * rate, rounded once. Gross = base - absences - late + extra hours. Net = gross
- * + peso and dollar allowances + adjustment - loan - other deductions.
+ * rate, rounded once. Gross = base - absences - late + extra hours + peso
+ * allowance. Net = gross + dollar allowance in pesos + adjustment - loan -
+ * other deductions.
  * No tax or contributions are computed.
  */
 export function calculateLine(
@@ -89,7 +90,11 @@ export function calculateLine(
   }
 
   const gross =
-    base - absences - late + EXTRA_KEYS.reduce((sum, key) => sum + extra[key], 0n);
+    base -
+    absences -
+    late +
+    EXTRA_KEYS.reduce((sum, key) => sum + extra[key], 0n) +
+    input.pesoAllowance;
 
   let dollarAllowancePesos = 0n;
   if (input.dollarAllowanceCents > 0n) {
@@ -103,7 +108,6 @@ export function calculateLine(
 
   const net =
     gross +
-    input.pesoAllowance +
     dollarAllowancePesos +
     input.adjustment -
     input.loan -

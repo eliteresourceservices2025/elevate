@@ -22,7 +22,7 @@ export function parseMoney(input: string): bigint | null {
   const match = MONEY.exec(input.trim());
   if (!match) return null;
   const whole = BigInt(match[1].replace(/,/g, ""));
-  const cents = BigInt((match[2] ?? "").padEnd(2, "0") || "0");
+  const cents = BigInt((match[2] ?? "").padEnd(2, "0"));
   const total = whole * 100n + cents;
   return total > MAX_CENTAVOS ? null : total;
 }

@@ -130,6 +130,22 @@ describe("calculateLine", () => {
     expect(f(r.net)).toBe("15,200.00");
   });
 
+  it("counts a peso allowance in gross and net", () => {
+    const r = calculateLine(input({ pesoAllowance: m("1,000.00") }), settings, null);
+    expect(f(r.gross)).toBe("16,000.00");
+    expect(f(r.net)).toBe("16,000.00");
+  });
+
+  it("peso allowance is in gross while a loan only reduces net", () => {
+    const r = calculateLine(
+      input({ pesoAllowance: m("1,000.00"), loan: m("200.00") }),
+      settings,
+      null,
+    );
+    expect(f(r.gross)).toBe("16,000.00");
+    expect(f(r.net)).toBe("15,800.00");
+  });
+
   it("flags negative net", () => {
     const r = calculateLine(input({ loan: m("20,000") }), settings, null);
     expect(f(r.net)).toBe("-5,000.00");
