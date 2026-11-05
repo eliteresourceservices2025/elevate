@@ -14,20 +14,24 @@ const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull(
 
 /** Append-only: a change is a new row with a later `effective_from`; the newest row at or before a date applies. */
 export const paySettings = payroll
-  .table("pay_settings", {
-    id: uuid("id").primaryKey().defaultRandom(),
-    effectiveFrom: date("effective_from").notNull(),
-    cutoffDivisor: smallint("cutoff_divisor").notNull(),
-    /** Basis points: 12500 = 1.25x. Null until counsel/owner supplies the rate. */
-    extraRegularBp: integer("extra_regular_bp"),
-    extraHolidayBp: integer("extra_holiday_bp"),
-    extraRestDayBp: integer("extra_rest_day_bp"),
-    extraRestDayOver8Bp: integer("extra_rest_day_over_8_bp"),
-    holidayBp: integer("holiday_bp"),
-    changeWarnBp: integer("change_warn_bp").notNull(),
-    createdBy: uuid("created_by").references(() => users.id),
-    createdAt: createdAt(),
-  })
+  .table(
+    "pay_settings",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      effectiveFrom: date("effective_from").notNull(),
+      cutoffDivisor: smallint("cutoff_divisor").notNull(),
+      /** Basis points: 12500 = 1.25x. Null until counsel/owner supplies the rate. */
+      extraRegularBp: integer("extra_regular_bp"),
+      extraHolidayBp: integer("extra_holiday_bp"),
+      extraRestDayBp: integer("extra_rest_day_bp"),
+      extraRestDayOver8Bp: integer("extra_rest_day_over_8_bp"),
+      holidayBp: integer("holiday_bp"),
+      changeWarnBp: integer("change_warn_bp").notNull(),
+      createdBy: uuid("created_by").references(() => users.id),
+      createdAt: createdAt(),
+    },
+    (t) => [check("pay_settings_divisor_chk", sql`${t.cutoffDivisor} > 0`)],
+  )
   .enableRLS();
 
 /** Append-only. A new version of a line shares the `line_key`; `amounts_enc` holds { monthlyCentavos, pesoAllowanceCentavos, dollarAllowanceCents } as strings. */
@@ -43,6 +47,7 @@ export const payLines = payroll
       clientId: uuid("client_id").references(() => clients.id),
       alias: text("alias"),
       hoursPerDay: smallint("hours_per_day").notNull(),
+      paymentMethod: text("payment_method").notNull().default("remitly"),
       fte: numeric("fte", { precision: 3, scale: 2 }).notNull(),
       endsOn: date("ends_on"),
       effectiveFrom: date("effective_from").notNull(),
@@ -56,11 +61,11 @@ export const payLines = payroll
       index("pay_lines_employee_idx").on(t.employeeId, t.effectiveFrom),
       index("pay_lines_key_idx").on(t.lineKey, t.effectiveFrom),
       check("pay_lines_hours_chk", sql`${t.hoursPerDay} between 1 and 12`),
+      check("pay_lines_fte_chk", sql`${t.fte} >= 0`),
+      check("pay_lines_ends_chk", sql`${t.endsOn} is null or ${t.endsOn} >= ${t.effectiveFrom}`),
     ],
   )
   .enableRLS();
-
-export const PAY_RUN_STATUS_VALUES = ["draft", "in_review", "approved", "paid"] as const;
 
 /** Status moves only draft -> in_review -> (draft | approved) -> paid, by trigger. The rate and snapshot change only in draft. */
 export const payRuns = payroll
@@ -84,6 +89,7 @@ export const payRuns = payroll
     (t) => [
       uniqueIndex("pay_runs_period_idx").on(t.periodStart, t.periodEnd),
       check("pay_runs_status_chk", sql`${t.status} in ('draft','in_review','approved','paid')`),
+      check("pay_runs_rate_chk", sql`${t.usdRateE4} is null or ${t.usdRateE4} > 0`),
       check("pay_runs_period_chk", sql`${t.periodEnd} >= ${t.periodStart}`),
     ],
   )
@@ -115,9 +121,7 @@ export const payRunLines = payroll
   )
   .enableRLS();
 
-export const PAY_ITEM_STATES = ["suggested", "confirmed", "dismissed"] as const;
-
-/** Append-only: changing an item is a new row; the newest per run, person and type wins. `value_enc` includes the reason. */
+/** Append-only: changing an item is a new row; the newest per line and type wins (a loan on one line never replaces another line's). `value_enc` includes the reason. */
 export const payRunItems = payroll
   .table(
     "pay_run_items",
@@ -139,7 +143,7 @@ export const payRunItems = payroll
       createdAt: createdAt(),
     },
     (t) => [
-      index("pay_run_items_run_idx").on(t.runId, t.employeeId, t.createdAt),
+      index("pay_run_items_run_idx").on(t.runId, t.employeeId, t.runLineId, t.type, t.createdAt),
       check("pay_run_items_state_chk", sql`${t.state} in ('suggested','confirmed','dismissed')`),
     ],
   )

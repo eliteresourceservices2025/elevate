@@ -71,3 +71,6 @@ export const CHANGE_ACTIONS = [
   "run_viewed",
 ] as const;
 export type ChangeAction = (typeof CHANGE_ACTIONS)[number];
+
+export const PAY_ITEM_STATES = ["suggested", "confirmed", "dismissed"] as const;
+export type PayItemState = (typeof PAY_ITEM_STATES)[number];

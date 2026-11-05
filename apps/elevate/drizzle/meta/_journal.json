@@ -855,6 +855,13 @@
       "when": 1793850796843,
       "tag": "0121_payroll_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1793851236411,
+      "tag": "0122_sticky_tigra",
+      "breakpoints": true
     }
   ]
 }

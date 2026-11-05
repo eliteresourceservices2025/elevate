@@ -164,6 +164,32 @@ describe("run status transitions", () => {
     await raises(db.execute(sql`update payroll.pay_runs set usd_rate_e4 = 590000 where id = ${runId}`), /draft/);
   });
 
+  it("a run can never be deleted, draft or not", async () => {
+    const draft = await newRun();
+    await raises(db.execute(sql`delete from payroll.pay_runs where id = ${draft}`), /cannot be removed/);
+    const later = await newRun("approved");
+    await raises(db.execute(sql`delete from payroll.pay_runs where id = ${later}`), /cannot be removed/);
+  });
+
+  it("the table checks refuse a zero divisor or rate, a negative fte, an end before the start", async () => {
+    await raises(db.execute(sql`insert into payroll.pay_settings (effective_from, cutoff_divisor, change_warn_bp) values ('2031-01-01', 0, 1000)`), /divisor_chk/);
+    const runId = await newRun();
+    await raises(db.execute(sql`update payroll.pay_runs set usd_rate_e4 = 0 where id = ${runId}`), /rate_chk/);
+    const line = (fte: string, ends: string) =>
+      db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, fte, effective_from, ends_on, amounts_enc, created_by)
+        values (${randomUUID()}, ${randomUUID()}, ${employeeId}, 8, ${fte}::numeric, '2030-05-01', ${ends}::date, 'x', ${actorId})`);
+    await raises(line("-0.5", "2030-06-01"), /fte_chk/);
+    await raises(line("1.00", "2030-04-01"), /ends_chk/);
+    await line("1.00", "2030-05-01");
+  });
+
+  it("a new line defaults to the remitly payment method", async () => {
+    const runId = await newRun();
+    const { lineId } = await addRunLine(runId);
+    const [l] = await rows<{ payment_method: string }>(sql`select payment_method from payroll.pay_lines where id = ${lineId}`);
+    expect(l.payment_method).toBe("remitly");
+  });
+
   it("refuses two runs for the same period", async () => {
     const runId = await newRun();
     const [r] = await rows<{ period_start: string; period_end: string }>(
