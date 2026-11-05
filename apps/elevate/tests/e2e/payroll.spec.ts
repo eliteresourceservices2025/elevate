@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { anotherPayRunId, createEmployeeAccount, endPayLinesOf, pickFreePayrollPeriod, signInEnrollingMfa, waitForHydration } from "./helpers";
+import { anotherPayRunId, createEmployeeAccount, endPayLinesOf, pickFreePayrollPeriod, restorePaySettings, signInEnrollingMfa, waitForHydration } from "./helpers";
 
 // Needs the local Supabase with migrations applied. Invented people and amounts only. The run is made in a random past period that is
 // free in the local database; the settings are put back and the pay line is ended at the end, so the database stays usable.
@@ -44,6 +44,7 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
   await signInEnrollingMfa(apprPage, approver);
   await signInEnrollingMfa(workPage, worker);
 
+  let settingsTouched = false;
   try {
     // A Super Admin with no level sees no Payroll menu item, and /payroll is a not-found page.
     await expect(adminPage.locator('a[href="/payroll"]')).toHaveCount(0);
@@ -66,6 +67,8 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
     await waitForHydration(prepPage, "#set-extraRegular");
     const original = await prepPage.locator("#set-extraRegular").inputValue();
     await prepPage.keyboard.press("Escape");
+    await expect(prepPage.getByRole("dialog")).toHaveCount(0);
+    settingsTouched = true; // from here on, the finally block puts the old settings back if the test stops early
     await saveSettings(prepPage, period.start, "125");
     await saveSettings(prepPage, period.later, original);
 
@@ -136,6 +139,14 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
     expect(csv).toContain(`Wanda Worker${stamp}`);
     expect(csv).toContain(alias);
     expect(csv).toMatch(/Person,Alias,Pesos,Dollars/);
+    // The figures, worked out here from the inputs (25,000.00 a month, divisor 11, 8 hours a day, 120 extra minutes at 125%, 58.50 pesos a dollar), not copied from the page.
+    const half = (n: bigint, d: bigint) => (2n * n + d) / (2n * d); // divide, rounding half up
+    const monthly = 2_500_000n; // centavos
+    const pesos = monthly / 2n + half(monthly * 120n * 125n, 22n * 8n * 60n * 100n);
+    const dollars = half(pesos * 100n, 5850n); // cents
+    const fmt = (c: bigint) => `${c / 100n}.${String(c % 100n).padStart(2, "0")}`;
+    const row = csv.split(String.fromCharCode(10)).map((l) => l.trim()).find((l) => l.includes(`Wanda Worker${stamp}`))!;
+    expect(row.split(",").slice(-2)).toEqual([fmt(pesos), fmt(dollars)]);
 
     await prepPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` }).last().getByRole("button", { name: "Mark paid" }).click();
     await waitForHydration(prepPage, `#ref-${worker.employeeId}`);
@@ -173,6 +184,10 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
     await expect(changed.getByText("Extra hours, regular day")).toBeVisible();
     await expect(apprPage.getByRole("row").filter({ hasText: "Payslip downloaded" }).first()).toBeVisible();
   } finally {
-    await endPayLinesOf(worker.employeeId);
+    try {
+      if (settingsTouched) await restorePaySettings(period.start, period.later);
+    } finally {
+      await endPayLinesOf(worker.employeeId);
+    }
   }
 });

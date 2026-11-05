@@ -183,6 +183,27 @@ export async function endPayLinesOf(employeeId: string): Promise<void> {
   }
 }
 
+/**
+ * Puts the pay settings back: inserts a copy of the version that was in force just before `changedOn`, dated `restoreOn`, unless a
+ * version dated `restoreOn` already exists. Safe to call whether or not the test got as far as its own restoring step.
+ */
+export async function restorePaySettings(changedOn: string, restoreOn: string): Promise<void> {
+  assertLocal();
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    await sql`
+      insert into payroll.pay_settings (effective_from, cutoff_divisor, extra_regular_bp, extra_holiday_bp, extra_rest_day_bp, extra_rest_day_over_8_bp, holiday_bp, change_warn_bp, created_by)
+      select ${restoreOn}::date, cutoff_divisor, extra_regular_bp, extra_holiday_bp, extra_rest_day_bp, extra_rest_day_over_8_bp, holiday_bp, change_warn_bp, created_by
+      from payroll.pay_settings
+      where effective_from < ${changedOn}::date
+        and not exists (select 1 from payroll.pay_settings where effective_from = ${restoreOn}::date)
+      order by effective_from desc, created_at desc
+      limit 1`;
+  } finally {
+    await sql.end();
+  }
+}
+
 /** Any other run than the given one, for "a payslip that is not yours" checks; null when the database has none. */
 export async function anotherPayRunId(notThis: string): Promise<string | null> {
   assertLocal();
