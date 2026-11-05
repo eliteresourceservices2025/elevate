@@ -13,10 +13,11 @@ import { confirmRunLine, dismissPayItem, savePayItem } from "../actions";
 import { PAY_ITEM_LABELS, PAY_ITEM_TYPES, REASON_REQUIRED_TYPES, type PayItemType } from "../constants";
 import { ITEM_UNIT_HINTS, itemUnit, parseItemValue } from "../items";
 import type { WorksheetLine } from "../runs";
+import { ConfirmSuggestionButton } from "./suggestion-controls";
 
 // Amounts for one line of a draft run. Reasons are kept in the change history, never in notices.
 
-function ExistingItem({ runId, item }: { runId: string; item: WorksheetLine["items"][number] }) {
+function ExistingItem({ runId, runLineId, item }: { runId: string; runLineId: string; item: WorksheetLine["items"][number] }) {
   const { run, pending } = useRun();
   const [asking, setAsking] = useState(false);
   const [why, setWhy] = useState("");
@@ -29,9 +30,12 @@ function ExistingItem({ runId, item }: { runId: string; item: WorksheetLine["ite
           {item.state === "suggested" ? <span className="ml-2 text-xs text-muted-foreground">Suggested, not yet confirmed</span> : null}
         </span>
         {asking ? null : (
-          <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => setAsking(true)}>
-            Remove
-          </Button>
+          <span className="flex gap-2">
+            {item.state === "suggested" ? <ConfirmSuggestionButton runId={runId} itemId={item.id} runLineId={runLineId} /> : null}
+            <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => setAsking(true)}>
+              Remove
+            </Button>
+          </span>
         )}
       </div>
       {asking ? (
@@ -81,7 +85,7 @@ function ItemForm({ runId, line }: { runId: string; line: WorksheetLine }) {
           {line.items
             .filter((i) => i.state !== "dismissed")
             .map((i) => (
-              <ExistingItem key={i.id} runId={runId} item={i} />
+              <ExistingItem key={i.id} runId={runId} runLineId={line.runLineId} item={i} />
             ))}
         </ul>
       ) : null}

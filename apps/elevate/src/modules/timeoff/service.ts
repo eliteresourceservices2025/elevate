@@ -55,6 +55,14 @@ export async function historicalHolidayDatesFor(executor: Executor, employeeId: 
   return new Set(rows.map((row) => row.date));
 }
 
+/** Checked (verified, not archived) holiday dates of one calendar inside a range. Payroll picks the calendar from the client. */
+export async function holidayDatesFor(executor: Executor, calendar: "PH" | "US", from: string, to: string): Promise<Set<string>> {
+  const rows = (await executor.execute(sql`
+    select date::text as date from time.holidays
+    where archived_at is null and verified and calendar = ${calendar} and date between ${from}::date and ${to}::date`)) as unknown as { date: string }[];
+  return new Set(rows.map((r) => r.date));
+}
+
 /** The Philippines plus each currently assigned client's holiday calendar, for the normal calendar view. */
 export async function holidayCalendarsFor(executor: Executor, employeeId: string): Promise<("PH" | "US")[]> {
   const rows = (await executor.execute(sql`

@@ -16,7 +16,11 @@ import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, assertNotOwnEmployee, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
 import { cancelRun, confirmLine, createRun, dismissItem, saveItem, setUsdRate } from "./runs";
+import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import {
+  assignSuggestionSchema,
+  confirmSuggestionSchema,
+  refreshSuggestionsSchema,
   cancelPayRunSchema,
   confirmRunLineSchema,
   createPayLineSchema,
@@ -277,6 +281,54 @@ export async function dismissPayItem(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return fail(BAD_REQUEST);
 
     await db.transaction((tx) => dismissItem(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Reads the approved hours and writes suggested amounts. Pay does not change until a Preparer confirms one. */
+export async function refreshSuggestions(input: unknown): Promise<ActionResult<{ written: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = refreshSuggestionsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const done = await db.transaction((tx) => applyRefresh(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: done } as const;
+  });
+}
+
+/** Confirms a suggestion on a line, as suggested or with another amount (a reason is needed then). */
+export async function confirmSuggestion(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = confirmSuggestionSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => applyConfirm(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Chooses the pay line an unassigned suggestion belongs to. */
+export async function assignSuggestion(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = assignSuggestionSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => applyAssign(tx, actor, parsed.data));
     refreshedRun(parsed.data.runId);
     return { ok: true, data: undefined } as const;
   });

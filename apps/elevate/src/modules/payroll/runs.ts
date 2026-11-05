@@ -46,7 +46,7 @@ const nameOf = (r: { preferred: string | null; first: string; last: string }) =>
 // ---- Items ----
 
 export type ItemRow = typeof payRunItems.$inferSelect;
-const itemKey = (i: { runLineId: string | null; employeeId: string; type: string }) => `${i.runLineId ?? `u:${i.employeeId}`}|${i.type}`;
+export const itemKey = (i: { runLineId: string | null; employeeId: string; type: string }) => `${i.runLineId ?? `u:${i.employeeId}`}|${i.type}`;
 
 /** The newest row for each line and type (a loan on one line never replaces another line's). Unassigned rows are keyed by person. */
 export async function latestItems(executor: Reader, runId: string): Promise<ItemRow[]> {
@@ -216,7 +216,7 @@ const itemDetail = (row: ItemRow | undefined) => {
 };
 
 /** The newest suggested value for this type on this line, or the person's unassigned one, in the full item history; null when there never was one. */
-async function suggestedValue(tx: Tx, runId: string, employeeId: string, runLineId: string | null, type: string): Promise<bigint | null> {
+export async function suggestedValue(tx: Tx, runId: string, employeeId: string, runLineId: string | null, type: string): Promise<bigint | null> {
   const [row] = await tx
     .select()
     .from(payRunItems)

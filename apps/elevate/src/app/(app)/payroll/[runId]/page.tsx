@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { PagerLinks } from "@/components/pager";
-import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
@@ -11,6 +10,7 @@ import { pageInfo, parsePaging } from "@/lib/pagination";
 import { RUN_STATUS_LABELS } from "@/modules/payroll/constants";
 import { RunChecks } from "@/modules/payroll/components/run-checks";
 import { CancelRunDialog, UsdRateDialog } from "@/modules/payroll/components/run-dialogs";
+import { RefreshSuggestionsButton, UnassignedSuggestions } from "@/modules/payroll/components/suggestion-controls";
 import { RunTotals } from "@/modules/payroll/components/run-totals";
 import { Worksheet } from "@/modules/payroll/components/worksheet";
 import { getWorksheet } from "@/modules/payroll/queries";
@@ -46,6 +46,7 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
         actions={
           sheet.canPrepare && run.status === "draft" ? (
             <>
+              <RefreshSuggestionsButton runId={run.id} />
               <UsdRateDialog runId={run.id} current={run.usdRate} />
               <CancelRunDialog runId={run.id} />
             </>
@@ -55,11 +56,7 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
       {run.status === "draft" ? (
         <RunChecks blocking={sheet.checks.blocking} warnings={sheet.checks.warnings} unreadableCount={sheet.unreadableCount} />
       ) : null}
-      {sheet.unassigned.length > 0 ? (
-        <Alert variant="warning" className="rounded-lg p-3 text-sm">
-          Suggested amounts for {sheet.unassigned.map((u) => u.name).join(", ")} are not assigned to a pay line yet.
-        </Alert>
-      ) : null}
+      <UnassignedSuggestions sheet={sheet} canPrepare={sheet.canPrepare} />
       <Worksheet sheet={sheet} lines={shown} canPrepare={sheet.canPrepare} />
       <PagerLinks info={info} basePath={`/payroll/${run.id}`} defaultSize={DEFAULT_SIZE} label="lines" />
       <RunTotals sheet={sheet} />

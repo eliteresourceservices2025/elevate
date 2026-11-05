@@ -182,6 +182,20 @@ export const WORKSHEET_LABELS = {
   noClient: "No client",
 } as const;
 
+/** Wording of the suggestions from approved hours. */
+export const SUGGESTION_LABELS = {
+  refresh: "Suggest from approved hours",
+  refreshed: "Suggestions updated.",
+  confirm: "Confirm",
+  confirmed: "Amount confirmed.",
+  assign: "Assign to line",
+  assigned: "Assigned to the line.",
+  assignAndConfirm: "Assign and confirm",
+  chooseLine: "Choose a pay line",
+  thisLine: "Pay line",
+  unassignedTitle: "These suggested amounts need a pay line before the run can be sent for review.",
+} as const;
+
 /** Deductions entered by hand need a reason, as does overriding a suggestion. */
 export const REASON_REQUIRED_TYPES: readonly PayItemType[] = ["loan", "other_deduction"];
 

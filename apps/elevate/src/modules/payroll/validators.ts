@@ -100,6 +100,19 @@ export const cancelPayRunSchema = z.object({ runId: uuid, reason });
 
 export const confirmRunLineSchema = z.object({ runLineId: uuid });
 
+export const refreshSuggestionsSchema = z.object({ runId: uuid });
+
+/** A blank `value` means "as suggested". The server checks a typed value against the item's own unit. */
+export const confirmSuggestionSchema = z.object({
+  runId: uuid,
+  itemId: uuid,
+  runLineId: uuid,
+  value: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().trim().max(20).optional()),
+  reason: optionalReason,
+});
+
+export const assignSuggestionSchema = z.object({ runId: uuid, itemId: uuid, runLineId: uuid });
+
 export type PayLineInput = z.input<typeof createPayLineSchema>;
 export type UpdatePayLineInput = z.input<typeof updatePayLineSchema>;
 export type PaySettingsInput = z.input<typeof savePaySettingsSchema>;
