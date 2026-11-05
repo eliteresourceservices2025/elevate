@@ -8,7 +8,7 @@ import { writeAudit } from "@/modules/audit/write";
 import type { Tx } from "@/modules/people/service";
 import { logChange } from "./changes";
 import { readRun, type Executor } from "./runs";
-import { buildRemitlyRows } from "./remitly";
+import { buildRemitlyRows, personName } from "./remitly";
 import { payPayments, payRunLines, payRuns } from "./schema";
 import { assertNotOwnEmployee, payrollToday } from "./service";
 
@@ -22,39 +22,72 @@ const referenceContext = (id: string) => `pay_payment:${id}`;
 const NOT_APPROVED = "This run has not been approved, so it can't be paid yet.";
 
 /** The reference as stored. Callers must already hold `payroll.view`. */
-export const decryptReference = (id: string, stored: string): string => fieldCrypto().decrypt(stored, referenceContext(id));
+export const decryptReference = (id: string, stored: string): string =>
+  fieldCrypto().decrypt(stored, referenceContext(id));
 
 /** The newest payment per person on the run (a correction is a newer row). */
 export async function latestPayments(executor: Pick<Executor, "select">, runId: string) {
-  const all = await executor.select().from(payPayments).where(eq(payPayments.runId, runId)).orderBy(desc(payPayments.createdAt), desc(payPayments.id));
+  const all = await executor
+    .select()
+    .from(payPayments)
+    .where(eq(payPayments.runId, runId))
+    .orderBy(desc(payPayments.createdAt), desc(payPayments.id));
   const newest = new Map<string, (typeof all)[number]>();
   for (const p of all) if (!newest.has(p.employeeId)) newest.set(p.employeeId, p);
   return newest;
 }
 
 /** Builds the Remitly list for an approved (or paid) run. Refused before approval and for a cancelled run. */
-export async function remitlyList(tx: Tx, actor: Actor, runId: string): Promise<{ fileName: string; csv: string; rows: number }> {
+export async function remitlyList(
+  tx: Tx,
+  actor: Actor,
+  runId: string,
+): Promise<{ fileName: string; csv: string; rows: number }> {
   const data = await readRun(tx, runId);
   if (!data) throw new ActionFailure("That pay run was not found.");
   const { run } = data;
-  if (run.status !== "approved" && run.status !== "paid") throw new ActionFailure("The Remitly list is available once the run is approved.");
-  if (run.usdRateE4 === null) throw new ActionFailure("Set the dollar rate on this run before downloading the Remitly list.");
+  if (run.status !== "approved" && run.status !== "paid")
+    throw new ActionFailure("The Remitly list is available once the run is approved.");
+  if (run.usdRateE4 === null)
+    throw new ActionFailure("Set the dollar rate on this run before downloading the Remitly list.");
 
   const lines = data.rows.map((r) => {
     const payload = data.payloads.get(r.runLine.id);
-    if (!payload) throw new ActionFailure("A line on this run can't be read, so the list can't be built. Tell the system owner.");
-    return { employeeId: r.runLine.employeeId, name: `${r.preferred?.trim() || r.first} ${r.last}`, alias: r.runLine.alias, net: payload.result.net };
+    if (!payload)
+      throw new ActionFailure(
+        "A line on this run can't be read, so the list can't be built. Tell the system owner.",
+      );
+    return {
+      employeeId: r.runLine.employeeId,
+      name: personName(r),
+      alias: r.runLine.alias,
+      net: payload.result.net,
+    };
   });
-  if (lines.some((l) => l.net < 0n)) throw new ActionFailure("A line on this run has negative pay, so the list can't be built.");
+  if (lines.some((l) => l.net < 0n))
+    throw new ActionFailure("A line on this run has negative pay, so the list can't be built.");
   const built = buildRemitlyRows(lines, run.usdRateE4);
   const csv = toCsv(
     ["Person", "Alias", "Pesos", "Dollars"],
     built.map((r) => [r.name, r.aliases, r.pesos, r.dollars]),
   );
 
-  await writeAudit({ actor, action: "payroll.remitly.export", targetType: "pay_run", targetId: runId, metadata: { rows: built.length, lines: lines.length } }, tx);
+  await writeAudit(
+    {
+      actor,
+      action: "payroll.remitly.export",
+      targetType: "pay_run",
+      targetId: runId,
+      metadata: { rows: built.length, lines: lines.length },
+    },
+    tx,
+  );
   await logChange(tx, actor, { action: "list_exported", runId, detail: { rows: built.length } });
-  return { fileName: `remitly-${run.periodStart}-to-${run.periodEnd}.csv`, csv, rows: built.length };
+  return {
+    fileName: `remitly-${run.periodStart}-to-${run.periodEnd}.csv`,
+    csv,
+    rows: built.length,
+  };
 }
 
 /**
@@ -63,18 +96,37 @@ export async function remitlyList(tx: Tx, actor: Actor, runId: string): Promise<
  * paid only). A correction after that adds a row and leaves the paid run as it is. The run row is locked, so two last payments at once
  * make it paid exactly once.
  */
-export async function recordPayment(tx: Tx, actor: Actor, v: { runId: string; employeeId: string; reference: string; paidOn: string }): Promise<{ runPaid: boolean }> {
+export async function recordPayment(
+  tx: Tx,
+  actor: Actor,
+  v: { runId: string; employeeId: string; reference: string; paidOn: string },
+): Promise<{ runPaid: boolean }> {
   const [run] = await tx.select().from(payRuns).where(eq(payRuns.id, v.runId)).for("update");
   if (!run) throw new ActionFailure("That pay run was not found.");
   if (run.status !== "approved" && run.status !== "paid") throw new ActionFailure(NOT_APPROVED);
 
-  const people = (await tx.selectDistinct({ id: payRunLines.employeeId }).from(payRunLines).where(eq(payRunLines.runId, v.runId))).map((r) => r.id);
+  const people = (
+    await tx
+      .selectDistinct({ id: payRunLines.employeeId })
+      .from(payRunLines)
+      .where(eq(payRunLines.runId, v.runId))
+  ).map((r) => r.id);
   if (!people.includes(v.employeeId)) throw new ActionFailure("That person is not on this run.");
   await assertNotOwnEmployee(actor, v.employeeId, tx);
-  if (v.paidOn > payrollToday()) throw new ActionFailure("The payment date can't be in the future.");
+  if (v.paidOn > payrollToday())
+    throw new ActionFailure("The payment date can't be in the future.");
+  if (v.paidOn < run.periodStart)
+    throw new ActionFailure("The payment date can't be before the pay period starts.");
 
   const id = randomUUID();
-  const correction = (await tx.select({ id: payPayments.id }).from(payPayments).where(and(eq(payPayments.runId, v.runId), eq(payPayments.employeeId, v.employeeId))).limit(1)).length > 0;
+  const correction =
+    (
+      await tx
+        .select({ id: payPayments.id })
+        .from(payPayments)
+        .where(and(eq(payPayments.runId, v.runId), eq(payPayments.employeeId, v.employeeId)))
+        .limit(1)
+    ).length > 0;
   await tx.insert(payPayments).values({
     id,
     runId: v.runId,
@@ -85,16 +137,43 @@ export async function recordPayment(tx: Tx, actor: Actor, v: { runId: string; em
     // The statement clock, not the transaction start: of two writers the later lock holder must also have the later time.
     createdAt: sql`clock_timestamp()` as unknown as Date,
   });
-  await writeAudit({ actor, action: "payroll.payment.mark", targetType: "pay_run", targetId: v.runId, metadata: { employeeId: v.employeeId, correction } }, tx);
-  await logChange(tx, actor, { action: "payment_marked", runId: v.runId, employeeId: v.employeeId, detail: { paidOn: v.paidOn, correction } });
+  await writeAudit(
+    {
+      actor,
+      action: "payroll.payment.mark",
+      targetType: "pay_run",
+      targetId: v.runId,
+      metadata: { employeeId: v.employeeId, correction },
+    },
+    tx,
+  );
+  await logChange(tx, actor, {
+    action: "payment_marked",
+    runId: v.runId,
+    employeeId: v.employeeId,
+    detail: { paidOn: v.paidOn, correction },
+  });
 
   let runPaid = false;
   if (run.status === "approved") {
     const paid = await latestPayments(tx, v.runId);
     if (people.every((p) => paid.has(p))) {
       await tx.update(payRuns).set({ status: "paid" }).where(eq(payRuns.id, v.runId));
-      await writeAudit({ actor, action: "payroll.run.paid", targetType: "pay_run", targetId: v.runId, metadata: { people: people.length } }, tx);
-      await logChange(tx, actor, { action: "run_paid", runId: v.runId, detail: { people: people.length } });
+      await writeAudit(
+        {
+          actor,
+          action: "payroll.run.paid",
+          targetType: "pay_run",
+          targetId: v.runId,
+          metadata: { people: people.length },
+        },
+        tx,
+      );
+      await logChange(tx, actor, {
+        action: "run_paid",
+        runId: v.runId,
+        detail: { people: people.length },
+      });
       runPaid = true;
     }
   }

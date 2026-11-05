@@ -1,5 +1,6 @@
 import "server-only";
-import { and, asc, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { users } from "@/modules/core/schema";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -12,6 +13,7 @@ import { lineLastDay, resolveLines } from "./lines";
 import { formatPesos } from "./money";
 import { countAwaiting, hashOf, latestSendBackNote, refusalFor } from "./approval";
 import { readRun, worksheetOf, type Worksheet } from "./runs";
+import { joinAliases, personName } from "./remitly";
 import { logChange } from "./changes";
 import { payLines, payRunLines, payRuns, paySettings } from "./schema";
 import { decryptReference, latestPayments } from "./payments";
@@ -234,18 +236,28 @@ export type PaymentsView = {
   hasRate: boolean;
   canMarkPaid: boolean;
   canExport: boolean;
-  people: { employeeId: string; name: string; aliases: string; isOwn: boolean; payment: { reference: string; paidOn: string } | null }[];
+  people: {
+    employeeId: string;
+    name: string;
+    aliases: string;
+    isOwn: boolean;
+    /** `reference` is null unless the viewer holds `payroll.mark_paid`: others see who marked it and when, not the reference. */
+    payment: { reference: string | null; paidOn: string; markedBy: string; markedAt: string } | null;
+  }[];
 };
 
 /**
- * Who is paid on a run, with the newest reference per person decrypted, or null when there is no such run. Showing references is a
- * sensitive read: one `sensitive.view` audit row (field name and a count, never a reference).
+ * Who is paid on a run. Transfer references are decrypted only for people who hold `payroll.mark_paid`; that is a sensitive read, so
+ * it writes one `sensitive.view` audit row (field name and a count of references actually decrypted, never a reference) and none when
+ * nothing was decrypted. Everyone else sees who marked each payment and when.
  */
 export async function getPayments(runId: string): Promise<PaymentsView | null> {
   const actor = await requireUser();
   await authorize(actor, "payroll.view");
   if (!z.uuid().safeParse(runId).success) return null;
+  const canMarkPaid = can(actor, "payroll.mark_paid");
 
+  let decrypted = 0;
   const view = await db.transaction(async (tx): Promise<PaymentsView | null> => {
     const [run] = await tx.select().from(payRuns).where(eq(payRuns.id, runId)).limit(1);
     if (!run) return null;
@@ -257,42 +269,37 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
       .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName), asc(payRunLines.alias));
     const own = await employeeIdForUser(tx, actor.id);
     const paid = await latestPayments(tx, runId);
-    const byPerson = new Map<string, PaymentsView["people"][number]>();
+    const markers = new Map(
+      (paid.size === 0 ? [] : await tx.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, [...new Set([...paid.values()].map((p) => p.markedBy))]))).map((u) => [u.id, u.email]),
+    );
+
+    const byPerson = new Map<string, { name: string; aliases: (string | null)[] }>();
     for (const l of lines) {
-      const existing = byPerson.get(l.employeeId);
-      const alias = l.alias?.trim();
-      if (existing) {
-        if (alias && !existing.aliases.split("; ").includes(alias)) existing.aliases = existing.aliases ? `${existing.aliases}; ${alias}` : alias;
-        continue;
-      }
-      const p = paid.get(l.employeeId);
-      let payment: { reference: string; paidOn: string } | null = null;
-      if (p) {
-        try {
-          payment = { reference: decryptReference(p.id, p.referenceEnc), paidOn: p.paidOn };
-        } catch (error) {
-          console.error("payroll payment reference unreadable:", { paymentId: p.id, error: error instanceof Error ? error.name : "UnknownError" });
-          payment = { reference: UNREADABLE, paidOn: p.paidOn };
-        }
-      }
-      byPerson.set(l.employeeId, {
-        employeeId: l.employeeId,
-        name: `${l.preferred?.trim() || l.first} ${l.last}`,
-        aliases: alias ?? "",
-        isOwn: own !== null && own === l.employeeId,
-        payment,
-      });
+      const person = byPerson.get(l.employeeId) ?? { name: personName(l), aliases: [] };
+      person.aliases.push(l.alias);
+      byPerson.set(l.employeeId, person);
     }
-    return {
-      runId,
-      status: run.status as RunStatus,
-      hasRate: run.usdRateE4 !== null,
-      canMarkPaid: can(actor, "payroll.mark_paid"),
-      canExport: can(actor, "payroll.export"),
-      people: [...byPerson.values()],
-    };
+    const people = [...byPerson].map(([employeeId, person]): PaymentsView["people"][number] => {
+      const p = paid.get(employeeId);
+      let payment: PaymentsView["people"][number]["payment"] = null;
+      if (p) {
+        let reference: string | null = null;
+        if (canMarkPaid) {
+          try {
+            reference = decryptReference(p.id, p.referenceEnc);
+          } catch (error) {
+            console.error("payroll payment reference unreadable:", { paymentId: p.id, error: error instanceof Error ? error.name : "UnknownError" });
+            reference = UNREADABLE;
+          }
+          decrypted += 1;
+        }
+        payment = { reference, paidOn: p.paidOn, markedBy: markers.get(p.markedBy) ?? "Unknown", markedAt: p.createdAt.toISOString() };
+      }
+      return { employeeId, name: person.name, aliases: joinAliases(person.aliases), isOwn: own !== null && own === employeeId, payment };
+    });
+    return { runId, status: run.status as RunStatus, hasRate: run.usdRateE4 !== null, canMarkPaid, canExport: can(actor, "payroll.export"), people };
   });
-  if (view) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["payment references"], count: view.people.length } });
+  if (view && decrypted > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["payment references"], count: decrypted } });
   return view;
 }
 

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { endPayrollLinesWhenDone } from "./payroll-test-helpers";
 
 // Real-database test: the Remitly list and recording payments. Invented names and figures only. Every period is a half month of 2028;
@@ -15,7 +15,17 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, savePaySettings, createPayRun, cancelPayRun, setRunUsdRate, submitRun, approveRun, exportRemitlyList, markPaid } = await import("@/modules/payroll/actions");
+const {
+  createPayLine,
+  savePaySettings,
+  createPayRun,
+  cancelPayRun,
+  setRunUsdRate,
+  submitRun,
+  approveRun,
+  exportRemitlyList,
+  markPaid,
+} = await import("@/modules/payroll/actions");
 const { getWorksheet, getPayments } = await import("@/modules/payroll/queries");
 const { decryptRunLine, payrollToday } = await import("@/modules/payroll/service");
 const { fieldCrypto } = await import("@/lib/crypto");
@@ -23,14 +33,20 @@ const { fieldCrypto } = await import("@/lib/crypto");
 type Row = Record<string, unknown>;
 type Level = "preparer" | "approver" | "viewer" | null;
 const rows = async <T = Row>(q: ReturnType<typeof sql>) => (await db.execute(q)) as unknown as T[];
-const uniq = (p: string) => `${p}${Date.now().toString(36)}${Math.floor(Math.random() * 1e6)}`;
+let seq = 0;
+const uniq = (p: string) =>
+  `${p}${Date.now().toString(36)}${Math.floor(Math.random() * 1e6)}x${seq++}`;
 const NO_ACCESS = "You do not have access to do that.";
 const BAD = "Check the request and try again.";
 
 async function account(level: Level = "preparer") {
   const id = randomUUID();
-  await db.execute(sql`insert into core.users (id, email, payroll_access) values (${id}, ${`${uniq("pay")}@example.com`}, ${level})`);
-  await db.execute(sql`insert into core.user_roles (user_id, role_slug) values (${id}, 'employee')`);
+  await db.execute(
+    sql`insert into core.users (id, email, payroll_access) values (${id}, ${`${uniq("pay")}@example.com`}, ${level})`,
+  );
+  await db.execute(
+    sql`insert into core.user_roles (user_id, role_slug) values (${id}, 'employee')`,
+  );
   return { id, email: "x@example.com", roles: ["employee"], payrollAccess: level };
 }
 async function person(userId: string | null = null, last = uniq("Testreyes")) {
@@ -44,27 +60,48 @@ function slot(n: number) {
   const month = Math.floor(n / 2) + 1;
   const mm = String(month).padStart(2, "0");
   const last = new Date(Date.UTC(2028, month, 0)).getUTCDate();
-  return n % 2 === 0 ? { periodStart: `2028-${mm}-01`, periodEnd: `2028-${mm}-15` } : { periodStart: `2028-${mm}-16`, periodEnd: `2028-${mm}-${last}` };
+  return n % 2 === 0
+    ? { periodStart: `2028-${mm}-01`, periodEnd: `2028-${mm}-15` }
+    : { periodStart: `2028-${mm}-16`, periodEnd: `2028-${mm}-${last}` };
 }
 const as = (who: unknown) => {
   current.user = who;
 };
-async function giveLine(employeeId: string, p: { periodStart: string; periodEnd: string }, over: Record<string, unknown> = {}, author: unknown = preparer) {
+async function giveLine(
+  employeeId: string,
+  p: { periodStart: string; periodEnd: string },
+  over: Record<string, unknown> = {},
+  author: unknown = preparer,
+) {
   as(author);
   const r = await createPayLine({
-    employeeId, hoursPerDay: 8, fte: "1", paymentMethod: "remitly", effectiveFrom: p.periodStart, endsOn: p.periodEnd,
-    monthly: "22,000", pesoAllowance: "1,000", dollarAllowance: "0", ...over,
+    employeeId,
+    hoursPerDay: 8,
+    fte: "1",
+    paymentMethod: "remitly",
+    effectiveFrom: p.periodStart,
+    endsOn: p.periodEnd,
+    monthly: "22,000",
+    pesoAllowance: "1,000",
+    dollarAllowance: "0",
+    ...over,
   });
   if (!r.ok) throw new Error(`line failed: ${r.error}`);
 }
-async function newRun(p: { periodStart: string; periodEnd: string }, rate: string | null = "58.50") {
+async function newRun(
+  p: { periodStart: string; periodEnd: string },
+  rate: string | null = "58.50",
+) {
   as(preparer);
   const r = await createPayRun(p);
   if (!r.ok) throw new Error(`run failed: ${r.error}`);
   if (rate) await setRunUsdRate({ runId: r.data.runId, rate });
   return r.data.runId;
 }
-async function approvedRun(p: { periodStart: string; periodEnd: string }, rate: string | null = "58.50") {
+async function approvedRun(
+  p: { periodStart: string; periodEnd: string },
+  rate: string | null = "58.50",
+) {
   const runId = await newRun(p, rate);
   as(preparer);
   const s = await submitRun({ runId });
@@ -75,8 +112,11 @@ async function approvedRun(p: { periodStart: string; periodEnd: string }, rate: 
   if (!a.ok) throw new Error(`approve failed: ${a.error}`);
   return runId;
 }
-const status = async (runId: string) => (await rows<{ status: string }>(sql`select status from payroll.pay_runs where id = ${runId}`))[0].status;
-const paymentRows = (runId: string) => rows<Row>(sql`select * from payroll.pay_payments where run_id = ${runId} order by created_at`);
+const status = async (runId: string) =>
+  (await rows<{ status: string }>(sql`select status from payroll.pay_runs where id = ${runId}`))[0]
+    .status;
+const paymentRows = (runId: string) =>
+  rows<Row>(sql`select * from payroll.pay_payments where run_id = ${runId} order by created_at`);
 const footprint = async (runId: string) =>
   (
     await rows<Row>(sql`
@@ -87,19 +127,38 @@ const footprint = async (runId: string) =>
   )[0];
 const today = () => payrollToday();
 const REF = "RMT-TEST-0001";
+const NOT_APPROVED = "The Remitly list is available once the run is approved.";
 
 let preparer: Awaited<ReturnType<typeof account>>;
 let other: Awaited<ReturnType<typeof account>>;
 let approver: Awaited<ReturnType<typeof account>>;
 let viewer: Awaited<ReturnType<typeof account>>;
+afterAll(() => {
+  vi.useRealTimers();
+});
+
+// The test periods are in 2028, and a payment can't be dated before its period starts or after today: only the clock (Date, nothing
+// else) is moved to the end of 2028, so a payment dated "today" is inside every period used here.
 beforeAll(async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2028-12-30T12:00:00Z") });
   preparer = await account("preparer");
   other = await account("preparer");
   approver = await account("approver");
   viewer = await account("viewer");
   as(preparer);
-  const rates = { cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "125", extraHoliday: "200", extraRestDay: "130", extraRestDayOver8: "169", holiday: "100", reason: "Test rates" };
-  expect(await savePaySettings({ ...rates, effectiveFrom: "2028-01-01" })).toMatchObject({ ok: true });
+  const rates = {
+    cutoffDivisor: 11,
+    changeWarnPercent: 10,
+    extraRegular: "125",
+    extraHoliday: "200",
+    extraRestDay: "130",
+    extraRestDayOver8: "169",
+    holiday: "100",
+    reason: "Test rates",
+  };
+  expect(await savePaySettings({ ...rates, effectiveFrom: "2028-01-01" })).toMatchObject({
+    ok: true,
+  });
 });
 
 describe("the Remitly list", () => {
@@ -109,18 +168,23 @@ describe("the Remitly list", () => {
     await giveLine(emp, p);
     const draft = await newRun(p);
     as(preparer);
-    expect(await exportRemitlyList({ runId: draft })).toMatchObject({ ok: false });
+    expect(await exportRemitlyList({ runId: draft })).toEqual({ ok: false, error: NOT_APPROVED });
     expect((await footprint(draft)).audits).toBe(0);
     expect(await submitRun({ runId: draft })).toMatchObject({ ok: true });
-    expect(await exportRemitlyList({ runId: draft })).toMatchObject({ ok: false }); // in review
+    expect(await exportRemitlyList({ runId: draft })).toEqual({ ok: false, error: NOT_APPROVED }); // in review
     expect((await footprint(draft)).changes).toBe(0);
 
     const q = slot(1);
     await giveLine(await person(), q);
     const cancelled = await newRun(q);
     as(preparer);
-    expect(await cancelPayRun({ runId: cancelled, reason: "Pay lines changed" })).toMatchObject({ ok: true });
-    expect(await exportRemitlyList({ runId: cancelled })).toMatchObject({ ok: false });
+    expect(await cancelPayRun({ runId: cancelled, reason: "Pay lines changed" })).toMatchObject({
+      ok: true,
+    });
+    expect(await exportRemitlyList({ runId: cancelled })).toEqual({
+      ok: false,
+      error: NOT_APPROVED,
+    });
 
     const r = slot(2);
     await giveLine(await person(), r);
@@ -152,19 +216,26 @@ describe("the Remitly list", () => {
     expect(r.data.csv).toContain("'=HYPERLINK(1); Billing");
 
     // The pesos are the sum of the person's decrypted line nets.
-    const nets = await rows<{ id: string; payload_enc: string }>(sql`select id, payload_enc from payroll.pay_run_lines where run_id = ${runId} and employee_id = ${emp}`);
+    const nets = await rows<{ id: string; payload_enc: string }>(
+      sql`select id, payload_enc from payroll.pay_run_lines where run_id = ${runId} and employee_id = ${emp}`,
+    );
     const total = nets.reduce((s, n) => s + decryptRunLine(n.id, n.payload_enc).result.net, 0n);
     const pesos = `${total / 100n}.${(total % 100n).toString().padStart(2, "0")}`;
     const cents = (total * 10_000n * 2n + 585_000n) / (585_000n * 2n);
     const dollars = `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
     expect(lines.find((l) => l.includes("Lopezexport"))).toContain(`${pesos},${dollars}`);
 
-    const [audit] = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where target_id = ${runId} and action = 'payroll.remitly.export'`);
+    const [audit] = await rows<{ metadata: unknown }>(
+      sql`select metadata from ops.audit_log where target_id = ${runId} and action = 'payroll.remitly.export'`,
+    );
     expect(JSON.stringify(audit.metadata)).toMatch(/"rows":\s*2/);
     expect(JSON.stringify(audit.metadata)).not.toContain(pesos);
     expect(JSON.stringify(audit.metadata)).not.toContain(dollars);
-    expect(await rows(sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'list_exported'`)).toHaveLength(1);
-    // A paid run can be downloaded again.
+    expect(
+      await rows(
+        sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'list_exported'`,
+      ),
+    ).toHaveLength(1);
   });
 
   it("is rate limited, and leaves nothing behind when refused", async () => {
@@ -207,7 +278,9 @@ describe("markPaid", () => {
     const r = await markPaid({ runId: draft, employeeId: emp, reference: REF, paidOn: today() });
     expect(r).toMatchObject({ ok: false });
     expect(await submitRun({ runId: draft })).toMatchObject({ ok: true });
-    expect(await markPaid({ runId: draft, employeeId: emp, reference: REF, paidOn: today() })).toMatchObject({ ok: false });
+    expect(
+      await markPaid({ runId: draft, employeeId: emp, reference: REF, paidOn: today() }),
+    ).toMatchObject({ ok: false });
     expect(await paymentRows(draft)).toHaveLength(0);
 
     const q = slot(7);
@@ -229,7 +302,10 @@ describe("markPaid", () => {
     const runId = await approvedRun(p);
     for (const who of [approver, viewer, await account(null)]) {
       as(who);
-      expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today() })).toEqual({ ok: false, error: NO_ACCESS });
+      expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today() })).toEqual({
+        ok: false,
+        error: NO_ACCESS,
+      });
     }
     as(preparer);
     for (const bad of [
@@ -240,11 +316,21 @@ describe("markPaid", () => {
       { employeeId: "nope" },
       { runId: "nope" },
     ]) {
-      expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today(), ...bad })).toEqual({ ok: false, error: BAD });
+      expect(
+        await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today(), ...bad }),
+      ).toEqual({ ok: false, error: BAD });
     }
     const future = await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2999-01-01" });
-    expect(future).toMatchObject({ ok: false });
-    expect(await paymentRows(runId)).toHaveLength(0);
+    expect(future).toEqual({ ok: false, error: "The payment date can't be in the future." });
+    const early = await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2028-04-30" }); // the period starts 2028-05-01
+    expect(early).toEqual({
+      ok: false,
+      error: "The payment date can't be before the pay period starts.",
+    });
+    expect(
+      await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2028-05-01" }),
+    ).toMatchObject({ ok: true }); // the first day is fine
+    expect(await paymentRows(runId)).toHaveLength(1);
   });
 
   it("a Preparer can't mark their own payment; another Preparer can", async () => {
@@ -254,10 +340,15 @@ describe("markPaid", () => {
     await giveLine(ownEmp, p);
     const runId = await approvedRun(p);
     as(owner);
-    expect(await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() })).toEqual({ ok: false, error: "You can't change your own pay." });
+    expect(await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() })).toEqual({
+      ok: false,
+      error: "You can't change your own pay.",
+    });
     expect(await paymentRows(runId)).toHaveLength(0);
     as(other);
-    expect(await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() })).toMatchObject({ ok: true });
+    expect(
+      await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() }),
+    ).toMatchObject({ ok: true });
     expect(await paymentRows(runId)).toHaveLength(1);
   });
 
@@ -268,16 +359,36 @@ describe("markPaid", () => {
     const runId = await approvedRun(p);
     as(preparer);
     const ref = "RMT-SECRET-77";
-    expect(await markPaid({ runId, employeeId: emp, reference: ref, paidOn: today() })).toMatchObject({ ok: true });
-    const [pay] = await rows<{ id: string; reference_enc: string; marked_by: string }>(sql`select id, reference_enc, marked_by from payroll.pay_payments where run_id = ${runId}`);
+    const notices = async () =>
+      (
+        await rows<{ n: number }>(
+          sql`select count(*)::int as n from ops.notifications where link = ${`/payroll/${runId}`}`,
+        )
+      )[0].n;
+    const noticesBefore = await notices(); // the submit and approval notices already exist
+    expect(
+      await markPaid({ runId, employeeId: emp, reference: ref, paidOn: today() }),
+    ).toMatchObject({ ok: true });
+    const [pay] = await rows<{ id: string; reference_enc: string; marked_by: string }>(
+      sql`select id, reference_enc, marked_by from payroll.pay_payments where run_id = ${runId}`,
+    );
     expect(pay.reference_enc).not.toContain(ref);
     expect(fieldCrypto().decrypt(pay.reference_enc, `pay_payment:${pay.id}`)).toBe(ref);
     expect(pay.marked_by).toBe(preparer.id);
-    const audit = await rows(sql`select metadata::text as m, action from ops.audit_log where target_id = ${runId} and action like 'payroll.payment.%'`);
+    const audit = await rows(
+      sql`select metadata::text as m, action from ops.audit_log where target_id = ${runId} and action like 'payroll.payment.%'`,
+    );
     expect(audit).toHaveLength(1);
     expect(JSON.stringify(audit)).not.toContain(ref);
-    expect(await rows(sql`select 1 from ops.notifications where body like ${`%${ref}%`}`)).toHaveLength(0);
-    expect(await rows(sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'payment_marked'`)).toHaveLength(1);
+    expect(await notices()).toBe(noticesBefore); // marking a payment sends no notice in this task
+    expect(
+      await rows(sql`select 1 from ops.notifications where body like ${`%${ref}%`}`),
+    ).toHaveLength(0);
+    expect(
+      await rows(
+        sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'payment_marked'`,
+      ),
+    ).toHaveLength(1);
   });
 
   it("makes the run paid only when every person has a payment, and a correction adds a row whose newest shows", async () => {
@@ -289,27 +400,47 @@ describe("markPaid", () => {
     await giveLine(b, p, { alias: "Second", monthly: "5,000" }); // two lines, one transfer
     const runId = await approvedRun(p);
     as(preparer);
-    expect(await markPaid({ runId, employeeId: a, reference: "RMT-A-1", paidOn: today() })).toMatchObject({ ok: true });
+    expect(
+      await markPaid({ runId, employeeId: a, reference: "RMT-A-1", paidOn: today() }),
+    ).toMatchObject({ ok: true });
     expect(await status(runId)).toBe("approved");
 
     // Correct a's reference before everyone is paid.
-    expect(await markPaid({ runId, employeeId: a, reference: "RMT-A-2", paidOn: today() })).toMatchObject({ ok: true });
+    expect(
+      await markPaid({ runId, employeeId: a, reference: "RMT-A-2", paidOn: today() }),
+    ).toMatchObject({ ok: true });
     expect(await status(runId)).toBe("approved");
     expect(await paymentRows(runId)).toHaveLength(2);
     const view = (await getPayments(runId))!;
     expect(view.people.find((x) => x.employeeId === a)!.payment!.reference).toBe("RMT-A-2");
     expect(view.people.find((x) => x.employeeId === b)!.payment).toBeNull();
 
-    expect(await markPaid({ runId, employeeId: b, reference: "RMT-B-1", paidOn: today() })).toMatchObject({ ok: true });
+    expect(
+      await markPaid({ runId, employeeId: b, reference: "RMT-B-1", paidOn: today() }),
+    ).toMatchObject({ ok: true });
     expect(await status(runId)).toBe("paid");
-    expect(await rows(sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'run_paid'`)).toHaveLength(1);
-    expect(await rows(sql`select 1 from ops.audit_log where target_id = ${runId} and action = 'payroll.run.paid'`)).toHaveLength(1);
+    expect(
+      await rows(
+        sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'run_paid'`,
+      ),
+    ).toHaveLength(1);
+    expect(
+      await rows(
+        sql`select 1 from ops.audit_log where target_id = ${runId} and action = 'payroll.run.paid'`,
+      ),
+    ).toHaveLength(1);
 
     // After paid, a correction is still recorded as a new row; the run stays paid and nothing else changes.
-    expect(await markPaid({ runId, employeeId: b, reference: "RMT-B-2", paidOn: today() })).toMatchObject({ ok: true });
+    expect(
+      await markPaid({ runId, employeeId: b, reference: "RMT-B-2", paidOn: today() }),
+    ).toMatchObject({ ok: true });
     expect(await status(runId)).toBe("paid");
     expect(await paymentRows(runId)).toHaveLength(4);
-    expect(await rows(sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'run_paid'`)).toHaveLength(1);
+    expect(
+      await rows(
+        sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'run_paid'`,
+      ),
+    ).toHaveLength(1);
     const after = (await getPayments(runId))!;
     expect(after.people.find((x) => x.employeeId === b)!.payment!.reference).toBe("RMT-B-2");
     expect(after.status).toBe("paid");
@@ -331,7 +462,11 @@ describe("markPaid", () => {
     ]);
     expect(results.every((r) => r.ok)).toBe(true);
     expect(await status(runId)).toBe("paid");
-    expect(await rows(sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'run_paid'`)).toHaveLength(1);
+    expect(
+      await rows(
+        sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'run_paid'`,
+      ),
+    ).toHaveLength(1);
   });
 
   it("works for people with no linked account (nothing to notify)", async () => {
@@ -340,10 +475,18 @@ describe("markPaid", () => {
     await giveLine(emp, p);
     const runId = await approvedRun(p);
     as(preparer);
-    const before = (await rows<{ n: number }>(sql`select count(*)::int as n from ops.notifications`))[0].n;
-    expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today() })).toMatchObject({ ok: true });
+    const noticesOfRun = async () =>
+      (
+        await rows<{ n: number }>(
+          sql`select count(*)::int as n from ops.notifications where link = ${`/payroll/${runId}`}`,
+        )
+      )[0].n;
+    const before = await noticesOfRun();
+    expect(
+      await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today() }),
+    ).toMatchObject({ ok: true });
     expect(await status(runId)).toBe("paid");
-    const after = (await rows<{ n: number }>(sql`select count(*)::int as n from ops.notifications`))[0].n;
+    const after = await noticesOfRun();
     expect(after).toBe(before);
   });
 
@@ -351,7 +494,9 @@ describe("markPaid", () => {
     const p = slot(14);
     await giveLine(await person(), p);
     const runId = await newRun(p);
-    await expect(db.execute(sql`update payroll.pay_runs set status = 'paid' where id = ${runId}`)).rejects.toThrow();
+    await expect(
+      db.execute(sql`update payroll.pay_runs set status = 'paid' where id = ${runId}`),
+    ).rejects.toThrow();
     expect(await status(runId)).toBe("draft");
   });
 });
@@ -375,5 +520,52 @@ describe("the payments view", () => {
     await expect(getPayments(runId)).rejects.toMatchObject({ name: "ForbiddenError" });
     as(preparer);
     expect(await getPayments(randomUUID())).toBeNull();
+  });
+
+  it("shows references only to Preparers; others see who marked it and when; the sensitive read is logged only when one was decrypted", async () => {
+    const p = slot(16);
+    const emp = await person();
+    await giveLine(emp, p);
+    const runId = await approvedRun(p);
+    const reads = async () =>
+      (
+        await rows(
+          sql`select 1 from ops.audit_log where target_id = ${runId} and action = 'sensitive.view' and metadata::text like '%payment references%'`,
+        )
+      ).length;
+
+    // Nothing paid yet: nothing decrypted, nothing logged (for anyone).
+    as(preparer);
+    expect((await getPayments(runId))!.people[0].payment).toBeNull();
+    as(viewer);
+    await getPayments(runId);
+    expect(await reads()).toBe(0);
+
+    as(preparer);
+    expect(
+      await markPaid({ runId, employeeId: emp, reference: "RMT-VISIBLE-1", paidOn: today() }),
+    ).toMatchObject({ ok: true });
+    as(viewer);
+    const seen = (await getPayments(runId))!.people[0].payment!;
+    expect(seen.reference).toBeNull();
+    expect(JSON.stringify(seen)).not.toContain("RMT-VISIBLE-1");
+    expect(seen.markedBy).toBe(
+      (
+        await rows<{ email: string }>(sql`select email from core.users where id = ${preparer.id}`)
+      )[0].email,
+    );
+    expect(seen.paidOn).toBe(today());
+    expect(Number.isNaN(Date.parse(seen.markedAt))).toBe(false);
+    as(approver);
+    expect((await getPayments(runId))!.people[0].payment!.reference).toBeNull();
+    expect(await reads()).toBe(0); // viewers and Approvers decrypt nothing
+
+    as(preparer);
+    expect((await getPayments(runId))!.people[0].payment!.reference).toBe("RMT-VISIBLE-1");
+    expect(await reads()).toBe(1);
+    const [entry] = await rows<{ metadata: unknown }>(
+      sql`select metadata from ops.audit_log where target_id = ${runId} and action = 'sensitive.view' and metadata::text like '%payment references%'`,
+    );
+    expect(JSON.stringify(entry.metadata)).not.toContain("RMT-VISIBLE-1");
   });
 });

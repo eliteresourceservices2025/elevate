@@ -128,6 +128,6 @@ export const exportRemitlySchema = z.object({ runId: uuid });
 /** A transfer reference typed by the Preparer who paid. Kept encrypted. */
 export const markPaidSchema = z.object({ runId: uuid, employeeId: uuid, reference: z.string().trim().min(1).max(100), paidOn: isoDate });
 
-export type PayLineInput =z.input<typeof createPayLineSchema>;
+export type PayLineInput = z.input<typeof createPayLineSchema>;
 export type UpdatePayLineInput = z.input<typeof updatePayLineSchema>;
 export type PaySettingsInput = z.input<typeof savePaySettingsSchema>;
