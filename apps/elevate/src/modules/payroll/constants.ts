@@ -219,6 +219,34 @@ export const PAYMENT_LABELS = {
   progress: (paid: number, total: number) => `${paid} of ${total} paid`,
 } as const;
 
+/**
+ * Wording of the payslip (the /my-pay page, the PDF and the notice). Item names come from PAY_ITEM_LABELS. The notice carries no amount,
+ * period or name.
+ */
+export const PAYSLIP_LABELS = {
+  pageTitle: "My pay",
+  pageDescription: "Your payslips. One appears here after the pay run it belongs to is paid.",
+  emptyTitle: "No payslips yet",
+  emptyDescription: "A payslip appears here once the pay run it belongs to is marked paid.",
+  period: "Pay period",
+  net: "Net pay",
+  download: "Download PDF",
+  documentTitle: "Payslip",
+  preparedFor: "Prepared for",
+  details: "Pay details",
+  lineHeading: (alias: string) => `Line: ${alias}`,
+  base: "Base pay for the period",
+  total: "Total net pay",
+  dollarRate: "Dollar rate used",
+  unreadable: "Can't be read",
+  unreadableDownload: "This payslip can't be read right now. Tell the system owner.",
+  footer: "Payslip",
+  noticeKind: "payroll.payslip_ready",
+  noticeTitle: "Your payslip is ready",
+  noticeBody: "A payslip is ready for you. Open My pay to read it.",
+  noticeLink: "/my-pay",
+} as const;
+
 /** Wording of sending a run for review and deciding it. Notices never carry an amount, a name or the note. */
 export const APPROVAL_LABELS = {
   submit: "Send for review",

@@ -1,12 +1,15 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { fieldCrypto } from "@/lib/crypto";
 import { toCsv } from "@/lib/csv";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
+import { notify } from "@/modules/notifications/service";
+import { employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
 import { logChange } from "./changes";
+import { PAYSLIP_LABELS } from "./constants";
 import { readRun, type Executor } from "./runs";
 import { buildRemitlyRows, personName } from "./remitly";
 import { payPayments, payRunLines, payRuns } from "./schema";
@@ -88,6 +91,25 @@ export async function remitlyList(
     csv,
     rows: built.length,
   };
+}
+
+/**
+ * Tells each person on a run who has a sign-in account that their payslip is ready: one notice per person (a two-line person gets one),
+ * a fixed sentence and a link, never an amount, a period or anyone else's name. A person with no account is simply skipped. Runs inside
+ * the transaction that makes the run paid.
+ */
+async function notifyPayslipsReady(tx: Tx, runId: string): Promise<void> {
+  const people = await tx
+    .selectDistinct({ userId: employees.userId })
+    .from(payRunLines)
+    .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
+    .where(and(eq(payRunLines.runId, runId), isNotNull(employees.userId)));
+  await notify(
+    tx,
+    people.flatMap((p) =>
+      p.userId ? [{ userId: p.userId, kind: PAYSLIP_LABELS.noticeKind, title: PAYSLIP_LABELS.noticeTitle, body: PAYSLIP_LABELS.noticeBody, link: PAYSLIP_LABELS.noticeLink }] : [],
+    ),
+  );
 }
 
 /**
@@ -174,6 +196,7 @@ export async function recordPayment(
         runId: v.runId,
         detail: { people: people.length },
       });
+      await notifyPayslipsReady(tx, v.runId);
       runPaid = true;
     }
   }
