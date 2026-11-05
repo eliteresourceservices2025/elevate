@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { endPayrollLinesWhenDone } from "./payroll-test-helpers";
 
 // Real-database tests for the payroll schema: append-only tables, the freeze triggers on runs, and the encrypted change log.
 // Invented names and figures only.
@@ -8,6 +9,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
+endPayrollLinesWhenDone(db);
 const { fieldCrypto } = await import("@/lib/crypto");
 const { ActionFailure } = await import("@/lib/run-action");
 const { logChange, readChangeDetail } = await import("@/modules/payroll/changes");

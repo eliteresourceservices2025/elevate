@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { endPayrollLinesWhenDone } from "./payroll-test-helpers";
 
 // Real-database test: pay lines, rates and settings. Invented names and figures only.
 
@@ -11,6 +12,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
+endPayrollLinesWhenDone(db);
 const { fieldCrypto } = await import("@/lib/crypto");
 const { createPayLine, updatePayLine, endPayLine, savePaySettings } = await import("@/modules/payroll/actions");
 const { getRates, getRateOptions, getPaySettings } = await import("@/modules/payroll/queries");

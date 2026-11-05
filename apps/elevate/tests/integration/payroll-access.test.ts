@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { endPayrollLinesWhenDone } from "./payroll-test-helpers";
 
 // Real-database test: a Super Admin chooses who has payroll access. Invented names only.
 
@@ -11,6 +12,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
+endPayrollLinesWhenDone(db);
 const { authorize, ForbiddenError } = await import("@/lib/authz");
 const { ensureCoreUser } = await import("@/modules/core/users");
 const { setPayrollAccess } = await import("@/modules/settings/actions");

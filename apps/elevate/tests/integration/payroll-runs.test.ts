@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { endPayrollLinesWhenDone } from "./payroll-test-helpers";
 
 // Real-database test: draft runs, items, the worksheet and the checks. Invented names and figures only.
 // Periods are in 2025 and lines start in 2024, clear of the leftovers other payroll test files keep in the same throwaway database.
@@ -12,6 +13,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
+endPayrollLinesWhenDone(db);
 const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine } = await import("@/modules/payroll/actions");
 const { getWorksheet, getRuns } = await import("@/modules/payroll/queries");
 const { decryptRunLine, encryptItemValue, settingsInForce } = await import("@/modules/payroll/service");

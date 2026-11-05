@@ -51,7 +51,7 @@ describe("setPayrollAccess, every role", () => {
 // a valid request from a Preparer reaches the (mocked, throwing) database, so it ends in the generic message.
 const { createPayLine, updatePayLine, endPayLine, savePaySettings } = await import("@/modules/payroll/actions");
 const { getRates, getPaySettings, getRuns, getWorksheet } = await import("@/modules/payroll/queries");
-const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine } = await import("@/modules/payroll/actions");
+const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion } = await import("@/modules/payroll/actions");
 
 const LEVELS = [null, "viewer", "approver", "preparer"] as const;
 const GENERIC = "Something went wrong. Try again.";
@@ -74,6 +74,9 @@ const calls: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   setRunUsdRate: () => setRunUsdRate({ runId: RUN_ID, rate: "58.50" }),
   confirmRunLine: () => confirmRunLine({ runLineId: LINE_KEY }),
   cancelPayRun: () => cancelPayRun({ runId: RUN_ID, reason: "Pay lines changed" }),
+  refreshSuggestions: () => refreshSuggestions({ runId: RUN_ID }),
+  confirmSuggestion: () => confirmSuggestion({ runId: RUN_ID, itemId: LINE_KEY, runLineId: LINE_KEY }),
+  assignSuggestion: () => assignSuggestion({ runId: RUN_ID, itemId: LINE_KEY, runLineId: LINE_KEY }),
 };
 
 describe.each(Object.keys(calls))("%s, every role at every payroll level", (name) => {

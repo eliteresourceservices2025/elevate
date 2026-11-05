@@ -1,17 +1,16 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { approvalKey, attendanceRows, dayState, latestApprovals } from "@/modules/attendance/hours-service";
-import { clients } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
-import { holidayDatesFor } from "@/modules/timeoff/service";
+import { historicalHolidayDatesFor } from "@/modules/timeoff/service";
 import { EXTRA_KEYS } from "./calculate";
 import { logChange } from "./changes";
 import { EXTRA_KEY_ITEM, type PayItemType } from "./constants";
 import { formatItemValue } from "./items";
-import { itemKey, latestItems, saveItem, suggestedValue, type ItemRow } from "./runs";
+import { itemKey, latestItems, saveItem, type ItemRow } from "./runs";
 import { payRunItems, payRunLines } from "./schema";
 import { assertNotOwnEmployee, decryptItemValue, encryptItemValue, lockDraftRun, payrollToday } from "./service";
 import { suggestFromDays, type SuggestDay } from "./suggest";
@@ -37,7 +36,7 @@ async function addItem(tx: Tx, actor: Actor, v: { runId: string; employeeId: str
     runLineId: v.runLineId,
     type: v.type,
     state: v.state,
-    valueEnc: encryptItemValue(id, { value: v.value, reason: v.reason }),
+    valueEnc: encryptItemValue(id, { value: v.value, reason: v.reason, system: true }),
     enteredBy: actor.id,
     createdAt: sql`clock_timestamp()`,
   });
@@ -52,13 +51,6 @@ export async function applyRefresh(tx: Tx, actor: Actor, runId: string): Promise
   const lines = await tx.select({ id: payRunLines.id, employeeId: payRunLines.employeeId, clientId: payRunLines.clientId }).from(payRunLines).where(eq(payRunLines.runId, runId));
   const employeeIds = [...new Set(lines.map((l) => l.employeeId))];
 
-  const clientIds = [...new Set(lines.map((l) => l.clientId).filter((c): c is string => c !== null))];
-  const calendarOf = new Map<string, "PH" | "US">();
-  if (clientIds.length > 0) {
-    for (const c of await tx.select({ id: clients.id, calendar: clients.holidayCalendar }).from(clients).where(inArray(clients.id, clientIds))) calendarOf.set(c.id, c.calendar === "US" ? "US" : "PH");
-  }
-  const holidays = { PH: await holidayDatesFor(tx, "PH", run.periodStart, run.periodEnd), US: await holidayDatesFor(tx, "US", run.periodStart, run.periodEnd) };
-
   const today = payrollToday();
   const allDays = await attendanceRows(tx, employeeIds, run.periodStart, run.periodEnd);
   const approvals = await latestApprovals(tx, employeeIds, run.periodStart, run.periodEnd);
@@ -67,10 +59,12 @@ export async function applyRefresh(tx: Tx, actor: Actor, runId: string): Promise
 
   for (const employeeId of employeeIds) {
     const own = lines.filter((l) => l.employeeId === employeeId);
-    const calendars = new Set(own.map((l) => (l.clientId ? (calendarOf.get(l.clientId) ?? "PH") : "PH")));
     const finished = allDays.filter((d) => d.employeeId === employeeId && (d.sessions > 0 || d.scheduledMinutes !== null) && d.date < today);
     if (finished.length === 0) continue;
 
+    // The same holiday set the nightly rebuild used when it worked out the approved extra minutes (the Philippines always, plus the
+    // calendars of the clients the person was assigned to on that date), so the rate class agrees with those minutes.
+    const holidays = await historicalHolidayDatesFor(tx, employeeId, run.periodStart, run.periodEnd);
     const days: SuggestDay[] = finished.map((d) => ({
       date: d.date,
       state: dayState(d, approvals.get(approvalKey(employeeId, d.date))),
@@ -80,7 +74,7 @@ export async function applyRefresh(tx: Tx, actor: Actor, runId: string): Promise
       flags: d.flags,
       lateMinutes: d.lateMinutes,
       earlyLeaveMinutes: d.earlyLeaveMinutes,
-      holiday: [...calendars].some((c) => holidays[c].has(d.date)), // eslint-disable-line security/detect-object-injection
+      holiday: holidays.has(d.date),
     }));
     const s = suggestFromDays(days);
     const wanted = new Map<PayItemType, bigint>([
@@ -109,13 +103,14 @@ export async function applyRefresh(tx: Tx, actor: Actor, runId: string): Promise
         written += 1;
         continue;
       }
-      // Nothing active. A Preparer's own removal of this very suggestion is respected; the refresh's own removal is not.
-      const removedByPerson = here.some((i) => i.state === "dismissed" && decryptItemValue(i.id, i.valueEnc).reason !== NO_LONGER_APPROVED);
-      if (removedByPerson) {
-        let seen = false;
-        for (const target of [null, ...lineIds]) if ((await suggestedValue(tx, runId, employeeId, target, type)) === value) seen = true;
-        if (seen) continue;
-      }
+      // Nothing active. Only a Preparer's own removal (through dismissItem) of this very amount is respected; removals the system made
+      // (a refresh, an assignment) are marked and never count.
+      const removedByPerson = here.some((i) => {
+        if (i.state !== "dismissed") return false;
+        const v = decryptItemValue(i.id, i.valueEnc);
+        return v.system !== true && v.value === value;
+      });
+      if (removedByPerson) continue;
       await addItem(tx, actor, { runId, employeeId, runLineId: own.length === 1 ? own[0].id : null, type, state: "suggested", value, reason: null });
       written += 1;
     }

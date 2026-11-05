@@ -41,6 +41,9 @@ export function suggestFromDays(days: SuggestDay[]): Suggestion {
     const extra = Math.max(0, d.approvedExtraMinutes);
     if (extra === 0) continue;
     if (d.holiday) out.extra.holiday += extra;
+    // Policy (open owner question, do not change without an answer): the approved extra minutes of a rest day fill the lower
+    // rest-day rate first, up to 480, and only what is beyond that goes to the past-8-hours rate. A partial approval of a long
+    // rest day therefore never reaches the higher rate.
     else if (d.scheduledMinutes === null) {
       out.extra.restDay += Math.min(extra, REST_DAY_FIRST_MINUTES);
       out.extra.restDayOver8 += Math.max(0, extra - REST_DAY_FIRST_MINUTES);
