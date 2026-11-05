@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -37,12 +37,12 @@ async function versionsOf(tx: Tx, lineKey: string): Promise<LineRow[]> {
   return tx.select().from(payLines).where(eq(payLines.lineKey, lineKey)).orderBy(desc(payLines.effectiveFrom), desc(payLines.createdAt));
 }
 
-/** The person must still be active, and the client (when given) must not be archived. */
+/** The person must not be separated or archived (onboarding, active, probation and on leave are all paid), and the client (when given) must not be archived. */
 async function checkPersonAndClient(tx: Tx, employeeId: string, clientId: string | null | undefined) {
   const [person] = await tx
     .select({ id: employees.id })
     .from(employees)
-    .where(and(eq(employees.id, employeeId), isNull(employees.archivedAt), eq(employees.status, "active")))
+    .where(and(eq(employees.id, employeeId), isNull(employees.archivedAt), ne(employees.status, "separated")))
     .limit(1);
   if (!person) return fail("That person was not found.");
   if (clientId) {

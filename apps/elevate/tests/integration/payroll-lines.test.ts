@@ -13,7 +13,7 @@ vi.mock("server-only", () => ({}));
 const { db } = await import("@/lib/db");
 const { fieldCrypto } = await import("@/lib/crypto");
 const { createPayLine, updatePayLine, endPayLine, savePaySettings } = await import("@/modules/payroll/actions");
-const { getRates, getPaySettings } = await import("@/modules/payroll/queries");
+const { getRates, getRateOptions, getPaySettings } = await import("@/modules/payroll/queries");
 const { settingsInForce } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
 
@@ -198,6 +198,22 @@ describe("pay lines", () => {
     // Ending is what is done for a leaver, so an archived person's line can still be ended.
     expect(await endPayLine({ lineKey: first.line_key, endsOn: "2030-12-01", reason: "Left" })).toMatchObject({ ok: true });
     expect(await lineRows(emp)).toHaveLength(2);
+  });
+
+  it.each(["onboarding", "active", "probation", "on_leave"])("gives a %s person a line and a change; a separated person gets neither", async (status) => {
+    const preparer = await account();
+    const emp = await person();
+    await db.execute(sql`update core.employees set status = ${status} where id = ${emp}`);
+    current.user = preparer;
+    expect(await createPayLine(base(emp))).toMatchObject({ ok: true });
+    const [first] = await lineRows(emp);
+    expect(await updatePayLine({ ...base(emp, { monthly: "30,000" }), lineKey: first.line_key, effectiveFrom: "2030-11-16", reason: "Raise" })).toMatchObject({ ok: true });
+
+    const gone = await person();
+    await db.execute(sql`update core.employees set status = 'separated' where id = ${gone}`);
+    expect(await createPayLine(base(gone))).toEqual({ ok: false, error: "That person was not found." });
+    expect((await getRateOptions()).people.map((p) => p.id)).toContain(emp);
+    expect((await getRateOptions()).people.map((p) => p.id)).not.toContain(gone);
   });
 
   it("still ends the line of a separated person", async () => {

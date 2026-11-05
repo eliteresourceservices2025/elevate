@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -137,7 +137,7 @@ export async function getRateOptions(): Promise<RateOptions> {
   const people = await db
     .select({ id: employees.id, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
     .from(employees)
-    .where(and(isNull(employees.archivedAt), eq(employees.status, "active")))
+    .where(and(isNull(employees.archivedAt), ne(employees.status, "separated")))
     .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName));
   const clientRows = await db.select({ id: clients.id, name: clients.name }).from(clients).where(isNull(clients.archivedAt)).orderBy(asc(clients.name));
   return {
