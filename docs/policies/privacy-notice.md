@@ -35,6 +35,7 @@ We do not sell personal data, use it for advertising or make decisions about you
 - **You** can see your own records under "My data".
 - **Your team leads** see what they need to manage their team: schedule, time records, leave requests and reviews they take part in. They do not see your birth date, civil status, personal email, home address or sensitive details, and they see your optional gender, sexual orientation or religion answers only if you chose to show them on your profile.
 - **HR** sees employee records and, with administrators, the sensitive details. Every time a sensitive detail is opened, the action is logged.
+- **Pay:** your pay is visible to you and to staff individually chosen to run payroll. HR and administrator roles can also see the pay rate held on your record. Payroll figures are encrypted, and every change to them is kept in a permanent history.
 - **Training results:** you, HR and the Privacy Officer see your scores and answers. Your lead and clients see only whether you passed.
 - **Clients** are told your name, role and working hours where needed to serve them. We do not share your sensitive details or personal records with clients.
 - **Authorities and other parties** only where the law requires it, or with your consent.

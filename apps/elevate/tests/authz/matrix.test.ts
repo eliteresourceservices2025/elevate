@@ -172,11 +172,21 @@ const EXPECTED: Record<string, string> = {
   "analytics.export": "A A - - - -",
   "settings.manage_roles": "A - - - - -",
   "settings.set_safevoice_handler": "A - - - - -",
+  "settings.set_payroll_access": "A - - - - -",
   "settings.reset_mfa": "A - - - - -",
   "settings.deactivate_account": "A - - - - -",
   "settings.view_audit": "A - - - - -",
   "settings.manage_policies": "A A - - - -",
   "invitations.create": "A A - - - -",
+  // payroll level only: no role grants these (the level is checked in the "payroll access" test below)
+  "payroll.view": "- - - - - -",
+  "payroll.view_history": "- - - - - -",
+  "payroll.prepare": "- - - - - -",
+  "payroll.manage_rates": "- - - - - -",
+  "payroll.mark_paid": "- - - - - -",
+  "payroll.export": "- - - - - -",
+  "payroll.approve": "- - - - - -",
+  "payroll.view_own": "O O O O O O",
 };
 
 const SCOPE_CODE: Record<string, Scope | null> = { A: "all", T: "team", O: "own", "-": null };
@@ -283,6 +293,31 @@ describe("Privacy Officer flag", () => {
 
   it("a Safe Voice handler flag does not open incidents", () => {
     expect(can({ id: "h", roles: ["employee"], isSafevoiceHandler: true }, "incidents.handle")).toBe(false);
+  });
+});
+
+const level = (payrollAccess: "preparer" | "approver" | "viewer" | null) => ({ id: "p", roles: ["super_admin"] as RoleSlug[], payrollAccess });
+describe("payroll access", () => {
+  it("comes only from the level", () => {
+    expect(can(level(null), "payroll.view")).toBe(false);
+    expect(can(level("viewer"), "payroll.view")).toBe(true);
+    expect(can(level("viewer"), "payroll.view_history")).toBe(true);
+    expect(can(level("viewer"), "payroll.prepare")).toBe(false);
+    expect(can(level("preparer"), "payroll.prepare")).toBe(true);
+    expect(can(level("preparer"), "payroll.approve")).toBe(false);
+    expect(can(level("approver"), "payroll.approve")).toBe(true);
+    expect(can(level("approver"), "payroll.export")).toBe(false);
+  });
+
+  it("no role, not even Super Admin, opens a payroll action without a level", () => {
+    for (const role of ROLE_SLUGS)
+      for (const action of ["payroll.view", "payroll.prepare", "payroll.approve", "payroll.mark_paid"] as const)
+        expect(can({ id: "p", roles: [role], payrollAccess: null }, action)).toBe(false);
+  });
+
+  it("the level does not widen anything outside payroll", () => {
+    expect(can({ id: "p", roles: ["employee"], payrollAccess: "preparer" }, "settings.set_payroll_access")).toBe(false);
+    expect(can({ id: "p", roles: ["employee"], payrollAccess: "preparer" }, "people.view_sensitive", { ownerUserId: "x" })).toBe(false);
   });
 });
 

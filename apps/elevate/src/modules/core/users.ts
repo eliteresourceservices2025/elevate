@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { BASE_ROLE, isRoleSlug, type RoleSlug } from "@/lib/roles";
+import { BASE_ROLE, isRoleSlug, type PayrollLevel, type RoleSlug } from "@/lib/roles";
 import { writeAudit } from "@/modules/audit/write";
 import { linkEmployeeToUser } from "@/modules/people/service";
 import { needsProvisioning } from "./provision-rules";
@@ -12,9 +12,14 @@ export type CoreUser = {
   email: string;
   archivedAt: Date | null;
   isSafevoiceHandler: boolean;
+  payrollAccess: PayrollLevel | null;
   isPrivacyOfficer: boolean;
   roles: RoleSlug[];
 };
+
+function asPayrollLevel(v: string | null): PayrollLevel | null {
+  return v === "preparer" || v === "approver" || v === "viewer" ? v : null;
+}
 
 function superAdminEmails(): string[] {
   return (process.env.SUPER_ADMIN_EMAILS ?? "")
@@ -108,6 +113,7 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
       email: row.email,
       archivedAt: row.archivedAt,
       isSafevoiceHandler: row.isSafevoiceHandler,
+      payrollAccess: asPayrollLevel(row.payrollAccess),
       isPrivacyOfficer: row.isPrivacyOfficer,
       roles: roleRows.map((r) => r.slug).filter(isRoleSlug),
     };
@@ -127,6 +133,7 @@ async function loadCoreUser(id: string): Promise<CoreUser | null> {
     email: row.email,
     archivedAt: row.archivedAt,
     isSafevoiceHandler: row.isSafevoiceHandler,
+    payrollAccess: asPayrollLevel(row.payrollAccess),
     isPrivacyOfficer: row.isPrivacyOfficer,
     roles: roleRows.map((r) => r.slug).filter(isRoleSlug),
   };

@@ -834,6 +834,13 @@
       "when": 1793832202679,
       "tag": "0118_common_shockwave",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1793850215935,
+      "tag": "0119_fast_absorbing_man",
+      "breakpoints": true
     }
   ]
 }
