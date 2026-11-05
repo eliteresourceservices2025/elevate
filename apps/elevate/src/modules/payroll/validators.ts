@@ -123,6 +123,11 @@ export const sendBackRunSchema = z.object({ runId: uuid, note: z.string().trim()
 /** The hash the page was given when it loaded (64 lowercase hex characters). */
 export const approveRunSchema = z.object({ runId: uuid, expectedHash: z.string().regex(/^[0-9a-f]{64}$/) });
 
-export type PayLineInput = z.input<typeof createPayLineSchema>;
+export const exportRemitlySchema = z.object({ runId: uuid });
+
+/** A transfer reference typed by the Preparer who paid. Kept encrypted. */
+export const markPaidSchema = z.object({ runId: uuid, employeeId: uuid, reference: z.string().trim().min(1).max(100), paidOn: isoDate });
+
+export type PayLineInput =z.input<typeof createPayLineSchema>;
 export type UpdatePayLineInput = z.input<typeof updatePayLineSchema>;
 export type PaySettingsInput = z.input<typeof savePaySettingsSchema>;

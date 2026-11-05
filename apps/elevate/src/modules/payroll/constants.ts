@@ -192,6 +192,28 @@ export const WORKSHEET_LABELS = {
 /** Item types that may name the earlier run they correct: an adjustment adds pay, an other deduction takes back an overpayment. */
 export const CORRECTION_TYPES: readonly PayItemType[] = ["adjustment", "other_deduction"];
 
+/** Wording of paying an approved run: the Remitly list and recording each person's reference. ELEVATE sends no money. */
+export const PAYMENT_LABELS = {
+  title: "Payment",
+  hint: "Download the list, pay each person in Remitly, then record the Remitly reference here. The list has names, pesos and dollars only, never account numbers.",
+  download: "Download Remitly list",
+  downloaded: (rows: number) => `Downloaded ${rows} ${rows === 1 ? "person" : "people"}.`,
+  noRate: "Set the dollar rate on this run before downloading the list.",
+  person: "Person",
+  alias: "Alias",
+  status: "Status",
+  paid: "Paid",
+  notPaid: "Not paid yet",
+  reference: "Remitly reference",
+  paidOn: "Paid on",
+  markPaid: "Mark paid",
+  correct: "Correct",
+  marked: "Payment recorded.",
+  allPaid: "Everyone on this run is paid.",
+  ownLine: "Another Preparer records your payment.",
+  progress: (paid: number, total: number) => `${paid} of ${total} paid`,
+} as const;
+
 /** Wording of sending a run for review and deciding it. Notices never carry an amount, a name or the note. */
 export const APPROVAL_LABELS = {
   submit: "Send for review",

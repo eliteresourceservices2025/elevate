@@ -13,8 +13,9 @@ import { formatPesos } from "./money";
 import { countAwaiting, hashOf, latestSendBackNote, refusalFor } from "./approval";
 import { readRun, worksheetOf, type Worksheet } from "./runs";
 import { logChange } from "./changes";
-import { payLines, payRuns, paySettings } from "./schema";
-import { decryptLineAmounts, payrollToday, snapshotOf } from "./service";
+import { payLines, payRunLines, payRuns, paySettings } from "./schema";
+import { decryptReference, latestPayments } from "./payments";
+import { decryptLineAmounts, employeeIdForUser, payrollToday, snapshotOf } from "./service";
 
 const today = payrollToday;
 const UNREADABLE = "Can't be read";
@@ -224,6 +225,74 @@ export async function getWorksheet(runId: string): Promise<WorksheetView | null>
     await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["pay figures"], count: view.lines.length } }, tx);
     await logChange(tx, actor, { action: "run_viewed", runId });
   });
+  return view;
+}
+
+export type PaymentsView = {
+  runId: string;
+  status: RunStatus;
+  hasRate: boolean;
+  canMarkPaid: boolean;
+  canExport: boolean;
+  people: { employeeId: string; name: string; aliases: string; isOwn: boolean; payment: { reference: string; paidOn: string } | null }[];
+};
+
+/**
+ * Who is paid on a run, with the newest reference per person decrypted, or null when there is no such run. Showing references is a
+ * sensitive read: one `sensitive.view` audit row (field name and a count, never a reference).
+ */
+export async function getPayments(runId: string): Promise<PaymentsView | null> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.view");
+  if (!z.uuid().safeParse(runId).success) return null;
+
+  const view = await db.transaction(async (tx): Promise<PaymentsView | null> => {
+    const [run] = await tx.select().from(payRuns).where(eq(payRuns.id, runId)).limit(1);
+    if (!run) return null;
+    const lines = await tx
+      .select({ employeeId: payRunLines.employeeId, alias: payRunLines.alias, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
+      .from(payRunLines)
+      .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
+      .where(eq(payRunLines.runId, runId))
+      .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName), asc(payRunLines.alias));
+    const own = await employeeIdForUser(tx, actor.id);
+    const paid = await latestPayments(tx, runId);
+    const byPerson = new Map<string, PaymentsView["people"][number]>();
+    for (const l of lines) {
+      const existing = byPerson.get(l.employeeId);
+      const alias = l.alias?.trim();
+      if (existing) {
+        if (alias && !existing.aliases.split("; ").includes(alias)) existing.aliases = existing.aliases ? `${existing.aliases}; ${alias}` : alias;
+        continue;
+      }
+      const p = paid.get(l.employeeId);
+      let payment: { reference: string; paidOn: string } | null = null;
+      if (p) {
+        try {
+          payment = { reference: decryptReference(p.id, p.referenceEnc), paidOn: p.paidOn };
+        } catch (error) {
+          console.error("payroll payment reference unreadable:", { paymentId: p.id, error: error instanceof Error ? error.name : "UnknownError" });
+          payment = { reference: UNREADABLE, paidOn: p.paidOn };
+        }
+      }
+      byPerson.set(l.employeeId, {
+        employeeId: l.employeeId,
+        name: `${l.preferred?.trim() || l.first} ${l.last}`,
+        aliases: alias ?? "",
+        isOwn: own !== null && own === l.employeeId,
+        payment,
+      });
+    }
+    return {
+      runId,
+      status: run.status as RunStatus,
+      hasRate: run.usdRateE4 !== null,
+      canMarkPaid: can(actor, "payroll.mark_paid"),
+      canExport: can(actor, "payroll.export"),
+      people: [...byPerson.values()],
+    };
+  });
+  if (view) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["payment references"], count: view.people.length } });
   return view;
 }
 

@@ -53,7 +53,8 @@ const { createPayLine, updatePayLine, endPayLine, savePaySettings } = await impo
 const { getRates, getPaySettings, getRuns, getWorksheet } = await import("@/modules/payroll/queries");
 const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun } =
   await import("@/modules/payroll/actions");
-const { payrollRunsAwaitingApproval } = await import("@/modules/payroll/queries");
+const { payrollRunsAwaitingApproval, getPayments } = await import("@/modules/payroll/queries");
+const { exportRemitlyList, markPaid } = await import("@/modules/payroll/actions");
 
 const LEVELS = [null, "viewer", "approver", "preparer"] as const;
 const GENERIC = "Something went wrong. Try again.";
@@ -80,6 +81,8 @@ const calls: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   confirmSuggestion: () => confirmSuggestion({ runId: RUN_ID, itemId: LINE_KEY, runLineId: LINE_KEY }),
   assignSuggestion: () => assignSuggestion({ runId: RUN_ID, itemId: LINE_KEY, runLineId: LINE_KEY }),
   submitRun: () => submitRun({ runId: RUN_ID }),
+  exportRemitlyList: () => exportRemitlyList({ runId: RUN_ID }),
+  markPaid: () => markPaid({ runId: RUN_ID, employeeId: OTHER, reference: "RMT-TEST-1", paidOn: "2030-11-20" }),
 };
 
 describe.each(Object.keys(calls))("%s, every role at every payroll level", (name) => {
@@ -166,7 +169,7 @@ describe("run queries, every role at every payroll level", () => {
       const allowed = level !== null;
       it(`${role} (${level ?? "no level"}): ${allowed ? "passes authorize()" : "is refused"}`, async () => {
         asLevel(role, level);
-        const queries = [() => getRuns({ page: 1, pageSize: 25 }), () => getWorksheet(RUN_ID)];
+        const queries = [() => getRuns({ page: 1, pageSize: 25 }), () => getWorksheet(RUN_ID), () => getPayments(RUN_ID)];
         for (const query of queries) {
           if (allowed) await expect(query()).rejects.toThrow("database touched");
           else await expect(query()).rejects.toMatchObject({ name: "ForbiddenError" });
@@ -192,6 +195,16 @@ describe("run input is checked on the server", () => {
   ])("refuses %s before touching data", async (_label, patch) => {
     asLevel("employee", "preparer");
     expect(await savePayItem(item(patch))).toEqual({ ok: false, error: BAD });
+  });
+
+  it("refuses a bad payment or export request before touching data", async () => {
+    asLevel("employee", "preparer");
+    const pay = { runId: RUN_ID, employeeId: OTHER, reference: "RMT-1", paidOn: "2030-11-20" };
+    for (const patch of [{ reference: "  " }, { reference: "x".repeat(101) }, { paidOn: "2030-02-31" }, { employeeId: "nope" }, { runId: "nope" }]) {
+      expect(await markPaid({ ...pay, ...patch })).toEqual({ ok: false, error: BAD });
+    }
+    expect(await exportRemitlyList({ runId: "nope" })).toEqual({ ok: false, error: BAD });
+    expect(await exportRemitlyList({})).toEqual({ ok: false, error: BAD });
   });
 
   it("refuses a bad period and a bad dollar rate before touching data", async () => {

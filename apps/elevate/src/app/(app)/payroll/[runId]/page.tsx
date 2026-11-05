@@ -14,7 +14,9 @@ import { CancelRunDialog, UsdRateDialog } from "@/modules/payroll/components/run
 import { RefreshSuggestionsButton, UnassignedSuggestions } from "@/modules/payroll/components/suggestion-controls";
 import { RunTotals } from "@/modules/payroll/components/run-totals";
 import { Worksheet } from "@/modules/payroll/components/worksheet";
-import { getWorksheet } from "@/modules/payroll/queries";
+import { PaymentsPanel } from "@/modules/payroll/components/payments-panel";
+import { getPayments, getWorksheet } from "@/modules/payroll/queries";
+import { payrollToday } from "@/modules/payroll/service";
 
 export const metadata: Metadata = { title: "Payroll run" };
 
@@ -32,6 +34,7 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
   const info = pageInfo(sheet.lines.length, paging.page, paging.pageSize);
   const shown = sheet.lines.slice(info.offset, info.offset + info.pageSize);
   const { run } = sheet;
+  const payments = run.status === "approved" || run.status === "paid" ? await getPayments(runId) : null;
 
   return (
     <PageContainer width="canvas">
@@ -78,6 +81,7 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
         sentBackNote={sheet.sentBackNote}
         lineCount={sheet.lines.length}
       />
+      {payments ? <PaymentsPanel view={payments} today={payrollToday()} /> : null}
     </PageContainer>
   );
 }

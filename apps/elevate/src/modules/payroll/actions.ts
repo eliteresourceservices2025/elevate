@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { allowRequest } from "@/lib/rate-limit";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { clients, employees } from "@/modules/people/schema";
@@ -18,8 +19,11 @@ import { amountsToJson, assertNotOwnEmployee, decryptLineAmounts, encryptLineAmo
 import { cancelRun, confirmLine, createRun, dismissItem, saveItem, setUsdRate } from "./runs";
 import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import { approve, sendBack, submit } from "./approval";
+import { recordPayment, remitlyList } from "./payments";
 import {
   approveRunSchema,
+  exportRemitlySchema,
+  markPaidSchema,
   sendBackRunSchema,
   submitRunSchema,
   assignSuggestionSchema,
@@ -435,6 +439,38 @@ export async function approveRun(input: unknown): Promise<ActionResult> {
     await db.transaction((tx) => approve(tx, actor, parsed.data));
     refreshedRun(parsed.data.runId);
     return { ok: true, data: undefined } as const;
+  });
+}
+
+/** The Remitly list (person, alias, pesos, dollars; never bank details) for an approved run. Audited and rate limited. */
+export async function exportRemitlyList(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.export");
+
+    const parsed = exportRemitlySchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    if (!(await allowRequest("download", actor.id))) return fail("Too many downloads. Wait a few minutes and try again.");
+
+    const built = await db.transaction((tx) => remitlyList(tx, actor, parsed.data.runId));
+    return { ok: true, data: built } as const;
+  });
+}
+
+/** Records that a person on an approved run was paid (their Remitly reference and date). Marking again corrects it. Never your own pay. */
+export async function markPaid(input: unknown): Promise<ActionResult<{ runPaid: boolean }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.mark_paid");
+
+    const parsed = markPaidSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const result = await db.transaction((tx) => recordPayment(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: result } as const;
   });
 }
 
