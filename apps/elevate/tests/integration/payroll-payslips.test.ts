@@ -570,15 +570,19 @@ describe("the Contractor Payment Statement lists every named line", () => {
     const view = payslipView((await getMyPayslip(owner as never, runId))!);
     expect(view.lines).toHaveLength(1);
     const v = view.lines[0];
-    expect(v.earnings.filter((r) => r.label.endsWith("allowance"))).toEqual([
-      { label: "Health allowance", detail: "", amount: formatPesos(100_000n) },
-      { label: "Internet allowance", detail: "", amount: formatPesos(50_000n) },
+    expect(v.compensation.filter((r) => r.detail === "Allowance")).toEqual([
+      { label: "Health allowance", detail: "Allowance", amount: formatPesos(100_000n) },
+      { label: "Internet allowance", detail: "Allowance", amount: formatPesos(50_000n) },
     ]);
     expect(JSON.stringify(view)).not.toContain("Hazard fee");
-    expect(v.reimbursements).toEqual([{ label: "Supplies", detail: "", amount: formatPesos(25_050n) }]);
-    expect(v.bonuses).toEqual([{ label: "Performance bonus", detail: "", amount: formatPesos(200_000n) }]);
-    expect(v.adjustments).toEqual([{ label: "Correction of an earlier payment", detail: "", amount: formatPesos(7_500n) }]);
-    expect(v.gross).toBe(formatPesos(1_250_000n));
+    expect(v.compensation.filter((r) => r.detail === "Reimbursement")).toEqual([{ label: "Supplies", detail: "Reimbursement", amount: formatPesos(25_050n) }]);
+    expect(v.compensation.filter((r) => r.detail === "Bonus")).toEqual([{ label: "Performance bonus", detail: "Bonus", amount: formatPesos(200_000n) }]);
+    expect(v.compensation.filter((r) => r.detail === "Adjustment")).toEqual([{ label: "Correction of an earlier payment", detail: "Adjustment", amount: formatPesos(7_500n) }]);
+    // Every kind that has no line still shows, with a dash; the totals add up to the total payable.
+    expect(v.deductions.every((r) => r.amount === "-")).toBe(true);
+    expect(v.totalCompensation).toBe(formatPesos(1_482_550n));
+    expect(v.totalDeductions).toBe("0.00");
+    expect(view.hiredOn === null || /^d{4}-d{2}-d{2}$/.test(view.hiredOn)).toBe(true);
     expect(v.net).toBe(formatPesos(1_482_550n));
     expect(view.title).toBe("Contractor Payment Statement");
     expect((await listMyPayslips()).find((x) => x.runId === runId)!.net).toBe(formatPesos(1_482_550n));

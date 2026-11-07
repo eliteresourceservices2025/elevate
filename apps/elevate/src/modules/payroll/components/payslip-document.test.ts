@@ -30,7 +30,8 @@ const slip = (over: Partial<PayslipInput> = {}): PayslipInput => ({
   name: "Liza Testreyes",
   periodStart: "2029-01-01",
   periodEnd: "2029-01-15",
-  lines: [{ alias: null, input, result }],
+  hiredOn: "2027-03-01",
+  lines: [{ alias: null, clientName: null, input, result }],
   paidOn: "2029-01-16",
   payslipNumber: "PS-TEST0001-ABCD",
   paymentMethods: ["remitly"],
@@ -43,7 +44,7 @@ const html = (over: Partial<PayslipInput> = {}) => renderToStaticMarkup(createEl
 describe("PayslipDocument", () => {
   it("shows the person, the period, the paid date, the figures and the net pay", () => {
     const out = html();
-    for (const text of ["Liza Testreyes", "2029-01-01 to 2029-01-15", "2029-01-16", "Remitly", "PS-TEST0001-ABCD", "Gross pay", "Total payable compensation", "2 h at 125%"]) expect(out).toContain(text);
+    for (const text of ["Liza Testreyes", "2029-01-01 to 2029-01-15", "2029-01-16", "Remitly", "PS-TEST0001-ABCD", "Total compensation", "Total deductions", "Compensation", "Deductions", "Monthly rate", "Total payable compensation", "2 h at 125%"]) expect(out).toContain(text);
     expect(out).toContain(formatPesos(result.net));
   });
 
@@ -68,7 +69,7 @@ describe("PayslipDocument", () => {
   });
 
   it("shows a heading and a total for a person with two lines", () => {
-    const out = html({ lines: [{ alias: "Front desk", input, result }, { alias: "Billing", input, result }] });
+    const out = html({ lines: [{ alias: "Front desk", clientName: null, input, result }, { alias: "Billing", clientName: null, input, result }] });
     expect(out).toContain("Line: Front desk");
     expect(out).toContain("Line: Billing");
     expect(out).toContain("Total payable compensation, all lines");

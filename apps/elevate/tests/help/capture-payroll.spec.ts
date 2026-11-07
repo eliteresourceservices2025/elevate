@@ -386,7 +386,7 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     // The payslip on screen, for the run made here
     await workPage.goto(`/my-pay/${runId}`);
     await expect(workPage.getByText("Carmen Dela Rosa")).toBeVisible();
-    await snap(workPage, "read-your-payslip", "03-payslip", "A contractor payment statement on screen: the period, how it was paid, the pay line by line, the total payable compensation and who signed it.", { viewport: { width: 1280, height: 960 } });
+    await snap(workPage, "read-your-payslip", "03-payslip", "A contractor payment statement on screen: the period, how it was paid, the pay line by line, the total payable compensation and who signed it.", { viewport: { width: 1280, height: 1900 } });
     await workPage.goto("/my-pay");
     const bell = workPage.getByRole("button", { name: /notification/i }).first();
     if (await bell.count()) {

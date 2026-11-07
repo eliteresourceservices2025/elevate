@@ -13,7 +13,7 @@ ELEVATE works out each person's pay for a pay period from their pay line (their 
 
 # What a person's pay is made of
 
-The statement and the worksheet show these parts, in this order:
+The worksheet and the contractor payment statement show these parts. On the statement, compensation is listed on the left and deductions on the right, and **every row always appears** (a dash when there is nothing), so a contractor sees what they were paid and what was taken off:
 
 - **Cutoff pay.** Half of the monthly rate.
 - **Less: absences, unpaid sick leave (SL) and late or undertime.**

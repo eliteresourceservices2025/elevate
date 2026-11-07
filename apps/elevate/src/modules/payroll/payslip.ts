@@ -6,7 +6,13 @@ import { formatPesos } from "./money";
 // own figures from their frozen run lines and nothing else: no other person, no Preparer or Approver, no reason typed by staff, no change
 // history, no bank detail.
 
-export type PayslipLine = { alias: string | null; input: LineInput; result: LineResult };
+export type PayslipLine = {
+  alias: string | null;
+  /** The client this pay line works for, when it has one. */
+  clientName: string | null;
+  input: LineInput;
+  result: LineResult;
+};
 
 /** Who signed, as kept with the run when it was paid. The picture is base64 JPEG, or null when there is none. */
 export type PayslipSignature = { name: string; title: string; signedOn: string; signatureBase64: string | null };
@@ -16,6 +22,8 @@ export type PayslipInput = {
   name: string;
   periodStart: string;
   periodEnd: string;
+  /** The person's start date on their people record. */
+  hiredOn: string | null;
   lines: PayslipLine[];
   /** The newest payment date recorded for the person on this run. */
   paidOn: string | null;
@@ -32,14 +40,17 @@ export type PayslipRowView = { label: string; detail: string; amount: string };
 export type PayslipLineView = {
   /** The pay line's alias, shown when there is more than one line or an alias. */
   heading: string | null;
-  earnings: PayslipRowView[];
-  /** Paid days (bereavement, PTO). They change no amount, so each row has no figure. */
-  leave: PayslipRowView[];
-  gross: string;
-  reimbursements: PayslipRowView[];
-  bonuses: PayslipRowView[];
-  adjustments: PayslipRowView[];
+  client: string | null;
+  /** How the pay was worked out: the rates. */
+  computation: PayslipRowView[];
+  /** Every kind of compensation, always listed: "-" when there is none for the period. */
+  compensation: PayslipRowView[];
+  totalCompensation: string;
+  /** Every kind of deduction, always listed: "-" when there is none for the period. */
   deductions: PayslipRowView[];
+  totalDeductions: string;
+  /** Days of leave, always listed (bereavement and PTO are paid, SL is unpaid). */
+  leave: PayslipRowView[];
   /** Total payable compensation. */
   net: string;
 };
@@ -48,6 +59,7 @@ export type PayslipView = {
   number: string;
   name: string;
   period: string;
+  hiredOn: string | null;
   paidOn: string | null;
   paidBy: string | null;
   lines: PayslipLineView[];
@@ -60,7 +72,6 @@ export type PayslipView = {
 const plain = (text: string) => text.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
 
 const money = (c: bigint) => formatPesos(c);
-const minus = (c: bigint) => `-${formatPesos(c)}`;
 
 const percent = (bp: number) => `${(bp / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 
@@ -72,44 +83,71 @@ const hoursAndMinutes = (minutes: number) => {
 
 const dayText = (hundredths: number) => `${(hundredths / 100).toFixed(2).replace(/\.?0+$/, "")} ${hundredths === 100 ? "day" : "days"}`;
 
+const DASH = "-";
+const orDash = (c: bigint) => (c === 0n ? DASH : money(c));
+
+/** The named lines of one kind, or a single "-" row under the kind's own name when there are none. */
+function named(lines: { label: string; amount: bigint }[], kind: string, none: string): PayslipRowView[] {
+  if (lines.length === 0) return [{ label: none, detail: "", amount: DASH }];
+  return lines.map((x) => ({ label: plain(x.label), detail: kind, amount: money(x.amount) }));
+}
+
 function lineView(line: PayslipLine, input: PayslipInput): PayslipLineView {
   const { input: i, result: r } = line;
-  const earnings: PayslipRowView[] = [{ label: L.base, detail: "", amount: money(r.base) }];
+
+  const worked = i.partial
+    ? `${[i.partial.dayHundredths > 0 ? dayText(i.partial.dayHundredths) : "", i.partial.minutes > 0 ? hoursAndMinutes(i.partial.minutes) : ""].filter(Boolean).join(" ")} worked`
+    : "";
+  const compensation: PayslipRowView[] = [{ label: L.base, detail: worked, amount: money(r.base) }];
   for (const key of EXTRA_KEYS) {
-    if (r.extra[key] === 0n && i.extra[key] === 0) continue;
     const bp = key === "holiday" ? HOLIDAY_BP : (input.multipliersBp?.[key] ?? null);
-    earnings.push({
+    compensation.push({
       label: PAY_ITEM_LABELS[EXTRA_KEY_ITEM[key]],
-      detail: [hoursAndMinutes(i.extra[key]), bp ? `at ${percent(bp)}` : ""].filter(Boolean).join(" "),
-      amount: money(r.extra[key]),
+      detail: i.extra[key] > 0 ? [hoursAndMinutes(i.extra[key]), bp ? `at ${percent(bp)}` : ""].filter(Boolean).join(" ") : "",
+      amount: orDash(r.extra[key]),
     });
   }
-  // Each allowance is its own row, under the name the Preparer gave it.
-  for (const a of i.allowances) earnings.push({ label: plain(a.label), detail: "", amount: money(a.amount) });
-  if (r.absences !== 0n) earnings.push({ label: PAY_ITEM_LABELS.absence_days, detail: dayText(i.absenceDayHundredths), amount: minus(r.absences) });
-  if (r.sickLeave !== 0n) earnings.push({ label: PAY_ITEM_LABELS.sick_leave_days, detail: dayText(i.sickLeaveDayHundredths), amount: minus(r.sickLeave) });
-  if (r.late !== 0n) earnings.push({ label: PAY_ITEM_LABELS.late_minutes, detail: `${i.lateMinutes} min`, amount: minus(r.late) });
+  compensation.push(
+    ...named(i.allowances, PAY_ITEM_LABELS.allowance, L.allowancesNone),
+    ...named(i.reimbursements, PAY_ITEM_LABELS.reimbursement, L.reimbursementsNone),
+    ...named(i.bonuses, PAY_ITEM_LABELS.bonus, L.bonusesNone),
+    ...named(i.adjustments, PAY_ITEM_LABELS.adjustment, L.adjustmentsNone),
+  );
+  const totalCompensation = r.base + EXTRA_KEYS.reduce((sum, key) => sum + r.extra[key], 0n) + r.allowances + r.reimbursements + r.bonuses + r.adjustments;
 
-  const leave: PayslipRowView[] = [];
-  if (i.bereavementDayHundredths > 0) leave.push({ label: PAY_ITEM_LABELS.bereavement_days, detail: dayText(i.bereavementDayHundredths), amount: "" });
-  if (i.ptoDayHundredths > 0) leave.push({ label: PAY_ITEM_LABELS.pto_days, detail: dayText(i.ptoDayHundredths), amount: "" });
+  const deductions: PayslipRowView[] = [
+    { label: PAY_ITEM_LABELS.absence_days, detail: r.absences !== 0n ? dayText(i.absenceDayHundredths) : "", amount: orDash(r.absences) },
+    { label: PAY_ITEM_LABELS.sick_leave_days, detail: r.sickLeave !== 0n ? dayText(i.sickLeaveDayHundredths) : "", amount: orDash(r.sickLeave) },
+    { label: PAY_ITEM_LABELS.late_minutes, detail: r.late !== 0n ? `${i.lateMinutes} min` : "", amount: orDash(r.late) },
+    { label: PAY_ITEM_LABELS.loan, detail: "", amount: orDash(i.loan) },
+    { label: PAY_ITEM_LABELS.other_deduction, detail: "", amount: orDash(i.otherDeductions) },
+  ];
+  const totalDeductions = r.absences + r.sickLeave + r.late + i.loan + i.otherDeductions;
 
-  const rows = (lines: { label: string; amount: bigint }[]): PayslipRowView[] => lines.map((x) => ({ label: plain(x.label), detail: "", amount: money(x.amount) }));
+  const days = (hundredths: number) => (hundredths > 0 ? dayText(hundredths) : DASH);
+  const leave: PayslipRowView[] = [
+    { label: PAY_ITEM_LABELS.bereavement_days, detail: "", amount: days(i.bereavementDayHundredths) },
+    { label: PAY_ITEM_LABELS.pto_days, detail: "", amount: days(i.ptoDayHundredths) },
+    { label: PAY_ITEM_LABELS.sick_leave_days, detail: "", amount: days(i.sickLeaveDayHundredths) },
+  ];
 
-  const deductions: PayslipRowView[] = [];
-  if (i.loan !== 0n) deductions.push({ label: PAY_ITEM_LABELS.loan, detail: "", amount: minus(i.loan) });
-  if (i.otherDeductions !== 0n) deductions.push({ label: PAY_ITEM_LABELS.other_deduction, detail: "", amount: minus(i.otherDeductions) });
+  const computation: PayslipRowView[] = [
+    { label: L.monthlyRate, detail: "", amount: money(i.monthlyCentavos) },
+    { label: L.dailyRate, detail: "", amount: money(r.daily) },
+    { label: L.hourlyRate, detail: "", amount: money(r.hourly) },
+    { label: L.hoursPerDay, detail: "", amount: String(i.hoursPerDay) },
+  ];
 
   const alias = line.alias ? plain(line.alias) : "";
   return {
     heading: alias ? L.lineHeading(alias) : null,
-    earnings,
-    leave,
-    gross: money(r.gross),
-    reimbursements: rows(i.reimbursements),
-    bonuses: rows(i.bonuses),
-    adjustments: rows(i.adjustments),
+    client: line.clientName ? plain(line.clientName) : null,
+    computation,
+    compensation,
+    totalCompensation: money(totalCompensation),
     deductions,
+    totalDeductions: money(totalDeductions),
+    leave,
     net: money(r.net),
   };
 }
@@ -123,6 +161,7 @@ export function payslipView(input: PayslipInput): PayslipView {
     number: input.payslipNumber,
     name: plain(input.name),
     period: `${input.periodStart} to ${input.periodEnd}`,
+    hiredOn: input.hiredOn,
     paidOn: input.paidOn,
     paidBy: paidBy || null,
     lines: input.lines.map((l, index) => {

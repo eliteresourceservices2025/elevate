@@ -16,63 +16,81 @@ const SOFT = "#f3effb";
 const LOGO_WIDTH = 30;
 
 const styles = StyleSheet.create({
-  page: { paddingTop: 44, paddingBottom: 70, paddingHorizontal: 48, fontFamily: "Helvetica", fontSize: 10, lineHeight: 1.4, color: INK },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 2, borderBottomColor: PURPLE, paddingBottom: 10, marginBottom: 16 },
+  page: { paddingTop: 30, paddingBottom: 54, paddingHorizontal: 44, fontFamily: "Helvetica", fontSize: 9.5, lineHeight: 1.3, color: INK },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 2, borderBottomColor: PURPLE, paddingBottom: 8, marginBottom: 10 },
   brand: { flexDirection: "row", alignItems: "center" },
   logo: { width: LOGO_WIDTH, height: LOGO_WIDTH / LOGO_ASPECT, marginRight: 8 },
   brandText: { fontFamily: "Helvetica-Bold", fontSize: 13, color: PURPLE },
   titleBlock: { alignItems: "flex-end" },
-  title: { fontFamily: "Helvetica-Bold", fontSize: 18, letterSpacing: 1.2, lineHeight: 1.2, marginBottom: 4 },
+  title: { fontFamily: "Helvetica-Bold", fontSize: 13, letterSpacing: 0.6, lineHeight: 1.2, marginBottom: 4 },
   number: { fontSize: 8.5, color: MUTED },
-  facts: { flexDirection: "row", flexWrap: "wrap", marginBottom: 14 },
-  fact: { width: "50%", marginBottom: 8 },
+  facts: { flexDirection: "row", flexWrap: "wrap", marginBottom: 6 },
+  fact: { width: "33.33%", marginBottom: 5 },
   factLabel: { fontSize: 8, color: MUTED, textTransform: "uppercase", letterSpacing: 0.6 },
-  factValue: { fontFamily: "Helvetica-Bold", fontSize: 11 },
+  factValue: { fontFamily: "Helvetica-Bold", fontSize: 10.5 },
   lineHeading: { fontFamily: "Helvetica-Bold", fontSize: 12, marginTop: 6, marginBottom: 6 },
-  tableHead: { flexDirection: "row", backgroundColor: SOFT, paddingVertical: 4, paddingHorizontal: 6, marginTop: 4 },
-  headText: { fontFamily: "Helvetica-Bold", fontSize: 8.5, color: PURPLE },
-  row: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.5, borderBottomColor: "#e6e1f0" },
-  colLabel: { flex: 3 },
-  colDetail: { flex: 3, color: MUTED, fontSize: 9 },
-  colAmount: { flex: 2, textAlign: "right" },
-  grossRow: { flexDirection: "row", paddingVertical: 5, paddingHorizontal: 6, borderTopWidth: 1, borderTopColor: PURPLE, backgroundColor: SOFT, marginBottom: 6 },
+  sectionTitle: { fontSize: 8, color: MUTED, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8, marginBottom: 3 },
+  compBox: { flexDirection: "row", borderWidth: 0.8, borderColor: INK, marginTop: 8 },
+  compCol: { width: "50%" },
+  compColRight: { borderLeftWidth: 0.8, borderLeftColor: INK },
+  colHead: { backgroundColor: SOFT, paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.8, borderBottomColor: INK, fontFamily: "Helvetica-Bold", fontSize: 8.5, textTransform: "uppercase", letterSpacing: 0.6 },
+  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 2, paddingHorizontal: 6, borderBottomWidth: 0.4, borderBottomColor: "#d9d3e8" },
+  rowLabel: { flex: 1, paddingRight: 6 },
+  rowDetail: { fontSize: 7.5, color: MUTED },
+  rowAmount: { width: 70, textAlign: "right" },
+  totalRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, paddingHorizontal: 6, borderTopWidth: 0.8, borderTopColor: INK, backgroundColor: SOFT, fontFamily: "Helvetica-Bold" },
+  miniRow: { flexDirection: "row", marginBottom: 2 },
+  mini: { width: "25%" },
+  miniLabel: { fontSize: 7.5, color: MUTED },
   bold: { fontFamily: "Helvetica-Bold" },
-  sectionTitle: { fontSize: 8, color: MUTED, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 6 },
+  certTitle: { fontFamily: "Helvetica-Bold", fontSize: 8, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 2 },
+  certText: { fontSize: 7.5, color: MUTED, lineHeight: 1.3 },
   netBox: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: PURPLE, color: "#ffffff", paddingVertical: 8, paddingHorizontal: 10, marginTop: 8, borderRadius: 3 },
   netLabel: { fontFamily: "Helvetica-Bold", fontSize: 11, color: "#ffffff" },
   netAmount: { fontFamily: "Helvetica-Bold", fontSize: 16, color: "#ffffff" },
   totalBox: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1.5, borderColor: PURPLE, paddingVertical: 8, paddingHorizontal: 10, marginTop: 14, borderRadius: 3 },
-  signature: { marginTop: 30, width: 200 },
+  signature: { marginTop: 14, width: 200 },
   signLabel: { fontSize: 8, color: MUTED, textTransform: "uppercase", letterSpacing: 0.6 },
-  signSpace: { height: 46, justifyContent: "flex-end", borderBottomWidth: 0.8, borderBottomColor: INK, paddingBottom: 2 },
-  signImage: { height: 42, objectFit: "contain", objectPositionX: 0 },
+  signSpace: { height: 38, justifyContent: "flex-end", borderBottomWidth: 0.8, borderBottomColor: INK, paddingBottom: 2 },
+  signImage: { height: 34, objectFit: "contain", objectPositionX: 0 },
   signName: { fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 4 },
   signMuted: { fontSize: 9, color: MUTED },
   notSigned: { fontSize: 10, fontFamily: "Helvetica-Oblique", color: MUTED, marginTop: 4 },
-  accent: { height: 3, width: 40, backgroundColor: GOLD, marginTop: 14 },
-  footer: { position: "absolute", bottom: 28, left: 48, right: 48, fontSize: 8, color: MUTED, flexDirection: "row", justifyContent: "space-between" },
+  accent: { height: 3, width: 40, backgroundColor: GOLD, marginTop: 8 },
+  footer: { position: "absolute", bottom: 20, left: 44, right: 44, fontSize: 7.5, color: MUTED },
 });
 
-function Rows({ rows }: { rows: PayslipRowView[] }) {
+function Column({ title, rows, totalLabel, total, right }: { title: string; rows: PayslipRowView[]; totalLabel: string; total: string; right?: boolean }) {
   return (
-    <>
-      {rows.map((row) => (
-        <View key={`${row.label}-${row.detail}`} style={styles.row} wrap={false}>
-          <Text style={styles.colLabel}>{latin(row.label)}</Text>
-          <Text style={styles.colDetail}>{latin(row.detail)}</Text>
-          <Text style={styles.colAmount}>{row.amount}</Text>
+    <View style={right ? [styles.compCol, styles.compColRight] : styles.compCol}>
+      <Text style={styles.colHead}>{title}</Text>
+      {rows.map((row, index) => (
+        <View key={`${row.label}-${index}`} style={styles.row} wrap={false}>
+          <Text style={styles.rowLabel}>
+            {latin(row.label)}
+            {row.detail ? <Text style={styles.rowDetail}>{`  ${latin(row.detail)}`}</Text> : null}
+          </Text>
+          <Text style={styles.rowAmount}>{row.amount}</Text>
         </View>
       ))}
-    </>
+      <View style={{ flexGrow: 1 }} />
+      <View style={styles.totalRow}>
+        <Text>{totalLabel}</Text>
+        <Text>{total}</Text>
+      </View>
+    </View>
   );
 }
 
-function Head() {
+function Mini({ rows, width }: { rows: PayslipRowView[]; width?: string }) {
   return (
-    <View style={styles.tableHead}>
-      <Text style={[styles.headText, styles.colLabel]}>{L.earnings}</Text>
-      <Text style={[styles.headText, styles.colDetail]}>{L.detailColumn}</Text>
-      <Text style={[styles.headText, styles.colAmount]}>{L.amountColumn}</Text>
+    <View style={styles.miniRow}>
+      {rows.map((row) => (
+        <View key={row.label} style={width ? [styles.mini, { width }] : styles.mini}>
+          <Text style={styles.miniLabel}>{latin(row.label)}</Text>
+          <Text>{row.amount}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -81,39 +99,15 @@ function Line({ line }: { line: PayslipLineView }) {
   return (
     <View>
       {line.heading ? <Text style={styles.lineHeading}>{latin(line.heading)}</Text> : null}
-      <Head />
-      <Rows rows={line.earnings} />
-      {line.leave.length > 0 ? (
-        <View>
-          <Text style={styles.sectionTitle}>{L.leaveTitle}</Text>
-          <Rows rows={line.leave} />
-        </View>
-      ) : null}
-      <View style={styles.grossRow} wrap={false}>
-        <Text style={[styles.colLabel, styles.bold]}>{L.gross}</Text>
-        <Text style={styles.colDetail} />
-        <Text style={[styles.colAmount, styles.bold]}>{line.gross}</Text>
+      {line.client ? <Text style={{ marginBottom: 4 }}>{L.client}: {latin(line.client)}</Text> : null}
+      <Text style={styles.sectionTitle}>{L.computationTitle}</Text>
+      <Mini rows={line.computation} />
+      <View style={styles.compBox} wrap={false}>
+        <Column title={L.compensationTitle} rows={line.compensation} totalLabel={L.totalCompensation} total={line.totalCompensation} />
+        <Column title={L.deductionsTitle} rows={line.deductions} totalLabel={L.totalDeductions} total={line.totalDeductions} right />
       </View>
-      {(
-        [
-          [L.reimbursements, line.reimbursements],
-          [L.bonuses, line.bonuses],
-          [L.adjustments, line.adjustments],
-        ] as const
-      ).map(([title, rows]) =>
-        rows.length > 0 ? (
-          <View key={title}>
-            <Text style={styles.sectionTitle}>{title}</Text>
-            <Rows rows={rows} />
-          </View>
-        ) : null,
-      )}
-      {line.deductions.length > 0 ? (
-        <View>
-          <Text style={styles.sectionTitle}>{L.deductions}</Text>
-          <Rows rows={line.deductions} />
-        </View>
-      ) : null}
+      <Text style={styles.sectionTitle}>{L.leaveTitle}</Text>
+      <Mini rows={line.leave} width="33%" />
       <View style={styles.netBox} wrap={false}>
         <Text style={styles.netLabel}>{L.net}</Text>
         <Text style={styles.netAmount}>{line.net}</Text>
@@ -152,6 +146,7 @@ function PayslipDocument({ view }: { view: PayslipView }) {
         <View style={styles.facts}>
           <Fact label={L.preparedFor} value={view.name} />
           <Fact label={L.period} value={view.period} />
+          {view.hiredOn ? <Fact label={L.hiredOn} value={view.hiredOn} /> : null}
           {view.paidOn ? <Fact label={L.paidOn} value={view.paidOn} /> : null}
           {view.paidBy ? <Fact label={L.paidBy} value={view.paidBy} /> : null}
         </View>
@@ -167,30 +162,48 @@ function PayslipDocument({ view }: { view: PayslipView }) {
           </View>
         ) : null}
 
-        <View style={styles.signature} wrap={false}>
-          <Text style={styles.signLabel}>{L.signedBy}</Text>
-          <View style={styles.signSpace}>
-            {signature?.imageBase64 ? <Image src={{ data: Buffer.from(signature.imageBase64, "base64"), format: "jpg" }} style={styles.signImage} /> : null}
+        <View style={{ marginTop: 10 }} wrap={false}>
+          <Text style={styles.certTitle}>{L.certificationTitle}</Text>
+          <Text style={styles.certText}>{latin(L.certificationText)}</Text>
+          <View style={{ flexDirection: "row", marginTop: 6, alignItems: "flex-end" }}>
+            <View style={{ width: "34%", marginRight: "2%" }}>
+              <Text style={styles.signLabel}>{L.signedBy}</Text>
+              <View style={styles.signSpace}>
+                {signature?.imageBase64 ? <Image src={{ data: Buffer.from(signature.imageBase64, "base64"), format: "jpg" }} style={styles.signImage} /> : null}
+              </View>
+              {signature ? (
+                <>
+                  <Text style={styles.signName}>{latin(signature.name)}</Text>
+                  <Text style={{ fontSize: 8.5 }}>{latin(signature.title)}</Text>
+                  <Text style={styles.signMuted}>
+                    {L.signedOn} {signature.signedOn}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.notSigned}>{L.notSigned}</Text>
+              )}
+            </View>
+            {[
+              [L.preparedBy, "22%"],
+              [L.certDate, "16%"],
+              [L.contractorSignature, "24%"],
+            ].map(([label, width]) => (
+              <View key={label} style={{ width, marginRight: "2%", alignSelf: "flex-start" }}>
+                <Text style={styles.signLabel}> </Text>
+                <View style={{ borderBottomWidth: 0.8, borderBottomColor: INK, height: 38 }} />
+                <Text style={[styles.miniLabel, { marginTop: 4 }]}>{latin(label)}</Text>
+              </View>
+            ))}
           </View>
-          {signature ? (
-            <>
-              <Text style={styles.signName}>{latin(signature.name)}</Text>
-              <Text style={{ fontSize: 10 }}>{latin(signature.title)}</Text>
-              <Text style={styles.signMuted}>
-                {L.signedOn} {signature.signedOn}
-              </Text>
-            </>
-          ) : (
-            <Text style={styles.notSigned}>{L.notSigned}</Text>
-          )}
+          <Text style={[styles.certTitle, { marginTop: 8 }]}>{L.disclaimerTitle}</Text>
+          <Text style={styles.certText}>{latin(L.disclaimerText)}</Text>
         </View>
-        <View style={styles.accent} />
-
-        <View style={styles.footer} fixed>
-          <Text>
-            {latin(L.footerNote)}
-          </Text>
-          <Text render={({ pageNumber, totalPages }) => `${latin(view.number)}  |  Page ${pageNumber} of ${totalPages}`} />
+        <View style={{ marginTop: 8, fontSize: 7.5, color: MUTED }} wrap={false}>
+          <Text style={{ marginBottom: 3 }}>{latin(L.noTax)}</Text>
+          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Text>{latin(L.footerNote)}</Text>
+            <Text>{latin(view.number)}</Text>
+          </View>
         </View>
       </Page>
     </Document>

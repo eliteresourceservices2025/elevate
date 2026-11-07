@@ -30,19 +30,20 @@ The bell shows the notice. It never shows an amount.
 
 # What is on it
 
-The statement is one page, and the PDF looks the same as the page. Everything is in pesos.
+The statement is one page, and the PDF looks the same as the page. Everything is in pesos. **Every row is always listed**, and a dash (-) means nothing for that item in this period, so you can see everything that could be paid or taken off.
 
-- **At the top:** the statement number, the pay period, the date you were paid and how (for example Remitly).
-- **Pay for the period:** your pay for the cutoff, any overtime (OT) or holiday pay with the hours and the rate, each allowance under its own name (for example Health allowance), and anything taken off for absences, unpaid sick leave (SL) or late minutes. It ends with **Gross pay**.
-- **Leave:** any paid bereavement or PTO days. They show the number of days and take nothing off.
-- **Reimbursements, Bonuses and Adjustments:** each in its own section, each line under its own name.
-- **Deductions:** loans or other deductions.
-- **Total payable compensation**, in the purple box. If you have more than one pay line, each has its own section and you also see **Total payable compensation, all lines**.
-- **Authorized by:** the signature, name and title of the Human Resources Director who signed it, and the date. It is the person who was the signatory on the day your pay run was paid, so it never changes afterwards. If nobody was set up yet on that day, it says **Not signed**.
+- **At the top:** the statement number, the pay period, your date of hire, the date you were paid and how (for example Remitly), and the client of the pay line.
+- **How your pay was worked out:** your monthly rate, the daily and hourly rate worked out from it, and the hours per day.
+- **Compensation (left column):** the base pay for the period, overtime (OT) for a regular day, a rest day and a rest day past 8 hours, holiday pay (always at 100%, with the hours), then your **allowances**, **reimbursements**, **bonuses** and **adjustments**, each line under its own name (for example Health allowance) and marked with its kind. It ends with **Total compensation**.
+- **Deductions (right column):** absent days, unpaid sick leave (SL), late and undertime, a loan and other deductions. It ends with **Total deductions**.
+- **Leave (days):** bereavement and PTO (both paid) and SL (unpaid), as a number of days.
+- **Total payable compensation**, in the purple box: total compensation minus total deductions. If you have more than one pay line, each has its own section and you also see **Total payable compensation, all lines**.
+- **Certification:** a sentence saying the statement reflects payment for services you rendered in the period, and that you acknowledge receiving the total payable compensation. Under it are the **Authorized by** signature (the name, title and date of the Human Resources Director, kept with the pay run so it never changes afterwards; it says **Not signed** if nobody was set up that day) and blank lines for **Prepared by**, **Date** and your own **Contractor signature (optional)**. Print the PDF if you want to sign it.
+- **Disclaimer:** the payment is for services rendered as an Independent Contractor and is not an employer-employee relationship. You are responsible for any taxes, registrations and government contributions that apply to you.
 
 ![A contractor payment statement on screen: the period, how it was paid, the pay line by line, the total payable compensation and who signed it.](help:read-your-payslip/03-payslip.png)
 
-It does not show tax or contributions, and it does not show your bank details. Names with letters outside English may show a "?" on the PDF.
+It says plainly that no tax, SSS, PhilHealth, HDMF or other government contribution is withheld or computed on it. It does not show your bank details or government ID numbers. Names with letters outside English may show a "?" on the PDF.
 
 # If something looks wrong
 

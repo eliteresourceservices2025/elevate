@@ -5,7 +5,7 @@ import { authorize, type AuthzUser } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/modules/audit/write";
-import { employees } from "@/modules/people/schema";
+import { clients, employees } from "@/modules/people/schema";
 import { PAYSLIP_LABELS as L } from "./constants";
 import { formatPesos } from "./money";
 import type { PayslipInput } from "./payslip";
@@ -106,14 +106,15 @@ export async function getMyPayslip(actor: AuthzUser, runId: string): Promise<(Pa
     .limit(1);
   if (!run) return null;
   const lines = await db
-    .select({ id: payRunLines.id, alias: payRunLines.alias, payloadEnc: payRunLines.payloadEnc, paymentMethod: payLines.paymentMethod })
+    .select({ id: payRunLines.id, alias: payRunLines.alias, clientName: clients.name, payloadEnc: payRunLines.payloadEnc, paymentMethod: payLines.paymentMethod })
     .from(payRunLines)
     .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
+    .leftJoin(clients, eq(clients.id, payRunLines.clientId))
     .where(and(eq(payRunLines.runId, runId), eq(payRunLines.employeeId, employeeId)))
     .orderBy(asc(payRunLines.alias), asc(payRunLines.id));
   if (lines.length === 0) return null;
   const [who] = await db
-    .select({ first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
+    .select({ first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName, startDate: employees.startDate })
     .from(employees)
     .where(eq(employees.id, employeeId))
     .limit(1);
@@ -129,19 +130,20 @@ export async function getMyPayslip(actor: AuthzUser, runId: string): Promise<(Pa
     runSignatory(db, runId),
   ]);
 
-  const decrypted = lines.map((l) => ({ alias: l.alias, payload: readable(l.id, l.payloadEnc) }));
+  const decrypted = lines.map((l) => ({ alias: l.alias, clientName: l.clientName, payload: readable(l.id, l.payloadEnc) }));
   if (decrypted.some((l) => l.payload === null)) throw new PayslipUnreadable();
   return {
     employeeId,
     name: personName(who),
     periodStart: run.periodStart,
     periodEnd: run.periodEnd,
+    hiredOn: who.startDate,
     paidOn: payment?.paidOn ?? null,
     payslipNumber: `PS-${runId.slice(0, 8).toUpperCase()}-${employeeId.slice(0, 4).toUpperCase()}`,
     paymentMethods: lines.map((l) => l.paymentMethod),
     multipliersBp: (run.settingsSnapshot as SettingsSnapshot | null)?.multipliersBp ?? null,
     signatory,
-    lines: decrypted.map((l) => ({ alias: l.alias, input: l.payload!.input, result: l.payload!.result })),
+    lines: decrypted.map((l) => ({ alias: l.alias, clientName: l.clientName, input: l.payload!.input, result: l.payload!.result })),
   };
 }
 
