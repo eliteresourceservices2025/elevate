@@ -14,31 +14,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { createPayLine, endPayLine, updatePayLine } from "../actions";
-import { PAY_ITEM_LABELS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS, RATES_LABELS as L, UNREADABLE_HINT, unreadableNotice, type PaymentMethod } from "../constants";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, RATES_LABELS as L, UNREADABLE_HINT, unreadableNotice, type PaymentMethod } from "../constants";
 import type { RateOptions, RateRow } from "../queries";
 
 type Fields = {
   clientId: string;
   alias: string;
   hoursPerDay: string;
-  fte: string;
   paymentMethod: PaymentMethod;
   effectiveFrom: string;
   monthly: string;
-  pesoAllowance: string;
-  dollarAllowance: string;
 };
 
 const blank = (today: string): Fields => ({
   clientId: "",
   alias: "",
   hoursPerDay: "8",
-  fte: "1",
   paymentMethod: "remitly",
   effectiveFrom: today,
   monthly: "",
-  pesoAllowance: "0",
-  dollarAllowance: "0",
 });
 
 function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onChange: (next: Fields) => void; clients: RateOptions["clients"]; idPrefix: string }) {
@@ -65,11 +59,6 @@ function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onC
         <Input id={`${idPrefix}-hours`} type="number" inputMode="numeric" min={1} max={12} step={1} value={value.hoursPerDay} onChange={(e) => set("hoursPerDay", e.target.value)} required />
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-fte`}>{L.fte}</Label>
-        <Input id={`${idPrefix}-fte`} inputMode="decimal" value={value.fte} onChange={(e) => set("fte", e.target.value)} required />
-        <p className="text-xs text-muted-foreground">1 for full time, 0.5 for half.</p>
-      </div>
-      <div className="space-y-1">
         <Label htmlFor={`${idPrefix}-monthly`}>{L.monthly}</Label>
         <Input id={`${idPrefix}-monthly`} inputMode="decimal" value={value.monthly} onChange={(e) => set("monthly", e.target.value)} placeholder="25,000.00" autoComplete="off" required />
       </div>
@@ -83,14 +72,6 @@ function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onC
           ))}
         </NativeSelect>
       </div>
-      <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-peso`}>{PAY_ITEM_LABELS.peso_allowance}</Label>
-        <Input id={`${idPrefix}-peso`} inputMode="decimal" value={value.pesoAllowance} onChange={(e) => set("pesoAllowance", e.target.value)} autoComplete="off" />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-usd`}>{PAY_ITEM_LABELS.dollar_allowance}</Label>
-        <Input id={`${idPrefix}-usd`} inputMode="decimal" value={value.dollarAllowance} onChange={(e) => set("dollarAllowance", e.target.value)} autoComplete="off" />
-      </div>
       <div className="space-y-1 sm:col-span-2">
         <Label htmlFor={`${idPrefix}-from`}>{L.startsOn}</Label>
         <Input id={`${idPrefix}-from`} type="date" value={value.effectiveFrom} onChange={(e) => set("effectiveFrom", e.target.value)} required />
@@ -103,12 +84,9 @@ const common = (v: Fields) => ({
   clientId: v.clientId,
   alias: v.alias,
   hoursPerDay: Number(v.hoursPerDay),
-  fte: v.fte,
   paymentMethod: v.paymentMethod,
   effectiveFrom: v.effectiveFrom,
   monthly: v.monthly,
-  pesoAllowance: v.pesoAllowance,
-  dollarAllowance: v.dollarAllowance,
 });
 
 function AddLineForm({ options, today }: { options: RateOptions; today: string }) {
@@ -150,12 +128,9 @@ function ChangeLineForm({ row, options, today }: { row: RateRow; options: RateOp
     clientId: row.clientId ?? "",
     alias: row.alias ?? "",
     hoursPerDay: String(row.hoursPerDay),
-    fte: row.fte,
     paymentMethod: row.paymentMethod,
     effectiveFrom: today,
     monthly: row.monthly,
-    pesoAllowance: row.pesoAllowance,
-    dollarAllowance: row.dollarAllowance,
   });
   const [reason, setReason] = useState("");
   return (
@@ -247,7 +222,6 @@ export function RatesTable({ rows, options, today }: { rows: RateRow[]; options:
                 <TableHead>{L.clientShort}</TableHead>
                 <TableHead>{L.aliasShort}</TableHead>
                 <TableHead>{L.hoursPerDay}</TableHead>
-                <TableHead>{L.fte}</TableHead>
                 <TableHead>{L.monthly}</TableHead>
                 <TableHead>{L.starts}</TableHead>
                 <TableHead>
@@ -264,7 +238,6 @@ export function RatesTable({ rows, options, today }: { rows: RateRow[]; options:
                   <TableCell label={L.clientShort}>{row.clientName ?? "None"}</TableCell>
                   <TableCell label={L.aliasShort}>{row.alias ?? "None"}</TableCell>
                   <TableCell label={L.hoursPerDay}>{row.hoursPerDay}</TableCell>
-                  <TableCell label={L.fte}>{row.fte}</TableCell>
                   <TableCell label={L.monthly} className="tabular-nums">
                     {row.monthly}
                   </TableCell>

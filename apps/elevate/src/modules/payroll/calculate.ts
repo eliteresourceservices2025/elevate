@@ -1,7 +1,14 @@
 import { divRoundHalfUp } from "./money";
 
-export const EXTRA_KEYS = ["regular", "holiday", "restDay", "restDayOver8", "holidayPay"] as const;
+/**
+ * The overtime (OT) kinds paid at a rate from the settings, and holiday pay, which is always paid 1 to 1 (100% of the hourly rate).
+ * `holiday` is holiday pay; there is no separate holiday overtime.
+ */
+export const EXTRA_KEYS = ["regular", "restDay", "restDayOver8", "holiday"] as const;
 export type ExtraKey = (typeof EXTRA_KEYS)[number];
+
+/** Holiday pay is one to one: basis points of the normal hourly rate. Not a setting. */
+export const HOLIDAY_BP = 10_000;
 
 export type SettingsSnapshot = {
   cutoffDivisor: number;
@@ -9,16 +16,25 @@ export type SettingsSnapshot = {
   multipliersBp: Record<ExtraKey, number | null>;
 };
 
+/** One named amount a Preparer itemized (for example "Health allowance"). Always positive pesos in centavos. */
+export type ItemLine = { label: string; amount: bigint };
+
 export type LineInput = {
   monthlyCentavos: bigint;
   hoursPerDay: number;
   partial: { dayHundredths: number; minutes: number } | null;
   absenceDayHundredths: number;
+  /** Unpaid sick leave, deducted like an absence. */
+  sickLeaveDayHundredths: number;
+  /** Paid days: shown on the statement, they change no amount. */
+  bereavementDayHundredths: number;
+  ptoDayHundredths: number;
   lateMinutes: number;
   extra: Record<ExtraKey, number>; // minutes
-  pesoAllowance: bigint;
-  dollarAllowanceCents: bigint;
-  adjustment: bigint;
+  allowances: ItemLine[];
+  reimbursements: ItemLine[];
+  bonuses: ItemLine[];
+  adjustments: ItemLine[];
   loan: bigint;
   otherDeductions: bigint;
 };
@@ -29,26 +45,28 @@ export type LineResult = {
   hourly: bigint;
   base: bigint;
   absences: bigint;
+  sickLeave: bigint;
   late: bigint;
   extra: Record<ExtraKey, bigint>;
+  allowances: bigint;
   gross: bigint;
-  dollarAllowancePesos: bigint;
+  reimbursements: bigint;
+  bonuses: bigint;
+  adjustments: bigint;
+  /** Total payable compensation. */
   net: bigint;
   issues: string[];
 };
 
+const sum = (lines: readonly ItemLine[]) => lines.reduce((total, l) => total + l.amount, 0n);
+
 /**
- * Pure pay calculator. Every money result is one exact fraction of the unrounded
- * rate, rounded once. Gross = base - absences - late + extra hours + peso
- * allowance. Net = gross + dollar allowance in pesos + adjustment - loan -
- * other deductions.
- * No tax or contributions are computed.
+ * Pure pay calculator. Every money result is one exact fraction of the unrounded rate, rounded once.
+ * Gross = base - absences - sick leave - late + overtime and holiday pay + allowances.
+ * Total payable = gross + reimbursements + bonuses + adjustments - loan - other deductions.
+ * Everything is in pesos. No tax or contributions are computed.
  */
-export function calculateLine(
-  input: LineInput,
-  settings: SettingsSnapshot,
-  usdRateE4: number | null,
-): LineResult {
+export function calculateLine(input: LineInput, settings: SettingsSnapshot): LineResult {
   const issues: string[] = [];
   const monthly = input.monthlyCentavos;
   const half = 2n * BigInt(settings.cutoffDivisor); // pay periods x divisor
@@ -72,6 +90,7 @@ export function calculateLine(
   if (input.partial && base > cutoff) issues.push("partial_exceeds_cutoff");
 
   const absences = divRoundHalfUp(monthly * BigInt(input.absenceDayHundredths), half * 100n);
+  const sickLeave = divRoundHalfUp(monthly * BigInt(input.sickLeaveDayHundredths), half * 100n);
   const late = divRoundHalfUp(monthly * BigInt(input.lateMinutes) * 100n, hourDen * 60n);
 
   const extra = {} as Record<ExtraKey, bigint>;
@@ -91,30 +110,14 @@ export function calculateLine(
     }
   }
 
-  const gross =
-    base -
-    absences -
-    late +
-    EXTRA_KEYS.reduce((sum, key) => sum + extra[key], 0n) +
-    input.pesoAllowance;
+  const allowances = sum(input.allowances);
+  const gross = base - absences - sickLeave - late + EXTRA_KEYS.reduce((total, key) => total + extra[key], 0n) + allowances;
 
-  let dollarAllowancePesos = 0n;
-  if (input.dollarAllowanceCents > 0n) {
-    if (usdRateE4 === null) issues.push("missing_usd_rate");
-    else
-      dollarAllowancePesos = divRoundHalfUp(
-        input.dollarAllowanceCents * BigInt(usdRateE4),
-        10000n,
-      );
-  }
-
-  const net =
-    gross +
-    dollarAllowancePesos +
-    input.adjustment -
-    input.loan -
-    input.otherDeductions;
+  const reimbursements = sum(input.reimbursements);
+  const bonuses = sum(input.bonuses);
+  const adjustments = sum(input.adjustments);
+  const net = gross + reimbursements + bonuses + adjustments - input.loan - input.otherDeductions;
   if (net < 0n) issues.push("negative_net");
 
-  return { cutoff, daily, hourly, base, absences, late, extra, gross, dollarAllowancePesos, net, issues };
+  return { cutoff, daily, hourly, base, absences, sickLeave, late, extra, allowances, gross, reimbursements, bonuses, adjustments, net, issues };
 }

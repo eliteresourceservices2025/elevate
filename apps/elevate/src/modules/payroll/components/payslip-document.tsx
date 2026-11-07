@@ -1,7 +1,7 @@
 import { PAYSLIP_LABELS as L } from "../constants";
 import type { PayslipLineView, PayslipRowView, PayslipView } from "../payslip";
 
-// The payslip on screen: the same content as the PDF (both draw from payslipView), laid out like a page of paper. A server component, no
+// The Contractor Payment Statement on screen: the same content as the PDF (both draw from payslipView), laid out like a page of paper. A server component, no
 // script: it works the same with or without a PDF viewer in the browser.
 
 function Rows({ rows }: { rows: PayslipRowView[] }) {
@@ -13,7 +13,7 @@ function Rows({ rows }: { rows: PayslipRowView[] }) {
             {row.label}
             {row.detail ? <span className="block text-xs text-muted-foreground">{row.detail}</span> : null}
           </span>
-          <span className="shrink-0 tabular-nums">{row.amount}</span>
+          {row.amount ? <span className="shrink-0 tabular-nums">{row.amount}</span> : null}
         </li>
       ))}
     </ul>
@@ -35,11 +35,14 @@ function Line({ line }: { line: PayslipLineView }) {
     <div className="space-y-4">
       {line.heading ? <h2 className="text-base font-semibold">{line.heading}</h2> : null}
       <Section title={L.earnings} rows={line.earnings} />
+      <Section title={L.leaveTitle} rows={line.leave} />
       <div className="flex items-baseline justify-between gap-4 border-y bg-muted/40 px-3 py-2 text-sm font-semibold">
         <span>{L.gross}</span>
         <span className="tabular-nums">{line.gross}</span>
       </div>
-      <Section title={L.additions} rows={line.additions} />
+      <Section title={L.reimbursements} rows={line.reimbursements} />
+      <Section title={L.bonuses} rows={line.bonuses} />
+      <Section title={L.adjustments} rows={line.adjustments} />
       <Section title={L.deductions} rows={line.deductions} />
       <div className="flex items-baseline justify-between gap-4 rounded-lg bg-primary px-4 py-3 text-primary-foreground">
         <span className="text-sm font-semibold">{L.net}</span>

@@ -134,7 +134,7 @@ Jibble mirror, repair job, safety lock, pause switch.
 Shift schedules, nightly flags, extra-hours requests.
 
 - A shift belongs to the day it starts in the person's own zone; people with no schedule get no flags.
-- Copy says "extra hours", never "overtime"; ELEVATE labels hours; the hours export computes nothing, and only the payroll module computes pay (never tax).
+- On schedules and extra-hours requests copy says "extra hours", never "overtime" (payroll screens say "overtime (OT)", by the executives' choice); ELEVATE labels hours; the hours export computes nothing, and only the payroll module computes pay (never tax).
 
 ### Hours review, export and system health — `docs/modules/hours-review-and-health.md`
 Hours approval, payroll export, test-only days, job health, backstop.
@@ -166,10 +166,11 @@ Review cycles, calibration, visibility rules, goals.
 - Visibility is the pure `visibility()` function; nobody writes or shares their own review.
 
 ### Payroll — `docs/modules/payroll.md`
-Pay runs, rates, change history, payslips.
+Pay runs, rates, change history, contractor payment statements (the former payslips).
 
 - No role grants payroll (not even Super Admin): only people a Super Admin chose, by level (preparer, approver, viewer; `core.users.payroll_access`).
-- Amounts are encrypted bigint centavos; one person prepares and a different person approves; nothing computes tax or sends money.
+- Amounts are encrypted bigint centavos, all in pesos (no dollar rate or FTE); one person prepares and a different person approves; nothing computes tax or sends money.
+- Allowances, reimbursements, bonuses and adjustments are named lines per run; holiday pay is always 1:1; the statement says "Total payable compensation" (see the 2026-11-06 revision at the top of the module notes).
 - Change history is append-only; audit rows never carry an amount or reason.
 
 ### Safe Voice — `docs/modules/safe-voice.md`

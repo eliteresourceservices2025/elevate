@@ -1,6 +1,5 @@
-import { EXTRA_KEYS, type ExtraKey, type LineInput, type LineResult } from "./calculate";
+import { EXTRA_KEYS, HOLIDAY_BP, type ExtraKey, type LineInput, type LineResult } from "./calculate";
 import { EXTRA_KEY_ITEM, PAYMENT_METHOD_LABELS, PAYSLIP_LABELS as L, PAY_ITEM_LABELS, type PaymentMethod } from "./constants";
-import { formatUsdRate } from "./items";
 import { formatPesos } from "./money";
 
 // The payslip as plain data, pure. The on-screen page and the PDF both draw from it, so they always say the same thing. It holds the person's
@@ -17,7 +16,6 @@ export type PayslipInput = {
   name: string;
   periodStart: string;
   periodEnd: string;
-  usdRateE4: number | null;
   lines: PayslipLine[];
   /** The newest payment date recorded for the person on this run. */
   paidOn: string | null;
@@ -25,7 +23,7 @@ export type PayslipInput = {
   payslipNumber: string;
   /** Payment methods of the person's lines on the run (for example "remitly"). */
   paymentMethods: string[];
-  /** The extra-hours rates the run was made with (basis points: 12500 is 125%), when known. */
+  /** The overtime (OT) rates the run was made with (basis points: 12500 is 125%), when known. Holiday pay is always 100%. */
   multipliersBp: Partial<Record<ExtraKey, number | null>> | null;
   signatory: PayslipSignature | null;
 };
@@ -35,9 +33,14 @@ export type PayslipLineView = {
   /** The pay line's alias, shown when there is more than one line or an alias. */
   heading: string | null;
   earnings: PayslipRowView[];
+  /** Paid days (bereavement, PTO). They change no amount, so each row has no figure. */
+  leave: PayslipRowView[];
   gross: string;
-  additions: PayslipRowView[];
+  reimbursements: PayslipRowView[];
+  bonuses: PayslipRowView[];
+  adjustments: PayslipRowView[];
   deductions: PayslipRowView[];
+  /** Total payable compensation. */
   net: string;
 };
 export type PayslipView = {
@@ -58,8 +61,6 @@ const plain = (text: string) => text.replace(/[\u0000-\u001f\u007f]+/g, " ").rep
 
 const money = (c: bigint) => formatPesos(c);
 const minus = (c: bigint) => `-${formatPesos(c)}`;
-/** A figure that can be either sign (an adjustment): the sign only when it is negative. */
-const signed = (c: bigint) => (c < 0n ? minus(-c) : money(c));
 
 const percent = (bp: number) => `${(bp / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 
@@ -76,33 +77,41 @@ function lineView(line: PayslipLine, input: PayslipInput): PayslipLineView {
   const earnings: PayslipRowView[] = [{ label: L.base, detail: "", amount: money(r.base) }];
   for (const key of EXTRA_KEYS) {
     if (r.extra[key] === 0n && i.extra[key] === 0) continue;
-    const bp = input.multipliersBp?.[key] ?? null;
+    const bp = key === "holiday" ? HOLIDAY_BP : (input.multipliersBp?.[key] ?? null);
     earnings.push({
       label: PAY_ITEM_LABELS[EXTRA_KEY_ITEM[key]],
       detail: [hoursAndMinutes(i.extra[key]), bp ? `at ${percent(bp)}` : ""].filter(Boolean).join(" "),
       amount: money(r.extra[key]),
     });
   }
-  if (i.pesoAllowance !== 0n) earnings.push({ label: PAY_ITEM_LABELS.peso_allowance, detail: "", amount: money(i.pesoAllowance) });
+  // Each allowance is its own row, under the name the Preparer gave it.
+  for (const a of i.allowances) earnings.push({ label: plain(a.label), detail: "", amount: money(a.amount) });
   if (r.absences !== 0n) earnings.push({ label: PAY_ITEM_LABELS.absence_days, detail: dayText(i.absenceDayHundredths), amount: minus(r.absences) });
+  if (r.sickLeave !== 0n) earnings.push({ label: PAY_ITEM_LABELS.sick_leave_days, detail: dayText(i.sickLeaveDayHundredths), amount: minus(r.sickLeave) });
   if (r.late !== 0n) earnings.push({ label: PAY_ITEM_LABELS.late_minutes, detail: `${i.lateMinutes} min`, amount: minus(r.late) });
 
-  const additions: PayslipRowView[] = [];
-  if (i.dollarAllowanceCents !== 0n) {
-    additions.push({
-      label: PAY_ITEM_LABELS.dollar_allowance,
-      detail: `USD ${money(i.dollarAllowanceCents)}${input.usdRateE4 !== null ? ` at ${formatUsdRate(input.usdRateE4)} pesos per dollar` : ""}`,
-      amount: money(r.dollarAllowancePesos),
-    });
-  }
-  if (i.adjustment !== 0n) additions.push({ label: PAY_ITEM_LABELS.adjustment, detail: "", amount: signed(i.adjustment) });
+  const leave: PayslipRowView[] = [];
+  if (i.bereavementDayHundredths > 0) leave.push({ label: PAY_ITEM_LABELS.bereavement_days, detail: dayText(i.bereavementDayHundredths), amount: "" });
+  if (i.ptoDayHundredths > 0) leave.push({ label: PAY_ITEM_LABELS.pto_days, detail: dayText(i.ptoDayHundredths), amount: "" });
+
+  const rows = (lines: { label: string; amount: bigint }[]): PayslipRowView[] => lines.map((x) => ({ label: plain(x.label), detail: "", amount: money(x.amount) }));
 
   const deductions: PayslipRowView[] = [];
   if (i.loan !== 0n) deductions.push({ label: PAY_ITEM_LABELS.loan, detail: "", amount: minus(i.loan) });
   if (i.otherDeductions !== 0n) deductions.push({ label: PAY_ITEM_LABELS.other_deduction, detail: "", amount: minus(i.otherDeductions) });
 
   const alias = line.alias ? plain(line.alias) : "";
-  return { heading: alias ? L.lineHeading(alias) : null, earnings, gross: money(r.gross), additions, deductions, net: money(r.net) };
+  return {
+    heading: alias ? L.lineHeading(alias) : null,
+    earnings,
+    leave,
+    gross: money(r.gross),
+    reimbursements: rows(i.reimbursements),
+    bonuses: rows(i.bonuses),
+    adjustments: rows(i.adjustments),
+    deductions,
+    net: money(r.net),
+  };
 }
 
 /** The payslip for one person and one run: every one of their lines, and a total when there is more than one. */

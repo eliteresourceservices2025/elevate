@@ -1,20 +1,24 @@
 import type { PayrollLevel } from "@/lib/roles";
 import type { ExtraKey } from "./calculate";
 
-// Every payroll label lives here so a wording change from counsel is one edit. Copy says "extra hours", never "overtime".
+// Every payroll label lives here so a wording change from counsel is one edit. Payroll copy says "overtime (OT)" (the executives' and
+// HR's choice); the schedules and extra-hours request screens keep their own wording. The statement of pay is the "Contractor Payment Statement".
 
 export const PAY_ITEM_TYPES = [
   "absence_days",
+  "sick_leave_days",
+  "bereavement_days",
+  "pto_days",
   "late_minutes",
   "partial_days",
   "partial_minutes",
   "extra_regular",
-  "extra_holiday",
   "extra_rest_day",
   "extra_rest_day_over_8",
   "holiday",
-  "peso_allowance",
-  "dollar_allowance",
+  "allowance",
+  "reimbursement",
+  "bonus",
   "adjustment",
   "loan",
   "other_deduction",
@@ -24,17 +28,20 @@ export type PayItemType = (typeof PAY_ITEM_TYPES)[number];
 
 export const PAY_ITEM_LABELS: Record<PayItemType, string> = {
   absence_days: "Absent days",
+  sick_leave_days: "Sick leave (SL) days, unpaid",
+  bereavement_days: "Bereavement days, paid",
+  pto_days: "PTO days, paid",
   late_minutes: "Late and undertime minutes",
   partial_days: "Days worked (partial cutoff)",
   partial_minutes: "Hours worked (partial cutoff)",
-  extra_regular: "Extra hours, regular day",
-  extra_holiday: "Extra hours, holiday",
-  extra_rest_day: "Extra hours, rest day",
-  extra_rest_day_over_8: "Extra hours, rest day past 8 hours",
+  extra_regular: "Overtime (OT), regular day",
+  extra_rest_day: "Overtime (OT), rest day",
+  extra_rest_day_over_8: "Overtime (OT), rest day past 8 hours",
   holiday: "Holiday pay",
-  peso_allowance: "Allowance or fee (pesos)",
-  dollar_allowance: "Allowance (dollars)",
-  adjustment: "Reimbursement, bonus or adjustment",
+  allowance: "Allowance",
+  reimbursement: "Reimbursement",
+  bonus: "Bonus",
+  adjustment: "Adjustment",
   loan: "Loan",
   other_deduction: "Other deduction",
   client_hours: "Client hours (reference only)",
@@ -47,23 +54,33 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   remitly: "Remitly",
 };
 
-/** The five extra-time rates in `SettingsSnapshot.multipliersBp`, mapped to the pay item whose label names them (ruling R3). */
+/** The overtime rates and holiday pay in `SettingsSnapshot.multipliersBp`, mapped to the pay item whose label names them (ruling R3). */
 export const EXTRA_KEY_ITEM: Record<ExtraKey, PayItemType> = {
   regular: "extra_regular",
-  holiday: "extra_holiday",
   restDay: "extra_rest_day",
   restDayOver8: "extra_rest_day_over_8",
-  holidayPay: "holiday",
+  holiday: "holiday",
 };
 
-/** The matching field name in the settings form and `savePaySettingsSchema`. */
-export const EXTRA_KEY_FORM: Record<ExtraKey, "extraRegular" | "extraHoliday" | "extraRestDay" | "extraRestDayOver8" | "holiday"> = {
+/** The overtime rates that are settings (holiday pay is always one to one), and their field names in the settings form. */
+export const OT_SETTING_KEYS = ["regular", "restDay", "restDayOver8"] as const;
+export const EXTRA_KEY_FORM: Record<(typeof OT_SETTING_KEYS)[number], "extraRegular" | "extraRestDay" | "extraRestDayOver8"> = {
   regular: "extraRegular",
-  holiday: "extraHoliday",
   restDay: "extraRestDay",
   restDayOver8: "extraRestDayOver8",
-  holidayPay: "holiday",
 };
+
+/** Item types a Preparer itemizes: any number of named lines, each with a name and an amount. */
+export const ITEMIZED_TYPES = ["allowance", "reimbursement", "bonus", "adjustment"] as const;
+export type ItemizedType = (typeof ITEMIZED_TYPES)[number];
+/** Names offered while typing an itemized line. Only suggestions: any plain name up to 60 characters works. */
+export const ITEM_NAME_SUGGESTIONS: Record<ItemizedType, readonly string[]> = {
+  allowance: ["Health allowance", "Transportation allowance", "Internet allowance", "Hazard fee"],
+  reimbursement: ["Supplies", "Transportation", "Medical"],
+  bonus: ["Performance bonus", "Holiday bonus", "Referral bonus"],
+  adjustment: ["Correction of an earlier payment", "Other adjustment"],
+};
+export const isItemized = (type: string): type is ItemizedType => (ITEMIZED_TYPES as readonly string[]).includes(type);
 
 /** Column and field labels of the Rates tab. */
 export const RATES_LABELS = {
@@ -73,7 +90,6 @@ export const RATES_LABELS = {
   alias: "Alias",
   aliasShort: "Alias",
   hoursPerDay: "Hours per day",
-  fte: "FTE",
   monthly: "Monthly rate (pesos)",
   paymentMethod: "Payment method",
   startsOn: "Starts on",
@@ -92,9 +108,9 @@ export const UNREADABLE_HINT = "This line can't be read, so it can't be changed 
 export const SETTINGS_LABELS = {
   startsOn: "Starts on",
   divisor: "Cutoff divisor",
-  warn: "Warn when net pay changes by more than (percent)",
+  warn: "Warn when total payable compensation changes by more than (percent)",
   warnShort: "Warn at",
-  ratesLegend: "Rates, as a percent of the normal hourly rate",
+  ratesLegend: "Overtime (OT) rates, as a percent of the normal hourly rate. Holiday pay is always 100% (one to one).",
   reasonOptional: "Reason (optional)",
   changeButton: "Change settings",
   changeTitle: "Change pay settings",
@@ -118,7 +134,6 @@ export const CHANGE_ACTIONS = [
   "line_ended",
   "settings_changed",
   "run_created",
-  "usd_rate_changed",
   "item_saved",
   "item_dismissed",
   "suggestions_refreshed",
@@ -144,7 +159,6 @@ export const CHANGE_ACTION_LABELS: Record<ChangeAction, string> = {
   line_ended: "Pay line ended",
   settings_changed: "Pay settings changed",
   run_created: "Pay run created",
-  usd_rate_changed: "Dollar rate changed",
   item_saved: "Amount saved on a line",
   item_dismissed: "Amount removed from a line",
   suggestions_refreshed: "Suggestions updated from approved hours",
@@ -156,7 +170,7 @@ export const CHANGE_ACTION_LABELS: Record<ChangeAction, string> = {
   run_paid: "Run fully paid",
   payment_marked: "Payment recorded",
   list_exported: "Remitly list downloaded",
-  payslip_downloaded: "Payslip downloaded",
+  payslip_downloaded: "Contractor payment statement downloaded",
   run_viewed: "Run opened",
   run_cancelled: "Run cancelled",
   signatory_changed: "Payslip signatory changed",
@@ -234,23 +248,25 @@ export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
 
 /** Headings and wording of the runs list and the worksheet. */
 export const WORKSHEET_LABELS = {
-  groups: { person: "Person", basis: "Pay basis", deductions: "Deductions", extra: "Extra hours", allowances: "Allowances", adjustments: "Adjustments", result: "Result", reference: "Reference only" },
+  groups: { person: "Person", basis: "Pay basis", deductions: "Absences and late", extra: "Overtime (OT) and holiday", leave: "Paid leave", allowances: "Allowances and gross", additions: "Reimbursements, bonuses and adjustments", loans: "Loan and other deductions", result: "Result", reference: "Reference only" },
   person: "Person",
   client: "Client",
   hoursPerDay: "Hours per day",
-  fte: "FTE",
   monthly: "Monthly rate",
   base: "Cutoff pay",
   absences: "Absences",
+  sickLeave: "Sick leave (SL)",
+  bereavement: "Bereavement (paid)",
+  pto: "PTO (paid)",
   late: "Late and undertime",
-  pesoAllowance: "Allowance or fee (pesos)",
-  dollarAllowance: "Allowance (dollars)",
-  dollarAllowancePesos: "Dollar allowance in pesos",
-  adjustment: "Reimbursement, bonus or adjustment",
+  allowances: "Allowances",
+  reimbursements: "Reimbursements",
+  bonuses: "Bonuses",
+  adjustments: "Adjustments",
   loan: "Loan",
   otherDeductions: "Other deduction",
   gross: "Gross",
-  net: "Net",
+  net: "Total payable compensation",
   clientHours: "Client hours",
   confirmation: "Checked by",
   actions: "Actions",
@@ -258,18 +274,14 @@ export const WORKSHEET_LABELS = {
   unreadable: "Can't be read",
   totals: "Totals",
   byClient: "By client",
-  dollarRate: "Dollar rate",
-  noRate: "Not set",
   period: "Period",
   status: "Status",
   lines: "Lines",
   newRun: "New run",
   noClient: "No client",
-  netChange: "Change from last run",
+  netChange: "Change in total payable from last run",
   grossTotal: "Gross (pesos)",
-  dollarTotal: "Dollar allowances (dollars)",
-  dollarPesosTotal: "Dollar allowance in pesos (pesos)",
-  netTotal: "Net (pesos)",
+  netTotal: "Total payable compensation (pesos)",
   corrects: "Corrects the run of",
   hasCorrection: "Includes a correction of an earlier run",
 } as const;
@@ -280,10 +292,9 @@ export const CORRECTION_TYPES: readonly PayItemType[] = ["adjustment", "other_de
 /** Wording of paying an approved run: the Remitly list and recording each person's reference. ELEVATE sends no money. */
 export const PAYMENT_LABELS = {
   title: "Payment",
-  hint: "Download the list, pay each person in Remitly, then record the Remitly reference here. The list has names, pesos and dollars only, never account numbers.",
+  hint: "Download the list, pay each person in Remitly at the rate Remitly shows, then record the Remitly reference here. The list has names and pesos only, never account numbers.",
   download: "Download Remitly list",
   downloaded: (rows: number) => `Downloaded ${rows} ${rows === 1 ? "person" : "people"}.`,
-  noRate: "Set the dollar rate on this run before downloading the list.",
   person: "Person",
   alias: "Alias",
   status: "Status",
@@ -305,24 +316,27 @@ export const PAYMENT_LABELS = {
 } as const;
 
 /**
- * Wording of the payslip (the /my-pay page, the PDF and the notice). Item names come from PAY_ITEM_LABELS. The notice carries no amount,
- * period or name.
+ * Wording of the Contractor Payment Statement (the /my-pay page, the PDF and the notice; it was called the payslip). Item names come from
+ * PAY_ITEM_LABELS. The notice carries no amount, period or name.
  */
 export const PAYSLIP_LABELS = {
-  pageTitle: "My pay",
-  pageDescription: "Your payslips. One appears here after the pay run it belongs to is paid.",
-  emptyTitle: "No payslips yet",
-  emptyDescription: "A payslip appears here once the pay run it belongs to is marked paid.",
+  pageTitle: "My payment statements",
+  pageDescription: "Your contractor payment statements. One appears here after the pay run it belongs to is paid.",
+  emptyTitle: "No statements yet",
+  emptyDescription: "A contractor payment statement appears here once the pay run it belongs to is marked paid.",
   period: "Pay period",
-  net: "Net pay",
+  net: "Total payable compensation",
   download: "Download PDF",
-  documentTitle: "Payslip",
-  number: "Payslip number",
+  documentTitle: "Contractor Payment Statement",
+  number: "Statement number",
   paidOn: "Paid on",
   paidBy: "Paid by",
   earnings: "Pay for the period",
   gross: "Gross pay",
-  additions: "Added after gross pay",
+  leaveTitle: "Leave",
+  reimbursements: "Reimbursements",
+  bonuses: "Bonuses",
+  adjustments: "Adjustments",
   deductions: "Deductions",
   detailColumn: "Details",
   amountColumn: "Amount (pesos)",
@@ -331,42 +345,41 @@ export const PAYSLIP_LABELS = {
   notSigned: "Not signed",
   footerNote: "A statement of pay for the period shown. It is not a tax document.",
   view: "View",
-  back: "Back to My pay",
-  viewAction: (period: string) => `View the payslip for ${period}`,
-  pageHeading: (period: string) => `Payslip ${period}`,
+  back: "Back to My payment statements",
+  viewAction: (period: string) => `View the contractor payment statement for ${period}`,
+  pageHeading: (period: string) => `Contractor Payment Statement ${period}`,
   viewDescription: "Only you can open this page. Download the PDF to keep or print a copy.",
-  unreadableView: "This payslip can't be read right now. Tell the system owner.",
+  unreadableView: "This contractor payment statement can't be read right now. Tell the system owner.",
   preparedFor: "Prepared for",
   details: "Pay details",
   lineHeading: (alias: string) => `Line: ${alias}`,
   base: "Base pay for the period",
-  total: "Total net pay",
-  dollarRate: "Dollar rate used",
+  total: "Total payable compensation, all lines",
   unreadable: "Can't be read",
-  unreadableDownload: "This payslip can't be read right now. Tell the system owner.",
-  footer: "Payslip",
+  unreadableDownload: "This contractor payment statement can't be read right now. Tell the system owner.",
+  footer: "Contractor Payment Statement",
   noticeKind: "payroll.payslip_ready",
-  noticeTitle: "Your payslip is ready",
-  noticeBody: "A payslip is ready for you. Open My pay to read it.",
+  noticeTitle: "Your contractor payment statement is ready",
+  noticeBody: "A contractor payment statement is ready for you. Open My payment statements to read it.",
   noticeLink: "/my-pay",
 } as const;
 
-/** Wording of the page where a Super Admin sets who signs the payslips. */
+/** Wording of the page where a Super Admin sets who signs the contractor payment statements. */
 export const SIGNATORY_LABELS = {
   name: "Name",
   title: "Title",
   titleDefault: "Human Resources Director",
   signature: "Signature picture",
-  signatureHint: "A clear picture of the signature on a white background. It is made small, kept private and printed above the name on every payslip. Nothing is stored about the file itself.",
+  signatureHint: "A clear picture of the signature on a white background. It is made small, kept private and printed above the name on every statement. Nothing is stored about the file itself.",
   choose: "Choose a picture",
   current: "Signature now",
-  none: "No signature picture yet. Payslips will show the name and title with a line.",
+  none: "No signature picture yet. Statements will show the name and title with a line.",
   remove: "Remove the signature picture",
   save: "Save signatory",
-  saved: "Payslip signatory saved.",
+  saved: "Signatory saved.",
   unreadable: "The saved signature can't be read. Choose the picture again.",
   fileError: "Choose a JPG, PNG or WEBP picture.",
-  notSetYet: "Nobody is set yet. Payments are never held up: a run paid before then shows Not signed on its payslips.",
+  notSetYet: "Nobody is set yet. Payments are never held up: a run paid before then shows Not signed on its statements.",
 } as const;
 
 /** Wording of sending a run for review and deciding it. Notices never carry an amount, a name or the note. */
@@ -411,14 +424,13 @@ export const SUGGESTION_LABELS = {
 /** Deductions entered by hand need a reason, as does overriding a suggestion. */
 export const REASON_REQUIRED_TYPES: readonly PayItemType[] = ["loan", "other_deduction"];
 
-export const BLOCKING_CHECKS = ["missing_usd_rate", "missing_multiplier", "negative_net", "partial_exceeds_cutoff", "unassigned_suggestion", "own_line_unconfirmed", "unreadable_line", "lines_out_of_date"] as const;
+export const BLOCKING_CHECKS = ["missing_multiplier", "negative_net", "partial_exceeds_cutoff", "unassigned_suggestion", "own_line_unconfirmed", "unreadable_line", "lines_out_of_date"] as const;
 export const WARNING_CHECKS = ["unapproved_days", "no_payout_details", "new_or_leaving", "rate_change_mid_period", "pending_suggestions", "large_change"] as const;
 export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
 
 export const CHECK_LABELS: Record<CheckCode, string> = {
-  missing_usd_rate: "Set this run's dollar rate. The Remitly list needs it, even when nobody has a dollar allowance.",
-  missing_multiplier: "An extra-hours rate is not set in the settings",
-  negative_net: "Net pay is below zero",
+  missing_multiplier: "An overtime (OT) rate is not set in the settings",
+  negative_net: "Total payable compensation is below zero",
   partial_exceeds_cutoff: "The days or hours worked pay more than a full cutoff. Check the amount entered.",
   unassigned_suggestion: "Suggested amounts are not assigned to a pay line",
   own_line_unconfirmed: "Your own line needs a confirmation from another Preparer",
@@ -429,7 +441,7 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   new_or_leaving: "Starts, ends or has left during this period",
   rate_change_mid_period: "The rate changes during this period",
   pending_suggestions: "Suggested amounts are waiting for a decision",
-  large_change: "Net pay changed a lot from the last run",
+  large_change: "Total payable compensation changed a lot from the last run",
 };
 
 export const LINE_FLAG_LABELS: Record<string, string> = {

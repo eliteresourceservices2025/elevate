@@ -100,7 +100,7 @@ export async function getMyPayslip(actor: AuthzUser, runId: string): Promise<(Pa
   if (!employeeId) return null;
 
   const [run] = await db
-    .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, usdRateE4: payRuns.usdRateE4, settingsSnapshot: payRuns.settingsSnapshot })
+    .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, settingsSnapshot: payRuns.settingsSnapshot })
     .from(payRuns)
     .where(and(eq(payRuns.id, runId), eq(payRuns.status, "paid")))
     .limit(1);
@@ -136,7 +136,6 @@ export async function getMyPayslip(actor: AuthzUser, runId: string): Promise<(Pa
     name: personName(who),
     periodStart: run.periodStart,
     periodEnd: run.periodEnd,
-    usdRateE4: run.usdRateE4,
     paidOn: payment?.paidOn ?? null,
     payslipNumber: `PS-${runId.slice(0, 8).toUpperCase()}-${employeeId.slice(0, 4).toUpperCase()}`,
     paymentMethods: lines.map((l) => l.paymentMethod),

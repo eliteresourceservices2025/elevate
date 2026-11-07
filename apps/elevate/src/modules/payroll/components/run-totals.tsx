@@ -2,7 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { WORKSHEET_LABELS as L } from "../constants";
 import type { Worksheet } from "../runs";
 
-// Peso and dollar totals for the whole run, and FTE, client hours and net pay for each client. Withheld when any line can't be read.
+// Peso totals for the whole run, and client hours and total payable compensation for each client. Withheld when any line can't be read.
 
 export function RunTotals({ sheet }: { sheet: Worksheet }) {
   if (!sheet.totals || !sheet.byClient) return null;
@@ -12,11 +12,9 @@ export function RunTotals({ sheet }: { sheet: Worksheet }) {
       <h2 id="run-totals" className="text-lg font-semibold">
         {L.totals}
       </h2>
-      <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="grid gap-3 sm:grid-cols-2">
         {[
           [L.grossTotal, t.gross],
-          [L.dollarTotal, t.dollarAllowance],
-          [L.dollarPesosTotal, t.dollarAllowancePesos],
           [L.netTotal, t.net],
         ].map(([label, value]) => (
           <div key={label} className="rounded-xl border bg-card p-3">
@@ -30,7 +28,6 @@ export function RunTotals({ sheet }: { sheet: Worksheet }) {
           <TableRow>
             <TableHead>{L.byClient}</TableHead>
             <TableHead className="text-right">{L.lines}</TableHead>
-            <TableHead className="text-right">{L.fte}</TableHead>
             <TableHead className="text-right">{L.clientHours}</TableHead>
             <TableHead className="text-right">{L.net}</TableHead>
           </TableRow>
@@ -43,9 +40,6 @@ export function RunTotals({ sheet }: { sheet: Worksheet }) {
               </TableCell>
               <TableCell label={L.lines} className="text-right tabular-nums">
                 {c.lines}
-              </TableCell>
-              <TableCell label={L.fte} className="text-right tabular-nums">
-                {c.fte}
               </TableCell>
               <TableCell label={L.clientHours} className="text-right tabular-nums">
                 {c.clientHours}

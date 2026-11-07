@@ -27,7 +27,6 @@ const input = (lines: CheckLine[], over: Partial<ChecksInput> = {}): ChecksInput
   submitter: { userId: ME, employeeId: EMP_ME },
   changeWarnBp: 1000,
   linesOutOfDate: false,
-  usdRateSet: true,
   ...over,
 });
 const codes = (r: { code: string }[]) => r.map((c) => c.code);
@@ -35,12 +34,6 @@ const codes = (r: { code: string }[]) => r.map((c) => c.code);
 describe("runChecks", () => {
   it("a clean run has nothing to report", () => {
     expect(runChecks(input([line()]))).toEqual({ blocking: [], warnings: [] });
-  });
-
-  it("blocks a run with no dollar rate once, for the whole run, even when nobody has a dollar allowance (the Remitly list needs it)", () => {
-    const r = runChecks(input([line(), line({ runLineId: "r2", employeeId: "e2", issues: ["missing_usd_rate"] })], { usdRateSet: false }));
-    expect(r.blocking).toEqual([{ code: "missing_usd_rate", employeeId: null, runLineId: null, name: "This run" }]);
-    expect(runChecks(input([line()], { usdRateSet: true })).blocking).toEqual([]);
   });
 
   it("blocks a partial cutoff that pays more than a full cutoff", () => {
@@ -54,7 +47,7 @@ describe("runChecks", () => {
     expect(r.warnings).toEqual([]);
     const multiplier = r.blocking.find((c) => c.code === "missing_multiplier")!;
     expect(multiplier.name).toBe("Maria Testcruz");
-    expect(multiplier.detail).toBe("Extra hours, rest day");
+    expect(multiplier.detail).toBe("Overtime (OT), rest day");
   });
 
   it("blocks on suggestions nobody has assigned to a line", () => {

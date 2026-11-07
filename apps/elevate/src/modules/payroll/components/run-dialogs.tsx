@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { cancelPayRun, createPayRun, setRunUsdRate } from "../actions";
+import { cancelPayRun, createPayRun } from "../actions";
 import { WORKSHEET_LABELS as L } from "../constants";
 
 function NewRunForm({ suggestedStart, suggestedEnd }: { suggestedStart: string; suggestedEnd: string }) {
@@ -97,34 +97,3 @@ export function CancelRunDialog({ runId }: { runId: string }) {
   );
 }
 
-function UsdRateForm({ runId, current }: { runId: string; current: string | null }) {
-  const { run, pending } = useRun();
-  const dialog = useFormDialog();
-  const [rate, setRate] = useState(current ?? "");
-  return (
-    <form
-      className="space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        run(() => setRunUsdRate({ runId, rate }), "Dollar rate saved.", () => dialog?.close(true));
-      }}
-    >
-      <div className="space-y-1">
-        <Label htmlFor="usd-rate">Pesos for one dollar</Label>
-        <Input id="usd-rate" inputMode="decimal" autoComplete="off" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="58.50" />
-        <p className="text-xs text-muted-foreground">Used for every dollar allowance on this run. Leave blank to clear it.</p>
-      </div>
-      <Button type="submit" disabled={pending}>
-        Save rate
-      </Button>
-    </form>
-  );
-}
-
-export function UsdRateDialog({ runId, current }: { runId: string; current: string | null }) {
-  return (
-    <FormDialog label={`${L.dollarRate}: ${current ?? L.noRate}`} title="Dollar rate for this run" variant="outline">
-      <UsdRateForm runId={runId} current={current} />
-    </FormDialog>
-  );
-}

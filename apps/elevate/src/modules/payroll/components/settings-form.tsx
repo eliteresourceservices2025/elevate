@@ -11,13 +11,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { savePaySettings } from "../actions";
+import { HOLIDAY_BP } from "../calculate";
 import { formatPesos } from "../money";
-import type { ExtraKey } from "../calculate";
-import { EXTRA_KEY_FORM, EXTRA_KEY_ITEM, PAY_ITEM_LABELS, SETTINGS_LABELS as S } from "../constants";
+import { EXTRA_KEY_FORM, EXTRA_KEY_ITEM, OT_SETTING_KEYS, PAY_ITEM_LABELS, SETTINGS_LABELS as S } from "../constants";
 import type { PaySettingsView, SettingsVersion } from "../queries";
 
-// The five rates the sheet owner supplies, with the label each one has on a pay run (one source: constants.ts).
-const RATE_FIELDS = (Object.keys(EXTRA_KEY_FORM) as ExtraKey[]).map((key) => ({ key, form: EXTRA_KEY_FORM[key], label: PAY_ITEM_LABELS[EXTRA_KEY_ITEM[key]] }));
+// The three overtime (OT) rates the sheet owner supplies, with the label each one has on a pay run (one source: constants.ts). Holiday pay is always one to one.
+const RATE_FIELDS = OT_SETTING_KEYS.map((key) => ({ key, form: EXTRA_KEY_FORM[key], label: PAY_ITEM_LABELS[EXTRA_KEY_ITEM[key]] }));
 
 /** Basis points as a percent of the normal rate: 12500 -> "125". */
 const percentOf = (bp: number | null) => (bp === null ? "" : formatPesos(BigInt(bp)).replace(/\.00$/, ""));
@@ -90,7 +90,7 @@ export function SettingsView({ view, today }: { view: PaySettingsView; today: st
   const { current, history, canManage } = view;
   if (!current) {
     // No version is dated today or earlier (the first one is normally added by the migration).
-    const starter: SettingsVersion = { effectiveFrom: today, cutoffDivisor: 11, changeWarnBp: 1000, multipliersBp: { regular: null, holiday: null, restDay: null, restDayOver8: null, holidayPay: null } };
+    const starter: SettingsVersion = { effectiveFrom: today, cutoffDivisor: 11, changeWarnBp: 1000, multipliersBp: { regular: null, restDay: null, restDayOver8: null, holiday: HOLIDAY_BP } };
     return (
       <EmptyState
         title={S.noneTitle}

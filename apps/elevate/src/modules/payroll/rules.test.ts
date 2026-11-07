@@ -42,22 +42,20 @@ describe("runHash", () => {
   ];
 
   it("is a hex SHA-256 that ignores line order and key order", () => {
-    const h = runHash(lines, 585_000);
+    const h = runHash(lines);
     expect(h).toMatch(/^[0-9a-f]{64}$/);
-    expect(runHash([...lines].reverse(), 585_000)).toBe(h);
-    expect(runHash([lines[0], { id: "a", payload: { nested: { y: [2, 3], z: 1 }, net: 900_000n } }], 585_000)).toBe(h);
+    expect(runHash([...lines].reverse())).toBe(h);
+    expect(runHash([lines[0], { id: "a", payload: { nested: { y: [2, 3], z: 1 }, net: 900_000n } }])).toBe(h);
   });
 
-  it("changes when a figure, a line, an item, or the dollar rate changes", () => {
-    const h = runHash(lines, 585_000);
-    expect(runHash([lines[0], { id: "a", payload: { net: 900_001n, nested: { z: 1, y: [2, 3] } } }], 585_000)).not.toBe(h);
-    expect(runHash([lines[0]], 585_000)).not.toBe(h);
-    expect(runHash([{ id: "b", payload: { net: 1_200_000n, items: [{ type: "loan", value: 50_001n }] } }, lines[1]], 585_000)).not.toBe(h);
-    expect(runHash(lines, 585_001)).not.toBe(h);
-    expect(runHash(lines, null)).not.toBe(h);
+  it("changes when a figure, a line or an item changes", () => {
+    const h = runHash(lines);
+    expect(runHash([lines[0], { id: "a", payload: { net: 900_001n, nested: { z: 1, y: [2, 3] } } }])).not.toBe(h);
+    expect(runHash([lines[0]])).not.toBe(h);
+    expect(runHash([{ id: "b", payload: { net: 1_200_000n, items: [{ type: "loan", value: 50_001n }] } }, lines[1]])).not.toBe(h);
   });
 
   it("tells a bigint apart from the same digits as a string", () => {
-    expect(runHash([{ id: "a", payload: { v: 5n } }], null)).not.toBe(runHash([{ id: "a", payload: { v: "5" } }], null));
+    expect(runHash([{ id: "a", payload: { v: 5n } }])).not.toBe(runHash([{ id: "a", payload: { v: "5" } }]));
   });
 });

@@ -51,7 +51,7 @@ describe("setPayrollAccess, every role", () => {
 // a valid request from a Preparer reaches the (mocked, throwing) database, so it ends in the generic message.
 const { createPayLine, updatePayLine, endPayLine, savePaySettings } = await import("@/modules/payroll/actions");
 const { getRates, getPaySettings, getRuns, getWorksheet } = await import("@/modules/payroll/queries");
-const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun } =
+const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun } =
   await import("@/modules/payroll/actions");
 const { payrollRunsAwaitingApproval, getPayments } = await import("@/modules/payroll/queries");
 const { exportRemitlyList, markPaid } = await import("@/modules/payroll/actions");
@@ -65,16 +65,16 @@ const LINE_KEY = "33333333-3333-4333-8333-333333333333";
 const RUN_ID = "44444444-4444-4444-8444-444444444444";
 const calls: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   createPayLine: () =>
-    createPayLine({ employeeId: OTHER, hoursPerDay: 8, fte: "1", paymentMethod: "remitly", effectiveFrom: "2030-11-01", monthly: "25000", pesoAllowance: "0", dollarAllowance: "0" }),
+    createPayLine({ employeeId: OTHER, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2030-11-01", monthly: "25000" }),
   updatePayLine: () =>
-    updatePayLine({ lineKey: LINE_KEY, hoursPerDay: 8, fte: "1", paymentMethod: "remitly", effectiveFrom: "2030-11-16", monthly: "26000", pesoAllowance: "0", dollarAllowance: "0", reason: "Raise" }),
+    updatePayLine({ lineKey: LINE_KEY, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2030-11-16", monthly: "26000", reason: "Raise" }),
   endPayLine: () => endPayLine({ lineKey: LINE_KEY, endsOn: "2030-11-30", reason: "Contract ended" }),
   savePaySettings: () =>
-    savePaySettings({ effectiveFrom: "2030-11-01", cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "", extraHoliday: "", extraRestDay: "", extraRestDayOver8: "", holiday: "", reason: "Update" }),
+    savePaySettings({ effectiveFrom: "2030-11-01", cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "", extraRestDay: "", extraRestDayOver8: "", reason: "Update" }),
   createPayRun: () => createPayRun({ periodStart: "2030-11-01", periodEnd: "2030-11-15" }),
   savePayItem: () => savePayItem({ runId: RUN_ID, employeeId: OTHER, runLineId: LINE_KEY, type: "late_minutes", value: "30" }),
+  savePayItemAllowance: () => savePayItem({ runId: RUN_ID, employeeId: OTHER, runLineId: LINE_KEY, type: "allowance", label: "Health allowance", value: "500" }),
   dismissPayItem: () => dismissPayItem({ runId: RUN_ID, itemId: LINE_KEY }),
-  setRunUsdRate: () => setRunUsdRate({ runId: RUN_ID, rate: "58.50" }),
   confirmRunLine: () => confirmRunLine({ runLineId: LINE_KEY }),
   cancelPayRun: () => cancelPayRun({ runId: RUN_ID, reason: "Pay lines changed" }),
   refreshSuggestions: () => refreshSuggestions({ runId: RUN_ID }),
@@ -188,7 +188,14 @@ describe("run input is checked on the server", () => {
     ["fractional minutes", { value: "1.5" }],
     ["days with three decimals", { type: "absence_days", value: "1.555" }],
     ["a negative loan", { type: "loan", value: "-100", reason: "x" }],
-    ["a dollar sign", { type: "adjustment", value: "$50" }],
+    ["a dollar sign", { type: "adjustment", label: "Fix", value: "$50" }],
+    ["an allowance with no name", { type: "allowance", value: "500" }],
+    ["an allowance with a name that is too long", { type: "allowance", label: "x".repeat(61), value: "500" }],
+    ["a reimbursement of zero", { type: "reimbursement", label: "Supplies", value: "0" }],
+    ["a name on a plain amount", { type: "late_minutes", label: "Late", value: "30" }],
+    ["sick leave of zero days", { type: "sick_leave_days", value: "0" }],
+    ["a removed item type", { type: "dollar_allowance", value: "5" }],
+    ["a removed holiday overtime type", { type: "extra_holiday", value: "60" }],
     ["a misplaced comma", { type: "other_deduction", value: "1,25.0", reason: "x" }],
     ["an unknown type", { type: "overtime" }],
     ["a line id that is not an id", { runLineId: "nope" }],
@@ -207,23 +214,24 @@ describe("run input is checked on the server", () => {
     expect(await exportRemitlyList({})).toEqual({ ok: false, error: BAD });
   });
 
-  it("refuses a bad period and a bad dollar rate before touching data", async () => {
+  it("refuses a bad period before touching data", async () => {
     asLevel("employee", "preparer");
     expect(await createPayRun({ periodStart: "2030-11-15", periodEnd: "2030-11-01" })).toEqual({ ok: false, error: BAD });
     expect(await createPayRun({ periodStart: "2030-11-01", periodEnd: "2031-01-15" })).toEqual({ ok: false, error: BAD });
     expect(await cancelPayRun({ runId: RUN_ID, reason: "  " })).toEqual({ ok: false, error: BAD });
-    for (const rate of ["0", "-1", "$58", "58.12345"]) expect(await setRunUsdRate({ runId: RUN_ID, rate })).toEqual({ ok: false, error: BAD });
   });
 
   it("accepts a valid item and reaches the database", async () => {
     asLevel("employee", "preparer");
+    expect(await savePayItem(item({ type: "bonus", label: "Performance bonus", value: "2,000" }))).toEqual({ ok: false, error: GENERIC });
+    expect(await savePayItem(item({ type: "pto_days", value: "2" }))).toEqual({ ok: false, error: GENERIC });
     expect(await savePayItem(item({ type: "loan", value: "1,250.50", reason: "Advance" }))).toEqual({ ok: false, error: GENERIC });
   });
 });
 
 describe("pay line input is checked on the server", () => {
   const valid = {
-    employeeId: OTHER, hoursPerDay: 8, fte: "1", paymentMethod: "remitly", effectiveFrom: "2030-11-01", monthly: "25,000.50", pesoAllowance: "0", dollarAllowance: "0",
+    employeeId: OTHER, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2030-11-01", monthly: "25,000.50",
   };
   const BAD = "Check the request and try again.";
   it.each([
@@ -235,8 +243,6 @@ describe("pay line input is checked on the server", () => {
     ["a misplaced comma", { monthly: "1,25.0" }],
     ["three decimals", { monthly: "1.255" }],
     ["an empty monthly rate", { monthly: "" }],
-    ["a negative FTE", { fte: "-1" }],
-    ["an FTE with three decimals", { fte: "0.555" }],
     ["an unknown payment method", { paymentMethod: "crypto" }],
     ["a date that is not real", { effectiveFrom: "2030-02-31" }],
     ["an end before the start", { endsOn: "2030-10-01" }],

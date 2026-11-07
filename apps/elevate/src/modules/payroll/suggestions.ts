@@ -24,7 +24,8 @@ type Actor = { id: string; email: string };
 export const NO_LONGER_APPROVED = "No longer in approved hours";
 export const ASSIGNED_TO_LINE = "Assigned to a line";
 
-const SUGGESTED_TYPES: PayItemType[] = ["absence_days", "late_minutes", ...EXTRA_KEYS.filter((k) => k !== "holidayPay").map((k) => EXTRA_KEY_ITEM[k])]; // eslint-disable-line security/detect-object-injection
+const SUGGESTED_TYPES: PayItemType[] = ["absence_days", "late_minutes", ...EXTRA_KEYS.map((k) => EXTRA_KEY_ITEM[k])]; // eslint-disable-line security/detect-object-injection
+// Approved extra minutes worked on a holiday are suggested as holiday pay (paid one to one); there is no separate holiday overtime.
 
 /** One new row in the item history. `clock_timestamp()` keeps rows written in one transaction in the order they were written. */
 async function addItem(tx: Tx, actor: Actor, v: { runId: string; employeeId: string; runLineId: string | null; type: string; state: "suggested" | "dismissed"; value: bigint; reason: string | null }): Promise<void> {
@@ -80,7 +81,7 @@ export async function applyRefresh(tx: Tx, actor: Actor, runId: string): Promise
     const wanted = new Map<PayItemType, bigint>([
       ["absence_days", BigInt(s.absenceDayHundredths)],
       ["late_minutes", BigInt(s.lateMinutes)],
-      ...EXTRA_KEYS.filter((k) => k !== "holidayPay").map((k) => [EXTRA_KEY_ITEM[k], BigInt(s.extra[k as keyof typeof s.extra])] as [PayItemType, bigint]), // eslint-disable-line security/detect-object-injection
+      ...EXTRA_KEYS.map((k) => [EXTRA_KEY_ITEM[k], BigInt(s.extra[k])] as [PayItemType, bigint]), // eslint-disable-line security/detect-object-injection
     ]);
 
     const lineIds = new Set(own.map((l) => l.id));

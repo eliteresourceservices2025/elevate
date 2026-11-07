@@ -42,7 +42,6 @@ export type RateRow = {
   clientName: string | null;
   alias: string | null;
   hoursPerDay: number;
-  fte: string;
   paymentMethod: PaymentMethod;
   effectiveFrom: string;
   endsOn: string | null;
@@ -50,10 +49,7 @@ export type RateRow = {
   upcomingFrom: string | null;
   /** Pesos, "31,415.92". */
   monthly: string;
-  pesoAllowance: string;
-  /** Dollars, "12.50". */
-  dollarAllowance: string;
-  /** The stored amounts could not be decrypted (usually a wrong or rotated encryption key). The three amounts above then read "Can't be read". */
+  /** The stored amount could not be decrypted (usually a wrong or rotated encryption key). The amount above then reads "Can't be read". */
   unreadable: boolean;
 };
 
@@ -107,14 +103,11 @@ export async function getRates(): Promise<RateRow[]> {
       clientName: r.clientName,
       alias: version.alias,
       hoursPerDay: version.hoursPerDay,
-      fte: version.fte,
       paymentMethod: version.paymentMethod as PaymentMethod,
       effectiveFrom: version.effectiveFrom,
       endsOn: lastDay,
       upcomingFrom: upcoming ?? null,
       monthly: amounts ? formatPesos(amounts.monthlyCentavos) : UNREADABLE,
-      pesoAllowance: amounts ? formatPesos(amounts.pesoAllowanceCentavos) : UNREADABLE,
-      dollarAllowance: amounts ? formatPesos(amounts.dollarAllowanceCents) : UNREADABLE,
       unreadable: amounts === null,
     });
   }
@@ -233,7 +226,6 @@ export async function getWorksheet(runId: string): Promise<WorksheetView | null>
 export type PaymentsView = {
   runId: string;
   status: RunStatus;
-  hasRate: boolean;
   canMarkPaid: boolean;
   canExport: boolean;
   people: {
@@ -297,7 +289,7 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
       }
       return { employeeId, name: person.name, aliases: joinAliases(person.aliases), isOwn: own !== null && own === employeeId, payment };
     });
-    return { runId, status: run.status as RunStatus, hasRate: run.usdRateE4 !== null, canMarkPaid, canExport: can(actor, "payroll.export"), people };
+    return { runId, status: run.status as RunStatus, canMarkPaid, canExport: can(actor, "payroll.export"), people };
   });
   if (view && decrypted > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["payment references"], count: decrypted } });
   return view;

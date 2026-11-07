@@ -15,7 +15,7 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, savePaySettings, createPayRun, cancelPayRun, setRunUsdRate, submitRun, approveRun, markPaid } = await import("@/modules/payroll/actions");
+const { createPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, submitRun, approveRun, markPaid } = await import("@/modules/payroll/actions");
 const { getWorksheet } = await import("@/modules/payroll/queries");
 const { listMyPayslips, countMyPayslips } = await import("@/modules/payroll/payslip-queries");
 const { decryptRunLine } = await import("@/modules/payroll/service");
@@ -55,13 +55,10 @@ async function giveLine(employeeId: string, p: { periodStart: string; periodEnd:
   const r = await createPayLine({
     employeeId,
     hoursPerDay: 8,
-    fte: "1",
     paymentMethod: "remitly",
     effectiveFrom: p.periodStart,
     endsOn: p.periodEnd,
     monthly: "22,000",
-    pesoAllowance: "1,000",
-    dollarAllowance: "0",
     ...over,
   });
   if (!r.ok) throw new Error(`line failed: ${r.error}`);
@@ -70,7 +67,6 @@ async function newRun(p: { periodStart: string; periodEnd: string }) {
   as(preparer);
   const r = await createPayRun(p);
   if (!r.ok) throw new Error(`run failed: ${r.error}`);
-  await setRunUsdRate({ runId: r.data.runId, rate: "58.50" });
   return r.data.runId;
 }
 async function approvedRun(p: { periodStart: string; periodEnd: string }) {
@@ -123,10 +119,8 @@ beforeAll(async () => {
     cutoffDivisor: 11,
     changeWarnPercent: 10,
     extraRegular: "125",
-    extraHoliday: "200",
     extraRestDay: "130",
     extraRestDayOver8: "169",
-    holiday: "100",
     reason: "Test rates",
     effectiveFrom: "2028-11-01",
   });
@@ -531,5 +525,66 @@ describe("the signatory on payslips", () => {
       expect(Buffer.from(await res.arrayBuffer()).subarray(0, 5).toString("latin1")).toBe("%PDF-");
     }
     expect(await rows(sql`select 1 from payroll.pay_run_signatures where run_id in (${run1}, ${run2}, ${run3})`)).toHaveLength(3);
+  });
+});
+
+describe("the Contractor Payment Statement lists every named line", () => {
+  it("shows several named allowances, a reimbursement, a bonus and an adjustment, each under its own name, with the right totals, and a removed line is gone", async () => {
+    const owner = await account();
+    const emp = await person(owner.id);
+    const p = slot(22);
+    await giveLine(emp, p); // 22,000 a month: 11,000.00 for the cutoff
+    const runId = await newRun(p);
+    const [line] = await rows<{ id: string; payload_enc: string }>(sql`select id, payload_enc from payroll.pay_run_lines where run_id = ${runId} and employee_id = ${emp}`);
+    as(preparer);
+    const add = async (type: string, label: string, value: string) => {
+      const r = await savePayItem({ runId, employeeId: emp, runLineId: line.id, type, label, value });
+      if (!r.ok) throw new Error(`item failed: ${r.error}`);
+    };
+    await add("allowance", "Health allowance", "1,000");
+    await add("allowance", "Internet allowance", "500");
+    await add("allowance", "Hazard fee", "300");
+    await add("reimbursement", "Supplies", "250.50");
+    await add("bonus", "Performance bonus", "2,000");
+    await add("adjustment", "Correction of an earlier payment", "75");
+
+    // Remove one named allowance by its item id: only that line goes.
+    const hazard = (await rows<{ id: string }>(sql`select id from payroll.pay_run_items where run_id = ${runId} and type = 'allowance' and state = 'confirmed' order by created_at`))[2];
+    expect(await dismissPayItem({ runId, itemId: hazard.id })).toMatchObject({ ok: true });
+
+    as(preparer);
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+    as(approver);
+    const a = await approveRun({ runId, expectedHash: (await getWorksheet(runId))!.expectedHash! });
+    expect(a).toMatchObject({ ok: true });
+    await payAll(runId, [emp]);
+
+    // 11,000.00 + 1,500.00 allowances = 12,500.00 gross; plus 250.50, 2,000.00 and 75.00 = 14,825.50 total payable compensation.
+    const [row] = await rows<{ id: string; payload_enc: string }>(sql`select id, payload_enc from payroll.pay_run_lines where run_id = ${runId} and employee_id = ${emp}`);
+    const result = decryptRunLine(row.id, row.payload_enc).result;
+    expect(result).toMatchObject({ allowances: 150_000n, reimbursements: 25_050n, bonuses: 200_000n, adjustments: 7_500n, gross: 1_250_000n, net: 1_482_550n });
+
+    as(owner);
+    const { getMyPayslip } = await import("@/modules/payroll/payslip-queries");
+    const { payslipView } = await import("@/modules/payroll/payslip");
+    const view = payslipView((await getMyPayslip(owner as never, runId))!);
+    expect(view.lines).toHaveLength(1);
+    const v = view.lines[0];
+    expect(v.earnings.filter((r) => r.label.endsWith("allowance"))).toEqual([
+      { label: "Health allowance", detail: "", amount: formatPesos(100_000n) },
+      { label: "Internet allowance", detail: "", amount: formatPesos(50_000n) },
+    ]);
+    expect(JSON.stringify(view)).not.toContain("Hazard fee");
+    expect(v.reimbursements).toEqual([{ label: "Supplies", detail: "", amount: formatPesos(25_050n) }]);
+    expect(v.bonuses).toEqual([{ label: "Performance bonus", detail: "", amount: formatPesos(200_000n) }]);
+    expect(v.adjustments).toEqual([{ label: "Correction of an earlier payment", detail: "", amount: formatPesos(7_500n) }]);
+    expect(v.gross).toBe(formatPesos(1_250_000n));
+    expect(v.net).toBe(formatPesos(1_482_550n));
+    expect(view.title).toBe("Contractor Payment Statement");
+    expect((await listMyPayslips()).find((x) => x.runId === runId)!.net).toBe(formatPesos(1_482_550n));
+
+    const res = await call(runId);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toContain(`contractor-payment-statement-${p.periodStart}-to-${p.periodEnd}.pdf`);
   });
 });

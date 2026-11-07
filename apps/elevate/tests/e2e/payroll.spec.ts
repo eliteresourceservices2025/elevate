@@ -23,7 +23,7 @@ async function saveSettings(page: Page, from: string, extraRegular: string) {
   await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
-test("payroll: levels, rate, run, review, approval, payment, payslip and history", async ({ browser }) => {
+test("payroll: levels, rate, run, review, approval, payment, contractor payment statement and history", async ({ browser }) => {
   test.setTimeout(420_000);
   const stamp = Date.now().toString(36);
   const period = await pickFreePayrollPeriod();
@@ -61,7 +61,7 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
     await adminPage.goto("/dashboard");
     await expect(adminPage.locator('a[href="/payroll"]')).toHaveCount(0);
 
-    // The Preparer sets the pay settings: the extra-hours rate from the period start, and the old values back from a few days later.
+    // The Preparer sets the pay settings: the overtime (OT) rate from the period start, and the old values back from a few days later.
     await prepPage.goto("/payroll/settings");
     await prepPage.getByRole("button", { name: "Change settings" }).click();
     await waitForHydration(prepPage, "#set-extraRegular");
@@ -97,23 +97,26 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
     const line = prepPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` });
     await expect(line).toBeVisible();
 
-    // An extra-hours item, entered twice so the history has an old and a new value.
+    // An overtime (OT) item, entered twice so the history has an old and a new value.
     for (const minutes of ["60", "120"]) {
       await line.getByRole("button", { name: "Amounts" }).click();
       await waitForHydration(prepPage, "form select");
-      await prepPage.getByLabel("What to enter").selectOption({ label: "Extra hours, regular day" });
+      await prepPage.getByLabel("What to enter").selectOption({ label: "Overtime (OT), regular day" });
       await prepPage.getByLabel("Amount", { exact: true }).fill(minutes);
       await prepPage.getByRole("button", { name: "Save amount" }).click();
       await expect(prepPage.getByText("Amount saved.").first()).toBeVisible();
       await expect(prepPage.getByRole("dialog")).toHaveCount(0);
     }
 
-    // The dollar rate, then the line is checked.
-    await prepPage.getByRole("button", { name: /Dollar rate/ }).click();
-    await waitForHydration(prepPage, "#usd-rate");
-    await prepPage.locator("#usd-rate").fill("58.50");
-    await prepPage.getByRole("button", { name: "Save rate" }).click();
-    await expect(prepPage.getByText("Dollar rate saved.")).toBeVisible();
+    // A named allowance (itemized: it appears on the statement under its own name), then the line is checked.
+    await line.getByRole("button", { name: "Amounts" }).click();
+    await waitForHydration(prepPage, "form select");
+    await prepPage.getByLabel("What to enter").selectOption({ label: "Allowance" });
+    await prepPage.getByLabel(/^Name of this allowance/).fill("Health allowance");
+    await prepPage.getByLabel("Amount", { exact: true }).fill("500");
+    await prepPage.getByRole("button", { name: "Save amount" }).click();
+    await expect(prepPage.getByText("Amount saved.").first()).toBeVisible();
+    await expect(prepPage.getByRole("dialog")).toHaveCount(0);
     await prepPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` }).getByRole("button", { name: "Mark as checked" }).click();
     await expect(prepPage.getByText("Line checked.")).toBeVisible();
 
@@ -138,15 +141,15 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
     const csv = (await import("node:fs")).readFileSync(csvPath, "utf8");
     expect(csv).toContain(`Wanda Worker${stamp}`);
     expect(csv).toContain(alias);
-    expect(csv).toMatch(/Person,Alias,Pesos,Dollars/);
-    // The figures, worked out here from the inputs (25,000.00 a month, divisor 11, 8 hours a day, 120 extra minutes at 125%, 58.50 pesos a dollar), not copied from the page.
+    expect(csv).toMatch(/Person,Alias,Pesos/);
+    expect(csv).not.toMatch(/Dollars/);
+    // The figures, worked out here from the inputs (25,000.00 a month, divisor 11, 8 hours a day, 120 overtime minutes at 125%, a 500.00 allowance), not copied from the page.
     const half = (n: bigint, d: bigint) => (2n * n + d) / (2n * d); // divide, rounding half up
     const monthly = 2_500_000n; // centavos
-    const pesos = monthly / 2n + half(monthly * 120n * 125n, 22n * 8n * 60n * 100n);
-    const dollars = half(pesos * 100n, 5850n); // cents
+    const pesos = monthly / 2n + half(monthly * 120n * 125n, 22n * 8n * 60n * 100n) + 50_000n;
     const fmt = (c: bigint) => `${c / 100n}.${String(c % 100n).padStart(2, "0")}`;
     const row = csv.split(String.fromCharCode(10)).map((l) => l.trim()).find((l) => l.includes(`Wanda Worker${stamp}`))!;
-    expect(row.split(",").slice(-2)).toEqual([fmt(pesos), fmt(dollars)]);
+    expect(row.split(",").slice(-1)).toEqual([fmt(pesos)]);
 
     await prepPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` }).last().getByRole("button", { name: "Mark paid" }).click();
     await waitForHydration(prepPage, `#ref-${worker.employeeId}`);
@@ -155,7 +158,7 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
     await expect(prepPage.getByText("Payment recorded.")).toBeVisible();
     await expect(prepPage.getByText("Everyone on this run is paid.")).toBeVisible();
 
-    // The worker opens My pay and downloads the payslip.
+    // The worker opens My payment statements and downloads the contractor payment statement.
     await workPage.goto("/my-pay");
     const link = workPage.getByRole("link", { name: "Download PDF" });
     await expect(link).toHaveCount(1);
@@ -166,18 +169,19 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
     expect(slip.headers()["content-type"]).toContain("application/pdf");
     expect((await slip.body()).subarray(0, 5).toString("latin1")).toBe("%PDF-");
 
-    // The worker can also read the payslip in the page. Whether it is signed depends on the settings of this database, so only the
+    // The worker can also read the statement in the page. Whether it is signed depends on the settings of this database, so only the
     // signature block is checked, not who signed.
     const view = workPage.locator(`a[href="/my-pay/${runId}"]`);
     await expect(view).toHaveCount(1);
     await view.click();
     await expect(workPage).toHaveURL(new RegExp(`/my-pay/${runId}$`));
-    await expect(workPage.getByRole("heading", { level: 1, name: /^Payslip \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}$/ })).toBeVisible();
-    await expect(workPage.getByText("Net pay").first()).toBeVisible();
+    await expect(workPage.getByRole("heading", { level: 1, name: /^Contractor Payment Statement \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}$/ })).toBeVisible();
+    await expect(workPage.getByText("Total payable compensation").first()).toBeVisible();
+    await expect(workPage.getByText("Health allowance")).toBeVisible();
     await expect(workPage.getByText("Authorized by")).toBeVisible();
     await expect(workPage.getByRole("link", { name: "Download PDF" })).toHaveAttribute("href", `/api/payroll/payslips/${runId}`);
 
-    // Only their own payslip: another run id (a real one when the database has one) and a made-up one are both not found.
+    // Only their own statement: another run id (a real one when the database has one) and a made-up one are both not found.
     const other = (await anotherPayRunId(runId)) ?? "00000000-0000-4000-8000-000000000000";
     for (const id of [other, "11111111-1111-4111-8111-111111111111"]) {
       expect((await workPage.context().request.get(`/api/payroll/payslips/${id}`)).status()).toBe(404);
@@ -193,8 +197,8 @@ test("payroll: levels, rate, run, review, approval, payment, payslip and history
       .filter({ has: apprPage.locator("td", { hasText: /^60$/ }) })
       .filter({ has: apprPage.locator("td", { hasText: /^120$/ }) });
     await expect(changed).toHaveCount(1);
-    await expect(changed.getByText("Extra hours, regular day")).toBeVisible();
-    await expect(apprPage.getByRole("row").filter({ hasText: "Payslip downloaded" }).first()).toBeVisible();
+    await expect(changed.getByText("Overtime (OT), regular day")).toBeVisible();
+    await expect(apprPage.getByRole("row").filter({ hasText: "Contractor payment statement downloaded" }).first()).toBeVisible();
   } finally {
     try {
       if (settingsTouched) await restorePaySettings(period.start, period.later);

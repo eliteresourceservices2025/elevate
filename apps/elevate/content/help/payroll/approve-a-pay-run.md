@@ -25,7 +25,7 @@ ELEVATE refuses this on the server, with no way around it. If it refuses you, as
 
 1. Click **Payroll** under **Admin** in the left menu. On the **Runs** tab, open the run whose status is **In review**. The Dashboard also shows how many runs are waiting for you.
 2. Read the **checks** above the worksheet. A problem that blocks must be sent back. Warnings are for you to judge.
-3. Read the worksheet line by line. Check **Cutoff pay**, **Absences**, **Late and undertime**, the extra hours, the allowances, **Gross** and **Net**, and the **Change from last run**. Use the **Totals** and **By client** to see whether the whole run makes sense.
+3. Read the worksheet line by line. Check **Cutoff pay**, **Absences**, **Sick leave (SL)**, **Late and undertime**, the overtime (OT) and holiday pay, the allowances, **Gross**, the reimbursements, bonuses and adjustments, and **Total payable compensation** with its **Change in total payable from last run**. Use the **Totals** and **By client** to see whether the whole run makes sense.
 4. Opening the run is written to the audit log. Amounts are never sent in notices.
 
 ![A run in review as the Approver sees it: the status, the checks and the worksheet with every line.](help:approve-a-pay-run/01-in-review.png)
@@ -64,5 +64,5 @@ Open the **History** tab to see every change: who did it, when, the old and new 
 
 # Try it yourself
 
-- If there is a run waiting for approval, open it and read one line against its **Net**.
+- If there is a run waiting for approval, open it and read one line against its **Total payable compensation**.
 - Open **History** and filter by a run.

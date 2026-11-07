@@ -17,13 +17,13 @@ function canonical(value: unknown): string {
 }
 
 /**
- * SHA-256 (hex) over every line's decrypted payload, sorted by line id, and the run's dollar rate. Any change to a figure, a line, an
- * item or the rate gives a different hash, so an approval given against one hash is void once anything changes. The result is never
+ * SHA-256 (hex) over every line's decrypted payload, sorted by line id. Any change to a figure, a line or an
+ * item gives a different hash, so an approval given against one hash is void once anything changes. The result is never
  * stored in the clear: a plain hash of a small amount can be guessed by anyone who can read it.
  */
-export function runHash(lines: { id: string; payload: unknown }[], usdRateE4: number | null): string {
+export function runHash(lines: { id: string; payload: unknown }[]): string {
   const sorted = [...lines].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return createHash("sha256").update(canonical({ lines: sorted, usdRateE4 })).digest("hex");
+  return createHash("sha256").update(canonical({ lines: sorted })).digest("hex");
 }
 
 export type ApprovalInput = {

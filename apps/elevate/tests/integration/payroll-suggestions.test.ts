@@ -37,7 +37,7 @@ async function person() {
 }
 async function giveLine(who: unknown, employeeId: string, over: Record<string, unknown> = {}) {
   current.user = who;
-  const r = await createPayLine({ employeeId, hoursPerDay: 8, fte: "1", paymentMethod: "remitly", effectiveFrom: "2023-01-01", monthly: "22,000", pesoAllowance: "0", dollarAllowance: "0", ...over });
+  const r = await createPayLine({ employeeId, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2023-01-01", monthly: "22,000", ...over });
   if (!r.ok) throw new Error(`line failed: ${r.error}`);
 }
 
@@ -97,7 +97,7 @@ beforeAll(async () => {
   lead = await account(null);
   // Extra-hours rates from 2026, so these periods price extra hours; earlier periods (2024) see the starting row with none.
   current.user = preparer;
-  const saved = await savePaySettings({ effectiveFrom: "2026-01-01", cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "125", extraHoliday: "200", extraRestDay: "130", extraRestDayOver8: "169", holiday: "100", reason: "Test rates" });
+  const saved = await savePaySettings({ effectiveFrom: "2026-01-01", cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "125", extraRestDay: "130", extraRestDayOver8: "169", reason: "Test rates" });
   expect(saved.ok).toBe(true);
 });
 
@@ -225,7 +225,7 @@ describe("holidays and rest days", () => {
     const runId = await newRun(preparer, p);
     current.user = preparer;
     await refreshSuggestions({ runId });
-    expect(byType(await suggestions(runId, emp))).toEqual({ extra_holiday: 300n, extra_regular: 80n });
+    expect(byType(await suggestions(runId, emp))).toEqual({ holiday: 300n, extra_regular: 80n });
   });
 
   it("counts a Philippine holiday on a US client's person's day too, as the nightly rebuild does", async () => {
@@ -239,7 +239,7 @@ describe("holidays and rest days", () => {
     const runId = await newRun(preparer, p);
     current.user = preparer;
     await refreshSuggestions({ runId });
-    expect(byType(await suggestions(runId, emp))).toEqual({ extra_holiday: 240n });
+    expect(byType(await suggestions(runId, emp))).toEqual({ holiday: 240n });
   });
 
   it("splits a rest day at 8 hours, prices each part with the settings, and blocks when a rate is missing", async () => {
@@ -283,7 +283,7 @@ describe("a person with two lines", () => {
     const p = slot(8);
     const emp = await person();
     await giveLine(preparer, emp, { alias: "Front desk" });
-    await giveLine(preparer, emp, { alias: "Night shift", fte: "0.5" });
+    await giveLine(preparer, emp, { alias: "Night shift" });
     await addDay(emp, { date: p.day(2), worked: 450, late: 30 }, lead.id);
     const runId = await newRun(preparer, p);
     current.user = preparer;

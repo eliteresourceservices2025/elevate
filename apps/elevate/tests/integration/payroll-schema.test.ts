@@ -65,8 +65,8 @@ async function addRunLine(runId: string) {
   const lineId = randomUUID();
   const id = randomUUID();
   await db.execute(sql`
-    insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, fte, effective_from, amounts_enc, created_by)
-    values (${lineId}, ${randomUUID()}, ${employeeId}, 8, 1.00, '2030-01-01', ${enc("{}", `pay_line:${lineId}`)}, ${actorId})`);
+    insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, effective_from, amounts_enc, created_by)
+    values (${lineId}, ${randomUUID()}, ${employeeId}, 8, '2030-01-01', ${enc("{}", `pay_line:${lineId}`)}, ${actorId})`);
   await db.execute(sql`
     insert into payroll.pay_run_lines (id, run_id, line_id, employee_id, flags, payload_enc)
     values (${id}, ${runId}, ${lineId}, ${employeeId}, '{}', ${enc("{}", `pay_run_line:${id}`)})`);
@@ -116,7 +116,16 @@ describe("append-only tables", () => {
     expect(s.cutoff_divisor).toBe(11);
     expect(s.change_warn_bp).toBe(1000);
     expect(s.extra_regular_bp).toBeNull();
-    expect(s.holiday_bp).toBeNull();
+    // Holiday pay is always one to one, so there is no holiday column; the dollar rate, FTE and item names have moved on too.
+    expect(s).not.toHaveProperty("holiday_bp");
+    expect(s).not.toHaveProperty("extra_holiday_bp");
+  });
+
+  it("has dropped the dollar rate and FTE columns and added the item key", async () => {
+    const cols = await rows<{ table_name: string; column_name: string }>(sql`
+      select table_name, column_name from information_schema.columns
+      where table_schema = 'payroll' and (column_name in ('usd_rate_e4', 'fte') or (table_name = 'pay_run_items' and column_name = 'item_key'))`);
+    expect(cols).toEqual([{ table_name: "pay_run_items", column_name: "item_key" }]);
   });
 });
 
@@ -174,21 +183,21 @@ describe("run status transitions", () => {
     const runId = await newRun();
     const { id: lineId } = await addRunLine(runId);
     await to(runId, "cancelled");
-    await raises(db.execute(sql`update payroll.pay_runs set usd_rate_e4 = 1 where id = ${runId}`), /cancelled/);
+    await raises(db.execute(sql`update payroll.pay_runs set settings_snapshot = '{"a":1}'::jsonb where id = ${runId}`), /cancelled/);
     await raises(to(runId, "draft"), /cancelled/);
     await raises(db.execute(sql`delete from payroll.pay_runs where id = ${runId}`), /cannot be removed/);
     await raises(db.execute(sql`update payroll.pay_run_lines set flags = '{x}' where id = ${lineId}`), /frozen/);
     await raises(itemInsert(runId), /frozen/);
   });
 
-  it("usd_rate_e4 and settings_snapshot change only in draft", async () => {
+  it("settings_snapshot and the period change only in draft", async () => {
     const runId = await newRun();
-    await db.execute(sql`update payroll.pay_runs set usd_rate_e4 = 585000, settings_snapshot = '{"a":1}'::jsonb where id = ${runId}`);
+    await db.execute(sql`update payroll.pay_runs set settings_snapshot = '{"a":1}'::jsonb where id = ${runId}`);
     await to(runId, "in_review");
-    await raises(db.execute(sql`update payroll.pay_runs set usd_rate_e4 = 590000 where id = ${runId}`), /draft/);
     await raises(db.execute(sql`update payroll.pay_runs set settings_snapshot = '{}'::jsonb where id = ${runId}`), /draft/);
+    await raises(db.execute(sql`update payroll.pay_runs set period_end = period_end + 1 where id = ${runId}`), /draft/);
     await to(runId, "approved");
-    await raises(db.execute(sql`update payroll.pay_runs set usd_rate_e4 = 590000 where id = ${runId}`), /draft/);
+    await raises(db.execute(sql`update payroll.pay_runs set settings_snapshot = '{}'::jsonb where id = ${runId}`), /draft/);
   });
 
   it("a run can never be deleted, draft or not", async () => {
@@ -198,16 +207,13 @@ describe("run status transitions", () => {
     await raises(db.execute(sql`delete from payroll.pay_runs where id = ${later}`), /cannot be removed/);
   });
 
-  it("the table checks refuse a zero divisor or rate, a negative fte, an end before the start", async () => {
+  it("the table checks refuse a zero divisor and an end before the start", async () => {
     await raises(db.execute(sql`insert into payroll.pay_settings (effective_from, cutoff_divisor, change_warn_bp) values ('2031-01-01', 0, 1000)`), /divisor_chk/);
-    const runId = await newRun();
-    await raises(db.execute(sql`update payroll.pay_runs set usd_rate_e4 = 0 where id = ${runId}`), /rate_chk/);
-    const line = (fte: string, ends: string) =>
-      db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, fte, effective_from, ends_on, amounts_enc, created_by)
-        values (${randomUUID()}, ${randomUUID()}, ${employeeId}, 8, ${fte}::numeric, '2030-05-01', ${ends}::date, 'x', ${actorId})`);
-    await raises(line("-0.5", "2030-06-01"), /fte_chk/);
-    await raises(line("1.00", "2030-04-01"), /ends_chk/);
-    await line("1.00", "2030-05-01");
+    const line = (ends: string) =>
+      db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, effective_from, ends_on, amounts_enc, created_by)
+        values (${randomUUID()}, ${randomUUID()}, ${employeeId}, 8, '2030-05-01', ${ends}::date, 'x', ${actorId})`);
+    await raises(line("2030-04-01"), /ends_chk/);
+    await line("2030-05-01");
   });
 
   it("a new line defaults to the remitly payment method", async () => {

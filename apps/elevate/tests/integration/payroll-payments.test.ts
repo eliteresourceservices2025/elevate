@@ -20,7 +20,6 @@ const {
   savePaySettings,
   createPayRun,
   cancelPayRun,
-  setRunUsdRate,
   submitRun,
   approveRun,
   exportRemitlyList,
@@ -77,32 +76,22 @@ async function giveLine(
   const r = await createPayLine({
     employeeId,
     hoursPerDay: 8,
-    fte: "1",
     paymentMethod: "remitly",
     effectiveFrom: p.periodStart,
     endsOn: p.periodEnd,
     monthly: "22,000",
-    pesoAllowance: "1,000",
-    dollarAllowance: "0",
     ...over,
   });
   if (!r.ok) throw new Error(`line failed: ${r.error}`);
 }
-async function newRun(
-  p: { periodStart: string; periodEnd: string },
-  rate: string | null = "58.50",
-) {
+async function newRun(p: { periodStart: string; periodEnd: string }) {
   as(preparer);
   const r = await createPayRun(p);
   if (!r.ok) throw new Error(`run failed: ${r.error}`);
-  if (rate) await setRunUsdRate({ runId: r.data.runId, rate });
   return r.data.runId;
 }
-async function approvedRun(
-  p: { periodStart: string; periodEnd: string },
-  rate: string | null = "58.50",
-) {
-  const runId = await newRun(p, rate);
+async function approvedRun(p: { periodStart: string; periodEnd: string }) {
+  const runId = await newRun(p);
   as(preparer);
   const s = await submitRun({ runId });
   if (!s.ok) throw new Error(`submit failed: ${s.error}`);
@@ -150,10 +139,8 @@ beforeAll(async () => {
     cutoffDivisor: 11,
     changeWarnPercent: 10,
     extraRegular: "125",
-    extraHoliday: "200",
     extraRestDay: "130",
     extraRestDayOver8: "169",
-    holiday: "100",
     reason: "Test rates",
   };
   expect(await savePaySettings({ ...rates, effectiveFrom: "2028-01-01" })).toMatchObject({
@@ -162,7 +149,7 @@ beforeAll(async () => {
 });
 
 describe("the Remitly list", () => {
-  it("is refused before approval, for a cancelled run, and with no dollar rate", async () => {
+  it("is refused before approval, and for a cancelled run", async () => {
     const p = slot(0);
     const emp = await person();
     await giveLine(emp, p);
@@ -188,25 +175,22 @@ describe("the Remitly list", () => {
 
   });
 
-  it("a run paid in pesos only can't be sent without a dollar rate; with one it is approved and the list downloads", async () => {
+  it("a pay line made with only the monthly rate needs nothing else to be sent, approved and listed, in pesos only", async () => {
     const r = slot(2);
     const emp = await person(null, "Pesoonly");
-    await giveLine(emp, r); // no dollar allowance
-    const runId = await newRun(r, null);
+    await giveLine(emp, r); // no FTE, no allowance, and no dollar rate anywhere
+    const runId = await newRun(r);
     as(preparer);
-    const refused = await submitRun({ runId });
-    expect(!refused.ok && refused.error).toMatch(/can't be sent for review/);
-    expect(await status(runId)).toBe("draft");
-
-    expect(await setRunUsdRate({ runId, rate: "58.50" })).toMatchObject({ ok: true });
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
     as(approver);
     expect(await approveRun({ runId, expectedHash: (await getWorksheet(runId))!.expectedHash! })).toMatchObject({ ok: true });
     as(preparer);
     const list = await exportRemitlyList({ runId });
     expect(list).toMatchObject({ ok: true });
-    // 22,000 / 2 + 1,000 = 12,000.00 pesos; at 58.50 that is 205.13 dollars.
-    expect(list.ok && list.data.csv).toContain("12000.00,205.13");
+    // 22,000 / 2 = 11,000.00 pesos, and the list has no dollars column.
+    const lines = list.ok ? list.data.csv.trim().split("\r\n") : [];
+    expect(lines[0]).toBe("Person,Alias,Pesos");
+    expect(lines.find((l) => l.includes("Pesoonly"))).toMatch(/,11000\.00$/);
   });
 
   it("gives one row per person, no bank column, neutralizes a formula alias, and is audited without amounts", async () => {
@@ -225,7 +209,7 @@ describe("the Remitly list", () => {
     expect(r.data.rows).toBe(2);
     expect(r.data.fileName).toMatch(/^remitly-2028-02-16-to-2028-02-29\.csv$/);
     const lines = r.data.csv.trim().split("\r\n");
-    expect(lines[0]).toBe("Person,Alias,Pesos,Dollars");
+    expect(lines[0]).toBe("Person,Alias,Pesos");
     expect(lines).toHaveLength(3);
     expect(r.data.csv).not.toMatch(/bank|account/i);
     expect(r.data.csv).toContain("'=HYPERLINK(1); Billing");
@@ -236,16 +220,13 @@ describe("the Remitly list", () => {
     );
     const total = nets.reduce((s, n) => s + decryptRunLine(n.id, n.payload_enc).result.net, 0n);
     const pesos = `${total / 100n}.${(total % 100n).toString().padStart(2, "0")}`;
-    const cents = (total * 10_000n * 2n + 585_000n) / (585_000n * 2n);
-    const dollars = `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
-    expect(lines.find((l) => l.includes("Lopezexport"))).toContain(`${pesos},${dollars}`);
+    expect(lines.find((l) => l.includes("Lopezexport"))).toMatch(new RegExp(`,${pesos.replace(".", "\\.")}$`));
 
     const [audit] = await rows<{ metadata: unknown }>(
       sql`select metadata from ops.audit_log where target_id = ${runId} and action = 'payroll.remitly.export'`,
     );
     expect(JSON.stringify(audit.metadata)).toMatch(/"rows":\s*2/);
     expect(JSON.stringify(audit.metadata)).not.toContain(pesos);
-    expect(JSON.stringify(audit.metadata)).not.toContain(dollars);
     expect(
       await rows(
         sql`select 1 from payroll.pay_change_log where run_id = ${runId} and action = 'list_exported'`,

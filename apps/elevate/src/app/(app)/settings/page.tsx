@@ -49,8 +49,8 @@ const SECTIONS = [
     href: "/settings/payroll-signatory",
     action: "settings.set_payroll_signatory",
     icon: PenLine,
-    title: "Payslip signatory",
-    description: "The name, title and signature of the Human Resources Director on every payslip.",
+    title: "Payment statement signatory",
+    description: "The name, title and signature of the Human Resources Director on every contractor payment statement.",
   },
   {
     href: "/settings/invitations",

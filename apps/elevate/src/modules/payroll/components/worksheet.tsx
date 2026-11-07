@@ -33,12 +33,14 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
             <TableHead colSpan={2} className={`${FROZEN} md:left-0 border-r`}>
               {L.groups.person}
             </TableHead>
-            <TableHead colSpan={4}>{L.groups.basis}</TableHead>
-            <TableHead colSpan={2}>{L.groups.deductions}</TableHead>
+            <TableHead colSpan={3}>{L.groups.basis}</TableHead>
+            <TableHead colSpan={3}>{L.groups.deductions}</TableHead>
             <TableHead colSpan={EXTRA_KEYS.length}>{L.groups.extra}</TableHead>
-            <TableHead colSpan={3}>{L.groups.allowances}</TableHead>
-            <TableHead colSpan={3}>{L.groups.adjustments}</TableHead>
-            <TableHead colSpan={3}>{L.groups.result}</TableHead>
+            <TableHead colSpan={2}>{L.groups.leave}</TableHead>
+            <TableHead colSpan={2}>{L.groups.allowances}</TableHead>
+            <TableHead colSpan={3}>{L.groups.additions}</TableHead>
+            <TableHead colSpan={2}>{L.groups.loans}</TableHead>
+            <TableHead colSpan={2}>{L.groups.result}</TableHead>
             <TableHead colSpan={1}>{L.groups.reference}</TableHead>
             <TableHead colSpan={2}>
               <span className="sr-only">{L.actions}</span>
@@ -48,23 +50,25 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
             <TableHead className={`${FROZEN} md:left-0 min-w-44`}>{L.person}</TableHead>
             <TableHead className={`${FROZEN} md:left-44 min-w-36 border-r`}>{L.client}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.hoursPerDay}</TableHead>
-            <TableHead className={`${head} ${num}`}>{L.fte}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.monthly}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.base}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.absences}</TableHead>
+            <TableHead className={`${head} ${num}`}>{L.sickLeave}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.late}</TableHead>
             {EXTRA_KEYS.map((k) => (
               <TableHead key={k} className={`${head} ${num} min-w-28`}>
                 {PAY_ITEM_LABELS[EXTRA_KEY_ITEM[k]]}
               </TableHead>
             ))}
-            <TableHead className={`${head} ${num}`}>{L.pesoAllowance}</TableHead>
-            <TableHead className={`${head} ${num}`}>{L.dollarAllowance}</TableHead>
-            <TableHead className={`${head} ${num}`}>{L.dollarAllowancePesos}</TableHead>
-            <TableHead className={`${head} ${num}`}>{L.adjustment}</TableHead>
+            <TableHead className={`${head} ${num}`}>{L.bereavement}</TableHead>
+            <TableHead className={`${head} ${num}`}>{L.pto}</TableHead>
+            <TableHead className={`${head} ${num}`}>{L.allowances}</TableHead>
+            <TableHead className={`${head} ${num}`}>{L.gross}</TableHead>
+            <TableHead className={`${head} ${num}`}>{L.reimbursements}</TableHead>
+            <TableHead className={`${head} ${num}`}>{L.bonuses}</TableHead>
+            <TableHead className={`${head} ${num}`}>{L.adjustments}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.loan}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.otherDeductions}</TableHead>
-            <TableHead className={`${head} ${num}`}>{L.gross}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.net}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.netChange}</TableHead>
             <TableHead className={`${head} ${num}`}>{L.clientHours}</TableHead>
@@ -102,29 +106,31 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
                   {line.clientName ?? L.noClient}
                 </TableCell>
                 {line.unreadable ? (
-                  <TableCell label={L.net} colSpan={21} className="text-destructive">
+                  <TableCell label={L.net} colSpan={22} className="text-destructive">
                     {L.unreadable}
                   </TableCell>
                 ) : (
                   <>
                     {cell(String(line.hoursPerDay), L.hoursPerDay)}
-                    {cell(line.fte, L.fte)}
                     {cell(f?.monthly, L.monthly)}
                     {cell(f?.base, L.base)}
                     {cell(f?.absences, L.absences)}
+                    {cell(f?.sickLeave, L.sickLeave)}
                     {cell(f?.late, L.late)}
                     {EXTRA_KEYS.map((k) => (
                       <TableCell key={k} label={PAY_ITEM_LABELS[EXTRA_KEY_ITEM[k]]} className={num}>
                         {f?.extra[k]}
                       </TableCell>
                     ))}
-                    {cell(f?.pesoAllowance, L.pesoAllowance)}
-                    {cell(f?.dollarAllowance, L.dollarAllowance)}
-                    {cell(f?.dollarAllowancePesos, L.dollarAllowancePesos)}
-                    {cell(f?.adjustment, L.adjustment)}
+                    {cell(f?.bereavementDays, L.bereavement)}
+                    {cell(f?.ptoDays, L.pto)}
+                    {cell(f?.allowances, L.allowances)}
+                    {cell(f?.gross, L.gross)}
+                    {cell(f?.reimbursements, L.reimbursements)}
+                    {cell(f?.bonuses, L.bonuses)}
+                    {cell(f?.adjustments, L.adjustments)}
                     {cell(f?.loan, L.loan)}
                     {cell(f?.otherDeductions, L.otherDeductions)}
-                    {cell(f?.gross, L.gross)}
                     {cell(f?.net, L.net, "font-semibold")}
                     {cell(f ? (f.netChange ?? "") : undefined, L.netChange, "text-muted-foreground")}
                     {cell(f?.clientHours, L.clientHours)}

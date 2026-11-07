@@ -40,6 +40,9 @@ function itemValue(type: unknown, v: unknown): string | null {
 }
 const itemLabel = (type: unknown): string => (typeof type === "string" && type in PAY_ITEM_LABELS ? PAY_ITEM_LABELS[type as PayItemType] : H.amountKind);
 
+/** The item's kind, with the name the Preparer gave an itemized line ("Allowance: Health allowance"). */
+const namedItem = (type: unknown, name: unknown): string => (str(name) ? `${itemLabel(type)}: ${str(name)}` : itemLabel(type));
+
 const percent = (bp: unknown): string => (typeof bp === "number" ? `${bp / 100}%` : H.notSet);
 
 /** The fields of one pay line version, as labelled strings. */
@@ -49,10 +52,7 @@ function lineFields(v: Json | null, names: NameLookup): Record<string, string | 
   const method = str(v.paymentMethod);
   return {
     [R.monthly]: centavos(v.monthlyCentavos),
-    [W.pesoAllowance]: centavos(v.pesoAllowanceCentavos),
-    [W.dollarAllowance]: centavos(v.dollarAllowanceCents),
     [R.hoursPerDay]: str(v.hoursPerDay),
-    [R.fte]: str(v.fte),
     [R.client]: client ? (names.client(client) ?? null) : H.none,
     [R.alias]: str(v.alias) ?? H.none,
     [R.paymentMethod]: method ? (PAYMENT_METHOD_LABELS[method as PaymentMethod] ?? method) : null,
@@ -125,11 +125,8 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       facts.push(...fact(H.reason, detail.reason));
       break;
     }
-    case "usd_rate_changed":
-      changes.push({ label: W.dollarRate, before: str(detail.old) ?? H.notSet, after: str(detail.new) ?? H.notSet });
-      break;
     case "item_saved": {
-      const label = itemLabel(detail.type);
+      const label = namedItem(detail.type, next?.label);
       const after = itemValue(detail.type, next?.value);
       const suffix = next?.state === "suggested" ? ` ${H.suggestedSuffix}` : "";
       const before = old ? `${itemValue(detail.type, old.value) ?? H.none}${old.state === "suggested" ? ` ${H.suggestedSuffix}` : ""}` : H.none;
@@ -139,7 +136,7 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       break;
     }
     case "item_dismissed":
-      changes.push({ label: itemLabel(detail.type), before: itemValue(detail.type, old?.value) ?? H.none, after: H.removed });
+      changes.push({ label: namedItem(detail.type, old?.label), before: itemValue(detail.type, old?.value) ?? H.none, after: H.removed });
       facts.push(...fact(H.reason, detail.reason));
       break;
     case "suggestion_confirmed": {

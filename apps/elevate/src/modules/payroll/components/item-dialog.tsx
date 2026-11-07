@@ -10,8 +10,8 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { confirmRunLine, dismissPayItem, savePayItem } from "../actions";
-import { APPROVAL_LABELS, CORRECTION_TYPES, PAY_ITEM_LABELS, PAY_ITEM_TYPES, REASON_REQUIRED_TYPES, WORKSHEET_LABELS, type PayItemType } from "../constants";
-import { ITEM_UNIT_HINTS, itemUnit, parseItemValue } from "../items";
+import { APPROVAL_LABELS, CORRECTION_TYPES, isItemized, ITEM_NAME_SUGGESTIONS, PAY_ITEM_LABELS, PAY_ITEM_TYPES, REASON_REQUIRED_TYPES, WORKSHEET_LABELS, type PayItemType } from "../constants";
+import { ITEM_UNIT_HINTS, itemUnit, MAX_ITEM_LABEL, parseItemValue } from "../items";
 import type { WorksheetLine } from "../runs";
 import { ConfirmSuggestionButton } from "./suggestion-controls";
 
@@ -26,7 +26,7 @@ function ExistingItem({ runId, runLineId, item }: { runId: string; runLineId: st
     <li className="space-y-2 rounded-lg border p-2 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span>
-          <span className="font-medium">{PAY_ITEM_LABELS[item.type]}</span>: {item.value}
+          <span className="font-medium">{item.label ? `${PAY_ITEM_LABELS[item.type]}: ${item.label}` : PAY_ITEM_LABELS[item.type]}</span>: {item.value}
           {item.state === "suggested" ? <span className="ml-2 text-xs text-muted-foreground">Suggested, not yet confirmed</span> : null}
         </span>
         {asking ? null : (
@@ -71,14 +71,16 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const [type, setType] = useState<PayItemType>("late_minutes");
-  const current = line.items.find((i) => i.type === type && i.state !== "dismissed");
+  const itemized = isItemized(type);
+  // An itemized type (allowance, reimbursement, bonus, adjustment) can have many named lines, so there is no single current one.
+  const current = itemized ? undefined : line.items.find((i) => i.type === type && i.state !== "dismissed");
+  const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
   const [corrects, setCorrects] = useState("");
   const canCorrect = CORRECTION_TYPES.includes(type);
   const correction = canCorrect ? corrects : "";
-  // The same rule as the server: a reason for a deduction, a correction, or when the amount differs from a suggestion. (Cutting an
-  // allowance below the line's own also needs one; the server says so if it is missing.)
+  // The same rule as the server: a reason for a deduction, a correction, or when the amount differs from a suggestion.
   const typed = parseItemValue(type, value);
   const suggestedValue = current?.state === "suggested" ? parseItemValue(type, current.value) : null;
   const needsReason = REASON_REQUIRED_TYPES.includes(type) || correction !== "" || (suggestedValue !== null && typed !== suggestedValue);
@@ -99,7 +101,8 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          run(() => savePayItem({ runId, employeeId: line.employeeId, runLineId: line.runLineId, type, value, reason, correctsRunId: correction }), "Amount saved.", () => {
+          run(() => savePayItem({ runId, employeeId: line.employeeId, runLineId: line.runLineId, type, value, label: itemized ? name : "", reason, correctsRunId: correction }), "Amount saved.", () => {
+            setName("");
             setValue("");
             setReason("");
             setCorrects("");
@@ -117,6 +120,18 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
             ))}
           </NativeSelect>
         </div>
+        {itemized ? (
+          <div className="space-y-1">
+            <Label htmlFor={`item-name-${line.runLineId}`}>Name of this {PAY_ITEM_LABELS[type].toLowerCase()}</Label>
+            <Input id={`item-name-${line.runLineId}`} list={`item-names-${line.runLineId}`} value={name} onChange={(e) => setName(e.target.value)} maxLength={MAX_ITEM_LABEL} autoComplete="off" required />
+            <datalist id={`item-names-${line.runLineId}`}>
+              {ITEM_NAME_SUGGESTIONS[type as keyof typeof ITEM_NAME_SUGGESTIONS].map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+            <p className="text-xs text-muted-foreground">It appears under this name on the contractor payment statement. Add as many as you need, one at a time.</p>
+          </div>
+        ) : null}
         <div className="space-y-1">
           <Label htmlFor={`item-value-${line.runLineId}`}>Amount</Label>
           <Input id={`item-value-${line.runLineId}`} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} required />

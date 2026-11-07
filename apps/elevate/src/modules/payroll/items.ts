@@ -1,24 +1,27 @@
-import { EXTRA_KEYS, type LineInput } from "./calculate";
-import { EXTRA_KEY_ITEM, type PayItemType } from "./constants";
+import { EXTRA_KEYS, type ItemLine, type LineInput } from "./calculate";
+import { EXTRA_KEY_ITEM, ITEMIZED_TYPES, type ItemizedType, type PayItemType } from "./constants";
 import { formatPesos, parseMoney } from "./money";
 
 // Run items: what a Preparer types for one pay line in one run, and how those values become calculator input. Pure.
 // The calculator has no input guards, so every value is checked here: whole minutes, day hundredths and non-negative money only.
 
-type Unit = "minutes" | "days" | "hours" | "money" | "allowance";
+type Unit = "minutes" | "days" | "hours" | "money";
 
 const UNIT: Record<PayItemType, Unit> = {
   absence_days: "days",
+  sick_leave_days: "days",
+  bereavement_days: "days",
+  pto_days: "days",
   late_minutes: "minutes",
   partial_days: "days",
   partial_minutes: "minutes",
   extra_regular: "minutes",
-  extra_holiday: "minutes",
   extra_rest_day: "minutes",
   extra_rest_day_over_8: "minutes",
   holiday: "minutes",
-  peso_allowance: "allowance",
-  dollar_allowance: "allowance",
+  allowance: "money",
+  reimbursement: "money",
+  bonus: "money",
   adjustment: "money",
   loan: "money",
   other_deduction: "money",
@@ -36,7 +39,6 @@ export const ITEM_UNIT_HINTS: Record<Unit, string> = {
   days: "Days, like 1 or 0.5.",
   hours: "Hours, like 86 or 86.5.",
   money: "An amount like 1,250.50.",
-  allowance: "An amount like 1,250.50. Enter 0 to pay none this run.",
 };
 
 /** A typed value in the item's smallest unit (minutes, hundredths of a day or hour, centavos or cents), or null when it isn't clearly valid. */
@@ -59,8 +61,6 @@ export function parseItemValue(type: PayItemType, raw: string): bigint | null {
       const n = parseMoney(text);
       return n !== null && n > 0n ? n : null;
     }
-    case "allowance":
-      return parseMoney(text);
   }
 }
 
@@ -81,29 +81,30 @@ export function formatItemValue(type: PayItemType, value: bigint): string {
   }
 }
 
-/** The dollar-to-peso rate typed as "58.50" (up to four decimals), as the run stores it: the rate times 10,000. Null when it isn't clearly one. */
-export function parseUsdRate(raw: string): number | null {
-  const match = /^(\d{1,4})(?:\.(\d{1,4}))?$/.exec(raw.trim());
-  if (!match) return null;
-  const e4 = Number(match[1]) * 10_000 + Number((match[2] ?? "").padEnd(4, "0"));
-  return e4 > 0 ? e4 : null;
+/** The longest name an itemized line may have. */
+export const MAX_ITEM_LABEL = 60;
+
+/** A typed line name: one line of plain text, or null when it is empty or too long. */
+export function cleanItemLabel(raw: string): string | null {
+  const text = raw.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  return text.length >= 1 && text.length <= MAX_ITEM_LABEL ? text : null;
 }
 
-/** 585000 as "58.50" (two decimals at least). */
-export function formatUsdRate(e4: number): string {
-  const whole = Math.floor(e4 / 10_000);
-  let frac = String(e4 % 10_000).padStart(4, "0");
-  while (frac.length > 2 && frac.endsWith("0")) frac = frac.slice(0, -1);
-  return `${whole}.${frac}`;
-}
+export type LineRate = { monthlyCentavos: bigint };
 
-export type LineRate = { monthlyCentavos: bigint; pesoAllowanceCentavos: bigint; dollarAllowanceCents: bigint };
+export type ItemizedLines = Record<ItemizedType, ItemLine[]>;
+export const noItemizedLines = (): ItemizedLines => Object.fromEntries(ITEMIZED_TYPES.map((t) => [t, []])) as unknown as ItemizedLines;
 
 /**
- * Calculator input for one line: the line's own rate and allowances, then the confirmed items (newest per type). An allowance item
- * replaces the line's own allowance for this run. Client hours are reference only and are returned beside the input, never inside it.
+ * Calculator input for one line: the line's own rate, then the confirmed items (newest per type) and the itemized lines (each named
+ * line is its own item). Client hours are reference only and are returned beside the input, never inside it.
  */
-export function buildLineInput(rate: LineRate, hoursPerDay: number, items: ReadonlyMap<PayItemType, bigint>): { input: LineInput; clientHoursHundredths: bigint } {
+export function buildLineInput(
+  rate: LineRate,
+  hoursPerDay: number,
+  items: ReadonlyMap<PayItemType, bigint>,
+  itemized: ItemizedLines = noItemizedLines(),
+): { input: LineInput; clientHoursHundredths: bigint } {
   const get = (t: PayItemType) => items.get(t);
   const minutes = (t: PayItemType) => Number(get(t) ?? 0n);
 
@@ -118,11 +119,15 @@ export function buildLineInput(rate: LineRate, hoursPerDay: number, items: Reado
       hoursPerDay,
       partial: partialDays > 0 || partialMinutes > 0 ? { dayHundredths: partialDays, minutes: partialMinutes } : null,
       absenceDayHundredths: minutes("absence_days"),
+      sickLeaveDayHundredths: minutes("sick_leave_days"),
+      bereavementDayHundredths: minutes("bereavement_days"),
+      ptoDayHundredths: minutes("pto_days"),
       lateMinutes: minutes("late_minutes"),
       extra,
-      pesoAllowance: get("peso_allowance") ?? rate.pesoAllowanceCentavos,
-      dollarAllowanceCents: get("dollar_allowance") ?? rate.dollarAllowanceCents,
-      adjustment: get("adjustment") ?? 0n,
+      allowances: itemized.allowance,
+      reimbursements: itemized.reimbursement,
+      bonuses: itemized.bonus,
+      adjustments: itemized.adjustment,
       loan: get("loan") ?? 0n,
       otherDeductions: get("other_deduction") ?? 0n,
     },

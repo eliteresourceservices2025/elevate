@@ -53,8 +53,6 @@ export async function remitlyList(
   const { run } = data;
   if (run.status !== "approved" && run.status !== "paid")
     throw new ActionFailure("The Remitly list is available once the run is approved.");
-  if (run.usdRateE4 === null)
-    throw new ActionFailure("Set the dollar rate on this run before downloading the Remitly list.");
 
   const lines = data.rows.map((r) => {
     const payload = data.payloads.get(r.runLine.id);
@@ -71,10 +69,10 @@ export async function remitlyList(
   });
   if (lines.some((l) => l.net < 0n))
     throw new ActionFailure("A line on this run has negative pay, so the list can't be built.");
-  const built = buildRemitlyRows(lines, run.usdRateE4);
+  const built = buildRemitlyRows(lines);
   const csv = toCsv(
-    ["Person", "Alias", "Pesos", "Dollars"],
-    built.map((r) => [r.name, r.aliases, r.pesos, r.dollars]),
+    ["Person", "Alias", "Pesos"],
+    built.map((r) => [r.name, r.aliases, r.pesos]),
   );
 
   await writeAudit(
@@ -96,7 +94,7 @@ export async function remitlyList(
 }
 
 /**
- * Tells each person on a run who has a sign-in account that their payslip is ready: one notice per person (a two-line person gets one),
+ * Tells each person on a run who has a sign-in account that their contractor payment statement is ready: one notice per person (a two-line person gets one),
  * a fixed sentence and a link, never an amount, a period or anyone else's name. A person with no account is simply skipped. Runs inside
  * the transaction that makes the run paid.
  */
@@ -199,7 +197,7 @@ export async function recordPayment(
         runId: v.runId,
         detail: { people: people.length },
       });
-      // The payslips carry whoever signs payslips today, kept with the run so they never change afterwards.
+      // The statements carry whoever signs them today, kept with the run so they never change afterwards.
       await freezeRunSignatory(tx, v.runId, payrollToday());
       await notifyPayslipsReady(tx, v.runId);
       runPaid = true;

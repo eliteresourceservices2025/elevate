@@ -31,7 +31,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ run
     return new Response(Buffer.from(pdf), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="payslip-${slip.periodStart}-to-${slip.periodEnd}.pdf"`,
+        "Content-Disposition": `inline; filename="contractor-payment-statement-${slip.periodStart}-to-${slip.periodEnd}.pdf"`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "SAMEORIGIN",

@@ -1,6 +1,4 @@
-import { divRoundHalfUp } from "./money";
-
-// The Remitly list, pure. One row per person; no bank or account field exists here on purpose. Money is bigint centavos and cents.
+// The Remitly list, pure. One row per person; no bank or account field exists here on purpose. Money is bigint centavos; everything is in pesos (Remitly applies its own rate).
 
 export type RemitlyLine = { employeeId: string; name: string; alias: string | null; net: bigint };
 export type RemitlyRow = {
@@ -8,7 +6,6 @@ export type RemitlyRow = {
   name: string;
   aliases: string;
   pesos: string;
-  dollars: string;
 };
 
 /** The name shown for a person: preferred name if set, else first name, then last name. */
@@ -33,12 +30,9 @@ function plain(hundredths: bigint): string {
 }
 
 /**
- * Sums each person's lines into one row. Dollars = pesos / the run's dollar rate (`usdRateE4`, 58.50 = 585000), rounded half up to the
- * cent from the person's total (not line by line). Rows are ordered by name, then id.
+ * Sums each person's lines (total payable compensation) into one row of pesos. Rows are ordered by name, then id.
  */
-export function buildRemitlyRows(lines: RemitlyLine[], usdRateE4: number | null): RemitlyRow[] {
-  if (usdRateE4 === null || !Number.isInteger(usdRateE4) || usdRateE4 <= 0)
-    throw new Error("A dollar rate is needed for the Remitly list.");
+export function buildRemitlyRows(lines: RemitlyLine[]): RemitlyRow[] {
   const byPerson = new Map<string, { name: string; aliases: (string | null)[]; total: bigint }>();
   for (const l of lines) {
     const p = byPerson.get(l.employeeId) ?? { name: l.name, aliases: [], total: 0n };
@@ -55,7 +49,5 @@ export function buildRemitlyRows(lines: RemitlyLine[], usdRateE4: number | null)
       name: p.name,
       aliases: joinAliases(p.aliases),
       pesos: plain(p.total),
-      // centavos / 100 / (rate / 10,000) * 100 cents = centavos * 10,000 / rate
-      dollars: plain(divRoundHalfUp(p.total * 10_000n, BigInt(usdRateE4))),
     }));
 }

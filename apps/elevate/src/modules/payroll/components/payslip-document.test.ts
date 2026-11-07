@@ -1,32 +1,35 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { calculateLine, type LineInput, type SettingsSnapshot } from "../calculate";
+import { calculateLine, HOLIDAY_BP, type LineInput, type SettingsSnapshot } from "../calculate";
 import { formatPesos } from "../money";
 import { payslipView, type PayslipInput } from "../payslip";
 import { PayslipDocument } from "./payslip-document";
 
-// The payslip page draws from the same view as the PDF. Invented person and figures.
-const settings: SettingsSnapshot = { cutoffDivisor: 11, changeWarnBp: 1000, multipliersBp: { regular: 12500, holiday: null, restDay: null, restDayOver8: null, holidayPay: null } };
+// The Contractor Payment Statement page draws from the same view as the PDF. Invented person and figures.
+const settings: SettingsSnapshot = { cutoffDivisor: 11, changeWarnBp: 1000, multipliersBp: { regular: 12500, restDay: null, restDayOver8: null, holiday: HOLIDAY_BP } };
 const input: LineInput = {
   monthlyCentavos: 2_200_000n,
   hoursPerDay: 8,
   partial: null,
   absenceDayHundredths: 0,
+  sickLeaveDayHundredths: 0,
+  bereavementDayHundredths: 0,
+  ptoDayHundredths: 0,
   lateMinutes: 0,
-  extra: { regular: 120, holiday: 0, restDay: 0, restDayOver8: 0, holidayPay: 0 },
-  pesoAllowance: 0n,
-  dollarAllowanceCents: 0n,
-  adjustment: 0n,
+  extra: { regular: 120, restDay: 0, restDayOver8: 0, holiday: 0 },
+  allowances: [],
+  reimbursements: [],
+  bonuses: [],
+  adjustments: [],
   loan: 0n,
   otherDeductions: 0n,
 };
-const result = calculateLine(input, settings, 585_000);
+const result = calculateLine(input, settings);
 const slip = (over: Partial<PayslipInput> = {}): PayslipInput => ({
   name: "Liza Testreyes",
   periodStart: "2029-01-01",
   periodEnd: "2029-01-15",
-  usdRateE4: 585_000,
   lines: [{ alias: null, input, result }],
   paidOn: "2029-01-16",
   payslipNumber: "PS-TEST0001-ABCD",
@@ -40,7 +43,7 @@ const html = (over: Partial<PayslipInput> = {}) => renderToStaticMarkup(createEl
 describe("PayslipDocument", () => {
   it("shows the person, the period, the paid date, the figures and the net pay", () => {
     const out = html();
-    for (const text of ["Liza Testreyes", "2029-01-01 to 2029-01-15", "2029-01-16", "Remitly", "PS-TEST0001-ABCD", "Gross pay", "Net pay", "2 h at 125%"]) expect(out).toContain(text);
+    for (const text of ["Liza Testreyes", "2029-01-01 to 2029-01-15", "2029-01-16", "Remitly", "PS-TEST0001-ABCD", "Gross pay", "Total payable compensation", "2 h at 125%"]) expect(out).toContain(text);
     expect(out).toContain(formatPesos(result.net));
   });
 
@@ -68,6 +71,6 @@ describe("PayslipDocument", () => {
     const out = html({ lines: [{ alias: "Front desk", input, result }, { alias: "Billing", input, result }] });
     expect(out).toContain("Line: Front desk");
     expect(out).toContain("Line: Billing");
-    expect(out).toContain("Total net pay");
+    expect(out).toContain("Total payable compensation, all lines");
   });
 });

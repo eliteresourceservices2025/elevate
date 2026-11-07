@@ -5,7 +5,7 @@ import { LOGO_ASPECT, LOGO_PNG_DATA_URI } from "@/modules/signing/brand-logo";
 import { PAYSLIP_LABELS as L } from "./constants";
 import type { PayslipLineView, PayslipRowView, PayslipView } from "./payslip";
 
-// The payslip as a PDF (A4), drawn from the same payslipView as the page. Standard Helvetica (Latin-1 only: other characters become "?"),
+// The Contractor Payment Statement as a PDF (A4), drawn from the same payslipView as the page. Standard Helvetica (Latin-1 only: other characters become "?"),
 // so a payslip never fails to draw. The signature picture is a JPEG kept with the run.
 
 const PURPLE = "#6C1ABA";
@@ -83,17 +83,31 @@ function Line({ line }: { line: PayslipLineView }) {
       {line.heading ? <Text style={styles.lineHeading}>{latin(line.heading)}</Text> : null}
       <Head />
       <Rows rows={line.earnings} />
+      {line.leave.length > 0 ? (
+        <View>
+          <Text style={styles.sectionTitle}>{L.leaveTitle}</Text>
+          <Rows rows={line.leave} />
+        </View>
+      ) : null}
       <View style={styles.grossRow} wrap={false}>
         <Text style={[styles.colLabel, styles.bold]}>{L.gross}</Text>
         <Text style={styles.colDetail} />
         <Text style={[styles.colAmount, styles.bold]}>{line.gross}</Text>
       </View>
-      {line.additions.length > 0 ? (
-        <View>
-          <Text style={styles.sectionTitle}>{L.additions}</Text>
-          <Rows rows={line.additions} />
-        </View>
-      ) : null}
+      {(
+        [
+          [L.reimbursements, line.reimbursements],
+          [L.bonuses, line.bonuses],
+          [L.adjustments, line.adjustments],
+        ] as const
+      ).map(([title, rows]) =>
+        rows.length > 0 ? (
+          <View key={title}>
+            <Text style={styles.sectionTitle}>{title}</Text>
+            <Rows rows={rows} />
+          </View>
+        ) : null,
+      )}
       {line.deductions.length > 0 ? (
         <View>
           <Text style={styles.sectionTitle}>{L.deductions}</Text>

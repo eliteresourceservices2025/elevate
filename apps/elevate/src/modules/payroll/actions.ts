@@ -11,12 +11,13 @@ import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { clients, employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
+import { HOLIDAY_BP } from "./calculate";
 import { logChange } from "./changes";
 import { lineLastDay } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, assertNotOwnEmployee, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
-import { cancelRun, confirmLine, createRun, dismissItem, saveItem, setUsdRate } from "./runs";
+import { cancelRun, confirmLine, createRun, dismissItem, saveItem } from "./runs";
 import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import { approve, sendBack, submit } from "./approval";
 import { recordPayment, remitlyList } from "./payments";
@@ -37,7 +38,6 @@ import {
   endPayLineSchema,
   savePayItemSchema,
   savePaySettingsSchema,
-  setRunUsdRateSchema,
   updatePayLineSchema,
 } from "./validators";
 
@@ -76,17 +76,12 @@ async function checkPersonAndClient(tx: Tx, employeeId: string, clientId: string
   return null;
 }
 
-const amountsOf = (v: { monthly: string; pesoAllowance: string; dollarAllowance: string }): LineAmounts => ({
-  monthlyCentavos: parseMoney(v.monthly) ?? 0n,
-  pesoAllowanceCentavos: parseMoney(v.pesoAllowance) ?? 0n,
-  dollarAllowanceCents: parseMoney(v.dollarAllowance) ?? 0n,
-});
+const amountsOf = (v: { monthly: string }): LineAmounts => ({ monthlyCentavos: parseMoney(v.monthly) ?? 0n });
 
 /** What the change log keeps about a line version: the figures (encrypted with the log row) and the non-money fields. */
-const detailOf = (row: Pick<LineRow, "hoursPerDay" | "fte" | "paymentMethod" | "effectiveFrom" | "endsOn" | "alias" | "clientId">, amounts: LineAmounts) => ({
+const detailOf = (row: Pick<LineRow, "hoursPerDay" | "paymentMethod" | "effectiveFrom" | "endsOn" | "alias" | "clientId">, amounts: LineAmounts) => ({
   ...amountsToJson(amounts),
   hoursPerDay: row.hoursPerDay,
-  fte: row.fte,
   paymentMethod: row.paymentMethod,
   effectiveFrom: row.effectiveFrom,
   endsOn: row.endsOn,
@@ -120,7 +115,6 @@ export async function createPayLine(input: unknown): Promise<ActionResult<{ line
         alias: v.alias ?? null,
         hoursPerDay: v.hoursPerDay,
         paymentMethod: v.paymentMethod,
-        fte: v.fte,
         endsOn: v.endsOn ?? null,
         effectiveFrom: v.effectiveFrom,
         amountsEnc: encryptLineAmounts(id, amounts),
@@ -170,7 +164,6 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
         alias: v.alias ?? null,
         hoursPerDay: v.hoursPerDay,
         paymentMethod: v.paymentMethod,
-        fte: v.fte,
         endsOn: v.endsOn ?? null,
         effectiveFrom: v.effectiveFrom,
         amountsEnc: encryptLineAmounts(id, amounts),
@@ -225,7 +218,6 @@ export async function endPayLine(input: unknown): Promise<ActionResult<{ lineKey
         alias: latest.alias,
         hoursPerDay: latest.hoursPerDay,
         paymentMethod: latest.paymentMethod,
-        fte: latest.fte,
         endsOn,
         effectiveFrom: latest.effectiveFrom,
         amountsEnc: encryptLineAmounts(id, amounts),
@@ -342,22 +334,6 @@ export async function assignSuggestion(input: unknown): Promise<ActionResult> {
   });
 }
 
-/** The dollar rate for the run; blank clears it. */
-export async function setRunUsdRate(input: unknown): Promise<ActionResult> {
-  const actor = await requireUser();
-
-  return runAction(async () => {
-    await authorize(actor, "payroll.prepare");
-
-    const parsed = setRunUsdRateSchema.safeParse(input);
-    if (!parsed.success) return fail(BAD_REQUEST);
-
-    await db.transaction((tx) => setUsdRate(tx, actor, parsed.data));
-    refreshedRun(parsed.data.runId);
-    return { ok: true, data: undefined } as const;
-  });
-}
-
 /** Cancels a draft run (for example when pay lines changed after it was built). The run stays on record and its period is free again. */
 export async function cancelPayRun(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
@@ -442,7 +418,7 @@ export async function approveRun(input: unknown): Promise<ActionResult> {
   });
 }
 
-/** The Remitly list (person, alias, pesos, dollars; never bank details) for an approved run. Audited and rate limited. */
+/** The Remitly list (person, alias, pesos; never bank details) for an approved run. Audited and rate limited. */
 export async function exportRemitlyList(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number }>> {
   const actor = await requireUser();
 
@@ -494,16 +470,14 @@ export async function savePaySettings(input: unknown): Promise<ActionResult> {
       const next = {
         cutoffDivisor: v.cutoffDivisor,
         changeWarnBp: v.changeWarnPercent * 100,
-        multipliersBp: { regular: v.extraRegular, holiday: v.extraHoliday, restDay: v.extraRestDay, restDayOver8: v.extraRestDayOver8, holidayPay: v.holiday },
+        multipliersBp: { regular: v.extraRegular, restDay: v.extraRestDay, restDayOver8: v.extraRestDayOver8, holiday: HOLIDAY_BP },
       };
       await tx.insert(paySettings).values({
         effectiveFrom: v.effectiveFrom,
         cutoffDivisor: next.cutoffDivisor,
         extraRegularBp: v.extraRegular,
-        extraHolidayBp: v.extraHoliday,
         extraRestDayBp: v.extraRestDay,
         extraRestDayOver8Bp: v.extraRestDayOver8,
-        holidayBp: v.holiday,
         changeWarnBp: next.changeWarnBp,
         createdBy: actor.id,
       });

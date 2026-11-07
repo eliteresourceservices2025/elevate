@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, date, index, integer, jsonb, numeric, pgSchema, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, index, integer, jsonb, pgSchema, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
 import { clients, employees } from "@/modules/people/schema";
 
@@ -20,12 +20,10 @@ export const paySettings = payroll
       id: uuid("id").primaryKey().defaultRandom(),
       effectiveFrom: date("effective_from").notNull(),
       cutoffDivisor: smallint("cutoff_divisor").notNull(),
-      /** Basis points: 12500 = 1.25x. Null until counsel/owner supplies the rate. */
+      /** Overtime (OT) rates in basis points: 12500 = 1.25x. Null until counsel/owner supplies the rate. Holiday pay is always 1 to 1 and is not a setting. */
       extraRegularBp: integer("extra_regular_bp"),
-      extraHolidayBp: integer("extra_holiday_bp"),
       extraRestDayBp: integer("extra_rest_day_bp"),
       extraRestDayOver8Bp: integer("extra_rest_day_over_8_bp"),
-      holidayBp: integer("holiday_bp"),
       changeWarnBp: integer("change_warn_bp").notNull(),
       createdBy: uuid("created_by").references(() => users.id),
       createdAt: createdAt(),
@@ -34,7 +32,7 @@ export const paySettings = payroll
   )
   .enableRLS();
 
-/** Append-only. A new version of a line shares the `line_key`; `amounts_enc` holds { monthlyCentavos, pesoAllowanceCentavos, dollarAllowanceCents } as strings. */
+/** Append-only. A new version of a line shares the `line_key`; `amounts_enc` holds { monthlyCentavos } as a string (pesos only). */
 export const payLines = payroll
   .table(
     "pay_lines",
@@ -48,7 +46,6 @@ export const payLines = payroll
       alias: text("alias"),
       hoursPerDay: smallint("hours_per_day").notNull(),
       paymentMethod: text("payment_method").notNull().default("remitly"),
-      fte: numeric("fte", { precision: 3, scale: 2 }).notNull(),
       endsOn: date("ends_on"),
       effectiveFrom: date("effective_from").notNull(),
       amountsEnc: text("amounts_enc").notNull(),
@@ -62,7 +59,6 @@ export const payLines = payroll
       index("pay_lines_employee_idx").on(t.employeeId, t.effectiveFrom),
       index("pay_lines_key_idx").on(t.lineKey, t.effectiveFrom),
       check("pay_lines_hours_chk", sql`${t.hoursPerDay} between 1 and 12`),
-      check("pay_lines_fte_chk", sql`${t.fte} >= 0`),
       check("pay_lines_ends_chk", sql`${t.endsOn} is null or ${t.endsOn} >= ${t.effectiveFrom}`),
     ],
   )
@@ -77,8 +73,6 @@ export const payRuns = payroll
       periodStart: date("period_start").notNull(),
       periodEnd: date("period_end").notNull(),
       status: text("status").notNull().default("draft"),
-      /** Dollar-to-peso rate times 10,000 (58.50 = 585000). */
-      usdRateE4: integer("usd_rate_e4"),
       settingsSnapshot: jsonb("settings_snapshot").notNull(),
       createdBy: uuid("created_by")
         .notNull()
@@ -90,7 +84,6 @@ export const payRuns = payroll
     (t) => [
       uniqueIndex("pay_runs_period_idx").on(t.periodStart, t.periodEnd).where(sql`${t.status} <> 'cancelled'`),
       check("pay_runs_status_chk", sql`${t.status} in ('draft','in_review','approved','paid','cancelled')`),
-      check("pay_runs_rate_chk", sql`${t.usdRateE4} is null or ${t.usdRateE4} > 0`),
       check("pay_runs_period_chk", sql`${t.periodEnd} >= ${t.periodStart}`),
     ],
   )
@@ -136,6 +129,8 @@ export const payRunItems = payroll
         .references(() => employees.id),
       runLineId: uuid("run_line_id").references(() => payRunLines.id),
       type: text("type").notNull(),
+      /** Names one itemized line (an allowance, reimbursement, bonus or adjustment); null for every other type, which has one value per line. */
+      itemKey: uuid("item_key"),
       state: text("state").notNull(),
       valueEnc: text("value_enc").notNull(),
       enteredBy: uuid("entered_by")

@@ -68,7 +68,7 @@ export async function touchedBy(executor: Executor, runId: string): Promise<stri
 
 /**
  * The hash an approval is given against, from data read by `readRun`; null when anything on the run can't be read (such a run can't be
- * approved). It covers every line's decrypted figures, inputs, items and confirmation, the dollar rate, the settings snapshot, the full
+ * approved). It covers every line's decrypted figures, inputs, items and confirmation, the settings snapshot, the full
  * item history and the latest submission, so any change, and any send-back and resubmission, voids a hash handed out earlier.
  */
 export async function hashOf(executor: Executor, data: RunData): Promise<string | null> {
@@ -105,7 +105,7 @@ export async function hashOf(executor: Executor, data: RunData): Promise<string 
       submission: submission?.id ?? null,
     },
   });
-  return runHash(lines, data.run.usdRateE4);
+  return runHash(lines);
 }
 
 /** The approval hash of a run as it is now; null when there is no such run or something on it can't be read. */

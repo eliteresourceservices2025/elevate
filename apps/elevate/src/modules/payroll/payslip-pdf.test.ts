@@ -19,13 +19,13 @@ vi.mock("@react-pdf/renderer", async (importOriginal) => {
 const { renderPayslipPdf } = await import("./payslip-pdf");
 
 const view = (imageBase64: string | null): PayslipView => ({
-  title: "Payslip",
+  title: "Contractor Payment Statement",
   number: "PS-TEST0001-ABCD",
   name: "Liza Testreyes",
   period: "2029-01-01 to 2029-01-15",
   paidOn: "2029-01-16",
   paidBy: "Remitly",
-  lines: [{ heading: null, earnings: [{ label: "Base pay for the period", detail: "", amount: "11,000.00" }], gross: "11,000.00", additions: [], deductions: [], net: "11,000.00" }],
+  lines: [{ heading: null, earnings: [{ label: "Base pay for the period", detail: "", amount: "11,000.00" }], leave: [], gross: "11,000.00", reimbursements: [], bonuses: [], adjustments: [], deductions: [], net: "11,000.00" }],
   total: null,
   signature: { name: "Carmen Dela Rosa", title: "Human Resources Director", signedOn: "2029-01-16", imageBase64 },
 });

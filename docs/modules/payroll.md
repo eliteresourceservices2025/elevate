@@ -2,6 +2,16 @@
 
 Design: `docs/superpowers/specs/2026-11-04-payroll-design.md`. Plan: `docs/superpowers/plans/`. Real names and pay figures never enter the repo, tests or a development database. Code: `apps/elevate/src/modules/payroll/`. Every label comes from `constants.ts`.
 
+## Revision of 2026-11-06 (executives and HR; read first, it overrides anything older below)
+
+- **Pesos only.** No dollar rate (`pay_runs.usd_rate_e4` dropped, `setRunUsdRate` and the `usd_rate_changed` history action removed), no dollar allowance, no dollars column in the Remitly list (`Person,Alias,Pesos`; the executive follows Remitly's own rate). **No FTE** (`pay_lines.fte` dropped).
+- **Overtime (OT)** is the payroll wording (not "extra hours"); there is **no holiday overtime**. Rates in settings: regular, rest day, rest day past 8 hours (columns `extra_holiday_bp` and `holiday_bp` dropped). **Holiday pay is always one to one** (`HOLIDAY_BP` = 10000, 100% of the hourly rate, not a setting); approved extra minutes worked on a holiday are suggested as holiday pay.
+- **Leave on the run:** `sick_leave_days` (SL, **unpaid**, deducted like an absence), `bereavement_days` and `pto_days` (**paid**, shown on the statement, change no amount). Time off holds none of the three (only prize days), so they are typed, never suggested. Counsel should confirm the "PTO" wording for 1099 contractors.
+- **Itemized money:** `allowance`, `reimbursement`, `bonus` and `adjustment` are any number of **named lines** per pay line and run (a name of 1 to 60 plain characters plus an amount). `pay_run_items.item_key` identifies one line (new key = new line; the same key replaces it; dismissing keeps the key; `itemKey()` in `runs.ts` keys by line, type and item key). The name travels in the encrypted item value (`ItemValue.label`), never in audit rows. Pay lines no longer carry an allowance; allowances are typed per run.
+- **Formula:** gross = cutoff pay - absences - sick leave - late + OT + holiday pay + allowances; **total payable compensation** (still `net` in code) = gross + reimbursements + bonuses + adjustments - loan - other deductions.
+- **Wording:** the payslip is the **Contractor Payment Statement** (menu "My payment statements", PDF `contractor-payment-statement-<period>.pdf`, number prefix `PS-`); "Net" is **Total payable compensation**. The slugs, routes (`/my-pay`) and function names keep the old words.
+- Frozen lines written before this revision are read through `upgradePayload` (service.ts): the old peso allowance and adjustment become one named line each, the dollar part is not shown, the stored total is kept.
+
 ## Rules (read first)
 
 - **No role grants payroll**, not even Super Admin. Access is `core.users.payroll_access` (`preparer`, `approver`, `viewer` or empty), chosen only by a Super Admin (`settings.set_payroll_access`, Settings > Payroll access), read fresh on every request (a removal or an archived account takes effect on the next call). **Deactivating an account clears its level** (`deactivateAccount`: audited as `user.payroll_access.update` with the level only, and an `access_changed` history row), so reactivating it never quietly restores payroll access; a Super Admin chooses again. The notice to a person whose access was removed links to `/dashboard` (they can no longer open `/payroll`).
@@ -9,7 +19,7 @@ Design: `docs/superpowers/specs/2026-11-04-payroll-design.md`. Plan: `docs/super
 - **Levels:** Preparer (`payroll.prepare`, `manage_rates`, `mark_paid`, `export`), Approver (`payroll.approve`), Viewer (nothing but reading). All three read runs, rates, settings and the change history (`payroll.view`, `payroll.view_history`). `payroll.view_own` is every role, own payslips only. A person has one level at a time. The Settings page warns when a level has fewer than two people.
 - **Only the payroll module computes pay.** It never computes tax or government contributions and never sends money (Remitly stays manual). The hours export computes nothing.
 - **Money** is `bigint` centavos (dollars in cents), never floats; amounts cross JSON as strings. Pay amounts live in the payroll tables, always encrypted (`src/lib/crypto.ts`, context bound to the row). Audit rows, notifications, email, logs and Sentry carry ids and counts, never an amount, a reference or a reason.
-- Copy says "extra hours", never "overtime", and never "PTO". Workers are 1099 contractors: letters and copy avoid "employee" wording (counsel to confirm, see Privacy and 1099).
+- Payroll copy says "overtime (OT)" and "PTO" since the 2026-11-06 revision (the schedules and extra-hours request screens keep "extra hours"). Workers are 1099 contractors: letters and copy avoid "employee" wording (counsel to confirm, see Privacy and 1099).
 - Real pay data must not enter ELEVATE until the privacy notice (with the Pay wording) is published.
 - The old `payRate` field in `core.employee_sensitive` is read-only reference until the parallel run ends, then removed from profiles in a separate small change. HR Admins and Super Admins who are not chosen for payroll can still see it until then.
 
@@ -35,8 +45,8 @@ A person is on payroll when a `pay_lines` row is in force in the period; there i
 ```
 cutoff = monthly / 2        daily = monthly / (2 x divisor)        hourly = daily / hours per day
 base   = cutoff, or days x daily + hours x hourly for a partial cutoff
-gross  = base - absences - late/undertime + extra hours (4 rates) + holiday pay + peso allowance
-net    = gross + dollar allowance x run's dollar rate + adjustment - loan - other deductions
+gross  = base - absences - sick leave - late/undertime + OT (3 rates) + holiday pay (1:1) + allowances
+total  = gross + reimbursements + bonuses + adjustments - loan - other deductions   (net in code)
 ```
 
 Rates stay unrounded; each result is one exact fraction rounded once, half up, to the centavo (`divRoundHalfUp`). Totals add rounded line results. Issues come back as codes: `missing_multiplier:<key>` (minutes entered, rate not set), `missing_usd_rate` (a dollar allowance, no run rate; the checks show the run-level check instead, so it is never listed twice), `partial_exceeds_cutoff` (a partial cutoff whose base is above the full cutoff salary; exactly equal is fine), `negative_net`. Settings are snapshotted on the run, so a later change never alters an approved run.

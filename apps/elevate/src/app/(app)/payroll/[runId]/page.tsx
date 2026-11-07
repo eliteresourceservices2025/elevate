@@ -10,7 +10,7 @@ import { pageInfo, parsePaging } from "@/lib/pagination";
 import { RUN_STATUS_LABELS } from "@/modules/payroll/constants";
 import { ApprovalBar } from "@/modules/payroll/components/approval-bar";
 import { RunChecks } from "@/modules/payroll/components/run-checks";
-import { CancelRunDialog, UsdRateDialog } from "@/modules/payroll/components/run-dialogs";
+import { CancelRunDialog } from "@/modules/payroll/components/run-dialogs";
 import { RefreshSuggestionsButton, UnassignedSuggestions } from "@/modules/payroll/components/suggestion-controls";
 import { RunTotals } from "@/modules/payroll/components/run-totals";
 import { Worksheet } from "@/modules/payroll/components/worksheet";
@@ -51,7 +51,6 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
           sheet.canPrepare && run.status === "draft" ? (
             <>
               <RefreshSuggestionsButton runId={run.id} />
-              <UsdRateDialog runId={run.id} current={run.usdRate} />
               <CancelRunDialog runId={run.id} />
             </>
           ) : undefined

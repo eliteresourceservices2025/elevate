@@ -15,7 +15,7 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine } = await import("@/modules/payroll/actions");
+const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
 const { getWorksheet, getRuns } = await import("@/modules/payroll/queries");
 const { decryptRunLine, encryptItemValue, settingsInForce } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
@@ -40,12 +40,9 @@ async function person(userId: string | null = null) {
 const lineBase = (employeeId: string, over: Record<string, unknown> = {}) => ({
   employeeId,
   hoursPerDay: 8,
-  fte: "1",
   paymentMethod: "remitly",
   effectiveFrom: "2024-12-01",
   monthly: "22,000",
-  pesoAllowance: "1,000",
-  dollarAllowance: "0",
   ...over,
 });
 async function giveLine(who: unknown, employeeId: string, over: Record<string, unknown> = {}) {
@@ -76,8 +73,10 @@ const payloadOf = async (runId: string, employeeId: string, index = 0) => {
   const l = (await runLines(runId, employeeId))[index];
   return decryptRunLine(l.id, l.payload_enc);
 };
-const item = (runId: string, employeeId: string, runLineId: string, type: string, value: string, reason?: string) =>
-  savePayItem({ runId, employeeId, runLineId, type, value, reason });
+// An itemized type (allowance, reimbursement, bonus, adjustment) needs a name; tests that do not care get a plain one.
+const ITEMIZED = ["allowance", "reimbursement", "bonus", "adjustment"];
+const item = (runId: string, employeeId: string, runLineId: string, type: string, value: string, reason?: string, label?: string) =>
+  savePayItem({ runId, employeeId, runLineId, type, value, reason, ...(ITEMIZED.includes(type) ? { label: label ?? "Test line" } : {}) });
 const forPerson = (list: { employeeId: string | null; code: string }[], employeeId: string) => list.filter((c) => c.employeeId === employeeId).map((c) => c.code).sort();
 
 let preparer: Awaited<ReturnType<typeof account>>;
@@ -90,10 +89,8 @@ beforeAll(async () => {
     cutoffDivisor: 11,
     changeWarnPercent: 10,
     extraRegular: "125",
-    extraHoliday: "200",
     extraRestDay: "130",
     extraRestDayOver8: "169",
-    holiday: "100",
     reason: "Test rates",
   });
   expect(saved.ok).toBe(true);
@@ -108,7 +105,7 @@ describe("creating a run", () => {
     await giveLine(preparer, solo);
     await giveLine(preparer, noAccount, { monthly: "30,000" });
     await giveLine(preparer, twoLines, { clientId: clientA.id, alias: "Front desk" });
-    await giveLine(preparer, twoLines, { alias: "Night shift", monthly: "10,000", fte: "0.5" });
+    await giveLine(preparer, twoLines, { alias: "Night shift", monthly: "10,000" });
 
     const p = period(1);
     const runId = await newRun(preparer, p);
@@ -117,11 +114,11 @@ describe("creating a run", () => {
     const two = await runLines(runId, twoLines);
     expect(two.map((l) => l.alias).sort()).toEqual(["Front desk", "Night shift"]);
 
-    // 22,000 / 2 = 11,000 plus the 1,000 allowance.
+    // 22,000 / 2 = 11,000: a pay line has only the monthly rate, nothing else is added.
     const pay = await payloadOf(runId, solo);
     expect(pay.result.cutoff).toBe(1_100_000n);
-    expect(pay.result.gross).toBe(1_200_000n);
-    expect(pay.result.net).toBe(1_200_000n);
+    expect(pay.result.gross).toBe(1_100_000n);
+    expect(pay.result.net).toBe(1_100_000n);
 
     const [run] = await rows<{ status: string; settings_snapshot: unknown }>(sql`select status, settings_snapshot from payroll.pay_runs where id = ${runId}`);
     expect(run.status).toBe("draft");
@@ -202,15 +199,15 @@ describe("items", () => {
 
     current.user = preparer;
     expect(await item(runId, a, la.id, "late_minutes", "60")).toMatchObject({ ok: true });
-    // 22,000 -> daily 1,000 -> hourly 125 -> 60 minutes is 125.00, so net is 12,000.00 - 125.00.
-    expect((await payloadOf(runId, a)).result.net).toBe(1_187_500n);
+    // 22,000 -> daily 1,000 -> hourly 125 -> 60 minutes is 125.00, so net is 11,000.00 - 125.00.
+    expect((await payloadOf(runId, a)).result.net).toBe(1_087_500n);
     expect((await runLines(runId, a))[0].confirmed_by).toBeNull();
     const bAfter = (await runLines(runId, b))[0];
     expect(bAfter.confirmed_by).toBe(checker.id);
     expect(bAfter.payload_enc).toBe(bBefore);
 
     expect(await item(runId, a, la.id, "late_minutes", "90")).toMatchObject({ ok: true });
-    expect((await payloadOf(runId, a)).result.net).toBe(1_181_250n);
+    expect((await payloadOf(runId, a)).result.net).toBe(1_081_250n);
 
     const log = await rows<{ id: string; detail_enc: string }>(
       sql`select id, detail_enc from payroll.pay_change_log where run_id = ${runId} and employee_id = ${a} and action = 'item_saved' order by created_at`,
@@ -220,13 +217,13 @@ describe("items", () => {
     expect(readChangeDetail(log[1])).toMatchObject({ old: { value: "60", state: "confirmed" }, new: { value: "90" } });
     const audit = await rows<Row>(sql`select * from ops.audit_log where actor_user_id = ${preparer.id} and action = 'payroll.item.save' and target_id = ${runId}`);
     expect(audit).toHaveLength(2);
-    expect(JSON.stringify(audit)).not.toMatch(/1187500|11,875|"60"|"90"/);
+    expect(JSON.stringify(audit)).not.toMatch(/1087500|10,875|"60"|"90"/);
   });
 
   it("keeps the lines of a two-line person apart", async () => {
     const emp = await person();
     await giveLine(preparer, emp, { alias: "First" });
-    await giveLine(preparer, emp, { alias: "Second", monthly: "11,000", pesoAllowance: "0" });
+    await giveLine(preparer, emp, { alias: "Second", monthly: "11,000" });
     const runId = await newRun(preparer, period(5));
     const lines = await runLines(runId, emp);
     const first = lines.find((l) => l.alias === "First")!;
@@ -235,7 +232,7 @@ describe("items", () => {
     expect(await item(runId, emp, first.id, "loan", "500", "Cash advance")).toMatchObject({ ok: true });
     const f = decryptRunLine(first.id, (await runLines(runId, emp)).find((l) => l.id === first.id)!.payload_enc);
     const s = decryptRunLine(second.id, (await runLines(runId, emp)).find((l) => l.id === second.id)!.payload_enc);
-    expect(f.result.net).toBe(1_200_000n - 50_000n);
+    expect(f.result.net).toBe(1_100_000n - 50_000n);
     expect(s.result.net).toBe(550_000n);
     expect(s.input.loan).toBe(0n);
   });
@@ -291,7 +288,7 @@ describe("items", () => {
     const [first] = await rows<{ id: string }>(sql`select id from payroll.pay_run_items where run_id = ${runId} and type = 'loan'`);
     expect(await dismissPayItem({ runId, itemId: first.id })).toEqual({ ok: false, error: "Give a reason for removing this amount." });
     expect(await dismissPayItem({ runId, itemId: first.id, reason: "Repaid in cash" })).toMatchObject({ ok: true });
-    expect((await payloadOf(runId, emp)).result.net).toBe(1_200_000n);
+    expect((await payloadOf(runId, emp)).result.net).toBe(1_100_000n);
     expect(await dismissPayItem({ runId, itemId: first.id, reason: "again" })).toEqual({ ok: false, error: "That amount has changed. Reload the page and try again." });
     const all = await rows<{ state: string }>(sql`select state from payroll.pay_run_items where run_id = ${runId} order by created_at`);
     expect(all.map((r) => r.state)).toEqual(["confirmed", "dismissed"]);
@@ -343,39 +340,14 @@ describe("separation of duties and the draft lock", () => {
     await db.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
     const frozen = { ok: false, error: "This run is no longer a draft, so it can't be changed." };
     expect(await item(runId, emp, line.id, "adjustment", "200")).toEqual(frozen);
-    expect(await setRunUsdRate({ runId, rate: "58.50" })).toEqual(frozen);
     expect(await confirmRunLine({ runLineId: line.id })).toEqual(frozen);
     const [it] = await rows<{ id: string }>(sql`select id from payroll.pay_run_items where run_id = ${runId}`);
     expect(await dismissPayItem({ runId, itemId: it.id })).toEqual(frozen);
-    expect((await payloadOf(runId, emp)).input.adjustment).toBe(10_000n);
+    expect((await payloadOf(runId, emp)).input.adjustments).toEqual([{ label: "Test line", amount: 10_000n }]);
   });
 });
 
-describe("the dollar rate and the settings", () => {
-  it("converts the dollar allowance at the run's rate, and a missing rate blocks", async () => {
-    const emp = await person();
-    await giveLine(preparer, emp, { dollarAllowance: "12.50" });
-    const runId = await newRun(preparer, period(11, 1));
-    current.user = preparer;
-    let sheet = (await getWorksheet(runId))!;
-    // Shown once, for the whole run, not again on the line with the dollar allowance.
-    expect(sheet.checks.blocking.filter((c) => c.code === "missing_usd_rate")).toEqual([expect.objectContaining({ employeeId: null, runLineId: null })]);
-    expect(forPerson(sheet.checks.blocking, emp)).toEqual([]);
-
-    expect(await setRunUsdRate({ runId, rate: "58.50" })).toMatchObject({ ok: true });
-    sheet = (await getWorksheet(runId))!;
-    expect(sheet.checks.blocking.map((c) => c.code)).not.toContain("missing_usd_rate");
-    expect(sheet.run.usdRate).toBe("58.50");
-    // 12.50 dollars at 58.50 is 731.25 pesos.
-    expect(sheet.lines.find((l) => l.employeeId === emp)!.figures).toMatchObject({ dollarAllowance: "12.50", dollarAllowancePesos: "731.25", net: "12,731.25" });
-    const log = await rows<{ id: string; detail_enc: string }>(sql`select id, detail_enc from payroll.pay_change_log where run_id = ${runId} and action = 'usd_rate_changed'`);
-    expect(readChangeDetail(log[0])).toEqual({ old: null, new: "58.50" });
-
-    expect(await setRunUsdRate({ runId, rate: "" })).toMatchObject({ ok: true });
-    expect(await setRunUsdRate({ runId, rate: "58" + "x" })).toEqual({ ok: false, error: "Check the request and try again." });
-    expect((await getWorksheet(runId))!.run.usdRate).toBeNull();
-  });
-
+describe("the settings", () => {
   it("blocks an extra-hours item whose rate is not set, using the settings in force for the period", async () => {
     const emp = await person();
     await giveLine(preparer, emp);
@@ -384,7 +356,7 @@ describe("the dollar rate and the settings", () => {
     const [line] = await runLines(early, emp);
     await item(early, emp, line.id, "extra_regular", "120");
     const sheet = (await getWorksheet(early))!;
-    expect(sheet.checks.blocking.filter((c) => c.employeeId === emp)).toEqual([expect.objectContaining({ code: "missing_multiplier", detail: "Extra hours, regular day" })]);
+    expect(sheet.checks.blocking.filter((c) => c.employeeId === emp)).toEqual([expect.objectContaining({ code: "missing_multiplier", detail: "Overtime (OT), regular day" })]);
   });
 
   it("rereads the settings when a draft run changes", async () => {
@@ -399,7 +371,7 @@ describe("the dollar rate and the settings", () => {
     expect(before).toBe(15_625n);
 
     expect(
-      await savePaySettings({ effectiveFrom: "2025-08-20", cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "150", extraHoliday: "200", extraRestDay: "130", extraRestDayOver8: "169", holiday: "100", reason: "Change" }),
+      await savePaySettings({ effectiveFrom: "2025-08-20", cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "150", extraRestDay: "130", extraRestDayOver8: "169", reason: "Change" }),
     ).toMatchObject({ ok: true });
     await item(runId, emp, line.id, "adjustment", "1");
     const [run] = await rows<{ settings_snapshot: { multipliersBp: { regular: number } } }>(sql`select settings_snapshot from payroll.pay_runs where id = ${runId}`);
@@ -413,7 +385,7 @@ describe("the worksheet", () => {
     const viewer = await account("viewer");
     const emp = await person();
     const [client] = await rows<{ id: string; name: string }>(sql`insert into core.clients (name) values (${uniq("Worksheet Client ")}) returning id, name`);
-    await giveLine(preparer, emp, { clientId: client.id, fte: "0.5" });
+    await giveLine(preparer, emp, { clientId: client.id });
     const runId = await newRun(preparer, period(12, 1));
     const [line] = await runLines(runId, emp);
     current.user = preparer;
@@ -430,10 +402,9 @@ describe("the worksheet", () => {
     expect(views).toHaveLength(1);
 
     const mine = first.lines.find((l) => l.employeeId === emp)!;
-    expect(mine.figures).toMatchObject({ gross: "12,000.00", net: "12,100.00", clientHours: "86.5" });
-    expect(mine.fte).toBe("0.50");
+    expect(mine.figures).toMatchObject({ gross: "11,000.00", net: "11,100.00", clientHours: "86.5" });
     const group = first.byClient!.find((c) => c.clientId === client.id)!;
-    expect(group).toEqual({ clientId: client.id, clientName: client.name, lines: 1, fte: "0.50", clientHours: "86.5", net: "12,100.00" });
+    expect(group).toEqual({ clientId: client.id, clientName: client.name, lines: 1, clientHours: "86.5", net: "11,100.00" });
     expect(first.totals).not.toBeNull();
     // The calculator never saw the client hours: net is the same without them.
     expect(first.canPrepare).toBe(false);
@@ -539,19 +510,6 @@ describe("reasons cannot be sidestepped", () => {
     expect(await dismissPayItem({ runId, itemId: confirmed.id })).toEqual({ ok: false, error: "Give a reason for removing this amount." });
     expect(await dismissPayItem({ runId, itemId: confirmed.id, reason: "Client waived it" })).toMatchObject({ ok: true });
   });
-
-  it("setting an allowance below the line's own needs a reason; keeping or raising it does not", async () => {
-    const emp = await person();
-    await giveLine(preparer, emp, { pesoAllowance: "1,000", dollarAllowance: "10", effectiveFrom: "2024-09-16" });
-    const runId = await newRun(preparer, { periodStart: "2024-09-16", periodEnd: "2024-09-30" });
-    const [line] = await runLines(runId, emp);
-    current.user = preparer;
-    expect(await item(runId, emp, line.id, "peso_allowance", "500")).toEqual(needReason);
-    expect(await item(runId, emp, line.id, "dollar_allowance", "0")).toEqual(needReason);
-    expect(await item(runId, emp, line.id, "peso_allowance", "500", "Half month")).toMatchObject({ ok: true });
-    expect(await item(runId, emp, line.id, "peso_allowance", "1,000")).toMatchObject({ ok: true });
-    expect(await item(runId, emp, line.id, "peso_allowance", "1,500")).toMatchObject({ ok: true });
-  });
 });
 
 describe("net pay below zero", () => {
@@ -568,7 +526,7 @@ describe("net pay below zero", () => {
     expect(await item(runId, a, la.id, "loan", "20,000", "Large advance")).toMatchObject({ ok: true });
     expect(await item(runId, b, lb.id, "other_deduction", "15,000.01", "Damaged equipment")).toMatchObject({ ok: true });
     let sheet = (await getWorksheet(runId))!;
-    expect(sheet.lines.find((l) => l.employeeId === a)!.figures!.net).toBe("-8,000.00");
+    expect(sheet.lines.find((l) => l.employeeId === a)!.figures!.net).toBe("-9,000.00");
     expect(forPerson(sheet.checks.blocking, a)).toEqual(["negative_net"]);
     expect(forPerson(sheet.checks.blocking, b)).toEqual(["negative_net"]);
     expect(sheet.checks.blocking.length).toBeGreaterThan(0); // nothing can be sent for review while this stands
@@ -602,7 +560,6 @@ describe("cancelling a draft run", () => {
     expect(await cancelPayRun({ runId, reason: "Again" })).toEqual(frozen);
     current.user = preparer;
     expect(await item(runId, emp, line.id, "adjustment", "100")).toEqual(frozen);
-    expect(await setRunUsdRate({ runId, rate: "58" })).toEqual(frozen);
     expect(await confirmRunLine({ runLineId: line.id })).toEqual(frozen);
 
     const [log] = await rows<{ id: string; detail_enc: string }>(sql`select id, detail_enc from payroll.pay_change_log where run_id = ${runId} and action = 'run_cancelled'`);
@@ -682,5 +639,159 @@ describe("a run whose pay lines changed after it was built", () => {
     expect(await outOfDate(runId)).toBe(true);
     await db.execute(sql`update payroll.pay_runs set status = 'approved' where id = ${runId}`);
     expect(await outOfDate(runId)).toBe(false);
+  });
+});
+
+describe("named lines, leave days and holiday pay", () => {
+  // One run for the first half of December 2024, before any overtime rate exists (the starting settings row has none): holiday pay must
+  // work without a setting. Each test uses its own person on a 22,000 a month line: a cutoff is 11,000.00 and a day is 1,000.00.
+  const DEC = { periodStart: "2024-12-01", periodEnd: "2024-12-15" };
+  let runId: string;
+  const BAD = { ok: false, error: "Check the request and try again." };
+
+  const people = {} as Record<"lines" | "bad" | "sick" | "paid" | "holiday", string>;
+  const lineOf = async (emp: string) => (await runLines(runId, emp))[0];
+  const itemRows = (emp: string, type: string) =>
+    rows<{ id: string; item_key: string | null; state: string }>(
+      sql`select id, item_key, state from payroll.pay_run_items where run_id = ${runId} and employee_id = ${emp} and type = ${type} order by created_at`,
+    );
+
+  beforeAll(async () => {
+    // The people are made before the run, so each has a line on it.
+    for (const key of ["lines", "bad", "sick", "paid", "holiday"] as const) {
+      people[key] = await person();
+      await giveLine(preparer, people[key]);
+    }
+    runId = await newRun(preparer, DEC);
+  });
+
+  it("adds each save as a new named line, replaces one that is saved with its item key, and removes only the line asked for", async () => {
+    const emp = people.lines;
+    const line = await lineOf(emp);
+    current.user = preparer;
+    const save = (over: Record<string, unknown>) => savePayItem({ runId, employeeId: emp, runLineId: line.id, ...over });
+
+    // A pay line made with only the monthly rate (no FTE, no allowance fields) is 11,000.00 for the cutoff.
+    expect((await payloadOf(runId, emp)).result.net).toBe(1_100_000n);
+
+    expect(await save({ type: "allowance", label: "Health allowance", value: "1,000" })).toMatchObject({ ok: true });
+    expect(await save({ type: "allowance", label: "Internet allowance", value: "500" })).toMatchObject({ ok: true });
+    let pay = await payloadOf(runId, emp);
+    expect(pay.input.allowances).toEqual([
+      { label: "Health allowance", amount: 100_000n },
+      { label: "Internet allowance", amount: 50_000n },
+    ]);
+    expect(pay.result.allowances).toBe(150_000n);
+    expect(pay.result.gross).toBe(1_250_000n);
+    expect(pay.result.net).toBe(1_250_000n);
+    const first = await itemRows(emp, "allowance");
+    expect(first).toHaveLength(2);
+    expect(first[0].item_key).toBeTruthy();
+    expect(first[1].item_key).toBeTruthy();
+    expect(first[0].item_key).not.toBe(first[1].item_key);
+
+    // The other itemized kinds add to the total payable compensation but not to gross.
+    expect(await save({ type: "reimbursement", label: "Supplies", value: "250.50" })).toMatchObject({ ok: true });
+    expect(await save({ type: "bonus", label: "Performance bonus", value: "2,000" })).toMatchObject({ ok: true });
+    expect(await save({ type: "adjustment", label: "Correction of an earlier payment", value: "75" })).toMatchObject({ ok: true });
+    pay = await payloadOf(runId, emp);
+    expect(pay.result).toMatchObject({ reimbursements: 25_050n, bonuses: 200_000n, adjustments: 7_500n, gross: 1_250_000n, net: 1_482_550n });
+
+    // Saving with the item key replaces that line: still two allowance lines, the first one's amount changed.
+    const keyOfHealth = first[0].item_key!;
+    expect(await save({ type: "allowance", label: "Health allowance", value: "2,000", itemKey: keyOfHealth })).toMatchObject({ ok: true });
+    pay = await payloadOf(runId, emp);
+    expect(pay.input.allowances).toEqual([
+      { label: "Health allowance", amount: 200_000n },
+      { label: "Internet allowance", amount: 50_000n },
+    ]);
+    expect(pay.result.allowances).toBe(250_000n);
+    expect(new Set((await itemRows(emp, "allowance")).map((r) => r.item_key)).size).toBe(2);
+    // An item key that belongs to no line is refused.
+    expect(await save({ type: "allowance", label: "Ghost", value: "1", itemKey: randomUUID() })).toEqual({ ok: false, error: "That line was not found. Reload the page and try again." });
+
+    // Removing the Internet allowance (by its item id) removes only that line; it keeps its key in the history.
+    const internet = (await itemRows(emp, "allowance")).filter((r) => r.item_key !== keyOfHealth).at(-1)!;
+    expect(await dismissPayItem({ runId, itemId: internet.id })).toMatchObject({ ok: true });
+    pay = await payloadOf(runId, emp);
+    expect(pay.input.allowances).toEqual([{ label: "Health allowance", amount: 200_000n }]);
+    expect(pay.result.allowances).toBe(200_000n);
+    expect(pay.input.reimbursements).toEqual([{ label: "Supplies", amount: 25_050n }]);
+    expect(pay.input.bonuses).toEqual([{ label: "Performance bonus", amount: 200_000n }]);
+    expect(pay.input.adjustments).toEqual([{ label: "Correction of an earlier payment", amount: 7_500n }]);
+    const dismissed = (await itemRows(emp, "allowance")).filter((r) => r.state === "dismissed");
+    expect(dismissed).toHaveLength(1);
+    expect(dismissed[0].item_key).toBe(internet.item_key);
+
+    // The worksheet lists each named line with its name.
+    const sheet = (await getWorksheet(runId))!;
+    const mine = sheet.lines.find((l) => l.employeeId === emp)!;
+    expect(mine.items.filter((i) => i.type === "allowance" && i.state === "confirmed").map((i) => [i.label, i.value])).toEqual([["Health allowance", "2,000.00"]]);
+    expect(mine.figures).toMatchObject({ allowances: "2,000.00", reimbursements: "250.50", bonuses: "2,000.00", adjustments: "75.00", gross: "13,000.00", net: "15,325.50" });
+  });
+
+  it("refuses a name on a type that has none, and an itemized type without a valid name", async () => {
+    const emp = people.bad;
+    const line = await lineOf(emp);
+    current.user = preparer;
+    const count = async () => (await rows<{ n: number }>(sql`select count(*)::int as n from payroll.pay_run_items where run_id = ${runId} and employee_id = ${emp}`))[0].n;
+    const before = await count();
+    const save = (over: Record<string, unknown>) => savePayItem({ runId, employeeId: emp, runLineId: line.id, ...over });
+    expect(await save({ type: "loan", value: "500", reason: "Advance", label: "Cash advance" })).toEqual(BAD);
+    expect(await save({ type: "late_minutes", value: "30", label: "Late" })).toEqual(BAD);
+    expect(await save({ type: "absence_days", value: "1", itemKey: randomUUID() })).toEqual(BAD);
+    expect(await save({ type: "bonus", value: "100" })).toEqual(BAD); // no name
+    expect(await save({ type: "bonus", value: "100", label: "x".repeat(61) })).toEqual(BAD); // too long
+    expect(await count()).toBe(before);
+  });
+
+  it("deducts sick leave days like absences, and leaves bereavement and PTO days as information only", async () => {
+    const emp = people.sick;
+    const line = await lineOf(emp);
+    current.user = preparer;
+    expect(await item(runId, emp, line.id, "sick_leave_days", "1.5")).toMatchObject({ ok: true });
+    let pay = await payloadOf(runId, emp);
+    expect(pay.result.sickLeave).toBe(150_000n);
+    expect(pay.result.absences).toBe(0n);
+    expect(pay.result.gross).toBe(1_100_000n - 150_000n);
+    expect(pay.result.net).toBe(1_100_000n - 150_000n);
+
+    // Absences of the same length take the same amount, in their own figure.
+    expect(await item(runId, emp, line.id, "absence_days", "1.5")).toMatchObject({ ok: true });
+    pay = await payloadOf(runId, emp);
+    expect(pay.result.absences).toBe(pay.result.sickLeave);
+    expect(pay.result.net).toBe(1_100_000n - 300_000n);
+
+    // Paid days change no amount.
+    const paid = people.paid;
+    const paidLine = await lineOf(paid);
+    expect(await item(runId, paid, paidLine.id, "bereavement_days", "2")).toMatchObject({ ok: true });
+    expect(await item(runId, paid, paidLine.id, "pto_days", "0.5")).toMatchObject({ ok: true });
+    const pp = await payloadOf(runId, paid);
+    expect(pp.input.bereavementDayHundredths).toBe(200);
+    expect(pp.input.ptoDayHundredths).toBe(50);
+    expect(pp.result).toMatchObject({ base: 1_100_000n, absences: 0n, sickLeave: 0n, gross: 1_100_000n, net: 1_100_000n });
+    const sheet = (await getWorksheet(runId))!;
+    expect(sheet.lines.find((l) => l.employeeId === paid)!.figures).toMatchObject({ bereavementDays: "2", ptoDays: "0.5", net: "11,000.00" });
+    expect(sheet.lines.find((l) => l.employeeId === emp)!.figures).toMatchObject({ sickLeave: "1,500.00" });
+  });
+
+  it("pays holiday pay one to one with no setting: 480 minutes is exactly one day's pay", async () => {
+    const emp = people.holiday;
+    const line = await lineOf(emp);
+    current.user = preparer;
+    // The December 2024 run is before any overtime rate was set.
+    const [run] = await rows<{ settings_snapshot: { multipliersBp: Record<string, number | null> } }>(sql`select settings_snapshot from payroll.pay_runs where id = ${runId}`);
+    expect(run.settings_snapshot.multipliersBp).toMatchObject({ regular: null, restDay: null, restDayOver8: null, holiday: 10000 });
+    expect(await item(runId, emp, line.id, "holiday", "480")).toMatchObject({ ok: true });
+    const pay = await payloadOf(runId, emp);
+    // 22,000 / 22 = 1,000.00 a day; 8 hours at 100% of 125.00 an hour is the same 1,000.00.
+    expect(pay.result.daily).toBe(100_000n);
+    expect(pay.result.extra.holiday).toBe(pay.result.daily);
+    expect(pay.result.net).toBe(1_100_000n + 100_000n);
+    expect(forPerson((await getWorksheet(runId))!.checks.blocking, emp)).toEqual([]);
+    // Overtime on a regular day, by contrast, still needs its setting.
+    expect(await item(runId, emp, line.id, "extra_regular", "60")).toMatchObject({ ok: true });
+    expect(forPerson((await getWorksheet(runId))!.checks.blocking, emp)).toEqual(["missing_multiplier"]);
   });
 });

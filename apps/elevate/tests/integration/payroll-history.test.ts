@@ -42,7 +42,7 @@ vi.mock("@/modules/payroll/remitly", async (original) => {
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const actions = await import("@/modules/payroll/actions");
-const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, setRunUsdRate, confirmRunLine } = actions;
+const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = actions;
 const { refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun, exportRemitlyList, markPaid } = actions;
 const { setPayrollAccess } = await import("@/modules/settings/actions");
 const { getWorksheet } = await import("@/modules/payroll/queries");
@@ -160,10 +160,8 @@ describe("the completeness test: one full cycle writes every kind of change", ()
         cutoffDivisor: 11,
         changeWarnPercent: 10,
         extraRegular: "125",
-        extraHoliday: "200",
         extraRestDay: "130",
         extraRestDayOver8: "169",
-        holiday: "100",
         reason: "Zqreason settings",
       }),
       "settings",
@@ -171,12 +169,12 @@ describe("the completeness test: one full cycle writes every kind of change", ()
 
     // 3. A line is created, changed and ended (a person who leaves).
     const created = ok(
-      await createPayLine({ employeeId: empLeaver, hoursPerDay: 8, fte: "1", paymentMethod: "remitly", effectiveFrom: "2030-08-01", monthly: "20,000", pesoAllowance: "0", dollarAllowance: "0" }),
+      await createPayLine({ employeeId: empLeaver, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2030-08-01", monthly: "20,000" }),
       "create leaver line",
     );
     const leaverKey = (created as { data: { lineKey: string } }).data.lineKey;
     ok(
-      await updatePayLine({ lineKey: leaverKey, hoursPerDay: 8, fte: "1", paymentMethod: "remitly", effectiveFrom: "2030-09-01", monthly: "21,000", pesoAllowance: "0", dollarAllowance: "0", reason: reasonOf(0) }),
+      await updatePayLine({ lineKey: leaverKey, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2030-09-01", monthly: "21,000", reason: reasonOf(0) }),
       "update leaver line",
     );
     ok(await endPayLine({ lineKey: leaverKey, endsOn: "2030-09-30", reason: reasonOf(6) }), "end leaver line");
@@ -189,7 +187,7 @@ describe("the completeness test: one full cycle writes every kind of change", ()
       [empB, null, MONTHLY_B],
     ] as const) {
       ok(
-        await createPayLine({ employeeId: emp, alias, hoursPerDay: 8, fte: "1", paymentMethod: "remitly", effectiveFrom: p.periodStart, endsOn: p.periodEnd, monthly, pesoAllowance: "0", dollarAllowance: "12.50" }),
+        await createPayLine({ employeeId: emp, alias, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: p.periodStart, endsOn: p.periodEnd, monthly }),
         "create line",
       );
     }
@@ -198,10 +196,9 @@ describe("the completeness test: one full cycle writes every kind of change", ()
       await addApprovedDay(emp, p.day(3), { absent: true }, lead.id);
     }
 
-    // 5. The run: created, dollar rate, suggestions, assignments and confirmations, items.
+    // 5. The run: created, suggestions, assignments and confirmations, items.
     const created2 = ok(await createPayRun({ periodStart: p.periodStart, periodEnd: p.periodEnd }), "create run");
     runId = (created2 as { data: { runId: string } }).data.runId;
-    ok(await setRunUsdRate({ runId, rate: "58.50" }), "usd rate");
     ok(await refreshSuggestions({ runId }), "refresh");
 
     const runLines = await rows<{ id: string; employee_id: string }>(sql`select id, employee_id from payroll.pay_run_lines where run_id = ${runId} order by employee_id, id`);
@@ -224,6 +221,8 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     ok(await savePayItem({ runId, employeeId: empB, runLineId: lineOf(empB), type: "loan", value: "2,000", reason: reasonOf(2) }), "save loan");
     const [loan] = await rows<{ id: string }>(sql`select id from payroll.pay_run_items where run_id = ${runId} and employee_id = ${empB} and type = 'loan' order by created_at desc limit 1`);
     ok(await dismissPayItem({ runId, itemId: loan.id, reason: reasonOf(4) }), "dismiss loan");
+    // A named allowance: the history shows the name the Preparer gave it.
+    ok(await savePayItem({ runId, employeeId: empA, runLineId: lineOf(empA), type: "allowance", label: "Zqhealth allowance", value: "1,234.56" }), "save allowance");
 
     // 6. Another Preparer checks every line; the run is sent for review, sent back, sent again and approved.
     as(checker);
@@ -251,7 +250,7 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     // 8. A draft run that is cancelled.
     as(preparer);
     const q = slot(1);
-    ok(await createPayLine({ employeeId: empB, hoursPerDay: 8, fte: "1", paymentMethod: "remitly", effectiveFrom: q.periodStart, endsOn: q.periodEnd, monthly: "20,000", pesoAllowance: "0", dollarAllowance: "0" }), "create draft line");
+    ok(await createPayLine({ employeeId: empB, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: q.periodStart, endsOn: q.periodEnd, monthly: "20,000" }), "create draft line");
     const second = ok(await createPayRun({ periodStart: q.periodStart, periodEnd: q.periodEnd }), "create draft run");
     draftRunId = (second as { data: { runId: string } }).data.runId;
     ok(await cancelPayRun({ runId: draftRunId, reason: reasonOf(5) }), "cancel");
@@ -276,10 +275,10 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     expect(seen).toEqual(CHANGE_ACTIONS.filter((a) => a !== "signatory_changed").sort());
   });
 
-  it("has a plain label for every kind of change, and none says overtime or PTO", () => {
+  it("has a plain label for every kind of change, and none says extra hours or PTO", () => {
     for (const a of CHANGE_ACTIONS) {
       expect(CHANGE_ACTION_LABELS[a]).toBeTruthy();
-      expect(CHANGE_ACTION_LABELS[a]).not.toMatch(/overtime|pto/i);
+      expect(CHANGE_ACTION_LABELS[a]).not.toMatch(/extra hours|pto/i);
     }
   });
 });
@@ -319,8 +318,9 @@ describe("what a row shows", () => {
     expect(created.actionLabel).toBe(CHANGE_ACTION_LABELS.run_created);
     expect(Number.isNaN(Date.parse(created.at))).toBe(false);
 
-    const rate = r.rows.find((x) => x.action === "usd_rate_changed")!;
-    expect(rate.changes).toEqual([{ label: expect.any(String), before: expect.stringMatching(/not set/i), after: "58.50" }]);
+    // An itemized line is listed under its kind and the name it was given.
+    const allowance = r.rows.find((x) => x.action === "item_saved" && x.changes.some((c) => c.label === "Allowance: Zqhealth allowance"))!;
+    expect(allowance.changes.find((c) => c.label === "Allowance: Zqhealth allowance")!.after).toContain("1,234.56");
 
     const loanSaved = r.rows.find((x) => x.action === "item_saved" && x.personName?.includes(lastNameB) && x.changes.some((c) => c.after?.includes("2,000.00")))!;
     expect(loanSaved).toBeTruthy();
@@ -348,9 +348,9 @@ describe("what a row shows", () => {
     expect(access.changes[0]).toMatchObject({ before: expect.any(String), after: "Viewer" });
   });
 
-  it("uses 'extra hours', never 'overtime'", async () => {
+  it("uses 'overtime (OT)', never 'extra hours'", async () => {
     as(preparer);
-    expect(JSON.stringify((await all()).rows)).not.toMatch(/overtime|\bpto\b/i);
+    expect(JSON.stringify((await all()).rows)).not.toMatch(/extra hours|\bpto\b/i);
   });
 
   it("lists the newest first, in a stable order", async () => {

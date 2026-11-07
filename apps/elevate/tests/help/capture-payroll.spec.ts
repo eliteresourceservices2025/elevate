@@ -162,8 +162,8 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
   try {
     // The person to be paid, before any payslip exists.
     await newcomerPage.goto("/my-pay");
-    await expect(newcomerPage.getByText("No payslips yet")).toBeVisible();
-    await snap(newcomerPage, "read-your-payslip", "01-no-payslip-yet", "My pay before a pay run is paid: it says there are no payslips yet.");
+    await expect(newcomerPage.getByText("No statements yet")).toBeVisible();
+    await snap(newcomerPage, "read-your-payslip", "01-no-payslip-yet", "My payment statements before a pay run is paid: it says there are no statements yet.");
 
     // The Super Admin chooses who has payroll access.
     await adminPage.goto("/settings/payroll-access");
@@ -205,16 +205,16 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     await adminPage.locator("#signatory-title").fill("Human Resources Director");
     await adminPage.locator("#signatory-picture").setInputFiles(signatureFile);
     await expect(adminPage.locator("form img")).toBeVisible();
-    await snap(adminPage, "how-payroll-works", "03-payslip-signatory", "Settings, Payslip signatory: the name, the title and the signature picture that print on every payslip.", {
+    await snap(adminPage, "how-payroll-works", "03-statement-signatory", "Settings, Payment statement signatory: the name, the title and the signature picture that print on every contractor payment statement.", {
       viewport: { width: 1280, height: 900 },
       highlight: [adminPage.locator("#signatory-name"), adminPage.locator("#signatory-picture")],
     });
     await adminPage.getByRole("button", { name: "Save signatory" }).click();
-    await expect(adminPage.getByText("Payslip signatory saved.")).toBeVisible();
+    await expect(adminPage.getByText("Signatory saved.")).toBeVisible();
 
-    // Settings: the extra-hours rate for this period.
+    // Settings: the overtime (OT) rate for this period.
     await prepPage.goto("/payroll/settings");
-    await snap(prepPage, "prepare-a-pay-run", "01-settings", "Payroll, Settings: the cutoff divisor and the rates for extra hours.", {
+    await snap(prepPage, "prepare-a-pay-run", "01-settings", "Payroll, Settings: the cutoff divisor and the overtime (OT) rates.", {
       rows: 2,
       highlight: [prepPage.getByRole("button", { name: "Change settings" })],
     });
@@ -223,7 +223,7 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     settingsTouched = true; // from here on, the finally block puts the old settings back if the run stops early
     await prepPage.locator("#set-from").fill(period.start);
     await prepPage.locator("#set-extraRegular").fill("125");
-    await snap(prepPage, "prepare-a-pay-run", "02-change-settings", "The Change settings window: the date the new rates start and the rate for extra hours on a regular day.", {
+    await snap(prepPage, "prepare-a-pay-run", "02-change-settings", "The Change settings window: the date the new rates start and the overtime (OT) rate for a regular day.", {
       highlight: [prepPage.locator("#set-extraRegular")],
     });
     await prepPage.getByRole("button", { name: "Save settings" }).click();
@@ -266,31 +266,47 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
       highlight: [worker().getByRole("button", { name: "Amounts" })],
     });
 
-    // Extra hours for the person.
+    // Overtime for the person.
     await worker().getByRole("button", { name: "Amounts" }).click();
     await waitForHydration(prepPage, "form select");
-    await prepPage.getByLabel("What to enter").selectOption({ label: "Extra hours, regular day" });
+    await prepPage.getByLabel("What to enter").selectOption({ label: "Overtime (OT), regular day" });
     await prepPage.getByLabel("Amount", { exact: true }).fill("120");
-    await snap(prepPage, "prepare-a-pay-run", "07-amounts", "The Amounts window: what to enter, and the amount (here 120 minutes of extra hours).", {
+    await snap(prepPage, "prepare-a-pay-run", "07-amounts", "The Amounts window: what to enter, and the amount (here 120 minutes of overtime).", {
       highlight: [prepPage.getByLabel("What to enter"), prepPage.getByLabel("Amount", { exact: true })],
     });
     await prepPage.getByRole("button", { name: "Save amount" }).click();
     await expect(prepPage.getByText("Amount saved.").first()).toBeVisible();
     await expect(prepPage.getByRole("dialog")).toHaveCount(0);
 
-    // The dollar rate.
-    await prepPage.getByRole("button", { name: /Dollar rate/ }).click();
-    await waitForHydration(prepPage, "#usd-rate");
-    await prepPage.locator("#usd-rate").fill("58.50");
-    await snap(prepPage, "prepare-a-pay-run", "08-dollar-rate", "The Dollar rate window: how many pesos one dollar is worth for this run.", {
-      highlight: [prepPage.locator("#usd-rate")],
+    // A named allowance (itemized), then a reimbursement and a bonus.
+    await worker().getByRole("button", { name: "Amounts" }).click();
+    await waitForHydration(prepPage, "form select");
+    await prepPage.getByLabel("What to enter").selectOption({ label: "Allowance" });
+    await prepPage.getByLabel(/^Name of this allowance/).fill("Health allowance");
+    await prepPage.getByLabel("Amount", { exact: true }).fill("500");
+    await snap(prepPage, "prepare-a-pay-run", "08-named-allowance", "The Amounts window for an allowance: give it a name, like Health allowance, and an amount. Add as many named lines as you need.", {
+      highlight: [prepPage.getByLabel(/^Name of this allowance/), prepPage.getByLabel("Amount", { exact: true })],
     });
-    await prepPage.getByRole("button", { name: "Save rate" }).click();
-    await expect(prepPage.getByText("Dollar rate saved.")).toBeVisible();
+    await prepPage.getByRole("button", { name: "Save amount" }).click();
+    await expect(prepPage.getByText("Amount saved.").first()).toBeVisible();
+    await expect(prepPage.getByRole("dialog")).toHaveCount(0);
+    for (const [type, label, amount] of [
+      ["Reimbursement", "Supplies", "120"],
+      ["Bonus", "Performance bonus", "2000"],
+    ] as const) {
+      await worker().getByRole("button", { name: "Amounts" }).click();
+      await waitForHydration(prepPage, "form select");
+      await prepPage.getByLabel("What to enter").selectOption({ label: type });
+      await prepPage.getByLabel(new RegExp(`^Name of this ${type.toLowerCase()}`)).fill(label);
+      await prepPage.getByLabel("Amount", { exact: true }).fill(amount);
+      await prepPage.getByRole("button", { name: "Save amount" }).click();
+      await expect(prepPage.getByText("Amount saved.").first()).toBeVisible();
+      await expect(prepPage.getByRole("dialog")).toHaveCount(0);
+    }
 
     // Every line is checked by a Preparer.
     const checkButtons = prepPage.getByRole("button", { name: "Mark as checked" });
-    await checkButtons.first().waitFor(); // the buttons appear once the page has refreshed after the dollar rate
+    await checkButtons.first().waitFor(); // the buttons appear once the page has refreshed after the last amount
     for (let guard = 0; guard < 20 && (await checkButtons.count()) > 0; guard++) {
       const before = await checkButtons.count();
       await checkButtons.first().click();
@@ -298,7 +314,7 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     }
     const send = prepPage.getByRole("button", { name: "Send for review" });
     await expect(send).toBeEnabled();
-    await snap(prepPage, "prepare-a-pay-run", "09-ready", "Every line checked and the dollar rate set: Send for review is ready.", {
+    await snap(prepPage, "prepare-a-pay-run", "09-ready", "Every line checked: Send for review is ready.", {
       viewport: { width: 1280, height: 1000 },
       scrollTo: send,
       highlight: [send],
@@ -320,7 +336,7 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     });
     await apprPage.getByRole("button", { name: "Send back" }).first().click();
     await expect(apprPage.getByRole("dialog")).toBeVisible();
-    await apprPage.getByRole("dialog").getByRole("textbox").first().fill("Please check the extra hours on one line.");
+    await apprPage.getByRole("dialog").getByRole("textbox").first().fill("Please check the overtime on one line.");
     await snap(apprPage, "approve-a-pay-run", "03-send-back", "The Send back window: a short note about what needs to change.", {
       highlight: [apprPage.getByRole("dialog").getByRole("textbox").first()],
     });
@@ -364,19 +380,19 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     // Newest payslip first: earlier runs of this tool may have left older ones for the same person
     const link = workPage.getByRole("link", { name: "Download PDF" }).first();
     await expect(link).toBeVisible();
-    const viewLink = workPage.getByRole("link", { name: /View the payslip for/ }).first();
+    const viewLink = workPage.getByRole("link", { name: /View the contractor payment statement for/ }).first();
     await expect(viewLink).toBeVisible();
-    await snap(workPage, "read-your-payslip", "02-my-pay", "My pay after the run is paid: the pay period, the net pay, View and Download PDF.", { highlight: [viewLink, link] });
+    await snap(workPage, "read-your-payslip", "02-my-pay", "My payment statements after the run is paid: the pay period, the total payable compensation, View and Download PDF.", { highlight: [viewLink, link] });
     // The payslip on screen, for the run made here
     await workPage.goto(`/my-pay/${runId}`);
     await expect(workPage.getByText("Carmen Dela Rosa")).toBeVisible();
-    await snap(workPage, "read-your-payslip", "03-payslip", "A payslip on screen: the period, how it was paid, the pay line by line, the net pay and who signed it.", { viewport: { width: 1280, height: 960 } });
+    await snap(workPage, "read-your-payslip", "03-payslip", "A contractor payment statement on screen: the period, how it was paid, the pay line by line, the total payable compensation and who signed it.", { viewport: { width: 1280, height: 960 } });
     await workPage.goto("/my-pay");
     const bell = workPage.getByRole("button", { name: /notification/i }).first();
     if (await bell.count()) {
       await bell.click();
-      await expect(workPage.getByText("Your payslip is ready").first()).toBeVisible();
-      await snap(workPage, "read-your-payslip", "04-notice", "The bell in the header shows the notice: Your payslip is ready.", { highlight: [workPage.getByText("Your payslip is ready").first()] });
+      await expect(workPage.getByText("Your contractor payment statement is ready").first()).toBeVisible();
+      await snap(workPage, "read-your-payslip", "04-notice", "The bell in the header shows the notice: Your contractor payment statement is ready.", { highlight: [workPage.getByText("Your contractor payment statement is ready").first()] });
       await workPage.keyboard.press("Escape");
     } else {
       console.log("  note  read-your-payslip/04-notice: the notification button was not found");

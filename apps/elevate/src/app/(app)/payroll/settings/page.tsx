@@ -17,7 +17,7 @@ export default async function PayrollSettingsPage() {
 
   return (
     <PageContainer width="wide">
-      <PageHeader title="Payroll" description="The cutoff divisor, extra-hours rates and the change warning. Each change is a new version with a start date." />
+      <PageHeader title="Payroll" description="The cutoff divisor, overtime (OT) rates and the change warning. Each change is a new version with a start date." />
       <PayrollTabs current="settings" />
       <SettingsView view={view} today={today} />
     </PageContainer>

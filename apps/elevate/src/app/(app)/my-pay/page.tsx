@@ -53,7 +53,7 @@ export default async function MyPayPage({ searchParams }: PageProps<"/my-pay">) 
                   </TableCell>
                   <TableCell label={L.download} className="text-right">
                     <div className="flex justify-end gap-2">
-                      {/* No prefetch: opening a payslip page is audited, so only a real click may run it. */}
+                      {/* No prefetch: opening a statement page is audited, so only a real click may run it. */}
                       <Link href={`/my-pay/${r.runId}`} prefetch={false} aria-label={L.viewAction(r.periodLabel)} className={buttonVariants({ variant: "default", size: "sm" })}>
                         {L.view}
                       </Link>
@@ -66,7 +66,7 @@ export default async function MyPayPage({ searchParams }: PageProps<"/my-pay">) 
               ))}
             </TableBody>
           </Table>
-          <PagerLinks info={info} basePath="/my-pay" label="payslips" />
+          <PagerLinks info={info} basePath="/my-pay" label="payment statements" />
         </>
       )}
     </PageContainer>

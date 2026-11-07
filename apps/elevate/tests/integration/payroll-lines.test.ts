@@ -38,12 +38,9 @@ async function person(userId: string | null = null) {
 const base = (employeeId: string, over: Record<string, unknown> = {}) => ({
   employeeId,
   hoursPerDay: 8,
-  fte: "1",
   paymentMethod: "remitly",
   effectiveFrom: "2030-11-01",
   monthly: "31,415.92",
-  pesoAllowance: "1,000.00",
-  dollarAllowance: "12.50",
   ...over,
 });
 const lineRows = (employeeId: string) =>
@@ -59,16 +56,12 @@ describe("pay lines", () => {
     expect(await createPayLine(base(emp))).toMatchObject({ ok: true });
 
     const [line] = await lineRows(emp);
-    expect(line.amounts_enc).not.toMatch(/31415|31,415|1000|12\.5/);
-    expect(JSON.parse(fieldCrypto().decrypt(line.amounts_enc, `pay_line:${line.id}`))).toEqual({
-      monthlyCentavos: "3141592",
-      pesoAllowanceCentavos: "100000",
-      dollarAllowanceCents: "1250",
-    });
+    expect(line.amounts_enc).not.toMatch(/31415|31,415/);
+    expect(JSON.parse(fieldCrypto().decrypt(line.amounts_enc, `pay_line:${line.id}`))).toEqual({ monthlyCentavos: "3141592" });
 
     const audit = await rows<Record<string, unknown>>(sql`select * from ops.audit_log where actor_user_id = ${preparer.id}`);
     expect(audit.length).toBeGreaterThan(0);
-    expect(JSON.stringify(audit)).not.toMatch(/31415|31,415|3141592|100000|1250|31\.4/);
+    expect(JSON.stringify(audit)).not.toMatch(/31415|31,415|3141592|31\.4/);
     const log = await rows<{ detail_enc: string }>(sql`select detail_enc from payroll.pay_change_log where actor_id = ${preparer.id}`);
     expect(JSON.stringify(log)).not.toMatch(/31415|3141592/);
   });
@@ -238,8 +231,8 @@ describe("pay lines", () => {
     await createPayLine(base(emp, { effectiveFrom: "2026-01-01" }));
     const badId = randomUUID();
     const marker = `not-a-ciphertext-${randomUUID()}`;
-    await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, fte, effective_from, amounts_enc, created_by)
-      values (${badId}, ${randomUUID()}, ${emp}, 8, 1.00, '2026-01-01', ${marker}, ${preparer.id})`);
+    await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, effective_from, amounts_enc, created_by)
+      values (${badId}, ${randomUUID()}, ${emp}, 8, '2026-01-01', ${marker}, ${preparer.id})`);
 
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const list = await getRates();
@@ -307,7 +300,7 @@ describe("pay settings", () => {
     expect(
       await savePaySettings({
         effectiveFrom: date, cutoffDivisor: 12, changeWarnPercent: 15,
-        extraRegular: "125", extraHoliday: "200", extraRestDay: "130", extraRestDayOver8: "", holiday: "", reason: "Per owner",
+        extraRegular: "125", extraRestDay: "130", extraRestDayOver8: "", reason: "Per owner",
       }),
     ).toMatchObject({ ok: true });
 
@@ -315,7 +308,8 @@ describe("pay settings", () => {
     expect(snap).toEqual({
       cutoffDivisor: 12,
       changeWarnBp: 1500,
-      multipliersBp: { regular: 12500, holiday: 20000, restDay: 13000, restDayOver8: null, holidayPay: null },
+      // Holiday pay is not a setting: it is always one to one (10,000 basis points).
+      multipliersBp: { regular: 12500, restDay: 13000, restDayOver8: null, holiday: 10000 },
     });
     const before = await settingsInForce(db as never, "2031-02-28");
     expect(before.cutoffDivisor).not.toBe(12);
@@ -331,7 +325,7 @@ describe("pay settings", () => {
   it("refuses an effective date that already has a version", async () => {
     const preparer = await account();
     current.user = preparer;
-    const input = { effectiveFrom: "2031-06-01", cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "", extraHoliday: "", extraRestDay: "", extraRestDayOver8: "", holiday: "", reason: "" };
+    const input = { effectiveFrom: "2031-06-01", cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "", extraRestDay: "", extraRestDayOver8: "", reason: "" };
     expect(await savePaySettings(input)).toMatchObject({ ok: true });
     expect((await savePaySettings(input)).ok).toBe(false);
   });

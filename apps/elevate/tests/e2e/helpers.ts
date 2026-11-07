@@ -175,8 +175,8 @@ export async function endPayLinesOf(employeeId: string): Promise<void> {
   const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
   try {
     await sql`
-      insert into payroll.pay_lines (id, line_key, employee_id, client_id, alias, hours_per_day, payment_method, fte, ends_on, effective_from, amounts_enc, created_by)
-      select gen_random_uuid(), l.line_key, l.employee_id, l.client_id, l.alias, l.hours_per_day, l.payment_method, l.fte, l.effective_from, l.effective_from, l.amounts_enc, l.created_by
+      insert into payroll.pay_lines (id, line_key, employee_id, client_id, alias, hours_per_day, payment_method, ends_on, effective_from, amounts_enc, created_by)
+      select gen_random_uuid(), l.line_key, l.employee_id, l.client_id, l.alias, l.hours_per_day, l.payment_method, l.effective_from, l.effective_from, l.amounts_enc, l.created_by
       from (
         select distinct on (line_key) * from payroll.pay_lines where employee_id = ${employeeId} order by line_key, effective_from desc, created_at desc
       ) l
@@ -195,8 +195,8 @@ export async function restorePaySettings(changedOn: string, restoreOn: string): 
   const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
   try {
     await sql`
-      insert into payroll.pay_settings (effective_from, cutoff_divisor, extra_regular_bp, extra_holiday_bp, extra_rest_day_bp, extra_rest_day_over_8_bp, holiday_bp, change_warn_bp, created_by)
-      select ${restoreOn}::date, cutoff_divisor, extra_regular_bp, extra_holiday_bp, extra_rest_day_bp, extra_rest_day_over_8_bp, holiday_bp, change_warn_bp, created_by
+      insert into payroll.pay_settings (effective_from, cutoff_divisor, extra_regular_bp, extra_rest_day_bp, extra_rest_day_over_8_bp, change_warn_bp, created_by)
+      select ${restoreOn}::date, cutoff_divisor, extra_regular_bp, extra_rest_day_bp, extra_rest_day_over_8_bp, change_warn_bp, created_by
       from payroll.pay_settings
       where effective_from < ${changedOn}::date
         and not exists (select 1 from payroll.pay_settings where effective_from = ${restoreOn}::date)

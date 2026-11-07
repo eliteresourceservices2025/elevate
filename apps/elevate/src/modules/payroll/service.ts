@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { employees } from "@/modules/people/schema";
-import type { LineInput, LineResult, SettingsSnapshot } from "./calculate";
+import { HOLIDAY_BP, type ItemLine, type LineInput, type LineResult, type SettingsSnapshot } from "./calculate";
 import type { Tx } from "@/modules/people/service";
 import { payRuns, paySettings } from "./schema";
 
@@ -46,24 +46,21 @@ export function snapshotOf(row: typeof paySettings.$inferSelect): SettingsSnapsh
     changeWarnBp: row.changeWarnBp,
     multipliersBp: {
       regular: row.extraRegularBp,
-      holiday: row.extraHolidayBp,
       restDay: row.extraRestDayBp,
       restDayOver8: row.extraRestDayOver8Bp,
-      holidayPay: row.holidayBp,
+      holiday: HOLIDAY_BP,
     },
   };
 }
 
-/** What a line's `amounts_enc` holds. Centavos and cents are bigints in memory and strings on the wire. */
-export type LineAmounts = { monthlyCentavos: bigint; pesoAllowanceCentavos: bigint; dollarAllowanceCents: bigint };
+/** What a line's `amounts_enc` holds. Centavos are bigints in memory and strings on the wire. (Older rows also carry allowance keys, which are ignored.) */
+export type LineAmounts = { monthlyCentavos: bigint };
 export type LineAmountsJson = { [K in keyof LineAmounts]: string };
 
 const lineContext = (id: string) => `pay_line:${id}`;
 
 export const amountsToJson = (a: LineAmounts): LineAmountsJson => ({
   monthlyCentavos: a.monthlyCentavos.toString(),
-  pesoAllowanceCentavos: a.pesoAllowanceCentavos.toString(),
-  dollarAllowanceCents: a.dollarAllowanceCents.toString(),
 });
 
 export function encryptLineAmounts(lineId: string, a: LineAmounts): string {
@@ -81,7 +78,6 @@ const bigReviver = (_k: string, v: unknown) =>
 export type RunLinePayload = {
   rate: LineAmounts;
   hoursPerDay: number;
-  fte: string;
   input: LineInput;
   clientHoursHundredths: bigint;
   result: LineResult;
@@ -92,11 +88,50 @@ const runItemContext = (id: string) => `pay_run_item:${id}`;
 
 export const payloadText = (p: RunLinePayload): string => JSON.stringify(p, bigReplacer);
 export const encryptRunLine = (id: string, p: RunLinePayload): string => fieldCrypto().encrypt(payloadText(p), runLineContext(id));
-export const decryptRunLine = (id: string, stored: string): RunLinePayload => JSON.parse(fieldCrypto().decrypt(stored, runLineContext(id)), bigReviver) as RunLinePayload;
+export const decryptRunLine = (id: string, stored: string): RunLinePayload => upgradePayload(JSON.parse(fieldCrypto().decrypt(stored, runLineContext(id)), bigReviver));
+
+/**
+ * Lines frozen before the revision (dollar allowance, FTE, holiday overtime, one adjustment amount) are read into the new shape so
+ * an old paid statement still opens: the peso allowance and adjustment become one named line each, the dollar part is no longer
+ * shown (the stored total payable is kept as it was), and holiday overtime is dropped. Nothing new is ever written in the old shape.
+ */
+function upgradePayload(raw: unknown): RunLinePayload {
+  const p = raw as RunLinePayload & { input: Record<string, unknown>; result: Record<string, unknown> };
+  const input = p.input;
+  const result = p.result;
+  const old = input.pesoAllowance !== undefined || input.adjustment !== undefined || input.dollarAllowanceCents !== undefined;
+  if (!old) return p;
+  const one = (label: string, value: unknown): ItemLine[] => (typeof value === "bigint" && value !== 0n ? [{ label, amount: value }] : []);
+  const oldExtra = (input.extra ?? {}) as Record<string, number>;
+  p.input = {
+    ...(input as unknown as LineInput),
+    sickLeaveDayHundredths: 0,
+    bereavementDayHundredths: 0,
+    ptoDayHundredths: 0,
+    extra: { regular: oldExtra.regular ?? 0, restDay: oldExtra.restDay ?? 0, restDayOver8: oldExtra.restDayOver8 ?? 0, holiday: oldExtra.holidayPay ?? 0 },
+    allowances: one("Allowance", input.pesoAllowance),
+    reimbursements: [],
+    bonuses: [],
+    adjustments: one("Adjustment", input.adjustment),
+  };
+  const oldResultExtra = (result.extra ?? {}) as Record<string, bigint>;
+  p.result = {
+    ...(result as unknown as LineResult),
+    sickLeave: 0n,
+    extra: { regular: oldResultExtra.regular ?? 0n, restDay: oldResultExtra.restDay ?? 0n, restDayOver8: oldResultExtra.restDayOver8 ?? 0n, holiday: oldResultExtra.holidayPay ?? 0n },
+    allowances: typeof input.pesoAllowance === "bigint" ? input.pesoAllowance : 0n,
+    reimbursements: 0n,
+    bonuses: 0n,
+    adjustments: typeof input.adjustment === "bigint" ? input.adjustment : 0n,
+  };
+  return p;
+}
 
 /** What `pay_run_items.value_enc` holds: the value in the item's smallest unit, and the reason. */
 export type ItemValue = {
   value: bigint;
+  /** The name of an itemized line (for example "Health allowance"). Only on allowance, reimbursement, bonus and adjustment items. */
+  label?: string;
   reason: string | null;
   /** Written by the system (a refresh, an assignment), not by a Preparer. */
   system?: true;
@@ -119,9 +154,5 @@ export async function lockDraftRun(tx: Tx, runId: string): Promise<typeof payRun
 
 export function decryptLineAmounts(lineId: string, stored: string): LineAmounts {
   const j = JSON.parse(fieldCrypto().decrypt(stored, lineContext(lineId))) as LineAmountsJson;
-  return {
-    monthlyCentavos: BigInt(j.monthlyCentavos),
-    pesoAllowanceCentavos: BigInt(j.pesoAllowanceCentavos),
-    dollarAllowanceCents: BigInt(j.dollarAllowanceCents),
-  };
+  return { monthlyCentavos: BigInt(j.monthlyCentavos) };
 }
