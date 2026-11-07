@@ -212,12 +212,14 @@ describe("the Remitly list", () => {
     expect(lines[0]).toBe("Person,Alias,Pesos");
     expect(lines).toHaveLength(3);
     expect(r.data.csv).not.toMatch(/bank|account/i);
-    // The formula alias is neutralized with a leading quote, and both aliases are listed; their order depends on the database's sort
-    // rules (it differs between a local database and CI), so it is not asserted.
-    const aliasCell = lines.find((l) => l.includes("Lopezexport"))!;
-    expect(aliasCell).toContain("'=HYPERLINK(1)");
+    // Both aliases are listed. Their order depends on the database's sort rules (it differs between a local database and CI), so it is
+    // not asserted. What matters is that no cell can start a spreadsheet formula: when the formula alias comes first the cell is
+    // neutralized with a leading quote, and when it comes second the cell starts with the other alias.
+    const aliasCell = lines.find((l) => l.includes("Lopezexport"))!.split(",")[1];
+    expect(aliasCell).toContain("HYPERLINK(1)");
     expect(aliasCell).toContain("Billing");
-    expect(aliasCell).not.toMatch(/(^|[;,"\s])=HYPERLINK/);
+    expect(aliasCell).not.toMatch(/^[=+\-@\t\r]/);
+    if (aliasCell.startsWith("'")) expect(aliasCell.startsWith("'=HYPERLINK(1)")).toBe(true);
 
     // The pesos are the sum of the person's decrypted line nets.
     const nets = await rows<{ id: string; payload_enc: string }>(
