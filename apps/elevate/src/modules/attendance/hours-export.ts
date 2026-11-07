@@ -11,7 +11,7 @@ import { toHours } from "./pay-periods";
 import { shiftOn, shiftRange } from "./schedule";
 import { loadSchedulesFor, workingWeekdaysFor } from "./schedule-service";
 
-// Builds the hours export for payroll. ELEVATE only labels and totals hours; it never computes pay. By default only days whose
+// Builds the hours export for payroll. ELEVATE only labels and totals hours; the export computes nothing (pay is computed in the Payroll module). By default only days whose
 // numbers are exactly what a lead approved are included; the rest can be added and are labelled.
 
 type Person = { id: string; name: string; email: string | null; team: string | null; clients: string };

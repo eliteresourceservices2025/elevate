@@ -22,11 +22,12 @@ import { recruitingPermissions } from "@/modules/recruiting/permissions";
 import { reviewsPermissions } from "@/modules/reviews/permissions";
 import { learnPermissions } from "@/modules/learn/permissions";
 import { safevoicePermissions } from "@/modules/safevoice/permissions";
+import { payrollPermissions } from "@/modules/payroll/permissions";
 import { signingPermissions } from "@/modules/signing/permissions";
 import { settingsPermissions } from "@/modules/settings/permissions";
 import { supportPermissions } from "@/modules/support/permissions";
 import { timeoffPermissions } from "@/modules/timeoff/permissions";
-import type { PermissionRule, RoleSlug, Scope } from "./roles";
+import type { PayrollLevel, PermissionRule, RoleSlug, Scope } from "./roles";
 
 // Pure module: no server-only imports, so the authz tests can run it directly.
 
@@ -51,6 +52,7 @@ export const PERMISSIONS = {
   ...reviewsPermissions,
   ...learnPermissions,
   ...safevoicePermissions,
+  ...payrollPermissions,
   ...assetsPermissions,
   ...credentialsPermissions,
   ...supportPermissions,
@@ -67,6 +69,8 @@ export type AuthzUser = {
   id: string;
   roles: readonly RoleSlug[];
   isSafevoiceHandler?: boolean;
+  /** Payroll level, read fresh on every request; no role grants payroll. */
+  payrollAccess?: PayrollLevel | null;
   /** Named individually (privacy incident inbox); a role never grants it. */
   isPrivacyOfficer?: boolean;
 };
@@ -99,6 +103,8 @@ function ruleFor(action: ActionName): PermissionRule {
 /** Every scope the user holds for this action, widest first. Empty means no access. */
 function grantedScopes(user: AuthzUser, rule: PermissionRule): Scope[] {
   const scopes: Scope[] = [];
+
+  if (rule.payrollLevels) return user.payrollAccess && rule.payrollLevels.includes(user.payrollAccess) ? ["all"] : [];
 
   if (rule.requiresFlag === "safevoice_handler") {
     if (user.isSafevoiceHandler && rule.flagScope) scopes.push(rule.flagScope);

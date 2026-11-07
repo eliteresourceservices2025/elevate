@@ -14,6 +14,8 @@ export const users = core
       isSafevoiceHandler: boolean("is_safevoice_handler").notNull().default(false),
       // The Privacy Officer reads and handles privacy incident reports together with HR; named individually by Super Admin or HR.
       isPrivacyOfficer: boolean("is_privacy_officer").notNull().default(false),
+      // Payroll access is chosen individually by a Super Admin (preparer, approver or viewer); no role grants it. Read fresh on every request.
+      payrollAccess: text("payroll_access"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -23,7 +25,10 @@ export const users = core
       photoPath: text("photo_path"),
       photoUpdatedAt: timestamp("photo_updated_at", { withTimezone: true }),
     },
-    (t) => [uniqueIndex("users_email_lower_idx").on(sql`lower(${t.email})`)],
+    (t) => [
+      uniqueIndex("users_email_lower_idx").on(sql`lower(${t.email})`),
+      check("users_payroll_access_chk", sql`${t.payrollAccess} in ('preparer', 'approver', 'viewer')`),
+    ],
   )
   .enableRLS();
 

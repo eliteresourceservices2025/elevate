@@ -5,6 +5,9 @@ import { definePermissions } from "@/lib/roles";
 export const settingsPermissions = definePermissions({
   "settings.manage_roles": { roles: { super_admin: "all" } },
   "settings.set_safevoice_handler": { roles: { super_admin: "all" } },
+  "settings.set_payroll_access": { roles: { super_admin: "all" } },
+  // The name, title and signature that print on payslips. Not a pay figure: a Super Admin sets it without any payroll level.
+  "settings.set_payroll_signatory": { roles: { super_admin: "all" } },
   "settings.reset_mfa": { roles: { super_admin: "all" } },
   "settings.deactivate_account": { roles: { super_admin: "all" } },
   "settings.view_audit": { roles: { super_admin: "all" } },

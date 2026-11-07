@@ -25,3 +25,6 @@ docs/*.mp4
 
 # The WordPress plugin zip is built with pnpm wordpress:zip
 wordpress/*.zip
+
+# Subagent-driven development scratch
+.superpowers/

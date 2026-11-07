@@ -20,10 +20,10 @@ vi.mock("@/lib/supabase/admin", () => ({
 vi.mock("@/modules/audit/write", () => ({ writeAudit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const { setUserRoles, setSafevoiceHandler, resetAuthenticator, deactivateAccount, reactivateAccount, createInvitation, revokeInvitation } = await import(
+const { setUserRoles, setSafevoiceHandler, savePayrollSignatory, resetAuthenticator, deactivateAccount, reactivateAccount, createInvitation, revokeInvitation } = await import(
   "@/modules/settings/actions"
 );
-const { listPeopleWithRoles, listInvitations, listAuditEntries } = await import("@/modules/settings/queries");
+const { listPeopleWithRoles, listInvitations, listAuditEntries, getPayrollSignatory } = await import("@/modules/settings/queries");
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
@@ -42,6 +42,7 @@ type Case = {
 const cases: Case[] = [
   { name: "setUserRoles", call: () => setUserRoles({ userId: OTHER, roles: ["team_lead"] }), allowed: ["super_admin"] },
   { name: "setSafevoiceHandler", call: () => setSafevoiceHandler({ userId: OTHER, enabled: true }), allowed: ["super_admin"] },
+  { name: "savePayrollSignatory", call: () => savePayrollSignatory({ name: "Test Director", title: "Human Resources Director", signature: null, removeSignature: false }), allowed: ["super_admin"] },
   { name: "resetAuthenticator", call: () => resetAuthenticator({ userId: OTHER }), allowed: ["super_admin"] },
   { name: "deactivateAccount", call: () => deactivateAccount({ userId: OTHER }), allowed: ["super_admin"] },
   { name: "reactivateAccount", call: () => reactivateAccount({ userId: OTHER }), allowed: ["super_admin"] },
@@ -76,6 +77,7 @@ describe("settings queries, every role", () => {
     { name: "listPeopleWithRoles", call: () => listPeopleWithRoles(), allowed: ["super_admin"] },
     { name: "listInvitations", call: () => listInvitations(), allowed: ["super_admin", "hr_admin"] },
     { name: "listAuditEntries", call: () => listAuditEntries({}), allowed: ["super_admin"] },
+    { name: "getPayrollSignatory", call: () => getPayrollSignatory(), allowed: ["super_admin"] },
   ];
 
   for (const q of queries) {

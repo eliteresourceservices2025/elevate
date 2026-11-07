@@ -134,12 +134,12 @@ Jibble mirror, repair job, safety lock, pause switch.
 Shift schedules, nightly flags, extra-hours requests.
 
 - A shift belongs to the day it starts in the person's own zone; people with no schedule get no flags.
-- Copy says "extra hours", never "overtime"; ELEVATE labels hours and never computes pay.
+- On schedules and extra-hours requests copy says "extra hours", never "overtime" (payroll screens say "overtime (OT)", by the executives' choice); ELEVATE labels hours; the hours export computes nothing, and only the payroll module computes pay (never tax).
 
 ### Hours review, export and system health — `docs/modules/hours-review-and-health.md`
 Hours approval, payroll export, test-only days, job health, backstop.
 
-- `time.hours_approvals` and `hours_marks` are append-only; nobody approves their own hours; export never computes pay.
+- `time.hours_approvals` and `hours_marks` are append-only; nobody approves their own hours; the hours export computes nothing (only the payroll module computes pay, never tax).
 - A new scheduled job must be added to both `src/inngest/functions.ts` and `health/registry.ts` and wrapped in `track()`.
 - `docs/RUNBOOK.md` is the operations guide; keep it current.
 
@@ -164,6 +164,14 @@ Review cycles, calibration, visibility rules, goals.
 
 - No pay, raise or bonus field exists; ratings are never converted into pay; no review content in emails or notifications.
 - Visibility is the pure `visibility()` function; nobody writes or shares their own review.
+
+### Payroll — `docs/modules/payroll.md`
+Pay runs, rates, change history, contractor payment statements (the former payslips).
+
+- No role grants payroll (not even Super Admin): only people a Super Admin chose, by level (preparer, approver, viewer; `core.users.payroll_access`).
+- Amounts are encrypted bigint centavos, all in pesos (no dollar rate or FTE); one person prepares and a different person approves; nothing computes tax or sends money.
+- Allowances, reimbursements, bonuses and adjustments are named lines per run; holiday pay is always 1:1; the statement says "Total payable compensation" (see the 2026-11-06 revision at the top of the module notes).
+- Change history is append-only; audit rows never carry an amount or reason.
 
 ### Safe Voice — `docs/modules/safe-voice.md`
 The anonymous reporting app and the handler side.
@@ -254,7 +262,7 @@ The audit log is insert-only at the database level (trigger). Test data written 
 
 - **MFA:** the `(app)` layout and `proxy.ts` require AAL2. No page or action works at AAL1 except MFA enrollment/challenge.
 - **Roles:** Super Admin, HR Admin, Team Lead, Recruiter, Executive, Employee. Scopes: own, team, all. The matrix in `docs/architecture-plan.md` §3 is the source of truth; `src/lib/authz.ts` implements it; `tests/authz/` must cover every action for every role.
-- **Sensitive fields** (government IDs: TIN, SSS, PhilHealth, Pag-IBIG; bank/payout details; pay rates) live only in `core.employee_sensitive`, encrypted with `src/lib/crypto.ts` (AES-256-GCM, versioned keys). Decrypt only for Super Admin, HR Admin, or the employee (masked by default). Every decrypt writes an audit entry.
+- **Sensitive fields** (government IDs: TIN, SSS, PhilHealth, Pag-IBIG; bank/payout details) live only in `core.employee_sensitive`, encrypted with `src/lib/crypto.ts` (AES-256-GCM, versioned keys). Decrypt only for Super Admin, HR Admin, or the employee (masked by default). Every decrypt writes an audit entry. **Pay amounts** live in the `payroll` tables, always encrypted, readable only by people a Super Admin chose (`core.users.payroll_access`); no role grants payroll. The old `payRate` field is read-only reference until the parallel run ends.
 - **Audit:** call `writeAudit()` for logins, role changes, approvals, exports, imports, sensitive views, and every create/update/delete on employee data (store before/after JSON, minus secrets).
 - **RLS:** every new table gets `ENABLE ROW LEVEL SECURITY` in its migration with no public policies.
 - **Secrets:** only `NEXT_PUBLIC_*` values may reach the browser. Never log tokens, passwords, government IDs or file contents. Sentry must not receive PII.

@@ -6,6 +6,10 @@ import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isRoleSlug } from "@/lib/roles";
+import { notify } from "@/modules/notifications/service";
+import { logChange } from "@/modules/payroll/changes";
+import { PAYROLL_LEVEL_LABELS } from "@/modules/payroll/constants";
+import { saveSignatory } from "@/modules/payroll/signatory";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { writeAudit } from "@/modules/audit/write";
@@ -22,6 +26,8 @@ import {
   createInvitationSchema,
   resetAuthenticatorSchema,
   revokeInvitationSchema,
+  savePayrollSignatorySchema,
+  setPayrollAccessSchema,
   setSafevoiceHandlerSchema,
   setUserRolesSchema,
 } from "./validators";
@@ -139,6 +145,113 @@ export async function setSafevoiceHandler(input: unknown): Promise<ActionResult>
   });
 }
 
+/** A Super Admin chooses who has payroll access. Notices carry no amounts; the level change applies on the person's next request. */
+export async function setPayrollAccess(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "settings.set_payroll_access");
+
+    const parsed = setPayrollAccessSchema.safeParse(input);
+    if (!parsed.success) return fail("Check the request and try again.");
+    const { userId, level } = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      const [target] = await tx
+        .select({ level: users.payrollAccess })
+        .from(users)
+        .where(and(eq(users.id, userId), isNull(users.archivedAt)))
+        .limit(1)
+        .for("update"); // two changes at once cannot both pass the "No change." check or log a stale "before"
+      if (!target) return fail("That person was not found.");
+      if ((target.level ?? null) === level) return fail("No change.");
+
+      const [profile] = await tx
+        .select({ first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName, email: users.email })
+        .from(users)
+        .leftJoin(employees, eq(employees.userId, users.id))
+        .where(eq(users.id, userId))
+        .limit(1);
+      const who = profile?.first ? `${profile.preferred?.trim() || profile.first} ${profile.last}` : (profile?.email ?? "A person");
+      const what = level ? `now has payroll access as ${PAYROLL_LEVEL_LABELS[level]}.` : "no longer has payroll access.";
+      const body = `${who} ${what}`;
+
+      await tx.update(users).set({ payrollAccess: level }).where(eq(users.id, userId));
+      await writeAudit(
+        {
+          actor,
+          action: "user.payroll_access.update",
+          targetType: "user",
+          targetId: userId,
+          before: { payrollAccess: target.level },
+          after: { payrollAccess: level },
+        },
+        tx,
+      );
+      await logChange(tx, actor, { action: "access_changed", detail: { userId, from: target.level, to: level } });
+
+      // Other Super Admins and every person who holds a level (before or after) hear about it; never the actor.
+      const admins = await tx
+        .selectDistinct({ id: userRoles.userId })
+        .from(userRoles)
+        .innerJoin(users, eq(users.id, userRoles.userId))
+        .where(and(eq(userRoles.roleSlug, "super_admin"), isNull(users.archivedAt)));
+      const holders = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(and(isNull(users.archivedAt), sql`${users.payrollAccess} is not null`));
+      const adminIds = new Set(admins.map((a) => a.id).filter((id) => id !== actor.id));
+      const personIds = new Set([userId, ...holders.map((h) => h.id)].filter((id) => id !== actor.id));
+      await notify(tx, [
+        ...[...adminIds].map((id) => ({
+          userId: id,
+          kind: "payroll.access",
+          title: "Payroll access was changed",
+          body,
+          link: "/settings/payroll-access",
+        })),
+        ...[...personIds]
+          .filter((id) => !adminIds.has(id))
+          .map((id) => ({
+            userId: id,
+            kind: "payroll.access",
+            title: "Payroll access was changed",
+            body,
+            // The person whose access was just removed can no longer open /payroll.
+            link: id === userId && level === null ? "/dashboard" : "/payroll",
+          })),
+      ]);
+      return { ok: true, data: undefined } as const;
+    });
+
+    if (result.ok) {
+      revalidatePath("/settings/payroll-access");
+      revalidatePath("/settings");
+    }
+    return result;
+  });
+}
+
+/**
+ * A Super Admin sets who signs the payslips: the name, the title and (optionally) a signature picture. Each save is a new version; a run
+ * keeps the version in force when it was paid. Not a pay figure, so it needs no payroll level.
+ */
+export async function savePayrollSignatory(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "settings.set_payroll_signatory");
+
+    const parsed = savePayrollSignatorySchema.safeParse(input);
+    if (!parsed.success) return fail("Check the name, the title and the picture, then try again.");
+    const { name, title, signature, removeSignature } = parsed.data;
+
+    await saveSignatory(actor, { name, title, signatureBase64: signature, removeSignature });
+    revalidatePath("/settings/payroll-signatory");
+    return { ok: true, data: undefined } as const;
+  });
+}
+
 export async function resetAuthenticator(input: unknown): Promise<ActionResult<{ removed: number }>> {
   const actor = await requireUser();
 
@@ -220,6 +333,16 @@ export async function deactivateAccount(input: unknown): Promise<ActionResult> {
       await archiveUserAccount(tx, userId);
       await revokeSessions(tx, userId);
       await writeAudit({ actor, action: "user.deactivate", targetType: "user", targetId: userId, before: { email: target.email } }, tx);
+      // A payroll level does not survive deactivation, so switching the account back on never quietly restores it.
+      const [held] = await tx.select({ level: users.payrollAccess }).from(users).where(eq(users.id, userId)).limit(1).for("update");
+      if (held?.level) {
+        await tx.update(users).set({ payrollAccess: null }).where(eq(users.id, userId));
+        await writeAudit(
+          { actor, action: "user.payroll_access.update", targetType: "user", targetId: userId, before: { payrollAccess: held.level }, after: { payrollAccess: null }, metadata: { reason: "account_deactivated" } },
+          tx,
+        );
+        await logChange(tx, actor, { action: "access_changed", detail: { userId, from: held.level, to: null } });
+      }
     });
     revalidatePath("/settings/roles");
     return { ok: true, data: undefined };

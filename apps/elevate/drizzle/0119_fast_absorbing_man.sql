@@ -1,0 +1,2 @@
+ALTER TABLE "core"."users" ADD COLUMN "payroll_access" text;--> statement-breakpoint
+ALTER TABLE "core"."users" ADD CONSTRAINT "users_payroll_access_chk" CHECK ("core"."users"."payroll_access" in ('preparer', 'approver', 'viewer'));

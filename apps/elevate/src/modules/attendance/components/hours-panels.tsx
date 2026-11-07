@@ -394,7 +394,7 @@ export function ExportPanel({ settings }: { settings: HoursSettings }) {
       <section aria-label="Export hours" className="space-y-3 rounded-2xl border bg-card p-5 shadow-sm">
         <h2 className="text-lg font-semibold">Export hours for payroll</h2>
         <p className="text-sm text-muted-foreground">
-          ELEVATE totals and labels hours; it does not compute pay. By default only days a lead or HR approved, with the numbers they approved, are included. Hours that were corrected after approval are left out until approved again.
+          ELEVATE totals and labels hours; this export computes nothing (pay is computed in the Payroll module). By default only days a lead or HR approved, with the numbers they approved, are included. Hours that were corrected after approval are left out until approved again.
         </p>
         {settings.progress.find((p) => p.start === period) ? <ProgressBox progress={settings.progress.find((p) => p.start === period)!} /> : null}
         <SelectField id="ex-period" label="Pay period" value={period} onChange={(e) => setPeriod(e.target.value)}>
