@@ -140,7 +140,7 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
                 <TableCell label={L.actions}>
                   {canPrepare && draft ? (
                     <div className="flex flex-wrap gap-2">
-                      {line.isOwn ? null : <ItemDialog runId={sheet.run.id} line={line} correctableRuns={sheet.correctableRuns} />}
+                      <ItemDialog runId={sheet.run.id} line={line} correctableRuns={sheet.correctableRuns} />
                       <ConfirmLineButton line={line} />
                     </div>
                   ) : null}

@@ -148,7 +148,9 @@ describe("creating a run", () => {
     expect((await createPayRun({ periodStart: "2024-12-16", periodEnd: "2024-12-31" })).ok).toBe(true);
     // A cutoff nobody is paid in is refused.
     const none = await createPayRun({ periodStart: "2019-01-01", periodEnd: "2019-01-15" });
-    expect(none).toEqual({ ok: false, error: "Nobody has a pay line in that period. Add pay lines on the Rates tab first." });
+    // It says why: lines exist, but the earliest one starts after that period.
+    expect(none).toMatchObject({ ok: false });
+    expect(none.ok === false && none.error).toMatch(/^No pay line was in force between 2019-01-01 and 2019-01-15: the earliest one starts on \d{4}-\d{2}-\d{2}\. Choose a later period, or change the pay line's start date on the Rates tab\.$/);
     const created = await rows<{ n: number }>(sql`select count(*)::int as n from payroll.pay_runs where period_start in ('2025-01-10', '2025-01-15', '2025-01-05', '2024-12-25', '2025-01-06', '2025-01-02')`);
     expect(created[0].n).toBe(0);
 
@@ -296,25 +298,28 @@ describe("items", () => {
 });
 
 describe("separation of duties and the draft lock", () => {
-  it("a Preparer can't save an item on, dismiss, or confirm their own line; another Preparer can", async () => {
+  it("a Preparer can save an item on and dismiss one from their own line, but can't check their own line; another Preparer does", async () => {
     const mine = await account();
     const ownEmp = await person(mine.id);
     await giveLine(preparer, ownEmp);
     const runId = await newRun(mine, period(9));
     const [line] = await runLines(runId, ownEmp);
-    const own = { ok: false, error: "You can't change your own pay." };
+    const own = { ok: false, error: "You can't do this for your own pay. Another Preparer does it." };
 
     current.user = mine;
-    expect(await item(runId, ownEmp, line.id, "adjustment", "100")).toEqual(own);
+    expect(await item(runId, ownEmp, line.id, "adjustment", "100")).toMatchObject({ ok: true });
     expect(await confirmRunLine({ runLineId: line.id })).toEqual(own);
+    const [it] = await rows<{ id: string }>(sql`select id from payroll.pay_run_items where run_id = ${runId} and employee_id = ${ownEmp}`);
+    expect(await dismissPayItem({ runId, itemId: it.id })).toMatchObject({ ok: true });
+    // The change history says who changed their own line.
+    const logged = await rows<{ action: string }>(sql`select action from payroll.pay_change_log where actor_id = ${mine.id} and run_id = ${runId} and action in ('item_saved', 'item_dismissed') order by created_at`);
+    expect(logged.map((r) => r.action)).toEqual(["item_saved", "item_dismissed"]);
 
     current.user = preparer;
     expect(await item(runId, ownEmp, line.id, "adjustment", "100")).toMatchObject({ ok: true });
-    const [it] = await rows<{ id: string }>(sql`select id from payroll.pay_run_items where run_id = ${runId} and employee_id = ${ownEmp}`);
-    current.user = mine;
-    expect(await dismissPayItem({ runId, itemId: it.id })).toEqual(own);
 
     // The worksheet blocks sending until someone else confirms the submitter's own line.
+    current.user = mine;
     let sheet = (await getWorksheet(runId))!;
     expect(forPerson(sheet.checks.blocking, ownEmp)).toEqual(["own_line_unconfirmed"]);
     current.user = preparer;
@@ -722,6 +727,9 @@ describe("named lines, leave days and holiday pay", () => {
     const dismissed = (await itemRows(emp, "allowance")).filter((r) => r.state === "dismissed");
     expect(dismissed).toHaveLength(1);
     expect(dismissed[0].item_key).toBe(internet.item_key);
+    // A removed line stays removed: saving against its key (a stale screen) is refused, and the figures do not change.
+    expect(await save({ type: "allowance", label: "Internet allowance", value: "9", itemKey: internet.item_key! })).toEqual({ ok: false, error: "That line was removed. Add it again as a new line." });
+    expect((await payloadOf(runId, emp)).result.allowances).toBe(200_000n);
 
     // The worksheet lists each named line with its name.
     const sheet = (await getWorksheet(runId))!;

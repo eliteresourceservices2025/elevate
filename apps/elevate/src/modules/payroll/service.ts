@@ -22,10 +22,15 @@ export async function employeeIdForUser(executor: Executor, userId: string): Pro
   return row?.id ?? null;
 }
 
-/** Nobody changes their own pay: refuses when the line belongs to the acting user's own people record. */
+/**
+ * Refuses when the line belongs to the acting user's own people record. Used for the two things nobody does for themselves: checking
+ * their own line and recording their own payment. A Preparer may edit their own rate and amounts (a Preparer can also be paid through
+ * payroll); the independent checks are another Preparer's check of the line, someone else recording the payment, and an Approver who
+ * did not touch the run.
+ */
 export async function assertNotOwnEmployee(actor: { id: string }, employeeId: string, executor: Executor = db): Promise<void> {
   const own = await employeeIdForUser(executor, actor.id);
-  if (own !== null && own === employeeId) throw new ActionFailure("You can't change your own pay.");
+  if (own !== null && own === employeeId) throw new ActionFailure("You can't do this for your own pay. Another Preparer does it.");
 }
 
 /** The settings that apply on a date: the newest version dated on or before it (ties go to the newest row). */

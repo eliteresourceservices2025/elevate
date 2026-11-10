@@ -38,7 +38,7 @@ function AssignRow({ runId, item, lines }: { runId: string; item: Worksheet["una
   return (
     <li className="flex flex-wrap items-center gap-2 text-sm">
       <span className="min-w-56 font-medium">
-        {PAY_ITEM_LABELS[item.type]}: {item.value}
+        {PAY_ITEM_LABELS[item.type] ?? "Amount"}: {item.value}
       </span>
       <label htmlFor={selectId} className="sr-only">
         {S.chooseLine}

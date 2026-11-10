@@ -26,7 +26,7 @@ function ExistingItem({ runId, runLineId, item }: { runId: string; runLineId: st
     <li className="space-y-2 rounded-lg border p-2 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span>
-          <span className="font-medium">{item.label ? `${PAY_ITEM_LABELS[item.type]}: ${item.label}` : PAY_ITEM_LABELS[item.type]}</span>: {item.value}
+          <span className="font-medium">{item.label ? `${PAY_ITEM_LABELS[item.type] ?? "Amount"}: ${item.label}` : (PAY_ITEM_LABELS[item.type] ?? "Amount")}</span>: {item.value}
           {item.state === "suggested" ? <span className="ml-2 text-xs text-muted-foreground">Suggested, not yet confirmed</span> : null}
         </span>
         {asking ? null : (

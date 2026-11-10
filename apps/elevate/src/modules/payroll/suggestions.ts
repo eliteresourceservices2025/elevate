@@ -12,7 +12,7 @@ import { EXTRA_KEY_ITEM, type PayItemType } from "./constants";
 import { formatItemValue } from "./items";
 import { itemKey, latestItems, saveItem, type ItemRow } from "./runs";
 import { payRunItems, payRunLines } from "./schema";
-import { assertNotOwnEmployee, decryptItemValue, encryptItemValue, lockDraftRun, payrollToday } from "./service";
+import { decryptItemValue, encryptItemValue, lockDraftRun, payrollToday } from "./service";
 import { suggestFromDays, type SuggestDay } from "./suggest";
 
 // Suggestions from approved hours. They are only suggestions: pay does not change until a Preparer confirms one. Hours are read
@@ -143,7 +143,6 @@ async function lineOf(tx: Tx, runId: string, employeeId: string, runLineId: stri
 export async function applyAssign(tx: Tx, actor: Actor, v: { runId: string; itemId: string; runLineId: string }): Promise<void> {
   await lockDraftRun(tx, v.runId);
   const item = await loadSuggestion(tx, v.runId, v.itemId);
-  await assertNotOwnEmployee(actor, item.employeeId, tx);
   if (item.runLineId !== null) throw new ActionFailure("That amount is already on a line.");
   await lineOf(tx, v.runId, item.employeeId, v.runLineId);
   const value = decryptItemValue(item.id, item.valueEnc).value;
@@ -157,7 +156,6 @@ export async function applyAssign(tx: Tx, actor: Actor, v: { runId: string; item
 export async function applyConfirm(tx: Tx, actor: Actor, v: { runId: string; itemId: string; runLineId: string; value?: string; reason?: string }): Promise<void> {
   await lockDraftRun(tx, v.runId);
   const item = await loadSuggestion(tx, v.runId, v.itemId);
-  await assertNotOwnEmployee(actor, item.employeeId, tx);
   if (item.runLineId !== null && item.runLineId !== v.runLineId) throw new ActionFailure("That amount belongs to another line.");
   await lineOf(tx, v.runId, item.employeeId, v.runLineId);
   const suggested = decryptItemValue(item.id, item.valueEnc).value;
