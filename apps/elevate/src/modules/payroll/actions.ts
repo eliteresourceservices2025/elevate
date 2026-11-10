@@ -16,7 +16,7 @@ import { logChange } from "./changes";
 import { lineLastDay } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
-import { amountsToJson, assertNotOwnEmployee, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
+import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
 import { cancelRun, confirmLine, createRun, dismissItem, saveItem } from "./runs";
 import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import { approve, sendBack, submit } from "./approval";
@@ -102,7 +102,6 @@ export async function createPayLine(input: unknown): Promise<ActionResult<{ line
     const result = await db.transaction(async (tx) => {
       const refused = await checkPersonAndClient(tx, v.employeeId, v.clientId);
       if (refused) return refused;
-      await assertNotOwnEmployee(actor, v.employeeId, tx);
 
       const id = randomUUID();
       const lineKey = randomUUID();
@@ -147,7 +146,6 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
       const versions = await versionsOf(tx, lineKey);
       const latest = versions[0];
       if (!latest) return fail("That pay line was not found.");
-      await assertNotOwnEmployee(actor, latest.employeeId, tx);
       const refused = await checkPersonAndClient(tx, latest.employeeId, v.clientId);
       if (refused) return refused;
       if (lineLastDay(versions) !== null) return fail("This pay line has ended. Add a new line instead.");
@@ -201,7 +199,6 @@ export async function endPayLine(input: unknown): Promise<ActionResult<{ lineKey
       const versions = await versionsOf(tx, lineKey);
       if (versions.length === 0) return fail("That pay line was not found.");
       const employeeId = versions[0].employeeId;
-      await assertNotOwnEmployee(actor, employeeId, tx);
       // No status check here: ending a line is what is done for a leaver, who may already be separated or archived.
       if (lineLastDay(versions) !== null) return fail("This pay line has already ended.");
       // The end is dated like the version in force on the last day, so a version scheduled for after it is ignored.

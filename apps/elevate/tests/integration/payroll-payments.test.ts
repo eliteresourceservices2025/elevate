@@ -345,7 +345,7 @@ describe("markPaid", () => {
     as(owner);
     expect(await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() })).toEqual({
       ok: false,
-      error: "You can't change your own pay.",
+      error: "You can't do this for your own pay. Another Preparer does it.",
     });
     expect(await paymentRows(runId)).toHaveLength(0);
     as(other);

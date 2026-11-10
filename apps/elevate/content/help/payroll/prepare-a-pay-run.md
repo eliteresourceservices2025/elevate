@@ -38,7 +38,7 @@ A pay line says what one person is paid. Someone who works for two clients has t
 
 To change a rate, click **Change** on the person's row, fill in the new details and a **Reason for the change**, then click **Save new version**. The old version stays on record. To stop paying a line, click **End**, choose the **Last day**, write a **Reason** and click **End pay line**.
 
-You cannot add or change your own pay line. Another Preparer does it.
+If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, **another Preparer must check your line**, and a different person records your payment.
 
 # Start a run
 
@@ -69,7 +69,7 @@ The new run shows the checks above the worksheet, then one row for each person. 
 ![The Amounts window for an allowance: give it a name, like Health allowance, and an amount.](help:prepare-a-pay-run/08-named-allowance.png)
 
 - For someone paid for part of the cutoff, enter the days or hours they worked. These can never pay more than a full cutoff; if they do, check what you typed (for example "15" instead of "1.5").
-- Click **Mark as checked** on a line when you have read it. It records that a Preparer looked at it. Any change to a line asks for a new check. You must have **another Preparer** check **your own** line if you are paid through payroll yourself, and you cannot send the run until they do.
+- Click **Mark as checked** on a line when you have read it. It records that a Preparer looked at it. Any change to a line asks for a new check. If you are paid through payroll yourself, **another Preparer** must check **your own** line, and you cannot send the run until they do. Changing your line clears that check.
 
 # Fix a mistake from an earlier run
 

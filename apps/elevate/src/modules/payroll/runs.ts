@@ -180,7 +180,17 @@ export async function createRun(tx: Tx, actor: Actor, period: { periodStart: str
     .innerJoin(employees, eq(employees.id, payLines.employeeId));
   const person = new Map(all.map((r) => [r.line.employeeId, r]));
   const resolved = resolveLines(all.map((r) => r.line), { start: period.periodStart, end: period.periodEnd });
-  if (resolved.length === 0) throw new ActionFailure("Nobody has a pay line in that period. Add pay lines on the Rates tab first.");
+  if (resolved.length === 0) {
+    // Say why: a line counts for a run only when it starts on or before the run's last day and has not ended before its first day.
+    const starts = all.map((r) => r.line.effectiveFrom).sort();
+    if (starts.length === 0) throw new ActionFailure("Nobody has a pay line yet. Add pay lines on the Rates tab first.");
+    if (starts[0] > period.periodEnd) {
+      throw new ActionFailure(
+        `No pay line was in force between ${period.periodStart} and ${period.periodEnd}: the earliest one starts on ${starts[0]}. Choose a later period, or change the pay line's start date on the Rates tab.`,
+      );
+    }
+    throw new ActionFailure(`Every pay line had ended before ${period.periodStart}. Choose a later period, or add a new pay line on the Rates tab.`);
+  }
 
   const runId = randomUUID();
   const prepared = resolved.map(({ version, flags }) => {
@@ -283,7 +293,6 @@ export async function saveItem(
   v: { runId: string; employeeId: string; runLineId: string; type: PayItemType; value: string; label?: string; itemKey?: string; reason?: string; correctsRunId?: string },
 ): Promise<void> {
   await lockDraftRun(tx, v.runId);
-  await assertNotOwnEmployee(actor, v.employeeId, tx);
   const [line] = await tx
     .select({ id: payRunLines.id, lineId: payRunLines.lineId })
     .from(payRunLines)
@@ -309,6 +318,8 @@ export async function saveItem(
   const all = await latestItems(tx, v.runId);
   const prior = all.find((i) => itemKey(i) === itemKey({ runLineId: v.runLineId, employeeId: v.employeeId, type: v.type, itemKey: key }));
   if (v.itemKey && !prior) throw new ActionFailure("That line was not found. Reload the page and try again.");
+  // A line that was removed stays removed: a stale screen must not quietly bring it back (add it again as a new line instead).
+  if (v.itemKey && prior?.state === "dismissed") throw new ActionFailure("That line was removed. Add it again as a new line.");
   // Compared with the newest suggestion in the whole history, not just the latest row: confirming the suggested value and then
   // changing it must still need a reason.
   const suggested = await suggestedValue(tx, v.runId, v.employeeId, v.runLineId, v.type);
@@ -353,7 +364,6 @@ export async function dismissItem(tx: Tx, actor: Actor, v: { runId: string; item
   await lockDraftRun(tx, v.runId);
   const [item] = await tx.select().from(payRunItems).where(and(eq(payRunItems.id, v.itemId), eq(payRunItems.runId, v.runId))).limit(1);
   if (!item) throw new ActionFailure("That amount was not found.");
-  await assertNotOwnEmployee(actor, item.employeeId, tx);
   const latest = (await latestItems(tx, v.runId)).find((i) => itemKey(i) === itemKey(item));
   if (latest?.id !== item.id) throw new ActionFailure("That amount has changed. Reload the page and try again.");
   if (item.state === "dismissed") throw new ActionFailure("That amount is already removed.");

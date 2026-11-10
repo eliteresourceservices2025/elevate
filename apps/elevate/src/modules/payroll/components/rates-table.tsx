@@ -75,6 +75,7 @@ function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onC
       <div className="space-y-1 sm:col-span-2">
         <Label htmlFor={`${idPrefix}-from`}>{L.startsOn}</Label>
         <Input id={`${idPrefix}-from`} type="date" value={value.effectiveFrom} onChange={(e) => set("effectiveFrom", e.target.value)} required />
+        <p className="text-xs text-muted-foreground">A pay run includes this line only if it starts on or before the last day of the run. Use the first day of the first cutoff this person is paid for.</p>
       </div>
     </div>
   );
@@ -89,11 +90,11 @@ const common = (v: Fields) => ({
   monthly: v.monthly,
 });
 
-function AddLineForm({ options, today }: { options: RateOptions; today: string }) {
+function AddLineForm({ options, addStart }: { options: RateOptions; addStart: string }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const [employeeId, setEmployeeId] = useState("");
-  const [fields, setFields] = useState<Fields>(blank(today));
+  const [fields, setFields] = useState<Fields>(blank(addStart));
   return (
     <form
       className="space-y-3"
@@ -182,7 +183,7 @@ function EndLineForm({ row, today }: { row: RateRow; today: string }) {
   );
 }
 
-export function RatesTable({ rows, options, today }: { rows: RateRow[]; options: RateOptions | null; today: string }) {
+export function RatesTable({ rows, options, today, addStart }: { rows: RateRow[]; options: RateOptions | null; today: string; addStart: string }) {
   const [filter, setFilter] = useState("");
   const needle = filter.trim().toLowerCase();
   const shown = rows.filter((r) => `${r.name} ${r.clientName ?? ""} ${r.alias ?? ""}`.toLowerCase().includes(needle));
@@ -207,7 +208,7 @@ export function RatesTable({ rows, options, today }: { rows: RateRow[]; options:
         </div>
         {options ? (
           <FormDialog label="Add pay line" title="Add a pay line" description="One line per person and role. Someone working for two clients has two lines." icon={<Plus className="size-4" aria-hidden />} size="lg">
-            <AddLineForm options={options} today={today} />
+            <AddLineForm options={options} addStart={addStart} />
           </FormDialog>
         ) : null}
       </div>
@@ -247,7 +248,7 @@ export function RatesTable({ rows, options, today }: { rows: RateRow[]; options:
                     {row.endsOn ? <span className="block text-xs text-muted-foreground">Ends {row.endsOn}</span> : null}
                   </TableCell>
                   <TableCell label="Actions">
-                    {options && !row.isOwn ? (
+                    {options ? (
                       <div className="flex flex-wrap gap-2">
                         {row.endsOn ? null : (
                           <>
@@ -260,8 +261,6 @@ export function RatesTable({ rows, options, today }: { rows: RateRow[]; options:
                           </>
                         )}
                       </div>
-                    ) : row.isOwn ? (
-                      <span className="text-xs text-muted-foreground">Your own line. Another Preparer changes it.</span>
                     ) : null}
                   </TableCell>
                 </TableRow>

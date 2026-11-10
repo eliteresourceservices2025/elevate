@@ -66,33 +66,29 @@ describe("pay lines", () => {
     expect(JSON.stringify(log)).not.toMatch(/31415|3141592/);
   });
 
-  it("lets a Preparer not create or update their own line, and lets another Preparer", async () => {
+  it("lets a Preparer who is also paid through payroll create, change and end their own line, with each change in the history", async () => {
     const mine = await account();
     const other = await account();
     const ownEmployee = await person(mine.id);
 
     current.user = mine;
-    expect(await createPayLine(base(ownEmployee))).toEqual({ ok: false, error: "You can't change your own pay." });
-    expect(await lineRows(ownEmployee)).toHaveLength(0);
-
-    current.user = other;
     expect(await createPayLine(base(ownEmployee))).toMatchObject({ ok: true });
+    expect(await lineRows(ownEmployee)).toHaveLength(1);
     const [line] = await lineRows(ownEmployee);
 
-    current.user = mine;
-    expect(await updatePayLine({ ...base(ownEmployee), lineKey: line.line_key, effectiveFrom: "2030-11-16", monthly: "40000", reason: "Raise" })).toEqual({
-      ok: false,
-      error: "You can't change your own pay.",
-    });
-    expect(await endPayLine({ lineKey: line.line_key, endsOn: "2030-12-31", reason: "Ended" })).toEqual({
-      ok: false,
-      error: "You can't change your own pay.",
-    });
-    expect(await lineRows(ownEmployee)).toHaveLength(1);
-
-    current.user = other;
     expect(await updatePayLine({ ...base(ownEmployee), lineKey: line.line_key, effectiveFrom: "2030-11-16", monthly: "40000", reason: "Raise" })).toMatchObject({ ok: true });
     expect(await lineRows(ownEmployee)).toHaveLength(2);
+    expect(await endPayLine({ lineKey: line.line_key, endsOn: "2030-12-31", reason: "Ended" })).toMatchObject({ ok: true });
+    expect(await lineRows(ownEmployee)).toHaveLength(3);
+
+    // Who did it is in the change history.
+    const log = await rows<{ action: string }>(sql`select action from payroll.pay_change_log where actor_id = ${mine.id} and employee_id = ${ownEmployee} order by created_at`);
+    expect(log.map((r) => r.action)).toEqual(["line_created", "line_updated", "line_ended"]);
+
+    // Another Preparer can still change it too.
+    const second = await person();
+    current.user = other;
+    expect(await createPayLine(base(second))).toMatchObject({ ok: true });
   });
 
   it("an update is a new version with the same line key; the change log carries old and new amounts, encrypted", async () => {
