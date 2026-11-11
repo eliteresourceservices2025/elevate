@@ -29,6 +29,16 @@ A change is a new rate with a new start date. Older rates stay in the history. A
 
 People with no client are not invoiced. They are listed in the window as "No client". People with 0 hours are left off.
 
+# What has to be set before you can invoice
+
+There is no setting to switch on. Three things must be in place:
+
+1. **The pay line has a client.** Set it on the **Rates** tab (the **Client** column). A person with no client is not invoiced.
+2. **The line has client payroll hours.** Type them on the draft pay run (**Actions**, then **Amounts**, then **Client payroll hours**), or fill them with the Jibble timesheet import. The pay run shows a note, "Has a client but no client payroll hours", until they are there.
+3. **The client has a billing rate.** Add it on **Invoices**, then the **Billing rates** tab.
+
+Hours are typed while the run is a draft. If the run is already in review, the Approver sends it back, you add the hours, and you send it again.
+
 # Draft invoices
 
 You can make an invoice from a pay run that is still a draft. It says **DRAFT** on the page and on the PDF, because the hours can still change. Once the run is final, make a new invoice. It gets the same number with **-R2** added, and the first one stays on record.

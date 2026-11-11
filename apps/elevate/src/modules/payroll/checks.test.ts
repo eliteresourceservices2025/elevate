@@ -18,6 +18,7 @@ const line = (over: Partial<CheckLine> = {}): CheckLine => ({
   unapprovedDays: 0,
   payoutReady: true,
   pendingSuggestions: 0,
+  clientHoursMissing: false,
   confirmedBy: null,
   ...over,
 });
@@ -83,6 +84,12 @@ describe("runChecks", () => {
     expect(codes(r.warnings).sort()).toEqual(
       ["new_or_leaving", "new_or_leaving", "new_or_leaving", "no_payout_details", "pending_suggestions", "rate_change_mid_period", "unapproved_days"].sort(),
     );
+  });
+
+  it("notes a line that has a client but no client payroll hours, without blocking", () => {
+    const r = runChecks(input([line({ clientHoursMissing: true }), line({ runLineId: "r2", employeeId: "e2", clientHoursMissing: false })]));
+    expect(r.blocking).toEqual([]);
+    expect(r.warnings).toEqual([{ code: "no_client_hours", employeeId: "e1", runLineId: "r1", name: "Maria Testcruz" }]);
   });
 
   it("warns when net pay moved by more than the threshold from the last run, never at exactly the threshold", () => {

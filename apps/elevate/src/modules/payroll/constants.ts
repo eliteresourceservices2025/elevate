@@ -479,6 +479,7 @@ export const WARNING_CHECKS = [
   "new_or_leaving",
   "rate_change_mid_period",
   "pending_suggestions",
+  "no_client_hours",
   "large_change",
 ] as const;
 export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
@@ -496,6 +497,7 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   new_or_leaving: "Starts, ends or has left during this period",
   rate_change_mid_period: "The rate changes during this period",
   pending_suggestions: "Suggested amounts are waiting for a decision",
+  no_client_hours: "Has a client but no client payroll hours, so it can't be invoiced. Add them under Actions > Amounts, or import the Jibble timesheet, before sending for review.",
   large_change: "Total payable compensation changed a lot from the last run",
 };
 

@@ -778,6 +778,11 @@ export async function checkInputsOf(executor: Executor, data: RunData, submitter
       unapprovedDays: data.unapproved.get(r.runLine.employeeId) ?? 0,
       payoutReady: data.ready.has(r.runLine.employeeId),
       pendingSuggestions: data.items.filter((i) => i.runLineId === r.runLine.id && i.state === "suggested").length,
+      clientHoursMissing:
+        r.runLine.clientId !== null &&
+        payload !== null &&
+        payload.clientHoursHundredths === 0n &&
+        !data.items.some((i) => i.runLineId === r.runLine.id && i.type === "client_hours" && i.state === "suggested"),
       confirmedBy: r.runLine.confirmedBy,
     };
   });

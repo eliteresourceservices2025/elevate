@@ -18,6 +18,7 @@ type Preview = {
   status: string;
   clients: { clientId: string; clientName: string; people: number; hours: string; unconfirmedLines: number; rate: string | null; total: string | null; existing: number }[];
   noClient: string[];
+  noHours: string[];
 };
 
 export type RunOption = { id: string; label: string };
@@ -84,7 +85,11 @@ function NewInvoiceForm({ runs }: { runs: RunOption[] }) {
         <>
           {preview.status === "draft" ? <Alert variant="warning">This pay run is still a draft. The invoice will say DRAFT.</Alert> : null}
           {preview.clients.length === 0 ? (
-            <Alert variant="muted">No client has hours on this run yet, so there is nothing to invoice.</Alert>
+            <Alert variant="muted">
+              {preview.noHours.length > 0
+                ? `Nothing to invoice yet: these people have a client but no client payroll hours on this run: ${preview.noHours.join(", ")}. Hours are typed on the pay run (Actions, then Amounts, or the Jibble timesheet import) while it is a draft. If the run is already in review, the Approver sends it back first.`
+                : "Nothing to invoice: no person on this run has client payroll hours."}
+            </Alert>
           ) : (
             <div className="space-y-1">
               <Label htmlFor="invoice-client">Client</Label>
