@@ -43,7 +43,8 @@ const itemLabel = (type: unknown): string => (typeof type === "string" && type i
 /** The item's kind, with the name the Preparer gave an itemized line ("Allowance: Health allowance"). */
 const namedItem = (type: unknown, name: unknown): string => (str(name) ? `${itemLabel(type)}: ${str(name)}` : itemLabel(type));
 
-const percent = (bp: unknown): string => (typeof bp === "number" ? `${bp / 100}%` : H.notSet);
+// A blank overtime setting means the standard percent applies, so history says that instead of "Not set".
+const percent = (bp: unknown): string => (typeof bp === "number" ? `${bp / 100}%` : "Standard");
 
 /** The fields of one pay line version, as labelled strings. */
 function lineFields(v: Json | null, names: NameLookup): Record<string, string | null> {
@@ -172,6 +173,20 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       break;
     case "run_cancelled":
       facts.push(...fact(H.reason, detail.reason), ...fact(H.lines, detail.lines));
+      break;
+    case "run_people_synced":
+      facts.push(...fact(H.peopleAdded, detail.added), ...fact(H.peopleUpdated, detail.updated), ...fact(H.peopleRemoved, detail.removed));
+      break;
+    case "run_line_removed":
+      facts.push(...fact(H.reason, detail.reason));
+      break;
+    case "run_line_restored":
+      break;
+    case "timesheet_imported":
+      facts.push(...fact(H.membersMatched, detail.members), ...fact(H.suggestionsWritten, detail.written), ...fact(H.keptAsTyped, detail.kept));
+      break;
+    case "suggestions_confirmed_all":
+      facts.push(...fact(H.confirmedCount, detail.confirmed));
       break;
     case "signatory_changed": {
       // The picture itself is never in the detail, only whether there is one.

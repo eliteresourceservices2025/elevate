@@ -17,12 +17,18 @@ import { lineLastDay } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
-import { cancelRun, confirmLine, createRun, dismissItem, saveItem } from "./runs";
+import { cancelRun, confirmLine, createRun, dismissItem, removeRunLine, restoreRunLine, saveItem, syncRunPeople } from "./runs";
 import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
+import { readJibbleTimesheet } from "./jibble/timesheet";
+import { MAX_XLSX_BYTES, XlsxError } from "./jibble/xlsx";
+import { applyTimesheet, confirmAllSuggestions as confirmAll, discardTimesheet, saveTimesheetUpload } from "./timesheet-import";
 import { approve, sendBack, submit } from "./approval";
 import { recordPayment, remitlyList } from "./payments";
 import {
+  applyTimesheetSchema,
   approveRunSchema,
+  confirmAllSuggestionsSchema,
+  discardTimesheetSchema,
   exportRemitlySchema,
   markPaidSchema,
   sendBackRunSchema,
@@ -30,6 +36,10 @@ import {
   assignSuggestionSchema,
   confirmSuggestionSchema,
   refreshSuggestionsSchema,
+  uploadTimesheetSchema,
+  removePersonFromRunSchema,
+  restorePersonToRunSchema,
+  updateRunPeopleSchema,
   cancelPayRunSchema,
   confirmRunLineSchema,
   createPayLineSchema,
@@ -485,5 +495,132 @@ export async function savePaySettings(input: unknown): Promise<ActionResult> {
 
     if (result.ok) refreshed();
     return result;
+  });
+}
+
+/** Brings a draft run up to date with the Rates tab: adds people, moves lines to a newer rate, takes off lines no longer in force. */
+export async function updateRunPeople(input: unknown): Promise<ActionResult<{ added: number; updated: number; removed: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = updateRunPeopleSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const done = await db.transaction((tx) => syncRunPeople(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: done } as const;
+  });
+}
+
+/** Takes one person off a draft run (their line and amounts stay on record and are ignored). */
+export async function removePersonFromRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = removePersonFromRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => removeRunLine(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Puts a removed person back on the draft run. */
+export async function restorePersonToRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = restorePersonToRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => restoreRunLine(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/**
+ * Reads a Jibble timesheet file (.xlsx) uploaded for a draft run and keeps its totals, encrypted, for the preview. Rate limited. The file
+ * is checked by its contents, never its name or type; only totals per member are kept, never clock times.
+ */
+export async function uploadJibbleTimesheet(formData: FormData): Promise<ActionResult<{ importId: string; members: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+    if (!(await allowRequest("upload", actor.id))) return fail("Too many uploads. Wait a few minutes and try again.");
+
+    const runId = uploadTimesheetSchema.safeParse({ runId: formData.get("runId") });
+    const file = formData.get("file");
+    if (!runId.success || !(file instanceof File)) return fail(BAD_REQUEST);
+    if (file.size === 0 || file.size > MAX_XLSX_BYTES) return fail("Choose the Excel file exported from Jibble (up to 8 MB).");
+
+    let timesheet;
+    try {
+      timesheet = readJibbleTimesheet(new Uint8Array(await file.arrayBuffer()));
+    } catch (error) {
+      if (error instanceof XlsxError) return fail(error.message);
+      console.error("payroll timesheet upload unreadable:", { error: error instanceof Error ? error.name : "UnknownError" });
+      return fail("That file could not be read. Export the timesheet from Jibble again.");
+    }
+
+    const done = await db.transaction((tx) => saveTimesheetUpload(tx, actor, runId.data.runId, timesheet));
+    refreshedRun(runId.data.runId);
+    return { ok: true, data: done } as const;
+  });
+}
+
+/** Fills the draft run with suggested amounts from the uploaded timesheet, for the members the Preparer matched. */
+export async function applyJibbleTimesheet(input: unknown): Promise<ActionResult<{ lines: number; written: number; kept: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = applyTimesheetSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const done = await db.transaction((tx) => applyTimesheet(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: done } as const;
+  });
+}
+
+/** Throws away an uploaded timesheet without using it. */
+export async function discardJibbleTimesheet(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = discardTimesheetSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => discardTimesheet(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Confirms every suggested amount that sits on a line, as suggested (after the Preparer has read them). */
+export async function confirmAllSuggestions(input: unknown): Promise<ActionResult<{ confirmed: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = confirmAllSuggestionsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const done = await db.transaction((tx) => confirmAll(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: done } as const;
   });
 }

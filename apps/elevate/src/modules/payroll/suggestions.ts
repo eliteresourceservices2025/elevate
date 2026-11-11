@@ -28,7 +28,7 @@ const SUGGESTED_TYPES: PayItemType[] = ["absence_days", "late_minutes", ...EXTRA
 // Approved extra minutes worked on a holiday are suggested as holiday pay (paid one to one); there is no separate holiday overtime.
 
 /** One new row in the item history. `clock_timestamp()` keeps rows written in one transaction in the order they were written. */
-async function addItem(tx: Tx, actor: Actor, v: { runId: string; employeeId: string; runLineId: string | null; type: string; state: "suggested" | "dismissed"; value: bigint; reason: string | null }): Promise<void> {
+export async function addItem(tx: Tx, actor: Actor, v: { runId: string; employeeId: string; runLineId: string | null; type: string; state: "suggested" | "dismissed"; value: bigint; reason: string | null }): Promise<void> {
   const id = randomUUID();
   await tx.insert(payRunItems).values({
     id,
@@ -49,7 +49,7 @@ async function addItem(tx: Tx, actor: Actor, v: { runId: string; employeeId: str
  */
 export async function applyRefresh(tx: Tx, actor: Actor, runId: string): Promise<{ written: number }> {
   const run = await lockDraftRun(tx, runId);
-  const lines = await tx.select({ id: payRunLines.id, employeeId: payRunLines.employeeId, clientId: payRunLines.clientId }).from(payRunLines).where(eq(payRunLines.runId, runId));
+  const lines = await tx.select({ id: payRunLines.id, employeeId: payRunLines.employeeId, clientId: payRunLines.clientId }).from(payRunLines).where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false)));
   const employeeIds = [...new Set(lines.map((l) => l.employeeId))];
 
   const today = payrollToday();
@@ -134,7 +134,7 @@ async function lineOf(tx: Tx, runId: string, employeeId: string, runLineId: stri
   const [line] = await tx
     .select({ id: payRunLines.id })
     .from(payRunLines)
-    .where(and(eq(payRunLines.id, runLineId), eq(payRunLines.runId, runId), eq(payRunLines.employeeId, employeeId)))
+    .where(and(eq(payRunLines.id, runLineId), eq(payRunLines.runId, runId), eq(payRunLines.excluded, false), eq(payRunLines.employeeId, employeeId)))
     .limit(1);
   if (!line) throw new ActionFailure("That line is not on this run.");
 }

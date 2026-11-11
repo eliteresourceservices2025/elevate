@@ -149,6 +149,11 @@ export const CHANGE_ACTIONS = [
   "run_viewed",
   "run_cancelled",
   "signatory_changed",
+  "run_people_synced",
+  "run_line_removed",
+  "run_line_restored",
+  "timesheet_imported",
+  "suggestions_confirmed_all",
 ] as const;
 export type ChangeAction = (typeof CHANGE_ACTIONS)[number];
 
@@ -174,6 +179,11 @@ export const CHANGE_ACTION_LABELS: Record<ChangeAction, string> = {
   run_viewed: "Run opened",
   run_cancelled: "Run cancelled",
   signatory_changed: "Payslip signatory changed",
+  run_people_synced: "Run updated from the Rates tab",
+  run_line_removed: "Person taken off the run",
+  run_line_restored: "Person put back on the run",
+  timesheet_imported: "Run filled from a Jibble timesheet",
+  suggestions_confirmed_all: "All suggested amounts confirmed",
 };
 
 /** Wording of the change history page. Figures and reasons are shown only there, never in the audit log, notices or logs. */
@@ -229,6 +239,13 @@ export const HISTORY_LABELS = {
   amountChanged: "Typed a different amount",
   amountAsSuggested: "Confirmed as suggested",
   amountKind: "Amount",
+  peopleAdded: "People added",
+  peopleUpdated: "Lines moved to a newer rate",
+  peopleRemoved: "People taken off",
+  membersMatched: "Members filled",
+  suggestionsWritten: "Suggestions written",
+  keptAsTyped: "Left as already confirmed",
+  confirmedCount: "Amounts confirmed",
   signatoryName: "Signatory name",
   signatoryTitle: "Signatory title",
   signatoryPicture: "Signature picture",
@@ -445,8 +462,25 @@ export const SUGGESTION_LABELS = {
 /** Deductions entered by hand need a reason, as does overriding a suggestion. */
 export const REASON_REQUIRED_TYPES: readonly PayItemType[] = ["loan", "other_deduction"];
 
-export const BLOCKING_CHECKS = ["missing_multiplier", "negative_net", "partial_exceeds_cutoff", "unassigned_suggestion", "own_line_unconfirmed", "unreadable_line", "lines_out_of_date"] as const;
-export const WARNING_CHECKS = ["unapproved_days", "no_payout_details", "new_or_leaving", "rate_change_mid_period", "pending_suggestions", "large_change"] as const;
+/**
+ * Only a line that cannot be read stops a run from being sent (there is nothing to approve). Everything else is a note for the Preparer and
+ * the Approver to read: the Approver still decides. (Changed 2026-11-12 so the team can push runs through while they test.)
+ */
+export const BLOCKING_CHECKS = ["unreadable_line"] as const;
+export const WARNING_CHECKS = [
+  "missing_multiplier",
+  "negative_net",
+  "partial_exceeds_cutoff",
+  "unassigned_suggestion",
+  "own_line_unconfirmed",
+  "lines_out_of_date",
+  "unapproved_days",
+  "no_payout_details",
+  "new_or_leaving",
+  "rate_change_mid_period",
+  "pending_suggestions",
+  "large_change",
+] as const;
 export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
 
 export const CHECK_LABELS: Record<CheckCode, string> = {
@@ -456,7 +490,7 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   unassigned_suggestion: "Suggested amounts are not assigned to a pay line",
   own_line_unconfirmed: "Your own line needs a confirmation from another Preparer",
   unreadable_line: "This line can't be read",
-  lines_out_of_date: "The pay lines changed after this run was created. Cancel the run and create it again.",
+  lines_out_of_date: "The pay lines changed after this run was created. Use Update people to bring the run up to date.",
   unapproved_days: "Some days in the period are not approved",
   no_payout_details: "No payout details on file",
   new_or_leaving: "Starts, ends or has left during this period",

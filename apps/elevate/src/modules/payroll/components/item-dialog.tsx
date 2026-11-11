@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { confirmRunLine, dismissPayItem, savePayItem } from "../actions";
+import { dismissPayItem, savePayItem } from "../actions";
 import { APPROVAL_LABELS, CORRECTION_TYPES, isItemized, ITEM_NAME_SUGGESTIONS, PAY_ITEM_LABELS, PAY_ITEM_TYPES, REASON_REQUIRED_TYPES, WORKSHEET_LABELS, type PayItemType } from "../constants";
 import { ITEM_UNIT_HINTS, itemUnit, MAX_ITEM_LABEL, parseItemValue } from "../items";
 import type { WorksheetLine } from "../runs";
@@ -76,12 +76,17 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
   const current = itemized ? undefined : line.items.find((i) => i.type === type && i.state !== "dismissed");
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
+  // Times (overtime, holiday pay, late, part cutoff) can be typed as hours or minutes: hours for overtime and holiday pay, minutes for late.
+  const timed = itemUnit(type) === "minutes";
+  const [pickedUnit, setPickedUnit] = useState<"h" | "m" | null>(null);
+  const unit = pickedUnit ?? (type === "late_minutes" ? "m" : "h");
+  const sentValue = timed && /^\d+(\.\d+)?$/.test(value.trim()) ? `${value.trim()} ${unit}` : value;
   const [reason, setReason] = useState("");
   const [corrects, setCorrects] = useState("");
   const canCorrect = CORRECTION_TYPES.includes(type);
   const correction = canCorrect ? corrects : "";
   // The same rule as the server: a reason for a deduction, a correction, or when the amount differs from a suggestion.
-  const typed = parseItemValue(type, value);
+  const typed = parseItemValue(type, sentValue);
   const suggestedValue = current?.state === "suggested" ? parseItemValue(type, current.value) : null;
   const needsReason = REASON_REQUIRED_TYPES.includes(type) || correction !== "" || (suggestedValue !== null && typed !== suggestedValue);
 
@@ -101,7 +106,7 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          run(() => savePayItem({ runId, employeeId: line.employeeId, runLineId: line.runLineId, type, value, label: itemized ? name : "", reason, correctsRunId: correction }), "Amount saved.", () => {
+          run(() => savePayItem({ runId, employeeId: line.employeeId, runLineId: line.runLineId, type, value: sentValue, label: itemized ? name : "", reason, correctsRunId: correction }), "Amount saved.", () => {
             setName("");
             setValue("");
             setReason("");
@@ -134,7 +139,15 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
         ) : null}
         <div className="space-y-1">
           <Label htmlFor={`item-value-${line.runLineId}`}>Amount</Label>
-          <Input id={`item-value-${line.runLineId}`} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} required />
+          <div className="flex gap-2">
+            <Input id={`item-value-${line.runLineId}`} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} required />
+            {timed ? (
+              <NativeSelect aria-label="Hours or minutes" className="w-32 shrink-0" value={unit} onChange={(e) => setPickedUnit(e.target.value as "h" | "m")}>
+                <option value="h">hours</option>
+                <option value="m">minutes</option>
+              </NativeSelect>
+            ) : null}
+          </div>
           <p className="text-xs text-muted-foreground">{ITEM_UNIT_HINTS[itemUnit(type)]} A reduction is entered as a loan or other deduction, never as a negative amount.</p>
         </div>
         {canCorrect && correctableRuns.length > 0 ? (
@@ -164,22 +177,12 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
   );
 }
 
-export function ItemDialog({ runId, line, correctableRuns = [] }: { runId: string; line: WorksheetLine; correctableRuns?: CorrectableRun[] }) {
+type Controlled = { open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean };
+
+export function ItemDialog({ runId, line, correctableRuns = [], open, onOpenChange, hideTrigger }: { runId: string; line: WorksheetLine; correctableRuns?: CorrectableRun[] } & Controlled) {
   return (
-    <FormDialog label="Amounts" title={`Amounts for ${line.name}`} description="Saving recomputes this person's pay and asks for a new check of the line." variant="outline" triggerSize="sm" size="lg" disabled={line.unreadable} hint="This line can't be read, so it can't be changed from here.">
+    <FormDialog label="Amounts" title={`Amounts for ${line.name}`} description="Saving recomputes this person's pay and asks for a new check of the line." variant="outline" triggerSize="sm" size="lg" disabled={line.unreadable} hint="This line can't be read, so it can't be changed from here." open={open} onOpenChange={onOpenChange} hideTrigger={hideTrigger}>
       <ItemForm runId={runId} line={line} correctableRuns={correctableRuns} />
     </FormDialog>
-  );
-}
-
-export function ConfirmLineButton({ line }: { line: WorksheetLine }) {
-  const { run, pending } = useRun();
-  if (line.isOwn) return <span className="text-xs text-muted-foreground">Your own line. Another Preparer checks it.</span>;
-  return (
-    <>
-      <Button type="button" variant="outline" size="sm" disabled={pending || line.unreadable || line.confirmedByMe} onClick={() => run(() => confirmRunLine({ runLineId: line.runLineId }), "Line checked.")}>
-        {line.confirmedByName ? "Check again" : "Mark as checked"}
-      </Button>
-    </>
   );
 }

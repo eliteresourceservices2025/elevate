@@ -134,18 +134,26 @@ describe("reminders", () => {
   it("sends the 30, 7 and 0 day notices once each, and nothing twice", async () => {
     const p = await makePerson("remind", ["employee"]);
     const name = `HIPAA ${uniq("r")}`;
+    // The job covers everyone's certificates in the shared database, so this counts only this person's notices (what other test files left
+    // behind must not change the result).
+    const mine = async () => (await noticesFor(p.user.id)).length;
     // 40 days out when added: nothing is due yet
     const id = await add(p.employeeId, name, plus(TODAY, 40));
-    expect(await jobs.runCredentialReminders(TODAY)).toMatchObject({ employeeNotices: 0 });
+    await jobs.runCredentialReminders(TODAY);
+    expect(await mine()).toBe(0);
     // 30 days out
-    const at30 = await jobs.runCredentialReminders(plus(TODAY, 10));
-    expect(at30.employeeNotices).toBe(1);
-    expect(await jobs.runCredentialReminders(plus(TODAY, 10))).toMatchObject({ employeeNotices: 0 });
+    await jobs.runCredentialReminders(plus(TODAY, 10));
+    expect(await mine()).toBe(1);
+    await jobs.runCredentialReminders(plus(TODAY, 10));
+    expect(await mine()).toBe(1);
     // a day with 5 days left sends only the 7-day notice, once
-    expect((await jobs.runCredentialReminders(plus(TODAY, 35))).employeeNotices).toBe(1);
-    expect((await jobs.runCredentialReminders(plus(TODAY, 36))).employeeNotices).toBe(0);
+    await jobs.runCredentialReminders(plus(TODAY, 35));
+    expect(await mine()).toBe(2);
+    await jobs.runCredentialReminders(plus(TODAY, 36));
+    expect(await mine()).toBe(2);
     // the end date itself
-    expect((await jobs.runCredentialReminders(plus(TODAY, 40))).employeeNotices).toBe(1);
+    await jobs.runCredentialReminders(plus(TODAY, 40));
+    expect(await mine()).toBe(3);
     const notices = await noticesFor(p.user.id);
     expect(notices).toHaveLength(3);
     expect(notices[2].title).toContain("expires today");

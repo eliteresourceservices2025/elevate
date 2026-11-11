@@ -104,7 +104,7 @@ async function notifyPayslipsReady(tx: Tx, runId: string): Promise<void> {
     .from(payRunLines)
     .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
     .innerJoin(users, eq(users.id, employees.userId))
-    .where(and(eq(payRunLines.runId, runId), isNotNull(employees.userId), isNull(users.archivedAt)));
+    .where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false), isNotNull(employees.userId), isNull(users.archivedAt)));
   await notify(
     tx,
     people.flatMap((p) =>
@@ -132,7 +132,7 @@ export async function recordPayment(
     await tx
       .selectDistinct({ id: payRunLines.employeeId })
       .from(payRunLines)
-      .where(eq(payRunLines.runId, v.runId))
+      .where(and(eq(payRunLines.runId, v.runId), eq(payRunLines.excluded, false)))
   ).map((r) => r.id);
   if (!people.includes(v.employeeId)) throw new ActionFailure("That person is not on this run.");
   await assertNotOwnEmployee(actor, v.employeeId, tx);

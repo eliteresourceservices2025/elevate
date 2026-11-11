@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { employees } from "@/modules/people/schema";
-import { HOLIDAY_BP, type ItemLine, type LineInput, type LineResult, type SettingsSnapshot } from "./calculate";
+import { DEFAULT_OT_BP, HOLIDAY_BP, type ItemLine, type LineInput, type LineResult, type SettingsSnapshot } from "./calculate";
 import type { Tx } from "@/modules/people/service";
 import { payRuns, paySettings } from "./schema";
 
@@ -50,9 +50,10 @@ export function snapshotOf(row: typeof paySettings.$inferSelect): SettingsSnapsh
     cutoffDivisor: row.cutoffDivisor,
     changeWarnBp: row.changeWarnBp,
     multipliersBp: {
-      regular: row.extraRegularBp,
-      restDay: row.extraRestDayBp,
-      restDayOver8: row.extraRestDayOver8Bp,
+      // A blank setting means the standard percent, not "missing": overtime must pay from the first run.
+      regular: row.extraRegularBp ?? DEFAULT_OT_BP.regular,
+      restDay: row.extraRestDayBp ?? DEFAULT_OT_BP.restDay,
+      restDayOver8: row.extraRestDayOver8Bp ?? DEFAULT_OT_BP.restDayOver8,
       holiday: HOLIDAY_BP,
     },
   };

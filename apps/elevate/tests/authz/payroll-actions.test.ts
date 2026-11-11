@@ -51,6 +51,7 @@ describe("setPayrollAccess, every role", () => {
 // a valid request from a Preparer reaches the (mocked, throwing) database, so it ends in the generic message.
 const { createPayLine, updatePayLine, endPayLine, savePaySettings } = await import("@/modules/payroll/actions");
 const { getRates, getPaySettings, getRuns, getWorksheet } = await import("@/modules/payroll/queries");
+const { updateRunPeople, removePersonFromRun, restorePersonToRun } = await import("@/modules/payroll/actions");
 const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun } =
   await import("@/modules/payroll/actions");
 const { payrollRunsAwaitingApproval, getPayments } = await import("@/modules/payroll/queries");
@@ -77,6 +78,9 @@ const calls: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   dismissPayItem: () => dismissPayItem({ runId: RUN_ID, itemId: LINE_KEY }),
   confirmRunLine: () => confirmRunLine({ runLineId: LINE_KEY }),
   cancelPayRun: () => cancelPayRun({ runId: RUN_ID, reason: "Pay lines changed" }),
+  updateRunPeople: () => updateRunPeople({ runId: RUN_ID }),
+  removePersonFromRun: () => removePersonFromRun({ runId: RUN_ID, runLineId: LINE_KEY, reason: "Not on this run" }),
+  restorePersonToRun: () => restorePersonToRun({ runId: RUN_ID, runLineId: LINE_KEY }),
   refreshSuggestions: () => refreshSuggestions({ runId: RUN_ID }),
   confirmSuggestion: () => confirmSuggestion({ runId: RUN_ID, itemId: LINE_KEY, runLineId: LINE_KEY }),
   assignSuggestion: () => assignSuggestion({ runId: RUN_ID, itemId: LINE_KEY, runLineId: LINE_KEY }),

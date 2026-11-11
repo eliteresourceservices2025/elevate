@@ -115,7 +115,7 @@ export async function recomputeRun(tx: Tx, runId: string, options: { employeeId?
     .select({ runLine: payRunLines, version: payLines })
     .from(payRunLines)
     .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
-    .where(scoped ? and(eq(payRunLines.runId, runId), eq(payRunLines.employeeId, scoped)) : eq(payRunLines.runId, runId));
+    .where(scoped ? and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false), eq(payRunLines.employeeId, scoped)) : and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false)));
 
   const items = await latestItems(tx, runId);
   const forceClear = new Set(options.clearConfirmationFor ?? []);
@@ -259,7 +259,7 @@ async function checkCorrection(tx: Tx, v: { runId: string; employeeId: string; t
   const [had] = await tx
     .select({ id: payRunLines.id })
     .from(payRunLines)
-    .where(and(eq(payRunLines.runId, correctsRunId), eq(payRunLines.employeeId, v.employeeId)))
+    .where(and(eq(payRunLines.runId, correctsRunId), eq(payRunLines.excluded, false), eq(payRunLines.employeeId, v.employeeId)))
     .limit(1);
   if (!had) throw new ActionFailure("That person had no line on the run being corrected.");
 }
@@ -296,7 +296,7 @@ export async function saveItem(
   const [line] = await tx
     .select({ id: payRunLines.id, lineId: payRunLines.lineId })
     .from(payRunLines)
-    .where(and(eq(payRunLines.id, v.runLineId), eq(payRunLines.runId, v.runId), eq(payRunLines.employeeId, v.employeeId)))
+    .where(and(eq(payRunLines.id, v.runLineId), eq(payRunLines.runId, v.runId), eq(payRunLines.excluded, false), eq(payRunLines.employeeId, v.employeeId)))
     .limit(1);
   if (!line) throw new ActionFailure("That line is not on this run.");
   const value = parseItemValue(v.type, v.value);
@@ -402,7 +402,7 @@ export async function confirmLine(tx: Tx, actor: Actor, runLineId: string): Prom
   if (!found) throw new ActionFailure("That line was not found.");
   await lockDraftRun(tx, found.runId);
   const [line] = await tx.select().from(payRunLines).where(eq(payRunLines.id, runLineId)).limit(1);
-  if (!line) throw new ActionFailure("That line was not found.");
+  if (!line || line.excluded) throw new ActionFailure("That line was not found.");
   await assertNotOwnEmployee(actor, line.employeeId, tx);
   try {
     decryptRunLine(line.id, line.payloadEnc);
@@ -413,6 +413,111 @@ export async function confirmLine(tx: Tx, actor: Actor, runLineId: string): Prom
   await tx.update(payRunLines).set({ confirmedBy: actor.id, confirmedAt: new Date() }).where(eq(payRunLines.id, runLineId));
   await writeAudit({ actor, action: "payroll.line.confirm", targetType: "pay_run", targetId: found.runId, metadata: { employeeId: line.employeeId } }, tx);
   await logChange(tx, actor, { action: "line_confirmed", runId: found.runId, employeeId: line.employeeId, detail: { runLineId } });
+}
+
+// ---- Who is on a draft run ----
+
+/**
+ * Brings a draft run up to date with the Rates tab, without creating another run: people whose pay line is now in force are added, a line
+ * whose pay line has a newer version is moved to it (recomputed, and its check cleared), and a line whose pay line is no longer in force is
+ * taken off. A person a Preparer removed on purpose stays removed (Restore puts them back). Settings are refreshed too.
+ */
+export async function syncRunPeople(tx: Tx, actor: Actor, runId: string): Promise<{ added: number; updated: number; removed: number }> {
+  const run = await lockDraftRun(tx, runId);
+  const settings = await settingsInForce(tx, run.periodStart);
+  const all = await tx
+    .select({ line: payLines, status: employees.status, archivedAt: employees.archivedAt })
+    .from(payLines)
+    .innerJoin(employees, eq(employees.id, payLines.employeeId));
+  const person = new Map(all.map((r) => [r.line.employeeId, r]));
+  const resolved = resolveLines(all.map((r) => r.line), { start: run.periodStart, end: run.periodEnd });
+  const existing = await tx
+    .select({ runLine: payRunLines, lineKey: payLines.lineKey })
+    .from(payRunLines)
+    .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
+    .where(eq(payRunLines.runId, runId));
+  const byKey = new Map(existing.map((e) => [e.lineKey, e]));
+  const inForce = new Set(resolved.map((r) => r.version.lineKey));
+  const items = await latestItems(tx, runId);
+
+  const flagsFor = (version: { employeeId: string }, flags: string[]) => {
+    const out = [...flags];
+    const who = person.get(version.employeeId);
+    if (who && (who.status === "separated" || who.archivedAt !== null)) out.push("person_left");
+    return out;
+  };
+
+  let added = 0;
+  let updated = 0;
+  let removed = 0;
+  for (const { version, flags } of resolved) {
+    const found = byKey.get(version.lineKey);
+    const lineFlags = flagsFor(version, flags);
+    if (!found) {
+      const id = randomUUID();
+      const rate = readRate(version.id, version.amountsEnc);
+      await tx.insert(payRunLines).values({
+        id,
+        runId,
+        lineId: version.id,
+        employeeId: version.employeeId,
+        clientId: version.clientId,
+        alias: version.alias,
+        flags: lineFlags,
+        payloadEnc: encryptRunLine(id, computePayload(version, rate, noConfirmed(), settings)),
+      });
+      added += 1;
+    } else if (found.runLine.excluded) {
+      continue; // taken off on purpose: only Restore brings it back
+    } else if (found.runLine.lineId !== version.id || canon([...found.runLine.flags].sort()) !== canon([...lineFlags].sort())) {
+      const rate = readRate(version.id, version.amountsEnc);
+      const payload = computePayload(version, rate, confirmedValues(items, found.runLine.id), settings);
+      await tx
+        .update(payRunLines)
+        .set({ lineId: version.id, clientId: version.clientId, alias: version.alias, flags: lineFlags, payloadEnc: encryptRunLine(found.runLine.id, payload), confirmedBy: null, confirmedAt: null })
+        .where(eq(payRunLines.id, found.runLine.id));
+      updated += 1;
+    }
+  }
+  for (const found of existing) {
+    if (found.runLine.excluded || inForce.has(found.lineKey)) continue;
+    await tx.update(payRunLines).set({ excluded: true, confirmedBy: null, confirmedAt: null }).where(eq(payRunLines.id, found.runLine.id));
+    removed += 1;
+  }
+  await recomputeRun(tx, runId); // also refreshes the settings snapshot
+
+  await writeAudit({ actor, action: "payroll.run.sync_people", targetType: "pay_run", targetId: runId, metadata: { added, updated, removed } }, tx);
+  await logChange(tx, actor, { action: "run_people_synced", runId, detail: { added, updated, removed } });
+  return { added, updated, removed };
+}
+
+/** Takes one person's line off a draft run. The line and its amounts stay on record (the history is append-only) and are ignored. */
+export async function removeRunLine(tx: Tx, actor: Actor, v: { runId: string; runLineId: string; reason: string }): Promise<void> {
+  await lockDraftRun(tx, v.runId);
+  const [line] = await tx
+    .select()
+    .from(payRunLines)
+    .where(and(eq(payRunLines.id, v.runLineId), eq(payRunLines.runId, v.runId), eq(payRunLines.excluded, false)))
+    .limit(1);
+  if (!line) throw new ActionFailure("That line is not on this run.");
+  await tx.update(payRunLines).set({ excluded: true, confirmedBy: null, confirmedAt: null }).where(eq(payRunLines.id, line.id));
+  await writeAudit({ actor, action: "payroll.run.remove_line", targetType: "pay_run", targetId: v.runId, metadata: { employeeId: line.employeeId } }, tx);
+  await logChange(tx, actor, { action: "run_line_removed", runId: v.runId, employeeId: line.employeeId, detail: { runLineId: line.id, reason: v.reason } });
+}
+
+/** Puts a removed line back on the draft run, recomputed from its amounts, with its check cleared. */
+export async function restoreRunLine(tx: Tx, actor: Actor, v: { runId: string; runLineId: string }): Promise<void> {
+  await lockDraftRun(tx, v.runId);
+  const [line] = await tx
+    .select()
+    .from(payRunLines)
+    .where(and(eq(payRunLines.id, v.runLineId), eq(payRunLines.runId, v.runId), eq(payRunLines.excluded, true)))
+    .limit(1);
+  if (!line) throw new ActionFailure("That line was not found.");
+  await tx.update(payRunLines).set({ excluded: false, confirmedBy: null, confirmedAt: null }).where(eq(payRunLines.id, line.id));
+  await recomputeRun(tx, v.runId, { employeeId: line.employeeId, clearConfirmationFor: [line.id] });
+  await writeAudit({ actor, action: "payroll.run.restore_line", targetType: "pay_run", targetId: v.runId, metadata: { employeeId: line.employeeId } }, tx);
+  await logChange(tx, actor, { action: "run_line_restored", runId: v.runId, employeeId: line.employeeId, detail: { runLineId: line.id } });
 }
 
 // ---- Reading a run ----
@@ -491,6 +596,8 @@ export type Worksheet = {
   unreadableCount: number;
   /** Approved or paid earlier runs a correction on this draft may name, newest first. */
   correctableRuns: { id: string; label: string }[];
+  /** People taken off this draft run, who can be put back. */
+  removed: { runLineId: string; name: string; alias: string | null }[];
 };
 
 /** Finished days in the period with hours that are not approved (or changed after approval), for each person. Reads through the attendance module. */
@@ -526,6 +633,8 @@ type RunRow = { runLine: typeof payRunLines.$inferSelect; lineKey: string; first
 export type RunData = {
   run: typeof payRuns.$inferSelect;
   rows: RunRow[];
+  /** People taken off this draft run (their lines are kept but ignored). */
+  removedLines: { runLineId: string; employeeId: string; name: string; alias: string | null }[];
   /** The newest item per line and type. */
   items: ItemRow[];
   /** Every item row the run has ever had (the history is append-only, so a new row always shows here). */
@@ -562,8 +671,17 @@ export async function readRun(executor: Executor, runId: string): Promise<RunDat
     .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
     .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
     .leftJoin(clients, eq(clients.id, payRunLines.clientId))
-    .where(eq(payRunLines.runId, runId))
+    .where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false)))
     .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName), asc(payRunLines.alias), asc(payRunLines.id));
+
+  // People taken off this draft: listed so they can be restored, and not counted as "out of date".
+  const removed = await executor
+    .select({ runLine: payRunLines, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
+    .from(payRunLines)
+    .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
+    .where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, true)))
+    .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName), asc(payRunLines.alias));
+  const removedLines = removed.map((r) => ({ runLineId: r.runLine.id, employeeId: r.runLine.employeeId, name: nameOf(r), alias: r.runLine.alias }));
 
   const items = await latestItems(executor, runId);
   const itemIds = (await executor.select({ id: payRunItems.id }).from(payRunItems).where(eq(payRunItems.runId, runId))).map((r) => r.id).sort();
@@ -601,7 +719,7 @@ export async function readRun(executor: Executor, runId: string): Promise<RunDat
       .select({ id: payRunLines.id, payloadEnc: payRunLines.payloadEnc, lineKey: payLines.lineKey })
       .from(payRunLines)
       .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
-      .where(eq(payRunLines.runId, previous.id));
+      .where(and(eq(payRunLines.runId, previous.id), eq(payRunLines.excluded, false)));
     for (const p of prevRows) {
       try {
         previousNets.set(p.lineKey, decryptRunLine(p.id, p.payloadEnc).result.net);
@@ -616,13 +734,17 @@ export async function readRun(executor: Executor, runId: string): Promise<RunDat
   let linesOutOfDate = false;
   if (run.status === "draft" || run.status === "in_review") {
     const now = await linesNowInForce(executor, { start: run.periodStart, end: run.periodEnd });
-    const built = new Set(rows.map((r) => `${r.runLine.lineId}|${r.runLine.flags.filter((f) => f !== "person_left").sort().join(",")}`));
-    linesOutOfDate = now.size !== built.size || [...now].some((k) => !built.has(k));
+    const key = (l: { lineId: string; flags: string[] }) => `${l.lineId}|${l.flags.filter((f) => f !== "person_left").sort().join(",")}`;
+    // A person taken off on purpose is not "missing".
+    const built = new Set([...rows.map((r) => key(r.runLine)), ...removed.map((r) => key(r.runLine))]);
+    // A line taken off on purpose is in `built` so it is not "missing"; it must not count as an extra either (an ended line that was
+    // taken off is no longer in `now`), so the sets are compared by what is in each, not by their sizes.
+    linesOutOfDate = [...now].some((k) => !built.has(k)) || rows.some((r) => !now.has(key(r.runLine)));
   }
 
   const unapproved = await unapprovedDaysByPerson(executor, employeeIds, run.periodStart, run.periodEnd);
   const ready = await payoutReady(executor, employeeIds);
-  return { run, rows, items, itemIds, payloads, values, previousNets, linesOutOfDate, unapproved, ready };
+  return { run, rows, removedLines, items, itemIds, payloads, values, previousNets, linesOutOfDate, unapproved, ready };
 }
 
 const lineUnreadable = (data: RunData, runLineId: string) =>
@@ -807,5 +929,6 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
     checksAreMine: checksAs !== null && checksAs === viewer.id,
     unreadableCount,
     correctableRuns,
+    removed: data.removedLines.map((r) => ({ runLineId: r.runLineId, name: r.name, alias: r.alias })),
   };
 }

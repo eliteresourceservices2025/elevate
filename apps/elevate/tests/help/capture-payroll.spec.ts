@@ -263,13 +263,15 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     await expect(worker()).toBeVisible();
     await snap(prepPage, "prepare-a-pay-run", "06-worksheet", "A new run: the checks above the worksheet, and one line for each person.", {
       viewport: { width: 1280, height: 1000 },
-      highlight: [worker().getByRole("button", { name: "Amounts" })],
+      highlight: [worker().getByRole("button", { name: /^Actions for/ })],
     });
 
     // Overtime for the person.
-    await worker().getByRole("button", { name: "Amounts" }).click();
+    await worker().getByRole("button", { name: /^Actions for/ }).click();
+    await prepPage.getByRole("menuitem", { name: "Amounts" }).click();
     await waitForHydration(prepPage, "form select");
     await prepPage.getByLabel("What to enter").selectOption({ label: "Overtime (OT), regular day" });
+    await prepPage.getByLabel("Hours or minutes").selectOption("m");
     await prepPage.getByLabel("Amount", { exact: true }).fill("120");
     await snap(prepPage, "prepare-a-pay-run", "07-amounts", "The Amounts window: what to enter, and the amount (here 120 minutes of overtime).", {
       highlight: [prepPage.getByLabel("What to enter"), prepPage.getByLabel("Amount", { exact: true })],
@@ -279,7 +281,8 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     await expect(prepPage.getByRole("dialog")).toHaveCount(0);
 
     // A named allowance (itemized), then a reimbursement and a bonus.
-    await worker().getByRole("button", { name: "Amounts" }).click();
+    await worker().getByRole("button", { name: /^Actions for/ }).click();
+    await prepPage.getByRole("menuitem", { name: "Amounts" }).click();
     await waitForHydration(prepPage, "form select");
     await prepPage.getByLabel("What to enter").selectOption({ label: "Allowance" });
     await prepPage.getByLabel(/^Name of this allowance/).fill("Health allowance");
@@ -294,7 +297,8 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
       ["Reimbursement", "Supplies", "120"],
       ["Bonus", "Performance bonus", "2000"],
     ] as const) {
-      await worker().getByRole("button", { name: "Amounts" }).click();
+      await worker().getByRole("button", { name: /^Actions for/ }).click();
+      await prepPage.getByRole("menuitem", { name: "Amounts" }).click();
       await waitForHydration(prepPage, "form select");
       await prepPage.getByLabel("What to enter").selectOption({ label: type });
       await prepPage.getByLabel(new RegExp(`^Name of this ${type.toLowerCase()}`)).fill(label);
@@ -305,12 +309,18 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     }
 
     // Every line is checked by a Preparer.
-    const checkButtons = prepPage.getByRole("button", { name: "Mark as checked" });
-    await checkButtons.first().waitFor(); // the buttons appear once the page has refreshed after the last amount
-    for (let guard = 0; guard < 20 && (await checkButtons.count()) > 0; guard++) {
-      const before = await checkButtons.count();
-      await checkButtons.first().click();
-      await expect(checkButtons).toHaveCount(before - 1);
+    const rowMenus = prepPage.getByRole("button", { name: /^Actions for/ });
+    await rowMenus.first().waitFor(); // the menus appear once the page has refreshed after the last amount
+    const lineCount = await rowMenus.count();
+    for (let i = 0; i < lineCount; i++) {
+      await rowMenus.nth(i).click();
+      const check = prepPage.getByRole("menuitem", { name: /^(Mark as checked|Check again)$/ });
+      if ((await check.count()) > 0 && (await check.isEnabled())) {
+        await check.click();
+        await expect(prepPage.getByText("Line checked.").first()).toBeVisible();
+      } else {
+        await prepPage.keyboard.press("Escape"); // the Preparer's own line: another Preparer checks it
+      }
     }
     const send = prepPage.getByRole("button", { name: "Send for review" });
     await expect(send).toBeEnabled();

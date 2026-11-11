@@ -13,7 +13,14 @@ const rate = { monthlyCentavos: 2_200_000n };
 describe("parseItemValue", () => {
   it("reads minutes as positive whole numbers", () => {
     expect(parseItemValue("late_minutes", "45")).toBe(45n);
-    for (const bad of ["0", "-5", "1.5", "", "abc", "1,000", "50000"]) expect(parseItemValue("late_minutes", bad)).toBeNull();
+    for (const bad of ["0", "-5", "1.5", "", "abc", "1,000", "50000", "1:75", "h", "1 h 90"]) expect(parseItemValue("late_minutes", bad)).toBeNull();
+  });
+  it("reads a time typed as hours or minutes", () => {
+    for (const [typed, minutes] of [["90m", 90n], ["90 min", 90n], ["1.5h", 90n], ["1.5 hours", 90n], ["2 h", 120n], ["1h30m", 90n], ["1 h 30 min", 90n], ["1:30", 90n], ["0.25 h", 15n], ["45 MIN", 45n]] as const) {
+      expect(parseItemValue("extra_regular", typed), typed).toBe(minutes);
+    }
+    // What the page shows can be typed back in.
+    expect(parseItemValue("extra_regular", formatItemValue("extra_regular", 135n))).toBe(135n);
   });
   it("reads days as hundredths, up to two decimals", () => {
     expect(parseItemValue("absence_days", "1.5")).toBe(150n);
@@ -43,7 +50,9 @@ describe("parseItemValue", () => {
 
 describe("formatItemValue", () => {
   it("shows each unit the way it was typed", () => {
-    expect(formatItemValue("late_minutes", 45n)).toBe("45");
+    expect(formatItemValue("late_minutes", 45n)).toBe("45 min");
+    expect(formatItemValue("extra_regular", 90n)).toBe("1 h 30 min");
+    expect(formatItemValue("extra_regular", 120n)).toBe("2 h");
     expect(formatItemValue("absence_days", 150n)).toBe("1.5");
     expect(formatItemValue("absence_days", 200n)).toBe("2");
     expect(formatItemValue("loan", 125050n)).toBe("1,250.50");

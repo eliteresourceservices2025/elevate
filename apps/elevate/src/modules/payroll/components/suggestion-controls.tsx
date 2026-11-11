@@ -1,26 +1,15 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { assignSuggestion, confirmSuggestion, refreshSuggestions } from "../actions";
+import { assignSuggestion, confirmSuggestion } from "../actions";
 import { PAY_ITEM_LABELS, SUGGESTION_LABELS as S } from "../constants";
 import type { Worksheet, WorksheetLine } from "../runs";
 
 // Suggestions come from approved hours and never change pay until a Preparer confirms them.
-
-export function RefreshSuggestionsButton({ runId }: { runId: string }) {
-  const { run, pending } = useRun();
-  return (
-    <Button type="button" variant="outline" disabled={pending} onClick={() => run(() => refreshSuggestions({ runId }), S.refreshed)}>
-      <RefreshCw className="size-4" aria-hidden />
-      {S.refresh}
-    </Button>
-  );
-}
 
 export function ConfirmSuggestionButton({ runId, itemId, runLineId }: { runId: string; itemId: string; runLineId: string }) {
   const { run, pending } = useRun();

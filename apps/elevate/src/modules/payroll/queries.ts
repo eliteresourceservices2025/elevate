@@ -257,7 +257,7 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
       .select({ employeeId: payRunLines.employeeId, alias: payRunLines.alias, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
       .from(payRunLines)
       .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
-      .where(eq(payRunLines.runId, runId))
+      .where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false)))
       .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName), asc(payRunLines.alias));
     const own = await employeeIdForUser(tx, actor.id);
     const paid = await latestPayments(tx, runId);

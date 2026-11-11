@@ -34,8 +34,31 @@ const MAX_HOUR_HUNDREDTHS = 74_400n; // 744 hours
 
 export const itemUnit = (type: PayItemType): Unit => UNIT[type]; // eslint-disable-line security/detect-object-injection
 
+/**
+ * A length of time typed by a person, in whole minutes, or null when it is not clearly one. Accepts "90", "90m", "90 min", "1.5h",
+ * "1.5 hours", "1h30m", "1 h 30 min" and "1:30". A plain number is minutes.
+ */
+export function parseDuration(raw: string): bigint | null {
+  const text = raw.trim().toLowerCase();
+  if (/^\d{1,6}$/.test(text)) return BigInt(text);
+  const clock = /^(\d{1,3}):(\d{1,2})$/.exec(text);
+  if (clock) return Number(clock[2]) < 60 ? BigInt(Number(clock[1]) * 60 + Number(clock[2])) : null;
+  const decimalHours = /^(\d{1,3}(?:\.\d{1,2})?)\s*h(?:ours?|rs?)?$/.exec(text);
+  if (decimalHours) return BigInt(Math.round(Number(decimalHours[1]) * 60));
+  const parts = /^(?:(\d{1,3})\s*h(?:ours?|rs?)?)?\s*(?:(\d{1,4})\s*m(?:in(?:ute)?s?)?)?$/.exec(text);
+  if (parts && (parts[1] !== undefined || parts[2] !== undefined)) return BigInt(Number(parts[1] ?? 0) * 60 + Number(parts[2] ?? 0));
+  return null;
+}
+
+/** Minutes as people read them: 45 -> "45 min", 90 -> "1 h 30 min", 120 -> "2 h". */
+export function minutesText(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return [h > 0 ? `${h} h` : "", m > 0 || h === 0 ? `${m} min` : ""].filter(Boolean).join(" ");
+}
+
 export const ITEM_UNIT_HINTS: Record<Unit, string> = {
-  minutes: "Whole minutes, like 90.",
+  minutes: "Hours or minutes, like 1.5 h, 90 m or 1:30. A plain number is minutes.",
   days: "Days, like 1 or 0.5.",
   hours: "Hours, like 86 or 86.5.",
   money: "An amount like 1,250.50.",
@@ -46,9 +69,8 @@ export function parseItemValue(type: PayItemType, raw: string): bigint | null {
   const text = raw.trim();
   switch (itemUnit(type)) {
     case "minutes": {
-      if (!/^\d{1,6}$/.test(text)) return null;
-      const n = BigInt(text);
-      return n >= 1n && n <= MAX_MINUTES ? n : null;
+      const n = parseDuration(text);
+      return n !== null && n >= 1n && n <= MAX_MINUTES ? n : null;
     }
     case "days":
     case "hours": {
@@ -68,7 +90,7 @@ export function parseItemValue(type: PayItemType, raw: string): bigint | null {
 export function formatItemValue(type: PayItemType, value: bigint): string {
   switch (itemUnit(type)) {
     case "minutes":
-      return value.toString();
+      return minutesText(Number(value));
     case "days":
     case "hours": {
       const whole = value / 100n;

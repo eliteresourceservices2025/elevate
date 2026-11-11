@@ -43,6 +43,8 @@ const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const actions = await import("@/modules/payroll/actions");
 const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = actions;
+const { updateRunPeople, removePersonFromRun, restorePersonToRun, applyJibbleTimesheet, confirmAllSuggestions } = actions;
+const { saveTimesheetUpload } = await import("@/modules/payroll/timesheet-import");
 const { refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun, exportRemitlyList, markPaid } = actions;
 const { setPayrollAccess } = await import("@/modules/settings/actions");
 const { getWorksheet } = await import("@/modules/payroll/queries");
@@ -104,7 +106,7 @@ async function addApprovedDay(employeeId: string, date: string, d: { worked?: nu
 // Distinctive figures and reasons, so the audit checks can search for them.
 const MONTHLY_A = "31,415.92";
 const MONTHLY_B = "27,182.81";
-const SECRET_REASONS = ["Zqreason cost-of-living", "Zqreason promotion review", "Zqreason large advance", "Zqreason check lates", "Zqreason wrong day", "Zqreason draft not needed", "Zqreason left the team"];
+const SECRET_REASONS = ["Zqreason cost-of-living", "Zqreason promotion review", "Zqreason large advance", "Zqreason check lates", "Zqreason wrong day", "Zqreason draft not needed", "Zqreason left the team", "Zqreason not on this run"];
 const SENT_BACK_NOTE = "Zqnote please look at the lates";
 
 let superAdmin: Awaited<ReturnType<typeof account>>;
@@ -223,6 +225,23 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     ok(await dismissPayItem({ runId, itemId: loan.id, reason: reasonOf(4) }), "dismiss loan");
     // A named allowance: the history shows the name the Preparer gave it.
     ok(await savePayItem({ runId, employeeId: empA, runLineId: lineOf(empA), type: "allowance", label: "Zqhealth allowance", value: "1,234.56" }), "save allowance");
+
+    // 5b. Draft run people: a line added to the period afterwards is pulled in, removed, brought back and removed again.
+    const extraLine = ok(
+      await createPayLine({ employeeId: empLeaver, alias: "Late hire", hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: p.periodStart, endsOn: p.periodEnd, monthly: "18,000" }),
+      "create late line",
+    );
+    expect(extraLine).toBeTruthy();
+    expect(await updateRunPeople({ runId })).toMatchObject({ ok: true, data: { added: 1, updated: 0, removed: 0 } });
+    const [lateRunLine] = await rows<{ id: string }>(sql`select id from payroll.pay_run_lines where run_id = ${runId} and employee_id = ${empLeaver}`);
+    ok(await removePersonFromRun({ runId, runLineId: lateRunLine.id, reason: reasonOf(7) }), "remove person");
+    ok(await restorePersonToRun({ runId, runLineId: lateRunLine.id }), "restore person");
+    ok(await removePersonFromRun({ runId, runLineId: lateRunLine.id, reason: reasonOf(7) }), "remove person again");
+
+    // 5c. A Jibble timesheet is uploaded and applied (matching nobody, so it writes nothing), then every suggestion is confirmed at once.
+    const upload = await db.transaction((tx) => saveTimesheetUpload(tx, preparer as never, runId, { periodText: null, members: [{ code: uniq("HIST-"), name: "Hist Member", days: [] }] }));
+    ok(await applyJibbleTimesheet({ runId, importId: upload.importId, assignments: [] }), "apply timesheet");
+    ok(await confirmAllSuggestions({ runId }), "confirm all suggestions");
 
     // 6. Another Preparer checks every line; the run is sent for review, sent back, sent again and approved.
     as(checker);
