@@ -109,6 +109,8 @@ export type RunPreview = {
   clients: RunPreviewClient[];
   /** People on the run with no client: not invoiced. */
   noClient: string[];
+  /** People who have a client but no client payroll hours entered: nothing to bill yet. */
+  noHours: string[];
 };
 
 /** What an invoice could be made from for one run, per client, with the rate that would apply today. Null when there is no such run. */
@@ -119,12 +121,16 @@ export async function previewRun(executor: Reader, runId: string, onDate: string
   const made = await executor.select({ clientId: invoices.clientId }).from(invoices).where(eq(invoices.runId, runId));
   const out = new Map<string, RunPreviewClient>();
   const noClient: string[] = [];
+  const noHours: string[] = [];
   for (const r of data.rows) {
     if (!r.clientId) {
       noClient.push(r.alias ? `${r.personName} (${r.alias})` : r.personName);
       continue;
     }
-    if (r.hundredths <= 0n) continue;
+    if (r.hundredths <= 0n) {
+      noHours.push(r.alias ? `${r.personName} (${r.alias})` : r.personName);
+      continue;
+    }
     let c = out.get(r.clientId);
     if (!c) {
       const rate = rateInForce(rates.filter((x) => x.clientId === r.clientId), onDate);
@@ -140,7 +146,7 @@ export async function previewRun(executor: Reader, runId: string, onDate: string
     const rows = data.rows.filter((r) => r.clientId === c.clientId);
     c.totalCents = buildInvoiceLines(rows, c.rateCents).totalCents;
   }
-  return { run: data.run, clients: [...out.values()].sort((a, b) => a.clientName.localeCompare(b.clientName)), noClient };
+  return { run: data.run, clients: [...out.values()].sort((a, b) => a.clientName.localeCompare(b.clientName)), noClient, noHours };
 }
 
 /** Makes one invoice inside the caller's transaction. Throws ActionFailure with a plain message when it cannot. */

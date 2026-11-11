@@ -20,6 +20,7 @@ type RunPreviewView = {
   status: string;
   clients: { clientId: string; clientName: string; people: number; hours: string; unconfirmedLines: number; rate: string | null; total: string | null; existing: number }[];
   noClient: string[];
+  noHours: string[];
 };
 
 /** What a run could be invoiced from, per client, with the rate that would apply. Read only. */
@@ -46,6 +47,7 @@ export async function previewInvoiceRun(input: unknown): Promise<ActionResult<Ru
         existing: c.existing,
       })),
       noClient: preview.noClient,
+      noHours: preview.noHours,
     };
     return { ok: true, data } as const;
   });

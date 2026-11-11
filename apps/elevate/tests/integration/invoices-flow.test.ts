@@ -143,6 +143,7 @@ describe("making an invoice", () => {
     expect(mine).toMatchObject({ people: 2, hours: "119.83", rate: "12.35", existing: 0 });
     expect(preview.data.clients.find((c) => c.clientId === other)?.rate).toBeNull(); // no rate yet
     expect(preview.data.noClient).toHaveLength(1);
+    expect(preview.data.noHours).toHaveLength(1); // Zed has a client but no hours: the dialog says so
 
     const made = await as(hr, () => createInvoice({ runId, clientId: client }));
     if (!made.ok) throw new Error(made.error);
