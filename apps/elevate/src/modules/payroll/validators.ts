@@ -96,6 +96,18 @@ export const confirmRunLineSchema = z.object({ runLineId: uuid });
 
 export const refreshSuggestionsSchema = z.object({ runId: uuid });
 
+export const updateRunPeopleSchema = z.object({ runId: uuid });
+export const applyTimesheetSchema = z.object({
+  runId: uuid,
+  importId: uuid,
+  assignments: z.array(z.object({ code: z.string().trim().min(1).max(40), runLineId: z.preprocess((v) => (v === "" ? null : v), uuid.nullable()) })).max(300),
+});
+export const discardTimesheetSchema = z.object({ runId: uuid });
+export const uploadTimesheetSchema = z.object({ runId: uuid });
+export const confirmAllSuggestionsSchema = z.object({ runId: uuid });
+export const removePersonFromRunSchema = z.object({ runId: uuid, runLineId: uuid, reason });
+export const restorePersonToRunSchema = z.object({ runId: uuid, runLineId: uuid });
+
 /** A blank `value` means "as suggested". The server checks a typed value against the item's own unit. */
 export const confirmSuggestionSchema = z.object({
   runId: uuid,

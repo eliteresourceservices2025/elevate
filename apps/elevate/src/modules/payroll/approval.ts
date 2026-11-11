@@ -150,7 +150,7 @@ async function lockRun(tx: Tx, runId: string) {
  */
 export async function submit(tx: Tx, actor: Actor, runId: string): Promise<void> {
   await lockDraftRun(tx, runId);
-  const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(payRunLines).where(eq(payRunLines.runId, runId));
+  const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(payRunLines).where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false)));
   if (n === 0) throw new ActionFailure("This run has no lines, so there is nothing to send for review.");
 
   await recomputeRun(tx, runId);

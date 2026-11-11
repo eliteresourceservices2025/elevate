@@ -36,31 +36,34 @@ describe("runChecks", () => {
     expect(runChecks(input([line()]))).toEqual({ blocking: [], warnings: [] });
   });
 
-  it("blocks a partial cutoff that pays more than a full cutoff", () => {
+  it("notes, without blocking, a partial cutoff that pays more than a full cutoff", () => {
     const r = runChecks(input([line({ issues: ["partial_exceeds_cutoff"] })]));
-    expect(r.blocking).toEqual([expect.objectContaining({ code: "partial_exceeds_cutoff", employeeId: "e1", runLineId: "r1" })]);
+    expect(r.blocking).toEqual([]);
+    expect(r.warnings).toEqual([expect.objectContaining({ code: "partial_exceeds_cutoff", employeeId: "e1", runLineId: "r1" })]);
   });
 
-  it("blocks on a missing multiplier and a negative net", () => {
+  it("notes, without blocking, a missing multiplier and a negative total payable", () => {
     const r = runChecks(input([line({ issues: ["missing_multiplier:restDay", "negative_net"] })]));
-    expect(codes(r.blocking).sort()).toEqual(["missing_multiplier", "negative_net"]);
-    expect(r.warnings).toEqual([]);
-    const multiplier = r.blocking.find((c) => c.code === "missing_multiplier")!;
+    expect(r.blocking).toEqual([]);
+    expect(codes(r.warnings).sort()).toEqual(["missing_multiplier", "negative_net"]);
+    const multiplier = r.warnings.find((c) => c.code === "missing_multiplier")!;
     expect(multiplier.name).toBe("Maria Testcruz");
     expect(multiplier.detail).toBe("Overtime (OT), rest day");
   });
 
-  it("blocks on suggestions nobody has assigned to a line", () => {
+  it("notes, without blocking, suggestions nobody has assigned to a line", () => {
     const r = runChecks(input([line()], { unassigned: [{ employeeId: "e9", name: "Jose Dummy", count: 2 }] }));
-    expect(r.blocking).toEqual([expect.objectContaining({ code: "unassigned_suggestion", employeeId: "e9", name: "Jose Dummy" })]);
+    expect(r.blocking).toEqual([]);
+    expect(r.warnings).toEqual([expect.objectContaining({ code: "unassigned_suggestion", employeeId: "e9", name: "Jose Dummy" })]);
   });
 
-  it("blocks when the submitter's own line has no confirmation from someone else", () => {
+  it("notes, without blocking, a submitter's own line that has no confirmation from someone else", () => {
     const own = (confirmedBy: string | null) => line({ employeeId: EMP_ME, runLineId: "mine", confirmedBy });
-    expect(codes(runChecks(input([own(null)])).blocking)).toEqual(["own_line_unconfirmed"]);
+    expect(runChecks(input([own(null)])).blocking).toEqual([]);
+    expect(codes(runChecks(input([own(null)])).warnings)).toEqual(["own_line_unconfirmed"]);
     // Confirmed by the submitter themselves does not count.
-    expect(codes(runChecks(input([own(ME)])).blocking)).toEqual(["own_line_unconfirmed"]);
-    expect(runChecks(input([own(OTHER)])).blocking).toEqual([]);
+    expect(codes(runChecks(input([own(ME)])).warnings)).toEqual(["own_line_unconfirmed"]);
+    expect(runChecks(input([own(OTHER)])).warnings).toEqual([]);
   });
 
   it("does not ask for a confirmation on someone else's line, or when the submitter has no people record", () => {
@@ -104,10 +107,11 @@ describe("runChecks", () => {
     expect(codes(r.warnings)).toEqual(["no_payout_details"]);
   });
 
-  it("blocks, for the whole run, when the pay lines changed after the run was created", () => {
+  it("notes, for the whole run and without blocking, when the pay lines changed after the run was created", () => {
     const r = runChecks(input([line()], { linesOutOfDate: true }));
-    expect(r.blocking).toEqual([expect.objectContaining({ code: "lines_out_of_date", employeeId: null, runLineId: null })]);
-    expect(runChecks(input([line()], { linesOutOfDate: false })).blocking).toEqual([]);
+    expect(r.blocking).toEqual([]);
+    expect(r.warnings).toEqual([expect.objectContaining({ code: "lines_out_of_date", employeeId: null, runLineId: null })]);
+    expect(runChecks(input([line()], { linesOutOfDate: false })).warnings).toEqual([]);
   });
 
   it("never puts an amount in a message", () => {

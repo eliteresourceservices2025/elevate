@@ -41,7 +41,7 @@ function readable(runLineId: string, stored: string) {
 }
 
 const ownPaidRuns = (employeeId: string) =>
-  and(eq(payRunLines.employeeId, employeeId), eq(payRuns.status, "paid"));
+  and(eq(payRunLines.employeeId, employeeId), eq(payRunLines.excluded, false), eq(payRuns.status, "paid"));
 
 /** How many payslips the signed-in person has. */
 export async function countMyPayslips(): Promise<number> {
@@ -72,7 +72,7 @@ export async function listMyPayslips(paging?: { page: number; pageSize: number }
   const lines = await db
     .select({ id: payRunLines.id, runId: payRunLines.runId, payloadEnc: payRunLines.payloadEnc })
     .from(payRunLines)
-    .where(and(eq(payRunLines.employeeId, employeeId), inArray(payRunLines.runId, runs.map((r) => r.id))));
+    .where(and(eq(payRunLines.employeeId, employeeId), eq(payRunLines.excluded, false), inArray(payRunLines.runId, runs.map((r) => r.id))));
   let shown = 0;
   const out = runs.map((r): PayslipListRow => {
     let net = 0n;
@@ -110,7 +110,7 @@ export async function getMyPayslip(actor: AuthzUser, runId: string): Promise<(Pa
     .from(payRunLines)
     .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
     .leftJoin(clients, eq(clients.id, payRunLines.clientId))
-    .where(and(eq(payRunLines.runId, runId), eq(payRunLines.employeeId, employeeId)))
+    .where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false), eq(payRunLines.employeeId, employeeId)))
     .orderBy(asc(payRunLines.alias), asc(payRunLines.id));
   if (lines.length === 0) return null;
   const [who] = await db

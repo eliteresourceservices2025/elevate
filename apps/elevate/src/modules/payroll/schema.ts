@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, date, index, integer, jsonb, pgSchema, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, jsonb, pgSchema, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
 import { clients, employees } from "@/modules/people/schema";
 
@@ -107,6 +107,8 @@ export const payRunLines = payroll
       clientId: uuid("client_id").references(() => clients.id),
       alias: text("alias"),
       flags: text("flags").array().notNull().default(sql`'{}'::text[]`),
+      /** Taken off a draft run by a Preparer (or because the pay line is no longer in force). Items are append-only, so the line stays; every reader ignores it. */
+      excluded: boolean("excluded").notNull().default(false),
       payloadEnc: text("payload_enc").notNull(),
       confirmedBy: uuid("confirmed_by").references(() => users.id),
       confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
@@ -246,4 +248,42 @@ export const payRunSignatures = payroll
     signedOn: date("signed_on").notNull(),
     createdAt: createdAt(),
   })
+  .enableRLS();
+
+/**
+ * The Jibble timesheet a Preparer uploaded to fill a draft run: one encrypted payload (member names and codes, and daily totals, never clock
+ * times), wiped when it is used or discarded and after 14 days. One per run (a new upload replaces the old one).
+ */
+export const timesheetImports = payroll
+  .table(
+    "timesheet_imports",
+    {
+      id: uuid("id").primaryKey(),
+      runId: uuid("run_id")
+        .notNull()
+        .references(() => payRuns.id),
+      payloadEnc: text("payload_enc").notNull(),
+      createdBy: uuid("created_by")
+        .notNull()
+        .references(() => users.id),
+      createdAt: createdAt(),
+    },
+    (t) => [index("timesheet_imports_run_idx").on(t.runId)],
+  )
+  .enableRLS();
+
+/** Which pay line a Jibble member (by member code, like "AVL-1") belongs to, remembered from earlier imports so the next sheet matches by itself. */
+export const jibbleMatches = payroll
+  .table(
+    "jibble_matches",
+    {
+      memberCode: text("member_code").primaryKey(),
+      lineKey: uuid("line_key").notNull(),
+      updatedBy: uuid("updated_by")
+        .notNull()
+        .references(() => users.id),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [check("jibble_matches_code_chk", sql`char_length(${t.memberCode}) between 1 and 40`)],
+  )
   .enableRLS();

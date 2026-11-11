@@ -304,8 +304,8 @@ describe("pay settings", () => {
     expect(snap).toEqual({
       cutoffDivisor: 12,
       changeWarnBp: 1500,
-      // Holiday pay is not a setting: it is always one to one (10,000 basis points).
-      multipliersBp: { regular: 12500, restDay: 13000, restDayOver8: null, holiday: 10000 },
+      // A blank column is the standard percent (169% here). Holiday pay is not a setting: it is always one to one (10,000 basis points).
+      multipliersBp: { regular: 12500, restDay: 13000, restDayOver8: 16900, holiday: 10000 },
     });
     const before = await settingsInForce(db as never, "2031-02-28");
     expect(before.cutoffDivisor).not.toBe(12);

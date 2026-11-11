@@ -88,7 +88,8 @@ const netOf = async (runId: string, employeeId: string, index = 0) => {
   const l = (await runLines(runId, employeeId))[index];
   return decryptRunLine(l.id, l.payload_enc).result.net;
 };
-const blockingFor = async (runId: string, employeeId: string) => (await getWorksheet(runId))!.checks.blocking.filter((c) => c.employeeId === employeeId).map((c) => c.code);
+// Every check but an unreadable amount is a note (it shows in the warnings and blocks nothing), so these read the notes.
+const blockingFor = async (runId: string, employeeId: string) => (await getWorksheet(runId))!.checks.warnings.filter((c) => c.employeeId === employeeId && c.code !== "no_payout_details").map((c) => c.code);
 
 let preparer: Awaited<ReturnType<typeof account>>;
 let lead: Awaited<ReturnType<typeof account>>;
@@ -242,7 +243,7 @@ describe("holidays and rest days", () => {
     expect(byType(await suggestions(runId, emp))).toEqual({ holiday: 240n });
   });
 
-  it("splits a rest day at 8 hours, prices each part with the settings, and blocks when a rate is missing", async () => {
+  it("splits a rest day at 8 hours and prices each part with the settings", async () => {
     const p = slot(7);
     const emp = await person();
     await giveLine(preparer, emp);
@@ -261,10 +262,10 @@ describe("holidays and rest days", () => {
     expect(await blockingFor(runId, emp)).not.toContain("missing_multiplier");
   });
 
-  it("with no rate set for the period, a confirmed extra-hours amount blocks the run and adds no pay", async () => {
+  it("with no rate set for the period, a confirmed extra-hours amount is paid at the standard 125% and raises no note", async () => {
     const emp = await person();
     await giveLine(preparer, emp);
-    // June 2024 is before the first rates: the starting settings have none.
+    // June 2024 is before the first rates: the starting settings have none, so the standard percent applies.
     await addDay(emp, { date: "2024-06-04", worked: 540, extra: 60, approvedExtra: 60 }, lead.id);
     const runId = await newRun(preparer, { periodStart: "2024-06-01", periodEnd: "2024-06-15" });
     current.user = preparer;
@@ -273,13 +274,15 @@ describe("holidays and rest days", () => {
     const line = (await runLines(runId, emp))[0];
     const before = await netOf(runId, emp);
     expect(await confirmSuggestion({ runId, itemId: s.id, runLineId: line.id })).toMatchObject({ ok: true });
-    expect(await netOf(runId, emp)).toBe(before);
-    expect(await blockingFor(runId, emp)).toContain("missing_multiplier");
+    // Hourly rate 125.00: one hour at the standard 125% is 156.25.
+    expect(await netOf(runId, emp)).toBe(before + 15_625n);
+    expect(await blockingFor(runId, emp)).not.toContain("missing_multiplier");
+    expect((await getWorksheet(runId))!.checks.blocking).toEqual([]);
   });
 });
 
 describe("a person with two lines", () => {
-  it("gets unassigned suggestions that block submission until a line is chosen, and assigning clears the check", async () => {
+  it("gets unassigned suggestions that are noted until a line is chosen, and assigning clears the note", async () => {
     const p = slot(8);
     const emp = await person();
     await giveLine(preparer, emp, { alias: "Front desk" });
@@ -335,7 +338,7 @@ describe("a person with two lines", () => {
     await approve(emp, date, lead.id);
     expect(await refreshSuggestions({ runId })).toMatchObject({ ok: true, data: { written: 1 } });
     const sheet = (await getWorksheet(runId))!;
-    expect(sheet.unassigned.find((u) => u.employeeId === emp)!.items.map((i) => i.value)).toEqual(["30"]);
+    expect(sheet.unassigned.find((u) => u.employeeId === emp)!.items.map((i) => i.value)).toEqual(["30 min"]);
     expect(await blockingFor(runId, emp)).toContain("unassigned_suggestion");
   });
 

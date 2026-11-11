@@ -46,7 +46,7 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 7. Use soft delete (`archived_at`); never hard-delete employee records except through the retention job.
 8. Dates: store `timestamptz` in UTC; display in the viewer's zone; schedules also show the client's zone. Use `date-fns-tz`.
 9. **Time and attendance: ELEVATE is the time clock and the only source of hours.** `time.clock_events` is append-only (clock_in, break_start, break_end, clock_out); corrections are new rows with a reason and lead approval, never edits. Timestamps come from the server clock and the IP from the request, never from values the browser sends. Location is optional, needs the employee's permission, and is stored rounded (~1 km). `time.attendance_days` is always rebuilt from clock events, never edited by hand.
-10. **Jibble is used only for screenshots.** On clock-in/clock-out, ELEVATE mirrors the event to Jibble through its API (queued in Inngest, retried, logged in `time.jibble_link_log`). Never read hours from Jibble into payroll exports, and never copy Jibble screenshots, GPS or activity data into ELEVATE: screenshots can contain client patient data.
+10. **Jibble is used only for screenshots.** On clock-in/clock-out, ELEVATE mirrors the event to Jibble through its API (queued in Inngest, retried, logged in `time.jibble_link_log`). Never read hours from Jibble by API into payroll exports, never mirror Jibble hours into ELEVATE's time records, and never copy Jibble screenshots, GPS or activity data into ELEVATE: screenshots can contain client patient data. **One exception (owner decision 2026-11-12):** a Preparer may upload the Jibble "Custom Timesheets" export file on a draft pay run to fill SUGGESTED payroll amounts (client payroll hours, overtime, holiday pay, PTO days); only totals per member are read, never clock times, and the rows are encrypted and wiped (see the Payroll notes).
 
 ## Job frequency (Inngest cost)
 
@@ -172,6 +172,15 @@ Pay runs, rates, change history, contractor payment statements (the former paysl
 - Amounts are encrypted bigint centavos, all in pesos (no dollar rate or FTE); one person prepares and a different person approves; nothing computes tax or sends money.
 - Allowances, reimbursements, bonuses and adjustments are named lines per run; holiday pay is always 1:1; the statement says "Total payable compensation" (see the 2026-11-06 revision at the top of the module notes).
 - Change history is append-only; audit rows never carry an amount or reason.
+- Round 2 (2026-11-12): blank OT settings mean the standard percents; only an unreadable line blocks a run (every other check is a note); a draft run is updated from the Rates tab (`updateRunPeople`) and a removed line is `excluded`, ignored by every reader; Jibble timesheet import writes suggestions only (`docs/modules/payroll.md`).
+
+### Client invoices — `docs/modules/invoices.md`
+Per-client invoices from a pay run's client payroll hours, billing rates in US dollars, PDF the executives send themselves.
+
+- Only HR Admin, Executive and Super Admin (`invoices.view`, `invoices.create`, `invoices.manage_rates`); a payroll level adds nothing and no one else gets in.
+- Reads pay runs only through `clientHoursForRun` (client hours, never a pay figure, rate or amount); the module imports nothing else from payroll (a test scans for it).
+- `ops.client_bill_rates` and `ops.invoices` are append-only by trigger and encrypted at rest; an invoice is a snapshot (rate, hours, lines) that never changes; a second one for the same run and client is a revision (`-R2`).
+- Money is integer cents and hours integer hundredths; line = round half up(hours x rate), total = sum of lines. ELEVATE sends no invoice email. Audit rows carry ids and counts only.
 
 ### Safe Voice — `docs/modules/safe-voice.md`
 The anonymous reporting app and the handler side.

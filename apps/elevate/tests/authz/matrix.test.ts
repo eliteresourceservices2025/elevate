@@ -188,6 +188,10 @@ const EXPECTED: Record<string, string> = {
   "payroll.export": "- - - - - -",
   "payroll.approve": "- - - - - -",
   "payroll.view_own": "O O O O O O",
+  // client invoices: roles only (a payroll level adds nothing)
+  "invoices.view": "A A - - A -",
+  "invoices.create": "A A - - A -",
+  "invoices.manage_rates": "A A - - A -",
 };
 
 const SCOPE_CODE: Record<string, Scope | null> = { A: "all", T: "team", O: "own", "-": null };

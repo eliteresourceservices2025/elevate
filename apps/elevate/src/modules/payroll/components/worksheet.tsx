@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { EXTRA_KEYS } from "../calculate";
 import { EXTRA_KEY_ITEM, HISTORY_LABELS, LINE_FLAG_LABELS, PAY_ITEM_LABELS, WORKSHEET_LABELS as L } from "../constants";
 import type { Worksheet, WorksheetLine } from "../runs";
-import { ConfirmLineButton, ItemDialog } from "./item-dialog";
+import { LineActions } from "./line-actions";
 
 // The sheet: one row per pay line, columns in the order the pay is worked out. Name and client stay in view when it scrolls sideways;
 // below the tablet width each row becomes a card (`stack`).
@@ -139,10 +139,7 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
                 <TableCell label={L.confirmation}>{line.confirmedByName ?? <span className="text-muted-foreground">{L.unconfirmed}</span>}</TableCell>
                 <TableCell label={L.actions}>
                   {canPrepare && draft ? (
-                    <div className="flex flex-wrap gap-2">
-                      <ItemDialog runId={sheet.run.id} line={line} correctableRuns={sheet.correctableRuns} />
-                      <ConfirmLineButton line={line} />
-                    </div>
+                    <LineActions runId={sheet.run.id} line={line} correctableRuns={sheet.correctableRuns} />
                   ) : null}
                 </TableCell>
               </TableRow>

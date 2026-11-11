@@ -99,9 +99,11 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
 
     // An overtime (OT) item, entered twice so the history has an old and a new value.
     for (const minutes of ["60", "120"]) {
-      await line.getByRole("button", { name: "Amounts" }).click();
+      await line.getByRole("button", { name: /^Actions for/ }).click();
+      await prepPage.getByRole("menuitem", { name: "Amounts" }).click();
       await waitForHydration(prepPage, "form select");
       await prepPage.getByLabel("What to enter").selectOption({ label: "Overtime (OT), regular day" });
+      await prepPage.getByLabel("Hours or minutes").selectOption("m"); // overtime defaults to hours; this flow types minutes
       await prepPage.getByLabel("Amount", { exact: true }).fill(minutes);
       await prepPage.getByRole("button", { name: "Save amount" }).click();
       await expect(prepPage.getByText("Amount saved.").first()).toBeVisible();
@@ -109,7 +111,8 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     }
 
     // A named allowance (itemized: it appears on the statement under its own name), then the line is checked.
-    await line.getByRole("button", { name: "Amounts" }).click();
+    await line.getByRole("button", { name: /^Actions for/ }).click();
+    await prepPage.getByRole("menuitem", { name: "Amounts" }).click();
     await waitForHydration(prepPage, "form select");
     await prepPage.getByLabel("What to enter").selectOption({ label: "Allowance" });
     await prepPage.getByLabel(/^Name of this allowance/).fill("Health allowance");
@@ -117,7 +120,8 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await prepPage.getByRole("button", { name: "Save amount" }).click();
     await expect(prepPage.getByText("Amount saved.").first()).toBeVisible();
     await expect(prepPage.getByRole("dialog")).toHaveCount(0);
-    await prepPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` }).getByRole("button", { name: "Mark as checked" }).click();
+    await prepPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` }).getByRole("button", { name: /^Actions for/ }).click();
+    await prepPage.getByRole("menuitem", { name: "Mark as checked" }).click();
     await expect(prepPage.getByText("Line checked.")).toBeVisible();
 
     // Sent for review.
@@ -194,8 +198,8 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     const changed = apprPage
       .getByRole("row")
       .filter({ hasText: "Amount saved on a line" })
-      .filter({ has: apprPage.locator("td", { hasText: /^60$/ }) })
-      .filter({ has: apprPage.locator("td", { hasText: /^120$/ }) });
+      .filter({ has: apprPage.locator("td", { hasText: /^1 h$/ }) })
+      .filter({ has: apprPage.locator("td", { hasText: /^2 h$/ }) });
     await expect(changed).toHaveCount(1);
     await expect(changed.getByText("Overtime (OT), regular day")).toBeVisible();
     await expect(apprPage.getByRole("row").filter({ hasText: "Contractor payment statement downloaded" }).first()).toBeVisible();

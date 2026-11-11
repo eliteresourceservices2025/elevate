@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { cancelPayRun, createPayRun } from "../actions";
+import { cancelPayRun, createPayRun, removePersonFromRun, restorePersonToRun } from "../actions";
 import { WORKSHEET_LABELS as L } from "../constants";
 
 function NewRunForm({ suggestedStart, suggestedEnd }: { suggestedStart: string; suggestedEnd: string }) {
@@ -97,3 +97,61 @@ export function CancelRunDialog({ runId }: { runId: string }) {
   );
 }
 
+function RemovePersonForm({ runId, runLineId, name }: { runId: string; runLineId: string; name: string }) {
+  const { run, pending } = useRun();
+  const dialog = useFormDialog();
+  const [reason, setReason] = useState("");
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => removePersonFromRun({ runId, runLineId, reason }), `${name} taken off the run.`, () => dialog?.close(true));
+      }}
+    >
+      <p className="text-sm text-muted-foreground">
+        The line and any amounts you entered stay on record but are ignored: this person is not in the totals, the Remitly list or the approval. You can put them back from the list under the worksheet.
+      </p>
+      <div className="space-y-1">
+        <Label htmlFor={`remove-reason-${runLineId}`}>Reason</Label>
+        <Textarea id={`remove-reason-${runLineId}`} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} required />
+        <p className="text-xs text-muted-foreground">Kept in the change history, never in notices. Don&apos;t write client or patient details.</p>
+      </div>
+      <Button type="submit" variant="destructive" disabled={pending}>
+        Take off this run
+      </Button>
+    </form>
+  );
+}
+
+export function RemovePersonDialog({ runId, runLineId, name, open, onOpenChange, hideTrigger }: { runId: string; runLineId: string; name: string; open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean }) {
+  return (
+    <FormDialog label="Remove" title={`Take ${name} off this run`} variant="outline" triggerSize="sm" open={open} onOpenChange={onOpenChange} hideTrigger={hideTrigger}>
+      <RemovePersonForm runId={runId} runLineId={runLineId} name={name} />
+    </FormDialog>
+  );
+}
+
+/** People taken off this draft run, each with a button to put them back. */
+export function RemovedPeople({ runId, removed }: { runId: string; removed: { runLineId: string; name: string; alias: string | null }[] }) {
+  const { run, pending } = useRun();
+  if (removed.length === 0) return null;
+  return (
+    <section aria-label="People taken off this run" className="space-y-2 rounded-xl border bg-card p-4">
+      <h2 className="text-sm font-semibold">Taken off this run ({removed.length})</h2>
+      <ul className="space-y-1">
+        {removed.map((r) => (
+          <li key={r.runLineId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span>
+              {r.name}
+              {r.alias ? <span className="text-muted-foreground"> ({r.alias})</span> : null}
+            </span>
+            <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => run(() => restorePersonToRun({ runId, runLineId: r.runLineId }), `${r.name} is back on the run.`)}>
+              Put back
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

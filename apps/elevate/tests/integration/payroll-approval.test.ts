@@ -133,7 +133,15 @@ describe("submitRun refuses a run that is not ready", () => {
     expect(await logActions(runId)).not.toContain("run_submitted");
     if (code) expect([...new Set((await getWorksheet(runId))!.checks.blocking.map((c) => c.code))]).toEqual([code]);
   }
-  const blocked = /can't be sent for review/;
+  /** A check that is only a note: it shows in the warnings, blocks nothing, and the run goes to review. */
+  async function sentWithNote(runId: string, code: string) {
+    as(preparer);
+    const sheet = (await getWorksheet(runId))!;
+    expect(sheet.checks.blocking).toEqual([]);
+    expect(sheet.checks.warnings.map((c) => c.code)).toContain(code);
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+    expect(await status(runId)).toBe("in_review");
+  }
 
   it("a run with no lines", async () => {
     const runId = randomUUID();
@@ -150,17 +158,21 @@ describe("submitRun refuses a run that is not ready", () => {
     const runId = await newRun(p);
     const [line] = await runLines(runId, emp);
     expect(await savePayItem({ runId, employeeId: emp, runLineId: line.id, type: "loan", value: "20,000", reason: "Large advance" })).toMatchObject({ ok: true });
-    await refused(runId, blocked, "negative_net");
+    await sentWithNote(runId, "negative_net");
   });
 
-  it("a missing extra-hours rate", async () => {
+  it("a blank extra-hours setting pays the standard percent and raises nothing", async () => {
     const p = slot(22); // 1 to 15 December: the settings version without the regular rate
     const emp = await person();
     await giveLine(emp, p);
     const runId = await newRun(p);
     const [line] = await runLines(runId, emp);
     expect(await savePayItem({ runId, employeeId: emp, runLineId: line.id, type: "extra_regular", value: "60" })).toMatchObject({ ok: true });
-    await refused(runId, blocked, "missing_multiplier");
+    as(preparer);
+    const sheet = (await getWorksheet(runId))!;
+    expect([...sheet.checks.blocking, ...sheet.checks.warnings].map((c) => c.code)).not.toContain("missing_multiplier");
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+    expect(await status(runId)).toBe("in_review");
   });
 
   it("an unassigned suggestion", async () => {
@@ -172,7 +184,7 @@ describe("submitRun refuses a run that is not ready", () => {
     const id = randomUUID();
     await db.execute(sql`insert into payroll.pay_run_items (id, run_id, employee_id, run_line_id, type, state, value_enc, entered_by)
       values (${id}, ${runId}, ${emp}, null, 'late_minutes', 'suggested', ${encryptItemValue(id, { value: 30n, reason: null, system: true })}, ${preparer.id})`);
-    await refused(runId, blocked, "unassigned_suggestion");
+    await sentWithNote(runId, "unassigned_suggestion");
   });
 
   it("an amount that can't be read", async () => {
@@ -194,7 +206,7 @@ describe("submitRun refuses a run that is not ready", () => {
     await giveLine(emp, p);
     const runId = await newRun(p);
     await giveLine(await person(), p); // someone added to the period afterwards would go unpaid
-    await refused(runId, blocked, "lines_out_of_date");
+    await sentWithNote(runId, "lines_out_of_date");
   });
 
   it("the submitter's own line until another Preparer confirms it", async () => {
@@ -204,22 +216,20 @@ describe("submitRun refuses a run that is not ready", () => {
     await giveLine(ownEmp, p);
     const runId = await newRun(p, mine);
     as(mine);
-    const r = await submitRun({ runId });
-    expect(!r.ok && r.error).toMatch(blocked);
-    expect(await status(runId)).toBe("draft");
-    // The submitter sees it as their own line; another Preparer or a Viewer does not get that check about someone else's line.
-    as(mine);
-    expect((await getWorksheet(runId))!).toMatchObject({ checksAreMine: true, checks: { blocking: [expect.objectContaining({ code: "own_line_unconfirmed" })] } });
+    // The submitter sees it as their own line (a note, not a block); another Preparer or a Viewer does not get that check about someone else's line.
+    expect((await getWorksheet(runId))!).toMatchObject({ checksAreMine: true, checks: { blocking: [] } });
+    expect((await getWorksheet(runId))!.checks.warnings.map((c) => c.code)).toContain("own_line_unconfirmed");
     as(checker);
-    expect((await getWorksheet(runId))!.checks.blocking).toEqual([]);
+    expect((await getWorksheet(runId))!.checks.warnings.map((c) => c.code)).not.toContain("own_line_unconfirmed");
     as(await account("viewer"));
-    expect((await getWorksheet(runId))!.checks.blocking).toEqual([]);
+    expect((await getWorksheet(runId))!.checks.warnings.map((c) => c.code)).not.toContain("own_line_unconfirmed");
 
-    // Confirmed by the submitter's colleague: now it goes.
+    // Confirmed by the submitter's colleague: the note goes, and the run is sent.
     const [line] = await runLines(runId, ownEmp);
     as(checker);
     expect(await confirmRunLine({ runLineId: line.id })).toMatchObject({ ok: true });
     as(mine);
+    expect((await getWorksheet(runId))!.checks.warnings.map((c) => c.code)).not.toContain("own_line_unconfirmed");
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
     expect(await status(runId)).toBe("in_review");
   });
@@ -400,7 +410,7 @@ describe("review, send back and approve", () => {
     expect(await approveRun({ runId, expectedHash: fresh })).toMatchObject({ ok: true });
   });
 
-  it("a check that starts blocking after the run was sent stops the approval, and the Approver sees why", async () => {
+  it("a person added after the run was sent is a note for the Approver, not a block", async () => {
     const p = slot(15);
     const emp = await person();
     await giveLine(emp, p);
@@ -410,11 +420,10 @@ describe("review, send back and approve", () => {
     await giveLine(await person(), p); // a person added to the period after the run was sent
     as(approver);
     const sheet = (await getWorksheet(runId))!;
-    expect(sheet.checks.blocking.map((c) => c.code)).toEqual(["lines_out_of_date"]);
-    expect(sheet.approvalRefusal).toMatch(/must be fixed/);
-    const r = await approveRun({ runId, expectedHash: sheet.expectedHash! });
-    expect(!r.ok && r.error).toMatch(/must be fixed/);
-    expect(await status(runId)).toBe("in_review");
+    // A person added after sending is a note for the Approver, not a block: the run was sent as it was.
+    expect(sheet.checks.blocking).toEqual([]);
+    expect(sheet.checks.warnings.map((c) => c.code)).toContain("lines_out_of_date");
+    expect(sheet.approvalRefusal).toBeNull();
   });
 
   it("two approvals at once: exactly one succeeds", async () => {
@@ -533,7 +542,7 @@ describe("recovering a run whose pay lines changed while in review", () => {
 
     as(approver);
     const sheet = (await getWorksheet(runId))!;
-    expect(sheet.approvalRefusal).toMatch(/must be fixed/);
+    expect(sheet.checks.warnings.map((c) => c.code)).toContain("lines_out_of_date");
     expect(await sendBackRun({ runId, note: "Someone was added to this period" })).toMatchObject({ ok: true });
     as(preparer);
     expect(await cancelPayRun({ runId, reason: "Pay lines changed" })).toMatchObject({ ok: true });

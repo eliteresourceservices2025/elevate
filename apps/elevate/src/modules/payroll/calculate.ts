@@ -10,6 +10,12 @@ export type ExtraKey = (typeof EXTRA_KEYS)[number];
 /** Holiday pay is one to one: basis points of the normal hourly rate. Not a setting. */
 export const HOLIDAY_BP = 10_000;
 
+/**
+ * The standard overtime percents (basis points of the person's own hourly rate), used when a setting is left blank, so overtime pays
+ * from the first run. A setting that is filled in always wins.
+ */
+export const DEFAULT_OT_BP = { regular: 12_500, restDay: 13_000, restDayOver8: 16_900 } as const;
+
 export type SettingsSnapshot = {
   cutoffDivisor: number;
   changeWarnBp: number;

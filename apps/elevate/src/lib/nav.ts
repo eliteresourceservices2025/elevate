@@ -29,6 +29,7 @@ import {
   Hourglass,
   GraduationCap,
   ListChecks,
+  Receipt,
   UsersRound,
   Wallet,
   type LucideIcon,
@@ -108,6 +109,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Admin",
     items: [
       { href: "/payroll", label: "Payroll", icon: Wallet, description: "Pay runs, rates and settings for the people chosen to run payroll.", access: { action: "payroll.view", scopes: ["all"] } },
+      { href: "/invoices", label: "Invoices", icon: Receipt, description: "Bill each client for the client payroll hours of a pay run, and set billing rates.", access: { action: "invoices.view", scopes: ["all"] } },
       { href: "/settings", label: "Settings", icon: Settings, description: "Roles, policies, templates, time zones and audit log." },
     ],
   },

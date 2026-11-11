@@ -298,6 +298,7 @@ describe("row level security", () => {
       select c.relname, c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'payroll' and c.relkind = 'r'`);
     expect(tables.map((t) => t.relname).sort()).toEqual([
+      "jibble_matches",
       "pay_approvals",
       "pay_change_log",
       "pay_lines",
@@ -308,6 +309,7 @@ describe("row level security", () => {
       "pay_runs",
       "pay_settings",
       "pay_signatory",
+      "timesheet_imports",
     ]);
     for (const t of tables) expect(t.relrowsecurity, t.relname).toBe(true);
     expect(await rows(sql`select 1 from pg_policies where schemaname = 'payroll'`)).toHaveLength(0);

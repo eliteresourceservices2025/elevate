@@ -9,9 +9,11 @@ import { orNotFound } from "@/lib/or-not-found";
 import { pageInfo, parsePaging } from "@/lib/pagination";
 import { RUN_STATUS_LABELS } from "@/modules/payroll/constants";
 import { ApprovalBar } from "@/modules/payroll/components/approval-bar";
+import { ConfirmAllButton } from "@/modules/payroll/components/jibble-import";
 import { RunChecks } from "@/modules/payroll/components/run-checks";
-import { CancelRunDialog } from "@/modules/payroll/components/run-dialogs";
-import { RefreshSuggestionsButton, UnassignedSuggestions } from "@/modules/payroll/components/suggestion-controls";
+import { CancelRunDialog, RemovedPeople } from "@/modules/payroll/components/run-dialogs";
+import { RunFillMenu } from "@/modules/payroll/components/run-fill-menu";
+import { UnassignedSuggestions } from "@/modules/payroll/components/suggestion-controls";
 import { RunTotals } from "@/modules/payroll/components/run-totals";
 import { Worksheet } from "@/modules/payroll/components/worksheet";
 import { PaymentsPanel } from "@/modules/payroll/components/payments-panel";
@@ -34,6 +36,8 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
   const info = pageInfo(sheet.lines.length, paging.page, paging.pageSize);
   const shown = sheet.lines.slice(info.offset, info.offset + info.pageSize);
   const { run } = sheet;
+  // Suggested amounts that sit on a line (from the hours, or from an imported timesheet) can be confirmed in one step.
+  const suggestedCount = sheet.lines.reduce((n, l) => n + l.items.filter((i) => i.state === "suggested").length, 0);
   const payments = run.status === "approved" || run.status === "paid" ? await getPayments(runId) : null;
 
   return (
@@ -50,7 +54,8 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
         actions={
           sheet.canPrepare && run.status === "draft" ? (
             <>
-              <RefreshSuggestionsButton runId={run.id} />
+              <RunFillMenu runId={run.id} />
+              <ConfirmAllButton runId={run.id} count={suggestedCount} />
               <CancelRunDialog runId={run.id} />
             </>
           ) : undefined
@@ -66,6 +71,7 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
         />
       ) : null}
       <UnassignedSuggestions sheet={sheet} canPrepare={sheet.canPrepare} />
+      {run.status === "draft" && sheet.canPrepare ? <RemovedPeople runId={run.id} removed={sheet.removed} /> : null}
       <Worksheet sheet={sheet} lines={shown} canPrepare={sheet.canPrepare} />
       <PagerLinks info={info} basePath={`/payroll/${run.id}`} defaultSize={DEFAULT_SIZE} label="lines" />
       <RunTotals sheet={sheet} />
