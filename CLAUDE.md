@@ -177,7 +177,7 @@ Pay runs, rates, change history, contractor payment statements (the former paysl
 ### Client invoices — `docs/modules/invoices.md`
 Per-client invoices from a pay run's client payroll hours, billing rates in US dollars, PDF the executives send themselves.
 
-- Only HR Admin, Executive and Super Admin (`invoices.view`, `invoices.create`, `invoices.manage_rates`); a payroll level adds nothing and no one else gets in.
+- Only HR Admin, Executive and Super Admin (`invoices.view`, `invoices.create`, `invoices.manage_rates`, `invoices.manage`); a payroll level adds nothing and no one else gets in.
 - Reads pay runs only through `clientHoursForRun` (client hours, never a pay figure, rate or amount); the module imports nothing else from payroll (a test scans for it).
 - `ops.client_bill_rates` and `ops.invoices` are append-only by trigger and encrypted at rest; an invoice is a snapshot (rate, hours, lines) that never changes; a second one for the same run and client is a revision (`-R2`).
 - Money is integer cents and hours integer hundredths; line = round half up(hours x rate), total = sum of lines. ELEVATE sends no invoice email. Audit rows carry ids and counts only.

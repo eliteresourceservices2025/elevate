@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AuthUser } from "@/lib/auth";
 import { fieldCrypto } from "@/lib/crypto";
@@ -8,11 +8,11 @@ import type { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { writeAudit } from "@/modules/audit/write";
-import { clients } from "@/modules/people/schema";
+import { clients, employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
 import { clientHoursForRun } from "@/modules/payroll/client-hours";
-import { buildInvoiceLines, invoiceNumber, parseDollars, rateInForce } from "./calc";
-import { clientBillRates, invoices } from "./schema";
+import { buildInvoiceLines, invoiceNumber, parseDollars, rateForPerson } from "./calc";
+import { clientBillRates, invoiceEvents, invoices } from "./schema";
 
 // Everything that touches invoices and billing rates. The caller has already authorized. The ONLY pay-run data read is clientHoursForRun:
 // the run's period and status and each person's client payroll hours. Nothing here reads or decrypts a pay figure.
@@ -23,21 +23,24 @@ export const invoiceToday = (): string => formatInZone(Date.now(), DEFAULT_TIMEZ
 
 const rateContext = (id: string) => `client_bill_rate:${id}`;
 const invoiceContext = (id: string) => `invoice:${id}`;
+const eventContext = (id: string) => `invoice_event:${id}`;
 
-export type BillRate = { id: string; clientId: string; effectiveFrom: string; createdAt: Date; createdBy: string; rateCents: bigint };
+/** `employeeId` null is the client's default rate; a person's id is that person's own rate at the client. */
+export type BillRate = { id: string; clientId: string; employeeId: string | null; effectiveFrom: string; createdAt: Date; createdBy: string; rateCents: bigint };
 
 function decryptRate(row: typeof clientBillRates.$inferSelect): BillRate {
   const text = fieldCrypto().decrypt(row.rateEnc, rateContext(row.id));
   if (!/^\d{1,9}$/.test(text)) throw new Error("Unreadable billing rate");
-  return { id: row.id, clientId: row.clientId, effectiveFrom: row.effectiveFrom, createdAt: row.createdAt, createdBy: row.createdBy, rateCents: BigInt(text) };
+  return { id: row.id, clientId: row.clientId, employeeId: row.employeeId, effectiveFrom: row.effectiveFrom, createdAt: row.createdAt, createdBy: row.createdBy, rateCents: BigInt(text) };
 }
 
-/** Every rate row (all clients, or one), newest first. */
-export async function readBillRates(executor: Reader, clientId?: string): Promise<BillRate[]> {
+/** Every rate row (all clients, one client, or the clients in a list), newest first. */
+export async function readBillRates(executor: Reader, clientId?: string | string[]): Promise<BillRate[]> {
+  if (Array.isArray(clientId) && clientId.length === 0) return [];
   const rows = await executor
     .select()
     .from(clientBillRates)
-    .where(clientId ? eq(clientBillRates.clientId, clientId) : undefined)
+    .where(clientId === undefined ? undefined : Array.isArray(clientId) ? inArray(clientBillRates.clientId, clientId) : eq(clientBillRates.clientId, clientId))
     .orderBy(desc(clientBillRates.effectiveFrom), desc(clientBillRates.createdAt));
   return rows.map(decryptRate);
 }
@@ -47,7 +50,8 @@ const payloadSchema = z.object({
   periodStart: z.string(),
   periodEnd: z.string(),
   rateCents: z.string().regex(/^\d+$/),
-  lines: z.array(z.object({ name: z.string(), alias: z.string().nullable(), hoursHundredths: z.string().regex(/^\d+$/), amountCents: z.string().regex(/^\d+$/) })),
+  // `rateCents` per line is new: an invoice made before it read as the one rate in the header.
+  lines: z.array(z.object({ name: z.string(), alias: z.string().nullable(), hoursHundredths: z.string().regex(/^\d+$/), rateCents: z.string().regex(/^\d+$/).optional(), amountCents: z.string().regex(/^\d+$/) })),
   totalHoursHundredths: z.string().regex(/^\d+$/),
   totalCents: z.string().regex(/^\d+$/),
   unconfirmedLines: z.number().int().min(0),
@@ -66,14 +70,49 @@ export type InvoiceView = {
   periodStart: string;
   periodEnd: string;
   rateCents: bigint;
-  lines: { name: string; alias: string | null; hoursHundredths: bigint; amountCents: bigint }[];
+  lines: { name: string; alias: string | null; hoursHundredths: bigint; rateCents: bigint; amountCents: bigint }[];
   totalHoursHundredths: bigint;
   totalCents: bigint;
   unconfirmedLines: number;
+  /** What became of the invoice after it was made (archived, voided, replaced), from its newest event. */
+  state: InvoiceState;
+  /** The reason given for the archive or void, when there was one. */
+  stateReason: string | null;
+  /** The number of the corrected version that replaced this invoice. */
+  replacedByNumber: string | null;
 };
 
-export function decryptInvoice(row: typeof invoices.$inferSelect): InvoiceView {
+export type InvoiceState = "active" | "archived" | "voided" | "superseded";
+export type EventRow = typeof invoiceEvents.$inferSelect;
+
+/** An invoice's state is its newest event: none, or a restore, means active; void and replaced are final. */
+export function stateFrom(events: readonly EventRow[]): InvoiceState {
+  const last = [...events].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1)).at(-1);
+  if (!last) return "active";
+  return last.kind === "archived" ? "archived" : last.kind === "voided" ? "voided" : last.kind === "superseded" ? "superseded" : "active";
+}
+
+/** The events of these invoices, oldest first. */
+export async function readEvents(executor: Reader, invoiceIds: string[]): Promise<EventRow[]> {
+  if (invoiceIds.length === 0) return [];
+  return executor.select().from(invoiceEvents).where(inArray(invoiceEvents.invoiceId, invoiceIds)).orderBy(asc(invoiceEvents.createdAt), asc(invoiceEvents.id));
+}
+
+function reasonOf(e: EventRow | undefined): string | null {
+  if (!e?.reasonEnc) return null;
+  try {
+    return fieldCrypto().decrypt(e.reasonEnc, eventContext(e.id));
+  } catch (error) {
+    console.error("invoice event reason unreadable:", { eventId: e.id, error: error instanceof Error ? error.name : "UnknownError" });
+    return null;
+  }
+}
+
+export function decryptInvoice(row: typeof invoices.$inferSelect, events: readonly EventRow[] = [], numberOf: (id: string) => string | null = () => null): InvoiceView {
   const p = payloadSchema.parse(JSON.parse(fieldCrypto().decrypt(row.payloadEnc, invoiceContext(row.id))));
+  const mine = events.filter((e) => e.invoiceId === row.id);
+  const state = stateFrom(mine);
+  const last = [...mine].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1)).at(-1);
   return {
     id: row.id,
     number: row.number,
@@ -87,11 +126,25 @@ export function decryptInvoice(row: typeof invoices.$inferSelect): InvoiceView {
     periodStart: p.periodStart,
     periodEnd: p.periodEnd,
     rateCents: BigInt(p.rateCents),
-    lines: p.lines.map((l) => ({ name: l.name, alias: l.alias, hoursHundredths: BigInt(l.hoursHundredths), amountCents: BigInt(l.amountCents) })),
+    lines: p.lines.map((l) => ({ name: l.name, alias: l.alias, hoursHundredths: BigInt(l.hoursHundredths), rateCents: BigInt(l.rateCents ?? p.rateCents), amountCents: BigInt(l.amountCents) })),
     totalHoursHundredths: BigInt(p.totalHoursHundredths),
     totalCents: BigInt(p.totalCents),
     unconfirmedLines: p.unconfirmedLines,
+    state,
+    stateReason: state === "archived" || state === "voided" ? reasonOf(last) : null,
+    replacedByNumber: state === "superseded" && last?.replacedBy ? numberOf(last.replacedBy) : null,
   };
+}
+
+/** One invoice decrypted, with its state and the number of the version that replaced it. Null when it does not exist. The caller has authorized. */
+export async function loadInvoiceView(executor: Reader, id: string): Promise<InvoiceView | null> {
+  const [row] = await executor.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+  if (!row) return null;
+  const events = await readEvents(executor, [id]);
+  const replacers = events.flatMap((e) => (e.replacedBy ? [e.replacedBy] : []));
+  const numbers = new Map<string, string>();
+  if (replacers.length > 0) for (const r of await executor.select({ id: invoices.id, number: invoices.number }).from(invoices).where(inArray(invoices.id, replacers))) numbers.set(r.id, r.number);
+  return decryptInvoice(row, events, (x) => numbers.get(x) ?? null);
 }
 
 export type RunPreviewClient = {
@@ -100,7 +153,12 @@ export type RunPreviewClient = {
   people: number;
   hoursHundredths: bigint;
   unconfirmedLines: number;
+  /** The client's default rate in force today; null when there is none. */
   rateCents: bigint | null;
+  /** How many of the people have a rate of their own that applies today. */
+  ownRates: number;
+  /** People with hours who have neither a rate of their own nor a client default: the invoice can't be made until they have one. */
+  missingRates: string[];
   totalCents: bigint | null;
   /** Invoices already made for this run and client; the next one is a revision. */
   existing: number;
@@ -119,7 +177,8 @@ export type RunPreview = {
 export async function previewRun(executor: Reader, runId: string, onDate: string = invoiceToday()): Promise<RunPreview | null> {
   const data = await clientHoursForRun(executor, runId);
   if (!data) return null;
-  const rates = await readBillRates(executor);
+  // Only the rates of the clients on this run are read (and decrypted).
+  const rates = await readBillRates(executor, [...new Set(data.rows.flatMap((r) => (r.clientId ? [r.clientId] : [])))]);
   const made = await executor.select({ clientId: invoices.clientId }).from(invoices).where(eq(invoices.runId, runId));
   const out = new Map<string, RunPreviewClient>();
   const noClient: string[] = [];
@@ -135,18 +194,22 @@ export async function previewRun(executor: Reader, runId: string, onDate: string
     }
     let c = out.get(r.clientId);
     if (!c) {
-      const rate = rateInForce(rates.filter((x) => x.clientId === r.clientId), onDate);
-      c = { clientId: r.clientId, clientName: r.clientName ?? "Client", people: 0, hoursHundredths: 0n, unconfirmedLines: 0, rateCents: rate?.rateCents ?? null, totalCents: null, existing: made.filter((m) => m.clientId === r.clientId).length };
+      const standard = rateForPerson(rates.filter((x) => x.clientId === r.clientId), null, onDate);
+      c = { clientId: r.clientId, clientName: r.clientName ?? "Client", people: 0, hoursHundredths: 0n, unconfirmedLines: 0, rateCents: standard?.rateCents ?? null, ownRates: 0, missingRates: [], totalCents: null, existing: made.filter((m) => m.clientId === r.clientId).length };
       out.set(r.clientId, c);
     }
     c.people += 1;
     c.hoursHundredths += r.hundredths;
     if (!r.confirmed) c.unconfirmedLines += 1;
+    const mine = rateForPerson(rates.filter((x) => x.clientId === r.clientId), r.employeeId, onDate);
+    if (!mine) c.missingRates.push(r.alias ? `${r.personName} (${r.alias})` : r.personName);
+    else if (mine.employeeId !== null) c.ownRates += 1;
   }
   for (const c of out.values()) {
-    if (c.rateCents === null) continue;
+    if (c.missingRates.length > 0) continue;
+    const clientRates = rates.filter((x) => x.clientId === c.clientId);
     const rows = data.rows.filter((r) => r.clientId === c.clientId);
-    c.totalCents = buildInvoiceLines(rows, c.rateCents).totalCents;
+    c.totalCents = buildInvoiceLines(rows, (r) => rateForPerson(clientRates, r.employeeId, onDate)!.rateCents).totalCents;
   }
   return { run: data.run, clients: [...out.values()].sort((a, b) => a.clientName.localeCompare(b.clientName)), noClient, noHours };
 }
@@ -170,15 +233,22 @@ export async function createInvoiceIn(tx: Tx, actor: AuthUser, v: { runId: strin
   if (built0.lines.length === 0) throw new ActionFailure(`${client.name} has no hours on this pay run, so there is nothing to invoice.`);
 
   const issuedOn = invoiceToday();
-  const rate = rateInForce(await readBillRates(tx, v.clientId), issuedOn);
-  if (!rate) throw new ActionFailure(`${client.name} has no billing rate yet. Add one on the Rates tab first.`);
+  const clientRates = await readBillRates(tx, v.clientId);
+  if (clientRates.length === 0) throw new ActionFailure(`${client.name} has no billing rate yet. Add one on the Billing rates tab first.`);
+  // Each person is billed at their own rate if they have one in force, else the client's default.
+  const missing = rows.filter((r) => r.hundredths > 0n && !rateForPerson(clientRates, r.employeeId, issuedOn));
+  if (missing.length > 0) {
+    const names = missing.map((r) => (r.alias ? `${r.personName} (${r.alias})` : r.personName)).join(", ");
+    throw new ActionFailure(`No billing rate applies to ${names}. Add a default rate for ${client.name}, or a rate for them, on the Billing rates tab.`);
+  }
 
-  const built = buildInvoiceLines(rows, rate.rateCents);
+  const built = buildInvoiceLines(rows, (r) => rateForPerson(clientRates, r.employeeId, issuedOn)!.rateCents);
+  const standard = rateForPerson(clientRates, null, issuedOn)?.rateCents ?? built.lines[0].rateCents;
   built.lines.sort((a, b) => a.name.localeCompare(b.name) || (a.alias ?? "").localeCompare(b.alias ?? ""));
 
   const year = Number(issuedOn.slice(0, 4));
   const earlier = await tx
-    .select({ year: invoices.year, seq: invoices.seq, revision: invoices.revision })
+    .select({ id: invoices.id, year: invoices.year, seq: invoices.seq, revision: invoices.revision })
     .from(invoices)
     .where(and(eq(invoices.runId, v.runId), eq(invoices.clientId, v.clientId)))
     .orderBy(asc(invoices.revision));
@@ -203,8 +273,8 @@ export async function createInvoiceIn(tx: Tx, actor: AuthUser, v: { runId: strin
     clientName: client.name,
     periodStart: data.run.periodStart,
     periodEnd: data.run.periodEnd,
-    rateCents: rate.rateCents.toString(),
-    lines: built.lines.map((l) => ({ name: l.name, alias: l.alias, hoursHundredths: l.hoursHundredths.toString(), amountCents: l.amountCents.toString() })),
+    rateCents: standard.toString(),
+    lines: built.lines.map((l) => ({ name: l.name, alias: l.alias, hoursHundredths: l.hoursHundredths.toString(), rateCents: l.rateCents.toString(), amountCents: l.amountCents.toString() })),
     totalHoursHundredths: built.totalHoursHundredths.toString(),
     totalCents: built.totalCents.toString(),
     unconfirmedLines: built.unconfirmedLines,
@@ -223,19 +293,68 @@ export async function createInvoiceIn(tx: Tx, actor: AuthUser, v: { runId: strin
     payloadEnc: fieldCrypto().encrypt(JSON.stringify(payload), invoiceContext(id)),
     createdBy: actor.id,
   });
+  // A corrected version replaces the previous one: the older invoice, if it is still live, is marked replaced (never two live versions).
+  const prior = earlier[earlier.length - 1];
+  let supersedes: string | null = null;
+  if (prior && stateFrom(await readEvents(tx, [prior.id])) === "active") {
+    await tx.insert(invoiceEvents).values({ id: randomUUID(), invoiceId: prior.id, kind: "superseded", replacedBy: id, createdBy: actor.id });
+    supersedes = prior.id;
+  }
   // Ids and counts only: never a rate, an hours total, a name or an amount.
-  await writeAudit({ actor, action: "invoice.create", targetType: "invoice", targetId: id, metadata: { runId: v.runId, clientId: v.clientId, lines: built.lines.length, revision, ...(test ? { test: true } : {}) } }, tx);
+  await writeAudit({ actor, action: "invoice.create", targetType: "invoice", targetId: id, metadata: { runId: v.runId, clientId: v.clientId, lines: built.lines.length, revision, ...(test ? { test: true } : {}), ...(supersedes ? { supersedes } : {}) } }, tx);
   return { id, number };
 }
 
 /** Adds a billing rate (a new row; earlier rows stay). Throws ActionFailure when the client is not found. */
-export async function addBillRateIn(tx: Tx, actor: AuthUser, v: { clientId: string; effectiveFrom: string; rate: string }): Promise<{ id: string }> {
+export async function addBillRateIn(tx: Tx, actor: AuthUser, v: { clientId: string; employeeId?: string | null; effectiveFrom: string; rate: string }): Promise<{ id: string }> {
   const cents = parseDollars(v.rate);
   if (cents === null) throw new ActionFailure("Enter a rate in dollars, for example 25.50.");
   const [client] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.id, v.clientId), isNull(clients.archivedAt))).limit(1);
   if (!client) throw new ActionFailure("That client was not found.");
+  const employeeId = v.employeeId ?? null;
+  if (employeeId) {
+    const [person] = await tx.select({ id: employees.id }).from(employees).where(eq(employees.id, employeeId)).limit(1);
+    if (!person) throw new ActionFailure("That person was not found.");
+  }
   const id = randomUUID();
-  await tx.insert(clientBillRates).values({ id, clientId: v.clientId, effectiveFrom: v.effectiveFrom, rateEnc: fieldCrypto().encrypt(cents.toString(), rateContext(id)), createdBy: actor.id });
-  await writeAudit({ actor, action: "invoice.rate.add", targetType: "client_bill_rate", targetId: id, metadata: { clientId: v.clientId } }, tx);
+  await tx.insert(clientBillRates).values({ id, clientId: v.clientId, employeeId, effectiveFrom: v.effectiveFrom, rateEnc: fieldCrypto().encrypt(cents.toString(), rateContext(id)), createdBy: actor.id });
+  await writeAudit({ actor, action: "invoice.rate.add", targetType: "client_bill_rate", targetId: id, metadata: { clientId: v.clientId, ...(employeeId ? { employeeId } : {}) } }, tx);
   return { id };
+}
+
+const loadInvoice = async (tx: Tx, invoiceId: string) => {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"invoices.events"}))`);
+  const [row] = await tx.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  if (!row) throw new ActionFailure("That invoice was not found.");
+  return { row, state: stateFrom(await readEvents(tx, [invoiceId])) };
+};
+
+async function addEvent(tx: Tx, actor: AuthUser, invoiceId: string, kind: "archived" | "restored" | "voided", reason: string | null, action: string): Promise<void> {
+  const id = randomUUID();
+  await tx.insert(invoiceEvents).values({ id, invoiceId, kind, reasonEnc: reason ? fieldCrypto().encrypt(reason, eventContext(id)) : null, createdBy: actor.id });
+  // Ids only: never the reason, a rate, a name or an amount.
+  await writeAudit({ actor, action, targetType: "invoice", targetId: invoiceId, metadata: { kind } }, tx);
+}
+
+/** Archives a TEST invoice (any time it is live): it leaves the list and stays on record. A real invoice is voided instead. */
+export async function archiveInvoiceIn(tx: Tx, actor: AuthUser, v: { invoiceId: string; reason?: string | null }): Promise<void> {
+  const { row, state } = await loadInvoice(tx, v.invoiceId);
+  if (!row.isTest) throw new ActionFailure("Only a test invoice can be archived. A real invoice is voided, with a reason.");
+  if (state !== "active") throw new ActionFailure(state === "archived" ? "This invoice is already archived." : "This invoice is no longer live, so it can't be archived.");
+  await addEvent(tx, actor, v.invoiceId, "archived", v.reason?.trim() || null, "invoice.archive");
+}
+
+/** Brings an archived test invoice back. */
+export async function restoreInvoiceIn(tx: Tx, actor: AuthUser, v: { invoiceId: string }): Promise<void> {
+  const { state } = await loadInvoice(tx, v.invoiceId);
+  if (state !== "archived") throw new ActionFailure("This invoice is not archived.");
+  await addEvent(tx, actor, v.invoiceId, "restored", null, "invoice.restore");
+}
+
+/** Voids a REAL invoice with a reason: kept, stamped VOID, hidden from the default list, never reused. A test invoice is archived instead. */
+export async function voidInvoiceIn(tx: Tx, actor: AuthUser, v: { invoiceId: string; reason: string }): Promise<void> {
+  const { row, state } = await loadInvoice(tx, v.invoiceId);
+  if (row.isTest) throw new ActionFailure("A test invoice is archived, not voided.");
+  if (state !== "active") throw new ActionFailure(state === "voided" ? "This invoice is already void." : "This invoice has already been replaced by a corrected version.");
+  await addEvent(tx, actor, v.invoiceId, "voided", v.reason.trim(), "invoice.void");
 }

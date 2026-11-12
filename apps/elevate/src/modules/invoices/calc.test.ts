@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInvoiceLines, formatDollars, formatHours, invoiceNumber, parseDollars, rateInForce, unconfirmedNote } from "./calc";
+import { buildInvoiceLines, formatDollars, formatHours, invoiceNumber, parseDollars, rateForPerson, rateInForce, unconfirmedNote } from "./calc";
 
 describe("invoice lines", () => {
   const rows = [
@@ -73,5 +73,54 @@ describe("numbers and formatting", () => {
   it("words the unconfirmed note", () => {
     expect(unconfirmedNote(1)).toBe("1 line uses suggested hours that is not confirmed yet.");
     expect(unconfirmedNote(3)).toBe("3 lines use suggested hours that are not confirmed yet.");
+  });
+});
+
+// ---- a rate for each person (VA rates vary within one client) ----
+describe("rateForPerson", () => {
+  const row = (employeeId: string | null, effectiveFrom: string, rateCents: bigint, createdAt = new Date("2031-01-01T00:00:00Z")) => ({ employeeId, effectiveFrom, rateCents, createdAt });
+  const rates = [row(null, "2031-01-01", 1000n), row(null, "2031-06-01", 1200n), row("ana", "2031-03-01", 1500n), row("ana", "2031-09-01", 1800n)];
+
+  it("uses a person's own rate in force, else the client's standard rate in force", () => {
+    expect(rateForPerson(rates, "ana", "2031-04-01")?.rateCents).toBe(1500n);
+    expect(rateForPerson(rates, "ben", "2031-04-01")?.rateCents).toBe(1000n); // no rate of his own: the standard rate
+    expect(rateForPerson(rates, null, "2031-04-01")?.rateCents).toBe(1000n);
+    expect(rateForPerson(rates, undefined, "2031-07-01")?.rateCents).toBe(1200n); // the newer standard rate
+  });
+
+  it("does not use a rate that starts later, and follows a person's own newer rate when it starts", () => {
+    expect(rateForPerson(rates, "ana", "2031-02-01")?.rateCents).toBe(1000n); // her own rate starts in March: the standard holds until then
+    expect(rateForPerson(rates, "ana", "2031-09-01")?.rateCents).toBe(1800n);
+  });
+
+  it("gives null when nothing applies yet", () => {
+    expect(rateForPerson(rates, "ana", "2030-12-31")).toBeNull();
+    expect(rateForPerson([row("ana", "2031-03-01", 1500n)], "ben", "2031-04-01")).toBeNull(); // only someone else has a rate
+    expect(rateForPerson([], "ana", "2031-04-01")).toBeNull();
+  });
+});
+
+describe("buildInvoiceLines with a rate for each line", () => {
+  const rows = [
+    { personName: "Ana Testcruz", alias: null, hundredths: 1000n, confirmed: true, employeeId: "ana" },
+    { personName: "Ben Testreyes", alias: null, hundredths: 833n, confirmed: true, employeeId: "ben" },
+    { personName: "Zed Nohours", alias: null, hundredths: 0n, confirmed: true, employeeId: "zed" },
+  ];
+  const own = new Map<string, bigint>([["ana", 1500n]]);
+
+  it("bills each line at its own rate, adds the line amounts and leaves a no-hours person off", () => {
+    const r = buildInvoiceLines(rows, (row) => own.get(row.employeeId ?? "") ?? 1000n);
+    expect(r.lines.map((l) => [l.name, l.rateCents, l.amountCents])).toEqual([
+      ["Ana Testcruz", 1500n, 15000n], // 10.00 h x 15.00
+      ["Ben Testreyes", 1000n, 8330n], // 8.33 h x 10.00
+    ]);
+    expect(r.totalCents).toBe(23330n);
+    expect(r.totalHoursHundredths).toBe(1833n);
+  });
+
+  it("still takes one rate for every line", () => {
+    const r = buildInvoiceLines(rows, 1235n);
+    expect(r.lines.every((l) => l.rateCents === 1235n)).toBe(true);
+    expect(r.totalCents).toBe(12350n + 10288n); // 10.00 x 12.35, then 8.33 x 12.35 = 102.8755 rounded half up
   });
 });

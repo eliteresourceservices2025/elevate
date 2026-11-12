@@ -34,22 +34,27 @@ export function parseDollars(input: string): bigint | null {
   return cents > 0n && cents <= MAX_RATE_CENTS ? cents : null;
 }
 
-export type HoursRow = { personName: string; alias: string | null; hundredths: bigint; confirmed: boolean };
+export type HoursRow = { personName: string; alias: string | null; hundredths: bigint; confirmed: boolean; /** Who the hours belong to, for a rate of their own. */ employeeId?: string };
 
-export type InvoiceLine = { name: string; alias: string | null; hoursHundredths: bigint; amountCents: bigint };
+/** Each line carries the rate it was worked out at: VA rates can differ within one client. */
+export type InvoiceLine = { name: string; alias: string | null; hoursHundredths: bigint; rateCents: bigint; amountCents: bigint };
 
 export type InvoiceTotals = { lines: InvoiceLine[]; totalHoursHundredths: bigint; totalCents: bigint; unconfirmedLines: number };
 
-/** Line amount = round half up(hours x rate), per line; the total is the sum of the line amounts so the lines always add up. Lines with no hours are left off. */
-export function buildInvoiceLines(rows: readonly HoursRow[], rateCents: bigint): InvoiceTotals {
+/**
+ * Line amount = round half up(hours x the line's rate), per line; the total is the sum of the line amounts so the lines always add up. Lines with
+ * no hours are left off. `rate` is one rate for every line, or a function that gives each line's own rate.
+ */
+export function buildInvoiceLines(rows: readonly HoursRow[], rate: bigint | ((row: HoursRow) => bigint)): InvoiceTotals {
   const lines: InvoiceLine[] = [];
   let totalHoursHundredths = 0n;
   let totalCents = 0n;
   let unconfirmedLines = 0;
   for (const r of rows) {
     if (r.hundredths <= 0n) continue;
+    const rateCents = typeof rate === "bigint" ? rate : rate(r);
     const amountCents = divRoundHalfUp(r.hundredths * rateCents, 100n);
-    lines.push({ name: r.personName, alias: r.alias, hoursHundredths: r.hundredths, amountCents });
+    lines.push({ name: r.personName, alias: r.alias, hoursHundredths: r.hundredths, rateCents, amountCents });
     totalHoursHundredths += r.hundredths;
     totalCents += amountCents;
     if (!r.confirmed) unconfirmedLines += 1;
@@ -69,6 +74,18 @@ export function rateInForce<T extends { effectiveFrom: string; createdAt: Date }
   return best;
 }
 
+/** A rate row as the lookup needs it: no `employeeId` is the client's default, one is that person's own rate. */
+export type RateRow = { employeeId: string | null; effectiveFrom: string; createdAt: Date };
+
+/**
+ * The rate that applies to one person on a date: their own rate in force if they have one, else the client's default in force, else null.
+ * `rates` are the rows of ONE client. A person's rate that starts later does not apply yet, so the default holds until then.
+ */
+export function rateForPerson<T extends RateRow>(rates: readonly T[], employeeId: string | null | undefined, onDate: string): T | null {
+  const own = employeeId ? rateInForce(rates.filter((r) => r.employeeId === employeeId), onDate) : null;
+  return own ?? rateInForce(rates.filter((r) => r.employeeId === null), onDate);
+}
+
 /** INV-2031-0007, or INV-2031-0007-R2 for the second invoice for the same run and client. An invoice made from a test run is TEST-2031-0007 (its own series). */
 export function invoiceNumber(year: number, seq: number, revision = 1, test = false): string {
   const base = `${test ? "TEST" : "INV"}-${year}-${String(seq).padStart(4, "0")}`;
@@ -82,4 +99,8 @@ export const INVOICE_LABELS = {
   draftNote: "DRAFT: made from a pay run that is still a draft. Hours may still change.",
   draftBadge: "Draft",
   testNote: "TEST: made from a test run. This is not a real invoice and must not be sent to a client.",
+  voidNote: "VOID: this invoice has been withdrawn and must not be sent or paid.",
+  archivedNote: "ARCHIVED: this test invoice is hidden from the list.",
+  supersededNote: (number: string) => `REPLACED: a corrected version, ${number}, replaces this invoice. Do not send this one.`,
+  mixedRates: "Varies by person",
 } as const;

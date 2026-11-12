@@ -72,7 +72,7 @@ describe("invoices are append-only", () => {
       values (${id}, ${uniq("INV-TEST-")}, 2031, 1, 1, ${runId}, ${clientId}, 'draft', '2031-12-16', 'v1:x', ${userId})`);
     await refused(db.execute(sql`update ops.invoices set run_status = 'paid' where id = ${id}`));
     await refused(db.execute(sql`delete from ops.invoices where id = ${id}`));
-    await refused(db.execute(sql`truncate ops.invoices`));
+    await refused(db.execute(sql`truncate ops.invoices cascade`));
     expect(await rows(sql`select 1 from ops.invoices where id = ${id}`)).toHaveLength(1);
   });
 });

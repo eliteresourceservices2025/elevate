@@ -6,9 +6,7 @@ import { allowRequest } from "@/lib/rate-limit";
 import { writeAudit } from "@/modules/audit/write";
 import { renderInvoicePdf } from "@/modules/invoices/invoice-pdf";
 import { invoiceText } from "@/modules/invoices/invoice-text";
-import { invoices } from "@/modules/invoices/schema";
-import { decryptInvoice } from "@/modules/invoices/service";
-import { eq } from "drizzle-orm";
+import { loadInvoiceView } from "@/modules/invoices/service";
 
 // An invoice as a PDF. Signed in, authorized (invoices.view), rate-limited and audited with the invoice id only; never cached.
 
@@ -22,9 +20,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   try {
     await authorize(actor, "invoices.view");
     if (!(await allowRequest("download", actor.id))) return new Response("Too many requests", { status: 429, headers: HEADERS });
-    const [row] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
-    if (!row) return notFound();
-    const view = decryptInvoice(row);
+    const view = await loadInvoiceView(db, id);
+    if (!view) return notFound();
     const pdf = await renderInvoicePdf(invoiceText(view));
     await writeAudit({ actor, action: "sensitive.view", targetType: "invoice", targetId: id, metadata: { fields: ["invoice pdf"] } });
     return new Response(Buffer.from(pdf), {

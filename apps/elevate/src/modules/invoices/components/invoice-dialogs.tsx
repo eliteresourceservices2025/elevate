@@ -17,7 +17,7 @@ type Preview = {
   period: string;
   status: string;
   isTest: boolean;
-  clients: { clientId: string; clientName: string; people: number; hours: string; unconfirmedLines: number; rate: string | null; total: string | null; existing: number }[];
+  clients: { clientId: string; clientName: string; people: number; hours: string; unconfirmedLines: number; rate: string | null; ownRates: number; missingRates: string[]; total: string | null; existing: number }[];
   noClient: string[];
   noHours: string[];
 };
@@ -50,7 +50,7 @@ function NewInvoiceForm({ runs }: { runs: RunOption[] }) {
   };
 
   const client = preview?.clients.find((c) => c.clientId === clientId) ?? null;
-  const blocked = !client || client.rate === null;
+  const blocked = !client || client.missingRates.length > 0;
 
   return (
     <form
@@ -116,7 +116,7 @@ function NewInvoiceForm({ runs }: { runs: RunOption[] }) {
                 <dd className="tabular-nums">{client.hours}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Rate per hour</dt>
+                <dt className="text-xs text-muted-foreground">{client.ownRates > 0 ? "Standard rate per hour" : "Rate per hour"}</dt>
                 <dd className="tabular-nums">{client.rate === null ? "None yet" : `${client.rate} USD`}</dd>
               </div>
               <div>
@@ -125,7 +125,16 @@ function NewInvoiceForm({ runs }: { runs: RunOption[] }) {
               </div>
             </dl>
           ) : null}
-          {client && client.rate === null ? <Alert variant="destructive">{client.clientName} has no billing rate yet. Add one on the Billing rates tab first.</Alert> : null}
+          {client && client.ownRates > 0 ? (
+            <Alert variant="info">
+              {client.ownRates} {client.ownRates === 1 ? "person is" : "people are"} billed at a rate of their own; everyone else is billed at the standard rate.
+            </Alert>
+          ) : null}
+          {client && client.missingRates.length > 0 ? (
+            <Alert variant="destructive">
+              No billing rate applies to {client.missingRates.join(", ")}. Add a standard rate for {client.clientName}, or a rate for them, on the Billing rates tab first.
+            </Alert>
+          ) : null}
           {client && client.unconfirmedLines > 0 ? (
             <Alert variant="warning">
               {client.unconfirmedLines} {client.unconfirmedLines === 1 ? "line uses" : "lines use"} suggested hours that {client.unconfirmedLines === 1 ? "is" : "are"} not confirmed yet. The invoice will say so.
@@ -154,10 +163,12 @@ export function NewInvoiceDialog({ runs }: { runs: RunOption[] }) {
   );
 }
 
-function AddRateForm({ clients, today, clientId: fixed }: { clients: { id: string; name: string }[]; today: string; clientId?: string }) {
+function AddRateForm({ clients, today, clientId: fixed, people = {}, person: personOnly = false }: { clients: { id: string; name: string }[]; today: string; clientId?: string; people?: Record<string, { id: string; name: string }[]>; person?: boolean }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const [clientId, setClientId] = useState(fixed ?? "");
+  const [employeeId, setEmployeeId] = useState("");
+  const choices = people[clientId] ?? [];
   const [effectiveFrom, setFrom] = useState(today);
   const [rate, setRate] = useState("");
   return (
@@ -165,15 +176,17 @@ function AddRateForm({ clients, today, clientId: fixed }: { clients: { id: strin
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => addBillRate({ clientId, effectiveFrom, rate }), "Rate added.", () => dialog?.close(true));
+        run(() => addBillRate({ clientId, employeeId: personOnly ? employeeId : "", effectiveFrom, rate }), "Rate added.", () => dialog?.close(true));
       }}
     >
       <p className="text-sm text-muted-foreground">
-        The rate is what we bill the client for one hour, in US dollars. An invoice uses the newest rate that started on or before the day it is made. Earlier rates stay in the history.
+        {personOnly
+          ? "A rate for one person at this client, for when their hourly rate differs from the client's standard rate. An invoice bills them at this rate from its start date, and everyone else at the standard rate."
+          : "The rate is what we bill the client for one hour, in US dollars. An invoice uses the newest rate that started on or before the day it is made. Earlier rates stay in the history."}
       </p>
       <div className="space-y-1">
         <Label htmlFor="rate-client">Client</Label>
-        <NativeSelect id="rate-client" value={clientId} onChange={(e) => setClientId(e.target.value)} required>
+        <NativeSelect id="rate-client" value={clientId} onChange={(e) => { setClientId(e.target.value); setEmployeeId(""); }} required>
           <option value="">Choose a client</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
@@ -182,6 +195,19 @@ function AddRateForm({ clients, today, clientId: fixed }: { clients: { id: strin
           ))}
         </NativeSelect>
       </div>
+      {personOnly ? (
+        <div className="space-y-1">
+          <Label htmlFor="rate-person">Person</Label>
+          <NativeSelect id="rate-person" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required disabled={clientId === ""}>
+            <option value="">{clientId === "" ? "Choose a client first" : choices.length === 0 ? "Nobody has a pay line for this client" : "Choose a person"}</option>
+            {choices.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="rate-from">Starts on</Label>
@@ -201,8 +227,17 @@ function AddRateForm({ clients, today, clientId: fixed }: { clients: { id: strin
 
 export function AddRateDialog({ clients, today }: { clients: { id: string; name: string }[]; today: string }) {
   return (
-    <FormDialog label="Add rate" title="Add a billing rate" icon={<Plus className="size-4" aria-hidden />}>
+    <FormDialog label="Add standard rate" title="Add a standard billing rate" icon={<Plus className="size-4" aria-hidden />}>
       <AddRateForm clients={clients} today={today} />
+    </FormDialog>
+  );
+}
+
+/** A rate of one person's own at a client (VA rates vary). Only people with a pay line for the client can be chosen. */
+export function AddPersonRateDialog({ clients, today, people }: { clients: { id: string; name: string }[]; today: string; people: Record<string, { id: string; name: string }[]> }) {
+  return (
+    <FormDialog label="Add a rate for a person" title="Add a rate for a person" variant="outline" icon={<Plus className="size-4" aria-hidden />}>
+      <AddRateForm clients={clients} today={today} people={people} person />
     </FormDialog>
   );
 }

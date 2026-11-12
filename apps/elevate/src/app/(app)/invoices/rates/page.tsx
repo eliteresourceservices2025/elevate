@@ -9,7 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
 import { formatDollars } from "@/modules/invoices/calc";
-import { AddRateDialog } from "@/modules/invoices/components/invoice-dialogs";
+import { AddPersonRateDialog, AddRateDialog } from "@/modules/invoices/components/invoice-dialogs";
 import { InvoiceTabs } from "@/modules/invoices/components/invoice-tabs";
 import { getBillRates } from "@/modules/invoices/queries";
 import { invoiceToday } from "@/modules/invoices/service";
@@ -28,8 +28,15 @@ export default async function BillingRatesPage({ searchParams }: PageProps<"/inv
     <PageContainer width="wide">
       <PageHeader
         title="Billing rates"
-        description="What each client is billed for one hour, in US dollars. A change is a new rate with a start date; earlier rates stay in the history."
-        actions={data.canManage ? <AddRateDialog clients={data.clients} today={invoiceToday()} /> : undefined}
+        description="What each client is billed for one hour, in US dollars: a standard rate for the client, and a rate of their own for any person whose rate differs. A change is a new rate with a start date; earlier rates stay in the history."
+        actions={
+          data.canManage ? (
+            <>
+              <AddPersonRateDialog clients={data.clients} today={invoiceToday()} people={data.peopleByClient} />
+              <AddRateDialog clients={data.clients} today={invoiceToday()} />
+            </>
+          ) : undefined
+        }
       />
       <InvoiceTabs current="rates" />
       {data.overview.length === 0 ? (
@@ -39,7 +46,7 @@ export default async function BillingRatesPage({ searchParams }: PageProps<"/inv
           <TableHeader>
             <TableRow>
               <TableHead>Client</TableHead>
-              <TableHead className="text-right">Rate per hour (USD)</TableHead>
+              <TableHead className="text-right">Standard rate per hour (USD)</TableHead>
               <TableHead>Since</TableHead>
               <TableHead>Next change</TableHead>
             </TableRow>
@@ -61,6 +68,39 @@ export default async function BillingRatesPage({ searchParams }: PageProps<"/inv
         </Table>
       )}
 
+      {data.personRates.length > 0 ? (
+        <section className="space-y-3" aria-label="Rates for people">
+          <h2 className="text-lg font-semibold">Rates for people</h2>
+          <p className="text-sm text-muted-foreground">These people are billed at their own rate. Everyone else at a client is billed at the client&apos;s standard rate.</p>
+          <Table stack>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Client</TableHead>
+                <TableHead>Person</TableHead>
+                <TableHead className="text-right">Rate per hour (USD)</TableHead>
+                <TableHead>Since</TableHead>
+                <TableHead>Next change</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.personRates.map((r) => (
+                <TableRow key={`${r.clientId}-${r.employeeId}`}>
+                  <TableCell label="Client">{r.clientName}</TableCell>
+                  <TableCell label="Person" className="font-medium">
+                    {r.personName}
+                  </TableCell>
+                  <TableCell label="Rate per hour (USD)" className="text-right tabular-nums">
+                    {r.currentCents === null ? "Starts later" : formatDollars(r.currentCents)}
+                  </TableCell>
+                  <TableCell label="Since">{r.currentFrom ?? "-"}</TableCell>
+                  <TableCell label="Next change">{r.upcoming ? `${formatDollars(r.upcoming.rateCents)} from ${r.upcoming.effectiveFrom}` : "-"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </section>
+      ) : null}
+
       {data.history.length > 0 ? (
         <section className="space-y-3" aria-label="Rate history">
           <h2 className="text-lg font-semibold">Rate history</h2>
@@ -68,6 +108,7 @@ export default async function BillingRatesPage({ searchParams }: PageProps<"/inv
             <TableHeader>
               <TableRow>
                 <TableHead>Client</TableHead>
+                <TableHead>Applies to</TableHead>
                 <TableHead>Starts on</TableHead>
                 <TableHead className="text-right">Rate per hour (USD)</TableHead>
               </TableRow>
@@ -76,6 +117,7 @@ export default async function BillingRatesPage({ searchParams }: PageProps<"/inv
               {data.history.map((h) => (
                 <TableRow key={h.id}>
                   <TableCell label="Client">{h.clientName}</TableCell>
+                  <TableCell label="Applies to">{h.personName ?? "Standard rate"}</TableCell>
                   <TableCell label="Starts on">{h.effectiveFrom}</TableCell>
                   <TableCell label="Rate per hour (USD)" className="text-right tabular-nums">
                     {formatDollars(h.rateCents)}

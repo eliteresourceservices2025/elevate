@@ -23,7 +23,8 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
   await requireUser();
   const params = await searchParams;
   const paging = parsePaging({ page: one(params.page), size: one(params.size) });
-  const list = await orNotFound(listInvoices(paging)); // authorize("invoices.view") inside
+  const all = one(params.all) === "1";
+  const list = await orNotFound(listInvoices(paging, { all })); // authorize("invoices.view") inside
   const runs = list.canCreate ? await orNotFound(listInvoiceableRuns()) : [];
 
   return (
@@ -34,6 +35,19 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
         actions={list.canCreate ? <NewInvoiceDialog runs={runs.map((r) => ({ id: r.id, label: `${r.periodStart} to ${r.periodEnd} (${r.isTest ? "test run, " : ""}${r.status.replace("_", " ")})` }))} /> : undefined}
       />
       <InvoiceTabs current="invoices" />
+      {list.hiddenCount > 0 || list.showingAll ? (
+        <p className="text-sm">
+          {list.showingAll ? (
+            <Link href="/invoices" className="underline underline-offset-2">
+              Hide archived, void and replaced invoices
+            </Link>
+          ) : (
+            <Link href="/invoices?all=1" className="underline underline-offset-2">
+              Show archived, void and replaced invoices ({list.hiddenCount})
+            </Link>
+          )}
+        </p>
+      ) : null}
       {list.rows.length === 0 ? (
         <EmptyState icon={Receipt} title="No invoices yet" description="Add the client's billing rate first, then make an invoice from a pay run." />
       ) : (
@@ -56,6 +70,10 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
                       {r.number}
                     </Link>{" "}
                     {r.runStatus === "draft" ? <Badge variant="warning">Draft</Badge> : null}
+                    {r.isTest ? <Badge variant="warning">Test</Badge> : null}
+                    {r.state === "voided" ? <Badge variant="destructive">Void</Badge> : null}
+                    {r.state === "archived" ? <Badge variant="outline">Archived</Badge> : null}
+                    {r.state === "superseded" ? <Badge variant="outline">Replaced</Badge> : null}
                   </TableCell>
                   <TableCell label="Client">{r.clientName}</TableCell>
                   <TableCell label="Period">{r.unreadable ? "-" : `${r.periodStart} to ${r.periodEnd}`}</TableCell>
@@ -67,7 +85,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
               ))}
             </TableBody>
           </Table>
-          <PagerLinks info={list.info} basePath="/invoices" label="invoices" />
+          <PagerLinks info={list.info} basePath="/invoices" query={{ all: list.showingAll ? "1" : undefined }} label="invoices" />
         </>
       )}
     </PageContainer>

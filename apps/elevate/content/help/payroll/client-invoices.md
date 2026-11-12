@@ -29,6 +29,25 @@ A change is a new rate with a new start date. Older rates stay in the history. A
 
 People with no client are not invoiced. They are listed in the window as "No client". People with 0 hours are left off.
 
+# A different rate for one person
+
+VA rates can differ. On **Invoices**, **Billing rates**:
+
+- **Add standard rate** sets what the client is billed for one hour. Everyone at that client is billed at it.
+- **Add a rate for a person** sets a rate of their own at that client, from a start date. Only people who have a pay line for that client can be chosen.
+
+An invoice bills each person at their own rate if they have one in force, and everyone else at the standard rate. If rates differ, the invoice says **Varies by person** at the top and shows each line's rate. If someone has neither a rate of their own nor a standard rate, the window names them and you can't make the invoice until you add one.
+
+# Change, replace or remove an invoice
+
+An invoice never changes once it is made. Open it and choose **Invoice options**:
+
+- **Make a corrected version** makes the next version (for example **-R2**) from the pay run's current hours and today's rates. The earlier version is marked **Replaced** and the page says which one replaces it.
+- **Archive this test invoice** hides a test invoice from the list. You can restore it.
+- **Void this invoice** is for a real invoice. Give a reason. It stays on record, is stamped **VOID** on the page and the PDF, leaves the main list and its number is never used again.
+
+Archived, void and replaced invoices are hidden from the list; use **Show archived, void and replaced invoices** to see them.
+
 # Invoices from a test run
 
 If the pay run is a test run, you can still make an invoice to practise. It is numbered **TEST** (its own series, so real invoice numbers never skip) and the page and PDF say it is a test. Do not send it to a client. An archived test run can't be invoiced.

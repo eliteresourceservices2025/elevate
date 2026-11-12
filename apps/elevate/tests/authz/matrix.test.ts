@@ -194,6 +194,7 @@ const EXPECTED: Record<string, string> = {
   "invoices.view": "A A - - A -",
   "invoices.create": "A A - - A -",
   "invoices.manage_rates": "A A - - A -",
+  "invoices.manage": "A A - - A -",
 };
 
 const SCOPE_CODE: Record<string, Scope | null> = { A: "all", T: "team", O: "own", "-": null };

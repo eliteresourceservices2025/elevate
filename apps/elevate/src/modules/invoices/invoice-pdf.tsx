@@ -23,6 +23,7 @@ const styles = StyleSheet.create({
   title: { fontFamily: "Helvetica-Bold", fontSize: 15, letterSpacing: 0.6, marginBottom: 3 },
   number: { fontSize: 9, color: MUTED },
   draft: { borderWidth: 1, borderColor: GOLD, backgroundColor: "#fbf3d0", padding: 6, marginBottom: 8, fontFamily: "Helvetica-Bold", fontSize: 9 },
+  stateStamp: { borderWidth: 2, borderColor: "#b42318", color: "#b42318", padding: 6, marginBottom: 8, fontFamily: "Helvetica-Bold", fontSize: 11, textAlign: "center" },
   test: { borderWidth: 2, borderColor: "#b42318", backgroundColor: "#fde8e6", color: "#7a1710", padding: 6, marginBottom: 8, fontFamily: "Helvetica-Bold", fontSize: 10 },
   facts: { flexDirection: "row", flexWrap: "wrap", marginBottom: 10 },
   fact: { width: "25%", marginBottom: 5, paddingRight: 6 },
@@ -55,6 +56,7 @@ function InvoicePdfDocument({ view }: { view: InvoiceText }) {
           </View>
         </View>
 
+        {view.stateNote ? <Text style={styles.stateStamp}>{latin(view.stateNote)}</Text> : null}
         {view.isTest ? <Text style={styles.test}>{latin(view.testNote)}</Text> : null}
         {view.isDraft ? <Text style={styles.draft}>{latin(view.draftNote)}</Text> : null}
 

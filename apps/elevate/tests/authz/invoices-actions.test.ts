@@ -14,8 +14,8 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/modules/audit/write", () => ({ writeAudit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const { previewInvoiceRun, createInvoice, addBillRate } = await import("@/modules/invoices/actions");
-const { listInvoices, listInvoiceableRuns, getInvoice, getBillRates } = await import("@/modules/invoices/queries");
+const { previewInvoiceRun, createInvoice, addBillRate, archiveInvoice, restoreInvoice, voidInvoice } = await import("@/modules/invoices/actions");
+const { listInvoices, listInvoiceableRuns, getInvoice, getBillRates, getInvoiceAbilities } = await import("@/modules/invoices/queries");
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
@@ -30,6 +30,10 @@ const cases: { name: string; call: () => Promise<{ ok: boolean; error?: string }
   { name: "previewInvoiceRun", call: () => previewInvoiceRun({ runId: OTHER }) },
   { name: "createInvoice", call: () => createInvoice({ runId: OTHER, clientId: ID }) },
   { name: "addBillRate", call: () => addBillRate({ clientId: OTHER, effectiveFrom: "2031-01-01", rate: "25.50" }) },
+  { name: "addBillRate (a person)", call: () => addBillRate({ clientId: OTHER, employeeId: ID, effectiveFrom: "2031-01-01", rate: "25.50" }) },
+  { name: "archiveInvoice", call: () => archiveInvoice({ invoiceId: OTHER, reason: "Practice done" }) },
+  { name: "restoreInvoice", call: () => restoreInvoice({ invoiceId: OTHER }) },
+  { name: "voidInvoice", call: () => voidInvoice({ invoiceId: OTHER, reason: "Wrong client" }) },
 ];
 
 beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
@@ -55,7 +59,16 @@ describe("invoice actions, every role", () => {
       });
       it("a bad request from an allowed role is refused before the database", async () => {
         as("executive");
-        const bad = (await (c.name === "previewInvoiceRun" ? previewInvoiceRun({ runId: "nope" }) : c.name === "createInvoice" ? createInvoice({ runId: "x" }) : addBillRate({ clientId: OTHER, effectiveFrom: "2031-01-01", rate: "-5" }))) as { ok: boolean; error?: string };
+        const badCalls: Record<string, () => Promise<unknown>> = {
+          previewInvoiceRun: () => previewInvoiceRun({ runId: "nope" }),
+          createInvoice: () => createInvoice({ runId: "x" }),
+          addBillRate: () => addBillRate({ clientId: OTHER, effectiveFrom: "2031-01-01", rate: "-5" }),
+          "addBillRate (a person)": () => addBillRate({ clientId: OTHER, employeeId: "nope", effectiveFrom: "2031-01-01", rate: "25.50" }),
+          archiveInvoice: () => archiveInvoice({ invoiceId: "nope" }),
+          restoreInvoice: () => restoreInvoice({ invoiceId: "nope" }),
+          voidInvoice: () => voidInvoice({ invoiceId: OTHER, reason: "   " }),
+        };
+        const bad = (await badCalls[c.name]()) as { ok: boolean; error?: string };
         expect(bad.ok).toBe(false);
         expect(bad.error).not.toBe(NO_ACCESS);
         expect(console.error).not.toHaveBeenCalled(); // never reached the throwing database
@@ -91,4 +104,20 @@ describe("invoice queries, every role", () => {
       });
     });
   }
+});
+
+describe("getInvoiceAbilities, every role", () => {
+  // It reads no data: it only says which buttons to show, so an allowed role gets an answer and anyone else is refused.
+  for (const role of ROLE_SLUGS) {
+    const allowed = ALLOWED.includes(role);
+    it(`${role}: ${allowed ? "gets the buttons" : "is refused"}`, async () => {
+      as(role);
+      if (allowed) expect(await getInvoiceAbilities()).toEqual({ canManage: true, canCreate: true });
+      else await expect(getInvoiceAbilities()).rejects.toBeInstanceOf(ForbiddenError);
+    });
+  }
+  it("a payroll level alone gives nothing", async () => {
+    as("employee", "approver");
+    await expect(getInvoiceAbilities()).rejects.toBeInstanceOf(ForbiddenError);
+  });
 });
