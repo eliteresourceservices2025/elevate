@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRemitlyRows } from "./remitly";
+import { buildRemitlyRows, REMITLY_HEADER, type PayoutDetails } from "./remitly";
 
 // Invented people and figures. Pesos are bigint centavos. The list is in pesos only (Remitly applies its own rate).
 const line = (employeeId: string, name: string, alias: string | null, net: bigint) => ({
@@ -18,6 +18,9 @@ describe("buildRemitlyRows", () => {
         name: "Liza Testreyes",
         aliases: "Front desk; Billing",
         pesos: "17500.50",
+        bankName: "",
+        accountName: "",
+        accountNumber: "",
       },
     ]);
   });
@@ -46,8 +49,19 @@ describe("buildRemitlyRows", () => {
     expect(rows[0].pesos).toBe("4.00");
   });
 
-  it("has no bank, account or dollar column", () => {
+  it("has the bank columns but no dollar column, blank when the person has no details", () => {
     const keys = Object.keys(buildRemitlyRows([line("e1", "A B", null, 100n)])[0]);
-    expect(keys).toEqual(["employeeId", "name", "aliases", "pesos"]);
+    expect(keys).toEqual(["employeeId", "name", "aliases", "pesos", "bankName", "accountName", "accountNumber"]);
+    expect(REMITLY_HEADER).toEqual(["Person", "Alias", "Pesos", "Bank", "Account name", "Account number"]);
+    expect(buildRemitlyRows([line("e1", "A B", null, 100n)])[0]).toMatchObject({ bankName: "", accountName: "", accountNumber: "" });
+  });
+
+  it("puts each person's payout details on their own row, and only theirs", () => {
+    const details = new Map<string, PayoutDetails>([["e1", { bankName: "Test Bank", accountName: "Ana Cruz", accountNumber: "0012345678" }]]);
+    const rows = buildRemitlyRows([line("e1", "Ana Cruz", null, 585_000n), line("e1", "Ana Cruz", "Billing", 100n), line("e2", "Ben Zamora", null, 100n)], details);
+    expect(rows.map((r) => [r.employeeId, r.bankName, r.accountName, r.accountNumber])).toEqual([
+      ["e1", "Test Bank", "Ana Cruz", "0012345678"],
+      ["e2", "", "", ""],
+    ]);
   });
 });

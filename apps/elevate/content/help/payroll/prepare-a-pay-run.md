@@ -102,7 +102,7 @@ Click **Send for review** at the bottom of the run. The Approvers are told that 
 
 When the run is approved, the **Payment** section appears at the bottom.
 
-1. Click **Download Remitly list**. It has each person's name, alias and **Total payable compensation** in pesos. It never has account numbers and no dollar amounts: pay at the rate Remitly shows. If two people share a name, use the alias to tell them apart.
+1. Click **Download Remitly list**. It has each person's name, alias and **Total payable compensation** in pesos, and their **Bank**, **Account name** and **Account number**, so you can pay them without looking anything up. There are no dollar amounts: pay at the rate Remitly shows. If two people share a name, use the alias to tell them apart. Someone with no bank details on file has blank cells, and the page tells you how many. The file holds real account numbers: keep it private and delete it once you have paid. Every download is recorded. On a test run the file shows masked details and says TEST on every row. A Preparer or an Approver can download the list and record the payments.
 2. Pay each person in Remitly.
 3. Click **Mark paid** on the person's row.
 

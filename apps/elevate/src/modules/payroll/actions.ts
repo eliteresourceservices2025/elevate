@@ -476,8 +476,8 @@ export async function approveRun(input: unknown): Promise<ActionResult> {
   });
 }
 
-/** The Remitly list (person, alias, pesos; never bank details) for an approved run. Audited and rate limited. */
-export async function exportRemitlyList(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number }>> {
+/** The Remitly list (person, alias, pesos and payout details: full for a real run, masked for a test run) for an approved run. Preparers and Approvers. Audited and rate limited. */
+export async function exportRemitlyList(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number; missingDetails: number; test: boolean }>> {
   const actor = await requireUser();
 
   return runAction(async () => {

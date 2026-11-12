@@ -2,6 +2,13 @@
 
 Design: `docs/superpowers/specs/2026-11-04-payroll-design.md`. Plan: `docs/superpowers/plans/`. Real names and pay figures never enter the repo, tests or a development database. Code: `apps/elevate/src/modules/payroll/`. Every label comes from `constants.ts`.
 
+## Round 3 (2026-11-12; overrides anything older below)
+
+Owner decisions, in the order they were built:
+
+- **Paying (`payroll.export`, `payroll.mark_paid`) is for Preparers AND Approvers.** Nobody marks their own payment (unchanged). An Approver who holds `mark_paid` also reads the Remitly references, like a Preparer.
+- **The Remitly list carries payout details: Bank, Account name, Account number.** For a REAL run they are decrypted in full (`payments.ts` `payoutDetailsFor`, each value bound to its person with `sensitiveContext`), after `authorize()`, with one `sensitive.view` audit row per download (the three field names and how many people, never a value). For a TEST run only the masks stored at write time are used (nothing is decrypted) and every row says "TEST - do not pay". A person with any of the three parts missing gets blank cells (the page says how many); a value that can't be decrypted refuses the whole file. **This is an owner-approved exception to "only Super Admin, HR Admin and the person decrypt bank details"** (CLAUDE.md records it). The privacy notice must say that people with payroll access read payout details to pay them, and must be published before real data goes live.
+
 ## Test runs (2026-11-12, migration 0132; overrides anything older below)
 
 The team is still rehearsing pay cycles, so a run can be a **test run** (`pay_runs.is_test`) and a test run can be **archived** (`archived_at`, `archived_by`). Nothing is ever deleted: a pay run still cannot be removed (the guard trigger refuses it).

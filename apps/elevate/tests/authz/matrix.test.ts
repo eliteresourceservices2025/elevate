@@ -312,7 +312,13 @@ describe("payroll access", () => {
     expect(can(level("preparer"), "payroll.prepare")).toBe(true);
     expect(can(level("preparer"), "payroll.approve")).toBe(false);
     expect(can(level("approver"), "payroll.approve")).toBe(true);
-    expect(can(level("approver"), "payroll.export")).toBe(false);
+    // Paying: both working levels (owner decision 2026-11-12), never a viewer or a person with no level.
+    expect(can(level("approver"), "payroll.export")).toBe(true);
+    expect(can(level("approver"), "payroll.mark_paid")).toBe(true);
+    expect(can(level("preparer"), "payroll.export")).toBe(true);
+    expect(can(level("viewer"), "payroll.export")).toBe(false);
+    expect(can(level("viewer"), "payroll.mark_paid")).toBe(false);
+    expect(can(level(null), "payroll.export")).toBe(false);
     // Test runs (mark, archive, restore): both working levels, never a viewer or a person with no level.
     expect(can(level(null), "payroll.manage_test_runs")).toBe(false);
     expect(can(level("viewer"), "payroll.manage_test_runs")).toBe(false);

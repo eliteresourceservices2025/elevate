@@ -86,8 +86,6 @@ const calls: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   confirmSuggestion: () => confirmSuggestion({ runId: RUN_ID, itemId: LINE_KEY, runLineId: LINE_KEY }),
   assignSuggestion: () => assignSuggestion({ runId: RUN_ID, itemId: LINE_KEY, runLineId: LINE_KEY }),
   submitRun: () => submitRun({ runId: RUN_ID }),
-  exportRemitlyList: () => exportRemitlyList({ runId: RUN_ID }),
-  markPaid: () => markPaid({ runId: RUN_ID, employeeId: OTHER, reference: "RMT-TEST-1", paidOn: "2030-11-20" }),
 };
 
 describe.each(Object.keys(calls))("%s, every role at every payroll level", (name) => {
@@ -110,6 +108,9 @@ const testRunCalls: Record<string, () => Promise<{ ok: boolean; error?: string }
   markRunAsTest: () => markRunAsTest({ runId: RUN_ID, test: true, reason: "Practice cycle" }),
   archivePayRun: () => archivePayRun({ runId: RUN_ID, reason: "Practice cycle done" }),
   restorePayRun: () => restorePayRun({ runId: RUN_ID }),
+  // Paying works for both levels too (owner decision 2026-11-12).
+  exportRemitlyList: () => exportRemitlyList({ runId: RUN_ID }),
+  markPaid: () => markPaid({ runId: RUN_ID, employeeId: OTHER, reference: "RMT-TEST-1", paidOn: "2030-11-20" }),
 };
 
 describe.each(Object.keys(testRunCalls))("%s, every role at every payroll level", (name) => {

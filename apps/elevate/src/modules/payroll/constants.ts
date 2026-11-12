@@ -317,7 +317,9 @@ export const CORRECTION_TYPES: readonly PayItemType[] = ["adjustment", "other_de
 /** Wording of paying an approved run: the Remitly list and recording each person's reference. ELEVATE sends no money. */
 export const PAYMENT_LABELS = {
   title: "Payment",
-  hint: "Download the list, pay each person in Remitly at the rate Remitly shows, then record the Remitly reference here. The list has names and pesos only, never account numbers.",
+  hint: "Download the list, pay each person in Remitly at the rate Remitly shows, then record the Remitly reference here. The list has each person's pesos and their bank details, so keep the file private and delete it once you have paid.",
+  testBanner: "This is a test run. Nothing is sent: the list shows masked bank details and says TEST, and no statement is released to anyone.",
+  missingDetails: (n: number) => `${n} ${n === 1 ? "person has" : "people have"} no payout details on file. Their bank cells are blank.`,
   download: "Download Remitly list",
   downloaded: (rows: number) => `Downloaded ${rows} ${rows === 1 ? "person" : "people"}.`,
   person: "Person",

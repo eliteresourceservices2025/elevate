@@ -1,18 +1,19 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { fieldCrypto } from "@/lib/crypto";
 import { toCsv } from "@/lib/csv";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { users } from "@/modules/core/schema";
 import { notify } from "@/modules/notifications/service";
-import { employees } from "@/modules/people/schema";
+import { employees, employeeSensitive } from "@/modules/people/schema";
+import { sensitiveContext } from "@/modules/people/sensitive";
 import type { Tx } from "@/modules/people/service";
 import { logChange } from "./changes";
 import { PAYSLIP_LABELS } from "./constants";
 import { readRun, type Executor } from "./runs";
-import { buildRemitlyRows, personName } from "./remitly";
+import { buildRemitlyRows, personName, REMITLY_HEADER, REMITLY_TEST_NOTE, type PayoutDetails } from "./remitly";
 import { payPayments, payRunLines, payRuns } from "./schema";
 import { assertNotOwnEmployee, payrollToday } from "./service";
 import { freezeRunSignatory } from "./signatory";
@@ -42,12 +43,55 @@ export async function latestPayments(executor: Pick<Executor, "select">, runId: 
   return newest;
 }
 
-/** Builds the Remitly list for an approved (or paid) run. Refused before approval and for a cancelled run. */
+/**
+ * Who has payout details on file and what they are. A REAL run reads them in full (decrypted, each bound to its own person); a TEST run
+ * reads only the masks stored at write time and decrypts nothing, so a practice file never holds a full account number. A person
+ * with any of the three parts missing is "not on file" and gets blank cells. A value that can't be decrypted refuses the file.
+ */
+async function payoutDetailsFor(tx: Tx, employeeIds: string[], full: boolean): Promise<Map<string, PayoutDetails>> {
+  const out = new Map<string, PayoutDetails>();
+  if (employeeIds.length === 0) return out;
+  const rows = await tx
+    .select({
+      id: employeeSensitive.employeeId,
+      masks: employeeSensitive.masks,
+      bankNameEnc: employeeSensitive.bankNameEnc,
+      bankAccountNameEnc: employeeSensitive.bankAccountNameEnc,
+      bankAccountNumberEnc: employeeSensitive.bankAccountNumberEnc,
+    })
+    .from(employeeSensitive)
+    .where(inArray(employeeSensitive.employeeId, employeeIds));
+  for (const r of rows) {
+    if (!full) {
+      if (r.masks.bankName && r.masks.bankAccountName && r.masks.bankAccountNumber) out.set(r.id, { bankName: r.masks.bankName, accountName: r.masks.bankAccountName, accountNumber: r.masks.bankAccountNumber });
+      continue;
+    }
+    if (!r.bankNameEnc || !r.bankAccountNameEnc || !r.bankAccountNumberEnc) continue;
+    try {
+      const crypto = fieldCrypto();
+      out.set(r.id, {
+        bankName: crypto.decrypt(r.bankNameEnc, sensitiveContext("bankName", r.id)),
+        accountName: crypto.decrypt(r.bankAccountNameEnc, sensitiveContext("bankAccountName", r.id)),
+        accountNumber: crypto.decrypt(r.bankAccountNumberEnc, sensitiveContext("bankAccountNumber", r.id)),
+      });
+    } catch (error) {
+      console.error("payroll payout details unreadable:", { employeeId: r.id, error: error instanceof Error ? error.name : "UnknownError" });
+      throw new ActionFailure("Someone's payout details can't be read, so the list can't be built. Tell the system owner.");
+    }
+  }
+  return out;
+}
+
+/**
+ * Builds the Remitly list for an approved (or paid) run: one row per person with pesos and payout details. Refused before approval and for
+ * a cancelled run. A real run carries the full bank details (an audited sensitive read: field names and a count, never a value); a test
+ * run carries masked details and a TEST note. `missingDetails` counts people with nothing on file.
+ */
 export async function remitlyList(
   tx: Tx,
   actor: Actor,
   runId: string,
-): Promise<{ fileName: string; csv: string; rows: number }> {
+): Promise<{ fileName: string; csv: string; rows: number; missingDetails: number; test: boolean }> {
   const data = await readRun(tx, runId);
   if (!data) throw new ActionFailure("That pay run was not found.");
   const { run } = data;
@@ -69,10 +113,13 @@ export async function remitlyList(
   });
   if (lines.some((l) => l.net < 0n))
     throw new ActionFailure("A line on this run has negative pay, so the list can't be built.");
-  const built = buildRemitlyRows(lines);
+  const test = run.isTest;
+  const details = await payoutDetailsFor(tx, [...new Set(lines.map((l) => l.employeeId))], !test);
+  const built = buildRemitlyRows(lines, details);
+  const missingDetails = built.filter((r) => !details.has(r.employeeId)).length;
   const csv = toCsv(
-    ["Person", "Alias", "Pesos"],
-    built.map((r) => [r.name, r.aliases, r.pesos]),
+    test ? [...REMITLY_HEADER, "Note"] : [...REMITLY_HEADER],
+    built.map((r) => [r.name, r.aliases, r.pesos, r.bankName, r.accountName, r.accountNumber, ...(test ? [REMITLY_TEST_NOTE] : [])]),
   );
 
   await writeAudit(
@@ -81,15 +128,21 @@ export async function remitlyList(
       action: "payroll.remitly.export",
       targetType: "pay_run",
       targetId: runId,
-      metadata: { rows: built.length, lines: lines.length },
+      metadata: { rows: built.length, lines: lines.length, ...(test ? { test: true } : {}) },
     },
     tx,
   );
+  // The full bank details of a real run are a sensitive read: one row, the field names and how many people, never a value.
+  if (!test && details.size > 0) {
+    await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["bankName", "bankAccountName", "bankAccountNumber"], people: details.size } }, tx);
+  }
   await logChange(tx, actor, { action: "list_exported", runId, detail: { rows: built.length } });
   return {
-    fileName: `remitly-${run.periodStart}-to-${run.periodEnd}.csv`,
+    fileName: `remitly-${test ? "TEST-" : ""}${run.periodStart}-to-${run.periodEnd}.csv`,
     csv,
     rows: built.length,
+    missingDetails,
+    test,
   };
 }
 
