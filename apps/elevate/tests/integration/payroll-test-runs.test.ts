@@ -122,6 +122,40 @@ describe("repeating a pay cycle", () => {
   });
 });
 
+describe("a test run for part of a cutoff", () => {
+  it("covers any dates up to 31 days, while a real run still has to be exactly one cutoff", async () => {
+    // The dates of a file you want to rehearse with (here 3 to 9 July 2036), not a whole cutoff.
+    const part = { periodStart: "2036-07-03", periodEnd: "2036-07-09" };
+    as(preparer);
+    const real = await createPayRun(part);
+    expect(real).toMatchObject({ ok: false, error: expect.stringMatching(/covers one cutoff.*test run can cover any dates/) });
+    const test = await createPayRun({ ...part, test: true });
+    expect(test.ok).toBe(true);
+    if (!test.ok) return;
+    expect(await runRow(test.data.runId)).toMatchObject({ is_test: true, status: "draft" });
+    const [dates] = await rows<{ period_start: string; period_end: string }>(sql`select period_start::text, period_end::text from payroll.pay_runs where id = ${test.data.runId}`);
+    expect(dates).toEqual({ period_start: "2036-07-03", period_end: "2036-07-09" });
+    // It takes the people with a pay line in force in those days, and may repeat or sit inside a period that has a run.
+    expect((await rows(sql`select 1 from payroll.pay_run_lines where run_id = ${test.data.runId}`)).length).toBeGreaterThan(0);
+    expect((await createPayRun({ ...part, test: true })).ok).toBe(true);
+    const real15 = await newRun(slot(13)); // a real cutoff in the same month is still fine
+    expect(real15).toBeTruthy();
+    // It can span two cutoffs, up to 31 days, and no more; a period that ends before it starts is refused.
+    expect((await createPayRun({ periodStart: "2036-07-10", periodEnd: "2036-08-09", test: true })).ok).toBe(true);
+    expect(await createPayRun({ periodStart: "2036-07-01", periodEnd: "2036-08-31", test: true })).toEqual({ ok: false, error: "Check the request and try again." });
+    expect(await createPayRun({ periodStart: "2036-07-09", periodEnd: "2036-07-03", test: true })).toEqual({ ok: false, error: "Check the request and try again." });
+  });
+
+  it("can't be made a real run: a partial period is never allowed for real pay", async () => {
+    const part = await createPayRun({ periodStart: "2036-09-03", periodEnd: "2036-09-09", test: true });
+    if (!part.ok) throw new Error("run failed");
+    as(preparer);
+    // It is a draft, so it may go back to real in general, but not with these dates: the run would then be a real run that is not a cutoff.
+    expect(await markRunAsTest({ runId: part.data.runId, test: false, reason: "Real after all" })).toMatchObject({ ok: false, error: expect.stringMatching(/covers one cutoff/) });
+    expect((await runRow(part.data.runId)).is_test).toBe(true);
+  });
+});
+
 describe("marking a run as a test run", () => {
   it("works for a Preparer and an Approver, not for a viewer or someone with no level, and needs a reason", async () => {
     const id = await newRun(slot(6));

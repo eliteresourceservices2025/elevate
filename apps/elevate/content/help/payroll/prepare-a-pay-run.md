@@ -84,6 +84,8 @@ While you are still practising, mark a run as a **test run** so you can repeat t
 - **Archive:** only a test run can be archived, in any status. It leaves the list, is never deleted, and you can bring it back from **Archived test runs** (open it, then **Run options**, **Restore this run**). A real run can never be archived.
 - **Nobody sees a statement from a test run.** The people on it are not told, and it never shows under **My pay**. An invoice made from a test run is numbered TEST and stamped TEST, and must not be sent.
 
+A test run can also cover any dates, up to 31 days (a part of a cutoff, or the dates of a Jibble file), while a real run is always one whole cutoff. To rehearse a whole pay cycle, see "Rehearse a pay cycle with a test run".
+
 A Preparer or an Approver can do this. Every step is written to the change history with its reason.
 
 # Fix a mistake from an earlier run

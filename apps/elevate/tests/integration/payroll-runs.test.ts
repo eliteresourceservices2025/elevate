@@ -58,7 +58,7 @@ const period = (month: number, half: 1 | 2 = 1) => ({
   periodStart: `2025-${String(month).padStart(2, "0")}-${half === 1 ? "01" : "16"}`,
   periodEnd: `2025-${String(month).padStart(2, "0")}-${half === 1 ? "15" : String(new Date(Date.UTC(2025, month, 0)).getUTCDate())}`,
 });
-const NOT_A_CUTOFF = { ok: false, error: "A pay run covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month." };
+const NOT_A_CUTOFF = { ok: false, error: "A pay run covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month. (A test run can cover any dates, up to 31 days.)" };
 async function newRun(who: unknown, p: { periodStart: string; periodEnd: string }) {
   current.user = who;
   const r = await createPayRun(p);
