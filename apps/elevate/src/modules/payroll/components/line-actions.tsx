@@ -21,7 +21,7 @@ export function LineActions({ runId, line, correctableRuns }: { runId: string; l
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button type="button" size="sm" variant="outline" disabled={pending} aria-label={`Actions for ${line.name}`} />}>
+        <DropdownMenuTrigger render={<Button type="button" size="sm" variant="outline" disabled={pending} aria-label={`Actions for ${line.name}`} className="pointer-coarse:h-10 pointer-coarse:px-4" />}>
           Actions
           <ChevronDown className="size-4" aria-hidden />
         </DropdownMenuTrigger>

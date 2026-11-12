@@ -34,7 +34,7 @@ const noteContext = (id: string) => `pay_approval_note:${id}`;
 export const decryptApprovalHash = (id: string, stored: string): string => fieldCrypto().decrypt(stored, hashContext(id));
 
 /** Deciding is not changing: a send-back or an approval does not stop that Approver from deciding the run again later. Marking a run as a test, archiving and restoring it change no figure, so they do not count either. */
-const NOT_A_CHANGE: readonly ChangeAction[] = ["run_viewed", "run_sent_back", "run_approved", "run_marked_test", "run_marked_real", "run_archived", "run_restored"];
+const NOT_A_CHANGE: readonly ChangeAction[] = ["run_viewed", "run_sent_back", "run_approved", "run_marked_test", "run_marked_real", "run_archived", "run_restored", "statements_released"];
 
 /**
  * The one definition of "prepared or changed this run", as SQL over a run id expression (a parameter, or a column of an outer query):

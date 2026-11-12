@@ -340,7 +340,7 @@ export const PAYMENT_LABELS = {
   markedBy: (who: string) => `Marked by ${who}`,
   marked: "Payment recorded.",
   allPaid: "Everyone on this run is paid.",
-  ownLine: "Another Preparer records your payment.",
+  ownLine: "Someone else records your payment.",
   progress: (paid: number, total: number) => `${paid} of ${total} paid`,
 } as const;
 
