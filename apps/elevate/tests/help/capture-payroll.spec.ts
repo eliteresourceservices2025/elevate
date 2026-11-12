@@ -385,7 +385,11 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
     await expect(prepPage.getByText("Everyone on this run is paid.")).toBeVisible();
     await snap(prepPage, "prepare-a-pay-run", "12-all-paid", "Everyone on the run is paid: the run is now Paid.", { viewport: { width: 1280, height: 1000 }, scrollStart: payment });
 
-    // The person to be paid reads the payslip.
+    // The Approver releases the statements, and only then does the person to be paid read theirs.
+    await apprPage.goto(`/payroll/statements/${runId}`);
+    await apprPage.getByRole("button", { name: "Release to everyone" }).click();
+    await apprPage.getByRole("button", { name: "Release now" }).click();
+    await expect(apprPage.getByText(/^Released \d+ statements?\.$/)).toBeVisible();
     await workPage.goto("/my-pay");
     // Newest payslip first: earlier runs of this tool may have left older ones for the same person
     const link = workPage.getByRole("link", { name: "Download PDF" }).first();

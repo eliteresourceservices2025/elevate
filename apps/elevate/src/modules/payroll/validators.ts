@@ -98,6 +98,8 @@ export const archiveRunSchema = z.object({ runId: uuid, reason });
 
 export const restoreRunSchema = z.object({ runId: uuid });
 
+export const releaseStatementsSchema = z.object({ runId: uuid });
+
 export const confirmRunLineSchema = z.object({ runLineId: uuid });
 
 export const refreshSuggestionsSchema = z.object({ runId: uuid });

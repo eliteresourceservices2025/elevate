@@ -12,6 +12,8 @@ export const payrollPermissions = definePermissions({
   "payroll.mark_paid": { roles: {}, payrollLevels: ["preparer", "approver"] },
   "payroll.export": { roles: {}, payrollLevels: ["preparer", "approver"] },
   "payroll.approve": { roles: {}, payrollLevels: ["approver"] },
+  // Releasing a run's contractor payment statements to the people on it (owner decision 2026-11-12): an Approver, once the run is approved.
+  "payroll.release_statements": { roles: {}, payrollLevels: ["approver"] },
   // Marking a run as a test run, archiving it and restoring it: both levels that work on runs (never a viewer).
   "payroll.manage_test_runs": { roles: {}, payrollLevels: ["preparer", "approver"] },
   "payroll.view_own": {

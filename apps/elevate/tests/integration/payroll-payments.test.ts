@@ -25,6 +25,7 @@ const {
   exportRemitlyList,
   markPaid,
   markRunAsTest,
+  releaseStatements,
 } = await import("@/modules/payroll/actions");
 const { getWorksheet, getPayments } = await import("@/modules/payroll/queries");
 const { countMyPayslips } = await import("@/modules/payroll/payslip-queries");
@@ -279,12 +280,12 @@ describe("the Remitly list", () => {
 
 // ---- Payout details in the list (owner decision 2026-11-12: full details for Preparers and Approvers on a real run) ----
 
-/** Half month `n` of 2029: the list does not check payment dates, so these runs can sit after the fake "today". */
+/** Half month `n` of 2038: the list does not check payment dates, so these runs can sit after the fake "today". */
 function slot29(n: number) {
   const month = Math.floor(n / 2) + 1;
   const mm = String(month).padStart(2, "0");
-  const last = new Date(Date.UTC(2029, month, 0)).getUTCDate();
-  return n % 2 === 0 ? { periodStart: `2029-${mm}-01`, periodEnd: `2029-${mm}-15` } : { periodStart: `2029-${mm}-16`, periodEnd: `2029-${mm}-${last}` };
+  const last = new Date(Date.UTC(2038, month, 0)).getUTCDate();
+  return n % 2 === 0 ? { periodStart: `2038-${mm}-01`, periodEnd: `2038-${mm}-15` } : { periodStart: `2038-${mm}-16`, periodEnd: `2038-${mm}-${last}` };
 }
 const BANK = { bankName: "Testbank Philippines", bankAccountName: "Lopez Testperson", bankAccountNumber: "0012345678901" };
 async function giveBankDetails(employeeId: string, over: Partial<typeof BANK> = {}) {
@@ -346,7 +347,7 @@ describe("payout details in the list", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data).toMatchObject({ test: true, missingDetails: 0 });
-    expect(r.data.fileName).toMatch(/^remitly-TEST-2029-01-16-to-2029-01-31\.csv$/);
+    expect(r.data.fileName).toMatch(/^remitly-TEST-2038-01-16-to-2038-01-31\.csv$/);
     const lines = r.data.csv.trim().split("\r\n");
     expect(lines[0]).toBe("Person,Alias,Pesos,Bank,Account name,Account number,Note");
     const row = lines.find((l) => l.includes("Practicebank"))!;
@@ -611,7 +612,7 @@ describe("markPaid", () => {
     expect(after).toBe(before);
   });
 
-  it("a test run reaches paid without a statement notice and is never listed under My pay; a real run gets both", async () => {
+  it("paying never makes a statement visible: a real run needs an Approver's release, a test run can never be released", async () => {
     const worker = await account("viewer");
     const emp = await person(worker.id);
     const realPeriod = slot(20);
@@ -631,6 +632,15 @@ describe("markPaid", () => {
 
     const notices = async () =>
       (await rows<{ n: number }>(sql`select count(*)::int as n from ops.notifications where user_id = ${worker.id} and kind = ${PAYSLIP_LABELS.noticeKind}`))[0].n;
+    // Both are paid, and still nothing is visible or sent: a release is a separate decision.
+    expect(await notices()).toBe(0);
+    as(worker);
+    expect(await countMyPayslips()).toBe(0);
+
+    // The Approver releases the real run: one notice, one statement. The test run can never be released.
+    as(approver);
+    expect(await releaseStatements({ runId: real })).toMatchObject({ ok: true });
+    expect(await releaseStatements({ runId: practice })).toMatchObject({ ok: false, error: expect.stringMatching(/test run is never released/) });
     expect(await notices()).toBe(1); // the real run only
     as(worker);
     expect(await countMyPayslips()).toBe(1);

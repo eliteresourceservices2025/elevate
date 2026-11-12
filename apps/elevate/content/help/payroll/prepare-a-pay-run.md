@@ -112,7 +112,7 @@ Type the **Remitly reference** and check the **Paid on** date, then click **Mark
 
 ![The Mark paid window: the Remitly reference and the date it was paid.](help:prepare-a-pay-run/11-mark-paid.png)
 
-When everyone is marked paid, the run becomes **Paid** and each person is told that their contractor payment statement is ready. Another Preparer records your own payment.
+When everyone is marked paid, the run becomes **Paid**. The contractors' statements are not sent by paying: an Approver releases them from **Statements** (see "Release the statements"). Another Preparer records your own payment.
 
 ![Everyone on the run is paid.](help:prepare-a-pay-run/12-all-paid.png)
 

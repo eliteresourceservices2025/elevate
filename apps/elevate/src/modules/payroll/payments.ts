@@ -1,17 +1,14 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { fieldCrypto } from "@/lib/crypto";
 import { toCsv } from "@/lib/csv";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
-import { users } from "@/modules/core/schema";
-import { notify } from "@/modules/notifications/service";
-import { employees, employeeSensitive } from "@/modules/people/schema";
+import { employeeSensitive } from "@/modules/people/schema";
 import { sensitiveContext } from "@/modules/people/sensitive";
 import type { Tx } from "@/modules/people/service";
 import { logChange } from "./changes";
-import { PAYSLIP_LABELS } from "./constants";
 import { readRun, type Executor } from "./runs";
 import { buildRemitlyRows, personName, REMITLY_HEADER, REMITLY_TEST_NOTE, type PayoutDetails } from "./remitly";
 import { payPayments, payRunLines, payRuns } from "./schema";
@@ -147,26 +144,6 @@ export async function remitlyList(
 }
 
 /**
- * Tells each person on a run who has a sign-in account that their contractor payment statement is ready: one notice per person (a two-line person gets one),
- * a fixed sentence and a link, never an amount, a period or anyone else's name. A person with no account is simply skipped. Runs inside
- * the transaction that makes the run paid.
- */
-async function notifyPayslipsReady(tx: Tx, runId: string): Promise<void> {
-  const people = await tx
-    .selectDistinct({ userId: employees.userId })
-    .from(payRunLines)
-    .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
-    .innerJoin(users, eq(users.id, employees.userId))
-    .where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false), isNotNull(employees.userId), isNull(users.archivedAt)));
-  await notify(
-    tx,
-    people.flatMap((p) =>
-      p.userId ? [{ userId: p.userId, kind: PAYSLIP_LABELS.noticeKind, title: PAYSLIP_LABELS.noticeTitle, body: PAYSLIP_LABELS.noticeBody, link: PAYSLIP_LABELS.noticeLink }] : [],
-    ),
-  );
-}
-
-/**
  * Records that a person on an approved run was paid. A second call for the same person is a correction: a new row, and the newest shows.
  * When every person on the run has a payment the run becomes paid, in the same transaction (the status trigger allows approved to
  * paid only). A correction after that adds a row and leaves the paid run as it is. The run row is locked, so two last payments at once
@@ -252,8 +229,6 @@ export async function recordPayment(
       });
       // The statements carry whoever signs them today, kept with the run so they never change afterwards.
       await freezeRunSignatory(tx, v.runId, payrollToday());
-      // A test run never reaches a person: no "your statement is ready" notice (and /my-pay never lists it).
-      if (!run.isTest) await notifyPayslipsReady(tx, v.runId);
       runPaid = true;
     }
   }

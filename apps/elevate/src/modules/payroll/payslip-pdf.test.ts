@@ -43,6 +43,7 @@ const view = (imageBase64: string | null): PayslipView => ({
     },
   ],
   total: null,
+  isTest: false,
   signature: { name: "Carmen Dela Rosa", title: "Human Resources Director", signedOn: "2029-01-16", imageBase64 },
 });
 
@@ -93,6 +94,12 @@ describe("renderPayslipPdf", () => {
     for (const needle of ["CERTIFICATION", "Contractor signature (optional)", "DISCLAIMER", "Independent Contractor", "No tax, SSS", "PS-TEST0001-ABCD"]) {
       expect(text.toUpperCase(), text.slice(-700)).toContain(needle.toUpperCase());
     }
+  });
+
+  it("stamps a statement from a test run, and no other", async () => {
+    const textOf = async (bytes: Uint8Array) => (await extractText(await getDocumentProxy(new Uint8Array(bytes)), { mergePages: true })).text;
+    expect(await textOf(await renderPayslipPdf({ ...view(null), isTest: true }))).toContain("this statement is from a test run");
+    expect(await textOf(await renderPayslipPdf(view(null)))).not.toContain("test run");
   });
 
   it("draws a payslip with a signature, and one that was not signed", async () => {

@@ -17,6 +17,7 @@ import { lineLastDay } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
+import { releaseRun } from "./statements";
 import { archiveRun, cancelRun, confirmLine, createRun, dismissItem, removeRunLine, restoreRun, restoreRunLine, saveItem, setRunTest, syncRunPeople } from "./runs";
 import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import { readJibbleTimesheet } from "./jibble/timesheet";
@@ -48,6 +49,7 @@ import {
   dismissPayItemSchema,
   endPayLineSchema,
   markRunTestSchema,
+  releaseStatementsSchema,
   restoreRunSchema,
   savePayItemSchema,
   savePaySettingsSchema,
@@ -405,6 +407,25 @@ export async function restorePayRun(input: unknown): Promise<ActionResult> {
     await db.transaction((tx) => restoreRun(tx, actor, parsed.data));
     refreshedRun(parsed.data.runId);
     return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Releases a real, approved run's contractor payment statements to the people on it (Approvers). Once; never undone. Notices carry no amount. */
+export async function releaseStatements(input: unknown): Promise<ActionResult<{ people: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.release_statements");
+
+    const parsed = releaseStatementsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const released = await db.transaction((tx) => releaseRun(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    revalidatePath("/payroll/statements");
+    revalidatePath(`/payroll/statements/${parsed.data.runId}`);
+    revalidatePath("/my-pay");
+    return { ok: true, data: released } as const;
   });
 }
 

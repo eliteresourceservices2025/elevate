@@ -56,7 +56,7 @@ const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine,
   await import("@/modules/payroll/actions");
 const { payrollRunsAwaitingApproval, getPayments } = await import("@/modules/payroll/queries");
 const { exportRemitlyList, markPaid } = await import("@/modules/payroll/actions");
-const { markRunAsTest, archivePayRun, restorePayRun } = await import("@/modules/payroll/actions");
+const { markRunAsTest, archivePayRun, restorePayRun, releaseStatements } = await import("@/modules/payroll/actions");
 
 const LEVELS = [null, "viewer", "approver", "preparer"] as const;
 const GENERIC = "Something went wrong. Try again.";
@@ -150,6 +150,8 @@ const HASH = "a".repeat(64);
 const decisions: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   approveRun: () => approveRun({ runId: RUN_ID, expectedHash: HASH }),
   sendBackRun: () => sendBackRun({ runId: RUN_ID, note: "Check the late minutes" }),
+  // Releasing the statements to the contractors is an Approver's decision too.
+  releaseStatements: () => releaseStatements({ runId: RUN_ID }),
 };
 
 describe.each(Object.entries(decisions))("%s, every role at every payroll level", (_name, decide) => {

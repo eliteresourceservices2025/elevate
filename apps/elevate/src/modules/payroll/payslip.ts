@@ -34,6 +34,8 @@ export type PayslipInput = {
   /** The overtime (OT) rates the run was made with (basis points: 12500 is 125%), when known. Holiday pay is always 100%. */
   multipliersBp: Partial<Record<ExtraKey, number | null>> | null;
   signatory: PayslipSignature | null;
+  /** From a test run: stamped TEST on the page and the PDF. Never true for a statement a contractor can open. */
+  isTest?: boolean;
 };
 
 export type PayslipRowView = { label: string; detail: string; amount: string };
@@ -65,6 +67,7 @@ export type PayslipView = {
   lines: PayslipLineView[];
   /** Only when the person has more than one line on the run. */
   total: string | null;
+  isTest: boolean;
   signature: { name: string; title: string; signedOn: string; imageBase64: string | null } | null;
 };
 
@@ -169,6 +172,7 @@ export function payslipView(input: PayslipInput): PayslipView {
       return { ...view, heading: view.heading ?? (multi ? L.lineHeading(String(index + 1)) : null) };
     }),
     total: multi ? money(input.lines.reduce((sum, l) => sum + l.result.net, 0n)) : null,
+    isTest: input.isTest === true,
     signature: input.signatory
       ? { name: plain(input.signatory.name), title: plain(input.signatory.title), signedOn: input.signatory.signedOn, imageBase64: input.signatory.signatureBase64 }
       : null,

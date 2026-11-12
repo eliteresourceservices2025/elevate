@@ -158,6 +158,7 @@ export const CHANGE_ACTIONS = [
   "run_marked_real",
   "run_archived",
   "run_restored",
+  "statements_released",
 ] as const;
 export type ChangeAction = (typeof CHANGE_ACTIONS)[number];
 
@@ -192,6 +193,7 @@ export const CHANGE_ACTION_LABELS: Record<ChangeAction, string> = {
   run_marked_real: "Test run made a real run again",
   run_archived: "Test run archived",
   run_restored: "Archived test run restored",
+  statements_released: "Contractor payment statements released to the people on the run",
 };
 
 /** Wording of the change history page. Figures and reasons are shown only there, never in the audit log, notices or logs. */
@@ -342,15 +344,51 @@ export const PAYMENT_LABELS = {
   progress: (paid: number, total: number) => `${paid} of ${total} paid`,
 } as const;
 
+/** Wording of the payroll team's Statements pages (see every statement of a run, download them, release them to the people). */
+export const STATEMENT_LABELS = {
+  tab: "Statements",
+  pageTitle: "Contractor payment statements",
+  pageDescription: "See every contractor's statement for a pay run, download them, and release them to the contractors when the run is ready. Opening a statement is written to the audit log.",
+  run: "Pay run",
+  status: "Run status",
+  people: "People",
+  release: "Release",
+  released: (when: string) => `Released on ${when}`,
+  notReleased: "Not released yet",
+  testRun: "Test run",
+  emptyTitle: "No runs to show yet",
+  emptyDescription: "A run appears here once it is approved.",
+  person: "Person",
+  lines: "Pay lines",
+  net: "Total payable compensation",
+  view: "View",
+  download: "Download PDF",
+  downloadAll: "Download all (one PDF)",
+  releaseAction: "Release to everyone",
+  releaseTitle: (n: number) => `Release ${n} ${n === 1 ? "statement" : "statements"}?`,
+  releaseBody: (n: number) => `Each of the ${n} ${n === 1 ? "person" : "people"} on this run can then open their statement under My payment statements, and is told with a short notice (no amounts). This can't be undone.`,
+  releaseConfirm: "Release now",
+  releaseDone: (n: number) => `Released ${n} ${n === 1 ? "statement" : "statements"}.`,
+  refusalTest: "A test run is never released. You can still open and download its statements to check them.",
+  refusalNotApproved: "Release is available once the run is approved.",
+  refusalApproverOnly: "An Approver releases the statements.",
+  refusalUnreadable: "A line on this run can't be read, so the statements can't be released. Tell the system owner.",
+  alreadyReleased: "These statements have been released to the contractors.",
+  readyHint: "Read the statements. When they are right, an Approver releases them to the contractors in one step.",
+  unreadable: "Can't be read",
+  statementFor: (name: string) => `Statement for ${name}`,
+} as const;
+
 /**
  * Wording of the Contractor Payment Statement (the /my-pay page, the PDF and the notice; it was called the payslip). Item names come from
  * PAY_ITEM_LABELS. The notice carries no amount, period or name.
  */
 export const PAYSLIP_LABELS = {
   pageTitle: "My payment statements",
-  pageDescription: "Your contractor payment statements. One appears here after the pay run it belongs to is paid.",
+  pageDescription: "Your contractor payment statements. One appears here when the pay run it belongs to is released to you.",
   emptyTitle: "No statements yet",
-  emptyDescription: "A contractor payment statement appears here once the pay run it belongs to is marked paid.",
+  emptyDescription: "A contractor payment statement appears here once the pay run it belongs to is approved and released.",
+  testNote: "TEST: this statement is from a test run. It is a practice copy for the payroll team and is never shown to a contractor.",
   period: "Pay period",
   net: "Total payable compensation",
   download: "Download PDF",

@@ -192,6 +192,9 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
     case "timesheet_imported":
       facts.push(...fact(H.membersMatched, detail.members), ...fact(H.suggestionsWritten, detail.written), ...fact(H.keptAsTyped, detail.kept));
       break;
+    case "statements_released":
+      facts.push(...fact(H.people, detail.people));
+      break;
     case "suggestions_confirmed_all":
       facts.push(...fact(H.confirmedCount, detail.confirmed));
       break;
