@@ -925,6 +925,13 @@
       "when": 1794429915192,
       "tag": "0131_wealthy_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1794443766916,
+      "tag": "0132_naive_shaman",
+      "breakpoints": true
     }
   ]
 }

@@ -18,13 +18,14 @@ function NewRunForm({ suggestedStart, suggestedEnd }: { suggestedStart: string; 
   const dialog = useFormDialog();
   const [periodStart, setStart] = useState(suggestedStart);
   const [periodEnd, setEnd] = useState(suggestedEnd);
+  const [test, setTest] = useState(false);
   return (
     <form
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
         run(
-          () => createPayRun({ periodStart, periodEnd }),
+          () => createPayRun({ periodStart, periodEnd, test }),
           "Run created.",
           (data) => {
             dialog?.close(true);
@@ -44,6 +45,13 @@ function NewRunForm({ suggestedStart, suggestedEnd }: { suggestedStart: string; 
         <div className="space-y-1">
           <Label htmlFor="run-end">Last day</Label>
           <Input id="run-end" type="date" value={periodEnd} onChange={(e) => setEnd(e.target.value)} required />
+        </div>
+      </div>
+      <div className="flex items-start gap-2">
+        <input id="run-test" type="checkbox" className="mt-1 size-4 accent-primary" checked={test} onChange={(e) => setTest(e.target.checked)} />
+        <div>
+          <Label htmlFor="run-test">This is a test run</Label>
+          <p className="text-xs text-muted-foreground">A practice run can repeat a period that already has a run, and nobody sees a payment statement from it. You can archive it later.</p>
         </div>
       </div>
       <Button type="submit" disabled={pending}>

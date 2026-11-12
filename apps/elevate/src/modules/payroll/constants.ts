@@ -154,6 +154,10 @@ export const CHANGE_ACTIONS = [
   "run_line_restored",
   "timesheet_imported",
   "suggestions_confirmed_all",
+  "run_marked_test",
+  "run_marked_real",
+  "run_archived",
+  "run_restored",
 ] as const;
 export type ChangeAction = (typeof CHANGE_ACTIONS)[number];
 
@@ -184,6 +188,10 @@ export const CHANGE_ACTION_LABELS: Record<ChangeAction, string> = {
   run_line_restored: "Person put back on the run",
   timesheet_imported: "Run filled from a Jibble timesheet",
   suggestions_confirmed_all: "All suggested amounts confirmed",
+  run_marked_test: "Run marked as a test run",
+  run_marked_real: "Test run made a real run again",
+  run_archived: "Test run archived",
+  run_restored: "Archived test run restored",
 };
 
 /** Wording of the change history page. Figures and reasons are shown only there, never in the audit log, notices or logs. */

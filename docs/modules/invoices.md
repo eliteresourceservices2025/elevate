@@ -33,3 +33,7 @@ The executives bill each **client** for a pay run: the client payroll hours of e
 - Unit: `calc.test.ts`, `invoice-pdf.test.ts`, `boundaries.test.ts`.
 - Authz: `tests/authz/invoices-actions.test.ts` (every action and query, all six roles, payroll levels) and the rows in `tests/authz/matrix.test.ts`.
 - Integration (`tests/integration/invoices-schema.test.ts`, `invoices-flow.test.ts`): RLS, append-only, rate lookup, snapshot, numbering under concurrency, refusals, draft status, no-client people, a user with no payroll level, the six roles.
+
+## Test runs (2026-11-12)
+
+An invoice from a **test run** is allowed: its number is `TEST-<year>-<counter>` (its own series, so real `INV-` numbers never skip because of practice), `ops.invoices.is_test` is true, and the page and the PDF carry a red TEST note. A run that is archived cannot be invoiced and is left out of the "new invoice" run list. Revisions work the same (`TEST-2031-0001-R2`).

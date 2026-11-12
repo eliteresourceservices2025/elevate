@@ -74,6 +74,18 @@ The new run shows notes above the worksheet, then one row for each person. Nothi
 - For someone paid for part of the cutoff, enter the days or hours they worked. These can never pay more than a full cutoff; if they do, check what you typed (for example "15" instead of "1.5").
 - Open **Actions** on a line and choose **Mark as checked** when you have read it. It records that a Preparer looked at it. Any change to a line asks for a new check. If you are paid through payroll yourself, **another Preparer** must check **your own** line, and you cannot send the run until they do. Changing your line clears that check.
 
+# Practice runs (test runs)
+
+While you are still practising, mark a run as a **test run** so you can repeat the same pay cycle and tidy up afterwards.
+
+- **Start one:** in **New run**, tick **This is a test run**. A test run can repeat a period that already has a run.
+- **Mark one you already made:** open the run, choose **Run options**, then **Mark as a test run**, and give a short reason. This works until the run is marked paid.
+- **Repeat a cycle you already approved:** mark the old run as a test run, then choose **Archive this test run**. Its period is free, so you can create the real run again.
+- **Archive:** only a test run can be archived, in any status. It leaves the list, is never deleted, and you can bring it back from **Archived test runs** (open it, then **Run options**, **Restore this run**). A real run can never be archived.
+- **Nobody sees a statement from a test run.** The people on it are not told, and it never shows under **My pay**. An invoice made from a test run is numbered TEST and stamped TEST, and must not be sent.
+
+A Preparer or an Approver can do this. Every step is written to the change history with its reason.
+
 # Fix a mistake from an earlier run
 
 An approved run never changes. Open **Actions** on the person's line in a later run, choose **Amounts**, and choose **Adjustment** (they were underpaid) or **Other deduction** (they were overpaid). Choose the earlier run under **Corrects the run of**, and write a **Reason**.

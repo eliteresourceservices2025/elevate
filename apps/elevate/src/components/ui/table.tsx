@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useDragScroll } from "@/components/use-drag-scroll"
 import { cn } from "@/lib/utils"
 
 /**
@@ -10,12 +11,21 @@ import { cn } from "@/lib/utils"
  * `stack` turns each row into a card below the tablet width (the first cell is the card title, every other cell shows its `label`),
  * for a list people work through on a phone. Keep a plain scrolling table for a dense comparison.
  * Inside #main every table gets the tinted header and striped rows from globals.css; `plain` opts this table out (data-plain).
+ * `dragScroll` lets a mouse user grab the table and drag it sideways (see useDragScroll); the box then takes keyboard focus so the arrow
+ * keys scroll it too, and `scrollLabel` names it for a screen reader. Use it on a wide table people read across, like the pay run sheet.
  */
-function Table({ className, containerClassName, plain = false, stack = false, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; plain?: boolean; stack?: boolean }) {
+function Table({ className, containerClassName, plain = false, stack = false, dragScroll = false, scrollLabel, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; plain?: boolean; stack?: boolean; dragScroll?: boolean; scrollLabel?: string }) {
+  const box = useDragScroll<HTMLDivElement>(dragScroll)
   return (
     <div
+      ref={box}
       data-slot="table-container"
-      className={cn("scroll-shadow-x relative w-full overflow-x-auto rounded-xl border bg-card shadow-sm in-[.scroll-shadow-x]:rounded-none in-[.scroll-shadow-x]:border-0 in-[.scroll-shadow-x]:shadow-none", containerClassName)}
+      {...(dragScroll ? { role: "region", "aria-label": scrollLabel ?? "Scrollable table" } : {})}
+      className={cn(
+        "scroll-shadow-x relative w-full overflow-x-auto rounded-xl border bg-card shadow-sm in-[.scroll-shadow-x]:rounded-none in-[.scroll-shadow-x]:border-0 in-[.scroll-shadow-x]:shadow-none",
+        dragScroll && "outline-none focus-visible:ring-2 focus-visible:ring-ring data-scrollable:cursor-grab data-dragging:cursor-grabbing data-dragging:select-none",
+        containerClassName
+      )}
     >
       <table
         data-slot="table"

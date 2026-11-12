@@ -59,6 +59,7 @@ export type InvoiceView = {
   runId: string;
   clientId: string;
   runStatus: string;
+  isTest: boolean;
   issuedOn: string;
   createdAt: Date;
   clientName: string;
@@ -79,6 +80,7 @@ export function decryptInvoice(row: typeof invoices.$inferSelect): InvoiceView {
     runId: row.runId,
     clientId: row.clientId,
     runStatus: row.runStatus,
+    isTest: row.isTest,
     issuedOn: row.issuedOn,
     createdAt: row.createdAt,
     clientName: p.clientName,
@@ -105,7 +107,7 @@ export type RunPreviewClient = {
 };
 
 export type RunPreview = {
-  run: { id: string; periodStart: string; periodEnd: string; status: string };
+  run: { id: string; periodStart: string; periodEnd: string; status: string; isTest: boolean; archived: boolean };
   clients: RunPreviewClient[];
   /** People on the run with no client: not invoiced. */
   noClient: string[];
@@ -157,6 +159,8 @@ export async function createInvoiceIn(tx: Tx, actor: AuthUser, v: { runId: strin
   const data = await clientHoursForRun(tx, v.runId);
   if (!data) throw new ActionFailure("That pay run was not found.");
   if (data.run.status === "cancelled") throw new ActionFailure("A cancelled pay run can't be invoiced.");
+  if (data.run.archived) throw new ActionFailure("An archived test run can't be invoiced. Restore it first.");
+  const test = data.run.isTest;
 
   const [client] = await tx.select({ id: clients.id, name: clients.name }).from(clients).where(and(eq(clients.id, v.clientId), isNull(clients.archivedAt))).limit(1);
   if (!client) throw new ActionFailure("That client was not found.");
@@ -187,13 +191,14 @@ export async function createInvoiceIn(tx: Tx, actor: AuthUser, v: { runId: strin
     seq = earlier[0].seq;
     revision = earlier[earlier.length - 1].revision + 1;
   } else {
-    const [top] = await tx.select({ seq: sql<number>`coalesce(max(${invoices.seq}), 0)::int` }).from(invoices).where(eq(invoices.year, year));
+    // A test run has its own series, so real invoice numbers never skip because of practice invoices.
+    const [top] = await tx.select({ seq: sql<number>`coalesce(max(${invoices.seq}), 0)::int` }).from(invoices).where(and(eq(invoices.year, year), eq(invoices.isTest, test)));
     seq = (top?.seq ?? 0) + 1;
   }
   if (seq > 9999) throw new ActionFailure("This year's invoice numbers are used up. Ask for help.");
 
   const id = randomUUID();
-  const number = invoiceNumber(useYear, seq, revision);
+  const number = invoiceNumber(useYear, seq, revision, test);
   const payload = {
     clientName: client.name,
     periodStart: data.run.periodStart,
@@ -213,12 +218,13 @@ export async function createInvoiceIn(tx: Tx, actor: AuthUser, v: { runId: strin
     runId: v.runId,
     clientId: v.clientId,
     runStatus: data.run.status,
+    isTest: test,
     issuedOn,
     payloadEnc: fieldCrypto().encrypt(JSON.stringify(payload), invoiceContext(id)),
     createdBy: actor.id,
   });
   // Ids and counts only: never a rate, an hours total, a name or an amount.
-  await writeAudit({ actor, action: "invoice.create", targetType: "invoice", targetId: id, metadata: { runId: v.runId, clientId: v.clientId, lines: built.lines.length, revision } }, tx);
+  await writeAudit({ actor, action: "invoice.create", targetType: "invoice", targetId: id, metadata: { runId: v.runId, clientId: v.clientId, lines: built.lines.length, revision, ...(test ? { test: true } : {}) } }, tx);
   return { id, number };
 }
 

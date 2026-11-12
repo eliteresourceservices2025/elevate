@@ -14,6 +14,7 @@ const view = (over: Partial<InvoiceView> = {}): InvoiceView => ({
   runId: "22222222-2222-4222-8222-222222222222",
   clientId: "33333333-3333-4333-8333-333333333333",
   runStatus: "approved",
+  isTest: false,
   issuedOn: "2031-02-03",
   createdAt: new Date(),
   clientName: "Testclinic Family Care",
@@ -45,6 +46,14 @@ describe("invoice PDF", () => {
     for (const s of ["INV-2031-0001", "Testclinic Family Care", "1,479.91", "119.83", "Ana Testcruz (Front desk)", "USD"]) expect(text).toContain(s);
     expect(text).not.toMatch(/undefined|NaN|null/);
     expect(text).not.toContain("DRAFT");
+  });
+
+  it("stamps TEST on an invoice made from a test run, and nothing on a real one", async () => {
+    const test = await textOf(await renderInvoicePdf(invoiceText(view({ isTest: true, number: "TEST-2031-0001" }))));
+    expect(test).toContain("TEST-2031-0001");
+    expect(test).toContain("not a real invoice");
+    const real = await textOf(await renderInvoicePdf(invoiceText(view())));
+    expect(real).not.toContain("not a real invoice");
   });
 
   it("says DRAFT for a draft run and shows the unconfirmed note", async () => {

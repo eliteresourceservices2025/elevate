@@ -11,6 +11,8 @@ export const payrollPermissions = definePermissions({
   "payroll.mark_paid": { roles: {}, payrollLevels: ["preparer"] },
   "payroll.export": { roles: {}, payrollLevels: ["preparer"] },
   "payroll.approve": { roles: {}, payrollLevels: ["approver"] },
+  // Marking a run as a test run, archiving it and restoring it: both levels that work on runs (never a viewer).
+  "payroll.manage_test_runs": { roles: {}, payrollLevels: ["preparer", "approver"] },
   "payroll.view_own": {
     roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },
   },

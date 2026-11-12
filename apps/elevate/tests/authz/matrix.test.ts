@@ -187,6 +187,7 @@ const EXPECTED: Record<string, string> = {
   "payroll.mark_paid": "- - - - - -",
   "payroll.export": "- - - - - -",
   "payroll.approve": "- - - - - -",
+  "payroll.manage_test_runs": "- - - - - -",
   "payroll.view_own": "O O O O O O",
   // client invoices: roles only (a payroll level adds nothing)
   "invoices.view": "A A - - A -",
@@ -312,6 +313,11 @@ describe("payroll access", () => {
     expect(can(level("preparer"), "payroll.approve")).toBe(false);
     expect(can(level("approver"), "payroll.approve")).toBe(true);
     expect(can(level("approver"), "payroll.export")).toBe(false);
+    // Test runs (mark, archive, restore): both working levels, never a viewer or a person with no level.
+    expect(can(level(null), "payroll.manage_test_runs")).toBe(false);
+    expect(can(level("viewer"), "payroll.manage_test_runs")).toBe(false);
+    expect(can(level("preparer"), "payroll.manage_test_runs")).toBe(true);
+    expect(can(level("approver"), "payroll.manage_test_runs")).toBe(true);
   });
 
   it("no role, not even Super Admin, opens a payroll action without a level", () => {

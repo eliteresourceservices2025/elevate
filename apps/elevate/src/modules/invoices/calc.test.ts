@@ -51,6 +51,8 @@ describe("numbers and formatting", () => {
     expect(invoiceNumber(2031, 7)).toBe("INV-2031-0007");
     expect(invoiceNumber(2031, 7, 1)).toBe("INV-2031-0007");
     expect(invoiceNumber(2031, 7, 2)).toBe("INV-2031-0007-R2");
+    expect(invoiceNumber(2031, 7, 1, true)).toBe("TEST-2031-0007");
+    expect(invoiceNumber(2031, 7, 3, true)).toBe("TEST-2031-0007-R3");
     expect(invoiceNumber(2031, 12345, 3)).toBe("INV-2031-12345-R3");
   });
   it("formats dollars and hours", () => {

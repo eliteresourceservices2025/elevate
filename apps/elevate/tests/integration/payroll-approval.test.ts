@@ -15,7 +15,7 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, confirmRunLine, submitRun, sendBackRun, approveRun } = await import(
+const { createPayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, confirmRunLine, submitRun, sendBackRun, approveRun, markRunAsTest, archivePayRun, restorePayRun } = await import(
   "@/modules/payroll/actions"
 );
 const { getWorksheet, payrollRunsAwaitingApproval } = await import("@/modules/payroll/queries");
@@ -557,6 +557,33 @@ describe("recovering a run whose pay lines changed while in review", () => {
     as(approver);
     expect(await approveRun({ runId: again, expectedHash: fresh })).toMatchObject({ ok: true });
     expect(await status(again)).toBe("approved");
+  });
+});
+
+describe("test runs and the separation of duties", () => {
+  it("marking a run as a test, archiving and restoring it change no figure: an Approver who did so can still approve it, and an archived run is not counted as waiting", async () => {
+    const p = slot(23);
+    const emp = await person();
+    await giveLine(emp, p);
+    const runId = await newRun(p);
+    as(preparer);
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+
+    const decider = await account("approver");
+    as(decider);
+    const waiting = await payrollRunsAwaitingApproval();
+    expect(await markRunAsTest({ runId, test: true, reason: "Practice cycle" })).toMatchObject({ ok: true });
+    expect(await archivePayRun({ runId, reason: "Tidy up" })).toMatchObject({ ok: true });
+    expect(await payrollRunsAwaitingApproval()).toBe(waiting - 1); // an archived run is not waiting for anyone
+    expect(await restorePayRun({ runId })).toMatchObject({ ok: true });
+    expect(await payrollRunsAwaitingApproval()).toBe(waiting);
+
+    // None of it made them a person who prepared or changed the run.
+    expect(await touchedBy(db, runId)).not.toContain(decider.id);
+    const hash = (await hashFor(runId, decider))!;
+    as(decider);
+    expect(await approveRun({ runId, expectedHash: hash })).toMatchObject({ ok: true });
+    expect(await status(runId)).toBe("approved");
   });
 });
 

@@ -216,7 +216,7 @@ export function RatesTable({ rows, options, today, addStart }: { rows: RateRow[]
         <EmptyState title="No pay lines yet" description={options ? "Add a line for each person you pay." : "A Preparer adds the pay lines."} />
       ) : (
         <>
-          <Table stack>
+          <Table stack dragScroll scrollLabel="Pay lines. Drag sideways or use the arrow keys to scroll.">
             <TableHeader>
               <TableRow>
                 <TableHead>{L.person}</TableHead>

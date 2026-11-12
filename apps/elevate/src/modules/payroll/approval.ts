@@ -33,8 +33,8 @@ const noteContext = (id: string) => `pay_approval_note:${id}`;
 /** The approval hash as stored (encrypted, bound to its row). Callers must already hold `payroll.view`. */
 export const decryptApprovalHash = (id: string, stored: string): string => fieldCrypto().decrypt(stored, hashContext(id));
 
-/** Deciding is not changing: a send-back or an approval does not stop that Approver from deciding the run again later. */
-const NOT_A_CHANGE: readonly ChangeAction[] = ["run_viewed", "run_sent_back", "run_approved"];
+/** Deciding is not changing: a send-back or an approval does not stop that Approver from deciding the run again later. Marking a run as a test, archiving and restoring it change no figure, so they do not count either. */
+const NOT_A_CHANGE: readonly ChangeAction[] = ["run_viewed", "run_sent_back", "run_approved", "run_marked_test", "run_marked_real", "run_archived", "run_restored"];
 
 /**
  * The one definition of "prepared or changed this run", as SQL over a run id expression (a parameter, or a column of an outer query):
@@ -165,7 +165,7 @@ export async function submit(tx: Tx, actor: Actor, runId: string): Promise<void>
   await writeAudit({ actor, action: "payroll.run.submit", targetType: "pay_run", targetId: runId, metadata: { lines: n, warnings: checks.warnings.length } }, tx);
   await logChange(tx, actor, { action: "run_submitted", runId, detail: { lines: n, warnings: checks.warnings.length } });
 
-  const [{ waiting }] = await tx.select({ waiting: sql<number>`count(*)::int` }).from(payRuns).where(eq(payRuns.status, "in_review"));
+  const [{ waiting }] = await tx.select({ waiting: sql<number>`count(*)::int` }).from(payRuns).where(and(eq(payRuns.status, "in_review"), isNull(payRuns.archivedAt)));
   await notify(
     tx,
     (await holders(tx, "approver", actor.id)).map((userId) => ({
@@ -266,7 +266,7 @@ export async function countAwaiting(executor: Executor, approverId: string, only
   const narrow = onlyRunIds ? sql`and p.id in (${sql.join(onlyRunIds.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``;
   const [row] = (await executor.execute(sql`
     select count(*)::int as n from payroll.pay_runs p
-    where p.status = 'in_review' ${narrow}
+    where p.status = 'in_review' and p.archived_at is null ${narrow}
       and not exists (select 1 from (${touchersOf(sql`p.id`)}) t where t.id = ${approverId}::uuid)`)) as unknown as { n: number }[];
   return row?.n ?? 0;
 }

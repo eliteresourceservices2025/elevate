@@ -17,7 +17,7 @@ import { lineLastDay } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
-import { cancelRun, confirmLine, createRun, dismissItem, removeRunLine, restoreRunLine, saveItem, syncRunPeople } from "./runs";
+import { archiveRun, cancelRun, confirmLine, createRun, dismissItem, removeRunLine, restoreRun, restoreRunLine, saveItem, setRunTest, syncRunPeople } from "./runs";
 import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import { readJibbleTimesheet } from "./jibble/timesheet";
 import { MAX_XLSX_BYTES, XlsxError } from "./jibble/xlsx";
@@ -43,9 +43,12 @@ import {
   cancelPayRunSchema,
   confirmRunLineSchema,
   createPayLineSchema,
+  archiveRunSchema,
   createPayRunSchema,
   dismissPayItemSchema,
   endPayLineSchema,
+  markRunTestSchema,
+  restoreRunSchema,
   savePayItemSchema,
   savePaySettingsSchema,
   updatePayLineSchema,
@@ -255,7 +258,7 @@ export async function createPayRun(input: unknown): Promise<ActionResult<{ runId
     const parsed = createPayRunSchema.safeParse(input);
     if (!parsed.success) return fail(BAD_REQUEST);
 
-    const created = await db.transaction((tx) => createRun(tx, actor, parsed.data));
+    const created = await db.transaction((tx) => createRun(tx, actor, { periodStart: parsed.data.periodStart, periodEnd: parsed.data.periodEnd }, { test: parsed.data.test === true }));
     refreshedRun();
     return { ok: true, data: { runId: created.runId } } as const;
   });
@@ -352,6 +355,54 @@ export async function cancelPayRun(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return fail(BAD_REQUEST);
 
     await db.transaction((tx) => cancelRun(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Marks a run as a test run (until it is paid), or makes a draft test run a real run again. */
+export async function markRunAsTest(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_test_runs");
+
+    const parsed = markRunTestSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => setRunTest(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Archives a test run (a real run can never be archived): it leaves the lists but stays on record. */
+export async function archivePayRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_test_runs");
+
+    const parsed = archiveRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => archiveRun(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Brings an archived test run back. */
+export async function restorePayRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_test_runs");
+
+    const parsed = restoreRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => restoreRun(tx, actor, parsed.data));
     refreshedRun(parsed.data.runId);
     return { ok: true, data: undefined } as const;
   });

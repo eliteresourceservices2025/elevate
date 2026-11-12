@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { PagerLinks } from "@/components/pager";
+import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
@@ -13,6 +14,7 @@ import { ConfirmAllButton } from "@/modules/payroll/components/jibble-import";
 import { RunChecks } from "@/modules/payroll/components/run-checks";
 import { CancelRunDialog, RemovedPeople } from "@/modules/payroll/components/run-dialogs";
 import { RunFillMenu } from "@/modules/payroll/components/run-fill-menu";
+import { RunOptionsMenu } from "@/modules/payroll/components/run-options";
 import { UnassignedSuggestions } from "@/modules/payroll/components/suggestion-controls";
 import { RunTotals } from "@/modules/payroll/components/run-totals";
 import { Worksheet } from "@/modules/payroll/components/worksheet";
@@ -48,19 +50,31 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
         description={
           <p className="flex flex-wrap items-center gap-2">
             <Badge variant={run.status === "draft" ? "outline" : "info"}>{RUN_STATUS_LABELS[run.status]}</Badge>
+            {run.isTest ? <Badge variant="warning">Test run</Badge> : null}
+            {run.archivedAt ? <Badge variant="outline">Archived</Badge> : null}
             <span>Opening this page is written to the audit log. Figures are never sent in notices.</span>
           </p>
         }
         actions={
-          sheet.canPrepare && run.status === "draft" ? (
-            <>
-              <RunFillMenu runId={run.id} />
-              <ConfirmAllButton runId={run.id} count={suggestedCount} />
-              <CancelRunDialog runId={run.id} />
-            </>
-          ) : undefined
+          <>
+            {sheet.canPrepare && run.status === "draft" ? (
+              <>
+                <RunFillMenu runId={run.id} />
+                <ConfirmAllButton runId={run.id} count={suggestedCount} />
+                <CancelRunDialog runId={run.id} />
+              </>
+            ) : null}
+            {sheet.canPrepare || sheet.canApprove ? <RunOptionsMenu runId={run.id} status={run.status} isTest={run.isTest} archived={run.archivedAt !== null} /> : null}
+          </>
         }
       />
+      {run.isTest ? (
+        <Alert variant="warning" role="note">
+          {run.archivedAt
+            ? "This test run is archived: it is hidden from the list but kept on record. Use Run options to restore it."
+            : "This is a test run. It is kept apart from real runs, nobody sees a payment statement from it, and invoices made from it are numbered TEST. When you are done, archive it under Run options."}
+        </Alert>
+      ) : null}
       {run.status === "draft" || run.status === "in_review" ? (
         <RunChecks
           blocking={sheet.checks.blocking}

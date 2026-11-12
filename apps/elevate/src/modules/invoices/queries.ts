@@ -33,14 +33,14 @@ export async function listInvoices(paging: { page: number; pageSize: number }) {
   return { rows: list, info, canCreate: can(actor, "invoices.create") };
 }
 
-export type InvoiceableRun = { id: string; periodStart: string; periodEnd: string; status: string };
+export type InvoiceableRun = { id: string; periodStart: string; periodEnd: string; status: string; isTest: boolean };
 
-/** The runs a new invoice can be made from (not cancelled), newest period first. Only the period and status are read. */
+/** The runs a new invoice can be made from (not cancelled, not archived), newest period first. Only the period, status and test flag are read. */
 export async function listInvoiceableRuns(): Promise<InvoiceableRun[]> {
   const actor = await requireUser();
   await authorize(actor, "invoices.create");
   const rows = (await db.execute(
-    sql`select id, period_start::text as "periodStart", period_end::text as "periodEnd", status from payroll.pay_runs where status <> 'cancelled' order by period_start desc limit 60`,
+    sql`select id, period_start::text as "periodStart", period_end::text as "periodEnd", status, is_test as "isTest" from payroll.pay_runs where status <> 'cancelled' and archived_at is null order by period_start desc, created_at desc limit 60`,
   )) as unknown as InvoiceableRun[];
   return rows;
 }

@@ -28,6 +28,7 @@ export function InvoiceDocument({ view }: { view: InvoiceText }) {
         </div>
       </header>
 
+      {view.isTest ? <Alert variant="destructive">{view.testNote}</Alert> : null}
       {view.isDraft ? <Alert variant="warning">{view.draftNote}</Alert> : null}
 
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

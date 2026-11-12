@@ -15,10 +15,10 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, createPayRun, cancelPayRun, savePayItem } = await import("@/modules/payroll/actions");
+const { createPayLine, createPayRun, cancelPayRun, savePayItem, archivePayRun } = await import("@/modules/payroll/actions");
 const { encryptItemValue } = await import("@/modules/payroll/service");
 const { createInvoice, previewInvoiceRun, addBillRate } = await import("@/modules/invoices/actions");
-const { getInvoice, listInvoices, getBillRates } = await import("@/modules/invoices/queries");
+const { getInvoice, listInvoices, getBillRates, listInvoiceableRuns } = await import("@/modules/invoices/queries");
 
 type Row = Record<string, unknown>;
 const rows = async <T = Row>(q: ReturnType<typeof sql>) => (await db.execute(q)) as unknown as T[];
@@ -313,5 +313,57 @@ describe("who may do what, with the real database", () => {
     }
     // The Preparer used to build the run holds no invoice right either.
     expect((await as(preparer, () => createInvoice({ runId, clientId: client }))).ok).toBe(false);
+  });
+});
+
+// Last in the file: its people have open-ended pay lines, which would otherwise show up on the runs of the tests after it.
+describe("test runs", () => {
+  it("an invoice from a test run is numbered TEST- in its own series, stamped as a test, and refused once the run is archived", async () => {
+    const client = await newClient();
+    const ana = await person("Ana");
+    await giveLine(ana, { clientId: client });
+    await rate(client, "10.00");
+
+    // A real run and a test run for the SAME period: a test run may repeat a cycle.
+    const real = await newRun(period(9));
+    await setHours(real, ana, "10");
+    const made = await as(preparer, () => createPayRun({ ...period(9), test: true }));
+    if (!made.ok) throw new Error(`test run failed: ${made.error}`);
+    const testRun = made.data.runId;
+    await setHours(testRun, ana, "20");
+
+    const preview = await as(hr, () => previewInvoiceRun({ runId: testRun }));
+    expect(preview.ok && preview.data.isTest).toBe(true);
+    expect(await as(hr, () => previewInvoiceRun({ runId: real }))).toMatchObject({ ok: true, data: { isTest: false } });
+
+    const realInvoice = await as(hr, () => createInvoice({ runId: real, clientId: client }));
+    const testInvoice = await as(hr, () => createInvoice({ runId: testRun, clientId: client }));
+    if (!realInvoice.ok || !testInvoice.ok) throw new Error("invoice failed");
+    expect(realInvoice.data.number).toMatch(/^INV-\d{4}-\d{4}$/);
+    expect(testInvoice.data.number).toMatch(/^TEST-\d{4}-\d{4}$/);
+
+    // The test invoice is flagged, the real one is not, and a second test invoice for the same run and client is a revision of the same number.
+    expect((await as(hr, () => getInvoice(testInvoice.data.invoiceId)))?.isTest).toBe(true);
+    expect((await as(hr, () => getInvoice(realInvoice.data.invoiceId)))?.isTest).toBe(false);
+    const again = await as(hr, () => createInvoice({ runId: testRun, clientId: client }));
+    expect(again.ok && again.data.number).toBe(`${testInvoice.data.number}-R2`);
+
+    // Practice invoices never use up a real number: the next real invoice follows the previous real one directly.
+    const next = await person("Ben");
+    await giveLine(next, { clientId: client });
+    const realTwo = await newRun(period(10));
+    await setHours(realTwo, next, "5");
+    const nextInvoice = await as(hr, () => createInvoice({ runId: realTwo, clientId: client }));
+    if (!nextInvoice.ok) throw new Error("invoice failed");
+    const seqOf = (n: string) => Number(n.split("-")[2]);
+    expect(seqOf(nextInvoice.data.number)).toBe(seqOf(realInvoice.data.number) + 1);
+
+    // The run list for the invoice window shows the test run, then hides it (and refuses it) once archived.
+    expect((await as(hr, () => listInvoiceableRuns())).some((r) => r.id === testRun && r.isTest)).toBe(true);
+    const archived = await as(preparer, () => archivePayRun({ runId: testRun, reason: "Practice cycle done" }));
+    expect(archived.ok).toBe(true);
+    expect((await as(hr, () => listInvoiceableRuns())).some((r) => r.id === testRun)).toBe(false);
+    const refused = await as(hr, () => createInvoice({ runId: testRun, clientId: client }));
+    expect(refused).toMatchObject({ ok: false, error: expect.stringMatching(/archived/) });
   });
 });

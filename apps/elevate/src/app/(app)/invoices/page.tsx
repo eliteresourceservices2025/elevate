@@ -31,7 +31,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
       <PageHeader
         title="Invoices"
         description="Bill each client for the client payroll hours of a pay run. Download the PDF and send it yourself: ELEVATE sends no email."
-        actions={list.canCreate ? <NewInvoiceDialog runs={runs.map((r) => ({ id: r.id, label: `${r.periodStart} to ${r.periodEnd} (${r.status.replace("_", " ")})` }))} /> : undefined}
+        actions={list.canCreate ? <NewInvoiceDialog runs={runs.map((r) => ({ id: r.id, label: `${r.periodStart} to ${r.periodEnd} (${r.isTest ? "test run, " : ""}${r.status.replace("_", " ")})` }))} /> : undefined}
       />
       <InvoiceTabs current="invoices" />
       {list.rows.length === 0 ? (

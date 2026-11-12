@@ -199,7 +199,8 @@ export async function recordPayment(
       });
       // The statements carry whoever signs them today, kept with the run so they never change afterwards.
       await freezeRunSignatory(tx, v.runId, payrollToday());
-      await notifyPayslipsReady(tx, v.runId);
+      // A test run never reaches a person: no "your statement is ready" notice (and /my-pay never lists it).
+      if (!run.isTest) await notifyPayslipsReady(tx, v.runId);
       runPaid = true;
     }
   }
