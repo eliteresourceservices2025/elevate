@@ -41,7 +41,7 @@ function readable(runLineId: string, stored: string) {
 }
 
 const ownPaidRuns = (employeeId: string) =>
-  and(eq(payRunLines.employeeId, employeeId), eq(payRunLines.excluded, false), eq(payRuns.status, "paid"));
+  and(eq(payRunLines.employeeId, employeeId), eq(payRunLines.excluded, false), eq(payRuns.status, "paid"), eq(payRuns.isTest, false));
 
 /** How many payslips the signed-in person has. */
 export async function countMyPayslips(): Promise<number> {
@@ -102,7 +102,7 @@ export async function getMyPayslip(actor: AuthzUser, runId: string): Promise<(Pa
   const [run] = await db
     .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, settingsSnapshot: payRuns.settingsSnapshot })
     .from(payRuns)
-    .where(and(eq(payRuns.id, runId), eq(payRuns.status, "paid")))
+    .where(and(eq(payRuns.id, runId), eq(payRuns.status, "paid"), eq(payRuns.isTest, false)))
     .limit(1);
   if (!run) return null;
   const lines = await db

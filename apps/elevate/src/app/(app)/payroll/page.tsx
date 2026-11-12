@@ -25,7 +25,8 @@ export default async function PayrollRunsPage({ searchParams }: PageProps<"/payr
   await requireUser();
   const params = await searchParams;
   const paging = parsePaging({ page: one(params.page), size: one(params.size) });
-  const list = await orNotFound(getRuns(paging)); // authorize("payroll.view") inside
+  const archived = one(params.archived) === "1";
+  const list = await orNotFound(getRuns(paging, { archived })); // authorize("payroll.view") inside
   const info = pageInfo(list.total, paging.page, paging.pageSize);
   // The pay period that ended most recently (twice a month by default); the person can change either date.
   const last = recentPeriods("semi_monthly", payrollToday(), 2)[1];
@@ -38,8 +39,25 @@ export default async function PayrollRunsPage({ searchParams }: PageProps<"/payr
         actions={list.canPrepare ? <NewRunDialog suggestedStart={last.start} suggestedEnd={last.end} /> : undefined}
       />
       <PayrollTabs current="runs" />
+      {list.archivedCount > 0 || list.showingArchived ? (
+        <p className="text-sm">
+          {list.showingArchived ? (
+            <Link href="/payroll" className="underline underline-offset-2">
+              Back to the runs
+            </Link>
+          ) : (
+            <Link href="/payroll?archived=1" className="underline underline-offset-2">
+              Archived test runs ({list.archivedCount})
+            </Link>
+          )}
+        </p>
+      ) : null}
       {list.rows.length === 0 ? (
-        <EmptyState icon={Wallet} title="No pay runs yet" description={list.canPrepare ? "Start a run for a pay period. Add pay lines on the Rates tab first." : "A Preparer starts the runs."} />
+        <EmptyState
+          icon={Wallet}
+          title={list.showingArchived ? "No archived runs" : "No pay runs yet"}
+          description={list.showingArchived ? "Test runs you archive appear here." : list.canPrepare ? "Start a run for a pay period. Add pay lines on the Rates tab first." : "A Preparer starts the runs."}
+        />
       ) : (
         <>
           <Table stack>
@@ -57,6 +75,11 @@ export default async function PayrollRunsPage({ searchParams }: PageProps<"/payr
                     <Link href={`/payroll/${r.id}`} className="underline-offset-4 hover:underline">
                       {r.periodStart} to {r.periodEnd}
                     </Link>
+                    {r.isTest ? (
+                      <Badge variant="warning" className="ml-2">
+                        Test
+                      </Badge>
+                    ) : null}
                   </TableCell>
                   <TableCell label={L.status}>
                     <Badge variant={r.status === "draft" || r.status === "cancelled" ? "outline" : r.status === "paid" ? "success" : "info"}>{RUN_STATUS_LABELS[r.status]}</Badge>
@@ -68,7 +91,7 @@ export default async function PayrollRunsPage({ searchParams }: PageProps<"/payr
               ))}
             </TableBody>
           </Table>
-          <PagerLinks info={info} basePath="/payroll" label="runs" />
+          <PagerLinks info={info} basePath="/payroll" query={{ archived: list.showingArchived ? "1" : undefined }} label="runs" />
         </>
       )}
     </PageContainer>

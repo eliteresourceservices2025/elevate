@@ -2,6 +2,17 @@
 
 Design: `docs/superpowers/specs/2026-11-04-payroll-design.md`. Plan: `docs/superpowers/plans/`. Real names and pay figures never enter the repo, tests or a development database. Code: `apps/elevate/src/modules/payroll/`. Every label comes from `constants.ts`.
 
+## Test runs (2026-11-12, migration 0132; overrides anything older below)
+
+The team is still rehearsing pay cycles, so a run can be a **test run** (`pay_runs.is_test`) and a test run can be **archived** (`archived_at`, `archived_by`). Nothing is ever deleted: a pay run still cannot be removed (the guard trigger refuses it).
+
+- **Who:** `payroll.manage_test_runs`, Preparer and Approver (not a viewer, not a role). Every step asks for a reason, kept in the encrypted change history (`run_marked_test`, `run_marked_real`, `run_archived`, `run_restored`); the audit rows hold ids and the status only.
+- **Marking:** a run can be marked as a test until it is paid (draft, in review, approved). A paid or cancelled run can never be marked, so a real payout cannot be hidden. A test run is made real again only while it is a draft and only if no other real run has its period. A new run can be created as a test run (`createPayRun({ test: true })`).
+- **Periods:** the period uniqueness (`pay_runs_period_idx`) and the overlap check apply to real runs only, so a test run may repeat a period that already has a run, any number of times. The way to repeat a real cycle: mark the old run as a test run, archive it, create the new run.
+- **Archiving:** only a test run, in any status (paid included). The trigger allows an archive or restore to change nothing else about the run, and refuses `archived_at` on a real run even from SQL. An archived run leaves the runs list (a link shows them), cannot be invoiced, and is skipped by the "net changed" and correction lookups.
+- **Kept apart:** the "net changed" comparison and the runs an adjustment can correct only look at runs of the same kind (test with test, real with real). A test run never reaches a person: no "your statement is ready" notice, and `/my-pay` and the statement download only read real runs (`is_test = false`).
+- **Invoices from a test run:** allowed, numbered `TEST-<year>-<counter>` in their own series (so real `INV-` numbers never skip), stored with `is_test`, and stamped TEST on the page and the PDF.
+
 ## Round 2 of 2026-11-12 (overtime, notes, draft people, Jibble import, invoices; overrides anything older below)
 
 Spec: `docs/superpowers/specs/2026-11-12-payroll-timesheet-invoices.md`.

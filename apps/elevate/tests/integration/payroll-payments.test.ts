@@ -24,8 +24,11 @@ const {
   approveRun,
   exportRemitlyList,
   markPaid,
+  markRunAsTest,
 } = await import("@/modules/payroll/actions");
 const { getWorksheet, getPayments } = await import("@/modules/payroll/queries");
+const { countMyPayslips } = await import("@/modules/payroll/payslip-queries");
+const { PAYSLIP_LABELS } = await import("@/modules/payroll/constants");
 const { decryptRunLine, payrollToday } = await import("@/modules/payroll/service");
 const { fieldCrypto } = await import("@/lib/crypto");
 
@@ -491,6 +494,35 @@ describe("markPaid", () => {
     expect(await status(runId)).toBe("paid");
     const after = await noticesOfRun();
     expect(after).toBe(before);
+  });
+
+  it("a test run reaches paid without a statement notice and is never listed under My pay; a real run gets both", async () => {
+    const worker = await account("viewer");
+    const emp = await person(worker.id);
+    const realPeriod = slot(20);
+    const testPeriod = slot(21);
+    await giveLine(emp, realPeriod);
+    await giveLine(emp, testPeriod);
+    const real = await approvedRun(realPeriod);
+    const practice = await approvedRun(testPeriod);
+
+    // A run that is already approved can be marked as a test until it is paid.
+    as(preparer);
+    expect(await markRunAsTest({ runId: practice, test: true, reason: "Practice cycle" })).toMatchObject({ ok: true });
+    for (const runId of [real, practice]) {
+      expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today() })).toMatchObject({ ok: true });
+      expect(await status(runId)).toBe("paid");
+    }
+
+    const notices = async () =>
+      (await rows<{ n: number }>(sql`select count(*)::int as n from ops.notifications where user_id = ${worker.id} and kind = ${PAYSLIP_LABELS.noticeKind}`))[0].n;
+    expect(await notices()).toBe(1); // the real run only
+    as(worker);
+    expect(await countMyPayslips()).toBe(1);
+
+    // Once paid, a run can no longer be marked: a real payout is never hidden.
+    as(preparer);
+    expect(await markRunAsTest({ runId: real, test: true, reason: "Hide it" })).toMatchObject({ ok: false, error: expect.stringMatching(/paid run can't be changed/) });
   });
 
   it("the database refuses any status jump to paid except from approved", async () => {

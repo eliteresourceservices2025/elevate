@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { users } from "@/modules/core/schema";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -146,30 +146,40 @@ export async function getRateOptions(): Promise<RateOptions> {
   };
 }
 
-export type RunListRow = { id: string; periodStart: string; periodEnd: string; status: RunStatus; lineCount: number; createdAt: string };
+export type RunListRow = { id: string; periodStart: string; periodEnd: string; status: RunStatus; lineCount: number; createdAt: string; isTest: boolean };
 
-/** One page of runs, newest period first. Shows no figures. */
-export async function getRuns(paging: { page: number; pageSize: number }): Promise<{ rows: RunListRow[]; total: number; canPrepare: boolean }> {
+/** One page of runs, newest period first. Archived test runs are left out unless `archived` is true. Shows no figures. */
+export async function getRuns(
+  paging: { page: number; pageSize: number },
+  options: { archived?: boolean } = {},
+): Promise<{ rows: RunListRow[]; total: number; archivedCount: number; showingArchived: boolean; canPrepare: boolean }> {
   const actor = await requireUser();
   await authorize(actor, "payroll.view");
 
-  const [{ total }] = await db.select({ total: count() }).from(payRuns);
+  const showingArchived = options.archived === true;
+  const shown = showingArchived ? isNotNull(payRuns.archivedAt) : isNull(payRuns.archivedAt);
+  const [{ total }] = await db.select({ total: count() }).from(payRuns).where(shown);
+  const [{ archivedCount }] = await db.select({ archivedCount: count() }).from(payRuns).where(isNotNull(payRuns.archivedAt));
   const rows = await db
     .select({
       id: payRuns.id,
       periodStart: payRuns.periodStart,
       periodEnd: payRuns.periodEnd,
       status: payRuns.status,
+      isTest: payRuns.isTest,
       createdAt: payRuns.createdAt,
       lineCount: sql<number>`(select count(*)::int from payroll.pay_run_lines l where l.run_id = ${payRuns.id})`,
     })
     .from(payRuns)
+    .where(shown)
     .orderBy(desc(payRuns.periodStart), desc(payRuns.createdAt))
     .limit(paging.pageSize)
     .offset((paging.page - 1) * paging.pageSize);
   return {
     rows: rows.map((r) => ({ ...r, status: r.status as RunStatus, createdAt: r.createdAt.toISOString() })),
     total,
+    archivedCount,
+    showingArchived,
     canPrepare: can(actor, "payroll.prepare"),
   };
 }

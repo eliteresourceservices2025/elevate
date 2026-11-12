@@ -27,7 +27,8 @@ export function Worksheet({ sheet, lines, canPrepare }: { sheet: Worksheet; line
           {HISTORY_LABELS.runHistory}
         </Link>
       </p>
-      <Table stack>
+      <p className="hidden text-xs text-muted-foreground md:block">Drag the table sideways to move across it, or hold Shift and use the mouse wheel.</p>
+      <Table stack dragScroll scrollLabel="Pay run sheet. Drag sideways or use the arrow keys to scroll.">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead colSpan={2} className={`${FROZEN} md:left-0 border-r`}>

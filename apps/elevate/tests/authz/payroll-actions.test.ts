@@ -56,6 +56,7 @@ const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine,
   await import("@/modules/payroll/actions");
 const { payrollRunsAwaitingApproval, getPayments } = await import("@/modules/payroll/queries");
 const { exportRemitlyList, markPaid } = await import("@/modules/payroll/actions");
+const { markRunAsTest, archivePayRun, restorePayRun } = await import("@/modules/payroll/actions");
 
 const LEVELS = [null, "viewer", "approver", "preparer"] as const;
 const GENERIC = "Something went wrong. Try again.";
@@ -101,6 +102,46 @@ describe.each(Object.keys(calls))("%s, every role at every payroll level", (name
       });
     }
   }
+});
+
+// Test runs (mark as a test, archive, restore): a Preparer or an Approver passes authorize(); a viewer, no level and every role without
+// a level are refused. A valid request from either level reaches the (mocked, throwing) database.
+const testRunCalls: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
+  markRunAsTest: () => markRunAsTest({ runId: RUN_ID, test: true, reason: "Practice cycle" }),
+  archivePayRun: () => archivePayRun({ runId: RUN_ID, reason: "Practice cycle done" }),
+  restorePayRun: () => restorePayRun({ runId: RUN_ID }),
+};
+
+describe.each(Object.keys(testRunCalls))("%s, every role at every payroll level", (name) => {
+  for (const role of ROLE_SLUGS) {
+    for (const level of LEVELS) {
+      const allowed = level === "preparer" || level === "approver";
+      it(`${role} (${level ?? "no level"}): ${allowed ? "passes authorize()" : "is refused"}`, async () => {
+        asLevel(role, level);
+        const result = await testRunCalls[name]();
+        expect(result.ok).toBe(false);
+        expect(result.error).toBe(allowed ? GENERIC : NO_ACCESS);
+      });
+    }
+  }
+});
+
+describe("test run requests are checked on the server", () => {
+  const BAD = "Check the request and try again.";
+  it("refuses a missing reason, a bad id and a non-boolean flag before touching data", async () => {
+    asLevel("employee", "approver");
+    expect(await markRunAsTest({ runId: RUN_ID, test: true, reason: "  " })).toEqual({ ok: false, error: BAD });
+    expect(await markRunAsTest({ runId: "nope", test: true, reason: "Practice" })).toEqual({ ok: false, error: BAD });
+    expect(await markRunAsTest({ runId: RUN_ID, test: "yes", reason: "Practice" })).toEqual({ ok: false, error: BAD });
+    expect(await archivePayRun({ runId: RUN_ID, reason: "" })).toEqual({ ok: false, error: BAD });
+    expect(await restorePayRun({ runId: "nope" })).toEqual({ ok: false, error: BAD });
+  });
+
+  it("accepts a test flag when creating a run", async () => {
+    asLevel("employee", "preparer");
+    expect(await createPayRun({ periodStart: "2030-11-01", periodEnd: "2030-11-15", test: true })).toEqual({ ok: false, error: GENERIC });
+    expect(await createPayRun({ periodStart: "2030-11-01", periodEnd: "2030-11-15", test: "yes" })).toEqual({ ok: false, error: BAD });
+  });
 });
 
 // Deciding a run: only an Approver passes authorize(). Who touched the run is checked after that, against the database.

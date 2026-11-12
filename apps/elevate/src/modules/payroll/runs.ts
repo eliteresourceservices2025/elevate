@@ -146,6 +146,22 @@ export async function recomputeRun(tx: Tx, runId: string, options: { employeeId?
 
 const NOT_A_CUTOFF = "A pay run covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month.";
 
+/** Throws when another real (not test, not cancelled) run already covers any part of the period. */
+async function refuseOverlap(tx: Tx, period: { periodStart: string; periodEnd: string }): Promise<void> {
+  const [clash] = await tx
+    .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd })
+    .from(payRuns)
+    .where(and(ne(payRuns.status, "cancelled"), eq(payRuns.isTest, false), lte(payRuns.periodStart, period.periodEnd), gte(payRuns.periodEnd, period.periodStart)))
+    .limit(1);
+  if (!clash) return;
+  const same = clash.periodStart === period.periodStart && clash.periodEnd === period.periodEnd;
+  throw new ActionFailure(
+    same
+      ? `There is already a pay run for ${period.periodStart} to ${period.periodEnd}. To repeat the cycle, mark that run as a test run and archive it, or make this one a test run.`
+      : `That period overlaps the pay run for ${clash.periodStart} to ${clash.periodEnd}. Pay runs can't overlap.`,
+  );
+}
+
 /** True when the period is exactly one cutoff (1st to 15th, or 16th to the end of the month), whatever the hours export uses. */
 function isCutoff(period: { periodStart: string; periodEnd: string }): boolean {
   const cutoff = periodContaining("semi_monthly", period.periodStart);
@@ -154,24 +170,14 @@ function isCutoff(period: { periodStart: string; periodEnd: string }): boolean {
 
 /**
  * Builds a draft run for a period: one line for each pay line in force. The calculator always pays half a month, so only one cutoff
- * is accepted (never the company's hours pay-period setting). Refuses any period that overlaps an existing run.
+ * is accepted (never the company's hours pay-period setting). Refuses any period that overlaps an existing real run. A test run (a practice
+ * run, `test: true`) may repeat a period that already has a run: it is the way to rehearse the same pay cycle again.
  */
-export async function createRun(tx: Tx, actor: Actor, period: { periodStart: string; periodEnd: string }): Promise<{ runId: string; lineCount: number }> {
+export async function createRun(tx: Tx, actor: Actor, period: { periodStart: string; periodEnd: string }, options: { test?: boolean } = {}): Promise<{ runId: string; lineCount: number }> {
+  const test = options.test === true;
   if (!isCutoff(period)) throw new ActionFailure(NOT_A_CUTOFF);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('pay_runs'))`);
-  const [clash] = await tx
-    .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd })
-    .from(payRuns)
-    .where(and(ne(payRuns.status, "cancelled"), lte(payRuns.periodStart, period.periodEnd), gte(payRuns.periodEnd, period.periodStart)))
-    .limit(1);
-  if (clash) {
-    const same = clash.periodStart === period.periodStart && clash.periodEnd === period.periodEnd;
-    throw new ActionFailure(
-      same
-        ? `There is already a pay run for ${period.periodStart} to ${period.periodEnd}.`
-        : `That period overlaps the pay run for ${clash.periodStart} to ${clash.periodEnd}. Pay runs can't overlap.`,
-    );
-  }
+  if (!test) await refuseOverlap(tx, period);
 
   const settings = await settingsInForce(tx, period.periodStart);
   const all = await tx
@@ -211,10 +217,10 @@ export async function createRun(tx: Tx, actor: Actor, period: { periodStart: str
     };
   });
 
-  await tx.insert(payRuns).values({ id: runId, periodStart: period.periodStart, periodEnd: period.periodEnd, status: "draft", settingsSnapshot: settings, createdBy: actor.id });
+  await tx.insert(payRuns).values({ id: runId, periodStart: period.periodStart, periodEnd: period.periodEnd, status: "draft", settingsSnapshot: settings, createdBy: actor.id, isTest: test });
   await tx.insert(payRunLines).values(prepared);
-  await writeAudit({ actor, action: "payroll.run.create", targetType: "pay_run", targetId: runId, metadata: { lines: prepared.length } }, tx);
-  await logChange(tx, actor, { action: "run_created", runId, detail: { periodStart: period.periodStart, periodEnd: period.periodEnd, lines: prepared.length } });
+  await writeAudit({ actor, action: "payroll.run.create", targetType: "pay_run", targetId: runId, metadata: { lines: prepared.length, ...(test ? { test: true } : {}) } }, tx);
+  await logChange(tx, actor, { action: "run_created", runId, detail: { periodStart: period.periodStart, periodEnd: period.periodEnd, lines: prepared.length, ...(test ? { test: true } : {}) } });
   return { runId, lineCount: prepared.length };
 }
 
@@ -233,6 +239,52 @@ export async function cancelRun(tx: Tx, actor: Actor, v: { runId: string; reason
   await logChange(tx, actor, { action: "run_cancelled", runId: v.runId, detail: { reason: v.reason, lines: n } });
 }
 
+// ---- Test runs ----
+
+const lockRun = async (tx: Tx, runId: string) => {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('pay_runs'))`);
+  const [run] = await tx.select().from(payRuns).where(eq(payRuns.id, runId)).for("update");
+  if (!run) throw new ActionFailure("That pay run was not found.");
+  return run;
+};
+
+/**
+ * Marks a run as a test run (a practice run), or makes it a real run again. A run can be marked until it is paid (a paid run is a real
+ * payout and is never hidden); it can be made real again only while it is a draft, and only if no other real run has its period.
+ */
+export async function setRunTest(tx: Tx, actor: Actor, v: { runId: string; test: boolean; reason: string }): Promise<void> {
+  const run = await lockRun(tx, v.runId);
+  if (run.isTest === v.test) throw new ActionFailure(v.test ? "This run is already a test run." : "This run is already a real run.");
+  if (run.status === "paid" || run.status === "cancelled") throw new ActionFailure(`A ${run.status} run can't be changed.`);
+  if (!v.test) {
+    if (run.status !== "draft") throw new ActionFailure("A test run can be made a real run again only while it is a draft.");
+    if (run.archivedAt) throw new ActionFailure("Restore this run first.");
+    await refuseOverlap(tx, { periodStart: run.periodStart, periodEnd: run.periodEnd });
+  }
+  await tx.update(payRuns).set({ isTest: v.test }).where(eq(payRuns.id, v.runId));
+  await writeAudit({ actor, action: v.test ? "payroll.run.mark_test" : "payroll.run.mark_real", targetType: "pay_run", targetId: v.runId, metadata: { status: run.status } }, tx);
+  await logChange(tx, actor, { action: v.test ? "run_marked_test" : "run_marked_real", runId: v.runId, detail: { reason: v.reason, status: run.status } });
+}
+
+/** Archives a test run in any status (paid included): it leaves the lists but stays on record, and a real run can never be archived. */
+export async function archiveRun(tx: Tx, actor: Actor, v: { runId: string; reason: string }): Promise<void> {
+  const run = await lockRun(tx, v.runId);
+  if (!run.isTest) throw new ActionFailure("Only a test run can be archived. Mark it as a test run first.");
+  if (run.archivedAt) throw new ActionFailure("This run is already archived.");
+  await tx.update(payRuns).set({ archivedAt: new Date(), archivedBy: actor.id }).where(eq(payRuns.id, v.runId));
+  await writeAudit({ actor, action: "payroll.run.archive", targetType: "pay_run", targetId: v.runId, metadata: { status: run.status } }, tx);
+  await logChange(tx, actor, { action: "run_archived", runId: v.runId, detail: { reason: v.reason, status: run.status } });
+}
+
+/** Brings an archived test run back into the lists. */
+export async function restoreRun(tx: Tx, actor: Actor, v: { runId: string }): Promise<void> {
+  const run = await lockRun(tx, v.runId);
+  if (!run.archivedAt) throw new ActionFailure("This run is not archived.");
+  await tx.update(payRuns).set({ archivedAt: null, archivedBy: null }).where(eq(payRuns.id, v.runId));
+  await writeAudit({ actor, action: "payroll.run.restore", targetType: "pay_run", targetId: v.runId, metadata: { status: run.status } }, tx);
+  await logChange(tx, actor, { action: "run_restored", runId: v.runId, detail: { status: run.status } });
+}
+
 // ---- Changing a draft run ----
 
 const itemDetail = (row: ItemRow | undefined) => {
@@ -249,11 +301,11 @@ const itemDetail = (row: ItemRow | undefined) => {
  */
 async function checkCorrection(tx: Tx, v: { runId: string; employeeId: string; type: PayItemType }, correctsRunId: string): Promise<void> {
   if (!CORRECTION_TYPES.includes(v.type)) throw new ActionFailure("Only an adjustment or another deduction can correct an earlier run.");
-  const [run] = await tx.select({ periodStart: payRuns.periodStart }).from(payRuns).where(eq(payRuns.id, v.runId)).limit(1);
+  const [run] = await tx.select({ periodStart: payRuns.periodStart, isTest: payRuns.isTest }).from(payRuns).where(eq(payRuns.id, v.runId)).limit(1);
   const [target] = await tx
     .select({ id: payRuns.id })
     .from(payRuns)
-    .where(and(eq(payRuns.id, correctsRunId), inArray(payRuns.status, ["approved", "paid"]), lt(payRuns.periodStart, run?.periodStart ?? "0000-01-01")))
+    .where(and(eq(payRuns.id, correctsRunId), inArray(payRuns.status, ["approved", "paid"]), eq(payRuns.isTest, run?.isTest ?? false), isNull(payRuns.archivedAt), lt(payRuns.periodStart, run?.periodStart ?? "0000-01-01")))
     .limit(1);
   if (!target) throw new ActionFailure("A correction must name an approved or paid earlier run.");
   const [had] = await tx
@@ -583,7 +635,7 @@ export type WorksheetLine = {
 export type ClientTotals = { clientId: string | null; clientName: string; lines: number; clientHours: string; net: string };
 
 export type Worksheet = {
-  run: { id: string; periodStart: string; periodEnd: string; status: RunStatus };
+  run: { id: string; periodStart: string; periodEnd: string; status: RunStatus; isTest: boolean; archivedAt: string | null };
   lines: WorksheetLine[];
   /** Suggestions no pay line has been chosen for. */
   unassigned: { employeeId: string; name: string; items: WorksheetItem[] }[];
@@ -710,7 +762,7 @@ export async function readRun(executor: Executor, runId: string): Promise<RunDat
   const [previous] = await executor
     .select({ id: payRuns.id })
     .from(payRuns)
-    .where(and(lt(payRuns.periodStart, run.periodStart), inArray(payRuns.status, ["approved", "paid"])))
+    .where(and(lt(payRuns.periodStart, run.periodStart), inArray(payRuns.status, ["approved", "paid"]), eq(payRuns.isTest, run.isTest), isNull(payRuns.archivedAt)))
     .orderBy(desc(payRuns.periodStart))
     .limit(1);
   const previousNets = new Map<string, bigint>();
@@ -913,7 +965,7 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
     const earlier = await executor
       .select({ id: payRuns.id, periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd })
       .from(payRuns)
-      .where(and(lt(payRuns.periodStart, run.periodStart), inArray(payRuns.status, ["approved", "paid"])))
+      .where(and(lt(payRuns.periodStart, run.periodStart), inArray(payRuns.status, ["approved", "paid"]), eq(payRuns.isTest, run.isTest), isNull(payRuns.archivedAt)))
       .orderBy(desc(payRuns.periodStart))
       .limit(24);
     correctableRuns = earlier.map((e) => ({ id: e.id, label: `${e.periodStart} to ${e.periodEnd}` }));
@@ -921,7 +973,7 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
 
   const complete = unreadableCount === 0;
   return {
-    run: { id: run.id, periodStart: run.periodStart, periodEnd: run.periodEnd, status: run.status as RunStatus },
+    run: { id: run.id, periodStart: run.periodStart, periodEnd: run.periodEnd, status: run.status as RunStatus, isTest: run.isTest, archivedAt: run.archivedAt ? run.archivedAt.toISOString() : null },
     lines,
     unassigned,
     totals: complete ? { gross: formatPesos(gross), net: formatPesos(net) } : null,

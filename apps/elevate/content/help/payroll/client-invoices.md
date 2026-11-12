@@ -29,6 +29,10 @@ A change is a new rate with a new start date. Older rates stay in the history. A
 
 People with no client are not invoiced. They are listed in the window as "No client". People with 0 hours are left off.
 
+# Invoices from a test run
+
+If the pay run is a test run, you can still make an invoice to practise. It is numbered **TEST** (its own series, so real invoice numbers never skip) and the page and PDF say it is a test. Do not send it to a client. An archived test run can't be invoiced.
+
 # What has to be set before you can invoice
 
 There is no setting to switch on. Three things must be in place:

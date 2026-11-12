@@ -8,6 +8,8 @@ export type InvoiceText = {
   issuedOn: string;
   isDraft: boolean;
   draftNote: string;
+  isTest: boolean;
+  testNote: string;
   clientName: string;
   period: string;
   rate: string;
@@ -25,6 +27,8 @@ export function invoiceText(v: InvoiceView): InvoiceText {
     issuedOn: v.issuedOn,
     isDraft: v.runStatus === "draft",
     draftNote: INVOICE_LABELS.draftNote,
+    isTest: v.isTest,
+    testNote: INVOICE_LABELS.testNote,
     clientName: v.clientName,
     period: `${v.periodStart} to ${v.periodEnd}`,
     rate,

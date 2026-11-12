@@ -16,6 +16,7 @@ import { addBillRate, createInvoice, previewInvoiceRun } from "../actions";
 type Preview = {
   period: string;
   status: string;
+  isTest: boolean;
   clients: { clientId: string; clientName: string; people: number; hours: string; unconfirmedLines: number; rate: string | null; total: string | null; existing: number }[];
   noClient: string[];
   noHours: string[];
@@ -83,6 +84,7 @@ function NewInvoiceForm({ runs }: { runs: RunOption[] }) {
       {loading ? <p className="text-sm text-muted-foreground">Looking up the hours...</p> : null}
       {preview ? (
         <>
+          {preview.isTest ? <Alert variant="warning">This is a test run. The invoice will be numbered TEST and stamped TEST, and must not be sent to a client.</Alert> : null}
           {preview.status === "draft" ? <Alert variant="warning">This pay run is still a draft. The invoice will say DRAFT.</Alert> : null}
           {preview.clients.length === 0 ? (
             <Alert variant="muted">

@@ -79,10 +79,15 @@ export const payRuns = payroll
         .references(() => users.id),
       submittedBy: uuid("submitted_by").references(() => users.id),
       decidedBy: uuid("decided_by").references(() => users.id),
+      /** A practice run: it does not take the period of a real run, never reaches a person's statements, and can be archived once approved. */
+      isTest: boolean("is_test").notNull().default(false),
+      /** Set only on a test run (a trigger refuses it on a real one). An archived run is hidden from the lists but stays on record. */
+      archivedAt: timestamp("archived_at", { withTimezone: true }),
+      archivedBy: uuid("archived_by").references(() => users.id),
       createdAt: createdAt(),
     },
     (t) => [
-      uniqueIndex("pay_runs_period_idx").on(t.periodStart, t.periodEnd).where(sql`${t.status} <> 'cancelled'`),
+      uniqueIndex("pay_runs_period_idx").on(t.periodStart, t.periodEnd).where(sql`${t.status} <> 'cancelled' and not ${t.isTest}`),
       check("pay_runs_status_chk", sql`${t.status} in ('draft','in_review','approved','paid','cancelled')`),
       check("pay_runs_period_chk", sql`${t.periodEnd} >= ${t.periodStart}`),
     ],

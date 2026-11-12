@@ -18,6 +18,7 @@ const BAD_REQUEST = "Check the request and try again.";
 type RunPreviewView = {
   period: string;
   status: string;
+  isTest: boolean;
   clients: { clientId: string; clientName: string; people: number; hours: string; unconfirmedLines: number; rate: string | null; total: string | null; existing: number }[];
   noClient: string[];
   noHours: string[];
@@ -36,6 +37,7 @@ export async function previewInvoiceRun(input: unknown): Promise<ActionResult<Ru
     const data: RunPreviewView = {
       period: `${preview.run.periodStart} to ${preview.run.periodEnd}`,
       status: preview.run.status,
+      isTest: preview.run.isTest,
       clients: preview.clients.map((c) => ({
         clientId: c.clientId,
         clientName: c.clientName,

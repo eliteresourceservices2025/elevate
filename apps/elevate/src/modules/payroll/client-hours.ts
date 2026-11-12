@@ -26,14 +26,19 @@ export type ClientHoursRow = {
 };
 
 export type RunClientHours = {
-  run: { id: string; periodStart: string; periodEnd: string; status: string };
+  run: { id: string; periodStart: string; periodEnd: string; status: string; isTest: boolean; archived: boolean };
   rows: ClientHoursRow[];
 };
 
 /** Client payroll hours for each live line of a run, or null when there is no such run. A line with no hours entered has 0. */
 export async function clientHoursForRun(executor: Executor, runId: string): Promise<RunClientHours | null> {
-  const [run] = await executor.select({ id: payRuns.id, periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, status: payRuns.status }).from(payRuns).where(eq(payRuns.id, runId)).limit(1);
-  if (!run) return null;
+  const [found] = await executor
+    .select({ id: payRuns.id, periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, status: payRuns.status, isTest: payRuns.isTest, archivedAt: payRuns.archivedAt })
+    .from(payRuns)
+    .where(eq(payRuns.id, runId))
+    .limit(1);
+  if (!found) return null;
+  const run = { id: found.id, periodStart: found.periodStart, periodEnd: found.periodEnd, status: found.status, isTest: found.isTest, archived: found.archivedAt !== null };
 
   const lines = await executor
     .select({

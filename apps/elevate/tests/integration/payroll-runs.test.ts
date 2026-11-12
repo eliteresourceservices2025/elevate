@@ -127,7 +127,7 @@ describe("creating a run", () => {
     expect(run.settings_snapshot).toEqual(await settingsInForce(db, p.periodStart));
 
     const same = await createPayRun(p);
-    expect(same).toEqual({ ok: false, error: `There is already a pay run for ${p.periodStart} to ${p.periodEnd}.` });
+    expect(same).toMatchObject({ ok: false, error: expect.stringContaining(`There is already a pay run for ${p.periodStart} to ${p.periodEnd}. To repeat the cycle`) });
     // Pay is always half a month, so only a cutoff is accepted: anything else (overlapping or not, a whole month, a week, a cutoff cut
     // short or run long) is refused before anything is written. Cutoffs tile the calendar, so two of them never overlap.
     for (const [s, e] of [

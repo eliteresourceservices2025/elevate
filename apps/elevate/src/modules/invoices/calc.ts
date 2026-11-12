@@ -69,9 +69,9 @@ export function rateInForce<T extends { effectiveFrom: string; createdAt: Date }
   return best;
 }
 
-/** INV-2031-0007, or INV-2031-0007-R2 for the second invoice for the same run and client. */
-export function invoiceNumber(year: number, seq: number, revision = 1): string {
-  const base = `INV-${year}-${String(seq).padStart(4, "0")}`;
+/** INV-2031-0007, or INV-2031-0007-R2 for the second invoice for the same run and client. An invoice made from a test run is TEST-2031-0007 (its own series). */
+export function invoiceNumber(year: number, seq: number, revision = 1, test = false): string {
+  const base = `${test ? "TEST" : "INV"}-${year}-${String(seq).padStart(4, "0")}`;
   return revision > 1 ? `${base}-R${revision}` : base;
 }
 
@@ -81,4 +81,5 @@ export const INVOICE_LABELS = {
   currency: "USD",
   draftNote: "DRAFT: made from a pay run that is still a draft. Hours may still change.",
   draftBadge: "Draft",
+  testNote: "TEST: made from a test run. This is not a real invoice and must not be sent to a client.",
 } as const;

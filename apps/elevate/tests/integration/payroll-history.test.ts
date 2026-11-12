@@ -43,6 +43,7 @@ const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const actions = await import("@/modules/payroll/actions");
 const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = actions;
+const { markRunAsTest, archivePayRun, restorePayRun } = actions;
 const { updateRunPeople, removePersonFromRun, restorePersonToRun, applyJibbleTimesheet, confirmAllSuggestions } = actions;
 const { saveTimesheetUpload } = await import("@/modules/payroll/timesheet-import");
 const { refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun, exportRemitlyList, markPaid } = actions;
@@ -272,6 +273,11 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     ok(await createPayLine({ employeeId: empB, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: q.periodStart, endsOn: q.periodEnd, monthly: "20,000" }), "create draft line");
     const second = ok(await createPayRun({ periodStart: q.periodStart, periodEnd: q.periodEnd }), "create draft run");
     draftRunId = (second as { data: { runId: string } }).data.runId;
+    // The same draft is marked as a test run, archived, restored and made a real run again before it is cancelled.
+    ok(await markRunAsTest({ runId: draftRunId, test: true, reason: reasonOf(5) }), "mark test");
+    ok(await archivePayRun({ runId: draftRunId, reason: reasonOf(5) }), "archive");
+    ok(await restorePayRun({ runId: draftRunId }), "restore");
+    ok(await markRunAsTest({ runId: draftRunId, test: false, reason: reasonOf(5) }), "mark real");
     ok(await cancelPayRun({ runId: draftRunId, reason: reasonOf(5) }), "cancel");
 
     // Only this cycle's rows: written by this file's own accounts, about this cycle's runs or about no run (access, lines, settings).
@@ -389,7 +395,7 @@ describe("filters", () => {
     expect(mine.total).toBeGreaterThan(5);
     expect(mine.rows.every((x) => x.runLabel === "2030-10-16 to 2030-10-31")).toBe(true);
     const cancelled = await all({ runId: draftRunId });
-    expect(cancelled.rows.map((x) => x.action).sort()).toEqual(["run_cancelled", "run_created"]);
+    expect(cancelled.rows.map((x) => x.action).sort()).toEqual(["run_archived", "run_cancelled", "run_created", "run_marked_real", "run_marked_test", "run_restored"]);
     expect((await all()).total).toBeGreaterThan(mine.total);
   });
 

@@ -57,7 +57,7 @@ const MAX_PERIOD_MS = 30 * 86_400_000; // 31 days, both ends counted
 const dayMs = (d: string) => Date.parse(`${d}T00:00:00Z`);
 
 export const createPayRunSchema = z
-  .object({ periodStart: isoDate, periodEnd: isoDate })
+  .object({ periodStart: isoDate, periodEnd: isoDate, /** A practice run: it may repeat a period that already has a run. */ test: z.boolean().optional() })
   .refine((v) => v.periodEnd >= v.periodStart, { message: "The period can't end before it starts", path: ["periodEnd"] })
   .refine((v) => dayMs(v.periodEnd) - dayMs(v.periodStart) <= MAX_PERIOD_MS, { message: "A pay period is at most 31 days", path: ["periodEnd"] });
 
@@ -91,6 +91,12 @@ export const savePayItemSchema = z
 export const dismissPayItemSchema = z.object({ runId: uuid, itemId: uuid, reason: optionalReason });
 
 export const cancelPayRunSchema = z.object({ runId: uuid, reason });
+
+export const markRunTestSchema = z.object({ runId: uuid, test: z.boolean(), reason });
+
+export const archiveRunSchema = z.object({ runId: uuid, reason });
+
+export const restoreRunSchema = z.object({ runId: uuid });
 
 export const confirmRunLineSchema = z.object({ runLineId: uuid });
 

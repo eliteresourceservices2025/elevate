@@ -182,6 +182,13 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       break;
     case "run_line_restored":
       break;
+    case "run_marked_test":
+    case "run_marked_real":
+    case "run_archived":
+      facts.push(...fact(H.reason, detail.reason));
+      break;
+    case "run_restored":
+      break;
     case "timesheet_imported":
       facts.push(...fact(H.membersMatched, detail.members), ...fact(H.suggestionsWritten, detail.written), ...fact(H.keptAsTyped, detail.kept));
       break;

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, date, index, integer, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { ops } from "@/modules/audit/schema";
 import { users } from "@/modules/core/schema";
 import { clients } from "@/modules/people/schema";
@@ -48,6 +48,8 @@ export const invoices = ops
         .notNull()
         .references(() => clients.id),
       runStatus: text("run_status").notNull(),
+      /** Made from a test run: numbered TEST-..., stamped TEST, and counted in its own series so real numbers never skip. */
+      isTest: boolean("is_test").notNull().default(false),
       issuedOn: date("issued_on").notNull(),
       payloadEnc: text("payload_enc").notNull(),
       createdBy: uuid("created_by")
