@@ -69,10 +69,10 @@ function ExistingItem({ runId, runLineId, item }: { runId: string; runLineId: st
 
 type CorrectableRun = { id: string; label: string };
 
-function ItemForm({ runId, line, correctableRuns }: { runId: string; line: WorksheetLine; correctableRuns: CorrectableRun[] }) {
+function ItemForm({ runId, line, correctableRuns, initialType }: { runId: string; line: WorksheetLine; correctableRuns: CorrectableRun[]; initialType?: PayItemType }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
-  const [type, setType] = useState<PayItemType>("late_minutes");
+  const [type, setType] = useState<PayItemType>(initialType ?? "late_minutes");
   const itemized = isItemized(type);
   // An itemized type (allowance, reimbursement, bonus, adjustment) can have many named lines, so there is no single current one.
   const current = itemized ? undefined : line.items.find((i) => i.type === type && i.state !== "dismissed");
@@ -181,10 +181,10 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
 
 type Controlled = { open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean };
 
-export function ItemDialog({ runId, line, correctableRuns = [], open, onOpenChange, hideTrigger }: { runId: string; line: WorksheetLine; correctableRuns?: CorrectableRun[] } & Controlled) {
+export function ItemDialog({ runId, line, correctableRuns = [], open, onOpenChange, hideTrigger, initialType }: { runId: string; line: WorksheetLine; correctableRuns?: CorrectableRun[]; initialType?: PayItemType } & Controlled) {
   return (
     <FormDialog label="Amounts" title={`Amounts for ${line.name}`} description="Saving recomputes this person's pay and asks for a new check of the line." variant="outline" triggerSize="sm" size="lg" disabled={line.unreadable} hint="This line can't be read, so it can't be changed from here." open={open} onOpenChange={onOpenChange} hideTrigger={hideTrigger}>
-      <ItemForm runId={runId} line={line} correctableRuns={correctableRuns} />
+      <ItemForm runId={runId} line={line} correctableRuns={correctableRuns} initialType={initialType} />
     </FormDialog>
   );
 }

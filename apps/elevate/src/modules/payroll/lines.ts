@@ -11,6 +11,28 @@ export type LineVersion = {
 
 export type ResolvedLine<V extends LineVersion = LineVersion> = { version: V; flags: LineFlag[] };
 
+/** The dates behind a line's part-period flags, for wording like "Starts 6 Nov". Each is null when that flag does not apply. */
+export type FlagDates = { startsOn: string | null; endsOn: string | null; rateChangeOn: string | null };
+
+/**
+ * The dates the flags of `resolveLines` are about, for one line: when it starts (when its paid version begins after the period began), the
+ * first new rate dated inside the period (after the paid version), and when it ends (when its last day falls before the period's last day).
+ * `paidFrom` is the effective date of the version the run pays.
+ */
+export function flagDatesOf(versions: LineVersion[], paidFrom: string, period: { start: string; end: string }): FlagDates {
+  const lastDay = lineLastDay(versions);
+  const live = lastDay === null ? versions : versions.filter((v) => v.effectiveFrom <= lastDay);
+  const later = live
+    .map((v) => v.effectiveFrom)
+    .filter((d) => d > paidFrom && d > period.start && d <= period.end)
+    .sort();
+  return {
+    startsOn: paidFrom > period.start ? paidFrom : null,
+    rateChangeOn: later[0] ?? null,
+    endsOn: lastDay !== null && lastDay >= period.start && lastDay < period.end ? lastDay : null,
+  };
+}
+
 /** The line's last day: the earliest end date on any of its versions, or null while it has not ended. */
 export function lineLastDay(versions: LineVersion[]): string | null {
   let last: string | null = null;

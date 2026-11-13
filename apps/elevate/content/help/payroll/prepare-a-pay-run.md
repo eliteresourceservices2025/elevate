@@ -76,6 +76,14 @@ The new run shows notes above the worksheet, then one row for each person. Nothi
 - For someone paid for part of the cutoff, enter the days or hours they worked. These can never pay more than a full cutoff; if they do, check what you typed (for example "15" instead of "1.5").
 - Open **Actions** on a line and choose **Mark as checked** when you have read it. It records that a Preparer looked at it. Any change to a line asks for a new check. If you are paid through payroll yourself, **another Preparer** must check **your own** line, and you cannot send the run until they do. Changing your line clears that check.
 
+# The checklist and the flags on a row
+
+- **The checklist** above the sheet lists what is left to do, one row for each kind of problem (for example "No client payroll hours, 58 people"). Each row says what it means and what to do. Click **Show who** to show only those people in the sheet, or use the chips above the sheet (**All**, **Needs attention**, **Not yet checked**, and the main problems). Click **See every note by person** for the full list, with **Go to this line** beside each name.
+- **The small pill under a name** says why that line is flagged, with the date: **Starts 6 Nov**, **Ends 12 Nov**, **New rate 10 Nov**, **Has left**. Click it for a plain explanation and the fix.
+  - **Starts or ends part-way.** ELEVATE pays a full cutoff unless you tell it how many days the person worked. Click **Use 8 days** (the weekdays between the dates, up to a full cutoff) or **Enter different days**. The suggestion doesn't count holidays or the person's own schedule, so check it. If the date itself is wrong, fix it on the **Rates** tab and then choose **Update people**.
+  - **New rate.** ELEVATE pays the rate that was in force on the first day of the cutoff for the whole cutoff. The new rate counts from the next cutoff. If it should count sooner, click **Add an adjustment** for the difference.
+  - **Has left.** Check the person should still be paid for this cutoff. If not, open **Actions** on their row and choose **Remove from this run**.
+
 # Practice runs (test runs)
 
 While you are still practising, mark a run as a **test run** so you can repeat the same pay cycle and tidy up afterwards.
