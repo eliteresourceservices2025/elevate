@@ -17,6 +17,7 @@ import { lineLastDay } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
+import { releaseRun } from "./statements";
 import { archiveRun, cancelRun, confirmLine, createRun, dismissItem, removeRunLine, restoreRun, restoreRunLine, saveItem, setRunTest, syncRunPeople } from "./runs";
 import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import { readJibbleTimesheet } from "./jibble/timesheet";
@@ -48,6 +49,7 @@ import {
   dismissPayItemSchema,
   endPayLineSchema,
   markRunTestSchema,
+  releaseStatementsSchema,
   restoreRunSchema,
   savePayItemSchema,
   savePaySettingsSchema,
@@ -408,6 +410,25 @@ export async function restorePayRun(input: unknown): Promise<ActionResult> {
   });
 }
 
+/** Releases a real, approved run's contractor payment statements to the people on it (Approvers). Once; never undone. Notices carry no amount. */
+export async function releaseStatements(input: unknown): Promise<ActionResult<{ people: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.release_statements");
+
+    const parsed = releaseStatementsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const released = await db.transaction((tx) => releaseRun(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    revalidatePath("/payroll/statements");
+    revalidatePath(`/payroll/statements/${parsed.data.runId}`);
+    revalidatePath("/my-pay");
+    return { ok: true, data: released } as const;
+  });
+}
+
 /** A Preparer other than the line's owner checks the line. Any later change to the line clears the confirmation. */
 export async function confirmRunLine(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
@@ -476,8 +497,8 @@ export async function approveRun(input: unknown): Promise<ActionResult> {
   });
 }
 
-/** The Remitly list (person, alias, pesos; never bank details) for an approved run. Audited and rate limited. */
-export async function exportRemitlyList(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number }>> {
+/** The Remitly list (person, alias, pesos and payout details: full for a real run, masked for a test run) for an approved run. Preparers and Approvers. Audited and rate limited. */
+export async function exportRemitlyList(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number; missingDetails: number; test: boolean }>> {
   const actor = await requireUser();
 
   return runAction(async () => {

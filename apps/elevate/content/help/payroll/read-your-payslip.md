@@ -1,6 +1,6 @@
 ---
 title: Read your contractor payment statement
-summary: Open My payment statements to see your contractor payment statements and download them as a PDF once a pay run is paid.
+summary: Open My payment statements to see your contractor payment statements and download them as a PDF once your pay run has been released to you.
 category: payroll
 audience: all
 order: 4
@@ -11,7 +11,7 @@ Your contractor payment statement shows how your pay for a pay period was worked
 
 # When it appears
 
-A statement appears after the whole pay run it belongs to has been paid. You get a notice that says **Your contractor payment statement is ready**. Before that, **My payment statements** shows **No statements yet**.
+A statement appears when the pay run it belongs to has been approved and an Approver has released it to the contractors. You get a notice that says **Your contractor payment statement is ready**. Before that, **My payment statements** shows **No statements yet**.
 
 ![My payment statements before a pay run is paid: it says there are no statements yet.](help:read-your-payslip/01-no-payslip-yet.png)
 
@@ -51,7 +51,7 @@ Write to HR and say which pay period. Do not send the PDF by chat or email: it h
 
 # Common mistakes
 
-- **Looking for a statement before payment is done.** It appears when everyone on the run is paid.
+- **Looking for a statement that is not there yet.** It appears when the pay run is approved and released to you, which can be before or after you are paid.
 - **Sharing the PDF.** Keep it private.
 
 # Try it yourself

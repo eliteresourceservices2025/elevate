@@ -28,6 +28,7 @@ export function InvoiceDocument({ view }: { view: InvoiceText }) {
         </div>
       </header>
 
+      {view.stateNote ? <Alert variant="destructive">{view.stateNote}</Alert> : null}
       {view.isTest ? <Alert variant="destructive">{view.testNote}</Alert> : null}
       {view.isDraft ? <Alert variant="warning">{view.draftNote}</Alert> : null}
 

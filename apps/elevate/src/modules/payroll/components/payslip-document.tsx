@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/alert";
 import { PAYSLIP_LABELS as L } from "../constants";
 import type { PayslipLineView, PayslipRowView, PayslipView } from "../payslip";
 
@@ -108,6 +109,8 @@ export function PayslipDocument({ view }: { view: PayslipView }) {
           </p>
         </div>
       </header>
+
+      {view.isTest ? <Alert variant="destructive">{L.testNote}</Alert> : null}
 
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Fact label={L.preparedFor} value={view.name} />

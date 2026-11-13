@@ -6,8 +6,8 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { formatDollars, formatHours } from "./calc";
-import { addBillRateIn, createInvoiceIn, previewRun } from "./service";
-import { addBillRateSchema, createInvoiceSchema, previewInvoiceRunSchema } from "./validators";
+import { addBillRateIn, archiveInvoiceIn, createInvoiceIn, previewRun, restoreInvoiceIn, voidInvoiceIn } from "./service";
+import { addBillRateSchema, archiveInvoiceSchema, createInvoiceSchema, previewInvoiceRunSchema, restoreInvoiceSchema, voidInvoiceSchema } from "./validators";
 
 // Every action: requireUser() first, then authorize() inside runAction, then Zod. Writes and their audit rows share one transaction.
 // Helpers that take the acting user live in service.ts.
@@ -19,7 +19,7 @@ type RunPreviewView = {
   period: string;
   status: string;
   isTest: boolean;
-  clients: { clientId: string; clientName: string; people: number; hours: string; unconfirmedLines: number; rate: string | null; total: string | null; existing: number }[];
+  clients: { clientId: string; clientName: string; people: number; hours: string; unconfirmedLines: number; rate: string | null; ownRates: number; missingRates: string[]; total: string | null; existing: number }[];
   noClient: string[];
   noHours: string[];
 };
@@ -45,6 +45,8 @@ export async function previewInvoiceRun(input: unknown): Promise<ActionResult<Ru
         hours: formatHours(c.hoursHundredths),
         unconfirmedLines: c.unconfirmedLines,
         rate: c.rateCents === null ? null : formatDollars(c.rateCents),
+        ownRates: c.ownRates,
+        missingRates: c.missingRates,
         total: c.totalCents === null ? null : formatDollars(c.totalCents),
         existing: c.existing,
       })),
@@ -77,6 +79,51 @@ export async function addBillRate(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return fail("Check the client, the start date and the rate (in dollars), then try again.");
     await db.transaction((tx) => addBillRateIn(tx, actor, parsed.data));
     revalidatePath("/invoices/rates");
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Archives a TEST invoice (it leaves the list and stays on record). A real invoice is voided instead. */
+export async function archiveInvoice(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "invoices.manage");
+    const parsed = archiveInvoiceSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    await db.transaction((tx) => archiveInvoiceIn(tx, actor, parsed.data));
+    revalidatePath("/invoices");
+    revalidatePath(`/invoices/${parsed.data.invoiceId}`);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Brings an archived test invoice back into the list. */
+export async function restoreInvoice(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "invoices.manage");
+    const parsed = restoreInvoiceSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    await db.transaction((tx) => restoreInvoiceIn(tx, actor, parsed.data));
+    revalidatePath("/invoices");
+    revalidatePath(`/invoices/${parsed.data.invoiceId}`);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Voids a REAL invoice with a reason: it is kept, stamped VOID and hidden from the default list. */
+export async function voidInvoice(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "invoices.manage");
+    const parsed = voidInvoiceSchema.safeParse(input);
+    if (!parsed.success) return fail("Give a reason for voiding this invoice.");
+    await db.transaction((tx) => voidInvoiceIn(tx, actor, parsed.data));
+    revalidatePath("/invoices");
+    revalidatePath(`/invoices/${parsed.data.invoiceId}`);
     return { ok: true, data: undefined } as const;
   });
 }

@@ -35,7 +35,7 @@ function NewRunForm({ suggestedStart, suggestedEnd }: { suggestedStart: string; 
       }}
     >
       <p className="text-sm text-muted-foreground">
-        A run covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month. One line is made for each pay line in force during it.
+        A run covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month (a test run can cover any dates). One line is made for each pay line in force during it.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
@@ -52,6 +52,7 @@ function NewRunForm({ suggestedStart, suggestedEnd }: { suggestedStart: string; 
         <div>
           <Label htmlFor="run-test">This is a test run</Label>
           <p className="text-xs text-muted-foreground">A practice run can repeat a period that already has a run, and nobody sees a payment statement from it. You can archive it later.</p>
+          {test ? <p className="mt-1 text-xs text-muted-foreground">A test run can cover any dates, up to 31 days: part of a cutoff, or the dates of a Jibble file. Its base pay is still a full cutoff unless you enter the days worked as amounts.</p> : null}
         </div>
       </div>
       <Button type="submit" disabled={pending}>

@@ -83,7 +83,7 @@ Every change is written to the change history: who made it, when, the old and ne
 
 - **I am HR or a Super Admin and I cannot see Payroll.** That is on purpose. Ask a Super Admin to give you a level.
 - **Why can't I approve this run?** You prepared it, changed it, checked a line on it, or wrote a rate it uses. Another Approver must do it.
-- **Where is my statement?** Open **My payment statements**. It appears only after the whole pay run it belongs to is paid. Click **View** to read it on the page, or **Download PDF** to keep a copy.
+- **Where is my statement?** Open **My payment statements**. It appears when the pay run it belongs to has been approved and an Approver has released it to everyone. Click **View** to read it on the page, or **Download PDF** to keep a copy.
 - **Where did the dollar rate go?** There is none. Everything is in pesos, and the executive pays at the rate Remitly shows.
 
 # Try it yourself

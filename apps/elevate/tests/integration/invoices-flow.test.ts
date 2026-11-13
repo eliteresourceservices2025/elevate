@@ -17,7 +17,8 @@ const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const { createPayLine, createPayRun, cancelPayRun, savePayItem, archivePayRun } = await import("@/modules/payroll/actions");
 const { encryptItemValue } = await import("@/modules/payroll/service");
-const { createInvoice, previewInvoiceRun, addBillRate } = await import("@/modules/invoices/actions");
+const { createInvoice, previewInvoiceRun, addBillRate, archiveInvoice, restoreInvoice, voidInvoice } = await import("@/modules/invoices/actions");
+const { fieldCrypto } = await import("@/lib/crypto");
 const { getInvoice, listInvoices, getBillRates, listInvoiceableRuns } = await import("@/modules/invoices/queries");
 
 type Row = Record<string, unknown>;
@@ -182,9 +183,14 @@ describe("making an invoice", () => {
     if (!third.ok) throw new Error(third.error);
     expect((await invoiceRow(third.data.invoiceId)).number).toBe(`${row.number}-R3`);
 
+    // Each version replaces the one before, so the default list shows only the newest; every version is still there under "show all".
     const list = await as(hr, () => listInvoices({ page: 1, pageSize: 100 }));
-    expect(list.rows.map((r) => r.id)).toEqual(expect.arrayContaining([made.data.invoiceId, rev.data.invoiceId]));
-    expect(list.rows.find((r) => r.id === made.data.invoiceId)?.runStatus).toBe("draft");
+    expect(list.rows.map((r) => r.id)).toContain(third.data.invoiceId);
+    expect(list.rows.map((r) => r.id)).not.toContain(made.data.invoiceId);
+    expect(list.rows.map((r) => r.id)).not.toContain(rev.data.invoiceId);
+    const all = await as(hr, () => listInvoices({ page: 1, pageSize: 100 }, { all: true }));
+    expect(all.rows.map((r) => r.id)).toEqual(expect.arrayContaining([made.data.invoiceId, rev.data.invoiceId, third.data.invoiceId]));
+    expect(all.rows.find((r) => r.id === made.data.invoiceId)?.runStatus).toBe("draft");
   });
 
   it("works for a person with no payroll level and reads no pay: the audit rows hold ids and counts only", async () => {
@@ -365,5 +371,210 @@ describe("test runs", () => {
     expect((await as(hr, () => listInvoiceableRuns())).some((r) => r.id === testRun)).toBe(false);
     const refused = await as(hr, () => createInvoice({ runId: testRun, clientId: client }));
     expect(refused).toMatchObject({ ok: false, error: expect.stringMatching(/archived/) });
+  });
+});
+
+// ---- a rate for each person, and what can be done with an invoice afterwards (2031 second halves, months 1 to 11) ----
+// Last in the file for the same reason as the test run block above: these people have open-ended pay lines.
+
+describe("a billing rate for a person", () => {
+  const ratesOn = (clientId: string, employeeId: string | null) => rows<{ employee_id: string | null }>(sql`select employee_id from ops.client_bill_rates where client_id = ${clientId} and employee_id ${employeeId ? sql`= ${employeeId}` : sql`is null`}`);
+
+  it("bills a person at their own rate and everyone else at the standard rate, with each line showing its rate", async () => {
+    const client = await newClient();
+    const ana = await person("Ana");
+    const ben = await person("Ben");
+    for (const e of [ana, ben]) await giveLine(e, { clientId: client });
+    const p = period(1, 2);
+    const runId = await newRun(p);
+    await setHours(runId, ana, "10");
+    await setHours(runId, ben, "10");
+    await rate(client, "10.00"); // the standard rate
+    expect(await as(hr, () => addBillRate({ clientId: client, employeeId: ana, effectiveFrom: "2020-01-01", rate: "15.00" }))).toMatchObject({ ok: true });
+    // A rate of Ben's own that starts in the far future changes nothing yet.
+    expect(await as(hr, () => addBillRate({ clientId: client, employeeId: ben, effectiveFrom: "2099-01-01", rate: "99.00" }))).toMatchObject({ ok: true });
+
+    const preview = await as(hr, () => previewInvoiceRun({ runId }));
+    if (!preview.ok) throw new Error("preview failed");
+    expect(preview.data.clients.find((c) => c.clientId === client)).toMatchObject({ people: 2, rate: "10.00", ownRates: 1, missingRates: [], total: "250.00" });
+
+    const made = await as(hr, () => createInvoice({ runId, clientId: client }));
+    if (!made.ok) throw new Error(made.error);
+    const view = (await as(hr, () => getInvoice(made.data.invoiceId)))!;
+    const byName = (n: string) => view.lines.find((l) => l.name.startsWith(n))!;
+    expect([byName("Ana").rateCents, byName("Ana").amountCents]).toEqual([1500n, 15000n]);
+    expect([byName("Ben").rateCents, byName("Ben").amountCents]).toEqual([1000n, 10000n]);
+    expect(view.totalCents).toBe(25000n);
+    expect(view.rateCents).toBe(1000n); // the header holds the standard rate
+  });
+
+  it("refuses an invoice, naming them, when a person has neither a rate of their own nor a standard rate", async () => {
+    const client = await newClient();
+    const ana = await person("Ana");
+    const ben = await person("Ben");
+    for (const e of [ana, ben]) await giveLine(e, { clientId: client });
+    const runId = await newRun(period(2, 2));
+    await setHours(runId, ana, "10");
+    await setHours(runId, ben, "10");
+    expect(await as(hr, () => addBillRate({ clientId: client, employeeId: ana, effectiveFrom: "2020-01-01", rate: "15.00" }))).toMatchObject({ ok: true });
+
+    const preview = await as(hr, () => previewInvoiceRun({ runId }));
+    if (!preview.ok) throw new Error("preview failed");
+    const c = preview.data.clients.find((x) => x.clientId === client)!;
+    expect(c.missingRates).toHaveLength(1);
+    expect(c.missingRates[0]).toContain("Ben");
+    expect(c.total).toBeNull();
+    const refused = await as(hr, () => createInvoice({ runId, clientId: client }));
+    expect(refused).toMatchObject({ ok: false, error: expect.stringMatching(/No billing rate applies to .*Ben/) });
+    // A standard rate fixes it, and Ana keeps her own.
+    await rate(client, "10.00");
+    expect(await as(hr, () => createInvoice({ runId, clientId: client }))).toMatchObject({ ok: true });
+  });
+
+  it("checks the person, keeps the history, and audits ids only", async () => {
+    const client = await newClient();
+    const ana = await person("Ana");
+    expect(await as(hr, () => addBillRate({ clientId: client, employeeId: randomUUID(), effectiveFrom: "2031-01-01", rate: "15.00" }))).toMatchObject({ ok: false, error: "That person was not found." });
+    expect(await as(hr, () => addBillRate({ clientId: client, employeeId: "nope", effectiveFrom: "2031-01-01", rate: "15.00" }))).toMatchObject({ ok: false });
+    const added = await as(hr, () => addBillRate({ clientId: client, employeeId: ana, effectiveFrom: "2020-01-01", rate: "15.55" }));
+    expect(added.ok).toBe(true);
+    expect(await ratesOn(client, ana)).toHaveLength(1);
+    expect(await ratesOn(client, null)).toHaveLength(0);
+    const [audit] = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where action = 'invoice.rate.add' and metadata::text like ${`%${ana}%`}`);
+    expect(JSON.stringify(audit.metadata)).not.toContain("15.55");
+    // The rates page shows it as a rate of a person, and offers the person to add rates for (they have a pay line for this client).
+    await giveLine(ana, { clientId: client });
+    const page = await as(hr, () => getBillRates({ page: 1, pageSize: 500 }));
+    expect(page.personRates.find((r) => r.clientId === client && r.employeeId === ana)).toMatchObject({ currentCents: 1555n });
+    expect(page.peopleByClient[client].map((x) => x.id)).toContain(ana);
+    expect(page.history.find((h) => h.personName?.includes("Ana"))).toBeTruthy();
+    expect(page.overview.find((o) => o.clientId === client)?.currentCents).toBeNull(); // no standard rate: the person's rate is not the client's
+  });
+
+  it("reads an invoice made before each line had a rate as the one rate in its header", async () => {
+    const client = await newClient();
+    const ana = await person("Ana");
+    await giveLine(ana, { clientId: client });
+    const runId = await newRun(period(3, 2));
+    const id = randomUUID();
+    const legacy = {
+      clientName: "Legacy Clinic",
+      periodStart: period(3, 2).periodStart,
+      periodEnd: period(3, 2).periodEnd,
+      rateCents: "1235",
+      lines: [{ name: "Ana Testcruz", alias: null, hoursHundredths: "1000", amountCents: "12350" }],
+      totalHoursHundredths: "1000",
+      totalCents: "12350",
+      unconfirmedLines: 0,
+    };
+    await db.execute(sql`insert into ops.invoices (id, number, year, seq, revision, run_id, client_id, run_status, issued_on, payload_enc, created_by)
+      values (${id}, ${uniq("INV-LEGACY-")}, 2031, 9000, 1, ${runId}, ${client}, 'draft', '2031-03-20', ${fieldCrypto().encrypt(JSON.stringify(legacy), `invoice:${id}`)}, ${hr.id})`);
+    const view = (await as(hr, () => getInvoice(id)))!;
+    expect(view.lines[0].rateCents).toBe(1235n);
+    expect(view.state).toBe("active");
+    expect(view.isTest).toBe(false);
+  });
+});
+
+describe("what happens to an invoice after it is made", () => {
+  async function invoiceFor(month: number, tests = false) {
+    const client = await newClient();
+    const ana = await person("Ana");
+    await giveLine(ana, { clientId: client });
+    await rate(client, "10.00");
+    const p = period(month, 2);
+    let runId: string;
+    if (tests) {
+      const made = await as(preparer, () => createPayRun({ ...p, test: true }));
+      if (!made.ok) throw new Error(made.error);
+      runId = made.data.runId;
+    } else runId = await newRun(p);
+    await setHours(runId, ana, "10");
+    const r = await as(hr, () => createInvoice({ runId, clientId: client }));
+    if (!r.ok) throw new Error(r.error);
+    return { runId, client, ...r.data };
+  }
+  const stateOf = async (id: string) => (await as(hr, () => getInvoice(id)))!;
+
+  it("a corrected version replaces the earlier one: its number is -R2, the old one is marked replaced, and the default list shows only the live one", async () => {
+    const first = await invoiceFor(4);
+    const second = await as(hr, () => createInvoice({ runId: first.runId, clientId: first.client }));
+    if (!second.ok) throw new Error(second.error);
+    expect(second.data.number).toBe(`${first.number}-R2`);
+    const old = await stateOf(first.invoiceId);
+    expect(old).toMatchObject({ state: "superseded", replacedByNumber: second.data.number });
+    expect((await stateOf(second.data.invoiceId)).state).toBe("active");
+
+    const third = await as(hr, () => createInvoice({ runId: first.runId, clientId: first.client }));
+    if (!third.ok) throw new Error(third.error);
+    expect((await stateOf(second.data.invoiceId)).state).toBe("superseded"); // each new version replaces the one before
+    expect((await stateOf(first.invoiceId)).replacedByNumber).toBe(second.data.number); // and the first still names its own replacement
+
+    const live = await as(hr, () => listInvoices({ page: 1, pageSize: 500 }));
+    expect(live.rows.map((r) => r.id)).toContain(third.data.invoiceId);
+    expect(live.rows.map((r) => r.id)).not.toContain(first.invoiceId);
+    expect(live.hiddenCount).toBeGreaterThanOrEqual(2);
+    const everything = await as(hr, () => listInvoices({ page: 1, pageSize: 500 }, { all: true }));
+    expect(everything.rows.find((r) => r.id === first.invoiceId)).toMatchObject({ state: "superseded" });
+    expect(everything.showingAll).toBe(true);
+    const [audit] = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where target_id = ${second.data.invoiceId} and action = 'invoice.create'`);
+    expect(JSON.stringify(audit.metadata)).toContain(first.invoiceId); // which one it replaced, as an id
+  });
+
+  it("a real invoice is voided with a reason, never archived: kept, stamped, hidden from the default list, number never reused", async () => {
+    const real = await invoiceFor(5);
+    expect(await as(hr, () => archiveInvoice({ invoiceId: real.invoiceId }))).toMatchObject({ ok: false, error: expect.stringMatching(/Only a test invoice can be archived/) });
+    expect(await as(hr, () => voidInvoice({ invoiceId: real.invoiceId, reason: "   " }))).toMatchObject({ ok: false });
+    expect(await as(hr, () => voidInvoice({ invoiceId: real.invoiceId, reason: "Wrong client" }))).toMatchObject({ ok: true });
+    const voided = await stateOf(real.invoiceId);
+    expect(voided).toMatchObject({ state: "voided", stateReason: "Wrong client" });
+    expect(await as(hr, () => voidInvoice({ invoiceId: real.invoiceId, reason: "Again" }))).toMatchObject({ ok: false, error: "This invoice is already void." });
+    expect((await as(hr, () => listInvoices({ page: 1, pageSize: 500 }))).rows.some((r) => r.id === real.invoiceId)).toBe(false);
+    expect((await as(hr, () => listInvoices({ page: 1, pageSize: 500 }, { all: true }))).rows.find((r) => r.id === real.invoiceId)).toMatchObject({ state: "voided" });
+    // A new version for the same run and client takes the next -R number; the voided one stays voided (not "replaced").
+    const next = await as(hr, () => createInvoice({ runId: real.runId, clientId: real.client }));
+    expect(next.ok && next.data.number).toBe(`${real.number}-R2`);
+    expect((await stateOf(real.invoiceId)).state).toBe("voided");
+    // The reason is encrypted at rest and kept out of the audit row.
+    const [event] = await rows<{ reason_enc: string }>(sql`select reason_enc from ops.invoice_events where invoice_id = ${real.invoiceId} and kind = 'voided'`);
+    expect(event.reason_enc).not.toContain("Wrong client");
+    const audits = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where target_id = ${real.invoiceId} and action = 'invoice.void'`);
+    expect(JSON.stringify(audits)).not.toContain("Wrong client");
+  });
+
+  it("a test invoice is archived and restored, never voided, and a replaced or void invoice can't be archived", async () => {
+    const test = await invoiceFor(6, true);
+    expect(await as(hr, () => voidInvoice({ invoiceId: test.invoiceId, reason: "Practice" }))).toMatchObject({ ok: false, error: "A test invoice is archived, not voided." });
+    expect(await as(hr, () => restoreInvoice({ invoiceId: test.invoiceId }))).toMatchObject({ ok: false, error: "This invoice is not archived." });
+    expect(await as(hr, () => archiveInvoice({ invoiceId: test.invoiceId, reason: "Practice cycle done" }))).toMatchObject({ ok: true });
+    expect(await stateOf(test.invoiceId)).toMatchObject({ state: "archived", stateReason: "Practice cycle done", isTest: true });
+    expect(await as(hr, () => archiveInvoice({ invoiceId: test.invoiceId }))).toMatchObject({ ok: false, error: "This invoice is already archived." });
+    expect((await as(hr, () => listInvoices({ page: 1, pageSize: 500 }))).rows.some((r) => r.id === test.invoiceId)).toBe(false);
+    expect(await as(hr, () => restoreInvoice({ invoiceId: test.invoiceId }))).toMatchObject({ ok: true });
+    expect((await stateOf(test.invoiceId)).state).toBe("active");
+    expect((await as(hr, () => listInvoices({ page: 1, pageSize: 500 }))).rows.some((r) => r.id === test.invoiceId)).toBe(true);
+    // A replaced test invoice can't be archived (it is already out of the way).
+    const second = await as(hr, () => createInvoice({ runId: test.runId, clientId: test.client }));
+    expect(second.ok).toBe(true);
+    expect(await as(hr, () => archiveInvoice({ invoiceId: test.invoiceId }))).toMatchObject({ ok: false, error: expect.stringMatching(/no longer live/) });
+    // Unknown ids and bad input are refused.
+    expect(await as(hr, () => archiveInvoice({ invoiceId: randomUUID() }))).toMatchObject({ ok: false, error: "That invoice was not found." });
+    expect(await as(hr, () => archiveInvoice({ invoiceId: "nope" }))).toMatchObject({ ok: false });
+  });
+
+  it("is for HR Admin, Executive and Super Admin only, and the events can never be changed or removed", async () => {
+    const test = await invoiceFor(7, true);
+    for (const role of ROLE_SLUGS) {
+      if (["super_admin", "hr_admin", "executive"].includes(role)) continue;
+      const who = await account(role);
+      expect(await as(who, () => archiveInvoice({ invoiceId: test.invoiceId }))).toEqual({ ok: false, error: "You do not have access to do that." });
+      expect(await as(who, () => voidInvoice({ invoiceId: test.invoiceId, reason: "x" }))).toEqual({ ok: false, error: "You do not have access to do that." });
+    }
+    // A payroll level alone opens nothing here either.
+    expect(await as(preparer, () => archiveInvoice({ invoiceId: test.invoiceId }))).toEqual({ ok: false, error: "You do not have access to do that." });
+    expect(await as(executive, () => archiveInvoice({ invoiceId: test.invoiceId }))).toMatchObject({ ok: true });
+    await refused(db.execute(sql`update ops.invoice_events set kind = 'restored' where invoice_id = ${test.invoiceId}`));
+    await refused(db.execute(sql`delete from ops.invoice_events where invoice_id = ${test.invoiceId}`));
+    await refused(db.execute(sql`truncate ops.invoice_events`));
   });
 });

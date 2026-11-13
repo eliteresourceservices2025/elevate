@@ -256,6 +256,25 @@ export const payRunSignatures = payroll
   .enableRLS();
 
 /**
+ * Append-only. The moment an Approver released a run's contractor payment statements to the people on it (one row per run). A person sees
+ * their statement only when the run is a real run with a row here; nothing else makes a statement visible to them.
+ */
+export const payRunReleases = payroll
+  .table("pay_run_releases", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id")
+      .notNull()
+      .unique()
+      .references(() => payRuns.id),
+    releasedBy: uuid("released_by")
+      .notNull()
+      .references(() => users.id),
+    peopleCount: integer("people_count").notNull(),
+    releasedAt: timestamp("released_at", { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
+  })
+  .enableRLS();
+
+/**
  * The Jibble timesheet a Preparer uploaded to fill a draft run: one encrypted payload (member names and codes, and daily totals, never clock
  * times), wiped when it is used or discarded and after 14 days. One per run (a new upload replaces the old one).
  */

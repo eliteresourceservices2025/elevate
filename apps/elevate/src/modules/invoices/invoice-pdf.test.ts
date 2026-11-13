@@ -22,12 +22,15 @@ const view = (over: Partial<InvoiceView> = {}): InvoiceView => ({
   periodEnd: "2031-01-15",
   rateCents: 1235n,
   lines: [
-    { name: "Ana Testcruz", alias: "Front desk", hoursHundredths: 8650n, amountCents: 106828n },
-    { name: "Ben Testreyes", alias: null, hoursHundredths: 3333n, amountCents: 41163n },
+    { name: "Ana Testcruz", alias: "Front desk", hoursHundredths: 8650n, rateCents: 1235n, amountCents: 106828n },
+    { name: "Ben Testreyes", alias: null, hoursHundredths: 3333n, rateCents: 1235n, amountCents: 41163n },
   ],
   totalHoursHundredths: 11983n,
   totalCents: 147991n,
   unconfirmedLines: 0,
+  state: "active",
+  stateReason: null,
+  replacedByNumber: null,
   ...over,
 });
 
@@ -54,6 +57,35 @@ describe("invoice PDF", () => {
     expect(test).toContain("not a real invoice");
     const real = await textOf(await renderInvoicePdf(invoiceText(view())));
     expect(real).not.toContain("not a real invoice");
+  });
+
+  it("shows each line's own rate, and says the rate varies by person in the header", async () => {
+    const mixed = view({
+      lines: [
+        { name: "Ana Testcruz", alias: null, hoursHundredths: 1000n, rateCents: 1500n, amountCents: 15000n },
+        { name: "Ben Testreyes", alias: null, hoursHundredths: 1000n, rateCents: 1000n, amountCents: 10000n },
+      ],
+      totalHoursHundredths: 2000n,
+      totalCents: 25000n,
+    });
+    expect(invoiceText(mixed).rate).toBe("Varies by person");
+    expect(invoiceText(mixed).lines.map((l) => l.rate)).toEqual(["15.00", "10.00"]);
+    const text = await textOf(await renderInvoicePdf(invoiceText(mixed)));
+    expect(text).toContain("Varies by person");
+    expect(text).toContain("15.00");
+    // One rate for everyone keeps the plain header.
+    expect(invoiceText(view()).rate).toBe("12.35");
+  });
+
+  it("stamps VOID, ARCHIVED or REPLACED on an invoice that is no longer live, and nothing on a live one", async () => {
+    const stamped = async (over: Partial<InvoiceView>) => textOf(await renderInvoicePdf(invoiceText(view(over))));
+    expect(await stamped({ state: "voided" })).toContain("VOID");
+    expect(await stamped({ state: "archived", isTest: true })).toContain("ARCHIVED");
+    const replaced = await stamped({ state: "superseded", replacedByNumber: "INV-2031-0001-R2" });
+    expect(replaced).toContain("REPLACED");
+    expect(replaced).toContain("INV-2031-0001-R2");
+    const live = await stamped({});
+    expect(live).not.toMatch(/VOID|ARCHIVED|REPLACED/);
   });
 
   it("says DRAFT for a draft run and shows the unconfirmed note", async () => {

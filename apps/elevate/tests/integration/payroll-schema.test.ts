@@ -305,6 +305,7 @@ describe("row level security", () => {
       "pay_payments",
       "pay_run_items",
       "pay_run_lines",
+      "pay_run_releases",
       "pay_run_signatures",
       "pay_runs",
       "pay_settings",

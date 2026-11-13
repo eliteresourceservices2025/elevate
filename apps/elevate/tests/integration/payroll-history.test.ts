@@ -43,7 +43,7 @@ const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const actions = await import("@/modules/payroll/actions");
 const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = actions;
-const { markRunAsTest, archivePayRun, restorePayRun } = actions;
+const { markRunAsTest, archivePayRun, restorePayRun, releaseStatements } = actions;
 const { updateRunPeople, removePersonFromRun, restorePersonToRun, applyJibbleTimesheet, confirmAllSuggestions } = actions;
 const { saveTimesheetUpload } = await import("@/modules/payroll/timesheet-import");
 const { refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun, exportRemitlyList, markPaid } = actions;
@@ -261,6 +261,9 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     as(preparer);
     ok(await exportRemitlyList({ runId }), "export");
     for (const emp of [empA, empB]) ok(await markPaid({ runId, employeeId: emp, reference: `RMT-HIST-${uniq("r")}`, paidOn: "2030-12-30" }), "mark paid");
+    // The Approver releases the statements, and only then can the person open theirs.
+    as(approver);
+    ok(await releaseStatements({ runId }), "release statements");
     as(paidOwner);
     const slip = await downloadPayslip(new Request("http://localhost/api/payroll/payslips/x"), { params: Promise.resolve({ runId }) });
     expect(slip.status).toBe(200);
@@ -410,7 +413,7 @@ describe("filters", () => {
     as(preparer);
     const r = await all({ actorId: approver.id });
     expect(r.total).toBeGreaterThan(0);
-    expect(new Set(r.rows.map((x) => x.action))).toEqual(new Set(["run_sent_back", "run_approved", "run_viewed"]));
+    expect(new Set(r.rows.map((x) => x.action))).toEqual(new Set(["run_sent_back", "run_approved", "run_viewed", "statements_released"]));
     expect(r.rows.every((x) => x.actorName.startsWith("Ariel Approvertan"))).toBe(true);
   });
 

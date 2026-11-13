@@ -144,7 +144,7 @@ export async function recomputeRun(tx: Tx, runId: string, options: { employeeId?
 
 // ---- Creating a run ----
 
-const NOT_A_CUTOFF = "A pay run covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month.";
+const NOT_A_CUTOFF = "A pay run covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month. (A test run can cover any dates, up to 31 days.)";
 
 /** Throws when another real (not test, not cancelled) run already covers any part of the period. */
 async function refuseOverlap(tx: Tx, period: { periodStart: string; periodEnd: string }): Promise<void> {
@@ -175,7 +175,9 @@ function isCutoff(period: { periodStart: string; periodEnd: string }): boolean {
  */
 export async function createRun(tx: Tx, actor: Actor, period: { periodStart: string; periodEnd: string }, options: { test?: boolean } = {}): Promise<{ runId: string; lineCount: number }> {
   const test = options.test === true;
-  if (!isCutoff(period)) throw new ActionFailure(NOT_A_CUTOFF);
+  // A real run is exactly one cutoff. A TEST run may cover any dates (up to 31 days, checked by the schema): a part of a cutoff, or the dates of a
+  // file you want to rehearse with. Its base pay is still a full cutoff unless the days worked are entered as amounts.
+  if (!test && !isCutoff(period)) throw new ActionFailure(NOT_A_CUTOFF);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('pay_runs'))`);
   if (!test) await refuseOverlap(tx, period);
 
@@ -259,6 +261,8 @@ export async function setRunTest(tx: Tx, actor: Actor, v: { runId: string; test:
   if (!v.test) {
     if (run.status !== "draft") throw new ActionFailure("A test run can be made a real run again only while it is a draft.");
     if (run.archivedAt) throw new ActionFailure("Restore this run first.");
+    // A real run is exactly one cutoff: a test run made for other dates can only stay a test run.
+    if (!isCutoff({ periodStart: run.periodStart, periodEnd: run.periodEnd })) throw new ActionFailure(NOT_A_CUTOFF);
     await refuseOverlap(tx, { periodStart: run.periodStart, periodEnd: run.periodEnd });
   }
   await tx.update(payRuns).set({ isTest: v.test }).where(eq(payRuns.id, v.runId));

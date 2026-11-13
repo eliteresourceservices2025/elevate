@@ -84,6 +84,8 @@ While you are still practising, mark a run as a **test run** so you can repeat t
 - **Archive:** only a test run can be archived, in any status. It leaves the list, is never deleted, and you can bring it back from **Archived test runs** (open it, then **Run options**, **Restore this run**). A real run can never be archived.
 - **Nobody sees a statement from a test run.** The people on it are not told, and it never shows under **My pay**. An invoice made from a test run is numbered TEST and stamped TEST, and must not be sent.
 
+A test run can also cover any dates, up to 31 days (a part of a cutoff, or the dates of a Jibble file), while a real run is always one whole cutoff. To rehearse a whole pay cycle, see "Rehearse a pay cycle with a test run".
+
 A Preparer or an Approver can do this. Every step is written to the change history with its reason.
 
 # Fix a mistake from an earlier run
@@ -102,7 +104,7 @@ Click **Send for review** at the bottom of the run. The Approvers are told that 
 
 When the run is approved, the **Payment** section appears at the bottom.
 
-1. Click **Download Remitly list**. It has each person's name, alias and **Total payable compensation** in pesos. It never has account numbers and no dollar amounts: pay at the rate Remitly shows. If two people share a name, use the alias to tell them apart.
+1. Click **Download Remitly list**. It has each person's name, alias and **Total payable compensation** in pesos, and their **Bank**, **Account name** and **Account number**, so you can pay them without looking anything up. There are no dollar amounts: pay at the rate Remitly shows. If two people share a name, use the alias to tell them apart. Someone with no bank details on file has blank cells, and the page tells you how many. The file holds real account numbers: keep it private and delete it once you have paid. Every download is recorded. On a test run the file shows masked details and says TEST on every row. A Preparer or an Approver can download the list and record the payments.
 2. Pay each person in Remitly.
 3. Click **Mark paid** on the person's row.
 
@@ -112,7 +114,7 @@ Type the **Remitly reference** and check the **Paid on** date, then click **Mark
 
 ![The Mark paid window: the Remitly reference and the date it was paid.](help:prepare-a-pay-run/11-mark-paid.png)
 
-When everyone is marked paid, the run becomes **Paid** and each person is told that their contractor payment statement is ready. Another Preparer records your own payment.
+When everyone is marked paid, the run becomes **Paid**. The contractors' statements are not sent by paying: an Approver releases them from **Statements** (see "Release the statements"). Someone else records your own payment.
 
 ![Everyone on the run is paid.](help:prepare-a-pay-run/12-all-paid.png)
 

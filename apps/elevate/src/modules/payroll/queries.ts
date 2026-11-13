@@ -236,6 +236,7 @@ export async function getWorksheet(runId: string): Promise<WorksheetView | null>
 export type PaymentsView = {
   runId: string;
   status: RunStatus;
+  isTest: boolean;
   canMarkPaid: boolean;
   canExport: boolean;
   people: {
@@ -299,7 +300,7 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
       }
       return { employeeId, name: person.name, aliases: joinAliases(person.aliases), isOwn: own !== null && own === employeeId, payment };
     });
-    return { runId, status: run.status as RunStatus, canMarkPaid, canExport: can(actor, "payroll.export"), people };
+    return { runId, status: run.status as RunStatus, isTest: run.isTest, canMarkPaid, canExport: can(actor, "payroll.export"), people };
   });
   if (view && decrypted > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["payment references"], count: decrypted } });
   return view;

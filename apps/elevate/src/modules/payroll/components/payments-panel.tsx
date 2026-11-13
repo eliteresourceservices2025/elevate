@@ -85,7 +85,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
   const paid = view.people.filter((p) => p.payment !== null).length;
 
   const download = () =>
-    run<{ fileName: string; csv: string; rows: number }>(
+    run<{ fileName: string; csv: string; rows: number; missingDetails: number; test: boolean }>(
       async () => {
         const result = await exportRemitlyList({ runId: view.runId });
         if (result.ok) {
@@ -100,7 +100,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
         }
         return result;
       },
-      (d) => P.downloaded(d?.rows ?? 0),
+      (d) => `${P.downloaded(d?.rows ?? 0)}${d && d.missingDetails > 0 ? ` ${P.missingDetails(d.missingDetails)}` : ""}`,
     );
 
   return (
@@ -125,6 +125,11 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
         </div>
       </div>
       <p className="text-sm text-muted-foreground">{P.hint}</p>
+      {view.isTest ? (
+        <Alert variant="warning" className="rounded-lg p-3 text-sm">
+          {P.testBanner}
+        </Alert>
+      ) : null}
       {view.status === "paid" ? (
         <Alert variant="success" className="rounded-lg p-3 text-sm">
           {P.allPaid}

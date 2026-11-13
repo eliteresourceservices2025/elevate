@@ -10,7 +10,8 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { InvoiceDocument } from "@/modules/invoices/components/invoice-document";
 import { invoiceText } from "@/modules/invoices/invoice-text";
-import { getInvoice } from "@/modules/invoices/queries";
+import { InvoiceOptionsMenu } from "@/modules/invoices/components/invoice-options";
+import { getInvoice, getInvoiceAbilities } from "@/modules/invoices/queries";
 
 export const metadata: Metadata = { title: "Invoice" };
 
@@ -35,6 +36,7 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
   }
   if (!view) notFound();
   const text = invoiceText(view);
+  const abilities = await orNotFound(getInvoiceAbilities());
 
   return (
     <PageContainer width="medium">
@@ -43,12 +45,20 @@ export default async function InvoicePage({ params }: PageProps<"/invoices/[id]"
         description={`${text.clientName}, ${text.period}`}
         breadcrumbs={[{ label: "Invoices", href: "/invoices" }, { label: text.number }]}
         actions={
-          <a href={`/api/invoices/${id}`} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline" })}>
-            <Download aria-hidden className="size-4" />
-            Download PDF
-          </a>
+          <>
+            <a href={`/api/invoices/${id}`} target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline" })}>
+              <Download aria-hidden className="size-4" />
+              Download PDF
+            </a>
+            <InvoiceOptionsMenu invoiceId={id} runId={view.runId} clientId={view.clientId} isTest={view.isTest} state={view.state} canManage={abilities.canManage} canCreate={abilities.canCreate} />
+          </>
         }
       />
+      {view.stateReason ? (
+        <Alert variant="muted" role="note">
+          Reason given: {view.stateReason}
+        </Alert>
+      ) : null}
       <InvoiceDocument view={text} />
     </PageContainer>
   );

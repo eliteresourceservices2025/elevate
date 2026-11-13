@@ -1,4 +1,11 @@
-// The Remitly list, pure. One row per person; no bank or account field exists here on purpose. Money is bigint centavos; everything is in pesos (Remitly applies its own rate).
+// The Remitly list, pure. One row per person with their payout details (bank, account name, account number: filled by payments.ts, in full for a real run and masked for a test run). Money is bigint centavos; everything is in pesos (Remitly applies its own rate).
+
+/** What a person is paid to. All three parts are on file, or the person has none. */
+export type PayoutDetails = { bankName: string; accountName: string; accountNumber: string };
+
+/** The columns of the file, in order. A test run adds a Note column so a practice file is never mistaken for a real one. */
+export const REMITLY_HEADER = ["Person", "Alias", "Pesos", "Bank", "Account name", "Account number"] as const;
+export const REMITLY_TEST_NOTE = "TEST - do not pay";
 
 export type RemitlyLine = { employeeId: string; name: string; alias: string | null; net: bigint };
 export type RemitlyRow = {
@@ -6,6 +13,9 @@ export type RemitlyRow = {
   name: string;
   aliases: string;
   pesos: string;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
 };
 
 /** The name shown for a person: preferred name if set, else first name, then last name. */
@@ -32,7 +42,7 @@ function plain(hundredths: bigint): string {
 /**
  * Sums each person's lines (total payable compensation) into one row of pesos. Rows are ordered by name, then id.
  */
-export function buildRemitlyRows(lines: RemitlyLine[]): RemitlyRow[] {
+export function buildRemitlyRows(lines: RemitlyLine[], details: ReadonlyMap<string, PayoutDetails> = new Map()): RemitlyRow[] {
   const byPerson = new Map<string, { name: string; aliases: (string | null)[]; total: bigint }>();
   for (const l of lines) {
     const p = byPerson.get(l.employeeId) ?? { name: l.name, aliases: [], total: 0n };
@@ -44,10 +54,16 @@ export function buildRemitlyRows(lines: RemitlyLine[]): RemitlyRow[] {
     .sort(([ai, a], [bi, b]) =>
       a.name < b.name ? -1 : a.name > b.name ? 1 : ai < bi ? -1 : ai > bi ? 1 : 0,
     )
-    .map(([employeeId, p]) => ({
-      employeeId,
-      name: p.name,
-      aliases: joinAliases(p.aliases),
-      pesos: plain(p.total),
-    }));
+    .map(([employeeId, p]) => {
+      const d = details.get(employeeId);
+      return {
+        employeeId,
+        name: p.name,
+        aliases: joinAliases(p.aliases),
+        pesos: plain(p.total),
+        bankName: d?.bankName ?? "",
+        accountName: d?.accountName ?? "",
+        accountNumber: d?.accountNumber ?? "",
+      };
+    });
 }

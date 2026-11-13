@@ -188,11 +188,13 @@ const EXPECTED: Record<string, string> = {
   "payroll.export": "- - - - - -",
   "payroll.approve": "- - - - - -",
   "payroll.manage_test_runs": "- - - - - -",
+  "payroll.release_statements": "- - - - - -",
   "payroll.view_own": "O O O O O O",
   // client invoices: roles only (a payroll level adds nothing)
   "invoices.view": "A A - - A -",
   "invoices.create": "A A - - A -",
   "invoices.manage_rates": "A A - - A -",
+  "invoices.manage": "A A - - A -",
 };
 
 const SCOPE_CODE: Record<string, Scope | null> = { A: "all", T: "team", O: "own", "-": null };
@@ -312,7 +314,18 @@ describe("payroll access", () => {
     expect(can(level("preparer"), "payroll.prepare")).toBe(true);
     expect(can(level("preparer"), "payroll.approve")).toBe(false);
     expect(can(level("approver"), "payroll.approve")).toBe(true);
-    expect(can(level("approver"), "payroll.export")).toBe(false);
+    // Releasing statements to the contractors: an Approver only.
+    expect(can(level("approver"), "payroll.release_statements")).toBe(true);
+    expect(can(level("preparer"), "payroll.release_statements")).toBe(false);
+    expect(can(level("viewer"), "payroll.release_statements")).toBe(false);
+    expect(can(level(null), "payroll.release_statements")).toBe(false);
+    // Paying: both working levels (owner decision 2026-11-12), never a viewer or a person with no level.
+    expect(can(level("approver"), "payroll.export")).toBe(true);
+    expect(can(level("approver"), "payroll.mark_paid")).toBe(true);
+    expect(can(level("preparer"), "payroll.export")).toBe(true);
+    expect(can(level("viewer"), "payroll.export")).toBe(false);
+    expect(can(level("viewer"), "payroll.mark_paid")).toBe(false);
+    expect(can(level(null), "payroll.export")).toBe(false);
     // Test runs (mark, archive, restore): both working levels, never a viewer or a person with no level.
     expect(can(level(null), "payroll.manage_test_runs")).toBe(false);
     expect(can(level("viewer"), "payroll.manage_test_runs")).toBe(false);

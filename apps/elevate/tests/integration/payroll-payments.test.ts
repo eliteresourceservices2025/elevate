@@ -25,10 +25,12 @@ const {
   exportRemitlyList,
   markPaid,
   markRunAsTest,
+  releaseStatements,
 } = await import("@/modules/payroll/actions");
 const { getWorksheet, getPayments } = await import("@/modules/payroll/queries");
 const { countMyPayslips } = await import("@/modules/payroll/payslip-queries");
 const { PAYSLIP_LABELS } = await import("@/modules/payroll/constants");
+const { sensitiveContext, maskFor } = await import("@/modules/people/sensitive");
 const { decryptRunLine, payrollToday } = await import("@/modules/payroll/service");
 const { fieldCrypto } = await import("@/lib/crypto");
 
@@ -192,11 +194,11 @@ describe("the Remitly list", () => {
     expect(list).toMatchObject({ ok: true });
     // 22,000 / 2 = 11,000.00 pesos, and the list has no dollars column.
     const lines = list.ok ? list.data.csv.trim().split("\r\n") : [];
-    expect(lines[0]).toBe("Person,Alias,Pesos");
-    expect(lines.find((l) => l.includes("Pesoonly"))).toMatch(/,11000\.00$/);
+    expect(lines[0]).toBe("Person,Alias,Pesos,Bank,Account name,Account number");
+    expect(lines.find((l) => l.includes("Pesoonly"))).toMatch(/,11000\.00,,,$/); // nothing on file: blank bank cells
   });
 
-  it("gives one row per person, no bank column, neutralizes a formula alias, and is audited without amounts", async () => {
+  it("gives one row per person, neutralizes a formula alias, and is audited without amounts", async () => {
     const p = slot(3);
     const emp = await person(null, "Lopezexport");
     await giveLine(emp, p, { alias: "=HYPERLINK(1)" });
@@ -212,9 +214,9 @@ describe("the Remitly list", () => {
     expect(r.data.rows).toBe(2);
     expect(r.data.fileName).toMatch(/^remitly-2028-02-16-to-2028-02-29\.csv$/);
     const lines = r.data.csv.trim().split("\r\n");
-    expect(lines[0]).toBe("Person,Alias,Pesos");
+    expect(lines[0]).toBe("Person,Alias,Pesos,Bank,Account name,Account number");
     expect(lines).toHaveLength(3);
-    expect(r.data.csv).not.toMatch(/bank|account/i);
+    expect(r.data.missingDetails).toBe(2); // nobody here has payout details on file
     // Both aliases are listed. Their order depends on the database's sort rules (it differs between a local database and CI), so it is
     // not asserted. What matters is that no cell can start a spreadsheet formula: when the formula alias comes first the cell is
     // neutralized with a leading quote, and when it comes second the cell starts with the other alias.
@@ -230,7 +232,7 @@ describe("the Remitly list", () => {
     );
     const total = nets.reduce((s, n) => s + decryptRunLine(n.id, n.payload_enc).result.net, 0n);
     const pesos = `${total / 100n}.${(total % 100n).toString().padStart(2, "0")}`;
-    expect(lines.find((l) => l.includes("Lopezexport"))).toMatch(new RegExp(`,${pesos.replace(".", "\\.")}$`));
+    expect(lines.find((l) => l.includes("Lopezexport"))).toMatch(new RegExp(`,${pesos.replace(".", "\\.")},,,$`));
 
     const [audit] = await rows<{ metadata: unknown }>(
       sql`select metadata from ops.audit_log where target_id = ${runId} and action = 'payroll.remitly.export'`,
@@ -260,17 +262,131 @@ describe("the Remitly list", () => {
     }
   });
 
-  it("is for Preparers only, and checks its input", async () => {
+  it("is for Preparers and Approvers only, and checks its input", async () => {
     const p = slot(5);
     await giveLine(await person(), p);
     const runId = await approvedRun(p);
-    for (const who of [approver, viewer, await account(null)]) {
+    for (const who of [viewer, await account(null)]) {
       as(who);
       expect(await exportRemitlyList({ runId })).toEqual({ ok: false, error: NO_ACCESS });
     }
+    as(approver);
+    expect(await exportRemitlyList({ runId })).toMatchObject({ ok: true });
     as(preparer);
     expect(await exportRemitlyList({ runId: "nope" })).toEqual({ ok: false, error: BAD });
     expect(await exportRemitlyList({ runId: randomUUID() })).toMatchObject({ ok: false });
+  });
+});
+
+// ---- Payout details in the list (owner decision 2026-11-12: full details for Preparers and Approvers on a real run) ----
+
+/** Half month `n` of 2038: the list does not check payment dates, so these runs can sit after the fake "today". */
+function slot29(n: number) {
+  const month = Math.floor(n / 2) + 1;
+  const mm = String(month).padStart(2, "0");
+  const last = new Date(Date.UTC(2038, month, 0)).getUTCDate();
+  return n % 2 === 0 ? { periodStart: `2038-${mm}-01`, periodEnd: `2038-${mm}-15` } : { periodStart: `2038-${mm}-16`, periodEnd: `2038-${mm}-${last}` };
+}
+const BANK = { bankName: "Testbank Philippines", bankAccountName: "Lopez Testperson", bankAccountNumber: "0012345678901" };
+async function giveBankDetails(employeeId: string, over: Partial<typeof BANK> = {}) {
+  const v = { ...BANK, ...over };
+  const c = fieldCrypto();
+  const masks = { bankName: maskFor("bankName", v.bankName), bankAccountName: maskFor("bankAccountName", v.bankAccountName), bankAccountNumber: maskFor("bankAccountNumber", v.bankAccountNumber) };
+  await db.execute(sql`insert into core.employee_sensitive (employee_id, bank_name_enc, bank_account_name_enc, bank_account_number_enc, masks)
+    values (${employeeId}, ${c.encrypt(v.bankName, sensitiveContext("bankName", employeeId))}, ${c.encrypt(v.bankAccountName, sensitiveContext("bankAccountName", employeeId))},
+      ${c.encrypt(v.bankAccountNumber, sensitiveContext("bankAccountNumber", employeeId))}, ${JSON.stringify(masks)}::jsonb)`);
+}
+const bankAudits = (runId: string) =>
+  rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where target_id = ${runId} and action = 'sensitive.view' and metadata::text like '%bankAccountNumber%'`);
+
+describe("payout details in the list", () => {
+  it("a real run carries the full bank details for a Preparer and an Approver, blank cells for someone with none, and one audited read with field names only", async () => {
+    const p = slot29(0);
+    const paid = await person(null, "Withbank");
+    const unpaid = await person(null, "Nobank");
+    await giveLine(paid, p);
+    await giveLine(unpaid, p);
+    await giveBankDetails(paid);
+    const runId = await approvedRun(p);
+
+    for (const who of [preparer, approver]) {
+      as(who);
+      const r = await exportRemitlyList({ runId });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.data).toMatchObject({ test: false, missingDetails: 1, rows: 2 });
+      const lines = r.data.csv.trim().split("\r\n");
+      expect(lines[0]).toBe("Person,Alias,Pesos,Bank,Account name,Account number");
+      expect(lines.find((l) => l.includes("Withbank"))).toMatch(/,Testbank Philippines,Lopez Testperson,0012345678901$/);
+      expect(lines.find((l) => l.includes("Nobank"))).toMatch(/,,,$/);
+      expect(r.data.csv).not.toContain("TEST");
+    }
+
+    // Two downloads, two audit rows: the field names and how many people, never a value.
+    const audits = await bankAudits(runId);
+    expect(audits).toHaveLength(2);
+    const text = JSON.stringify(audits);
+    expect(text).toContain("bankName");
+    expect(text).toMatch(/"people":\s*1/);
+    for (const secret of [BANK.bankName, BANK.bankAccountName, BANK.bankAccountNumber]) expect(text).not.toContain(secret);
+    // The audit row of the export itself holds counts only.
+    const [exportAudit] = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where target_id = ${runId} and action = 'payroll.remitly.export' order by id limit 1`);
+    for (const secret of [BANK.bankName, BANK.bankAccountNumber]) expect(JSON.stringify(exportAudit.metadata)).not.toContain(secret);
+  });
+
+  it("a test run carries masked details and a TEST note, never a full number, and reads nothing sensitive", async () => {
+    const p = slot29(1);
+    const emp = await person(null, "Practicebank");
+    await giveLine(emp, p);
+    await giveBankDetails(emp);
+    const runId = await approvedRun(p);
+    as(preparer);
+    expect(await markRunAsTest({ runId, test: true, reason: "Practice cycle" })).toMatchObject({ ok: true });
+
+    const r = await exportRemitlyList({ runId });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data).toMatchObject({ test: true, missingDetails: 0 });
+    expect(r.data.fileName).toMatch(/^remitly-TEST-2038-01-16-to-2038-01-31\.csv$/);
+    const lines = r.data.csv.trim().split("\r\n");
+    expect(lines[0]).toBe("Person,Alias,Pesos,Bank,Account name,Account number,Note");
+    const row = lines.find((l) => l.includes("Practicebank"))!;
+    expect(row).toContain("TEST - do not pay");
+    expect(row).toContain(maskFor("bankAccountNumber", BANK.bankAccountNumber));
+    for (const secret of [BANK.bankName, BANK.bankAccountName, BANK.bankAccountNumber]) expect(r.data.csv).not.toContain(secret);
+    expect(await bankAudits(runId)).toHaveLength(0); // nothing was decrypted
+  });
+
+  it("refuses the file, writing nothing, when someone's details can't be read", async () => {
+    const p = slot29(2);
+    const emp = await person(null, "Brokenbank");
+    await giveLine(emp, p);
+    await giveBankDetails(emp);
+    await db.execute(sql`update core.employee_sensitive set bank_name_enc = 'not-a-ciphertext' where employee_id = ${emp}`);
+    const runId = await approvedRun(p);
+    as(preparer);
+    const before = await footprint(runId);
+    const r = await exportRemitlyList({ runId });
+    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/payout details can't be read/) });
+    expect(await footprint(runId)).toEqual(before);
+    expect(await bankAudits(runId)).toHaveLength(0);
+  });
+
+  it("an Approver can mark a payment too, but still not their own", async () => {
+    const p = slot(22);
+    const other2 = await account("approver");
+    const ownEmp = await person(other2.id);
+    const colleague = await person(null, "Colleaguepay");
+    await giveLine(ownEmp, p);
+    await giveLine(colleague, p);
+    const runId = await approvedRun(p); // approved by the shared Approver, so other2 is free to pay
+    as(other2);
+    expect(await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() })).toMatchObject({ ok: false, error: expect.stringMatching(/own/i) });
+    expect(await markPaid({ runId, employeeId: colleague, reference: REF, paidOn: today() })).toMatchObject({ ok: true });
+    // The Approver who marked it can read the reference (they hold mark_paid), a viewer cannot.
+    expect((await getPayments(runId))!.people.find((x) => x.employeeId === colleague)!.payment!.reference).toBe(REF);
+    as(viewer);
+    expect((await getPayments(runId))!.people.find((x) => x.employeeId === colleague)!.payment!.reference).toBeNull();
   });
 });
 
@@ -301,12 +417,12 @@ describe("markPaid", () => {
     expect(await status(runId)).toBe("approved");
   });
 
-  it("is for Preparers only and checks its input", async () => {
+  it("is for Preparers and Approvers only and checks its input", async () => {
     const p = slot(8);
     const emp = await person();
     await giveLine(emp, p);
     const runId = await approvedRun(p);
-    for (const who of [approver, viewer, await account(null)]) {
+    for (const who of [viewer, await account(null)]) {
       as(who);
       expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today() })).toEqual({
         ok: false,
@@ -496,7 +612,7 @@ describe("markPaid", () => {
     expect(after).toBe(before);
   });
 
-  it("a test run reaches paid without a statement notice and is never listed under My pay; a real run gets both", async () => {
+  it("paying never makes a statement visible: a real run needs an Approver's release, a test run can never be released", async () => {
     const worker = await account("viewer");
     const emp = await person(worker.id);
     const realPeriod = slot(20);
@@ -516,6 +632,15 @@ describe("markPaid", () => {
 
     const notices = async () =>
       (await rows<{ n: number }>(sql`select count(*)::int as n from ops.notifications where user_id = ${worker.id} and kind = ${PAYSLIP_LABELS.noticeKind}`))[0].n;
+    // Both are paid, and still nothing is visible or sent: a release is a separate decision.
+    expect(await notices()).toBe(0);
+    as(worker);
+    expect(await countMyPayslips()).toBe(0);
+
+    // The Approver releases the real run: one notice, one statement. The test run can never be released.
+    as(approver);
+    expect(await releaseStatements({ runId: real })).toMatchObject({ ok: true });
+    expect(await releaseStatements({ runId: practice })).toMatchObject({ ok: false, error: expect.stringMatching(/test run is never released/) });
     expect(await notices()).toBe(1); // the real run only
     as(worker);
     expect(await countMyPayslips()).toBe(1);
@@ -557,7 +682,7 @@ describe("the payments view", () => {
     expect(await getPayments(randomUUID())).toBeNull();
   });
 
-  it("shows references only to Preparers; others see who marked it and when; the sensitive read is logged only when one was decrypted", async () => {
+  it("shows references only to Preparers and Approvers; a viewer sees who marked it and when; the sensitive read is logged only when one was decrypted", async () => {
     const p = slot(16);
     const emp = await person();
     await giveLine(emp, p);
@@ -591,13 +716,15 @@ describe("the payments view", () => {
     );
     expect(seen.paidOn).toBe(today());
     expect(Number.isNaN(Date.parse(seen.markedAt))).toBe(false);
+    expect(await reads()).toBe(0); // a viewer decrypts nothing
+
     as(approver);
-    expect((await getPayments(runId))!.people[0].payment!.reference).toBeNull();
-    expect(await reads()).toBe(0); // viewers and Approvers decrypt nothing
+    expect((await getPayments(runId))!.people[0].payment!.reference).toBe("RMT-VISIBLE-1"); // an Approver holds mark_paid too
+    expect(await reads()).toBe(1);
 
     as(preparer);
     expect((await getPayments(runId))!.people[0].payment!.reference).toBe("RMT-VISIBLE-1");
-    expect(await reads()).toBe(1);
+    expect(await reads()).toBe(2);
     const [entry] = await rows<{ metadata: unknown }>(
       sql`select metadata from ops.audit_log where target_id = ${runId} and action = 'sensitive.view' and metadata::text like '%payment references%'`,
     );

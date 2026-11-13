@@ -22,6 +22,7 @@ const styles = StyleSheet.create({
   logo: { width: LOGO_WIDTH, height: LOGO_WIDTH / LOGO_ASPECT, marginRight: 8 },
   brandText: { fontFamily: "Helvetica-Bold", fontSize: 13, color: PURPLE },
   titleBlock: { alignItems: "flex-end" },
+  test: { borderWidth: 2, borderColor: "#b42318", backgroundColor: "#fde8e6", color: "#7a1710", padding: 6, marginBottom: 8, fontFamily: "Helvetica-Bold", fontSize: 10 },
   title: { fontFamily: "Helvetica-Bold", fontSize: 13, letterSpacing: 0.6, lineHeight: 1.2, marginBottom: 4 },
   number: { fontSize: 8.5, color: MUTED },
   facts: { flexDirection: "row", flexWrap: "wrap", marginBottom: 6 },
@@ -142,6 +143,8 @@ function PayslipDocument({ view }: { view: PayslipView }) {
             </Text>
           </View>
         </View>
+
+        {view.isTest ? <Text style={styles.test}>{latin(L.testNote)}</Text> : null}
 
         <View style={styles.facts}>
           <Fact label={L.preparedFor} value={view.name} />

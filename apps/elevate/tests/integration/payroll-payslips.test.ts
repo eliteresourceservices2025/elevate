@@ -16,6 +16,7 @@ vi.mock("server-only", () => ({}));
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const { createPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, submitRun, approveRun, markPaid } = await import("@/modules/payroll/actions");
+const { releaseStatements } = await import("@/modules/payroll/actions");
 const { getWorksheet } = await import("@/modules/payroll/queries");
 const { listMyPayslips, countMyPayslips } = await import("@/modules/payroll/payslip-queries");
 const { decryptRunLine } = await import("@/modules/payroll/service");
@@ -87,11 +88,18 @@ async function payAll(runId: string, employeeIds: string[]) {
     if (!r.ok) throw new Error(`pay failed: ${r.error}`);
   }
 }
-/** A paid run for the given people (each with one line), in period `p`. */
+/** An Approver releases a run's statements to the people on it (the step that makes them visible). */
+async function release(runId: string) {
+  as(approver);
+  const r = await releaseStatements({ runId });
+  if (!r.ok) throw new Error(`release failed: ${r.error}`);
+}
+/** A paid and RELEASED run for the given people (each with one line), in period `p`. */
 async function paidRun(p: { periodStart: string; periodEnd: string }, employeeIds: string[], over: Record<string, unknown> = {}) {
   for (const e of employeeIds) await giveLine(e, p, over);
   const runId = await approvedRun(p);
   await payAll(runId, employeeIds);
+  await release(runId);
   return runId;
 }
 const call = (runId: string) => GET(new Request("http://localhost/api/payroll/payslips/x"), { params: Promise.resolve({ runId }) });
@@ -127,8 +135,8 @@ beforeAll(async () => {
   expect(saved).toMatchObject({ ok: true });
 });
 
-describe("only a paid run has a payslip", () => {
-  it("lists nothing and answers 404 for a draft, in-review, approved-but-unpaid and cancelled run, then lists it once paid", async () => {
+describe("only a released run has a payslip", () => {
+  it("lists nothing and answers 404 for a draft, in-review, approved-but-unpaid and cancelled run, and even a paid one, then lists it once released", async () => {
     const owner = await account();
     const emp = await person(owner.id);
 
@@ -161,7 +169,13 @@ describe("only a paid run has a payslip", () => {
       expect(await r.text()).toBe(missingBody);
     }
 
+    // Paid is not released: the person still sees nothing until an Approver releases the statements.
     await payAll(approved, [emp]);
+    as(owner);
+    expect(await listMyPayslips()).toEqual([]);
+    expect(await countMyPayslips()).toBe(0);
+    expect((await call(approved)).status).toBe(404);
+    await release(approved);
     as(owner);
     const list = await listMyPayslips();
     expect(list).toHaveLength(1);
@@ -212,6 +226,7 @@ describe("the payslip is the person's own", () => {
     await giveLine(secondEmp, p, { alias: "Zzsecretalias", monthly: "31,415.92" });
     const runId = await approvedRun(p);
     await payAll(runId, [emp, secondEmp]);
+    await release(runId);
     as(owner);
     const list = await listMyPayslips();
     expect(list).toHaveLength(1);
@@ -342,8 +357,8 @@ describe("the PDF", () => {
   });
 });
 
-describe("the notification when a run is paid", () => {
-  it("goes to each linked person with a link and no amount, and marking paid works for a person with no account", async () => {
+describe("the notification when a run is released", () => {
+  it("goes to each linked person with a link and no amount, only when the statements are released, and marking paid works for a person with no account", async () => {
     const a = await account();
     const b = await account();
     const empA = await person(a.id);
@@ -359,6 +374,8 @@ describe("the notification when a run is paid", () => {
     expect(await slipNotices(a.id)).toHaveLength(0); // not paid until everyone is
     const last = await markPaid({ runId, employeeId: noAccount, reference: "RMT-N-3", paidOn: today() });
     expect(last).toEqual({ ok: true, data: { runPaid: true } });
+    expect(await slipNotices(a.id)).toHaveLength(0); // paid is not released: nobody is told yet
+    await release(runId);
 
     for (const [u, e] of [[a, empA], [b, empB]] as const) {
       const n = await slipNotices(u.id);
@@ -369,8 +386,11 @@ describe("the notification when a run is paid", () => {
       expect(text).not.toContain(formatPesos(await netOf(runId, e)));
       expect(text).not.toMatch(/overtime|pto/i);
     }
-    // A correction after the run is paid sends nothing more.
+    // A correction after the run is paid sends nothing more, and a second release is refused.
+    as(preparer);
     expect(await markPaid({ runId, employeeId: empA, reference: "RMT-N-9", paidOn: today() })).toMatchObject({ ok: true });
+    as(approver);
+    expect(await releaseStatements({ runId })).toMatchObject({ ok: false, error: expect.stringMatching(/already been released|released/i) });
     expect(await slipNotices(a.id)).toHaveLength(1);
   });
 
@@ -394,6 +414,7 @@ describe("the notification when a run is paid", () => {
     await giveLine(emp, p, { alias: "Two" });
     const runId = await approvedRun(p);
     await payAll(runId, [emp]);
+    await release(runId);
     expect(await slipNotices(owner.id)).toHaveLength(1);
   });
 });
@@ -558,6 +579,7 @@ describe("the Contractor Payment Statement lists every named line", () => {
     const a = await approveRun({ runId, expectedHash: (await getWorksheet(runId))!.expectedHash! });
     expect(a).toMatchObject({ ok: true });
     await payAll(runId, [emp]);
+    await release(runId);
 
     // 11,000.00 + 1,500.00 allowances = 12,500.00 gross; plus 250.50, 2,000.00 and 75.00 = 14,825.50 total payable compensation.
     const [row] = await rows<{ id: string; payload_enc: string }>(sql`select id, payload_enc from payroll.pay_run_lines where run_id = ${runId} and employee_id = ${emp}`);
