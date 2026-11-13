@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { purgeArchivedInvoices } from "@/modules/invoices/actions";
+import { purgeArchivedInvoices, purgeRetiredInvoices } from "@/modules/invoices/actions";
 import { purgeArchivedPayRuns } from "@/modules/payroll/actions";
 import { useRun } from "@/modules/recruiting/components/use-run";
 
@@ -46,10 +46,24 @@ export function PurgeArchivedInvoicesButton({ count }: { count: number }) {
   return (
     <FormDialog label={label} title={label} variant="outline" icon={<Trash2 className="size-4" aria-hidden />} triggerSize="sm">
       <Confirm
-        explain={`Deletes the ${plural(count, "archived test invoice", "archived test invoices")}. Real invoices (including void ones) and test invoices that are not archived are never deleted.`}
+        explain={`Deletes the ${plural(count, "archived test invoice", "archived test invoices")}. Live invoices, void and replaced invoices, and test invoices that are not archived are not touched here.`}
         confirmLabel={label}
         act={purgeArchivedInvoices}
         done={(d) => (d ? `Deleted ${plural(d.deleted, "test invoice", "test invoices")}.${d.kept > 0 ? ` ${d.kept} stayed because a newer invoice replaced them.` : ""}` : "Done.")}
+      />
+    </FormDialog>
+  );
+}
+
+export function PurgeRetiredInvoicesButton({ count }: { count: number }) {
+  const label = "Delete void and replaced invoices for good";
+  return (
+    <FormDialog label={label} title={label} variant="outline" icon={<Trash2 className="size-4" aria-hidden />} triggerSize="sm">
+      <Confirm
+        explain={`Deletes the ${plural(count, "void or replaced invoice", "void and replaced invoices")}, real ones too, with their history. A live invoice is never deleted. The numbers of deleted invoices are never used again, so the numbering will have gaps. If you need a copy, download the PDF first.`}
+        confirmLabel={label}
+        act={purgeRetiredInvoices}
+        done={(d) => (d ? `Deleted ${plural(d.deleted, "invoice", "invoices")}.${d.kept > 0 ? ` ${d.kept} stayed because a newer invoice replaced them.` : ""}` : "Done.")}
       />
     </FormDialog>
   );

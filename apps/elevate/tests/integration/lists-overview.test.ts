@@ -17,7 +17,7 @@ const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const { createPayLine, createPayRun, savePayItem, submitRun, approveRun } = await import("@/modules/payroll/actions");
 const { getRuns, getWorksheet } = await import("@/modules/payroll/queries");
-const { createInvoice, addBillRate, voidInvoice } = await import("@/modules/invoices/actions");
+const { createInvoice, addBillRate, voidInvoice, purgeRetiredInvoices } = await import("@/modules/invoices/actions");
 const { listInvoices } = await import("@/modules/invoices/queries");
 
 type Row = Record<string, unknown>;
@@ -171,5 +171,71 @@ describe("the invoices list", () => {
     // ...but it is still there under "all", and the old ?all option still means the same.
     expect((await listInvoices(PAGE, { show: "all" })).rows.find((r) => r.id === inv.data.invoiceId)?.state).toBe("voided");
     expect((await listInvoices(PAGE, { all: true })).rows.map((r) => r.id)).toContain(inv.data.invoiceId);
+  });
+});
+
+describe("deleting void and replaced invoices", () => {
+  async function approvedRun(start: string, end: string, hours: string) {
+    const runId = await newRun(start, end, false);
+    const line = await runLineId(runId);
+    as(preparer);
+    expect(await savePayItem({ runId, employeeId, runLineId: line, type: "client_hours", value: hours })).toMatchObject({ ok: true });
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+    as(approver);
+    const sheet = (await getWorksheet(runId))!;
+    expect(await approveRun({ runId, expectedHash: sheet.expectedHash! })).toMatchObject({ ok: true });
+    return runId;
+  }
+  const seqOf = async (id: string) => (await rows<{ seq: number }>(sql`select seq from ops.invoices where id = ${id}`))[0].seq;
+  const exists = async (id: string) => (await rows(sql`select 1 from ops.invoices where id = ${id}`)).length > 0;
+
+  it("deletes void and replaced real invoices, keeps live ones, and never hands out a deleted number again", async () => {
+    // A live invoice that must survive.
+    const liveRun = await approvedRun("2044-03-01", "2044-03-15", "4");
+    as(hr);
+    const live = await createInvoice({ runId: liveRun, clientId: client });
+    if (!live.ok) throw new Error("live invoice failed");
+
+    // An invoice that is corrected (the first is "replaced") and then voided: both are retired.
+    const run2 = await approvedRun("2044-03-16", "2044-03-31", "6");
+    as(hr);
+    const first = await createInvoice({ runId: run2, clientId: client });
+    const second = await createInvoice({ runId: run2, clientId: client }); // a corrected version: the first is now replaced
+    if (!first.ok || !second.ok) throw new Error("invoice failed");
+    expect(await voidInvoice({ invoiceId: second.data.invoiceId, reason: "Wrong client" })).toMatchObject({ ok: true });
+    // The newest number so far belongs to a retired invoice: the one a careless delete would let the next invoice reuse.
+    const highest = await seqOf(second.data.invoiceId);
+    expect(highest).toBeGreaterThan(await seqOf(live.data.invoiceId));
+
+    const listed = await listInvoices(PAGE);
+    expect(listed.retiredCount).toBeGreaterThanOrEqual(2);
+    const result = await purgeRetiredInvoices();
+    expect(result.ok && result.data.deleted).toBeGreaterThanOrEqual(2);
+    expect(await exists(first.data.invoiceId)).toBe(false);
+    expect(await exists(second.data.invoiceId)).toBe(false);
+    expect(await rows(sql`select 1 from ops.invoice_events where invoice_id in (${first.data.invoiceId}, ${second.data.invoiceId})`)).toHaveLength(0);
+    // The live invoice is untouched, and the audit entry holds counts only.
+    expect(await exists(live.data.invoiceId)).toBe(true);
+    const [audit] = await rows<{ metadata: Record<string, unknown> }>(sql`select metadata from ops.audit_log where action = 'invoice.purge_retired' order by id desc limit 1`);
+    expect(Object.keys(audit.metadata).sort()).toEqual(["deleted", "kept"]);
+
+    // The next real invoice starts above the deleted number, not on it.
+    const run3 = await approvedRun("2044-04-01", "2044-04-15", "3");
+    as(hr);
+    const next = await createInvoice({ runId: run3, clientId: client });
+    if (!next.ok) throw new Error("next invoice failed");
+    expect(await seqOf(next.data.invoiceId)).toBeGreaterThan(highest);
+
+    // The floor is protected: it can't be lowered or removed, and a plain delete of an invoice is still refused.
+    await expect(db.execute(sql`update ops.invoice_number_floor set seq = 0`)).rejects.toThrow();
+    await expect(db.execute(sql`delete from ops.invoice_number_floor`)).rejects.toThrow();
+    await expect(db.execute(sql`delete from ops.invoices where id = ${live.data.invoiceId}`)).rejects.toThrow();
+  });
+
+  it("refuses a person without the right", async () => {
+    as(preparer);
+    expect(await purgeRetiredInvoices()).toMatchObject({ ok: false });
+    as(approver);
+    expect(await purgeRetiredInvoices()).toMatchObject({ ok: false });
   });
 });

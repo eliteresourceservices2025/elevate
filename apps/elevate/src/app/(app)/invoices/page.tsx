@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { PagerLinks } from "@/components/pager";
-import { PurgeArchivedInvoicesButton } from "@/components/purge-archived-button";
+import { PurgeArchivedInvoicesButton, PurgeRetiredInvoicesButton } from "@/components/purge-archived-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/lib/auth";
@@ -44,9 +44,10 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
       <InvoiceTabs current="invoices" />
       <InvoiceSummaryTiles billedCents={list.billedThisMonthCents} month={list.month} issuedCount={list.monthIssuedCount} liveCount={list.liveCount} hiddenCount={list.hiddenCount} />
       <InvoiceFilters show={list.show} q={list.q} />
-      {list.show !== "live" && list.canPurge && list.archivedTestCount > 0 ? (
+      {list.show !== "live" && list.canPurge && (list.archivedTestCount > 0 || list.retiredCount > 0) ? (
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <PurgeArchivedInvoicesButton count={list.archivedTestCount} />
+          {list.archivedTestCount > 0 ? <PurgeArchivedInvoicesButton count={list.archivedTestCount} /> : null}
+          {list.retiredCount > 0 ? <PurgeRetiredInvoicesButton count={list.retiredCount} /> : null}
         </div>
       ) : null}
       {list.rows.length === 0 ? (

@@ -953,6 +953,13 @@
       "when": 1794569161634,
       "tag": "0135_payroll_purge_archived_test_data",
       "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1794609662187,
+      "tag": "0136_invoice_number_floor",
+      "breakpoints": true
     }
   ]
 }

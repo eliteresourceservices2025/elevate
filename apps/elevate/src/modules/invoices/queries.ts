@@ -56,6 +56,11 @@ export async function listInvoices(paging: { page: number; pageSize: number }, o
     .from(invoices)
     .where(sql`${invoices.isTest} and (select e.kind from ops.invoice_events e where e.invoice_id = ${invoices.id} order by e.created_at desc, e.id desc limit 1) = 'archived'`);
 
+  const [{ retired }] = await db
+    .select({ retired: count() })
+    .from(invoices)
+    .where(sql`(select e.kind from ops.invoice_events e where e.invoice_id = ${invoices.id} order by e.created_at desc, e.id desc limit 1) in ('voided', 'superseded')`);
+
   // This month's real, live invoices (a practice invoice never counts): the sum of what they bill, in cents.
   const month = invoiceToday().slice(0, 7);
   const monthRows = await db
@@ -78,6 +83,7 @@ export async function listInvoices(paging: { page: number; pageSize: number }, o
     canCreate: can(actor, "invoices.create"),
     canPurge: can(actor, "invoices.purge_archived"),
     archivedTestCount: archivedTest,
+    retiredCount: retired,
     showingAll: show === "all",
     show,
     q,
