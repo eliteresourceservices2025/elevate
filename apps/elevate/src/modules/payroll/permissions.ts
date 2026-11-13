@@ -16,6 +16,8 @@ export const payrollPermissions = definePermissions({
   "payroll.release_statements": { roles: {}, payrollLevels: ["preparer", "approver"] },
   // Marking a run as a test run, archiving it and restoring it: both levels that work on runs (never a viewer).
   "payroll.manage_test_runs": { roles: {}, payrollLevels: ["preparer", "approver"] },
+  // Deleting archived test runs (and archived cancelled runs) for good: the same two working levels. Real approved or paid runs can never be deleted.
+  "payroll.purge_archived": { roles: {}, payrollLevels: ["preparer", "approver"] },
   "payroll.view_own": {
     roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" },
   },

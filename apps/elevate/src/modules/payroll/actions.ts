@@ -18,7 +18,7 @@ import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
 import { releaseRun } from "./statements";
-import { archiveRun, cancelRun, confirmLine, createRun, dismissItem, removeRunLine, restoreRun, restoreRunLine, saveItem, setRunTest, syncRunPeople } from "./runs";
+import { archiveRun, cancelRun, confirmLine, createRun, dismissItem, purgeArchivedRuns, removeRunLine, restoreRun, restoreRunLine, saveItem, setRunTest, syncRunPeople } from "./runs";
 import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import { readJibbleTimesheet } from "./jibble/timesheet";
 import { MAX_XLSX_BYTES, XlsxError } from "./jibble/xlsx";
@@ -384,7 +384,20 @@ export async function markRunAsTest(input: unknown): Promise<ActionResult> {
   });
 }
 
-/** Archives a test run (a real run can never be archived): it leaves the lists but stays on record. */
+/** Deletes every archived test run and archived cancelled run for good (with its test invoices). Returns what was deleted and what had to stay. */
+export async function purgeArchivedPayRuns(): Promise<ActionResult<{ runsDeleted: number; invoicesDeleted: number; runsKept: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.purge_archived");
+    const r = await db.transaction((tx) => purgeArchivedRuns(tx, actor));
+    revalidatePath("/payroll");
+    revalidatePath("/invoices");
+    return { ok: true, data: { runsDeleted: r.runsDeleted, invoicesDeleted: r.invoicesDeleted, runsKept: r.runsKept } } as const;
+  });
+}
+
+/** Archives a test run or a cancelled run (a real run in any other status can never be archived): it leaves the lists but stays on record. */
 export async function archivePayRun(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
 

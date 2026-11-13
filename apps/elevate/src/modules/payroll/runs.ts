@@ -271,10 +271,13 @@ export async function setRunTest(tx: Tx, actor: Actor, v: { runId: string; test:
   await logChange(tx, actor, { action: v.test ? "run_marked_test" : "run_marked_real", runId: v.runId, detail: { reason: v.reason, status: run.status } });
 }
 
-/** Archives a test run in any status (paid included): it leaves the lists but stays on record, and a real run can never be archived. */
+/**
+ * Archives a test run in any status (paid included), or a cancelled run (never approved, never paid): it leaves the lists but stays on record.
+ * A real run that is draft, in review, approved or paid can never be archived.
+ */
 export async function archiveRun(tx: Tx, actor: Actor, v: { runId: string; reason: string }): Promise<void> {
   const run = await lockRun(tx, v.runId);
-  if (!run.isTest) throw new ActionFailure("Only a test run can be archived. Mark it as a test run first.");
+  if (!run.isTest && run.status !== "cancelled") throw new ActionFailure("Only a test run or a cancelled run can be archived. Mark it as a test run first.");
   if (run.archivedAt) throw new ActionFailure("This run is already archived.");
   await tx.update(payRuns).set({ archivedAt: new Date(), archivedBy: actor.id }).where(eq(payRuns.id, v.runId));
   await writeAudit({ actor, action: "payroll.run.archive", targetType: "pay_run", targetId: v.runId, metadata: { status: run.status } }, tx);
@@ -288,6 +291,26 @@ export async function restoreRun(tx: Tx, actor: Actor, v: { runId: string }): Pr
   await tx.update(payRuns).set({ archivedAt: null, archivedBy: null }).where(eq(payRuns.id, v.runId));
   await writeAudit({ actor, action: "payroll.run.restore", targetType: "pay_run", targetId: v.runId, metadata: { status: run.status } }, tx);
   await logChange(tx, actor, { action: "run_restored", runId: v.runId, detail: { status: run.status } });
+}
+
+/** What a permanent delete removed, and what is archived but had to stay (a run with a real or still-live invoice, an invoice a kept one was replaced by). */
+export type PurgeResult = { runsDeleted: number; invoicesDeleted: number; runsKept: number; invoicesKept: number };
+
+/**
+ * Deletes archived test runs and archived cancelled runs for good, with their lines, payments, history and test invoices. Never a real run
+ * that was approved or paid, never a real invoice, never anything not archived. The database function picks the rows and is the only place
+ * the append-only protections let a delete through; the audit entry carries counts only.
+ */
+export async function purgeArchivedRuns(tx: Tx, actor: Actor): Promise<PurgeResult> {
+  return purgeArchived(tx, actor, { runs: true, invoices: false }, "payroll.run.purge");
+}
+
+export async function purgeArchived(tx: Tx, actor: Actor, scope: { runs: boolean; invoices: boolean }, action: string): Promise<PurgeResult> {
+  const res = await tx.execute(sql`select * from payroll.purge_archived_test_data(${scope.runs}, ${scope.invoices})`);
+  const row = (res as unknown as Array<{ runs_deleted: number; invoices_deleted: number; runs_kept: number; invoices_kept: number }>)[0];
+  const out: PurgeResult = { runsDeleted: row.runs_deleted, invoicesDeleted: row.invoices_deleted, runsKept: row.runs_kept, invoicesKept: row.invoices_kept };
+  await writeAudit({ actor, action, targetType: "pay_run", metadata: { ...out } }, tx);
+  return out;
 }
 
 // ---- Changing a draft run ----

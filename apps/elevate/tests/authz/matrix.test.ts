@@ -188,6 +188,7 @@ const EXPECTED: Record<string, string> = {
   "payroll.export": "- - - - - -",
   "payroll.approve": "- - - - - -",
   "payroll.manage_test_runs": "- - - - - -",
+  "payroll.purge_archived": "- - - - - -",
   "payroll.release_statements": "- - - - - -",
   "payroll.view_own": "O O O O O O",
   // client invoices: roles only (a payroll level adds nothing)
@@ -195,6 +196,7 @@ const EXPECTED: Record<string, string> = {
   "invoices.create": "A A - - A -",
   "invoices.manage_rates": "A A - - A -",
   "invoices.manage": "A A - - A -",
+  "invoices.purge_archived": "A A - - A -",
 };
 
 const SCOPE_CODE: Record<string, Scope | null> = { A: "all", T: "team", O: "own", "-": null };
@@ -331,6 +333,11 @@ describe("payroll access", () => {
     expect(can(level("viewer"), "payroll.manage_test_runs")).toBe(false);
     expect(can(level("preparer"), "payroll.manage_test_runs")).toBe(true);
     expect(can(level("approver"), "payroll.manage_test_runs")).toBe(true);
+    // Deleting archived test runs for good: the same two working levels.
+    expect(can(level(null), "payroll.purge_archived")).toBe(false);
+    expect(can(level("viewer"), "payroll.purge_archived")).toBe(false);
+    expect(can(level("preparer"), "payroll.purge_archived")).toBe(true);
+    expect(can(level("approver"), "payroll.purge_archived")).toBe(true);
   });
 
   it("no role, not even Super Admin, opens a payroll action without a level", () => {

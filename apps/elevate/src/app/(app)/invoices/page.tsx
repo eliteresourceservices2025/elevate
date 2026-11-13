@@ -5,11 +5,13 @@ import { EmptyState } from "@/components/empty-state";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { PagerLinks } from "@/components/pager";
+import { PurgeArchivedButton } from "@/components/purge-archived-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
+import { purgeArchivedInvoices } from "@/modules/invoices/actions";
 import { formatDollars } from "@/modules/invoices/calc";
 import { NewInvoiceDialog } from "@/modules/invoices/components/invoice-dialogs";
 import { InvoiceTabs } from "@/modules/invoices/components/invoice-tabs";
@@ -36,7 +38,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
       />
       <InvoiceTabs current="invoices" />
       {list.hiddenCount > 0 || list.showingAll ? (
-        <p className="text-sm">
+        <div className="flex flex-wrap items-center gap-3 text-sm">
           {list.showingAll ? (
             <Link href="/invoices" className="underline underline-offset-2">
               Hide archived, void and replaced invoices
@@ -46,7 +48,20 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
               Show archived, void and replaced invoices ({list.hiddenCount})
             </Link>
           )}
-        </p>
+          {list.showingAll && list.canPurge && list.archivedTestCount > 0 ? (
+            <PurgeArchivedButton
+              label="Delete archived test invoices for good"
+              title="Delete archived test invoices for good"
+              explain={`Deletes the ${list.archivedTestCount} archived test invoice${list.archivedTestCount === 1 ? "" : "s"}. Real invoices (including void ones) and test invoices that are not archived are never deleted.`}
+              act={purgeArchivedInvoices}
+              done={(d) =>
+                d
+                  ? `Deleted ${d.deleted} test invoice${d.deleted === 1 ? "" : "s"}.${d.kept > 0 ? ` ${d.kept} stayed because a newer invoice replaced them.` : ""}`
+                  : "Done."
+              }
+            />
+          ) : null}
+        </div>
       ) : null}
       {list.rows.length === 0 ? (
         <EmptyState icon={Receipt} title="No invoices yet" description="Add the client's billing rate first, then make an invoice from a pay run." />

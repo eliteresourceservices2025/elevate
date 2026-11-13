@@ -50,7 +50,7 @@ If you are paid through payroll yourself, you can add and change your own pay li
 
 ![The Start a pay run window: the first and last day of one cutoff.](help:prepare-a-pay-run/05-new-run.png)
 
-A run always covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month. Any other dates are refused. There is one run for each cutoff. If you chose the wrong period, or the pay lines changed after you made the run, click **Cancel run**, give a **Reason**, and create it again.
+A run always covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month. Any other dates are refused. There is one run for each cutoff. If you chose the wrong period, or the pay lines changed after you made the run, click **Cancel run**, give a **Reason**, and create it again. To tidy the cancelled run away, open it, choose **Run options**, then **Archive this cancelled run**. It moves to **Archived runs**, where **Delete archived runs for good** removes it.
 
 # Fill in the run
 
