@@ -131,6 +131,7 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
       const pages: { path: string; name: string; heading: RegExp }[] = [
         { path: "/dashboard", name: "dashboard", heading: /./ },
         { path: "/payroll", name: "runs", heading: /^Payroll$/ },
+        { path: "/payroll?view=action", name: "runs-needs-you", heading: /^Payroll$/ },
         { path: `/payroll/${draftRun}`, name: "run-sheet-draft", heading: /^Pay run / },
         { path: `/payroll/${approvedRun}`, name: "run-sheet-approved", heading: /^Pay run / },
         { path: `/payroll/${draftRun}/import`, name: "import", heading: /^Import a Jibble timesheet$/ },
@@ -140,6 +141,7 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
         { path: "/payroll/history", name: "history", heading: /./ },
         { path: "/payroll/settings", name: "settings", heading: /./ },
         { path: "/invoices", name: "invoices", heading: /^Invoices$/ },
+        { path: "/invoices?show=all", name: "invoices-all", heading: /^Invoices$/ },
         { path: "/invoices/rates", name: "billing-rates", heading: /^Billing rates$/ },
       ];
       for (const p of pages) {
