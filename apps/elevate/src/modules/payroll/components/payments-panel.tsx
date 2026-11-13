@@ -7,6 +7,8 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { HintedLabel } from "@/components/field-hint";
+import { PAYROLL_HINTS } from "../hints";
 import { Label } from "@/components/ui/label";
 import {
   Table,
@@ -52,7 +54,7 @@ function MarkPaidForm({
       }}
     >
       <div className="space-y-1">
-        <Label htmlFor={`ref-${employeeId}`}>{P.reference}</Label>
+        <HintedLabel htmlFor={`ref-${employeeId}`} hint={PAYROLL_HINTS.paymentReference}>{P.reference}</HintedLabel>
         <Input
           id={`ref-${employeeId}`}
           value={reference}
@@ -63,7 +65,7 @@ function MarkPaidForm({
         />
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`paid-${employeeId}`}>{P.paidOn}</Label>
+        <HintedLabel htmlFor={`paid-${employeeId}`} hint={PAYROLL_HINTS.paymentPaidOn}>{P.paidOn}</HintedLabel>
         <Input
           id={`paid-${employeeId}`}
           type="date"

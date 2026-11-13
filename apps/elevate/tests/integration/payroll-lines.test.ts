@@ -66,6 +66,24 @@ describe("pay lines", () => {
     expect(JSON.stringify(log)).not.toMatch(/31415|3141592/);
   });
 
+  it("keeps a person's own overtime percents with the rate, shows them as typed, and clears them on a blank box", async () => {
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    expect(await createPayLine(base(emp, { effectiveFrom: "2026-01-01", otRegular: "150", otRestDay: "", otRestDayOver8: "180" }))).toMatchObject({ ok: true });
+    const [line] = await lineRows(emp);
+    expect(JSON.parse(fieldCrypto().decrypt(line.amounts_enc, `pay_line:${line.id}`))).toEqual({ monthlyCentavos: "3141592", otBp: { regular: 15000, restDayOver8: 18000 } });
+    const shown = (await getRates()).find((r) => r.employeeId === emp)!;
+    expect(shown.otPercent).toEqual({ regular: "150", restDay: "", restDayOver8: "180" });
+
+    // A new version with the boxes blank goes back to the company standard.
+    expect(await updatePayLine({ lineKey: line.line_key, ...base(emp, { effectiveFrom: "2026-02-01", otRegular: "", otRestDay: "", otRestDayOver8: "" }), reason: "Back to standard" })).toMatchObject({ ok: true });
+    const after = (await getRates()).find((r) => r.employeeId === emp)!;
+    expect(after.otPercent).toEqual({ regular: "", restDay: "", restDayOver8: "" });
+    // Anything that is not a percent is refused.
+    expect((await createPayLine(base(await person(), { otRegular: "abc" }))).ok).toBe(false);
+  });
+
   it("lets a Preparer who is also paid through payroll create, change and end their own line, with each change in the history", async () => {
     const mine = await account();
     const other = await account();

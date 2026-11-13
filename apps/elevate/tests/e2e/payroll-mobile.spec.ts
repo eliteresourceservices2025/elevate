@@ -200,6 +200,28 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
           },
         },
         {
+          label: `${device.name} field descriptions open on a tap`,
+          run: async () => {
+            await page.goto("/payroll/settings");
+            await page.getByRole("button", { name: "Change settings" }).click();
+            const dialog = page.getByRole("dialog");
+            await dialog.locator('[data-hint-for="Starts on"]').click();
+            const tip = page.getByText(/first day these settings apply/);
+            await expect(tip).toBeVisible();
+            await onScreen(page, tip, "the Starts on description");
+            await page.screenshot({ path: `${SHOTS}/${device.name}-field-hint.png` });
+            await page.keyboard.press("Escape");
+            await expect(tip).toHaveCount(0);
+            await page.keyboard.press("Escape");
+            await page.goto("/payroll/rates");
+            await page.getByRole("button", { name: "Add pay line" }).click();
+            await expect(page.getByRole("dialog").getByLabel("Regular day (%)")).toBeVisible();
+            await onScreen(page, page.getByRole("dialog"), "the Add pay line window");
+            await page.screenshot({ path: `${SHOTS}/${device.name}-add-pay-line.png` });
+            await page.keyboard.press("Escape");
+          },
+        },
+        {
           label: `${device.name} new invoice and rate windows`,
           run: async () => {
             await page.goto("/invoices");

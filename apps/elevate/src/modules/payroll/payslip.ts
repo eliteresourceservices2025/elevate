@@ -10,6 +10,8 @@ export type PayslipLine = {
   alias: string | null;
   /** The client this pay line works for, when it has one. */
   clientName: string | null;
+  /** This person's own overtime percents laid over the run's, when their pay line sets any. */
+  multipliersBp?: Partial<Record<ExtraKey, number | null>> | null;
   input: LineInput;
   result: LineResult;
 };
@@ -36,6 +38,10 @@ export type PayslipInput = {
   signatory: PayslipSignature | null;
   /** From a test run: stamped TEST on the page and the PDF. Never true for a statement a contractor can open. */
   isTest?: boolean;
+  /** Filled in by ELEVATE from the run: the Preparer who sent it for review, the Approver who approved it, and the day they approved it. */
+  preparedBy?: string | null;
+  authorizedBy?: string | null;
+  approvedOn?: string | null;
 };
 
 export type PayslipRowView = { label: string; detail: string; amount: string };
@@ -68,6 +74,10 @@ export type PayslipView = {
   /** Only when the person has more than one line on the run. */
   total: string | null;
   isTest: boolean;
+  /** The names and date the certification block fills in by itself. */
+  preparedBy: string | null;
+  authorizedBy: string | null;
+  approvedOn: string | null;
   signature: { name: string; title: string; signedOn: string; imageBase64: string | null } | null;
 };
 
@@ -103,7 +113,7 @@ function lineView(line: PayslipLine, input: PayslipInput): PayslipLineView {
     : "";
   const compensation: PayslipRowView[] = [{ label: L.base, detail: worked, amount: money(r.base) }];
   for (const key of EXTRA_KEYS) {
-    const bp = key === "holiday" ? HOLIDAY_BP : (input.multipliersBp?.[key] ?? null);
+    const bp = key === "holiday" ? HOLIDAY_BP : (line.multipliersBp?.[key] ?? input.multipliersBp?.[key] ?? null);
     compensation.push({
       label: PAY_ITEM_LABELS[EXTRA_KEY_ITEM[key]],
       detail: i.extra[key] > 0 ? [hoursAndMinutes(i.extra[key]), bp ? `at ${percent(bp)}` : ""].filter(Boolean).join(" ") : "",
@@ -173,6 +183,9 @@ export function payslipView(input: PayslipInput): PayslipView {
     }),
     total: multi ? money(input.lines.reduce((sum, l) => sum + l.result.net, 0n)) : null,
     isTest: input.isTest === true,
+    preparedBy: input.preparedBy ? plain(input.preparedBy) : null,
+    authorizedBy: input.authorizedBy ? plain(input.authorizedBy) : null,
+    approvedOn: input.approvedOn ?? null,
     signature: input.signatory
       ? { name: plain(input.signatory.name), title: plain(input.signatory.title), signedOn: input.signatory.signedOn, imageBase64: input.signatory.signatureBase64 }
       : null,

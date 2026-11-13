@@ -91,7 +91,13 @@ async function checkPersonAndClient(tx: Tx, employeeId: string, clientId: string
   return null;
 }
 
-const amountsOf = (v: { monthly: string }): LineAmounts => ({ monthlyCentavos: parseMoney(v.monthly) ?? 0n });
+const amountsOf = (v: { monthly: string; otRegular?: number | null; otRestDay?: number | null; otRestDayOver8?: number | null }): LineAmounts => {
+  const otBp: Partial<Record<"regular" | "restDay" | "restDayOver8", number>> = {};
+  if (v.otRegular != null) otBp.regular = v.otRegular;
+  if (v.otRestDay != null) otBp.restDay = v.otRestDay;
+  if (v.otRestDayOver8 != null) otBp.restDayOver8 = v.otRestDayOver8;
+  return { monthlyCentavos: parseMoney(v.monthly) ?? 0n, ...(Object.keys(otBp).length > 0 ? { otBp } : {}) };
+};
 
 /** What the change log keeps about a line version: the figures (encrypted with the log row) and the non-money fields. */
 const detailOf = (row: Pick<LineRow, "hoursPerDay" | "paymentMethod" | "effectiveFrom" | "endsOn" | "alias" | "clientId">, amounts: LineAmounts) => ({
@@ -410,7 +416,7 @@ export async function restorePayRun(input: unknown): Promise<ActionResult> {
   });
 }
 
-/** Releases a real, approved run's contractor payment statements to the people on it (Approvers). Once; never undone. Notices carry no amount. */
+/** Releases a real, approved run's contractor payment statements to the people on it (Preparers and Approvers). Once; never undone. Notices carry no amount. */
 export async function releaseStatements(input: unknown): Promise<ActionResult<{ people: number }>> {
   const actor = await requireUser();
 

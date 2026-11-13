@@ -44,6 +44,9 @@ const view = (imageBase64: string | null): PayslipView => ({
   ],
   total: null,
   isTest: false,
+  preparedBy: null,
+  authorizedBy: null,
+  approvedOn: null,
   signature: { name: "Carmen Dela Rosa", title: "Human Resources Director", signedOn: "2029-01-16", imageBase64 },
 });
 
@@ -94,6 +97,21 @@ describe("renderPayslipPdf", () => {
     for (const needle of ["CERTIFICATION", "Contractor signature (optional)", "DISCLAIMER", "Independent Contractor", "No tax, SSS", "PS-TEST0001-ABCD"]) {
       expect(text.toUpperCase(), text.slice(-700)).toContain(needle.toUpperCase());
     }
+  });
+
+  it("prints the Preparer, the Approver and the date that ELEVATE filled in, and falls back to Not signed with none", async () => {
+    const textOf = async (bytes: Uint8Array) => (await extractText(await getDocumentProxy(new Uint8Array(bytes)), { mergePages: true })).text;
+    const filled = await textOf(await renderPayslipPdf({ ...view(null), signature: null, preparedBy: "Pia Preparer", authorizedBy: "Ari Approver", approvedOn: "2029-01-16" }));
+    expect(filled).toContain("Pia Preparer");
+    expect(filled).toContain("Ari Approver");
+    expect(filled).toContain("Approved on 2029-01-16");
+    expect(filled).not.toContain("Not signed");
+    const empty = await textOf(await renderPayslipPdf({ ...view(null), signature: null }));
+    expect(empty).toContain("Not signed");
+    // A signatory set in Settings still shows under Authorized by, with the Preparer and the date filled in beside it.
+    const withSignatory = await textOf(await renderPayslipPdf({ ...view(null), preparedBy: "Pia Preparer", authorizedBy: "Ari Approver", approvedOn: "2029-01-16" }));
+    expect(withSignatory).toContain("Carmen Dela Rosa");
+    expect(withSignatory).toContain("Pia Preparer");
   });
 
   it("stamps a statement from a test run, and no other", async () => {

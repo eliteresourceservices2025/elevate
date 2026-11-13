@@ -67,7 +67,7 @@ Every contractor payment statement carries the name, title and signature of the 
 
 ![Settings, Payment statement signatory: the name, the title and the signature picture that print on every contractor payment statement.](help:how-payroll-works/03-statement-signatory.png)
 
-A pay run keeps the signatory in force on the day it is paid, so an earlier statement never changes when the Human Resources Director changes. A run paid before anyone was set up still pays on time: its statements say **Not signed**.
+A pay run keeps the signatory in force on the day it is paid, so an earlier statement never changes when the Human Resources Director changes. A run paid before anyone was set up still pays on time. Either way, the statement fills in **Prepared by** (who prepared the run), **Authorized by** (who approved it) and the **Date** it was approved by itself, from the run: nobody types them. With no signatory set up, the person who approved the run shows under **Authorized by** instead of **Not signed**.
 
 # What is kept
 
@@ -83,7 +83,7 @@ Every change is written to the change history: who made it, when, the old and ne
 
 - **I am HR or a Super Admin and I cannot see Payroll.** That is on purpose. Ask a Super Admin to give you a level.
 - **Why can't I approve this run?** You prepared it, changed it, checked a line on it, or wrote a rate it uses. Another Approver must do it.
-- **Where is my statement?** Open **My payment statements**. It appears when the pay run it belongs to has been approved and an Approver has released it to everyone. Click **View** to read it on the page, or **Download PDF** to keep a copy.
+- **Where is my statement?** Open **My payment statements**. It appears when the pay run it belongs to has been approved and has been released to everyone. Click **View** to read it on the page, or **Download PDF** to keep a copy.
 - **Where did the dollar rate go?** There is none. Everything is in pesos, and the executive pays at the rate Remitly shows.
 
 # Try it yourself

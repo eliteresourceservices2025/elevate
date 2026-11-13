@@ -5,6 +5,8 @@ import { EmptyState } from "@/components/empty-state";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldHint, HintedLabel } from "@/components/field-hint";
+import { PAYROLL_HINTS } from "../hints";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,20 +45,23 @@ function ChangeSettingsForm({ current, today }: { current: SettingsVersion; toda
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
-          <Label htmlFor="set-from">{S.startsOn}</Label>
+          <HintedLabel htmlFor="set-from" hint={PAYROLL_HINTS.settingsStartsOn}>{S.startsOn}</HintedLabel>
           <Input id="set-from" type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} required />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="set-divisor">{S.divisor}</Label>
+          <HintedLabel htmlFor="set-divisor" hint={PAYROLL_HINTS.settingsDivisor}>{S.divisor}</HintedLabel>
           <Input id="set-divisor" type="number" inputMode="numeric" min={1} max={31} step={1} value={divisor} onChange={(e) => setDivisor(e.target.value)} required />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="set-warn">{S.warn}</Label>
+          <HintedLabel htmlFor="set-warn" hint={PAYROLL_HINTS.settingsWarn}>{S.warn}</HintedLabel>
           <Input id="set-warn" type="number" inputMode="numeric" min={1} max={100} step={1} value={warn} onChange={(e) => setWarn(e.target.value)} required />
         </div>
       </div>
       <fieldset className="grid gap-3 sm:grid-cols-2">
-        <legend className="mb-1 text-sm font-medium">{S.ratesLegend}</legend>
+        <legend className="mb-1 flex items-center gap-1 text-sm font-medium">
+          {S.ratesLegend}
+          <FieldHint label="Standard overtime rates">{PAYROLL_HINTS.settingsOt}</FieldHint>
+        </legend>
         {RATE_FIELDS.map((f) => (
           <div key={f.form} className="space-y-1">
             <Label htmlFor={`set-${f.form}`}>{f.label}</Label>
@@ -70,10 +75,10 @@ function ChangeSettingsForm({ current, today }: { current: SettingsVersion; toda
             />
           </div>
         ))}
-        <p className="text-xs text-muted-foreground sm:col-span-2">125 means 1.25 times the person&apos;s own hourly rate, so overtime differs per person because their rates differ. Leave a box blank to use the standard (125 regular, 130 rest day, 169 rest day past 8 hours).</p>
+        <p className="text-xs text-muted-foreground sm:col-span-2">This is the standard for everyone. 125 means 1.25 times the person&apos;s own hourly rate. A person who is paid differently gets their own percents on their pay line (Rates tab); a blank box there uses these. Leave a box here blank to use the built-in standard (125 regular, 130 rest day, 169 rest day past 8 hours).</p>
       </fieldset>
       <div className="space-y-1">
-        <Label htmlFor="set-reason">{S.reasonOptional}</Label>
+        <HintedLabel htmlFor="set-reason" hint={PAYROLL_HINTS.settingsReason}>{S.reasonOptional}</HintedLabel>
         <Textarea id="set-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} />
       </div>
       <Button type="submit" disabled={pending}>

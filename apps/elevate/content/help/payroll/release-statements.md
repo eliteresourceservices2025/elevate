@@ -1,6 +1,6 @@
 ---
 title: Release the contractor payment statements
-summary: For people with payroll access. Read, download and check every contractor's statement for a pay run, and let an Approver release them all in one step.
+summary: For people with payroll access. Read, download and check every contractor's statement for a pay run, and release them all in one step.
 category: payroll
 audience: all
 order: 6
@@ -15,11 +15,11 @@ Every pay run has one contractor payment statement for each person on it. The **
 2. Open a run. You see each person, their pay lines and their **Total payable compensation**.
 3. Click **View** to read a statement on the page, exactly as the contractor will see it. Click **Download PDF** for one person, or **Download all (one PDF)** for the whole run.
 
-Opening a statement is written to the audit log. Anyone with payroll access can read them; only an Approver can release them.
+Opening a statement is written to the audit log. Anyone with payroll access can read them; a Preparer or an Approver can release them.
 
 # Release them to the contractors
 
-When you have read the statements and they are right, an Approver clicks **Release to everyone**. A window shows how many statements will go out. After **Release now**:
+When you have read the statements and they are right, a Preparer or an Approver clicks **Release to everyone**. A window shows how many statements will go out. After **Release now**:
 
 - Each person can open their statement under **My payment statements**.
 - Each person who has a sign-in is told with a short notice. The notice never has an amount.
@@ -33,5 +33,5 @@ A statement from a **test run** is stamped **TEST**. You can read and download i
 
 # Common mistakes
 
-- **The button is grey.** Hover over it: it says why. A Preparer or a viewer sees **An Approver releases the statements.** A run that is not approved yet shows **Release is available once the run is approved.**
+- **The button is grey.** Hover over it: it says why. Someone with only a viewer level sees **A Preparer or an Approver releases the statements.** A run that is not approved yet shows **Release is available once the run is approved.**
 - **A contractor says their statement is missing.** Check that the run says **Released** on the Statements tab. If it does, ask them to open **My payment statements** again.

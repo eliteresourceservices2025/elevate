@@ -32,6 +32,9 @@ function readableAmounts(id: string, stored: string) {
   }
 }
 
+/** Basis points as the percent typed in the form: 12500 -> "125"; blank when not set. */
+const otText = (bp: number | undefined) => (bp === undefined ? "" : formatPesos(BigInt(bp)).replace(/\.00$/, ""));
+
 export type RateRow = {
   lineKey: string;
   employeeId: string;
@@ -49,6 +52,8 @@ export type RateRow = {
   upcomingFrom: string | null;
   /** Pesos, "31,415.92". */
   monthly: string;
+  /** This person's own overtime percents as typed ("125"); blank means the company standard from Settings applies. */
+  otPercent: { regular: string; restDay: string; restDayOver8: string };
   /** The stored amount could not be decrypted (usually a wrong or rotated encryption key). The amount above then reads "Can't be read". */
   unreadable: boolean;
 };
@@ -108,6 +113,11 @@ export async function getRates(): Promise<RateRow[]> {
       endsOn: lastDay,
       upcomingFrom: upcoming ?? null,
       monthly: amounts ? formatPesos(amounts.monthlyCentavos) : UNREADABLE,
+      otPercent: {
+        regular: otText(amounts?.otBp?.regular),
+        restDay: otText(amounts?.otBp?.restDay),
+        restDayOver8: otText(amounts?.otBp?.restDayOver8),
+      },
       unreadable: amounts === null,
     });
   }

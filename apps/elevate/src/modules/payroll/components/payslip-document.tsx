@@ -151,6 +151,15 @@ export function PayslipDocument({ view }: { view: PayslipView }) {
                 {L.signedOn} {signature.signedOn}
               </p>
             </>
+          ) : view.authorizedBy ? (
+            <>
+              <p className="text-sm font-semibold">{view.authorizedBy}</p>
+              {view.approvedOn ? (
+                <p className="text-xs text-muted-foreground">
+                  {L.approvedOn} {view.approvedOn}
+                </p>
+              ) : null}
+            </>
           ) : (
             <p className="text-sm italic text-muted-foreground">{L.notSigned}</p>
           )}
@@ -159,9 +168,13 @@ export function PayslipDocument({ view }: { view: PayslipView }) {
           <h3 className="text-xs font-semibold uppercase tracking-wide">{L.certificationTitle}</h3>
           <p className="text-xs">{L.certificationText}</p>
           <div className="grid gap-4 pt-2 sm:grid-cols-3">
-            {[L.preparedBy, L.certDate, L.contractorSignature].map((label) => (
+            {[
+              [L.preparedBy, view.preparedBy ?? ""],
+              [L.certDate, view.approvedOn ?? ""],
+              [L.contractorSignature, ""],
+            ].map(([label, value]) => (
               <div key={label}>
-                <div className="h-8 border-b border-foreground/60" />
+                <div className="flex h-8 items-end border-b border-foreground/60 pb-0.5 text-sm">{value}</div>
                 <p className="pt-1 text-xs text-muted-foreground">{label}</p>
               </div>
             ))}

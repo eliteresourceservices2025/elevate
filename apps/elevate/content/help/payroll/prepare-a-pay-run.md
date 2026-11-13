@@ -15,11 +15,13 @@ A pay run is prepared by one person and approved by a different person. ELEVATE 
 
 Open **Payroll** under **Admin** in the left menu. It has four tabs: **Runs**, **Rates**, **Settings** and **History**.
 
-Start with **Settings**. It shows the **Cutoff divisor**, the **Warn at** percentage and the overtime (OT) rates. Each row is a version with a start date, and the one marked **In force** is the one used today. Overtime is paid at the person's **own hourly rate** times a percent, so it differs per person because their rates differ. If you leave an overtime box blank, the **standard** percent is used: 125 for a regular day, 130 for a rest day and 169 for a rest day past 8 hours, so overtime pays from your first run. Holiday pay is not a setting: it is always one to one (100% of the hourly rate).
+Start with **Settings**. It shows the **Cutoff divisor**, the **Warn at** percentage and the overtime (OT) rates. Each row is a version with a start date, and the one marked **In force** is the one used today. Overtime is paid at the person's **own hourly rate** times a percent. These Settings are the **company standard**; a person who is paid differently can have their own percents on their pay line (see **Rates**). If you leave an overtime box blank, the **standard** percent is used: 125 for a regular day, 130 for a rest day and 169 for a rest day past 8 hours, so overtime pays from your first run. Holiday pay is not a setting: it is always one to one (100% of the hourly rate).
 
 ![Payroll, Settings: the versions of the pay settings, and the Change settings button.](help:prepare-a-pay-run/01-settings.png)
 
-To change them, click **Change settings**. Choose **Starts on**, check the **Cutoff divisor**, and type each overtime rate as a percent of the normal hourly rate: 125 means 1.25 times. Leave a rate blank until the figure is confirmed. Then click **Save settings**. The old version stays on record.
+To change them, click **Change settings**. Choose **Starts on**, check the **Cutoff divisor**, and type each overtime rate as a percent of the normal hourly rate: 125 means 1.25 times. Leave a rate blank until the figure is confirmed. Then click **Save settings**. The old version stays on record. Every box has a small **(i)** button: tap or hover it to read what the box is for.
+
+To give one person their own overtime percents, open **Rates**, then **Add pay line** (or **Change** on a line) and fill in **Overtime (OT) for this person**. A box left blank uses the company standard from Settings. The statement shows the percent that was used.
 
 ![The Change pay settings window: the start date, the divisor and the overtime (OT) rates.](help:prepare-a-pay-run/02-change-settings.png)
 
@@ -114,7 +116,7 @@ Type the **Remitly reference** and check the **Paid on** date, then click **Mark
 
 ![The Mark paid window: the Remitly reference and the date it was paid.](help:prepare-a-pay-run/11-mark-paid.png)
 
-When everyone is marked paid, the run becomes **Paid**. The contractors' statements are not sent by paying: an Approver releases them from **Statements** (see "Release the statements"). Someone else records your own payment.
+When everyone is marked paid, the run becomes **Paid**. The contractors' statements are not sent by paying: a Preparer or an Approver releases them from **Statements** (see "Release the contractor payment statements"). Someone else records your own payment.
 
 ![Everyone on the run is paid.](help:prepare-a-pay-run/12-all-paid.png)
 

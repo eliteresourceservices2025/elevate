@@ -370,6 +370,25 @@ describe("the settings", () => {
     expect((await payloadOf(early, emp)).result.extra.regular).toBe(31_250n);
   });
 
+  it("pays a person's own overtime percent instead of the standard one, and keeps the standard for everyone else", async () => {
+    const own = await person();
+    const other = await person();
+    await giveLine(preparer, own, { otRegular: "150" });
+    await giveLine(preparer, other);
+    current.user = preparer;
+    const made = await createPayRun({ ...period(3, 2), test: true }); // a test run: a period that may repeat
+    if (!made.ok) throw new Error(made.error);
+    const runId = made.data.runId;
+    for (const emp of [own, other]) {
+      const [line] = await runLines(runId, emp);
+      await item(runId, emp, line.id, "extra_regular", "120");
+    }
+    // 22,000 -> hourly 125.00; two hours at their own 150% is 375.00, at the standard 125% it is 312.50.
+    expect((await payloadOf(runId, own)).result.extra.regular).toBe(37_500n);
+    expect((await payloadOf(runId, other)).result.extra.regular).toBe(31_250n);
+    expect((await payloadOf(runId, own)).rate.otBp).toEqual({ regular: 15_000 });
+  });
+
   it("rereads the settings when a draft run changes", async () => {
     const emp = await person();
     await giveLine(preparer, emp);

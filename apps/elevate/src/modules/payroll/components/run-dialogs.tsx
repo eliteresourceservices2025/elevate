@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { cancelPayRun, createPayRun, removePersonFromRun, restorePersonToRun } from "../actions";
 import { WORKSHEET_LABELS as L } from "../constants";
+import { HintedLabel } from "@/components/field-hint";
+import { PAYROLL_HINTS } from "../hints";
 
 function NewRunForm({ suggestedStart, suggestedEnd }: { suggestedStart: string; suggestedEnd: string }) {
   const { run, pending } = useRun();
@@ -39,18 +41,18 @@ function NewRunForm({ suggestedStart, suggestedEnd }: { suggestedStart: string; 
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
-          <Label htmlFor="run-start">First day</Label>
+          <HintedLabel htmlFor="run-start" hint={PAYROLL_HINTS.runFirstDay}>First day</HintedLabel>
           <Input id="run-start" type="date" value={periodStart} onChange={(e) => setStart(e.target.value)} required />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="run-end">Last day</Label>
+          <HintedLabel htmlFor="run-end" hint={PAYROLL_HINTS.runLastDay}>Last day</HintedLabel>
           <Input id="run-end" type="date" value={periodEnd} onChange={(e) => setEnd(e.target.value)} required />
         </div>
       </div>
       <div className="flex items-start gap-2">
         <input id="run-test" type="checkbox" className="mt-1 size-4 accent-primary" checked={test} onChange={(e) => setTest(e.target.checked)} />
         <div>
-          <Label htmlFor="run-test">This is a test run</Label>
+          <HintedLabel htmlFor="run-test" hint={PAYROLL_HINTS.runTest}>This is a test run</HintedLabel>
           <p className="text-xs text-muted-foreground">A practice run can repeat a period that already has a run, and nobody sees a payment statement from it. You can archive it later.</p>
           {test ? <p className="mt-1 text-xs text-muted-foreground">A test run can cover any dates, up to 31 days: part of a cutoff, or the dates of a Jibble file. Its base pay is still a full cutoff unless you enter the days worked as amounts.</p> : null}
         </div>
