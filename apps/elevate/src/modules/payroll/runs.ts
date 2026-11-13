@@ -29,6 +29,7 @@ import {
   payloadText,
   payrollToday,
   settingsInForce,
+  withOtOverride,
   type ItemValue,
   type RunLinePayload,
 } from "./service";
@@ -84,7 +85,7 @@ function confirmedValues(items: ItemRow[], runLineId: string): Confirmed {
 
 function computePayload(line: { hoursPerDay: number }, rate: RunLinePayload["rate"], confirmed: Confirmed, settings: SettingsSnapshot): RunLinePayload {
   const { input, clientHoursHundredths } = buildLineInput(rate, line.hoursPerDay, confirmed.values, confirmed.itemized);
-  return { rate, hoursPerDay: line.hoursPerDay, input, clientHoursHundredths, result: calculateLine(input, settings) };
+  return { rate, hoursPerDay: line.hoursPerDay, input, clientHoursHundredths, result: calculateLine(input, { ...settings, multipliersBp: withOtOverride(settings.multipliersBp, rate.otBp) }) };
 }
 
 function readRate(lineId: string, stored: string) {

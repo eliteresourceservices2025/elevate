@@ -10,6 +10,8 @@ export type PayslipLine = {
   alias: string | null;
   /** The client this pay line works for, when it has one. */
   clientName: string | null;
+  /** This person's own overtime percents laid over the run's, when their pay line sets any. */
+  multipliersBp?: Partial<Record<ExtraKey, number | null>> | null;
   input: LineInput;
   result: LineResult;
 };
@@ -111,7 +113,7 @@ function lineView(line: PayslipLine, input: PayslipInput): PayslipLineView {
     : "";
   const compensation: PayslipRowView[] = [{ label: L.base, detail: worked, amount: money(r.base) }];
   for (const key of EXTRA_KEYS) {
-    const bp = key === "holiday" ? HOLIDAY_BP : (input.multipliersBp?.[key] ?? null);
+    const bp = key === "holiday" ? HOLIDAY_BP : (line.multipliersBp?.[key] ?? input.multipliersBp?.[key] ?? null);
     compensation.push({
       label: PAY_ITEM_LABELS[EXTRA_KEY_ITEM[key]],
       detail: i.extra[key] > 0 ? [hoursAndMinutes(i.extra[key]), bp ? `at ${percent(bp)}` : ""].filter(Boolean).join(" ") : "",

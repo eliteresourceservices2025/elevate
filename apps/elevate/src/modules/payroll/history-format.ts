@@ -2,6 +2,7 @@ import { EXTRA_KEYS } from "./calculate";
 import {
   EXTRA_KEY_ITEM,
   HISTORY_LABELS as H,
+  OT_SETTING_KEYS,
   PAY_ITEM_LABELS,
   PAYMENT_METHOD_LABELS,
   PAYROLL_LEVEL_LABELS,
@@ -59,6 +60,8 @@ function lineFields(v: Json | null, names: NameLookup): Record<string, string | 
     [R.paymentMethod]: method ? (PAYMENT_METHOD_LABELS[method as PaymentMethod] ?? method) : null,
     [R.startsOn]: str(v.effectiveFrom),
     [R.lastDay]: str(v.endsOn) ?? H.notSet,
+    // This person's own overtime percents; "Standard" means the company setting applies.
+    ...Object.fromEntries(OT_SETTING_KEYS.map((k) => [`${PAY_ITEM_LABELS[EXTRA_KEY_ITEM[k]]} (this person)`, percent((obj(v.otBp) ?? {})[k])])),
   };
 }
 

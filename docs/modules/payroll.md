@@ -2,6 +2,11 @@
 
 Design: `docs/superpowers/specs/2026-11-04-payroll-design.md`. Plan: `docs/superpowers/plans/`. Real names and pay figures never enter the repo, tests or a development database. Code: `apps/elevate/src/modules/payroll/`. Every label comes from `constants.ts`.
 
+## Field descriptions and per-person overtime (2026-11-12; owner request)
+
+- Every payroll and invoice form field has an (i) description (`components/field-hint.tsx`: `FieldHint`, `HintedLabel`; texts in `payroll/hints.ts` and `invoices/hints.ts`). It opens on hover and on a tap, so it works on a phone. Its accessible name is generic on purpose; tests find it by `data-hint-for`. Add a description to every new field.
+- Overtime percents are the company standard in Settings (blank = the built-in 125/130/169) **and** can be set per pay line: `LineAmounts.otBp` (encrypted with the monthly rate; only keys that are set are stored, so older lines keep their shape). `computePayload` lays the person's percents over the run's snapshot (`withOtOverride`); the frozen line payload keeps `rate.otBp`, and the statement shows the percent that was used. The change history shows them as "<kind> (this person)".
+
 ## Round 3 (2026-11-12; overrides anything older below)
 
 Owner decisions, in the order they were built:

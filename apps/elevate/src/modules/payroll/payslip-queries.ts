@@ -174,7 +174,7 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
     paymentMethods: lines.map((l) => l.paymentMethod),
     multipliersBp: (run.settingsSnapshot as SettingsSnapshot | null)?.multipliersBp ?? null,
     signatory,
-    lines: decrypted.map((l) => ({ alias: l.alias, clientName: l.clientName, input: l.payload!.input, result: l.payload!.result })),
+    lines: decrypted.map((l) => ({ alias: l.alias, clientName: l.clientName, multipliersBp: l.payload!.rate.otBp ?? null, input: l.payload!.input, result: l.payload!.result })),
     isTest: run.isTest,
     preparedBy: preparerId ? names.get(preparerId) ?? null : null,
     authorizedBy: approval ? names.get(approval.decidedBy) ?? null : null,

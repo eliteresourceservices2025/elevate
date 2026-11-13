@@ -5,6 +5,8 @@ import { useState } from "react";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { EmptyState } from "@/components/empty-state";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
+import { FieldHint, HintedLabel } from "@/components/field-hint";
+import { PAYROLL_HINTS } from "../hints";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +26,17 @@ type Fields = {
   paymentMethod: PaymentMethod;
   effectiveFrom: string;
   monthly: string;
+  /** This person's own overtime percents as typed; blank = the company standard. */
+  otRegular: string;
+  otRestDay: string;
+  otRestDayOver8: string;
 };
+
+const OT_FIELDS = [
+  { field: "otRegular", label: "Regular day (%)", hint: "lineOtRegular" },
+  { field: "otRestDay", label: "Rest day (%)", hint: "lineOtRestDay" },
+  { field: "otRestDayOver8", label: "Rest day, past 8 hours (%)", hint: "lineOtRestDayOver8" },
+] as const;
 
 const blank = (today: string): Fields => ({
   clientId: "",
@@ -33,6 +45,9 @@ const blank = (today: string): Fields => ({
   paymentMethod: "remitly",
   effectiveFrom: today,
   monthly: "",
+  otRegular: "",
+  otRestDay: "",
+  otRestDayOver8: "",
 });
 
 function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onChange: (next: Fields) => void; clients: RateOptions["clients"]; idPrefix: string }) {
@@ -40,7 +55,7 @@ function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onC
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-client`}>{L.client} (optional)</Label>
+        <HintedLabel htmlFor={`${idPrefix}-client`} hint={PAYROLL_HINTS.lineClient}>{L.client} (optional)</HintedLabel>
         <NativeSelect id={`${idPrefix}-client`} value={value.clientId} onChange={(e) => set("clientId", e.target.value)}>
           <option value="">No client</option>
           {clients.map((c) => (
@@ -51,19 +66,19 @@ function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onC
         </NativeSelect>
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-alias`}>{L.alias} (optional)</Label>
+        <HintedLabel htmlFor={`${idPrefix}-alias`} hint={PAYROLL_HINTS.lineAlias}>{L.alias} (optional)</HintedLabel>
         <Input id={`${idPrefix}-alias`} value={value.alias} onChange={(e) => set("alias", e.target.value)} maxLength={80} />
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-hours`}>{L.hoursPerDay}</Label>
+        <HintedLabel htmlFor={`${idPrefix}-hours`} hint={PAYROLL_HINTS.lineHours}>{L.hoursPerDay}</HintedLabel>
         <Input id={`${idPrefix}-hours`} type="number" inputMode="numeric" min={1} max={12} step={1} value={value.hoursPerDay} onChange={(e) => set("hoursPerDay", e.target.value)} required />
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-monthly`}>{L.monthly}</Label>
+        <HintedLabel htmlFor={`${idPrefix}-monthly`} hint={PAYROLL_HINTS.lineMonthly}>{L.monthly}</HintedLabel>
         <Input id={`${idPrefix}-monthly`} inputMode="decimal" value={value.monthly} onChange={(e) => set("monthly", e.target.value)} placeholder="25,000.00" autoComplete="off" required />
       </div>
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-method`}>{L.paymentMethod}</Label>
+        <HintedLabel htmlFor={`${idPrefix}-method`} hint={PAYROLL_HINTS.lineMethod}>{L.paymentMethod}</HintedLabel>
         <NativeSelect id={`${idPrefix}-method`} value={value.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value as PaymentMethod)}>
           {PAYMENT_METHODS.map((m) => (
             <option key={m} value={m}>
@@ -73,10 +88,21 @@ function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onC
         </NativeSelect>
       </div>
       <div className="space-y-1 sm:col-span-2">
-        <Label htmlFor={`${idPrefix}-from`}>{L.startsOn}</Label>
+        <HintedLabel htmlFor={`${idPrefix}-from`} hint={PAYROLL_HINTS.lineStartsOn}>{L.startsOn}</HintedLabel>
         <Input id={`${idPrefix}-from`} type="date" value={value.effectiveFrom} onChange={(e) => set("effectiveFrom", e.target.value)} required />
-        <p className="text-xs text-muted-foreground">A pay run includes this line only if it starts on or before the last day of the run. Use the first day of the first cutoff this person is paid for.</p>
       </div>
+      <fieldset className="grid gap-3 sm:col-span-2 sm:grid-cols-3">
+        <legend className="mb-1 flex items-center gap-1 text-sm font-medium">
+          Overtime (OT) for this person (optional)
+          <FieldHint label="Overtime for this person">{PAYROLL_HINTS.lineOt}</FieldHint>
+        </legend>
+        {OT_FIELDS.map((f) => (
+          <div key={f.field} className="space-y-1">
+            <HintedLabel htmlFor={`${idPrefix}-${f.field}`} hint={PAYROLL_HINTS[f.hint]}>{f.label}</HintedLabel>
+            <Input id={`${idPrefix}-${f.field}`} inputMode="decimal" value={value[f.field]} onChange={(e) => set(f.field, e.target.value)} placeholder="Standard" autoComplete="off" />
+          </div>
+        ))}
+      </fieldset>
     </div>
   );
 }
@@ -88,6 +114,9 @@ const common = (v: Fields) => ({
   paymentMethod: v.paymentMethod,
   effectiveFrom: v.effectiveFrom,
   monthly: v.monthly,
+  otRegular: v.otRegular,
+  otRestDay: v.otRestDay,
+  otRestDayOver8: v.otRestDayOver8,
 });
 
 function AddLineForm({ options, addStart }: { options: RateOptions; addStart: string }) {
@@ -104,7 +133,7 @@ function AddLineForm({ options, addStart }: { options: RateOptions; addStart: st
       }}
     >
       <div className="space-y-1">
-        <Label htmlFor="add-person">{L.person}</Label>
+        <HintedLabel htmlFor="add-person" hint={PAYROLL_HINTS.linePerson}>{L.person}</HintedLabel>
         <NativeSelect id="add-person" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
           <option value="">Choose a person</option>
           {options.people.map((p) => (
@@ -132,6 +161,9 @@ function ChangeLineForm({ row, options, today }: { row: RateRow; options: RateOp
     paymentMethod: row.paymentMethod,
     effectiveFrom: today,
     monthly: row.monthly,
+    otRegular: row.otPercent.regular,
+    otRestDay: row.otPercent.restDay,
+    otRestDayOver8: row.otPercent.restDayOver8,
   });
   const [reason, setReason] = useState("");
   return (
@@ -144,7 +176,7 @@ function ChangeLineForm({ row, options, today }: { row: RateRow; options: RateOp
     >
       <LineFields value={fields} onChange={setFields} clients={options.clients} idPrefix={`chg-${row.lineKey}`} />
       <div className="space-y-1">
-        <Label htmlFor={`chg-${row.lineKey}-reason`}>{L.reasonForChange}</Label>
+        <HintedLabel htmlFor={`chg-${row.lineKey}-reason`} hint={PAYROLL_HINTS.lineReason}>{L.reasonForChange}</HintedLabel>
         <Textarea id={`chg-${row.lineKey}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} required />
         <p className="text-xs text-muted-foreground">Kept in the change history, never in notices.</p>
       </div>
@@ -169,7 +201,7 @@ function EndLineForm({ row, today }: { row: RateRow; today: string }) {
       }}
     >
       <div className="space-y-1">
-        <Label htmlFor={`end-${row.lineKey}-date`}>{L.lastDay}</Label>
+        <HintedLabel htmlFor={`end-${row.lineKey}-date`} hint={PAYROLL_HINTS.lineLastDay}>{L.lastDay}</HintedLabel>
         <Input id={`end-${row.lineKey}-date`} type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} required />
       </div>
       <div className="space-y-1">

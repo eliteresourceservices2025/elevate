@@ -8,6 +8,8 @@ import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { HintedLabel } from "@/components/field-hint";
+import { INVOICE_HINTS } from "../hints";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useRun } from "@/modules/recruiting/components/use-run";
@@ -71,7 +73,7 @@ function NewInvoiceForm({ runs }: { runs: RunOption[] }) {
         An invoice bills one client for one pay run: the client payroll hours of each person, times the client&apos;s hourly rate in US dollars. It is a snapshot; later changes to hours or rates do not change it.
       </p>
       <div className="space-y-1">
-        <Label htmlFor="invoice-run">Pay run</Label>
+        <HintedLabel htmlFor="invoice-run" hint={INVOICE_HINTS.invoiceRun}>Pay run</HintedLabel>
         <NativeSelect id="invoice-run" value={runId} onChange={(e) => choose(e.target.value)} required>
           <option value="">Choose a pay run</option>
           {runs.map((r) => (
@@ -94,7 +96,7 @@ function NewInvoiceForm({ runs }: { runs: RunOption[] }) {
             </Alert>
           ) : (
             <div className="space-y-1">
-              <Label htmlFor="invoice-client">Client</Label>
+              <HintedLabel htmlFor="invoice-client" hint={INVOICE_HINTS.invoiceClient}>Client</HintedLabel>
               <NativeSelect id="invoice-client" value={clientId} onChange={(e) => setClientId(e.target.value)} required>
                 <option value="">Choose a client</option>
                 {preview.clients.map((c) => (
@@ -185,7 +187,7 @@ function AddRateForm({ clients, today, clientId: fixed, people = {}, person: per
           : "The rate is what we bill the client for one hour, in US dollars. An invoice uses the newest rate that started on or before the day it is made. Earlier rates stay in the history."}
       </p>
       <div className="space-y-1">
-        <Label htmlFor="rate-client">Client</Label>
+        <HintedLabel htmlFor="rate-client" hint={INVOICE_HINTS.rateClient}>Client</HintedLabel>
         <NativeSelect id="rate-client" value={clientId} onChange={(e) => { setClientId(e.target.value); setEmployeeId(""); }} required>
           <option value="">Choose a client</option>
           {clients.map((c) => (
@@ -197,7 +199,7 @@ function AddRateForm({ clients, today, clientId: fixed, people = {}, person: per
       </div>
       {personOnly ? (
         <div className="space-y-1">
-          <Label htmlFor="rate-person">Person</Label>
+          <HintedLabel htmlFor="rate-person" hint={INVOICE_HINTS.ratePerson}>Person</HintedLabel>
           <NativeSelect id="rate-person" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required disabled={clientId === ""}>
             <option value="">{clientId === "" ? "Choose a client first" : choices.length === 0 ? "Nobody has a pay line for this client" : "Choose a person"}</option>
             {choices.map((p) => (
@@ -210,11 +212,11 @@ function AddRateForm({ clients, today, clientId: fixed, people = {}, person: per
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
-          <Label htmlFor="rate-from">Starts on</Label>
+          <HintedLabel htmlFor="rate-from" hint={INVOICE_HINTS.rateStartsOn}>Starts on</HintedLabel>
           <Input id="rate-from" type="date" value={effectiveFrom} onChange={(e) => setFrom(e.target.value)} required />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="rate-amount">Rate per hour (USD)</Label>
+          <HintedLabel htmlFor="rate-amount" hint={INVOICE_HINTS.rateAmount}>Rate per hour (USD)</HintedLabel>
           <Input id="rate-amount" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="25.50" required />
         </div>
       </div>

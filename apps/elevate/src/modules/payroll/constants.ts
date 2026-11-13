@@ -110,7 +110,7 @@ export const SETTINGS_LABELS = {
   divisor: "Cutoff divisor",
   warn: "Warn when total payable compensation changes by more than (percent)",
   warnShort: "Warn at",
-  ratesLegend: "Overtime (OT) rates, as a percent of the normal hourly rate. Holiday pay is always 100% (one to one).",
+  ratesLegend: "Standard overtime (OT) rates, as a percent of the hourly rate. Holiday pay is always 100% (one to one).",
   reasonOptional: "Reason (optional)",
   changeButton: "Change settings",
   changeTitle: "Change pay settings",

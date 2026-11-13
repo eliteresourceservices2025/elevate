@@ -5,6 +5,8 @@ import { toast } from "@/components/feedback-dialog";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { HintedLabel } from "@/components/field-hint";
+import { PAYROLL_HINTS } from "../hints";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
@@ -116,7 +118,7 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
         }}
       >
         <div className="space-y-1">
-          <Label htmlFor={`item-type-${line.runLineId}`}>What to enter</Label>
+          <HintedLabel htmlFor={`item-type-${line.runLineId}`} hint={PAYROLL_HINTS.itemType}>What to enter</HintedLabel>
           <NativeSelect id={`item-type-${line.runLineId}`} value={type} onChange={(e) => setType(e.target.value as PayItemType)}>
             {PAY_ITEM_TYPES.map((t) => (
               <option key={t} value={t}>
@@ -127,7 +129,7 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
         </div>
         {itemized ? (
           <div className="space-y-1">
-            <Label htmlFor={`item-name-${line.runLineId}`}>Name of this {PAY_ITEM_LABELS[type].toLowerCase()}</Label>
+            <HintedLabel htmlFor={`item-name-${line.runLineId}`} hint={PAYROLL_HINTS.itemName}>Name of this {PAY_ITEM_LABELS[type].toLowerCase()}</HintedLabel>
             <Input id={`item-name-${line.runLineId}`} list={`item-names-${line.runLineId}`} value={name} onChange={(e) => setName(e.target.value)} maxLength={MAX_ITEM_LABEL} autoComplete="off" required />
             <datalist id={`item-names-${line.runLineId}`}>
               {ITEM_NAME_SUGGESTIONS[type as keyof typeof ITEM_NAME_SUGGESTIONS].map((n) => (
@@ -138,7 +140,7 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
           </div>
         ) : null}
         <div className="space-y-1">
-          <Label htmlFor={`item-value-${line.runLineId}`}>Amount</Label>
+          <HintedLabel htmlFor={`item-value-${line.runLineId}`} hint={PAYROLL_HINTS.itemValue}>Amount</HintedLabel>
           <div className="flex gap-2">
             <Input id={`item-value-${line.runLineId}`} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} required />
             {timed ? (
@@ -152,7 +154,7 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
         </div>
         {canCorrect && correctableRuns.length > 0 ? (
           <div className="space-y-1">
-            <Label htmlFor={`item-corrects-${line.runLineId}`}>{WORKSHEET_LABELS.corrects}</Label>
+            <HintedLabel htmlFor={`item-corrects-${line.runLineId}`} hint={PAYROLL_HINTS.itemCorrects}>{WORKSHEET_LABELS.corrects}</HintedLabel>
             <NativeSelect id={`item-corrects-${line.runLineId}`} value={corrects} onChange={(e) => setCorrects(e.target.value)}>
               <option value="">{APPROVAL_LABELS.correctionNone}</option>
               {correctableRuns.map((r) => (
@@ -165,7 +167,7 @@ function ItemForm({ runId, line, correctableRuns }: { runId: string; line: Works
           </div>
         ) : null}
         <div className="space-y-1">
-          <Label htmlFor={`item-reason-${line.runLineId}`}>{needsReason ? "Reason" : "Reason (optional)"}</Label>
+          <HintedLabel htmlFor={`item-reason-${line.runLineId}`} hint={PAYROLL_HINTS.itemReason}>{needsReason ? "Reason" : "Reason (optional)"}</HintedLabel>
           <Textarea id={`item-reason-${line.runLineId}`} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} required={needsReason} />
           <p className="text-xs text-muted-foreground">Kept in the change history, never in notices. Don&apos;t write client or patient details.</p>
         </div>

@@ -60,14 +60,29 @@ export function snapshotOf(row: typeof paySettings.$inferSelect): SettingsSnapsh
 }
 
 /** What a line's `amounts_enc` holds. Centavos are bigints in memory and strings on the wire. (Older rows also carry allowance keys, which are ignored.) */
-export type LineAmounts = { monthlyCentavos: bigint };
-export type LineAmountsJson = { [K in keyof LineAmounts]: string };
+export type OtKey = keyof typeof DEFAULT_OT_BP;
+export const OT_KEYS = ["regular", "restDay", "restDayOver8"] as const satisfies readonly OtKey[];
+/** A person's own overtime percents in basis points (12500 = 125%). A key left out uses the company standard from Settings. */
+export type OtOverride = Partial<Record<OtKey, number>>;
+export type LineAmounts = { monthlyCentavos: bigint; otBp?: OtOverride };
+export type LineAmountsJson = { monthlyCentavos: string; otBp?: OtOverride };
+
+/** The run's overtime percents with a person's own percents laid over them. */
+export function withOtOverride<T extends Partial<Record<string, number | null>>>(base: T, otBp: OtOverride | undefined): T {
+  return otBp ? { ...base, ...otBp } : base;
+}
 
 const lineContext = (id: string) => `pay_line:${id}`;
 
-export const amountsToJson = (a: LineAmounts): LineAmountsJson => ({
-  monthlyCentavos: a.monthlyCentavos.toString(),
-});
+const cleanOt = (o: OtOverride | undefined): OtOverride | undefined => {
+  const kept = OT_KEYS.filter((k) => typeof o?.[k] === "number").map((k) => [k, o![k]!] as const);
+  return kept.length > 0 ? Object.fromEntries(kept) : undefined;
+};
+
+export const amountsToJson = (a: LineAmounts): LineAmountsJson => {
+  const otBp = cleanOt(a.otBp);
+  return otBp ? { monthlyCentavos: a.monthlyCentavos.toString(), otBp } : { monthlyCentavos: a.monthlyCentavos.toString() };
+};
 
 export function encryptLineAmounts(lineId: string, a: LineAmounts): string {
   return fieldCrypto().encrypt(JSON.stringify(amountsToJson(a)), lineContext(lineId));
@@ -160,5 +175,6 @@ export async function lockDraftRun(tx: Tx, runId: string): Promise<typeof payRun
 
 export function decryptLineAmounts(lineId: string, stored: string): LineAmounts {
   const j = JSON.parse(fieldCrypto().decrypt(stored, lineContext(lineId))) as LineAmountsJson;
-  return { monthlyCentavos: BigInt(j.monthlyCentavos) };
+  const otBp = cleanOt(j.otBp);
+  return otBp ? { monthlyCentavos: BigInt(j.monthlyCentavos), otBp } : { monthlyCentavos: BigInt(j.monthlyCentavos) };
 }
