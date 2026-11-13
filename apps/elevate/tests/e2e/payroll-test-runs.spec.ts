@@ -57,6 +57,8 @@ test("payroll: drag the run sheet sideways, mark a run as a test, archive it, re
     await expect(line).toBeVisible();
 
     // ---- Drag the sheet sideways ----
+    // The sheet shows a short set of columns first; every column is one tick away.
+    await p.getByLabel("Show every column").check();
     const sheet = p.getByRole("region", { name: /Pay run sheet/ });
     await expect(sheet).toBeVisible();
     const scrollLeft = () => sheet.evaluate((el) => el.scrollLeft);
@@ -80,7 +82,7 @@ test("payroll: drag the run sheet sideways, mark a run as a test, archive it, re
     const before = await scrollLeft();
     await p.keyboard.press("ArrowLeft");
     await p.keyboard.press("ArrowLeft");
-    expect(await scrollLeft()).toBeLessThan(before);
+    await expect.poll(scrollLeft).toBeLessThan(before); // the scroll may animate, so wait for it
 
     // ---- A second real run for the same period is refused, and says how to repeat the cycle ----
     await p.goto("/payroll");
@@ -112,7 +114,7 @@ test("payroll: drag the run sheet sideways, mark a run as a test, archive it, re
     await expect(p.getByText("Archived", { exact: true })).toBeVisible();
     await p.goto("/payroll");
     await expect(p.locator(`a[href="/payroll/${first}"]`)).toHaveCount(0);
-    await expect(p.getByRole("link", { name: /^Archived test runs \(\d+\)$/ })).toBeVisible();
+    await expect(p.getByRole("link", { name: /^Archived runs \(\d+\)$/ })).toBeVisible();
 
     // The same cycle again, as a real run (this is what the archive is for).
     const second = await createRun();
