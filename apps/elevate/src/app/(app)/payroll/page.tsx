@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { PagerLinks } from "@/components/pager";
-import { PurgeArchivedButton } from "@/components/purge-archived-button";
+import { PurgeArchivedRunsButton } from "@/components/purge-archived-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/lib/auth";
@@ -53,17 +53,7 @@ export default async function PayrollRunsPage({ searchParams }: PageProps<"/payr
             </Link>
           )}
           {list.showingArchived && list.canPurge && list.archivedCount > 0 ? (
-            <PurgeArchivedButton
-              label="Delete archived runs for good"
-              title="Delete archived runs for good"
-              explain="Deletes every archived test run and every archived cancelled run, with their lines, payments, history and test invoices. Real runs that were approved or paid are never deleted. A run stays if it has a real invoice or an invoice that is not archived yet."
-              act={purgeArchivedPayRuns}
-              done={(d) =>
-                d
-                  ? `Deleted ${d.runsDeleted} run${d.runsDeleted === 1 ? "" : "s"} and ${d.invoicesDeleted} invoice${d.invoicesDeleted === 1 ? "" : "s"}.${d.runsKept > 0 ? ` ${d.runsKept} stayed (check their invoices).` : ""}`
-                  : "Done."
-              }
-            />
+            <PurgeArchivedRunsButton />
           ) : null}
         </div>
       ) : null}

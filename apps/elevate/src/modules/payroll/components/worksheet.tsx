@@ -173,7 +173,7 @@ export function Worksheet({ sheet, lines, canPrepare, issueCounts = {} }: { shee
                 <TableHead className={`${head} ${num}`}>{L.netChange}</TableHead>
                 <TableHead className={`${head} ${num}`}>{L.clientHours}</TableHead>
                 <TableHead className={head}>{L.confirmation}</TableHead>
-                <TableHead>
+                <TableHead className="md:sticky md:right-0 z-10 bg-card">
                   <span className="sr-only">{L.actions}</span>
                 </TableHead>
               </TableRow>
@@ -237,7 +237,7 @@ export function Worksheet({ sheet, lines, canPrepare, issueCounts = {} }: { shee
                       </>
                     )}
                     <TableCell label={L.confirmation}>{line.confirmedByName ?? <span className="text-muted-foreground">{L.unconfirmed}</span>}</TableCell>
-                    <TableCell label={L.actions}>
+                    <TableCell label={L.actions} className="md:sticky md:right-0 z-10 bg-card">
                       {canActOnLines ? <LineActions runId={sheet.run.id} line={line} correctableRuns={sheet.correctableRuns} /> : null}
                     </TableCell>
                   </TableRow>

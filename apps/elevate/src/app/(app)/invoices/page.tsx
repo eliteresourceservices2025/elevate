@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { PagerLinks } from "@/components/pager";
-import { PurgeArchivedButton } from "@/components/purge-archived-button";
+import { PurgeArchivedInvoicesButton } from "@/components/purge-archived-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/lib/auth";
@@ -49,17 +49,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
             </Link>
           )}
           {list.showingAll && list.canPurge && list.archivedTestCount > 0 ? (
-            <PurgeArchivedButton
-              label="Delete archived test invoices for good"
-              title="Delete archived test invoices for good"
-              explain={`Deletes the ${list.archivedTestCount} archived test invoice${list.archivedTestCount === 1 ? "" : "s"}. Real invoices (including void ones) and test invoices that are not archived are never deleted.`}
-              act={purgeArchivedInvoices}
-              done={(d) =>
-                d
-                  ? `Deleted ${d.deleted} test invoice${d.deleted === 1 ? "" : "s"}.${d.kept > 0 ? ` ${d.kept} stayed because a newer invoice replaced them.` : ""}`
-                  : "Done."
-              }
-            />
+            <PurgeArchivedInvoicesButton count={list.archivedTestCount} />
           ) : null}
         </div>
       ) : null}
