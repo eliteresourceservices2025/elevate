@@ -38,7 +38,11 @@ export async function listInvoices(paging: { page: number; pageSize: number }, o
       return { id: r.id, number: r.number, clientName: "Can't be read", periodStart: "", periodEnd: "", runStatus: r.runStatus, issuedOn: r.issuedOn, totalCents: 0n, unreadable: true, isTest: r.isTest, state: "active" };
     }
   });
-  return { rows: list, info, canCreate: can(actor, "invoices.create"), showingAll: showAll, hiddenCount: every - live };
+  const [{ archivedTest }] = await db
+    .select({ archivedTest: count() })
+    .from(invoices)
+    .where(sql`${invoices.isTest} and (select e.kind from ops.invoice_events e where e.invoice_id = ${invoices.id} order by e.created_at desc, e.id desc limit 1) = 'archived'`);
+  return { rows: list, info, canCreate: can(actor, "invoices.create"), canPurge: can(actor, "invoices.purge_archived"), archivedTestCount: archivedTest, showingAll: showAll, hiddenCount: every - live };
 }
 
 export type InvoiceableRun = { id: string; periodStart: string; periodEnd: string; status: string; isTest: boolean };

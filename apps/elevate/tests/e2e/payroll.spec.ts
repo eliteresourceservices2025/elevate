@@ -165,7 +165,7 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     // Paid is not released: the worker sees nothing yet. A Preparer can read the statements and may release them.
     await workPage.goto("/my-pay");
     await expect(workPage.getByText("No statements yet")).toBeVisible();
-    await prepPage.goto("/payroll/statements");
+    await prepPage.goto("/payroll/statements?size=100");
     await prepPage.locator(`a[href="/payroll/statements/${runId}"]`).click();
     await expect(prepPage.getByRole("button", { name: "Release to everyone" })).toBeEnabled();
 
@@ -175,9 +175,11 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await apprPage.getByRole("link", { name: `View: Wanda Worker${stamp}` }).click();
     await expect(apprPage.getByRole("heading", { level: 1, name: `Statement for Wanda Worker${stamp}` })).toBeVisible();
     await expect(apprPage.getByText("Health allowance")).toBeVisible();
-    await expect(apprPage.getByText(`Approved on ${new Date().toISOString().slice(0, 10)}`).or(apprPage.getByText(/^Approved on \d{4}-\d{2}-\d{2}$/))).toBeVisible();
-    await expect(apprPage.getByText(`Pia Preparer${stamp}`)).toBeVisible(); // Prepared by
-    await expect(apprPage.getByText(`Ari Approver${stamp}`)).toBeVisible(); // Authorized by
+    // The certification block names the Preparer and the approval date by itself. Who is shown under "Authorized by" depends on whether a signatory
+    // is set (a database that has run other specs has one), so that line is checked in the integration tests, which control the signatory.
+    const certification = apprPage.getByRole("region", { name: "Certification" });
+    await expect(certification).toContainText(`Pia Preparer${stamp}`);
+    await expect(certification).toContainText(new Date().toISOString().slice(0, 10));
 
     // The Preparer releases all of them with one button.
     await prepPage.goto(`/payroll/statements/${runId}`);

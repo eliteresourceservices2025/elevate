@@ -11,7 +11,7 @@ import { pageInfo, parsePaging } from "@/lib/pagination";
 import { RUN_STATUS_LABELS } from "@/modules/payroll/constants";
 import { ApprovalBar } from "@/modules/payroll/components/approval-bar";
 import { ConfirmAllButton } from "@/modules/payroll/components/jibble-import";
-import { RunChecks } from "@/modules/payroll/components/run-checks";
+import { RunReadiness } from "@/modules/payroll/components/run-readiness";
 import { CancelRunDialog, RemovedPeople } from "@/modules/payroll/components/run-dialogs";
 import { RunFillMenu } from "@/modules/payroll/components/run-fill-menu";
 import { RunOptionsMenu } from "@/modules/payroll/components/run-options";
@@ -40,6 +40,15 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
   const { run } = sheet;
   // Suggested amounts that sit on a line (from the hours, or from an imported timesheet) can be confirmed in one step.
   const suggestedCount = sheet.lines.reduce((n, l) => n + l.items.filter((i) => i.state === "suggested").length, 0);
+  // Where each line sits (its page and anchor), and how many checks each one has, for the readiness screen and the phone cards.
+  const sizeQuery = one(query.size) ? `&size=${one(query.size)}` : "";
+  const lineHrefs: Record<string, string> = Object.fromEntries(
+    sheet.lines.map((l, i) => [l.runLineId, `/payroll/${run.id}?page=${Math.floor(i / info.pageSize) + 1}${sizeQuery}#line-${l.runLineId}`]),
+  );
+  const issueCounts: Record<string, { must: number; review: number }> = {};
+  for (const [kind, list] of [["must", sheet.checks.blocking], ["review", sheet.checks.warnings]] as const) {
+    for (const c of list) if (c.runLineId) (issueCounts[c.runLineId] ??= { must: 0, review: 0 })[kind] += 1;
+  }
   const payments = run.status === "approved" || run.status === "paid" ? await getPayments(runId) : null;
 
   return (
@@ -76,17 +85,18 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
         </Alert>
       ) : null}
       {run.status === "draft" || run.status === "in_review" ? (
-        <RunChecks
+        <RunReadiness
           blocking={sheet.checks.blocking}
           warnings={sheet.checks.warnings}
           unreadableCount={sheet.unreadableCount}
           stage={run.status === "draft" ? "draft" : "review"}
           checksAreMine={sheet.checksAreMine}
+          lineHrefs={lineHrefs}
         />
       ) : null}
       <UnassignedSuggestions sheet={sheet} canPrepare={sheet.canPrepare} />
       {run.status === "draft" && sheet.canPrepare ? <RemovedPeople runId={run.id} removed={sheet.removed} /> : null}
-      <Worksheet sheet={sheet} lines={shown} canPrepare={sheet.canPrepare} />
+      <Worksheet sheet={sheet} lines={shown} canPrepare={sheet.canPrepare} issueCounts={issueCounts} />
       <PagerLinks info={info} basePath={`/payroll/${run.id}`} defaultSize={DEFAULT_SIZE} label="lines" />
       <RunTotals sheet={sheet} />
       <ApprovalBar

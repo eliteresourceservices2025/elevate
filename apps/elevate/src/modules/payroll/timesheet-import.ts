@@ -100,6 +100,12 @@ export type TimesheetPreview = {
   runPeriod: { start: string; end: string };
   /** Days in the file that fall outside the run's period (they are ignored). */
   outsideDays: number;
+  /** Sheets in the file that were not read as a person (summary or raw sheets, or a repeated member). */
+  skippedSheets: number;
+  /** Columns missing from every member sheet: their amounts count as zero. */
+  missingColumns: string[];
+  /** Unconfirmed suggestions already on the matched lines that this file would change. */
+  conflicts: number;
   lines: { runLineId: string; label: string }[];
   members: {
     code: string;
@@ -127,12 +133,28 @@ export async function buildTimesheetPreview(executor: Executor, runId: string): 
   const matchLines: MatchLine[] = lines.map((l) => ({ runLineId: l.runLineId, lineKey: l.lineKey, names: l.names }));
   const matches = matchAll(sheet.members, matchLines, await rememberedCodes(executor));
   const hoursOf = new Map(lines.map((l) => [l.runLineId, l.hoursPerDay]));
+  const existing = await latestItems(executor, runId);
+  let conflicts = 0;
+  for (const m of sheet.members) {
+    const runLineId = matches.get(m.code)?.runLineId;
+    if (!runLineId) continue;
+    const amounts = suggestedAmounts(totalsFor(m, run.start, run.end), hoursOf.get(runLineId) ?? 8);
+    for (const type of AMOUNT_TYPES) {
+      const here = existing.filter((i) => i.runLineId === runLineId && i.type === type && i.itemKey === null);
+      if (here.some((i) => i.state === "confirmed")) continue;
+      const active = here.find((i) => i.state === "suggested");
+      if (active && decryptItemValue(active.id, active.valueEnc).value !== amounts[type]) conflicts += 1;
+    }
+  }
 
   return {
     importId: row.id,
     periodText: sheet.periodText,
     runPeriod: { start: run.start, end: run.end },
     outsideDays: daysOutside(sheet, run.start, run.end),
+    skippedSheets: sheet.skippedSheets ?? 0,
+    missingColumns: sheet.missingColumns ?? [],
+    conflicts,
     lines: lines.map((l) => ({ runLineId: l.runLineId, label: l.label })),
     members: sheet.members.map((m) => {
       const match = matches.get(m.code)!;
@@ -159,9 +181,11 @@ export type Assignment = { code: string; runLineId: string | null };
 
 /**
  * Writes the suggestions for the members the Preparer matched, remembers the matches by member code, and wipes the upload. A confirmed
- * amount is never overwritten; an unchanged suggestion adds nothing. Nobody's pay changes until a Preparer confirms a suggestion.
+ * amount is never overwritten; an unchanged suggestion adds nothing. An unconfirmed suggestion that is already on a line and differs from the file
+ * (from the other fill, or an earlier upload) is held, not replaced, unless the Preparer asked to replace them; a replacement keeps the earlier value
+ * in the change history (the earlier row stays, and the new reason names its value). Nobody's pay changes until a Preparer confirms a suggestion.
  */
-export async function applyTimesheet(tx: Tx, actor: Actor, v: { runId: string; importId: string; assignments: Assignment[] }): Promise<{ lines: number; written: number; kept: number }> {
+export async function applyTimesheet(tx: Tx, actor: Actor, v: { runId: string; importId: string; assignments: Assignment[]; replaceSuggestions?: boolean }): Promise<{ lines: number; written: number; kept: number; held: number }> {
   const run = await lockDraftRun(tx, v.runId);
   const [row] = await tx.select({ id: timesheetImports.id, payloadEnc: timesheetImports.payloadEnc }).from(timesheetImports).where(and(eq(timesheetImports.id, v.importId), eq(timesheetImports.runId, v.runId))).limit(1);
   if (!row) throw new ActionFailure("That upload was not found. Upload the file again.");
@@ -184,6 +208,7 @@ export async function applyTimesheet(tx: Tx, actor: Actor, v: { runId: string; i
   const employeeOf = new Map((await tx.select({ id: payRunLines.id, employeeId: payRunLines.employeeId }).from(payRunLines).where(eq(payRunLines.runId, v.runId))).map((r) => [r.id, r.employeeId]));
   let written = 0;
   let kept = 0;
+  let held = 0;
   for (const { code, runLineId } of chosen) {
     const member = byCode.get(code)!;
     const choice = lines.get(runLineId)!;
@@ -197,15 +222,24 @@ export async function applyTimesheet(tx: Tx, actor: Actor, v: { runId: string; i
         continue;
       }
       const active = here.find((i) => i.state === "suggested");
+      const earlier = active ? decryptItemValue(active.id, active.valueEnc).value : null;
       if (value === 0n) {
-        if (active) {
-          await addItem(tx, actor, { runId: v.runId, employeeId, runLineId, type, state: "dismissed", value: decryptItemValue(active.id, active.valueEnc).value, reason: "Not in the timesheet" });
+        if (active && earlier !== null) {
+          if (!v.replaceSuggestions) {
+            held += 1;
+            continue;
+          }
+          await addItem(tx, actor, { runId: v.runId, employeeId, runLineId, type, state: "dismissed", value: earlier, reason: "Not in the timesheet" });
           written += 1;
         }
         continue;
       }
-      if (active && decryptItemValue(active.id, active.valueEnc).value === value) continue;
-      await addItem(tx, actor, { runId: v.runId, employeeId, runLineId, type, state: "suggested", value, reason: null });
+      if (earlier === value) continue;
+      if (active && !v.replaceSuggestions) {
+        held += 1; // another fill's suggestion is still there: the Preparer decides
+        continue;
+      }
+      await addItem(tx, actor, { runId: v.runId, employeeId, runLineId, type, state: "suggested", value, reason: earlier !== null ? `Jibble import replaced an earlier suggestion of ${formatItemValue(type, earlier)}` : null });
       written += 1;
     }
   }
@@ -218,9 +252,9 @@ export async function applyTimesheet(tx: Tx, actor: Actor, v: { runId: string; i
       .onConflictDoUpdate({ target: jibbleMatches.memberCode, set: { lineKey, updatedBy: actor.id, updatedAt: sql`now()` } });
   }
   await tx.delete(timesheetImports).where(eq(timesheetImports.runId, v.runId));
-  await writeAudit({ actor, action: "payroll.timesheet.apply", targetType: "pay_run", targetId: v.runId, metadata: { members: chosen.length, written, kept } }, tx);
-  await logChange(tx, actor, { action: "timesheet_imported", runId: v.runId, detail: { members: chosen.length, written, kept } });
-  return { lines: chosen.length, written, kept };
+  await writeAudit({ actor, action: "payroll.timesheet.apply", targetType: "pay_run", targetId: v.runId, metadata: { members: chosen.length, written, kept, held } }, tx);
+  await logChange(tx, actor, { action: "timesheet_imported", runId: v.runId, detail: { members: chosen.length, written, kept, held } });
+  return { lines: chosen.length, written, kept, held };
 }
 
 /** Throws away the upload for a run. */

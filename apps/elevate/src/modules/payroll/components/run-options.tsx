@@ -12,7 +12,7 @@ import { archivePayRun, markRunAsTest, restorePayRun } from "../actions";
 import type { RunStatus } from "../constants";
 
 // Test runs: a run can be marked as a practice run until it is paid, a test run can be archived (even once approved or paid) so the same
-// pay cycle can be rehearsed again, and an archived one can be restored. A real run can never be archived. Every change needs a short
+// pay cycle can be rehearsed again, and an archived one can be restored. A cancelled run can be archived too (it was never approved or paid); any other real run can never be archived. Every change needs a short
 // reason, which is kept in the change history.
 
 function ReasonForm({ explain, confirmLabel, destructive = false, act }: { explain: string; confirmLabel: string; destructive?: boolean; act: (reason: string) => Promise<{ ok: boolean; error?: string }> }) {
@@ -46,7 +46,7 @@ export function RunOptionsMenu({ runId, status, isTest, archived }: { runId: str
 
   const canMark = !isTest && status !== "paid" && status !== "cancelled";
   const canUnmark = isTest && !archived && status === "draft";
-  const canArchive = isTest && !archived;
+  const canArchive = (isTest || status === "cancelled") && !archived;
   if (!canMark && !canUnmark && !canArchive && !archived) return null;
 
   return (
@@ -76,7 +76,7 @@ export function RunOptionsMenu({ runId, status, isTest, archived }: { runId: str
             <>
               {canMark || canUnmark ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem variant="destructive" onClick={() => setOpen("archive")}>
-                <Archive aria-hidden /> Archive this test run
+                <Archive aria-hidden /> {isTest ? "Archive this test run" : "Archive this cancelled run"}
               </DropdownMenuItem>
             </>
           ) : null}
@@ -97,10 +97,10 @@ export function RunOptionsMenu({ runId, status, isTest, archived }: { runId: str
           act={(reason) => markRunAsTest({ runId, test: false, reason })}
         />
       </FormDialog>
-      <FormDialog label="Archive" title="Archive this test run" open={open === "archive"} onOpenChange={(o) => setOpen(o ? "archive" : null)} hideTrigger>
+      <FormDialog label="Archive" title={isTest ? "Archive this test run" : "Archive this cancelled run"} open={open === "archive"} onOpenChange={(o) => setOpen(o ? "archive" : null)} hideTrigger>
         <ReasonForm
           explain="The run leaves the list and its period is free for another run. It stays on record and you can restore it later. Nothing is deleted."
-          confirmLabel="Archive this test run"
+          confirmLabel={isTest ? "Archive this test run" : "Archive this cancelled run"}
           destructive
           act={(reason) => archivePayRun({ runId, reason })}
         />

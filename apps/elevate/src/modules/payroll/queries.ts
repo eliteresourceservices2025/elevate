@@ -158,11 +158,11 @@ export async function getRateOptions(): Promise<RateOptions> {
 
 export type RunListRow = { id: string; periodStart: string; periodEnd: string; status: RunStatus; lineCount: number; createdAt: string; isTest: boolean };
 
-/** One page of runs, newest period first. Archived test runs are left out unless `archived` is true. Shows no figures. */
+/** One page of runs, newest period first. Archived runs (test runs and cancelled runs) are left out unless `archived` is true. Shows no figures. */
 export async function getRuns(
   paging: { page: number; pageSize: number },
   options: { archived?: boolean } = {},
-): Promise<{ rows: RunListRow[]; total: number; archivedCount: number; showingArchived: boolean; canPrepare: boolean }> {
+): Promise<{ rows: RunListRow[]; total: number; archivedCount: number; showingArchived: boolean; canPrepare: boolean; canPurge: boolean }> {
   const actor = await requireUser();
   await authorize(actor, "payroll.view");
 
@@ -191,6 +191,7 @@ export async function getRuns(
     archivedCount,
     showingArchived,
     canPrepare: can(actor, "payroll.prepare"),
+    canPurge: can(actor, "payroll.purge_archived"),
   };
 }
 

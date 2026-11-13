@@ -351,6 +351,18 @@ export async function restoreInvoiceIn(tx: Tx, actor: AuthUser, v: { invoiceId: 
   await addEvent(tx, actor, v.invoiceId, "restored", null, "invoice.restore");
 }
 
+/**
+ * Deletes archived TEST invoices for good (their events go with them). A real invoice, a live one, and an invoice that a kept invoice was
+ * replaced by are never deleted. The database function picks the rows; the audit entry carries counts only.
+ */
+export async function purgeArchivedInvoicesIn(tx: Tx, actor: AuthUser): Promise<{ deleted: number; kept: number }> {
+  const res = await tx.execute(sql`select invoices_deleted, invoices_kept from payroll.purge_archived_test_data(false, true)`);
+  const row = (res as unknown as Array<{ invoices_deleted: number; invoices_kept: number }>)[0];
+  const out = { deleted: row.invoices_deleted, kept: row.invoices_kept };
+  await writeAudit({ actor, action: "invoice.purge", targetType: "invoice", metadata: { ...out } }, tx);
+  return out;
+}
+
 /** Voids a REAL invoice with a reason: kept, stamped VOID, hidden from the default list, never reused. A test invoice is archived instead. */
 export async function voidInvoiceIn(tx: Tx, actor: AuthUser, v: { invoiceId: string; reason: string }): Promise<void> {
   const { row, state } = await loadInvoice(tx, v.invoiceId);

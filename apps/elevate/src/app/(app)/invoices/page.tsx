@@ -5,11 +5,13 @@ import { EmptyState } from "@/components/empty-state";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { PagerLinks } from "@/components/pager";
+import { PurgeArchivedInvoicesButton } from "@/components/purge-archived-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { parsePaging } from "@/lib/pagination";
+import { purgeArchivedInvoices } from "@/modules/invoices/actions";
 import { formatDollars } from "@/modules/invoices/calc";
 import { NewInvoiceDialog } from "@/modules/invoices/components/invoice-dialogs";
 import { InvoiceTabs } from "@/modules/invoices/components/invoice-tabs";
@@ -36,7 +38,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
       />
       <InvoiceTabs current="invoices" />
       {list.hiddenCount > 0 || list.showingAll ? (
-        <p className="text-sm">
+        <div className="flex flex-wrap items-center gap-3 text-sm">
           {list.showingAll ? (
             <Link href="/invoices" className="underline underline-offset-2">
               Hide archived, void and replaced invoices
@@ -46,7 +48,10 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
               Show archived, void and replaced invoices ({list.hiddenCount})
             </Link>
           )}
-        </p>
+          {list.showingAll && list.canPurge && list.archivedTestCount > 0 ? (
+            <PurgeArchivedInvoicesButton count={list.archivedTestCount} />
+          ) : null}
+        </div>
       ) : null}
       {list.rows.length === 0 ? (
         <EmptyState icon={Receipt} title="No invoices yet" description="Add the client's billing rate first, then make an invoice from a pay run." />

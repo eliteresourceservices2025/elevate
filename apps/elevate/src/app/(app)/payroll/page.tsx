@@ -5,12 +5,14 @@ import { EmptyState } from "@/components/empty-state";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { PagerLinks } from "@/components/pager";
+import { PurgeArchivedRunsButton } from "@/components/purge-archived-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { pageInfo, parsePaging } from "@/lib/pagination";
 import { recentPeriods } from "@/modules/attendance/pay-periods";
+import { purgeArchivedPayRuns } from "@/modules/payroll/actions";
 import { RUN_STATUS_LABELS, WORKSHEET_LABELS as L } from "@/modules/payroll/constants";
 import { NewRunDialog } from "@/modules/payroll/components/run-dialogs";
 import { PayrollTabs } from "@/modules/payroll/components/payroll-tabs";
@@ -40,23 +42,26 @@ export default async function PayrollRunsPage({ searchParams }: PageProps<"/payr
       />
       <PayrollTabs current="runs" />
       {list.archivedCount > 0 || list.showingArchived ? (
-        <p className="text-sm">
+        <div className="flex flex-wrap items-center gap-3 text-sm">
           {list.showingArchived ? (
             <Link href="/payroll" className="underline underline-offset-2">
               Back to the runs
             </Link>
           ) : (
             <Link href="/payroll?archived=1" className="underline underline-offset-2">
-              Archived test runs ({list.archivedCount})
+              Archived runs ({list.archivedCount})
             </Link>
           )}
-        </p>
+          {list.showingArchived && list.canPurge && list.archivedCount > 0 ? (
+            <PurgeArchivedRunsButton />
+          ) : null}
+        </div>
       ) : null}
       {list.rows.length === 0 ? (
         <EmptyState
           icon={Wallet}
           title={list.showingArchived ? "No archived runs" : "No pay runs yet"}
-          description={list.showingArchived ? "Test runs you archive appear here." : list.canPrepare ? "Start a run for a pay period. Add pay lines on the Rates tab first." : "A Preparer starts the runs."}
+          description={list.showingArchived ? "Test runs and cancelled runs you archive appear here." : list.canPrepare ? "Start a run for a pay period. Add pay lines on the Rates tab first." : "A Preparer starts the runs."}
         />
       ) : (
         <>

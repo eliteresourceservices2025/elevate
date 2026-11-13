@@ -189,6 +189,28 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
           },
         },
         {
+          label: `${device.name} readiness screen and pay line cards`,
+          run: async () => {
+            await page.goto(`/payroll/${draftRun}`);
+            await expect(page.getByRole("region", { name: "Run readiness" })).toBeVisible();
+            if (device.name === "phone") {
+              // A compact card per person: name, net, status; it opens to every figure; Actions stays beside it.
+              const card = page.locator(`li[data-line="Wanda Worker${stamp}"]`);
+              await expect(card).toBeVisible();
+              await expect(card.getByText("Net", { exact: true })).toBeVisible();
+              await expect(card.getByRole("button", { name: /^Actions for/ })).toBeVisible();
+              await expect(card.getByText("Gross", { exact: true })).toBeHidden();
+              await card.locator("summary").click();
+              await expect(card.getByText("Gross", { exact: true })).toBeVisible();
+              await fits(page, "phone pay line card open");
+              await page.screenshot({ path: `${SHOTS}/phone-pay-line-card.png` });
+            } else {
+              await expect(page.getByLabel("Show every column")).toBeVisible();
+            }
+            await page.screenshot({ path: `${SHOTS}/${device.name}-readiness.png` });
+          },
+        },
+        {
           label: `${device.name} new run window`,
           run: async () => {
             await page.goto("/payroll");

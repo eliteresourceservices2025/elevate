@@ -56,7 +56,7 @@ const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine,
   await import("@/modules/payroll/actions");
 const { payrollRunsAwaitingApproval, getPayments } = await import("@/modules/payroll/queries");
 const { exportRemitlyList, markPaid } = await import("@/modules/payroll/actions");
-const { markRunAsTest, archivePayRun, restorePayRun, releaseStatements } = await import("@/modules/payroll/actions");
+const { markRunAsTest, archivePayRun, purgeArchivedPayRuns, restorePayRun, releaseStatements } = await import("@/modules/payroll/actions");
 
 const LEVELS = [null, "viewer", "approver", "preparer"] as const;
 const GENERIC = "Something went wrong. Try again.";
@@ -108,6 +108,8 @@ const testRunCalls: Record<string, () => Promise<{ ok: boolean; error?: string }
   markRunAsTest: () => markRunAsTest({ runId: RUN_ID, test: true, reason: "Practice cycle" }),
   archivePayRun: () => archivePayRun({ runId: RUN_ID, reason: "Practice cycle done" }),
   restorePayRun: () => restorePayRun({ runId: RUN_ID }),
+  // Deleting archived test runs for good: the same two levels.
+  purgeArchivedPayRuns: () => purgeArchivedPayRuns(),
   // Releasing the statements to the contractors works for both levels too (owner decision 2026-11-12).
   releaseStatements: () => releaseStatements({ runId: RUN_ID }),
   // Paying works for both levels too (owner decision 2026-11-12).

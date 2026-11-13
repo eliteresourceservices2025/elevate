@@ -22,7 +22,7 @@ A **test run** is a practice pay run. You can take a real earlier period, fill i
 4. **Make the payment list.** Open the run and choose **Download Remitly list**. On a test run the bank details are masked and every row says **TEST - do not pay**, so the file cannot be used to pay anyone by mistake. Record a reference for each person to try **Mark paid**: nothing is sent anywhere.
 5. **Read the statements.** Open **Payroll**, then **Statements**, and open the run. Read each contractor's statement or download them all as one PDF. They are stamped **TEST**. The **Release to everyone** button is off for a test run: a contractor never sees it.
 6. **Make the invoice.** Open **Invoices**, then **New invoice**, choose the test run and the client. The invoice is numbered **TEST** and stamped **TEST** on the page and the PDF. Do not send it.
-7. **Tidy up.** Open the run, choose **Run options**, then **Archive this test run**, and give a reason. Archive the TEST invoice from **Invoice options**. Nothing is deleted: both stay on record and you can restore them.
+7. **Tidy up.** Open the run, choose **Run options**, then **Archive this test run**, and give a reason. Archive the TEST invoice from **Invoice options**. Both stay on record and you can restore them. When you are sure you do not need the practice any more, open **Archived runs** on the Payroll page and choose **Delete archived runs for good** (and **Delete archived test invoices for good** on the Invoices page). This cannot be undone.
 
 # To repeat a cycle you already ran for real
 

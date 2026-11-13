@@ -232,11 +232,11 @@ describe("archiving and restoring", () => {
     expect(await restorePayRun({ runId: id })).toMatchObject({ ok: false, error: "This run is not archived." });
   });
 
-  it("never archives a real run, through the action or straight in the database", async () => {
+  it("never archives a real run that is not cancelled, through the action or straight in the database", async () => {
     const id = await newRun(slot(18));
     as(preparer);
-    expect(await archivePayRun({ runId: id, reason: "Clean up" })).toMatchObject({ ok: false, error: expect.stringMatching(/Only a test run can be archived/) });
-    await dbRefuses(db.execute(sql`update payroll.pay_runs set archived_at = now(), archived_by = ${preparer.id} where id = ${id}`), /Only a test run can be archived/);
+    expect(await archivePayRun({ runId: id, reason: "Clean up" })).toMatchObject({ ok: false, error: expect.stringMatching(/Only a test run or a cancelled run can be archived/) });
+    await dbRefuses(db.execute(sql`update payroll.pay_runs set archived_at = now(), archived_by = ${preparer.id} where id = ${id}`), /Only a test run or a cancelled run can be archived/);
     expect((await runRow(id)).archived_at).toBeNull();
   });
 

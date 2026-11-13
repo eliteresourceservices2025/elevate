@@ -23,6 +23,10 @@ export type TimesheetMember = {
   days: TimesheetDay[];
 };
 export type Timesheet = {
+  /** Sheets that were not a member sheet (team summary, raw data) or repeated a member already read. Older uploads do not have it. */
+  skippedSheets?: number;
+  /** Columns (other than Payroll Hrs) that no member sheet had: their amounts are counted as zero, so the Preparer is told. */
+  missingColumns?: string[];
   /** The period text printed on the sheet, for example "01 November 2026 - 09 November 2026". */
   periodText: string | null;
   members: TimesheetMember[];
@@ -34,10 +38,16 @@ const text = (c: Cell | undefined): string => (c === null || c === undefined ? "
 
 /** "8h 06m" -> 486, "0h 00m" -> 0, "-" or blank -> 0. */
 export function minutesOf(value: Cell | undefined): number {
-  if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? Math.round(value) : 0;
+  return parseMinutes(value) ?? 0;
+}
+
+/** Like `minutesOf`, but null for a value that is not blank, "-" or a recognised time (so it can be refused, never counted as zero). */
+export function parseMinutes(value: Cell | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
   const t = text(value).toLowerCase();
+  if (t === "" || t === "-" || t === "--") return 0;
   const m = /^(?:(\d{1,4})\s*h)?\s*(?:(\d{1,2})\s*m)?$/.exec(t);
-  if (!m || (m[1] === undefined && m[2] === undefined)) return 0;
+  if (!m || (m[1] === undefined && m[2] === undefined)) return null;
   return Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0);
 }
 
@@ -52,7 +62,7 @@ export function dateOf(value: Cell | undefined): string | null {
 }
 
 /** One member sheet, or null when the sheet is not one (the team summary, raw sheets). */
-function memberOf(sheet: Sheet): TimesheetMember | null {
+function memberOf(sheet: Sheet): { member: TimesheetMember; missing: Column[] } | null {
   let name = "";
   let code = "";
   let header = -1;
@@ -77,10 +87,19 @@ function memberOf(sheet: Sheet): TimesheetMember | null {
     const date = dateOf(row[0]);
     if (date === null) continue; // a totals row or a blank one
     const day = { date } as TimesheetDay;
-    for (const key of Object.keys(at) as Column[]) day[key] = at[key] >= 0 ? minutesOf(row[at[key]]) : 0;
+    for (const key of Object.keys(at) as Column[]) {
+      if (at[key] < 0) {
+        day[key] = 0;
+        continue;
+      }
+      const minutes = parseMinutes(row[at[key]]);
+      if (minutes === null) throw new XlsxError(`The sheet for ${name.slice(0, 60)} has a value in the ${TIMESHEET_COLUMNS[key]} column on ${date} that ELEVATE can't read (it should look like 8h 06m). Fix it in Jibble and export again.`);
+      day[key] = minutes;
+    }
     days.push(day);
   }
-  return { code: code.slice(0, 40), name: name.slice(0, 120), days };
+  const missing = (Object.keys(at) as Column[]).filter((k) => at[k] < 0);
+  return { member: { code: code.slice(0, 40), name: name.slice(0, 120), days }, missing };
 }
 
 /** Reads a Jibble timesheet workbook. Throws XlsxError with a plain message when it is not one. */
@@ -89,18 +108,24 @@ export function readJibbleTimesheet(bytes: Uint8Array): Timesheet {
   const members: TimesheetMember[] = [];
   const seen = new Set<string>();
   let periodText: string | null = null;
+  let skipped = 0;
+  let missingEverywhere: Column[] | null = null;
   for (const sheet of sheets) {
     if (periodText === null) {
       const row = sheet.rows.slice(0, 8).find((r) => text(r[0]).toLowerCase() === "period");
       if (row && text(row[1]) !== "") periodText = text(row[1]).slice(0, 80);
     }
-    const member = memberOf(sheet);
-    if (!member || seen.has(member.code)) continue;
-    seen.add(member.code);
-    members.push(member);
+    const read = memberOf(sheet);
+    if (!read || seen.has(read.member.code)) {
+      skipped += 1;
+      continue;
+    }
+    seen.add(read.member.code);
+    members.push(read.member);
+    missingEverywhere = missingEverywhere === null ? read.missing : missingEverywhere.filter((k) => read.missing.includes(k));
   }
   if (members.length === 0) throw new XlsxError("That file does not look like a Jibble timesheet export (no member sheets with a Payroll Hrs column were found).");
-  return { periodText, members };
+  return { periodText, members, skippedSheets: skipped, missingColumns: (missingEverywhere ?? []).map((k) => TIMESHEET_COLUMNS[k]) };
 }
 
 /** The member's totals in minutes for the days inside [from, to] (inclusive, YYYY-MM-DD). */

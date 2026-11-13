@@ -8,4 +8,6 @@ export const invoicesPermissions = definePermissions({
   "invoices.manage_rates": { roles: { super_admin: "all", hr_admin: "all", executive: "all" } },
   // Archive a test invoice, restore it, void a real one (owner decision 2026-11-12). Making a corrected version is `invoices.create`.
   "invoices.manage": { roles: { super_admin: "all", hr_admin: "all", executive: "all" } },
+  // Deleting archived TEST invoices for good (a real invoice is never deleted).
+  "invoices.purge_archived": { roles: { super_admin: "all", hr_admin: "all", executive: "all" } },
 });
