@@ -3,15 +3,17 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EXTRA_KEYS } from "../calculate";
-import { EXTRA_KEY_ITEM, HISTORY_LABELS, LINE_FLAG_LABELS, PAY_ITEM_LABELS, WORKSHEET_LABELS as L } from "../constants";
+import { EXTRA_KEY_ITEM, HISTORY_LABELS, PAY_ITEM_LABELS, WORKSHEET_LABELS as L } from "../constants";
 import type { Worksheet, WorksheetFigures, WorksheetLine } from "../runs";
+import { LineHashScroller } from "./go-to-line";
+import { LineFlags } from "./line-flags";
 import { LineActions } from "./line-actions";
 import { WorksheetColumns } from "./worksheet-columns";
 
 // The sheet. Below the tablet width each person is a compact card (name, net, status, what needs attention) that opens to every figure,
 // with the Actions menu always beside it. From the tablet width up it is a table with a short set of columns, and "Show every column"
-// adds the rest. Name and client stay in view when the table scrolls sideways. Every row has an anchor (#line-<id>) the readiness
-// screen links to.
+// adds the rest. Name and client stay in view when the table scrolls sideways. Each person is drawn twice (card and row, one hidden), so the
+// two copies have different ids (card-<id>, row-<id>); the readiness screen links to #line-<id> and go-to-line.tsx finds the visible one.
 
 const FROZEN = "md:sticky z-10 bg-card";
 const num = "text-right tabular-nums";
@@ -49,10 +51,10 @@ function figureRows(f: WorksheetFigures, hoursPerDay: number): [string, string][
   ];
 }
 
-function PhoneCard({ line, runId, canActOnLines, correctableRuns, issues }: { line: WorksheetLine; runId: string; canActOnLines: boolean; correctableRuns: { id: string; label: string }[]; issues: { must: number; review: number } | undefined }) {
+function PhoneCard({ line, runId, period, canActOnLines, correctableRuns, issues }: { line: WorksheetLine; runId: string; period: { start: string; end: string }; canActOnLines: boolean; correctableRuns: { id: string; label: string }[]; issues: { must: number; review: number } | undefined }) {
   const f = line.figures;
   return (
-    <li id={`line-${line.runLineId}`} className="scroll-mt-24 rounded-lg border bg-card target:ring-2 target:ring-ring" data-line={line.name}>
+    <li id={`card-${line.runLineId}`} className="scroll-mt-24 rounded-lg border bg-card outline-none data-flash:ring-2 data-flash:ring-ring" data-line={line.name}>
       <details className="group/card">
         <summary className="flex min-h-14 cursor-pointer list-none items-start justify-between gap-3 p-3 [&::-webkit-details-marker]:hidden">
           <span className="min-w-0 space-y-1">
@@ -66,12 +68,8 @@ function PhoneCard({ line, runId, canActOnLines, correctableRuns, issues }: { li
               {issues && issues.must > 0 ? <Badge variant="destructive">{issues.must} must fix</Badge> : null}
               {issues && issues.review > 0 ? <Badge variant="warning">{issues.review} to review</Badge> : null}
               {line.confirmedByName ? <Badge variant="success">Checked</Badge> : <Badge variant="outline">Not checked</Badge>}
-              {line.flags.map((flag) => (
-                <Badge key={flag} variant="warning">
-                  {LINE_FLAG_LABELS[flag] ?? flag}
-                </Badge>
-              ))}
             </span>
+            <LineFlags runId={runId} line={line} period={period} canAct={canActOnLines} correctableRuns={correctableRuns} />
             <Pending line={line} />
           </span>
           <span className="flex shrink-0 items-start gap-1">
@@ -112,6 +110,7 @@ export function Worksheet({ sheet, lines, canPrepare, issueCounts = {} }: { shee
   const canActOnLines = canPrepare && draft;
   return (
     <div className="space-y-4">
+      <LineHashScroller />
       <p className="text-sm">
         <Link href={`/payroll/history?run=${sheet.run.id}`} className="underline underline-offset-2">
           {HISTORY_LABELS.runHistory}
@@ -120,7 +119,7 @@ export function Worksheet({ sheet, lines, canPrepare, issueCounts = {} }: { shee
 
       <ul className="space-y-2 md:hidden" aria-label="Pay lines">
         {lines.map((line) => (
-          <PhoneCard key={line.runLineId} line={line} runId={sheet.run.id} canActOnLines={canActOnLines} correctableRuns={sheet.correctableRuns} issues={issueCounts[line.runLineId]} />
+          <PhoneCard key={line.runLineId} line={line} runId={sheet.run.id} period={{ start: sheet.run.periodStart, end: sheet.run.periodEnd }} canActOnLines={canActOnLines} correctableRuns={sheet.correctableRuns} issues={issueCounts[line.runLineId]} />
         ))}
       </ul>
 
@@ -187,16 +186,12 @@ export function Worksheet({ sheet, lines, canPrepare, issueCounts = {} }: { shee
                   </TableCell>
                 );
                 return (
-                  <TableRow key={line.runLineId} id={`line-${line.runLineId}`} className="scroll-mt-24 target:bg-muted">
+                  <TableRow key={line.runLineId} id={`row-${line.runLineId}`} className="scroll-mt-24 outline-none data-flash:bg-muted data-flash:ring-2 data-flash:ring-inset data-flash:ring-ring">
                     <TableCell label={L.person} className={`${FROZEN} md:left-0 font-medium`}>
                       {line.name}
                       {line.alias ? <span className="block text-xs font-normal text-muted-foreground">{line.alias}</span> : null}
                       {line.isOwn ? <span className="block text-xs font-normal text-muted-foreground">Your own line</span> : null}
-                      {line.flags.map((flag) => (
-                        <Badge key={flag} variant="warning" className="mt-1 mr-1">
-                          {LINE_FLAG_LABELS[flag] ?? flag}
-                        </Badge>
-                      ))}
+                      <LineFlags runId={sheet.run.id} line={line} period={{ start: sheet.run.periodStart, end: sheet.run.periodEnd }} canAct={canActOnLines} correctableRuns={sheet.correctableRuns} />
                       <Pending line={line} />
                       {line.items.some((i) => i.correctsRunId && i.state === "confirmed") ? (
                         <span className="block text-xs font-normal text-muted-foreground">{L.hasCorrection}</span>

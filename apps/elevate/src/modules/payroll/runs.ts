@@ -14,7 +14,8 @@ import { logChange } from "./changes";
 import { runChecks, type CheckLine, type ChecksInput, type RunCheck } from "./checks";
 import { CORRECTION_TYPES, isItemized, PAY_ITEM_LABELS, REASON_REQUIRED_TYPES, type PayItemState, type PayItemType, type RunStatus } from "./constants";
 import { buildLineInput, cleanItemLabel, formatItemValue, noItemizedLines, parseItemValue, type ItemizedLines } from "./items";
-import { resolveLines } from "./lines";
+import { suggestedDays } from "./flags";
+import { flagDatesOf, resolveLines, type FlagDates } from "./lines";
 import { formatPesos } from "./money";
 import { payLines, payPayments, payRunItems, payRunLines, payRunReleases, payRuns } from "./schema";
 import {
@@ -658,6 +659,10 @@ export type WorksheetLine = {
   alias: string | null;
   hoursPerDay: number;
   flags: string[];
+  /** The dates behind the part-period flags (when the line starts, when a new rate starts, when it ends), for wording like "Starts 6 Nov". */
+  flagDates: FlagDates;
+  /** For a person who starts or ends part-way: the weekdays between the dates (at most a full cutoff), as a starting point for "days worked". Null otherwise. */
+  suggestedDays: number | null;
   /** The stored figures or an amount on the line could not be decrypted. */
   unreadable: boolean;
   confirmedByName: string | null;
@@ -900,6 +905,18 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
     for (const p of people) confirmerNames.set(p.id, p.first && p.last ? nameOf({ first: p.first, last: p.last, preferred: p.preferred }) : p.email);
   }
 
+  // The dates behind each line's part-period flags: every version of its pay line, and which one this run pays.
+  const keys = [...new Set(rows.map((r) => r.lineKey))];
+  const versions = keys.length
+    ? await executor.select({ id: payLines.id, lineKey: payLines.lineKey, effectiveFrom: payLines.effectiveFrom, endsOn: payLines.endsOn, createdAt: payLines.createdAt }).from(payLines).where(inArray(payLines.lineKey, keys))
+    : [];
+  const noDates: FlagDates = { startsOn: null, endsOn: null, rateChangeOn: null };
+  const flagDatesFor = (r: RunRow): FlagDates => {
+    const all = versions.filter((v) => v.lineKey === r.lineKey);
+    const paid = all.find((v) => v.id === r.runLine.lineId);
+    return paid ? flagDatesOf(all, paid.effectiveFrom, { start: run.periodStart, end: run.periodEnd }) : noDates;
+  };
+
   const displayItem = (row: ItemRow): WorksheetItem | null => {
     const v = data.values.get(row.id);
     if (!v) return null;
@@ -925,6 +942,7 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
     const payload = data.payloads.get(r.runLine.id) ?? null;
     const unreadable = lineUnreadable(data, r.runLine.id);
     if (unreadable) unreadableCount += 1;
+    const flagDates = flagDatesFor(r);
 
     let figures: WorksheetFigures | null = null;
     if (payload && !unreadable) {
@@ -973,6 +991,8 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
       alias: r.runLine.alias,
       hoursPerDay: payload?.hoursPerDay ?? 0,
       flags: r.runLine.flags,
+      flagDates,
+      suggestedDays: r.runLine.flags.some((f) => f === "starts_mid_period" || f === "ends_mid_period") ? suggestedDays(flagDates, { start: run.periodStart, end: run.periodEnd }, (run.settingsSnapshot as SettingsSnapshot).cutoffDivisor) : null,
       unreadable,
       confirmedByName: r.runLine.confirmedBy ? (confirmerNames.get(r.runLine.confirmedBy) ?? "Someone") : null,
       confirmedByMe: r.runLine.confirmedBy === viewer.id,
