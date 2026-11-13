@@ -314,9 +314,9 @@ describe("payroll access", () => {
     expect(can(level("preparer"), "payroll.prepare")).toBe(true);
     expect(can(level("preparer"), "payroll.approve")).toBe(false);
     expect(can(level("approver"), "payroll.approve")).toBe(true);
-    // Releasing statements to the contractors: an Approver only.
+    // Releasing statements to the contractors: a Preparer or an Approver, never a viewer or a person with no level.
     expect(can(level("approver"), "payroll.release_statements")).toBe(true);
-    expect(can(level("preparer"), "payroll.release_statements")).toBe(false);
+    expect(can(level("preparer"), "payroll.release_statements")).toBe(true);
     expect(can(level("viewer"), "payroll.release_statements")).toBe(false);
     expect(can(level(null), "payroll.release_statements")).toBe(false);
     // Paying: both working levels (owner decision 2026-11-12), never a viewer or a person with no level.

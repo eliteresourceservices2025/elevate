@@ -182,18 +182,27 @@ function PayslipDocument({ view }: { view: PayslipView }) {
                     {L.signedOn} {signature.signedOn}
                   </Text>
                 </>
+              ) : view.authorizedBy ? (
+                <>
+                  <Text style={styles.signName}>{latin(view.authorizedBy)}</Text>
+                  {view.approvedOn ? (
+                    <Text style={styles.signMuted}>
+                      {L.approvedOn} {view.approvedOn}
+                    </Text>
+                  ) : null}
+                </>
               ) : (
                 <Text style={styles.notSigned}>{L.notSigned}</Text>
               )}
             </View>
             {[
-              [L.preparedBy, "22%"],
-              [L.certDate, "16%"],
-              [L.contractorSignature, "24%"],
-            ].map(([label, width]) => (
+              [L.preparedBy, "22%", view.preparedBy ?? ""],
+              [L.certDate, "16%", view.approvedOn ?? ""],
+              [L.contractorSignature, "24%", ""],
+            ].map(([label, width, value]) => (
               <View key={label} style={{ width, marginRight: "2%", alignSelf: "flex-start" }}>
                 <Text style={styles.signLabel}> </Text>
-                <View style={{ borderBottomWidth: 0.8, borderBottomColor: INK, height: 38 }} />
+                <View style={{ borderBottomWidth: 0.8, borderBottomColor: INK, height: 38, justifyContent: "flex-end" }}>{value ? <Text style={{ fontSize: 9.5, paddingBottom: 2 }}>{latin(value)}</Text> : null}</View>
                 <Text style={[styles.miniLabel, { marginTop: 4 }]}>{latin(label)}</Text>
               </View>
             ))}

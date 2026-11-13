@@ -10,7 +10,9 @@ import { PAYSLIP_LABELS as L } from "./constants";
 import { formatPesos } from "./money";
 import type { PayslipInput } from "./payslip";
 import { personName } from "./remitly";
-import { payLines, payPayments, payRunLines, payRunReleases, payRuns } from "./schema";
+import { users } from "@/modules/core/schema";
+import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
+import { payApprovals, payLines, payPayments, payRunLines, payRunReleases, payRuns } from "./schema";
 import { decryptRunLine, employeeIdForUser } from "./service";
 import { runSignatory } from "./signatory";
 import type { SettingsSnapshot } from "./calculate";
@@ -137,6 +139,17 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
     .where(eq(employees.id, employeeId))
     .limit(1);
 
+  // Who prepared and who approved the run, and when: the certification block fills these in by itself.
+  const [meta] = await executor.select({ submittedBy: payRuns.submittedBy, createdBy: payRuns.createdBy }).from(payRuns).where(eq(payRuns.id, runId)).limit(1);
+  const [approval] = await executor
+    .select({ decidedBy: payApprovals.decidedBy, createdAt: payApprovals.createdAt })
+    .from(payApprovals)
+    .where(and(eq(payApprovals.runId, runId), eq(payApprovals.decision, "approved")))
+    .orderBy(desc(payApprovals.createdAt))
+    .limit(1);
+  const preparerId = meta?.submittedBy ?? meta?.createdBy ?? null;
+  const names = await namesOfUsers(executor, [preparerId, approval?.decidedBy ?? null]);
+
   // Independent of each other: asked together.
   const [[payment], signatory] = await Promise.all([
     executor
@@ -163,5 +176,20 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
     signatory,
     lines: decrypted.map((l) => ({ alias: l.alias, clientName: l.clientName, input: l.payload!.input, result: l.payload!.result })),
     isTest: run.isTest,
+    preparedBy: preparerId ? names.get(preparerId) ?? null : null,
+    authorizedBy: approval ? names.get(approval.decidedBy) ?? null : null,
+    approvedOn: approval ? formatInZone(approval.createdAt.getTime(), DEFAULT_TIMEZONE, "yyyy-MM-dd") : null,
   };
+}
+
+/** A person's name for each sign-in account: the name on their people record, else the account's email. */
+async function namesOfUsers(executor: Pick<typeof db, "select">, userIds: (string | null)[]): Promise<Map<string, string>> {
+  const ids = [...new Set(userIds.filter((x): x is string => x !== null))];
+  if (ids.length === 0) return new Map();
+  const rows = await executor
+    .select({ id: users.id, email: users.email, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
+    .from(users)
+    .leftJoin(employees, eq(employees.userId, users.id))
+    .where(inArray(users.id, ids));
+  return new Map(rows.map((r) => [r.id, r.first ? personName({ preferred: r.preferred, first: r.first, last: r.last ?? "" }) : r.email]));
 }

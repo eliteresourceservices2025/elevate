@@ -13,7 +13,7 @@ import { payRunLines, payRunReleases, payRuns } from "./schema";
 import { payrollToday } from "./service";
 import { freezeRunSignatory } from "./signatory";
 
-// Releasing a run's contractor payment statements: one decision by an Approver (the caller has already authorized) that makes every
+// Releasing a run's contractor payment statements: one decision by a Preparer or an Approver (the caller has already authorized) that makes every
 // person's statement on a REAL, approved run visible to them. A release is a fact that is never undone (a mistake is fixed by an
 // adjustment on the next run). Counts and links only in the audit row, the change log and the notices: never an amount or a name.
 

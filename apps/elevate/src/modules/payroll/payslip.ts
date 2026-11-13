@@ -36,6 +36,10 @@ export type PayslipInput = {
   signatory: PayslipSignature | null;
   /** From a test run: stamped TEST on the page and the PDF. Never true for a statement a contractor can open. */
   isTest?: boolean;
+  /** Filled in by ELEVATE from the run: the Preparer who sent it for review, the Approver who approved it, and the day they approved it. */
+  preparedBy?: string | null;
+  authorizedBy?: string | null;
+  approvedOn?: string | null;
 };
 
 export type PayslipRowView = { label: string; detail: string; amount: string };
@@ -68,6 +72,10 @@ export type PayslipView = {
   /** Only when the person has more than one line on the run. */
   total: string | null;
   isTest: boolean;
+  /** The names and date the certification block fills in by itself. */
+  preparedBy: string | null;
+  authorizedBy: string | null;
+  approvedOn: string | null;
   signature: { name: string; title: string; signedOn: string; imageBase64: string | null } | null;
 };
 
@@ -173,6 +181,9 @@ export function payslipView(input: PayslipInput): PayslipView {
     }),
     total: multi ? money(input.lines.reduce((sum, l) => sum + l.result.net, 0n)) : null,
     isTest: input.isTest === true,
+    preparedBy: input.preparedBy ? plain(input.preparedBy) : null,
+    authorizedBy: input.authorizedBy ? plain(input.authorizedBy) : null,
+    approvedOn: input.approvedOn ?? null,
     signature: input.signatory
       ? { name: plain(input.signatory.name), title: plain(input.signatory.title), signedOn: input.signatory.signedOn, imageBase64: input.signatory.signatureBase64 }
       : null,

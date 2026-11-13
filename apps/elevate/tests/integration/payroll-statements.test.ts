@@ -21,6 +21,8 @@ const { createPayLine, createPayRun, submitRun, approveRun, releaseStatements, m
 const { getWorksheet } = await import("@/modules/payroll/queries");
 const { getRunStatements, getStatementRuns, getStatementForTeam, getAllStatementsForTeam } = await import("@/modules/payroll/statements-queries");
 const { decryptRunLine } = await import("@/modules/payroll/service");
+const { payslipView } = await import("@/modules/payroll/payslip");
+const { getMyPayslip } = await import("@/modules/payroll/payslip-queries");
 const { formatPesos } = await import("@/modules/payroll/money");
 const single = await import("@/app/api/payroll/statements/[runId]/[employeeId]/route");
 const all = await import("@/app/api/payroll/statements/[runId]/route");
@@ -92,15 +94,23 @@ const call = {
   all: (runId: string) => all.GET(new Request("http://localhost/x"), { params: Promise.resolve({ runId }) }),
 };
 
+const STAMP = Date.now().toString(36);
+async function linkEmployee(userId: string, first: string, last: string) {
+  await db.execute(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values (${first}, ${last}, ${`${uniq("lnk")}@example.com`}, 'active', ${userId})`);
+}
+
 beforeAll(async () => {
   preparer = await account("preparer");
   approver = await account("approver");
   viewer = await account("viewer");
   nobody = await account(null);
+  // Their names, as the statement prints them under Prepared by and Authorized by.
+  await linkEmployee(preparer.id, "Pia", `Preparer${STAMP}`);
+  await linkEmployee(approver.id, "Ari", `Approver${STAMP}`);
 });
 
 describe("releasing the statements", () => {
-  it("is for an Approver, refused for a draft and an in-review run, done once, and recorded with counts only", async () => {
+  it("is for a Preparer or an Approver, refused for a draft and an in-review run, done once, and recorded with counts only", async () => {
     const p = slot(0);
     const a = await person();
     const b = await person();
@@ -116,16 +126,18 @@ describe("releasing the statements", () => {
     expect(await releaseStatements({ runId })).toMatchObject({ ok: false, error: "Release is available once the run is approved." });
     expect(await approveRun({ runId, expectedHash: (await getWorksheet(runId))!.expectedHash! })).toMatchObject({ ok: true });
 
-    // Only an Approver may release.
-    for (const who of [preparer, viewer, nobody]) {
+    // A viewer and a person with no level may not release.
+    for (const who of [viewer, nobody]) {
       as(who);
       expect(await releaseStatements({ runId })).toEqual({ ok: false, error: NO_ACCESS });
     }
     expect(await releaseRows(runId)).toHaveLength(0);
 
-    as(approver);
+    // The Preparer of the run may release it (it was approved by someone else).
+    as(preparer);
     expect(await releaseStatements({ runId })).toEqual({ ok: true, data: { people: 2 } });
     expect(await releaseRows(runId)).toHaveLength(1);
+    as(approver);
     expect(await releaseStatements({ runId })).toMatchObject({ ok: false, error: "These statements have been released to the contractors." });
     expect(await releaseRows(runId)).toHaveLength(1);
 
@@ -170,9 +182,9 @@ describe("the payroll team's view of the statements", () => {
     }
     // Who may press the button and why not.
     as(viewer);
-    expect((await getRunStatements(runId))!.refusal).toBe("An Approver releases the statements.");
+    expect((await getRunStatements(runId))!.refusal).toBe("A Preparer or an Approver releases the statements.");
     as(preparer);
-    expect((await getRunStatements(runId))!.canRelease).toBe(false);
+    expect(await getRunStatements(runId)).toMatchObject({ canRelease: true, refusal: null });
     as(approver);
     expect(await getRunStatements(runId)).toMatchObject({ canRelease: true, refusal: null });
     expect(await getRunStatements(draft)).toBeNull();
@@ -220,6 +232,52 @@ describe("the payroll team's view of the statements", () => {
     const text = JSON.stringify(audits);
     expect(text).toContain("statement");
     for (const n of [await netOf(runId, a), await netOf(runId, b)]) expect(text).not.toContain(formatPesos(n));
+  });
+});
+
+describe("the certification block fills in by itself", () => {
+  it("names the Preparer who sent the run, the Approver who approved it and the day, for the team and for the contractor once released", async () => {
+    const p = slot(7);
+    const worker = await account(null);
+    const emp = await person("Hhhhsign", worker.id);
+    const runId = await approvedRun(p, [emp]);
+
+    as(viewer);
+    const slip = (await getStatementForTeam(runId, emp))!;
+    expect(slip.preparedBy).toBe(`Pia Preparer${STAMP}`);
+    expect(slip.authorizedBy).toBe(`Ari Approver${STAMP}`);
+    const [{ d }] = await rows<{ d: string }>(sql`select (now() at time zone 'America/Phoenix')::date::text as d`);
+    expect(slip.approvedOn).toBe(d);
+    const view = payslipView(slip);
+    expect([view.preparedBy, view.authorizedBy, view.approvedOn]).toEqual([`Pia Preparer${STAMP}`, `Ari Approver${STAMP}`, d]);
+
+    // The contractor sees the same names and date on their own statement once it is released, and the PDF carries them.
+    as(preparer);
+    expect(await releaseStatements({ runId })).toMatchObject({ ok: true });
+    as(worker);
+    const own = (await getMyPayslip(worker as never, runId))!;
+    expect([own.preparedBy, own.authorizedBy, own.approvedOn]).toEqual([`Pia Preparer${STAMP}`, `Ari Approver${STAMP}`, d]);
+    expect((await call.one(runId, emp)).status).toBe(404); // the contractor has no payroll level: the team route is not theirs
+  });
+
+  it("falls back to the account's email when a person has no people record, and shows nothing for a run nobody approved", async () => {
+    const lone = await account("preparer");
+    const loneApprover = await account("approver");
+    const emp = await person("Iiiisign");
+    // A run approved by an account with no people record: its email stands in for the name.
+    const p = slot(8);
+    await giveLine(emp, p);
+    as(lone);
+    const made = await createPayRun(p);
+    if (!made.ok) throw new Error(made.error);
+    expect(await submitRun({ runId: made.data.runId })).toMatchObject({ ok: true });
+    as(loneApprover);
+    expect(await approveRun({ runId: made.data.runId, expectedHash: (await getWorksheet(made.data.runId))!.expectedHash! })).toMatchObject({ ok: true });
+    as(viewer);
+    const slip = (await getStatementForTeam(made.data.runId, emp))!;
+    const [{ pe }] = await rows<{ pe: string }>(sql`select email as pe from core.users where id = ${lone.id}`);
+    const [{ ae }] = await rows<{ ae: string }>(sql`select email as ae from core.users where id = ${loneApprover.id}`);
+    expect([slip.preparedBy, slip.authorizedBy]).toEqual([pe, ae]);
   });
 });
 

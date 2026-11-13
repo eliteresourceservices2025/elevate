@@ -92,7 +92,7 @@ export async function getRunStatements(runId: string): Promise<RunStatementsView
 
   const canRelease = can(actor, "payroll.release_statements");
   const base = releaseRefusal(run, release !== undefined);
-  const refusal = base ?? (people.some((p) => !p.readable) ? S.refusalUnreadable : !canRelease ? S.refusalApproverOnly : null);
+  const refusal = base ?? (people.some((p) => !p.readable) ? S.refusalUnreadable : !canRelease ? S.refusalNoAccess : null);
   return {
     run: { id: run.id, periodLabel: `${run.periodStart} to ${run.periodEnd}`, status: run.status as RunStatus, isTest: run.isTest },
     people,

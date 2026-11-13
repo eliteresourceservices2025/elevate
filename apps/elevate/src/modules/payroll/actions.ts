@@ -410,7 +410,7 @@ export async function restorePayRun(input: unknown): Promise<ActionResult> {
   });
 }
 
-/** Releases a real, approved run's contractor payment statements to the people on it (Approvers). Once; never undone. Notices carry no amount. */
+/** Releases a real, approved run's contractor payment statements to the people on it (Preparers and Approvers). Once; never undone. Notices carry no amount. */
 export async function releaseStatements(input: unknown): Promise<ActionResult<{ people: number }>> {
   const actor = await requireUser();
 

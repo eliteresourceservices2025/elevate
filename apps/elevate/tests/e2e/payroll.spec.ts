@@ -162,26 +162,30 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await expect(prepPage.getByText("Payment recorded.")).toBeVisible();
     await expect(prepPage.getByText("Everyone on this run is paid.")).toBeVisible();
 
-    // Paid is not released: the worker sees nothing yet. A Preparer can read the statements but cannot release them.
+    // Paid is not released: the worker sees nothing yet. A Preparer can read the statements and may release them.
     await workPage.goto("/my-pay");
     await expect(workPage.getByText("No statements yet")).toBeVisible();
     await prepPage.goto("/payroll/statements");
     await prepPage.locator(`a[href="/payroll/statements/${runId}"]`).click();
-    await expect(prepPage.getByRole("button", { name: "Release to everyone" })).toBeDisabled();
-    await expect(prepPage.getByText("An Approver releases the statements.")).toBeVisible();
+    await expect(prepPage.getByRole("button", { name: "Release to everyone" })).toBeEnabled();
 
-    // The Approver reads the worker's statement, then releases all of them with one button.
+    // The Approver reads the worker's statement; it already shows who prepared and authorized the run and when, without anyone signing.
     await apprPage.goto(`/payroll/statements/${runId}`);
     await expect(apprPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toBeVisible();
     await apprPage.getByRole("link", { name: `View: Wanda Worker${stamp}` }).click();
     await expect(apprPage.getByRole("heading", { level: 1, name: `Statement for Wanda Worker${stamp}` })).toBeVisible();
     await expect(apprPage.getByText("Health allowance")).toBeVisible();
-    await apprPage.goto(`/payroll/statements/${runId}`);
-    await apprPage.getByRole("button", { name: "Release to everyone" }).click();
-    await expect(apprPage.getByRole("alertdialog")).toContainText("Release 1 statement?");
-    await apprPage.getByRole("button", { name: "Release now" }).click();
-    await expect(apprPage.getByText("Released 1 statement.")).toBeVisible();
-    await expect(apprPage.getByText("These statements have been released to the contractors.")).toBeVisible();
+    await expect(apprPage.getByText(`Approved on ${new Date().toISOString().slice(0, 10)}`).or(apprPage.getByText(/^Approved on \d{4}-\d{2}-\d{2}$/))).toBeVisible();
+    await expect(apprPage.getByText(`Pia Preparer${stamp}`)).toBeVisible(); // Prepared by
+    await expect(apprPage.getByText(`Ari Approver${stamp}`)).toBeVisible(); // Authorized by
+
+    // The Preparer releases all of them with one button.
+    await prepPage.goto(`/payroll/statements/${runId}`);
+    await prepPage.getByRole("button", { name: "Release to everyone" }).click();
+    await expect(prepPage.getByRole("alertdialog")).toContainText("Release 1 statement?");
+    await prepPage.getByRole("button", { name: "Release now" }).click();
+    await expect(prepPage.getByText("Released 1 statement.")).toBeVisible();
+    await expect(prepPage.getByText("These statements have been released to the contractors.")).toBeVisible();
 
     // The worker opens My payment statements and downloads the contractor payment statement.
     await workPage.goto("/my-pay");

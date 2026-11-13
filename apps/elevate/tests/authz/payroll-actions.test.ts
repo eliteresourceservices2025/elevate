@@ -108,6 +108,8 @@ const testRunCalls: Record<string, () => Promise<{ ok: boolean; error?: string }
   markRunAsTest: () => markRunAsTest({ runId: RUN_ID, test: true, reason: "Practice cycle" }),
   archivePayRun: () => archivePayRun({ runId: RUN_ID, reason: "Practice cycle done" }),
   restorePayRun: () => restorePayRun({ runId: RUN_ID }),
+  // Releasing the statements to the contractors works for both levels too (owner decision 2026-11-12).
+  releaseStatements: () => releaseStatements({ runId: RUN_ID }),
   // Paying works for both levels too (owner decision 2026-11-12).
   exportRemitlyList: () => exportRemitlyList({ runId: RUN_ID }),
   markPaid: () => markPaid({ runId: RUN_ID, employeeId: OTHER, reference: "RMT-TEST-1", paidOn: "2030-11-20" }),
@@ -150,8 +152,6 @@ const HASH = "a".repeat(64);
 const decisions: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   approveRun: () => approveRun({ runId: RUN_ID, expectedHash: HASH }),
   sendBackRun: () => sendBackRun({ runId: RUN_ID, note: "Check the late minutes" }),
-  // Releasing the statements to the contractors is an Approver's decision too.
-  releaseStatements: () => releaseStatements({ runId: RUN_ID }),
 };
 
 describe.each(Object.entries(decisions))("%s, every role at every payroll level", (_name, decide) => {

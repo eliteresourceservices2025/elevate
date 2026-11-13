@@ -11,7 +11,7 @@ Your contractor payment statement shows how your pay for a pay period was worked
 
 # When it appears
 
-A statement appears when the pay run it belongs to has been approved and an Approver has released it to the contractors. You get a notice that says **Your contractor payment statement is ready**. Before that, **My payment statements** shows **No statements yet**.
+A statement appears when the pay run it belongs to has been approved and has been released to the contractors. You get a notice that says **Your contractor payment statement is ready**. Before that, **My payment statements** shows **No statements yet**.
 
 ![My payment statements before a pay run is paid: it says there are no statements yet.](help:read-your-payslip/01-no-payslip-yet.png)
 
@@ -38,7 +38,7 @@ The statement is one page, and the PDF looks the same as the page. Everything is
 - **Deductions (right column):** absent days, unpaid sick leave (SL), late and undertime, a loan and other deductions. It ends with **Total deductions**.
 - **Leave (days):** bereavement and PTO (both paid) and SL (unpaid), as a number of days.
 - **Total payable compensation**, in the purple box: total compensation minus total deductions. If you have more than one pay line, each has its own section and you also see **Total payable compensation, all lines**.
-- **Certification:** a sentence saying the statement reflects payment for services you rendered in the period, and that you acknowledge receiving the total payable compensation. Under it are the **Authorized by** signature (the name, title and date of the Human Resources Director, kept with the pay run so it never changes afterwards; it says **Not signed** if nobody was set up that day) and blank lines for **Prepared by**, **Date** and your own **Contractor signature (optional)**. Print the PDF if you want to sign it.
+- **Certification:** a sentence saying the statement reflects payment for services you rendered in the period, and that you acknowledge receiving the total payable compensation. Under it, ELEVATE fills in **Prepared by** (the person who prepared the pay run), **Authorized by** (the person who approved it) and the **Date** it was approved. If a Human Resources Director's name, title and signature were set up, they show under **Authorized by** instead. There is also a blank line for your own **Contractor signature (optional)**. Print the PDF if you want to sign it.
 - **Disclaimer:** the payment is for services rendered as an Independent Contractor and is not an employer-employee relationship. You are responsible for any taxes, registrations and government contributions that apply to you.
 
 ![A contractor payment statement on screen: the period, how it was paid, the pay line by line, the total payable compensation and who signed it.](help:read-your-payslip/03-payslip.png)
