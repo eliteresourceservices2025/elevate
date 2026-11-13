@@ -26,6 +26,13 @@ describe("approvalRefusal", () => {
     expect(approvalRefusal({ ...clean, ownLines: [{ confirmedBy: OTHER }] })).toBeNull();
   });
 
+  it("refuses when the line of the person who sent the run is unchecked or was checked by themself", () => {
+    expect(approvalRefusal({ ...clean, submitterId: PREPARER, submitterLines: [{ confirmedBy: null }] })).toMatch(/sent this run for review has not been checked/);
+    expect(approvalRefusal({ ...clean, submitterId: PREPARER, submitterLines: [{ confirmedBy: PREPARER }] })).toMatch(/sent this run for review has not been checked/);
+    expect(approvalRefusal({ ...clean, submitterId: PREPARER, submitterLines: [{ confirmedBy: OTHER }] })).toBeNull();
+    expect(approvalRefusal({ ...clean, submitterId: null, submitterLines: [{ confirmedBy: null }] })).toBeNull(); // a test run passes null
+  });
+
   it("refuses while blocking checks remain", () => {
     expect(approvalRefusal({ ...clean, blockingChecks: 1 })).toMatch(/must be fixed/);
   });

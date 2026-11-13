@@ -132,9 +132,8 @@ function columnOf(ref: string): number {
 function parseSheet(xml: string, strings: string[]): Cell[][] {
   const rows: Cell[][] = [];
   for (const row of elements(xml, "row")) {
-    if (rows.length >= MAX_ROWS) break;
     const rowNumber = Number(/\br="(\d+)"/.exec(row.attrs)?.[1] ?? rows.length + 1);
-    if (rowNumber > MAX_ROWS) break;
+    if (rows.length >= MAX_ROWS || rowNumber > MAX_ROWS) throw new XlsxError(`A sheet in that workbook has more than ${MAX_ROWS} rows, so some days would be left out. Export a shorter period.`);
     const cells: Cell[] = [];
     for (const cell of elements(row.body, "c")) {
       const col = columnOf(/\br="([A-Z]+\d+)"/.exec(cell.attrs)?.[1] ?? "");
@@ -179,7 +178,7 @@ export function readXlsxSheets(bytes: Uint8Array): Sheet[] {
 
   const sheets: Sheet[] = [];
   for (const s of elements(workbook, "sheet")) {
-    if (sheets.length >= MAX_SHEETS) break;
+    if (sheets.length >= MAX_SHEETS) throw new XlsxError(`That workbook has more than ${MAX_SHEETS} sheets, so some people would be left out. Export the timesheet in smaller groups.`);
     const name = /\bname="([^"]*)"/.exec(s.attrs)?.[1];
     const rid = /\br:id="([^"]+)"/.exec(s.attrs)?.[1];
     const target = rid ? targets.get(rid) : undefined;

@@ -113,6 +113,8 @@ export const applyTimesheetSchema = z.object({
   runId: uuid,
   importId: uuid,
   assignments: z.array(z.object({ code: z.string().trim().min(1).max(40), runLineId: z.preprocess((v) => (v === "" ? null : v), uuid.nullable()) })).max(300),
+  /** Replace unconfirmed suggestions already on the lines (from another fill). Off: they are kept and the new amounts are not written. */
+  replaceSuggestions: z.boolean().optional(),
 });
 export const discardTimesheetSchema = z.object({ runId: uuid });
 export const uploadTimesheetSchema = z.object({ runId: uuid });

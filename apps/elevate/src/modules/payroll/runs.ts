@@ -16,7 +16,7 @@ import { CORRECTION_TYPES, isItemized, PAY_ITEM_LABELS, REASON_REQUIRED_TYPES, t
 import { buildLineInput, cleanItemLabel, formatItemValue, noItemizedLines, parseItemValue, type ItemizedLines } from "./items";
 import { resolveLines } from "./lines";
 import { formatPesos } from "./money";
-import { payLines, payRunItems, payRunLines, payRuns } from "./schema";
+import { payLines, payPayments, payRunItems, payRunLines, payRunReleases, payRuns } from "./schema";
 import {
   assertNotOwnEmployee,
   decryptItemValue,
@@ -259,6 +259,12 @@ export async function setRunTest(tx: Tx, actor: Actor, v: { runId: string; test:
   const run = await lockRun(tx, v.runId);
   if (run.isTest === v.test) throw new ActionFailure(v.test ? "This run is already a test run." : "This run is already a real run.");
   if (run.status === "paid" || run.status === "cancelled") throw new ActionFailure(`A ${run.status} run can't be changed.`);
+  if (v.test) {
+    // A real run with money already recorded, or statements already released, is a real payout: hiding it as practice could lead to paying the period twice.
+    const [paid] = await tx.select({ n: sql<number>`count(*)::int` }).from(payPayments).where(eq(payPayments.runId, v.runId));
+    const [released] = await tx.select({ n: sql<number>`count(*)::int` }).from(payRunReleases).where(eq(payRunReleases.runId, v.runId));
+    if (paid.n > 0 || released.n > 0) throw new ActionFailure("This run already has payments recorded or statements released, so it can't become a test run. Correct a mistake with an adjustment on the next run.");
+  }
   if (!v.test) {
     if (run.status !== "draft") throw new ActionFailure("A test run can be made a real run again only while it is a draft.");
     if (run.archivedAt) throw new ActionFailure("Restore this run first.");

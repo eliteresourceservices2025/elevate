@@ -48,6 +48,7 @@ export function JibblePreview({ runId, preview }: { runId: string; preview: Time
   const { run, pending } = useRun();
   const router = useRouter();
   const [chosen, setChosen] = useState<Record<string, string>>(() => Object.fromEntries(preview.members.map((m) => [m.code, m.runLineId ?? ""])));
+  const [replace, setReplace] = useState(false);
   const picked = Object.values(chosen).filter(Boolean);
   const clash = picked.length !== new Set(picked).size;
   const labelOf = new Map(preview.lines.map((l) => [l.runLineId, l.label]));
@@ -58,6 +59,25 @@ export function JibblePreview({ runId, preview }: { runId: string; preview: Time
         Timesheet period: {preview.periodText ?? "not printed"}. This run covers {preview.runPeriod.start} to {preview.runPeriod.end}; only days inside it are counted.
         {preview.outsideDays > 0 ? ` ${preview.outsideDays} ${preview.outsideDays === 1 ? "day" : "days"} in the file fall outside the run and are ignored.` : ""}
       </Alert>
+      {preview.missingColumns.length > 0 ? (
+        <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
+          The file has no {preview.missingColumns.join(", ")} {preview.missingColumns.length === 1 ? "column" : "columns"}, so those amounts count as zero. Check that the export is the right one before filling the run.
+        </Alert>
+      ) : null}
+      {preview.skippedSheets > 0 ? (
+        <Alert variant="info" role="note" className="rounded-lg p-3 text-sm">
+          {preview.members.length} {preview.members.length === 1 ? "person" : "people"} read. {preview.skippedSheets} other {preview.skippedSheets === 1 ? "sheet was" : "sheets were"} not read as a person (a summary, raw data, or a repeated member).
+        </Alert>
+      ) : null}
+      {preview.conflicts > 0 ? (
+        <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
+          {preview.conflicts} unconfirmed {preview.conflicts === 1 ? "suggestion" : "suggestions"} already on these lines (from the other fill or an earlier upload) differ from this file. They are kept unless you choose to replace them. A replaced amount stays in the history.
+          <label className="mt-2 flex items-center gap-2">
+            <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
+            Replace them with the amounts from this file
+          </label>
+        </Alert>
+      ) : null}
       {clash ? (
         <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
           Two people are set to the same pay line. Choose a different line for one of them before filling the run.
@@ -113,8 +133,8 @@ export function JibblePreview({ runId, preview }: { runId: string; preview: Time
           disabled={pending || clash || picked.length === 0}
           onClick={() =>
             run(
-              () => applyJibbleTimesheet({ runId, importId: preview.importId, assignments: preview.members.map((m) => ({ code: m.code, runLineId: chosen[m.code] || null })) }),
-              (d) => `Filled ${d?.lines ?? 0} pay lines with ${d?.written ?? 0} suggested amounts${d?.kept ? ` (${d.kept} left as you had confirmed them)` : ""}. Read them, then confirm.`,
+              () => applyJibbleTimesheet({ runId, importId: preview.importId, assignments: preview.members.map((m) => ({ code: m.code, runLineId: chosen[m.code] || null })), replaceSuggestions: replace }),
+              (d) => `Filled ${d?.lines ?? 0} pay lines with ${d?.written ?? 0} suggested amounts${d?.kept ? ` (${d.kept} left as you had confirmed them)` : ""}${d?.held ? ` ${d.held} existing ${d.held === 1 ? "suggestion was" : "suggestions were"} kept as they were.` : ""}. Read them, then confirm.`,
               () => router.push(`/payroll/${runId}`),
             )
           }

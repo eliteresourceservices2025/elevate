@@ -669,7 +669,7 @@ export async function uploadJibbleTimesheet(formData: FormData): Promise<ActionR
 }
 
 /** Fills the draft run with suggested amounts from the uploaded timesheet, for the members the Preparer matched. */
-export async function applyJibbleTimesheet(input: unknown): Promise<ActionResult<{ lines: number; written: number; kept: number }>> {
+export async function applyJibbleTimesheet(input: unknown): Promise<ActionResult<{ lines: number; written: number; kept: number; held: number }>> {
   const actor = await requireUser();
 
   return runAction(async () => {

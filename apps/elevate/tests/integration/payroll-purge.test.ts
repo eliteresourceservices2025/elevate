@@ -5,7 +5,7 @@ import type { RoleSlug } from "@/lib/roles";
 import { endPayrollLinesWhenDone } from "./payroll-test-helpers";
 
 // Real-database test: archiving a cancelled run, and deleting archived test runs, cancelled runs and test invoices for good. Invented people,
-// clients and figures. Periods are in 2037 so they never overlap another file's runs.
+// clients and figures. Periods are in 2041 so they never overlap another file's runs.
 
 const current = vi.hoisted(() => ({ user: null as unknown }));
 vi.mock("@/lib/auth", () => ({ requireUser: vi.fn(async () => current.user) }));
@@ -45,13 +45,13 @@ let preparer: Awaited<ReturnType<typeof account>>;
 let hr: Awaited<ReturnType<typeof account>>;
 let nobody: Awaited<ReturnType<typeof account>>;
 
+// One client and one billing rate for the whole file (the rates list is paged, so this file must not add a client for each test).
+let sharedClient = "";
 async function setup() {
-  const client = await newClient();
+  const client = sharedClient;
   const ana = await person("Ana");
   const line = await as(preparer, () => createPayLine({ employeeId: ana, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2031-01-01", monthly: "22,000", clientId: client }));
   if (!line.ok) throw new Error(`line failed: ${line.error}`);
-  const rate = await as(hr, () => addBillRate({ clientId: client, effectiveFrom: "2020-01-01", rate: "10.00" }));
-  if (!rate.ok) throw new Error("rate failed");
   return { client, ana };
 }
 async function newRun(periodStart: string, periodEnd: string, test: boolean) {
@@ -71,12 +71,15 @@ beforeAll(async () => {
   preparer = await account("employee", "preparer");
   hr = await account("hr_admin");
   nobody = await account("employee");
+  sharedClient = await newClient();
+  const rate = await as(hr, () => addBillRate({ clientId: sharedClient, effectiveFrom: "2020-01-01", rate: "10.00" }));
+  if (!rate.ok) throw new Error("rate failed");
 });
 
 describe("a cancelled run can be archived and deleted", () => {
   it("archives a cancelled real run (a real draft cannot be archived), restores it, and deletes it only once archived", async () => {
     await setup();
-    const real = await newRun("2037-01-01", "2037-01-15", false);
+    const real = await newRun("2041-01-01", "2041-01-15", false);
 
     // A real run that is not cancelled can't be archived.
     expect(await as(preparer, () => archivePayRun({ runId: real, reason: "Clearing out" }))).toMatchObject({ ok: false, error: expect.stringMatching(/Only a test run or a cancelled run/) });
@@ -101,7 +104,7 @@ describe("a cancelled run can be archived and deleted", () => {
 
   it("never deletes a real run, however it ended up, and the database refuses a plain delete", async () => {
     await setup();
-    const real = await newRun("2037-02-01", "2037-02-15", false);
+    const real = await newRun("2041-02-01", "2041-02-15", false);
     await as(preparer, () => purgeArchivedPayRuns());
     expect(await runGone(real)).toBe(false);
     await expect(db.execute(sql`delete from payroll.pay_runs where id = ${real}`)).rejects.toThrow();
@@ -113,7 +116,7 @@ describe("a cancelled run can be archived and deleted", () => {
 describe("archived test runs and test invoices are deleted for good", () => {
   it("keeps a run while an invoice on it is live, deletes the run with its invoices once they are archived, and never touches a real invoice", async () => {
     const { client, ana } = await setup();
-    const testRun = await newRun("2037-03-01", "2037-03-20", true);
+    const testRun = await newRun("2041-03-01", "2041-03-20", true);
     await setHours(testRun, ana, "12");
     const inv = await as(hr, () => createInvoice({ runId: testRun, clientId: client }));
     if (!inv.ok) throw new Error(`invoice failed: ${inv.error}`);
@@ -121,7 +124,7 @@ describe("archived test runs and test invoices are deleted for good", () => {
     if (!again.ok) throw new Error("second invoice failed");
 
     // A real run with a real invoice that is voided: kept for good.
-    const realRun = await newRun("2037-04-01", "2037-04-15", false);
+    const realRun = await newRun("2041-04-01", "2041-04-15", false);
     await setHours(realRun, ana, "5");
     const realInv = await as(hr, () => createInvoice({ runId: realRun, clientId: client }));
     if (!realInv.ok) throw new Error("real invoice failed");
@@ -151,7 +154,7 @@ describe("archived test runs and test invoices are deleted for good", () => {
 
   it("deletes archived test invoices alone, keeps one that a kept invoice was replaced by, and leaves live and real invoices", async () => {
     const { client, ana } = await setup();
-    const testRun = await newRun("2037-05-01", "2037-05-20", true);
+    const testRun = await newRun("2041-05-01", "2041-05-20", true);
     await setHours(testRun, ana, "8");
     const v1 = await as(hr, () => createInvoice({ runId: testRun, clientId: client }));
     const v2 = await as(hr, () => createInvoice({ runId: testRun, clientId: client })); // replaces v1
@@ -165,7 +168,7 @@ describe("archived test runs and test invoices are deleted for good", () => {
     expect(await invGone(v1.data.invoiceId)).toBe(false);
 
     // A lone archived test invoice (its run is a test run that is not archived) is deleted.
-    const solo = await newRun("2037-06-01", "2037-06-20", true);
+    const solo = await newRun("2041-06-01", "2041-06-20", true);
     await setHours(solo, ana, "3");
     const s = await as(hr, () => createInvoice({ runId: solo, clientId: client }));
     if (!s.ok) throw new Error("invoice failed");

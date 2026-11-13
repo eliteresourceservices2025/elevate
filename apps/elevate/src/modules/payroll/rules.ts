@@ -33,6 +33,12 @@ export type ApprovalInput = {
   /** The approver's own lines on the run. */
   ownLines: { confirmedBy: string | null }[];
   blockingChecks: number;
+  /**
+   * The submitter's own lines on a REAL run: the person who sent the run for review is paid on it too, and that line needs a confirmation
+   * from a Preparer other than themself before anyone approves. Leave empty for a test run (practice runs may go through without it).
+   */
+  submitterLines?: { confirmedBy: string | null }[];
+  submitterId?: string | null;
 };
 
 /** Why this person may not approve this run, or null when they may. There is no bypass. */
@@ -40,6 +46,9 @@ export function approvalRefusal(input: ApprovalInput): string | null {
   if (input.touchedBy.includes(input.approverId)) return "You prepared or changed this run, or wrote a rate it pays, so someone else must approve it.";
   if (input.ownLines.some((l) => l.confirmedBy === null || l.confirmedBy === input.approverId)) {
     return "Your own line on this run must be checked by a Preparer other than you before you can approve it. Send the run back to ask for that.";
+  }
+  if (input.submitterId && (input.submitterLines ?? []).some((l) => l.confirmedBy === null || l.confirmedBy === input.submitterId)) {
+    return "The line of the person who sent this run for review has not been checked by another Preparer. Send the run back to ask for that.";
   }
   if (input.blockingChecks > 0) return "This run has problems that must be fixed before it can be approved. Send it back to the Preparer.";
   return null;

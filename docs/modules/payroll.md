@@ -193,3 +193,11 @@ Frozen pay rows (approved runs) cannot be re-encrypted, so **every old `FIELD_EN
 - Whether settings authors should be in `touchedBy` (above).
 - The privacy notice length: trim about 300 characters of counsel-approved wording, or raise the policy limit (see Privacy and 1099).
 - From the spec, section 12 (the sheet owner's questions): the multipliers, whether the divisor is always 11, how late minutes are deducted, how the dollar allowance recurs.
+
+## Review fixes (2026-11-13)
+
+- **Test marking:** a run with any recorded payment or a statement release can't be marked as a test run (`setRunTest`), so a real payout can't be hidden and the period paid twice. A mistake is fixed by an adjustment on the next run.
+- **Submitter's own line:** on a REAL run, approval is refused (server side, `approvalRefusal`) while the line of the person who sent the run for review is unchecked or was checked only by themself. Submitting is still allowed (the check stays a note), and a test run is exempt.
+- **Timesheet reader:** a workbook with more than 200 sheets or a sheet with more than 5,000 rows is refused instead of cut short; a time that is not blank, a dash or `8h 06m` is refused naming the person, column and day instead of counting as zero. The preview says how many sheets were not read as a person and which columns were missing everywhere.
+- **Test runs send no review, send-back or approval notices.**
+- **Jibble fill vs. suggestions already on a line:** an unconfirmed suggestion that differs from the file is held unless the Preparer ticks "Replace them"; a replacement writes a new row (the earlier one stays) whose reason names the earlier value. The preview counts the conflicts.

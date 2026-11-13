@@ -119,7 +119,11 @@ export async function refusalFor(executor: Executor, data: RunData, approverId: 
   const ownEmployeeId = await employeeIdForUser(executor, approverId);
   const ownLines = ownEmployeeId === null ? [] : data.rows.filter((r) => r.runLine.employeeId === ownEmployeeId).map((r) => ({ confirmedBy: r.runLine.confirmedBy }));
   const checks = runChecks(await checkInputsOf(executor, data, data.run.submittedBy));
-  return approvalRefusal({ approverId, touchedBy: await touchedBy(executor, data.run.id), ownLines, blockingChecks: checks.blocking.length });
+  // The submitter's own line on a real run must be checked by someone else too (a test run is exempt).
+  const submitterId = data.run.isTest ? null : data.run.submittedBy;
+  const submitterEmployeeId = submitterId ? await employeeIdForUser(executor, submitterId) : null;
+  const submitterLines = submitterEmployeeId === null ? [] : data.rows.filter((r) => r.runLine.employeeId === submitterEmployeeId).map((r) => ({ confirmedBy: r.runLine.confirmedBy }));
+  return approvalRefusal({ approverId, touchedBy: await touchedBy(executor, data.run.id), ownLines, blockingChecks: checks.blocking.length, submitterId, submitterLines });
 }
 
 /**
@@ -165,7 +169,9 @@ export async function submit(tx: Tx, actor: Actor, runId: string): Promise<void>
   await writeAudit({ actor, action: "payroll.run.submit", targetType: "pay_run", targetId: runId, metadata: { lines: n, warnings: checks.warnings.length } }, tx);
   await logChange(tx, actor, { action: "run_submitted", runId, detail: { lines: n, warnings: checks.warnings.length } });
 
-  const [{ waiting }] = await tx.select({ waiting: sql<number>`count(*)::int` }).from(payRuns).where(and(eq(payRuns.status, "in_review"), isNull(payRuns.archivedAt)));
+  // A test run is practice: nobody is sent looking for real work.
+  if (data.run.isTest) return;
+  const [{ waiting }] = await tx.select({ waiting: sql<number>`count(*)::int` }).from(payRuns).where(and(eq(payRuns.status, "in_review"), isNull(payRuns.archivedAt), eq(payRuns.isTest, false)));
   await notify(
     tx,
     (await holders(tx, "approver", actor.id)).map((userId) => ({
@@ -198,6 +204,7 @@ export async function sendBack(tx: Tx, actor: Actor, v: { runId: string; note: s
   await tx.update(payRuns).set({ status: "draft", decidedBy: actor.id }).where(eq(payRuns.id, v.runId));
   await writeAudit({ actor, action: "payroll.run.send_back", targetType: "pay_run", targetId: v.runId, metadata: { lines: data.rows.length } }, tx);
   await logChange(tx, actor, { action: "run_sent_back", runId: v.runId, detail: { note: v.note } });
+  if (data.run.isTest) return;
   await notify(
     tx,
     (await holders(tx, "preparer", actor.id)).map((userId) => ({
@@ -232,6 +239,7 @@ export async function approve(tx: Tx, actor: Actor, v: { runId: string; expected
   await tx.update(payRuns).set({ status: "approved", decidedBy: actor.id }).where(eq(payRuns.id, v.runId));
   await writeAudit({ actor, action: "payroll.run.approve", targetType: "pay_run", targetId: v.runId, metadata: { lines: data.rows.length } }, tx);
   await logChange(tx, actor, { action: "run_approved", runId: v.runId, detail: { lines: data.rows.length } });
+  if (data.run.isTest) return;
   await notify(
     tx,
     (await holders(tx, "preparer", actor.id)).map((userId) => ({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateOf, daysOutside, minutesOf, readJibbleTimesheet, suggestedAmounts, totalsFor } from "./timesheet";
+import { dateOf, daysOutside, minutesOf, parseMinutes, readJibbleTimesheet, suggestedAmounts, totalsFor } from "./timesheet";
 import { MAX_XLSX_BYTES, readXlsxSheets, XlsxError } from "./xlsx";
 
 import { JIBBLE_HEADER as HEADER, jibbleDay as day, jibbleMemberSheet as memberSheet, workbook, zip } from "../../../../tests/helpers/jibble-workbook";
@@ -71,6 +71,30 @@ describe("a crafted file", () => {
     expect(performance.now() - started).toBeLessThan(2_000);
     const ok = readXlsxSheets(withSheet('<worksheet><cols><col min="1"/></cols><sheetData><row r="1"><c r="A1"><v>5</v></c><c r="B1" t="inlineStr"><is><t>hi &amp; bye</t></is></c></row></sheetData></worksheet>'));
     expect(ok[0].rows[0]).toEqual([5, "hi & bye"]);
+  });
+});
+
+describe("a value that can't be read is refused, never counted as zero", () => {
+  it("parseMinutes tells a blank or dash from a value it doesn't understand", () => {
+    expect(parseMinutes("")).toBe(0);
+    expect(parseMinutes("-")).toBe(0);
+    expect(parseMinutes(null)).toBe(0);
+    expect(parseMinutes("8h 06m")).toBe(486);
+    expect(parseMinutes("abc")).toBeNull();
+    expect(parseMinutes("8.5 hours")).toBeNull();
+    expect(parseMinutes(-3)).toBeNull();
+  });
+
+  it("refuses a sheet with an unreadable time and names the person, column and day", () => {
+    const bad = workbook([memberSheet("Ana Testcruz", "ATC-1", [day(46328, "eight hours")])]);
+    expect(() => readJibbleTimesheet(bad)).toThrow(/Ana Testcruz.*PAYROLL HRS.*2026-11-02/);
+  });
+
+  it("counts the sheets it did not read as a person", () => {
+    const sheet = readJibbleTimesheet(sample());
+    expect(sheet.members).toHaveLength(2);
+    expect(sheet.skippedSheets).toBe(1); // the team summary
+    expect(sheet.missingColumns).toEqual([]);
   });
 });
 
