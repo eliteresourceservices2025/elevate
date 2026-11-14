@@ -16,6 +16,7 @@ import { CORRECTION_TYPES, isItemized, PAY_ITEM_LABELS, REASON_REQUIRED_TYPES, t
 import { buildLineInput, cleanItemLabel, formatItemValue, noItemizedLines, parseItemValue, type ItemizedLines } from "./items";
 import { suggestedDays } from "./flags";
 import type { SortKeys } from "./sort";
+import { autoTidyRates } from "./doubled-service";
 import { flagDatesOf, resolveLines, sameJob, type FlagDates } from "./lines";
 import { formatPesos } from "./money";
 import type { BulkResult } from "@/lib/bulk";
@@ -185,6 +186,8 @@ export async function createRun(tx: Tx, actor: Actor, period: { periodStart: str
   if (!test && !isCutoff(period)) throw new ActionFailure(NOT_A_CUTOFF);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('pay_runs'))`);
   if (!test) await refuseOverlap(tx, period);
+  // A doubled rate (the same person and client twice) that was never paid is taken away first, so the run does not pay it twice.
+  await autoTidyRates(tx, actor);
 
   const settings = await settingsInForce(tx, period.periodStart);
   const all = await tx
@@ -568,6 +571,7 @@ export async function confirmLine(tx: Tx, actor: Actor, runLineId: string): Prom
  */
 export async function syncRunPeople(tx: Tx, actor: Actor, runId: string): Promise<{ added: number; updated: number; removed: number }> {
   const run = await lockDraftRun(tx, runId);
+  await autoTidyRates(tx, actor);
   const settings = await settingsInForce(tx, run.periodStart);
   const all = await tx
     .select({ line: payLines, status: employees.status, archivedAt: employees.archivedAt })

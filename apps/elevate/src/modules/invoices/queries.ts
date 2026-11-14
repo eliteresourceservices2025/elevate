@@ -144,7 +144,7 @@ export async function getBillRates(paging: { page: number; pageSize: number }) {
   const names = new Map(list.map((c) => [c.id, c.name]));
 
   // People: those who already have a rate of their own, and those who have a pay line for a client (who a rate could be added for).
-  const linked = (await db.execute(sql`select distinct l.client_id::text as "clientId", l.employee_id::text as "employeeId" from payroll.pay_lines l where l.client_id is not null and not exists (select 1 from payroll.pay_lines w where w.line_key = l.line_key and w.withdrawn)`)) as unknown as { clientId: string; employeeId: string }[];
+  const linked = (await db.execute(sql`select distinct l.client_id::text as "clientId", l.employee_id::text as "employeeId" from payroll.pay_lines l where l.client_id is not null and not coalesce((select w.withdrawn from payroll.pay_lines w where w.line_key = l.line_key order by w.created_at desc limit 1), false)`)) as unknown as { clientId: string; employeeId: string }[];
   const personIds = [...new Set([...rates.flatMap((r) => (r.employeeId ? [r.employeeId] : [])), ...linked.map((l) => l.employeeId)])];
   const people = personIds.length === 0 ? [] : await db.select({ id: employees.id, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName }).from(employees).where(inArray(employees.id, personIds));
   const personName = new Map(people.map((p) => [p.id, nameOf(p)]));

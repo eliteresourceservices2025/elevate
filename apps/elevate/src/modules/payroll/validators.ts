@@ -52,8 +52,8 @@ export const withdrawPayLineSchema = z.object({ lineKey: uuid, reason });
 /** Removing every stopped rate that was never on a real run. `apply: false` only counts them. */
 export const removeStoppedRatesSchema = z.object({ apply: z.boolean() });
 
-/** The doubled-rate groups (person and client) to clean up, as the preview named them. */
-export const removeDoubledRatesSchema = z.object({ groupIds: z.array(z.string().min(1).max(200)).min(1).max(500) });
+/** The tidied rates to bring back (one contractor's, or every one the tidy took away). */
+export const restoreRemovedRatesSchema = z.object({ lineKeys: z.array(uuid).min(1).max(1000) });
 
 export const savePaySettingsSchema = z.object({
   effectiveFrom: isoDate,

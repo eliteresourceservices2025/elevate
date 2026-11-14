@@ -49,7 +49,7 @@ describe("setPayrollAccess, every role", () => {
 
 // Pay lines, rates and settings, as each of the six roles at each payroll level. Only a Preparer passes authorize();
 // a valid request from a Preparer reaches the (mocked, throwing) database, so it ends in the generic message.
-const { createPayLine, updatePayLine, endPayLine, reviewDoubledRates, removeDoubledRates, removeStoppedRates, withdrawPayLine, savePaySettings } = await import("@/modules/payroll/actions");
+const { createPayLine, updatePayLine, endPayLine, tidyDoubledRates, listRemovedRates, restoreTidiedRates, removeStoppedRates, withdrawPayLine, savePaySettings } = await import("@/modules/payroll/actions");
 const { getRates, getPaySettings, getRuns, getWorksheet } = await import("@/modules/payroll/queries");
 const { updateRunPeople, removePersonFromRun, restorePersonToRun } = await import("@/modules/payroll/actions");
 const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun } =
@@ -71,8 +71,9 @@ const calls: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   updatePayLine: () =>
     updatePayLine({ lineKey: LINE_KEY, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2030-11-16", monthly: "26000", reason: "Raise" }),
   endPayLine: () => endPayLine({ lineKey: LINE_KEY, endsOn: "2030-11-30", reason: "Contract ended" }),
-  reviewDoubledRates: () => reviewDoubledRates(),
-  removeDoubledRates: () => removeDoubledRates({ groupIds: ["x|y"] }),
+  tidyDoubledRates: () => tidyDoubledRates(),
+  listRemovedRates: () => listRemovedRates(),
+  restoreTidiedRates: () => restoreTidiedRates({ lineKeys: [LINE_KEY] }),
   removeStoppedRates: () => removeStoppedRates({ apply: false }),
   withdrawPayLine: () => withdrawPayLine({ lineKey: LINE_KEY, reason: "Added by mistake" }),
   savePaySettings: () =>

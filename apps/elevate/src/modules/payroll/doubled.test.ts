@@ -19,13 +19,21 @@ describe("findDoubledRates", () => {
     expect(g.remove).toEqual([{ lineKey: "old", how: "withdraw", endsOn: null }]);
   });
 
-  it("ignores the alias and treats two client records with the same name as one client", () => {
+  it("ignores the alias when there is a client, and the spelling of the client's name", () => {
     const groups = findDoubledRates([
-      line("a", "2026-01-01", null, { clientName: "Alturas Lab" }),
-      line("b", "2026-10-16", null, { clientName: "  alturas   LAB " }),
+      line("a", "2026-01-01", null, { clientName: "Alturas Lab", alias: "Front desk" }),
+      line("b", "2026-10-16", null, { clientName: "  alturas   LAB ", alias: "Billing" }),
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0].keep).toBe("b");
+  });
+
+  it("with no client, only the same alias is the same job (two roles without a client are not doubled)", () => {
+    const none = { clientName: null };
+    expect(findDoubledRates([line("a", "2026-01-01", null, { ...none, alias: "Front desk" }), line("b", "2026-01-01", null, { ...none, alias: "Billing" })])).toEqual([]);
+    const same = findDoubledRates([line("a", "2026-01-01", null, { ...none, alias: "Billing" }), line("b", "2026-06-01", null, { ...none, alias: " billing " })]);
+    expect(same).toHaveLength(1);
+    expect(same[0].keep).toBe("b");
   });
 
   it("keeps the same person on a different client (a second job) and different people apart", () => {
@@ -48,6 +56,13 @@ describe("findDoubledRates", () => {
       line("b", "2026-01-01", null, { clientName: "Zora Group" }),
     ]);
     expect(two).toEqual([]);
+  });
+
+  it("leaves a no-client line with its own alias alone: it is another role, not a leftover", () => {
+    const out = findDoubledRates([line("client", "2026-01-01", null, { alias: "Front desk" }), line("role", "2026-01-01", null, { clientName: null, alias: "Night shift" })]);
+    expect(out).toEqual([]);
+    const leftover = findDoubledRates([line("client", "2026-10-16", null, { alias: "Front desk" }), line("old", "2026-01-01", null, { clientName: null, alias: "Front desk" })]);
+    expect(leftover).toHaveLength(1);
   });
 
   it("keeps the line that starts last, the later written one on a tie, and handles three lines", () => {

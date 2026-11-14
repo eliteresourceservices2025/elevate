@@ -1,12 +1,15 @@
 // Finding doubled rates: two pay lines of the same person for the same client whose dates overlap, so a run pays both. Pure: no database,
-// no clock (dates are plain YYYY-MM-DD strings). The alias is ignored on purpose (the owner's rule: the same person with a different CLIENT
-// is a second job, anything else on the same client is a double); the dialog shows each line's alias so a real second role can be left alone.
+// no clock (dates are plain YYYY-MM-DD strings). With a client, the alias is ignored on purpose (the owner's rule: the same person with a
+// different CLIENT is a second job, anything else on the same client is a double). With no client there is nothing to compare but the alias, so
+// two no-client lines are doubled only when their aliases match. A restored line is decided on, and is left out before it gets here.
 
 export type DoubledInput = {
   lineKey: string;
   employeeId: string;
-  /** The client's name as stored (two client records with the same name are the same client here). Null when the line has no client. */
+  /** The client's name as stored (client names are unique, ignoring case). Null when the line has no client. */
   clientName: string | null;
+  /** The line's alias; compared only between lines that have no client. */
+  alias?: string | null;
   /** The first day the line is in force. */
   first: string;
   /** The line's last day, or null while it has not ended. */
@@ -58,21 +61,27 @@ const overlaps = (a: DoubledInput, b: DoubledInput) => a.first <= (b.last ?? FAR
 /**
  * Every set of lines of one person and one client that overlap in time, with the one to keep (the line that starts last: it is the newer
  * rate; a tie goes to the line written last) and what to do with each of the others. A line with no client joins the person's client when the
- * person has exactly one client among these lines (a leftover from before the client was filled in); otherwise it stays with the other
- * no-client lines. Lines that follow each other without overlapping are not doubled.
+ * person has exactly one client among these lines and the line has no alias or the client's alias (a leftover from before the client was
+ * filled in); otherwise it stays with the other no-client lines of the same alias. Lines that follow each other without overlapping are not doubled.
  */
 export function findDoubledRates(lines: DoubledInput[]): DoubledGroup[] {
+  const aliasOf = (l: DoubledInput) => (l.alias ?? "").trim().toLowerCase().replace(/\s+/g, " ");
   const namedOf = new Map<string, Set<string>>();
+  const aliasesWithClient = new Map<string, Set<string>>();
   for (const l of lines) {
     const key = norm(l.clientName);
     if (key === null) continue;
     namedOf.set(l.employeeId, (namedOf.get(l.employeeId) ?? new Set()).add(key));
+    aliasesWithClient.set(l.employeeId, (aliasesWithClient.get(l.employeeId) ?? new Set()).add(aliasOf(l)));
   }
   const keyOf = (l: DoubledInput): string => {
     const own = norm(l.clientName);
     if (own !== null) return own;
     const named = namedOf.get(l.employeeId);
-    return named && named.size === 1 ? [...named][0] : "";
+    // A no-client line with its own alias is another role, not a leftover.
+    if (named && named.size === 1 && (aliasOf(l) === "" || aliasesWithClient.get(l.employeeId)?.has(aliasOf(l)))) return [...named][0];
+    // No client to compare: only the same alias is the same job.
+    return `|${aliasOf(l)}`;
   };
 
   const byGroup = new Map<string, DoubledInput[]>();

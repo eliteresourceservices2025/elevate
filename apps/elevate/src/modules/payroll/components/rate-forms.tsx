@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FieldHint, HintedLabel } from "@/components/field-hint";
 import { useFormDialog } from "@/components/form-dialog";
 import { Alert } from "@/components/ui/alert";
@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { createPayLine, endPayLine, removeDoubledRates, removeStoppedRates, reviewDoubledRates, updatePayLine, withdrawPayLine } from "../actions";
+import { createPayLine, endPayLine, listRemovedRates, removeStoppedRates, restoreTidiedRates, tidyDoubledRates, updatePayLine, withdrawPayLine } from "../actions";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../constants";
-import type { DoubledGroupView, DoubledLineView } from "../doubled";
+import type { RemovedRateView } from "../doubled-service";
 import { PAYROLL_HINTS } from "../hints";
 import { sameJob } from "../lines";
 import { DETAIL_REASONS, reasonText, startChoicesFor, STOP_REASONS, UPDATE_REASONS, type CutoffChoice } from "../rate-start";
@@ -349,93 +349,96 @@ export function RemoveRateForm({ row }: { row: RateRow }) {
   );
 }
 
-const sinceText = (l: DoubledLineView) => `${l.monthly} a month, since ${l.since}${l.until ? ` to ${l.until}` : ""}${l.alias ? ` (${l.alias})` : ""}`;
+/**
+ * Takes doubled rates (the same person and client with overlapping dates, never paid) away automatically when a Preparer opens the Rates tab,
+ * and again after a rate is added or changed. Shows a short note with where to restore them. It renders nothing.
+ */
+export function AutoTidy({ tidyKey }: { tidyKey: string }) {
+  const { run } = useRun();
+  const doneFor = useRef("");
+  useEffect(() => {
+    // One tidy for each different set of doubled rates: a new double is tidied, and one that cannot be removed does not loop.
+    if (tidyKey === "" || doneFor.current === tidyKey) return;
+    doneFor.current = tidyKey;
+    run(
+      () => tidyDoubledRates(),
+      (d) => (d && d.removed > 0 ? `Removed ${d.removed} doubled ${d.removed === 1 ? "rate" : "rates"} automatically. Restore any of them under Removed rates.` : ""),
+    );
+  }, [tidyKey, run]);
+  return null;
+}
+
+const removedText = (r: RemovedRateView) => `${r.clientName ?? "No client"}${r.alias ? ` (${r.alias})` : ""}: ${r.monthly} a month, since ${r.since}`;
 
 /**
- * Doubled rates: the same person and client with two rates whose dates overlap, which a run pays twice. Lists each set with the newest rate
- * that stays and the ones that go (each group can be unticked: a real second role on the same client is the one exception), then removes them.
+ * The doubled rates the tidy took away, grouped by contractor. Restore one contractor's, or all of them. A restored rate is left alone by the
+ * tidy from then on (a real second role on the same client, for example).
  */
-export function DoubledRatesForm() {
+export function RemovedRatesForm() {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
-  const [groups, setGroups] = useState<DoubledGroupView[] | null>(null);
+  const [rates, setRates] = useState<RemovedRateView[] | null>(null);
   const [failed, setFailed] = useState(false);
-  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
     let live = true;
-    reviewDoubledRates()
-      .then((r) => {
-        if (!live) return;
-        if (!r.ok) return setFailed(true);
-        setGroups(r.data.groups);
-        setChosen(new Set(r.data.groups.map((g) => g.groupId)));
-      })
+    listRemovedRates()
+      .then((r) => live && (r.ok ? setRates(r.data.rates) : setFailed(true)))
       .catch(() => live && setFailed(true));
     return () => {
       live = false;
     };
   }, []);
-  const toRemove = useMemo(
-    () => (groups ?? []).filter((g) => chosen.has(g.groupId)).reduce((n, g) => n + g.remove.filter((r) => r.how !== "manual").length, 0),
-    [groups, chosen],
-  );
-  const toggle = (id: string) => {
-    const next = new Set(chosen);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setChosen(next);
-  };
+  const people = useMemo(() => {
+    const byPerson = new Map<string, { name: string; rates: RemovedRateView[] }>();
+    for (const r of rates ?? []) byPerson.set(r.employeeId, { name: r.name, rates: [...(byPerson.get(r.employeeId)?.rates ?? []), r] });
+    return [...byPerson.values()];
+  }, [rates]);
+  const restore = (lineKeys: string[]) =>
+    run(
+      () => restoreTidiedRates({ lineKeys }),
+      (d) => `Restored ${d?.restored ?? 0} ${d?.restored === 1 ? "rate" : "rates"}. The tidy will leave them alone.`,
+      () => dialog?.close(true),
+    );
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Two overlapping rates for the same person and client would be paid twice. Each set below keeps the newest rate. A rate that was never on a real pay run is taken
-        away; one that was paid stops the day before the newer rate starts. Nothing is deleted: the change history keeps it. The same person with a different client is never touched.
+        Two overlapping rates for the same person and client would be paid twice, so ELEVATE takes the older one away automatically (never one that was paid).
+        Nothing is deleted. Restore a rate here if it is real, for example a second role on the same client; it will not be taken away again.
       </p>
       {failed ? (
         <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
-          Could not check the rates. Try again.
+          Could not load the removed rates. Try again.
         </Alert>
-      ) : groups === null ? (
-        <p className="text-sm" role="status">Checking…</p>
-      ) : groups.length === 0 ? (
+      ) : rates === null ? (
+        <p className="text-sm" role="status">Loading…</p>
+      ) : rates.length === 0 ? (
         <Alert variant="success" role="status" className="rounded-lg p-3 text-sm">
-          No doubled rates found.
+          Nothing has been removed automatically.
         </Alert>
       ) : (
-        <ul className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
-          {groups.map((g) => (
-            <li key={g.groupId} className="rounded-md border p-3 text-sm">
-              <label className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1 size-4 accent-primary" checked={chosen.has(g.groupId)} onChange={() => toggle(g.groupId)} />
+        <>
+          <ul className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+            {people.map((p) => (
+              <li key={p.name + p.rates[0].lineKey} className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm">
                 <span className="space-y-1">
-                  <span className="block font-medium">
-                    {g.name} · {g.clientName ?? "No client"}
-                  </span>
-                  <span className="block text-muted-foreground">Keeps: {sinceText(g.keep)}</span>
-                  {g.remove.map((r) => (
-                    <span key={r.lineKey} className="block">
-                      {r.how === "withdraw" ? "Takes away" : r.how === "end" ? `Stops on ${r.endsOn}` : "Needs a manual look"}: {sinceText(r)}
+                  <span className="block font-medium">{p.name}</span>
+                  {p.rates.map((r) => (
+                    <span key={r.lineKey} className="block text-muted-foreground">
+                      {removedText(r)}
                     </span>
                   ))}
                 </span>
-              </label>
-            </li>
-          ))}
-        </ul>
+                <Button type="button" size="sm" variant="outline" disabled={pending} aria-label={`Restore ${p.name}'s removed rates`} onClick={() => restore(p.rates.map((r) => r.lineKey))}>
+                  Restore
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <Button type="button" disabled={pending} onClick={() => restore((rates ?? []).map((r) => r.lineKey))}>
+            Restore all ({rates.length})
+          </Button>
+        </>
       )}
-      <Button
-        type="button"
-        disabled={pending || toRemove === 0}
-        onClick={() =>
-          run(
-            () => removeDoubledRates({ groupIds: [...chosen] }),
-            (d) => `Done: ${d?.removed ?? 0} taken away, ${d?.stopped ?? 0} stopped${d?.manual ? `, ${d.manual} left for a manual look` : ""}. Now press Fill or update this run on any draft run.`,
-            () => dialog?.close(true),
-          )
-        }
-      >
-        {toRemove === 0 ? "Remove doubled rates" : `Remove ${toRemove} doubled ${toRemove === 1 ? "rate" : "rates"}`}
-      </Button>
     </div>
   );
 }

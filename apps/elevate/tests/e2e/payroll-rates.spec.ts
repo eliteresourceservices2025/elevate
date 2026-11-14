@@ -112,7 +112,7 @@ test("payroll rates: add a contractor, update the rate, stop paying, remove a mi
     await expect(p.getByRole("dialog").getByText(/stopped rates? will be removed|No stopped rates to remove/)).toBeVisible();
     await p.keyboard.press("Escape");
 
-    // ---- Doubled rates: the same client with two aliases is found and the older one is taken away ----
+    // ---- Doubled rates are tidied automatically: the same client with two aliases, the older one is taken away, and Restore brings it back ----
     await p.goto("/payroll/rates");
     for (const alias of ["Front desk", "Billing"]) {
       dialog = await add(`Cat${stamp}`, "21,000.00");
@@ -122,23 +122,21 @@ test("payroll rates: add a contractor, update the rate, stop paying, remove a mi
       await dialog.getByRole("button", { name: "Add contractor" }).click();
       await expect(p.getByText("Rate added.")).toBeVisible();
     }
-    await expect(rowOf(`Cat${stamp}`)).toHaveCount(2);
-    await p.getByRole("button", { name: "Remove doubled rates" }).click();
+    // The page tidies the doubled rate by itself and says so; only the newest rate is left in the list.
+    await expect(p.getByText(/Removed \d+ doubled rates? automatically/)).toBeVisible();
+    await expect(rowOf(`Cat${stamp}`)).toHaveCount(1);
+    await p.getByRole("button", { name: "Removed rates" }).click();
     dialog = p.getByRole("dialog");
     const ours = dialog.getByRole("listitem").filter({ hasText: `Cat${stamp}` });
     await expect(ours).toHaveCount(1);
-    await expect(ours).toContainText("Keeps:");
-    await expect(ours).toContainText("Takes away:");
-    await p.screenshot({ path: `${SHOTS}/5-doubled.png` });
-    // Only our own pair: untick every other set the local database may hold.
-    const sets = dialog.getByRole("listitem");
-    for (let i = 0; i < (await sets.count()); i++) {
-      const item = sets.nth(i);
-      if (!(await item.textContent())?.includes(`Cat${stamp}`)) await item.getByRole("checkbox").uncheck();
-    }
-    await dialog.getByRole("button", { name: /^Remove 1 doubled rate$/ }).click();
-    await expect(p.getByText(/Done: 1 taken away/)).toBeVisible();
-    await expect(rowOf(`Cat${stamp}`)).toHaveCount(1);
+    await expect(ours).toContainText("Front desk");
+    await p.screenshot({ path: `${SHOTS}/5-removed.png` });
+    await ours.getByRole("button", { name: /^Restore/ }).click();
+    await expect(p.getByText(/Restored 1 rate/)).toBeVisible();
+    await expect(rowOf(`Cat${stamp}`)).toHaveCount(2);
+    // A restored rate stays: opening the page again does not take it away.
+    await p.goto("/payroll/rates");
+    await expect(rowOf(`Cat${stamp}`)).toHaveCount(2);
 
     // ---- A phone: the same actions, in cards ----
     await p.setViewportSize({ width: 390, height: 844 });

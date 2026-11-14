@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RATES_LABELS as L, UNREADABLE_HINT, unreadableNotice } from "../constants";
 import type { CutoffChoice } from "../rate-start";
 import type { RateOptions, RateRow } from "../queries";
-import { AddContractorForm, DoubledRatesForm, EditDetailsForm, RemoveRateForm, RemoveStoppedForm, StopPayingForm, UpdateRateForm } from "./rate-forms";
+import { AddContractorForm, AutoTidy, EditDetailsForm, RemovedRatesForm, RemoveRateForm, RemoveStoppedForm, StopPayingForm, UpdateRateForm } from "./rate-forms";
 import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
 
 // One row per rate, grouped under the person (the name is written once, on the first row of a person). The main button is "Update rate"; the
@@ -65,6 +65,7 @@ export function RatesTable({
   rows,
   options,
   cutoffs,
+  tidyKey,
   sortLinks,
   sortMenu,
   endedToggle,
@@ -72,6 +73,8 @@ export function RatesTable({
   rows: RateRow[];
   options: RateOptions | null;
   cutoffs: CutoffChoice[];
+  /** Names the doubled rates that were never paid (empty when none): they are taken away automatically, once for each different value. */
+  tidyKey?: string;
   endedToggle?: { showing: boolean; href: string };
   sortLinks?: SortLinks;
   sortMenu?: React.ReactNode;
@@ -84,6 +87,7 @@ export function RatesTable({
 
   return (
     <div className="space-y-4">
+      <AutoTidy tidyKey={tidyKey ?? ""} />
       <Alert variant="info" role="note" className="rounded-lg p-3 text-sm">
         These are pay figures. Opening this page is written to the audit log.
         {preparing ? ` A new rate counts from a pay run: the next one to prepare is ${preparing.range}.` : ""} Pay runs that are already made are never changed, and every old rate stays on record.
@@ -113,8 +117,8 @@ export function RatesTable({
             </FormDialog>
           ) : null}
           {options ? (
-            <FormDialog label="Remove doubled rates" title="Remove doubled rates" description="The same person and client with two overlapping rates would be paid twice." variant="outline" size="lg">
-              <DoubledRatesForm />
+            <FormDialog label="Removed rates" title="Removed rates" description="Doubled rates that were taken away automatically. Restore any of them." variant="outline" size="lg">
+              <RemovedRatesForm />
             </FormDialog>
           ) : null}
           {options ? (
