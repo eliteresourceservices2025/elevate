@@ -10,11 +10,14 @@ import { orNotFound } from "@/lib/or-not-found";
 import { pageInfo, parsePaging } from "@/lib/pagination";
 import { ISSUE_COPY, RUN_STATUS_LABELS } from "@/modules/payroll/constants";
 import { groupByIssue, groupReadiness } from "@/modules/payroll/readiness";
+import { DEFAULT_SORT, headerState, nextSort, parseSort, SORT_LABELS, SORT_MENU, sortLines, type SortHeader, type SortValue } from "@/modules/payroll/sort";
 import { ApprovalBar } from "@/modules/payroll/components/approval-bar";
 import { ConfirmAllButton } from "@/modules/payroll/components/jibble-import";
 import { RunReadiness } from "@/modules/payroll/components/run-readiness";
 import { RunSteps } from "@/modules/payroll/components/run-steps";
 import { SheetFilters, type SheetChip } from "@/modules/payroll/components/sheet-filters";
+import type { SortLinks } from "@/modules/payroll/components/sort-head";
+import { SortMenu } from "@/modules/payroll/components/sort-menu";
 import { CancelRunDialog, RemovedPeople } from "@/modules/payroll/components/run-dialogs";
 import { RunFillMenu } from "@/modules/payroll/components/run-fill-menu";
 import { RunOptionsMenu } from "@/modules/payroll/components/run-options";
@@ -49,7 +52,11 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
   const idsFor = (key: string): Set<string> => (key === "attention" ? attentionIds : key === "unchecked" ? uncheckedIds : new Set(issues.find((g) => g.code === key)?.runLineIds ?? []));
   const askedFocus = one(query.focus);
   const focus = askedFocus === "attention" || askedFocus === "unchecked" || issues.some((g) => g.code === askedFocus && g.runLineIds.length > 0) ? askedFocus : undefined;
-  const visible = focus ? sheet.lines.filter((l) => idsFor(focus).has(l.runLineId)) : sheet.lines;
+  // The order of the list: ?sort= (default name A to Z) and ?group=client. A bad value is the default. The order applies to every page.
+  const sort = parseSort(one(query.sort));
+  const grouped = one(query.group) === "client";
+  const ordered = sortLines(sheet.lines, sort, { attentionIds }, { groupByClient: grouped });
+  const visible = focus ? ordered.filter((l) => idsFor(focus).has(l.runLineId)) : ordered;
   const inReview = run.status === "draft" || run.status === "in_review";
   const chips: SheetChip[] = [{ key: "all", label: "All", count: sheet.lines.length }];
   if (attentionIds.size > 0) chips.push({ key: "attention", label: "Needs attention", count: attentionIds.size });
@@ -63,9 +70,23 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
   const suggestedCount = sheet.lines.reduce((n, l) => n + l.items.filter((i) => i.state === "suggested").length, 0);
   // Where each line sits (its page and anchor), and how many checks each one has, for the readiness screen and the phone cards.
   // A link to a line always goes to the unfiltered list, so the line is on the page it names.
-  const sizeParam = one(query.size) ? `size=${one(query.size)}` : "";
+  // Links keep the page size, the sort and the grouping (never the focus or the page): "keepQuery" for the checklist and the chips, `hrefWith` to
+  // change one of them.
+  const keepQuery = new URLSearchParams({ ...(one(query.size) ? { size: one(query.size) as string } : {}), ...(sort !== DEFAULT_SORT ? { sort } : {}), ...(grouped ? { group: "client" } : {}) }).toString();
+  const hrefWith = (over: { sort?: SortValue; group?: boolean }) => {
+    const p = new URLSearchParams();
+    if (one(query.size)) p.set("size", one(query.size) as string);
+    const s = over.sort ?? sort;
+    if (s !== DEFAULT_SORT) p.set("sort", s);
+    if (over.group ?? grouped) p.set("group", "client");
+    if (focus) p.set("focus", focus);
+    const q = p.toString();
+    return `/payroll/${run.id}${q ? `?${q}` : ""}#pay-sheet`;
+  };
+  const sortLinks: SortLinks = {};
+  for (const h of ["name", "client", "rate", "net", "change", "checked"] as SortHeader[]) sortLinks[h] = { href: hrefWith({ sort: nextSort(h, sort) }), state: headerState(h, sort) };
   const lineHrefs: Record<string, string> = Object.fromEntries(
-    sheet.lines.map((l, i) => [l.runLineId, `/payroll/${run.id}?page=${Math.floor(i / paging.pageSize) + 1}${sizeParam ? `&${sizeParam}` : ""}#line-${l.runLineId}`]),
+    ordered.map((l, i) => [l.runLineId, `/payroll/${run.id}?page=${Math.floor(i / paging.pageSize) + 1}${keepQuery ? `&${keepQuery}` : ""}#line-${l.runLineId}`]),
   );
   const issueCounts: Record<string, { must: number; review: number }> = {};
   for (const [kind, list] of [["must", sheet.checks.blocking], ["review", sheet.checks.warnings]] as const) {
@@ -118,15 +139,25 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
           checksAreMine={sheet.checksAreMine}
           lineHrefs={lineHrefs}
           focus={focus}
-          sizeQuery={sizeParam}
+          keepQuery={keepQuery}
         />
       ) : null}
       <UnassignedSuggestions sheet={sheet} canPrepare={sheet.canPrepare} />
       {run.status === "draft" && sheet.canPrepare ? <RemovedPeople runId={run.id} removed={sheet.removed} /> : null}
       <div id="pay-sheet" className="scroll-mt-24 space-y-3">
-        {chips.length > 1 ? <SheetFilters runId={run.id} active={focus} chips={chips} shown={visible.length} total={sheet.lines.length} sizeQuery={sizeParam} /> : null}
-        <Worksheet sheet={sheet} lines={shown} canPrepare={sheet.canPrepare} issueCounts={issueCounts} />
-        <PagerLinks info={info} basePath={`/payroll/${run.id}`} query={{ focus }} defaultSize={DEFAULT_SIZE} label="lines" />
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">{chips.length > 1 ? <SheetFilters runId={run.id} active={focus} chips={chips} shown={visible.length} total={sheet.lines.length} keepQuery={keepQuery} /> : null}</div>
+          {sheet.lines.length > 1 ? (
+            <SortMenu
+              current={SORT_LABELS[sort]}
+              options={SORT_MENU.map((v) => ({ value: v, label: SORT_LABELS[v], href: hrefWith({ sort: v }), active: v === sort }))}
+              groupHref={hrefWith({ group: !grouped })}
+              grouped={grouped}
+            />
+          ) : null}
+        </div>
+        <Worksheet sheet={sheet} lines={shown} canPrepare={sheet.canPrepare} issueCounts={issueCounts} sortLinks={sortLinks} grouped={grouped} />
+        <PagerLinks info={info} basePath={`/payroll/${run.id}`} query={{ focus, sort: sort !== DEFAULT_SORT ? sort : undefined, group: grouped ? "client" : undefined }} defaultSize={DEFAULT_SIZE} label="lines" />
       </div>
       <RunTotals sheet={sheet} />
       <ApprovalBar

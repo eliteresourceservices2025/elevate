@@ -15,6 +15,7 @@ import { runChecks, type CheckLine, type ChecksInput, type RunCheck } from "./ch
 import { CORRECTION_TYPES, isItemized, PAY_ITEM_LABELS, REASON_REQUIRED_TYPES, type PayItemState, type PayItemType, type RunStatus } from "./constants";
 import { buildLineInput, cleanItemLabel, formatItemValue, noItemizedLines, parseItemValue, type ItemizedLines } from "./items";
 import { suggestedDays } from "./flags";
+import type { SortKeys } from "./sort";
 import { flagDatesOf, resolveLines, type FlagDates } from "./lines";
 import { formatPesos } from "./money";
 import { payLines, payPayments, payRunItems, payRunLines, payRunReleases, payRuns } from "./schema";
@@ -668,6 +669,8 @@ export type WorksheetLine = {
   confirmedByName: string | null;
   confirmedByMe: boolean;
   figures: WorksheetFigures | null;
+  /** The numbers the sheet sorts on (monthly rate, total payable, change from the last run), as whole centavos in text; null when the line can't be read. */
+  sortKeys: SortKeys;
   items: WorksheetItem[];
 };
 
@@ -945,6 +948,7 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
     const flagDates = flagDatesFor(r);
 
     let figures: WorksheetFigures | null = null;
+    let sortKeys: SortKeys = { monthly: null, net: null, change: null };
     if (payload && !unreadable) {
       const x = payload.result;
       const extra = {} as Record<ExtraKey, string>;
@@ -971,6 +975,7 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
         clientHours: formatItemValue("client_hours", payload.clientHoursHundredths),
         netChange: previousNet === undefined ? null : signedPesos(x.net - previousNet),
       };
+      sortKeys = { monthly: payload.rate.monthlyCentavos.toString(), net: x.net.toString(), change: previousNet === undefined ? null : (x.net - previousNet).toString() };
       gross += x.gross;
       net += x.net;
       const key = r.runLine.clientId ?? "none";
@@ -997,6 +1002,7 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
       confirmedByName: r.runLine.confirmedBy ? (confirmerNames.get(r.runLine.confirmedBy) ?? "Someone") : null,
       confirmedByMe: r.runLine.confirmedBy === viewer.id,
       figures,
+      sortKeys,
       items: data.items
         .filter((i) => i.runLineId === r.runLine.id)
         .map(displayItem)

@@ -84,6 +84,21 @@ The new run shows notes above the worksheet, then one row for each person. Nothi
   - **New rate.** ELEVATE pays the rate that was in force on the first day of the cutoff for the whole cutoff. The new rate counts from the next cutoff. If it should count sooner, click **Add an adjustment** for the difference.
   - **Has left.** Check the person should still be paid for this cutoff. If not, open **Actions** on their row and choose **Remove from this run**.
 
+# Sort the list
+
+The sheet starts in name order (last name, then first name). To see it another way, choose **Sort** above the sheet, or click a column title (click it again to turn the order around; the arrow shows which way it runs):
+
+- **Name, A to Z** or **Z to A**.
+- **Client, then name.** Clients A to Z, people with no client last, and the people of one client in name order.
+- **Monthly rate**, high to low or low to high. (Turn on **Show every column** to see the rate column.)
+- **Total payable**, high to low or low to high.
+- **Biggest change from last run.** The people whose total moved the most, up or down, come first; a person with no earlier run comes last.
+- **Not yet checked first** and **Needs attention first**, for reading a run before you send or approve it.
+
+Turn on **Group by client** to put a heading above each client's people. The heading shows how many people, their client hours and their total payable, for the whole run (not just the page you are on). The sort you chose orders the people inside each client.
+
+The sort and the grouping are in the address, so they stay when you change page or use a filter chip, and you can send the link to someone. They are not saved for next time: the sheet opens in name order again. The **Rates** tab has the same **Sort** menu and sortable column titles (name, client and monthly rate).
+
 # Practice runs (test runs)
 
 While you are still practising, mark a run as a **test run** so you can repeat the same pay cycle and tidy up afterwards.

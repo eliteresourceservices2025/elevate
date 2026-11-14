@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { Fragment } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EXTRA_KEYS } from "../calculate";
 import { EXTRA_KEY_ITEM, HISTORY_LABELS, PAY_ITEM_LABELS, WORKSHEET_LABELS as L } from "../constants";
@@ -8,6 +9,7 @@ import type { Worksheet, WorksheetFigures, WorksheetLine } from "../runs";
 import { LineHashScroller } from "./go-to-line";
 import { LineFlags } from "./line-flags";
 import { LineActions } from "./line-actions";
+import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
 import { WorksheetColumns } from "./worksheet-columns";
 
 // The sheet. Below the tablet width each person is a compact card (name, net, status, what needs attention) that opens to every figure,
@@ -105,7 +107,35 @@ function PhoneCard({ line, runId, period, canActOnLines, correctableRuns, issues
   );
 }
 
-export function Worksheet({ sheet, lines, canPrepare, issueCounts = {} }: { sheet: Worksheet; lines: WorksheetLine[]; canPrepare: boolean; issueCounts?: IssueCounts }) {
+/** The heading for a client's people when the list is grouped by client, with the client's totals for the whole run (not just this page). */
+function clientHeading(sheet: Worksheet, line: WorksheetLine): { name: string; facts: string | null } {
+  const t = sheet.byClient?.find((c) => c.clientId === line.clientId);
+  return {
+    name: line.clientName ?? L.noClient,
+    facts: t ? `${t.lines} ${t.lines === 1 ? "person" : "people"} · ${t.clientHours} client hours · total payable ${t.net}` : null,
+  };
+}
+
+/** True for the first line of the page, and whenever the client changes from the line before. */
+const startsGroup = (grouped: boolean, lines: WorksheetLine[], i: number) => grouped && (i === 0 || lines[i - 1].clientId !== lines[i].clientId);
+
+export function Worksheet({
+  sheet,
+  lines,
+  canPrepare,
+  issueCounts = {},
+  sortLinks,
+  grouped = false,
+}: {
+  sheet: Worksheet;
+  lines: WorksheetLine[];
+  canPrepare: boolean;
+  issueCounts?: IssueCounts;
+  /** Where each sortable column title links to, and which way it points now. */
+  sortLinks?: SortLinks;
+  /** The list is grouped by client: a heading row for each client. */
+  grouped?: boolean;
+}) {
   const draft = sheet.run.status === "draft";
   const canActOnLines = canPrepare && draft;
   return (
@@ -118,8 +148,16 @@ export function Worksheet({ sheet, lines, canPrepare, issueCounts = {} }: { shee
       </p>
 
       <ul className="space-y-2 md:hidden" aria-label="Pay lines">
-        {lines.map((line) => (
-          <PhoneCard key={line.runLineId} line={line} runId={sheet.run.id} period={{ start: sheet.run.periodStart, end: sheet.run.periodEnd }} canActOnLines={canActOnLines} correctableRuns={sheet.correctableRuns} issues={issueCounts[line.runLineId]} />
+        {lines.map((line, i) => (
+          <Fragment key={line.runLineId}>
+            {startsGroup(grouped, lines, i) ? (
+              <li className="px-1 pt-2">
+                <h3 className="text-sm font-semibold">{clientHeading(sheet, line).name}</h3>
+                {clientHeading(sheet, line).facts ? <p className="text-xs text-muted-foreground">{clientHeading(sheet, line).facts}</p> : null}
+              </li>
+            ) : null}
+            <PhoneCard line={line} runId={sheet.run.id} period={{ start: sheet.run.periodStart, end: sheet.run.periodEnd }} canActOnLines={canActOnLines} correctableRuns={sheet.correctableRuns} issues={issueCounts[line.runLineId]} />
+          </Fragment>
         ))}
       </ul>
 
@@ -146,10 +184,22 @@ export function Worksheet({ sheet, lines, canPrepare, issueCounts = {} }: { shee
                 </TableHead>
               </TableRow>
               <TableRow>
-                <TableHead className={`${FROZEN} md:left-0 min-w-44`}>{L.person}</TableHead>
-                <TableHead className={`${FROZEN} md:left-44 min-w-36 border-r`}>{L.client}</TableHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "name")} className={`${FROZEN} md:left-0 min-w-44`}>
+                  <SortHead header="name" links={sortLinks}>
+                    {L.person}
+                  </SortHead>
+                </TableHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "client")} className={`${FROZEN} md:left-44 min-w-36 border-r`}>
+                  <SortHead header="client" links={sortLinks}>
+                    {L.client}
+                  </SortHead>
+                </TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.hoursPerDay}</TableHead>
-                <TableHead className={`${head} ${num} ${D}`}>{L.monthly}</TableHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "rate")} className={`${head} ${num} ${D}`}>
+                  <SortHead header="rate" links={sortLinks}>
+                    {L.monthly}
+                  </SortHead>
+                </TableHead>
                 <TableHead className={`${head} ${num}`}>{L.base}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.absences}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.sickLeave}</TableHead>
@@ -168,25 +218,49 @@ export function Worksheet({ sheet, lines, canPrepare, issueCounts = {} }: { shee
                 <TableHead className={`${head} ${num} ${D}`}>{L.adjustments}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.loan}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.otherDeductions}</TableHead>
-                <TableHead className={`${head} ${num}`}>{L.net}</TableHead>
-                <TableHead className={`${head} ${num}`}>{L.netChange}</TableHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "net")} className={`${head} ${num}`}>
+                  <SortHead header="net" links={sortLinks}>
+                    {L.net}
+                  </SortHead>
+                </TableHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "change")} className={`${head} ${num}`}>
+                  <SortHead header="change" links={sortLinks}>
+                    {L.netChange}
+                  </SortHead>
+                </TableHead>
                 <TableHead className={`${head} ${num}`}>{L.clientHours}</TableHead>
-                <TableHead className={head}>{L.confirmation}</TableHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "checked")} className={head}>
+                  <SortHead header="checked" links={sortLinks}>
+                    {L.confirmation}
+                  </SortHead>
+                </TableHead>
                 <TableHead className="md:sticky md:right-0 z-10 bg-card">
                   <span className="sr-only">{L.actions}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {lines.map((line) => {
+              {lines.map((line, rowIndex) => {
                 const f = line.figures;
                 const cell = (value: string | undefined, label: string, extra = "") => (
                   <TableCell label={label} className={`${num} ${extra}`}>
                     {line.unreadable || value === undefined ? "" : value}
                   </TableCell>
                 );
+                const heading = startsGroup(grouped, lines, rowIndex) ? clientHeading(sheet, line) : null;
                 return (
-                  <TableRow key={line.runLineId} id={`row-${line.runLineId}`} className="scroll-mt-24 outline-none data-flash:bg-muted data-flash:ring-2 data-flash:ring-inset data-flash:ring-ring">
+                  <Fragment key={line.runLineId}>
+                    {heading ? (
+                      <TableRow className="bg-muted/60 hover:bg-muted/60" data-client-heading={heading.name}>
+                        <TableCell colSpan={40} className="py-2">
+                          <div className="sticky left-0 flex w-fit max-w-[calc(100vw-6rem)] flex-wrap items-baseline gap-x-3">
+                            <span className="font-semibold">{heading.name}</span>
+                            {heading.facts ? <span className="text-xs text-muted-foreground">{heading.facts}</span> : null}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  <TableRow id={`row-${line.runLineId}`} className="scroll-mt-24 outline-none data-flash:bg-muted data-flash:ring-2 data-flash:ring-inset data-flash:ring-ring">
                     <TableCell label={L.person} className={`${FROZEN} md:left-0 font-medium`}>
                       {line.name}
                       {line.alias ? <span className="block text-xs font-normal text-muted-foreground">{line.alias}</span> : null}
@@ -236,6 +310,7 @@ export function Worksheet({ sheet, lines, canPrepare, issueCounts = {} }: { shee
                       {canActOnLines ? <LineActions runId={sheet.run.id} line={line} correctableRuns={sheet.correctableRuns} /> : null}
                     </TableCell>
                   </TableRow>
+                  </Fragment>
                 );
               })}
             </TableBody>
