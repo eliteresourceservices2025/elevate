@@ -53,8 +53,12 @@ export type RateRow = {
   endsOn: string | null;
   /** The date of the next version, when one is already scheduled. */
   upcomingFrom: string | null;
+  /** The line's last day has already passed: it is only listed when ended lines are asked for, and it can still be part of a run for an earlier period. */
+  ended: boolean;
   /** Pesos, "31,415.92". */
   monthly: string;
+  /** The monthly rate as whole centavos in text, for sorting; null when it can't be read. */
+  monthlyCentavos: string | null;
   /** This person's own overtime percents as typed ("125"); blank means the company standard from Settings applies. */
   otPercent: { regular: string; restDay: string; restDayOver8: string };
   /** The stored amount could not be decrypted (usually a wrong or rotated encryption key). The amount above then reads "Can't be read". */
@@ -62,10 +66,11 @@ export type RateRow = {
 };
 
 /**
- * The lines in force today, with the monthly rate and allowances decrypted for the people who can open payroll. Showing them is a
+ * The lines in force today (and, when asked, the lines that already ended: a run for an earlier period still includes them), with the
+ * monthly rate and allowances decrypted for the people who can open payroll. Showing them is a
  * sensitive read: one `sensitive.view` audit row per view (field names and a count, never a figure).
  */
-export async function getRates(): Promise<RateRow[]> {
+export async function getRates(options: { includeEnded?: boolean } = {}): Promise<RateRow[]> {
   const actor = await requireUser();
   await authorize(actor, "payroll.view");
 
@@ -93,7 +98,20 @@ export async function getRates(): Promise<RateRow[]> {
   const notStarted = [...new Set(all.map((l) => l.lineKey))]
     .filter((key) => !known.has(key))
     .map((key) => all.filter((l) => l.lineKey === key).sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : 0))[0]);
-  for (const version of [...inForce, ...notStarted]) {
+  // Lines whose last day has passed: not in force today, but still part of any run for a period they covered. The version shown is the one
+  // in force on the last day.
+  const endedVersions = options.includeEnded
+    ? [...new Set(all.map((l) => l.lineKey))].flatMap((key) => {
+        const versions = all.filter((l) => l.lineKey === key);
+        const last = lineLastDay(versions);
+        if (last === null || last >= day) return [];
+        const shown = versions
+          .filter((l) => l.effectiveFrom <= last)
+          .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : a.effectiveFrom > b.effectiveFrom ? -1 : b.createdAt.getTime() - a.createdAt.getTime()))[0];
+        return shown ? [shown] : [];
+      })
+    : [];
+  for (const version of [...inForce, ...notStarted, ...endedVersions]) {
     const r = byId.get(version.id)!;
     // One row that cannot be read (wrong key, damaged data) must not take the whole page down: it is listed as unreadable.
     const amounts = readableAmounts(version.id, version.amountsEnc);
@@ -115,7 +133,9 @@ export async function getRates(): Promise<RateRow[]> {
       effectiveFrom: version.effectiveFrom,
       endsOn: lastDay,
       upcomingFrom: upcoming ?? null,
+      ended: lastDay !== null && lastDay < day,
       monthly: amounts ? formatPesos(amounts.monthlyCentavos) : UNREADABLE,
+      monthlyCentavos: amounts ? amounts.monthlyCentavos.toString() : null,
       otPercent: {
         regular: otText(amounts?.otBp?.regular),
         restDay: otText(amounts?.otBp?.restDay),

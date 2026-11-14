@@ -529,6 +529,7 @@ export const WARNING_CHECKS = [
   "rate_change_mid_period",
   "pending_suggestions",
   "no_client_hours",
+  "duplicate_pay_line",
   "large_change",
 ] as const;
 export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
@@ -546,13 +547,41 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   new_or_leaving: "Starts, ends or has left during this period",
   rate_change_mid_period: "The rate changes during this period",
   pending_suggestions: "Suggested amounts are waiting for a decision",
-  no_client_hours: "Has a client but no client payroll hours, so it can't be invoiced. Add them under Actions > Amounts, or import the Jibble timesheet, before sending for review.",
+  no_client_hours: "Has a client but no client payroll hours",
+  duplicate_pay_line: "Another line for the same job (same alias, same client or none) is on this run, so this person is paid twice",
   large_change: "Total payable compensation changed a lot from the last run",
 };
 
+/**
+ * The checklist on a run, one entry for each kind of problem: a short title, what it means, and what to do. Plain words for the people who
+ * prepare a run; the per-person wording stays in CHECK_LABELS. Never an amount.
+ */
+export const ISSUE_COPY: Record<CheckCode, { title: string; meaning: string }> = {
+  unreadable_line: { title: "A line can't be read", meaning: "Its figures can't be opened, so no totals are shown. This usually means a problem with the encryption key. Tell the system owner." },
+  missing_multiplier: { title: "Overtime percent not set", meaning: "Overtime was entered but no percent applies to it. Set it in Payroll settings, or on the person's pay line." },
+  negative_net: { title: "Pay is below zero", meaning: "Deductions are bigger than the pay. Open the person's amounts and check what was entered." },
+  partial_exceeds_cutoff: { title: "More than a full cutoff of pay", meaning: "The days or hours entered pay more than a whole cutoff. Check the amount." },
+  unassigned_suggestion: { title: "Suggestions with no pay line", meaning: "Amounts from a file or from approved hours that no pay line was chosen for. Assign them below the checklist." },
+  own_line_unconfirmed: { title: "Your own line needs another Preparer", meaning: "Nobody checks their own pay. Another Preparer has to mark your line as checked." },
+  lines_out_of_date: { title: "The pay lines changed", meaning: "People or rates changed after this run was made. Update people to bring the run up to date." },
+  unapproved_days: { title: "Some days are not approved", meaning: "A lead hasn't approved their hours yet. The run can still go; ask the lead to approve them in Hours review." },
+  no_payout_details: { title: "No payout details", meaning: "They can't be paid until HR adds how to pay them. Ask HR to add it on their profile." },
+  new_or_leaving: { title: "Paid for part of the cutoff", meaning: "They started, ended or left part-way. ELEVATE pays a full cutoff until you enter the days they worked. Open the flag on their row." },
+  rate_change_mid_period: { title: "New rate part-way through", meaning: "ELEVATE pays the old rate for the whole cutoff and the new rate from the next one. Add an adjustment if it should count sooner." },
+  pending_suggestions: { title: "Suggested amounts waiting", meaning: "Read them, then confirm or change them. Nothing changes pay until you confirm." },
+  no_client_hours: { title: "No client payroll hours", meaning: "Needed to invoice the client. Fill them from the Jibble file in one go, or type them under Actions, then Amounts." },
+  duplicate_pay_line: {
+    title: "Paid twice for the same job",
+    meaning:
+      "This person has two lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each one pays a full cutoff. Often an old line was left when a new one was added. Take the extra one off this run (Actions, then Remove from this run), and end the old pay line on the Rates tab (tick Show ended lines to see it).",
+  },
+  large_change: { title: "Pay changed a lot", meaning: "Their total is much higher or lower than in the last run. Check it is right." },
+};
+
+// Plain names for the raw flags. The sheet shows pills with the real date instead ("Starts 6 Nov", see flags.ts); these are the fallback.
 export const LINE_FLAG_LABELS: Record<string, string> = {
-  rate_change_mid_period: "Rate changes in the period",
-  starts_mid_period: "Starts in the period",
-  ends_mid_period: "Ends in the period",
-  person_left: "Person has left",
+  rate_change_mid_period: "New rate part-way",
+  starts_mid_period: "Starts part-way",
+  ends_mid_period: "Ends part-way",
+  person_left: "Has left",
 };

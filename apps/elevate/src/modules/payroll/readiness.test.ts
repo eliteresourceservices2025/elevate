@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RunCheck } from "./checks";
-import { groupReadiness } from "./readiness";
+import { groupByIssue, groupReadiness } from "./readiness";
 
 const E1 = "11111111-1111-4111-8111-111111111111";
 const E2 = "22222222-2222-4222-8222-222222222222";
@@ -40,5 +40,41 @@ describe("groupReadiness", () => {
 
   it("is empty when nothing is wrong", () => {
     expect(groupReadiness([], [])).toMatchObject({ mustCount: 0, reviewCount: 0, peopleCount: 0, people: [] });
+  });
+});
+
+describe("groupByIssue", () => {
+  const E3 = "33333333-3333-4333-8333-333333333333";
+  const L3 = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  it("groups by kind of problem and counts the people, not the notes", () => {
+    const g = groupByIssue([], [check("no_client_hours", "Ana", E1, L1), check("no_client_hours", "Ben", E2, L2), check("unapproved_days", "Ana", E1, L1)]);
+    expect(g.map((x) => [x.code, x.count])).toEqual([
+      ["no_client_hours", 2],
+      ["unapproved_days", 1],
+    ]);
+    expect(g[0].names).toEqual(["Ana", "Ben"]);
+    expect(g[0].runLineIds).toEqual([L1, L2]);
+  });
+
+  it("puts must-fix first, then the easy-to-miss kinds, then the most people", () => {
+    const g = groupByIssue(
+      [check("unreadable_line", "Cy", E3, L3)],
+      [check("large_change", "Ana", E1, L1), check("large_change", "Ben", E2, L2), check("pending_suggestions", "Ana", E1, L1), check("unapproved_days", "Ana", E1, L1), check("unapproved_days", "Ben", E2, L2), check("unapproved_days", "Cy", E3, L3)],
+    );
+    expect(g.map((x) => x.code)).toEqual(["unreadable_line", "pending_suggestions", "unapproved_days", "large_change"]);
+    expect(g[0].tone).toBe("must");
+    expect(g[1].priority).toBe(true);
+  });
+
+  it("counts a person with two lines once for each line, and a whole-run check once", () => {
+    const g = groupByIssue([], [check("no_client_hours", "Ana", E1, L1), check("no_client_hours", "Ana", E1, L2), check("lines_out_of_date", "This run", null, null)]);
+    expect(g.find((x) => x.code === "no_client_hours")?.count).toBe(2);
+    const run = g.find((x) => x.code === "lines_out_of_date")!;
+    expect(run).toMatchObject({ count: 1, runLevel: true, names: [], runLineIds: [] });
+  });
+
+  it("is empty when nothing is wrong", () => {
+    expect(groupByIssue([], [])).toEqual([]);
   });
 });

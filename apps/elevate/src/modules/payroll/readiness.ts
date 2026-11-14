@@ -8,7 +8,7 @@ import type { CheckCode } from "./constants";
  * Checks that are easy to overlook and cost the most when they are: waiting suggestions, no client hours, no payout details and pay for
  * part of a period. They come first inside a person's list and carry a stronger mark.
  */
-export const PRIORITY_CHECKS: readonly CheckCode[] = ["pending_suggestions", "no_client_hours", "no_payout_details", "partial_exceeds_cutoff", "new_or_leaving", "rate_change_mid_period"];
+export const PRIORITY_CHECKS: readonly CheckCode[] = ["duplicate_pay_line", "pending_suggestions", "no_client_hours", "no_payout_details", "partial_exceeds_cutoff", "new_or_leaving", "rate_change_mid_period"];
 
 export type ReadinessItem = RunCheck & { priority: boolean };
 
@@ -34,6 +34,46 @@ export type Readiness = {
 
 const item = (c: RunCheck): ReadinessItem => ({ ...c, priority: PRIORITY_CHECKS.includes(c.code) });
 const byPriority = (a: ReadinessItem, b: ReadinessItem) => Number(b.priority) - Number(a.priority);
+
+/** One kind of problem across the run: how many people it touches and who, for the checklist. */
+export type IssueGroup = {
+  code: CheckCode;
+  /** "must" stops the run (or its approval); "review" does not. */
+  tone: "must" | "review";
+  priority: boolean;
+  /** People (run lines) with this check; 1 for a check about the whole run. */
+  count: number;
+  /** A check about the whole run, not one person. */
+  runLevel: boolean;
+  runLineIds: string[];
+  names: string[];
+};
+
+/**
+ * The checks grouped by kind of problem instead of by person: "No client payroll hours: 58 people". Must-fix first, then the easy-to-miss
+ * kinds, then the most people. A person with two lines counts once per line (each line is a place to fix).
+ */
+export function groupByIssue(blocking: readonly RunCheck[], warnings: readonly RunCheck[]): IssueGroup[] {
+  const groups = new Map<CheckCode, IssueGroup & { seen: Set<string> }>();
+  const add = (c: RunCheck, tone: "must" | "review") => {
+    const key = c.runLineId ?? c.employeeId ?? c.name;
+    let g = groups.get(c.code);
+    if (!g) {
+      g = { code: c.code, tone, priority: PRIORITY_CHECKS.includes(c.code), count: 0, runLevel: c.employeeId === null && c.runLineId === null, runLineIds: [], names: [], seen: new Set() };
+      groups.set(c.code, g);
+    }
+    if (g.seen.has(key)) return;
+    g.seen.add(key);
+    g.count += 1;
+    if (c.runLineId) g.runLineIds.push(c.runLineId);
+    if (!g.runLevel) g.names.push(c.name);
+  };
+  for (const c of blocking) add(c, "must");
+  for (const c of warnings) add(c, "review");
+  return [...groups.values()]
+    .map(({ seen: _seen, ...g }) => g)
+    .sort((a, b) => Number(b.tone === "must") - Number(a.tone === "must") || Number(b.priority) - Number(a.priority) || b.count - a.count || a.code.localeCompare(b.code));
+}
 
 export function groupReadiness(blocking: readonly RunCheck[], warnings: readonly RunCheck[]): Readiness {
   const runLevel: Readiness["runLevel"] = { must: [], review: [] };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveLines, type LineVersion } from "./lines";
+import { flagDatesOf, resolveLines, sameJob, type LineVersion } from "./lines";
 
 // Period Nov 16-30. Invented line keys and dates only.
 const period = { start: "2030-11-16", end: "2030-11-30" };
@@ -103,5 +103,58 @@ describe("resolveLines", () => {
     expect(out[0].flags).toEqual(["ends_mid_period"]);
     // The period after the last day carries nothing, even though the later version starts inside it.
     expect(resolveLines([a, later, end], { start: "2030-12-01", end: "2030-12-15" })).toEqual([]);
+  });
+});
+
+describe("flagDatesOf", () => {
+  const period = { start: "2031-01-01", end: "2031-01-15" };
+  const v = (effectiveFrom: string, endsOn: string | null = null): LineVersion => ({ lineKey: "k", effectiveFrom, endsOn, createdAt: 0 });
+
+  it("has no dates for a line that is in force the whole period", () => {
+    expect(flagDatesOf([v("2030-06-01")], "2030-06-01", period)).toEqual({ startsOn: null, endsOn: null, rateChangeOn: null });
+  });
+
+  it("names the start date when the paid version begins after the period began", () => {
+    expect(flagDatesOf([v("2031-01-06")], "2031-01-06", period)).toEqual({ startsOn: "2031-01-06", endsOn: null, rateChangeOn: null });
+  });
+
+  it("names the first new rate inside the period, not the rate that is paid", () => {
+    const versions = [v("2030-06-01"), v("2031-01-10"), v("2031-01-13")];
+    expect(flagDatesOf(versions, "2030-06-01", period)).toEqual({ startsOn: null, endsOn: null, rateChangeOn: "2031-01-10" });
+  });
+
+  it("names a rate change after a mid-period start, but not the start itself as a rate change", () => {
+    expect(flagDatesOf([v("2031-01-04"), v("2031-01-11")], "2031-01-04", period)).toEqual({ startsOn: "2031-01-04", endsOn: null, rateChangeOn: "2031-01-11" });
+  });
+
+  it("names the last day when it falls inside the period, and not one on the last day or before the period", () => {
+    expect(flagDatesOf([v("2030-06-01", "2031-01-12")], "2030-06-01", period).endsOn).toBe("2031-01-12");
+    expect(flagDatesOf([v("2030-06-01", "2031-01-15")], "2030-06-01", period).endsOn).toBeNull();
+    expect(flagDatesOf([v("2030-06-01", "2030-12-20")], "2030-06-01", period).endsOn).toBeNull();
+  });
+
+  it("ignores a rate saved for after the line ended", () => {
+    const versions = [v("2030-06-01", "2031-01-08"), v("2031-01-12")];
+    expect(flagDatesOf(versions, "2030-06-01", period)).toEqual({ startsOn: null, endsOn: "2031-01-08", rateChangeOn: null });
+  });
+});
+
+describe("sameJob", () => {
+  const job = (clientId: string | null, alias: string | null, employeeId = "e1") => ({ employeeId, clientId, alias });
+  it("is the same job for the same client and alias, ignoring case and spaces", () => {
+    expect(sameJob(job("c1", null), job("c1", null))).toBe(true);
+    expect(sameJob(job("c1", "Night shift"), job("c1", "  NIGHT shift "))).toBe(true);
+    expect(sameJob(job("c1", ""), job("c1", null))).toBe(true);
+  });
+  it("treats a line with no client as the same job as one with a client (a leftover), when the alias matches", () => {
+    expect(sameJob(job(null, null), job("c1", null))).toBe(true);
+    expect(sameJob(job("c1", null), job(null, null))).toBe(true);
+    expect(sameJob(job(null, null), job(null, null))).toBe(true);
+  });
+  it("is not the same job for another person, another client (both set) or another alias", () => {
+    expect(sameJob(job("c1", null, "e1"), job("c1", null, "e2"))).toBe(false);
+    expect(sameJob(job("c1", null), job("c2", null))).toBe(false);
+    expect(sameJob(job("c1", "Front desk"), job("c1", "Night shift"))).toBe(false);
+    expect(sameJob(job(null, "Front desk"), job("c1", "Night shift"))).toBe(false);
   });
 });

@@ -14,7 +14,7 @@ import { users } from "@/modules/core/schema";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { payApprovals, payLines, payPayments, payRunLines, payRunReleases, payRuns } from "./schema";
 import { decryptRunLine, employeeIdForUser } from "./service";
-import { runSignatory } from "./signatory";
+import { runSignatory, savedSignatoryForTest } from "./signatory";
 import type { SettingsSnapshot } from "./calculate";
 
 // A person's own payslips. Scoped through the signed-in person's own people record, never by a payroll level or a role: nobody, not even
@@ -161,6 +161,10 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
     runSignatory(executor, runId),
   ]);
 
+  // A test run is signed by the saved signatory too, even before it is paid and whoever approved it for the test (it is only used for testing).
+  const approvedOn = approval ? formatInZone(approval.createdAt.getTime(), DEFAULT_TIMEZONE, "yyyy-MM-dd") : null;
+  const shownSignatory = signatory ?? (run.isTest ? await savedSignatoryForTest(executor, approvedOn ?? formatInZone(Date.now(), DEFAULT_TIMEZONE, "yyyy-MM-dd")) : null);
+
   const decrypted = lines.map((l) => ({ alias: l.alias, clientName: l.clientName, payload: readable(l.id, l.payloadEnc) }));
   if (decrypted.some((l) => l.payload === null)) throw new PayslipUnreadable();
   return {
@@ -173,12 +177,12 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
     payslipNumber: `PS-${runId.slice(0, 8).toUpperCase()}-${employeeId.slice(0, 4).toUpperCase()}`,
     paymentMethods: lines.map((l) => l.paymentMethod),
     multipliersBp: (run.settingsSnapshot as SettingsSnapshot | null)?.multipliersBp ?? null,
-    signatory,
+    signatory: shownSignatory,
     lines: decrypted.map((l) => ({ alias: l.alias, clientName: l.clientName, multipliersBp: l.payload!.rate.otBp ?? null, input: l.payload!.input, result: l.payload!.result })),
     isTest: run.isTest,
     preparedBy: preparerId ? names.get(preparerId) ?? null : null,
     authorizedBy: approval ? names.get(approval.decidedBy) ?? null : null,
-    approvedOn: approval ? formatInZone(approval.createdAt.getTime(), DEFAULT_TIMEZONE, "yyyy-MM-dd") : null,
+    approvedOn,
   };
 }
 

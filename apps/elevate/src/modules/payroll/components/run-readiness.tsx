@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { CHECK_LABELS, OWN_LINE_OF_SUBMITTER } from "../constants";
-import { groupReadiness, type ReadinessItem, type ReadinessPerson } from "../readiness";
+import { buttonVariants } from "@/components/ui/button";
+import { CHECK_LABELS, ISSUE_COPY, OWN_LINE_OF_SUBMITTER } from "../constants";
+import { groupByIssue, groupReadiness, type IssueGroup, type ReadinessItem, type ReadinessPerson } from "../readiness";
 import type { RunCheck } from "../checks";
+import { GoToLine } from "./go-to-line";
+import { UpdatePeopleFix } from "./readiness-actions";
 
-// The readiness screen: what is left to do before the run goes for review (and, once sent, before approval), grouped by person. "Must fix"
-// stops the run; "Review" does not, but waiting suggestions, missing client hours, missing payout details and part-period pay come first
-// and are marked, because they are the ones that get missed. Each person links to their row in the sheet. Names and wording only, never an amount.
+// The readiness screen: what is left to do before the run goes for review (and, once sent, before approval). The top is a short checklist,
+// one row for each KIND of problem ("No client payroll hours: 58 people") with what it means, what to do, a button that fixes it where one
+// exists, and "Show who" (filters the sheet to those people). "Must fix" stops the run; the rest do not, but the easy-to-miss kinds come
+// first. Every note, person by person, is one click away under "See every note by person". Names and wording only, never an amount.
 
 const text = (c: ReadinessItem, mine: boolean) => (c.code === "own_line_unconfirmed" && !mine ? OWN_LINE_OF_SUBMITTER : CHECK_LABELS[c.code]) + (c.detail ? ` (${c.detail})` : "");
 
@@ -32,10 +36,10 @@ function PersonCard({ person, mine, href }: { person: ReadinessPerson; mine: boo
     <li className="rounded-lg border bg-card p-3" data-readiness-person={person.name}>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{person.name}</h3>
-        {href ? (
-          <Link href={href} className="inline-flex min-h-8 items-center text-sm underline underline-offset-2 pointer-coarse:min-h-11">
+        {href && person.runLineId ? (
+          <GoToLine href={href} runLineId={person.runLineId} className="inline-flex min-h-8 items-center text-sm underline underline-offset-2 pointer-coarse:min-h-11">
             Go to this line
-          </Link>
+          </GoToLine>
         ) : null}
       </div>
       <div className="space-y-2">
@@ -46,23 +50,74 @@ function PersonCard({ person, mine, href }: { person: ReadinessPerson; mine: boo
   );
 }
 
+function IssueRow({ group, runId, focus, canFix, mine, keepQuery }: { group: IssueGroup; runId: string; focus: string | undefined; canFix: boolean; mine: boolean; keepQuery: string }) {
+  const copy = ISSUE_COPY[group.code];
+  const ownOfSender = group.code === "own_line_unconfirmed" && !mine;
+  const title = ownOfSender ? "The sender's own line needs another Preparer" : copy.title;
+  const meaning = ownOfSender ? OWN_LINE_OF_SUBMITTER : copy.meaning;
+  const showWho = group.runLineIds.length > 0;
+  const focused = focus === group.code;
+  return (
+    <li className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start sm:justify-between" data-issue={group.code}>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <Badge variant={group.tone === "must" ? "destructive" : group.priority ? "warning" : "outline"}>
+            {group.runLevel ? "Whole run" : `${group.count} ${group.count === 1 ? "person" : "people"}`}
+          </Badge>
+          {group.tone === "must" ? <Badge variant="destructive">Must fix</Badge> : group.priority ? <Badge variant="warning">Check first</Badge> : null}
+        </div>
+        <p className="text-sm text-muted-foreground">{meaning}</p>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {canFix && group.code === "no_client_hours" ? (
+          <Link href={`/payroll/${runId}/import`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Import Jibble timesheet
+          </Link>
+        ) : null}
+        {canFix && group.code === "lines_out_of_date" ? <UpdatePeopleFix runId={runId} /> : null}
+        {showWho ? (
+          <Link
+            href={focused ? `/payroll/${runId}${keepQuery ? `?${keepQuery}` : ""}#pay-sheet` : `/payroll/${runId}?focus=${group.code}${keepQuery ? `&${keepQuery}` : ""}#pay-sheet`}
+            className={buttonVariants({ variant: focused ? "default" : "ghost", size: "sm" })}
+            aria-pressed={focused}
+          >
+            {focused ? "Show everyone" : "Show who"}
+          </Link>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
 export function RunReadiness({
   blocking,
   warnings,
   unreadableCount,
+  runId,
   stage = "draft",
+  canPrepare = false,
   checksAreMine = true,
   lineHrefs,
+  focus,
+  keepQuery = "",
 }: {
   blocking: RunCheck[];
   warnings: RunCheck[];
   unreadableCount: number;
+  runId: string;
   /** "review": the run was sent, so blocking checks stop the approval rather than the sending. */
   stage?: "draft" | "review";
+  /** A Preparer can fix some things from here (import a timesheet, update people), on a draft only. */
+  canPrepare?: boolean;
   /** False when the "own line" check is about the person who sent the run, not the viewer. */
   checksAreMine?: boolean;
   /** Where each run line sits in the sheet (page and anchor), by run line id. */
   lineHrefs: Record<string, string>;
+  /** The check the sheet is filtered to ("Show who"), if any. */
+  focus?: string;
+  /** The page size in the address (`size=25`), kept when a link changes the filter. */
+  keepQuery?: string;
 }) {
   const r = groupReadiness(blocking, warnings);
   if (r.mustCount === 0 && r.reviewCount === 0 && unreadableCount === 0) {
@@ -74,23 +129,25 @@ export function RunReadiness({
       </section>
     );
   }
-  const attention = r.people.filter((p) => p.must.length > 0 || p.review.some((c) => c.priority));
-  const other = r.people.filter((p) => !attention.includes(p));
+  const issues = groupByIssue(blocking, warnings);
   const hrefOf = (p: ReadinessPerson) => (p.runLineId ? lineHrefs[p.runLineId] : undefined);
+  const canFix = canPrepare && stage === "draft";
 
   return (
     <section aria-label="Run readiness" className="space-y-3 rounded-lg border bg-card p-3 sm:p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-1 text-base font-semibold">Before you send this run</h2>
+        <h2 className="mr-1 text-base font-semibold">{stage === "review" ? "Before you approve this run" : "Before you send this run"}</h2>
         <Badge variant={r.mustCount + unreadableCount > 0 ? "destructive" : "success"}>{r.mustCount + unreadableCount} must fix</Badge>
-        <Badge variant={r.reviewCount > 0 ? "warning" : "outline"}>{r.reviewCount} to review</Badge>
+        <Badge variant={issues.filter((g) => g.tone === "review").length > 0 ? "warning" : "outline"}>
+          {issues.filter((g) => g.tone === "review").length} {issues.filter((g) => g.tone === "review").length === 1 ? "thing" : "things"} to check
+        </Badge>
         <Badge variant="outline">
           {r.peopleCount} {r.peopleCount === 1 ? "person" : "people"}
         </Badge>
       </div>
       <p className="text-sm text-muted-foreground">
         {stage === "review" ? "Must-fix items stop the approval: send the run back to have them fixed. " : "Fix the must-fix items before sending the run for review. "}
-        Review items don&apos;t stop the run, but look at them: the ones marked Check first are the ones that get missed.
+        The rest don&apos;t stop the run, but the ones marked Check first are the ones that get missed.
       </p>
 
       {unreadableCount > 0 ? (
@@ -99,29 +156,19 @@ export function RunReadiness({
         </Alert>
       ) : null}
 
-      {r.runLevel.must.length > 0 || r.runLevel.review.length > 0 ? (
-        <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
-          <h3 className="text-sm font-semibold">The whole run</h3>
-          <Items items={r.runLevel.must} tone="must" mine={checksAreMine} />
-          <Items items={r.runLevel.review} tone="review" mine={checksAreMine} />
-        </div>
-      ) : null}
+      <ul className="divide-y rounded-lg border" aria-label="What to fix">
+        {issues.map((g) => (
+          <IssueRow key={g.code} group={g} runId={runId} focus={focus} canFix={canFix} mine={checksAreMine} keepQuery={keepQuery} />
+        ))}
+      </ul>
 
-      {attention.length > 0 ? (
-        <ul className="grid gap-2 lg:grid-cols-2">
-          {attention.map((p) => (
-            <PersonCard key={p.key} person={p} mine={checksAreMine} href={hrefOf(p)} />
-          ))}
-        </ul>
-      ) : null}
-
-      {other.length > 0 ? (
+      {r.people.length > 0 ? (
         <details className="rounded-lg border p-3">
           <summary className="min-h-8 cursor-pointer text-sm font-medium pointer-coarse:min-h-11">
-            Other notes ({other.length} {other.length === 1 ? "person" : "people"})
+            See every note by person ({r.people.length} {r.people.length === 1 ? "person" : "people"})
           </summary>
           <ul className="mt-2 grid gap-2 lg:grid-cols-2">
-            {other.map((p) => (
+            {r.people.map((p) => (
               <PersonCard key={p.key} person={p} mine={checksAreMine} href={hrefOf(p)} />
             ))}
           </ul>

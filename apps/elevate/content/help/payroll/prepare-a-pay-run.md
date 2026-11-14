@@ -76,6 +76,29 @@ The new run shows notes above the worksheet, then one row for each person. Nothi
 - For someone paid for part of the cutoff, enter the days or hours they worked. These can never pay more than a full cutoff; if they do, check what you typed (for example "15" instead of "1.5").
 - Open **Actions** on a line and choose **Mark as checked** when you have read it. It records that a Preparer looked at it. Any change to a line asks for a new check. If you are paid through payroll yourself, **another Preparer** must check **your own** line, and you cannot send the run until they do. Changing your line clears that check.
 
+# The checklist and the flags on a row
+
+- **The checklist** above the sheet lists what is left to do, one row for each kind of problem (for example "No client payroll hours, 58 people"). Each row says what it means and what to do. Click **Show who** to show only those people in the sheet, or use the chips above the sheet (**All**, **Needs attention**, **Not yet checked**, and the main problems). Click **See every note by person** for the full list, with **Go to this line** beside each name.
+- **The small pill under a name** says why that line is flagged, with the date: **Starts 6 Nov**, **Ends 12 Nov**, **New rate 10 Nov**, **Has left**. Click it for a plain explanation and the fix.
+  - **Starts or ends part-way.** ELEVATE pays a full cutoff unless you tell it how many days the person worked. Click **Use 8 days** (the weekdays between the dates, up to a full cutoff) or **Enter different days**. The suggestion doesn't count holidays or the person's own schedule, so check it. If the date itself is wrong, fix it on the **Rates** tab and then choose **Update people**.
+  - **New rate.** ELEVATE pays the rate that was in force on the first day of the cutoff for the whole cutoff. The new rate counts from the next cutoff. If it should count sooner, click **Add an adjustment** for the difference.
+  - **Has left.** Check the person should still be paid for this cutoff. If not, open **Actions** on their row and choose **Remove from this run**.
+
+# Sort the list
+
+The sheet starts in name order (last name, then first name). To see it another way, choose **Sort** above the sheet, or click a column title (click it again to turn the order around; the arrow shows which way it runs):
+
+- **Name, A to Z** or **Z to A**.
+- **Client, then name.** Clients A to Z, people with no client last, and the people of one client in name order.
+- **Monthly rate**, high to low or low to high. (The rate column is one of the columns the sheet shows by default on a laptop. Untick **Show every column** for a shorter sheet.)
+- **Total payable**, high to low or low to high.
+- **Biggest change from last run.** The people whose total moved the most, up or down, come first; a person with no earlier run comes last.
+- **Not yet checked first** and **Needs attention first**, for reading a run before you send or approve it.
+
+Turn on **Group by client** to put a heading above each client's people. The heading shows how many people, their client hours and their total payable, for the whole run (not just the page you are on). The sort you chose orders the people inside each client.
+
+The sort and the grouping are in the address, so they stay when you change page or use a filter chip, and you can send the link to someone. They are not saved for next time: the sheet opens in name order again. The **Rates** tab has the same **Sort** menu and sortable column titles (name, client and monthly rate).
+
 # Practice runs (test runs)
 
 While you are still practising, mark a run as a **test run** so you can repeat the same pay cycle and tidy up afterwards.
@@ -124,6 +147,7 @@ When everyone is marked paid, the run becomes **Paid**. The contractors' stateme
 
 - **Writing a client's or patient's details in a reason.** Reasons are kept in the change history. Never put client or patient information in them.
 - **Sending a run for review with warnings you have not read.** Read each one.
+- **A person's statement shows "Line: 1" and "Line: 2" with the same pay.** They have two pay lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each pays a full cutoff, so they would be paid twice. The Rates tab only lists lines still in force today, so an old line that already ended is hidden: tick **Show ended lines** to see it. The run warns **Paid twice for the same job**. Take the extra line off this run (**Actions**, then **Remove from this run**), and end the old pay line on the Rates tab so later runs do not include it. To pay someone for two roles, give each pay line its own alias. The Rates tab no longer lets you add two overlapping lines for the same job.
 - **Choosing the wrong period.** Cancel and create the run again; do not try to edit it.
 - **Expecting to approve your own run.** The person who prepared or changed a run, checked a line on it, or wrote a rate it pays, can never approve it.
 - **Looking for a dollar rate or dollar allowance.** There are none. Type every amount in pesos.

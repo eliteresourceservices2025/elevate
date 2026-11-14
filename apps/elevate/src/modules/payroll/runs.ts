@@ -14,7 +14,9 @@ import { logChange } from "./changes";
 import { runChecks, type CheckLine, type ChecksInput, type RunCheck } from "./checks";
 import { CORRECTION_TYPES, isItemized, PAY_ITEM_LABELS, REASON_REQUIRED_TYPES, type PayItemState, type PayItemType, type RunStatus } from "./constants";
 import { buildLineInput, cleanItemLabel, formatItemValue, noItemizedLines, parseItemValue, type ItemizedLines } from "./items";
-import { resolveLines } from "./lines";
+import { suggestedDays } from "./flags";
+import type { SortKeys } from "./sort";
+import { flagDatesOf, resolveLines, sameJob, type FlagDates } from "./lines";
 import { formatPesos } from "./money";
 import type { BulkResult } from "@/lib/bulk";
 import { runActions } from "./runs-list";
@@ -714,11 +716,17 @@ export type WorksheetLine = {
   alias: string | null;
   hoursPerDay: number;
   flags: string[];
+  /** The dates behind the part-period flags (when the line starts, when a new rate starts, when it ends), for wording like "Starts 6 Nov". */
+  flagDates: FlagDates;
+  /** For a person who starts or ends part-way: the weekdays between the dates (at most a full cutoff), as a starting point for "days worked". Null otherwise. */
+  suggestedDays: number | null;
   /** The stored figures or an amount on the line could not be decrypted. */
   unreadable: boolean;
   confirmedByName: string | null;
   confirmedByMe: boolean;
   figures: WorksheetFigures | null;
+  /** The numbers the sheet sorts on (monthly rate, total payable, change from the last run), as whole centavos in text; null when the line can't be read. */
+  sortKeys: SortKeys;
   items: WorksheetItem[];
 };
 
@@ -905,6 +913,10 @@ function unassignedOf(data: RunData): { employeeId: string; rows: ItemRow[] }[] 
  */
 export async function checkInputsOf(executor: Executor, data: RunData, submitterUserId: string | null): Promise<ChecksInput> {
   const submitterEmployeeId = submitterUserId ? await employeeIdForUser(executor, submitterUserId) : null;
+  // Two live lines that are the same job of one person (same alias, and the same client or one with none) each pay a full cutoff: paid twice.
+  const byPerson = new Map<string, typeof data.rows>();
+  for (const r of data.rows) byPerson.set(r.runLine.employeeId, [...(byPerson.get(r.runLine.employeeId) ?? []), r]);
+  const isTwin = (r: (typeof data.rows)[number]) => (byPerson.get(r.runLine.employeeId) ?? []).some((o) => o !== r && sameJob(r.runLine, o.runLine));
   const lines: CheckLine[] = data.rows.map((r) => {
     const payload = data.payloads.get(r.runLine.id) ?? null;
     const unreadable = lineUnreadable(data, r.runLine.id);
@@ -925,6 +937,7 @@ export async function checkInputsOf(executor: Executor, data: RunData, submitter
         payload !== null &&
         payload.clientHoursHundredths === 0n &&
         !data.items.some((i) => i.runLineId === r.runLine.id && i.type === "client_hours" && i.state === "suggested"),
+      duplicateLine: isTwin(r),
       confirmedBy: r.runLine.confirmedBy,
     };
   });
@@ -956,6 +969,18 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
     for (const p of people) confirmerNames.set(p.id, p.first && p.last ? nameOf({ first: p.first, last: p.last, preferred: p.preferred }) : p.email);
   }
 
+  // The dates behind each line's part-period flags: every version of its pay line, and which one this run pays.
+  const keys = [...new Set(rows.map((r) => r.lineKey))];
+  const versions = keys.length
+    ? await executor.select({ id: payLines.id, lineKey: payLines.lineKey, effectiveFrom: payLines.effectiveFrom, endsOn: payLines.endsOn, createdAt: payLines.createdAt }).from(payLines).where(inArray(payLines.lineKey, keys))
+    : [];
+  const noDates: FlagDates = { startsOn: null, endsOn: null, rateChangeOn: null };
+  const flagDatesFor = (r: RunRow): FlagDates => {
+    const all = versions.filter((v) => v.lineKey === r.lineKey);
+    const paid = all.find((v) => v.id === r.runLine.lineId);
+    return paid ? flagDatesOf(all, paid.effectiveFrom, { start: run.periodStart, end: run.periodEnd }) : noDates;
+  };
+
   const displayItem = (row: ItemRow): WorksheetItem | null => {
     const v = data.values.get(row.id);
     if (!v) return null;
@@ -981,8 +1006,10 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
     const payload = data.payloads.get(r.runLine.id) ?? null;
     const unreadable = lineUnreadable(data, r.runLine.id);
     if (unreadable) unreadableCount += 1;
+    const flagDates = flagDatesFor(r);
 
     let figures: WorksheetFigures | null = null;
+    let sortKeys: SortKeys = { monthly: null, net: null, change: null };
     if (payload && !unreadable) {
       const x = payload.result;
       const extra = {} as Record<ExtraKey, string>;
@@ -1009,6 +1036,7 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
         clientHours: formatItemValue("client_hours", payload.clientHoursHundredths),
         netChange: previousNet === undefined ? null : signedPesos(x.net - previousNet),
       };
+      sortKeys = { monthly: payload.rate.monthlyCentavos.toString(), net: x.net.toString(), change: previousNet === undefined ? null : (x.net - previousNet).toString() };
       gross += x.gross;
       net += x.net;
       const key = r.runLine.clientId ?? "none";
@@ -1029,10 +1057,13 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
       alias: r.runLine.alias,
       hoursPerDay: payload?.hoursPerDay ?? 0,
       flags: r.runLine.flags,
+      flagDates,
+      suggestedDays: r.runLine.flags.some((f) => f === "starts_mid_period" || f === "ends_mid_period") ? suggestedDays(flagDates, { start: run.periodStart, end: run.periodEnd }, (run.settingsSnapshot as SettingsSnapshot).cutoffDivisor) : null,
       unreadable,
       confirmedByName: r.runLine.confirmedBy ? (confirmerNames.get(r.runLine.confirmedBy) ?? "Someone") : null,
       confirmedByMe: r.runLine.confirmedBy === viewer.id,
       figures,
+      sortKeys,
       items: data.items
         .filter((i) => i.runLineId === r.runLine.id)
         .map(displayItem)

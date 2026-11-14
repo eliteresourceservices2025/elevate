@@ -16,7 +16,7 @@ vi.mock("server-only", () => ({}));
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
-const { getWorksheet, getRuns } = await import("@/modules/payroll/queries");
+const { getWorksheet, getRuns, getRates } = await import("@/modules/payroll/queries");
 const { decryptRunLine, encryptItemValue, settingsInForce } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
 
@@ -1133,5 +1133,99 @@ describe("checks that are only notes", () => {
     const refused = await approveRun({ runId, expectedHash: review.expectedHash! });
     expect(!refused.ok && refused.error).toMatch(/your own line/i);
     expect((await rows<{ status: string }>(sql`select status from payroll.pay_runs where id = ${runId}`))[0].status).toBe("in_review");
+  });
+});
+
+describe("a person paid twice for the same client", () => {
+  const TWICE = /would pay them twice/;
+  const client = async () => (await rows<{ id: string }>(sql`insert into core.clients (name) values (${uniq("Twinclinic ")}) returning id`))[0].id;
+  const make = (over: Record<string, unknown>) => {
+    current.user = preparer;
+    return createPayLine(lineBase(over.employeeId as string, over));
+  };
+
+  it("refuses a second line for the same person, client and alias that overlaps the first, and allows every real second line", async () => {
+    const emp = await person();
+    const clinic = await client();
+    const first = await make({ employeeId: emp, clientId: clinic, effectiveFrom: "2033-07-01", endsOn: "2033-07-31" });
+    expect(first.ok).toBe(true);
+    // The same client and no alias, overlapping dates: a twin.
+    expect(await make({ employeeId: emp, clientId: clinic, effectiveFrom: "2033-07-10" })).toMatchObject({ ok: false, error: expect.stringMatching(TWICE) });
+    expect(await make({ employeeId: emp, clientId: clinic, effectiveFrom: "2033-06-01", endsOn: "2033-07-01" })).toMatchObject({ ok: false, error: expect.stringMatching(TWICE) });
+    // Real second lines: another alias (a second role), another client, or dates that start after the first ended.
+    expect((await make({ employeeId: emp, clientId: clinic, alias: "Night shift", effectiveFrom: "2033-07-01", endsOn: "2033-07-31" })).ok).toBe(true);
+    expect((await make({ employeeId: emp, clientId: await client(), effectiveFrom: "2033-07-01", endsOn: "2033-07-31" })).ok).toBe(true);
+    expect((await make({ employeeId: emp, clientId: clinic, effectiveFrom: "2033-08-01", endsOn: "2033-08-31" })).ok).toBe(true);
+    // A line with no client is the same job as the client's line (a leftover): refused too.
+    expect(await make({ employeeId: emp, effectiveFrom: "2033-07-01", endsOn: "2033-07-31" })).toMatchObject({ ok: false, error: expect.stringMatching(TWICE) });
+    // The alias match ignores case and spaces.
+    expect(await make({ employeeId: emp, clientId: clinic, alias: "  NIGHT shift ", effectiveFrom: "2033-07-05", endsOn: "2033-07-20" })).toMatchObject({ ok: false, error: expect.stringMatching(TWICE) });
+    // Nothing is written for a refused line.
+    expect(await rows(sql`select 1 from payroll.pay_lines where employee_id = ${emp}`)).toHaveLength(4);
+  });
+
+  it("refuses to change a line's alias or client so that it becomes a twin of another line", async () => {
+    const emp = await person();
+    const clinic = await client();
+    current.user = preparer;
+    const a = await createPayLine(lineBase(emp, { clientId: clinic, alias: "Front desk", effectiveFrom: "2033-09-01" }));
+    const b = await createPayLine(lineBase(emp, { clientId: clinic, alias: "Night shift", effectiveFrom: "2033-09-01" }));
+    if (!a.ok || !b.ok) throw new Error("lines failed");
+    const change = (lineKey: string, over: Record<string, unknown>) =>
+      updatePayLine({ lineKey, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2033-09-01", monthly: "22,000", reason: "Rename", ...over });
+    expect(await change(b.data.lineKey, { clientId: clinic, alias: "front DESK" })).toMatchObject({ ok: false, error: expect.stringMatching(TWICE) });
+    // Changing the pay, with the same client and alias, is not a twin of anything.
+    expect(await change(b.data.lineKey, { clientId: clinic, alias: "Night shift", monthly: "23,000" })).toMatchObject({ ok: true });
+    // A different alias is fine.
+    expect(await change(b.data.lineKey, { clientId: clinic, alias: "Weekend" })).toMatchObject({ ok: true });
+  });
+
+  it("a run that has two lines for the same client and alias warns about every one of them, without blocking; different aliases do not warn", async () => {
+    const p = c33(12);
+    const twin = await person();
+    const roles = await person();
+    const clinic = await client();
+    await lineIn(twin, p, { clientId: clinic, alias: "A" });
+    await lineIn(twin, p, { clientId: clinic, alias: "B" });
+    await lineIn(roles, p, { clientId: clinic, alias: "Front desk" });
+    await lineIn(roles, p, { clientId: clinic, alias: "Night shift" });
+    const runId = await newRun(preparer, p);
+    // The way a twin could exist already: the same client and alias on two live lines of one run.
+    await db.execute(sql`update payroll.pay_run_lines set alias = 'A' where run_id = ${runId} and employee_id = ${twin} and alias = 'B'`);
+
+    current.user = preparer;
+    const sheet = (await getWorksheet(runId))!;
+    expect(sheet.checks.blocking).toEqual([]);
+    const twice = sheet.checks.warnings.filter((c) => c.code === "duplicate_pay_line");
+    expect(twice).toHaveLength(2);
+    expect(new Set(twice.map((c) => c.employeeId))).toEqual(new Set([twin]));
+    expect(sheet.checks.warnings.some((c) => c.code === "duplicate_pay_line" && c.employeeId === roles)).toBe(false);
+    // It is a note: the run can still be sent.
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+  });
+
+  it("a leftover line with no client next to the client's line for the same alias is a twin too (the case that doubled a whole run)", async () => {
+    const p = c33(14);
+    const left = await person();
+    const clinic = await client();
+    await lineIn(left, p, { clientId: clinic, alias: "X" });
+    await lineIn(left, p, { clientId: clinic, alias: "Y" });
+    const runId = await newRun(preparer, p);
+    // The run as it would be built from an old no-client line and the new client line for the same job.
+    await db.execute(sql`update payroll.pay_run_lines set alias = 'X', client_id = null where run_id = ${runId} and employee_id = ${left} and alias = 'Y'`);
+    current.user = preparer;
+    const sheet = (await getWorksheet(runId))!;
+    expect(sheet.checks.warnings.filter((c) => c.code === "duplicate_pay_line" && c.employeeId === left)).toHaveLength(2);
+  });
+
+  it("lists a line whose last day has passed only when ended lines are asked for (the Rates tab hides them by default)", async () => {
+    const emp = await person();
+    const key = await giveLine(preparer, emp, { effectiveFrom: "2024-01-01", endsOn: "2024-01-31" });
+    current.user = preparer;
+    expect((await getRates()).some((r) => r.lineKey === key)).toBe(false);
+    const ended = (await getRates({ includeEnded: true })).find((r) => r.lineKey === key);
+    expect(ended).toMatchObject({ employeeId: emp, ended: true, endsOn: "2024-01-31", effectiveFrom: "2024-01-01" });
+    // A line still in force is not marked ended.
+    expect((await getRates({ includeEnded: true })).filter((r) => r.ended === false).length).toBeGreaterThanOrEqual(0);
   });
 });
