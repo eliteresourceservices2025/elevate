@@ -16,6 +16,7 @@ const sampleDays = (flagsByDate: Record<string, string[]> = {}, approved = false
     // eslint-disable-next-line security/detect-object-injection -- index comes from the fixed five-day preview list.
     weekday: ["Mon", "Tue", "Wed", "Thu", "Fri"][index],
     scheduledMinutes: 480,
+    hasSchedule: true,
     workedMinutes: index === 2 ? 485 : 480,
     breakMinutes: 30,
     extraMinutes: index === 2 ? 5 : 0,

@@ -167,6 +167,35 @@ describe("deciding a request", () => {
     expect(await actions.decideExtraHours({ requestId: r.id, decision: "approve" })).toEqual({ ok: false, error: "That request was already handled." });
   });
 
+  it("rebuilds the person's day when a request is approved, so approved extra shows without waiting for the nightly job", async () => {
+    const { clientId, lead, va } = await setup("Rebuild");
+    // A day in the last week that is not a holiday in any calendar (a holiday counts all worked time as extra).
+    let day = "";
+    for (const back of [3, 4, 2, 5, 6]) {
+      const candidate = formatInZone(Date.now() - back * DAY, PHX, "yyyy-MM-dd");
+      const [h] = await rows<{ n: number }>(sql`select count(*)::int as n from time.holidays where date = ${candidate}::date`);
+      if (h.n === 0) {
+        day = candidate;
+        break;
+      }
+    }
+    expect(day).not.toBe("");
+    const at = (time: string) => fromZonedTime(`${day}T${time}:00`, PHX).toISOString();
+    await db.execute(sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone) values (${va.employeeId}, current_date - 30, '09:00', '17:00', array[1,2,3,4,5,6,7]::smallint[], 60, ${PHX})`);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${va.employeeId}, 'clock_in', ${at("09:00")}), (${va.employeeId}, 'clock_out', ${at("19:00")})`);
+    await jobs.rebuildAttendanceDays(new Date(), 10, va.employeeId);
+    const before = (await rows<{ extra_minutes: number; approved_extra_minutes: number }>(sql`select extra_minutes, approved_extra_minutes from time.attendance_days where employee_id = ${va.employeeId} and date = ${day}::date`))[0];
+    expect(before).toMatchObject({ extra_minutes: 120, approved_extra_minutes: 0 });
+
+    expect((await ask(va, clientId, { windowStart: at("17:00"), windowEnd: at("19:00") })).ok).toBe(true);
+    const r = await latest(va.employeeId);
+    as(lead.user);
+    expect((await actions.decideExtraHours({ requestId: r.id, decision: "approve" })).ok).toBe(true);
+    const after = (await rows<{ approved_extra_minutes: number; flags: string[] }>(sql`select approved_extra_minutes, flags from time.attendance_days where employee_id = ${va.employeeId} and date = ${day}::date`))[0];
+    expect(after.approved_extra_minutes).toBe(120);
+    expect(after.flags).not.toContain("unapproved_extra");
+  });
+
   it("lets the reviewer change the window when approving, and keeps what was first asked", async () => {
     const { clientId, lead, va } = await setup("Adj");
     await ask(va, clientId, window(3 * HOUR, 3 * HOUR));

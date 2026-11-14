@@ -37,6 +37,12 @@ Open **Days** on a row to see each day.
 
 You approve only the days that have finished. A day still running (**Day not over**) waits.
 
+# Very long sessions
+
+A session longer than 12 hours is flagged **Very long session (check the clock-out)**. It is almost always a forgotten clock-out. The week cannot be approved until it is fixed. Open **Days** on the row and click **Fix clock-out**: it opens **Change someone's time** on that day, where you remove the wrong clock-out and add the real one, with a reason. HR saves the change at once. A lead's change goes to HR to approve. Once the change is saved, approve the week.
+
+A day with no schedule shows **No schedule**. **Rest day** means the person has a schedule but no shift that day.
+
 ![Open Days to see each day, then click Approve week.](help:approve-weekly-hours/02-approve-week.png)
 
 # Rules

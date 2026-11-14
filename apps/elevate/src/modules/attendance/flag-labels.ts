@@ -1,5 +1,6 @@
 export const FLAG_LABELS = new Map<string, string>(Object.entries({
   open_session: "Still clocked in",
+  long_session: "Very long session (check the clock-out)",
   outside_range: "Outside allowed IP range",
   corrected: "Corrected",
   idle_unanswered: "Idle prompt unanswered",

@@ -9,8 +9,7 @@ type Executor = Pick<typeof db, "execute">;
 export type DayNumbers = { scheduledMinutes: number | null; workedMinutes: number; breakMinutes: number; extraMinutes: number; approvedExtraMinutes: number };
 export type Approval = DayNumbers & { approvedBy: string; approvedAt: Date; note: string | null };
 
-/** Flags that do not stop "approve everything that looks fine": informational, or already explained. */
-export const CLEAN_FLAGS: ReadonlySet<string> = new Set(["on_leave", "corrected", "extra_hours"]);
+export { BLOCKING_FLAGS, CLEAN_FLAGS, HARD_STOP_FLAGS } from "./flag-severity";
 
 export const approvalKey = (employeeId: string, date: string) => `${employeeId}|${date}`;
 

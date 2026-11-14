@@ -7,6 +7,8 @@ import { formatInZone, resolveTimeZone } from "@/lib/time";
 import { timeDownlineEmployeeIds, reportName, todayInZone } from "@/modules/org/service";
 import { approvalKey, attendanceRows, dayState, latestApprovals, testMarks, zonesFor, type DayState } from "./hours-service";
 import { addDays, mondayOf, recentPeriods, type PayPeriod, type PayPeriodKind } from "./pay-periods";
+import { hasScheduleAround } from "./schedule";
+import { loadSchedulesFor } from "./schedule-service";
 import { hoursSettings } from "./schema";
 
 // Every query starts with requireUser() and authorize(). Pages wrap them in orNotFound().
@@ -17,6 +19,8 @@ export type ReviewDay = {
   date: string;
   weekday: string;
   scheduledMinutes: number | null;
+  /** The person has a schedule around this day, so a day without a shift is a rest day (otherwise they have no schedule). */
+  hasSchedule: boolean;
   workedMinutes: number;
   /** Break time actually taken that day (the scheduled unpaid break is already taken out of the scheduled hours). */
   breakMinutes: number;
@@ -74,6 +78,7 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
 
   const approvals = await latestApprovals(db, ids, weekStart, weekEnd);
   const zones = await zonesFor(db, ids);
+  const schedules = await loadSchedulesFor(db, ids);
   const people = (await db.execute(sql`
     select e.id, e.user_id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team
     from core.employees e left join core.teams t on t.id = e.team_id where e.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { id: string; user_id: string | null; first: string; last: string; preferred: string | null; team: string | null }[];
@@ -90,6 +95,7 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
         date: d.date,
         weekday: WEEKDAY.format(new Date(`${d.date}T00:00:00Z`)),
         scheduledMinutes: d.scheduledMinutes,
+        hasSchedule: hasScheduleAround(schedules.get(id) ?? [], d.date),
         workedMinutes: d.workedMinutes,
         breakMinutes: d.breakMinutes,
         extraMinutes: d.extraMinutes,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MINUTE, breakLabel, buildDays, formatClock, formatDuration, ipAllowed, isPossiblyOffline, isValidRange, lastSeenOf, needsHrDecision, needsWelcomeBack, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
+import { MINUTE, breakLabel, buildDays, formatClock, formatDuration, hasLongSession, ipAllowed, isPossiblyOffline, isValidRange, lastSeenOf, needsHrDecision, needsWelcomeBack, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
 
 const T = (iso: string) => Date.parse(iso);
 const ev = (type: ClockType, iso: string): ClockEventLite => ({ type, at: T(iso) });
@@ -237,5 +237,20 @@ describe("connection and presence rules", () => {
       "UTC",
     );
     expect(days[0].sessionList[0].eventId).toBe("in-1");
+  });
+});
+
+describe("long sessions (a forgotten clock-out)", () => {
+  it("flags a finished session longer than 12 hours, not one of exactly 12", () => {
+    const wed = buildDays([ev("clock_in", "2026-11-11T12:50:00Z"), ev("clock_out", "2026-11-12T12:47:00Z")], "America/Phoenix");
+    expect(wed[0].workedMinutes).toBe(1437);
+    expect(hasLongSession(wed[0].sessionList)).toBe(true);
+    const twelve = buildDays([ev("clock_in", "2026-11-11T12:00:00Z"), ev("clock_out", "2026-11-12T00:00:00Z")], "America/Phoenix");
+    expect(hasLongSession(twelve[0].sessionList)).toBe(false);
+  });
+
+  it("leaves an open session to its own flag", () => {
+    const open = buildDays([ev("clock_in", "2026-11-11T12:00:00Z")], "America/Phoenix");
+    expect(hasLongSession(open[0].sessionList)).toBe(false);
   });
 });
