@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cutoffNote, daysBetween, nextCutoff, nextStepOf, parseView, periodSubtitle, shortRange, stepOf, type RunFacts, type ViewerRights } from "./runs-list";
+import { cutoffNote, daysBetween, nextCutoff, nextStepOf, parseView, periodSubtitle, runActions, runWhy, shortRange, stepOf, type RunFacts, type ViewerRights } from "./runs-list";
 
 const none: ViewerRights = { prepare: false, approve: false, markPaid: false, release: false };
 const run = (over: Partial<RunFacts>): RunFacts => ({ status: "draft", isTest: false, peopleCount: 14, paidCount: 9, released: false, ...over });
@@ -58,7 +58,7 @@ describe("nextCutoff and cutoffNote", () => {
 
 describe("parseView", () => {
   it("accepts only the known views", () => {
-    expect([parseView("action"), parseView("test"), parseView("all"), parseView("nope"), parseView(undefined)]).toEqual(["action", "test", "all", "all", "all"]);
+    expect([parseView("action"), parseView("test"), parseView("archived"), parseView("all"), parseView("nope"), parseView(undefined)]).toEqual(["action", "test", "archived", "all", "all", "all"]);
   });
 });
 
@@ -66,5 +66,36 @@ describe("shortRange", () => {
   it("writes a period in short form", () => {
     expect(shortRange("2026-11-16", "2026-11-30")).toBe("Nov 16 to 30");
     expect(shortRange("2026-10-28", "2026-11-03")).toBe("Oct 28 to Nov 3");
+  });
+});
+
+describe("runActions and runWhy", () => {
+  const f = (over: Partial<Parameters<typeof runActions>[0]>) => ({ status: "draft" as const, isTest: false, archived: false, blockedByInvoice: false, ...over });
+
+  it("lets a test run or a cancelled run be archived, and an archived one be restored or deleted", () => {
+    expect(runActions(f({ isTest: true })).actions).toEqual(["archive"]);
+    expect(runActions(f({ status: "cancelled" })).actions).toEqual(["archive"]);
+    expect(runActions(f({ isTest: true, archived: true, status: "paid" })).actions).toEqual(["restore", "delete"]);
+    expect(runActions(f({ status: "cancelled", archived: true })).actions).toEqual(["restore", "delete"]);
+  });
+
+  it("never offers anything on a real run that is not cancelled", () => {
+    for (const status of ["draft", "in_review", "approved", "paid"] as const) {
+      const r = runActions(f({ status }));
+      expect(r.actions).toEqual([]);
+      expect(r.whyNot).toMatch(/real run is never archived or deleted/);
+    }
+  });
+
+  it("holds back the delete while an invoice on the run is real or not archived, and says so", () => {
+    const r = runActions(f({ isTest: true, archived: true, blockedByInvoice: true }));
+    expect(r.actions).toEqual(["restore"]);
+    expect(r.whyNot).toMatch(/invoice/);
+    expect(runWhy(f({ isTest: true, archived: true, blockedByInvoice: true })).delete).toMatch(/invoice/);
+  });
+
+  it("names a reason for every action that does not fit", () => {
+    expect(runWhy(f({ isTest: true }))).toMatchObject({ delete: expect.stringMatching(/Archive this run first/), restore: "It is not archived." });
+    expect(runWhy(f({ isTest: true, archived: true }))).toEqual({ archive: "It is already archived." });
   });
 });

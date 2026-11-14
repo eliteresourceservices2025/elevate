@@ -113,8 +113,8 @@ test("payroll: drag the run sheet sideways, mark a run as a test, archive it, re
     await p.getByRole("button", { name: "Archive this test run" }).last().click();
     await expect(p.getByText("Archived", { exact: true })).toBeVisible();
     await p.goto("/payroll");
-    await expect(p.locator(`a[href="/payroll/${first}"]`)).toHaveCount(0);
-    await expect(p.getByRole("link", { name: /^Archived runs \(\d+\)$/ })).toBeVisible();
+    await expect(p.locator(`a[href="/payroll/${first}"]`).first()).toHaveCount(0);
+    await expect(p.getByRole("link", { name: /^Archived \(\d+\)$/ })).toBeVisible();
 
     // The same cycle again, as a real run (this is what the archive is for).
     const second = await createRun();
@@ -122,45 +122,79 @@ test("payroll: drag the run sheet sideways, mark a run as a test, archive it, re
 
     // ---- The archived one is still there, and can be restored ----
     await p.goto("/payroll?archived=1&size=100");
-    await expect(p.locator(`a[href="/payroll/${first}"]`)).toBeVisible();
-    await p.locator(`a[href="/payroll/${first}"]`).click();
+    await expect(p.locator(`a[href="/payroll/${first}"]`).first()).toBeVisible();
+    await p.locator(`a[href="/payroll/${first}"]`).first().click();
     await p.getByRole("button", { name: "Run options" }).click();
     await p.getByRole("menuitem", { name: "Restore this run" }).click();
     await expect(p.getByText("Run restored.")).toBeVisible();
     await p.goto("/payroll?size=100");
-    await expect(p.locator(`a[href="/payroll/${first}"]`)).toBeVisible();
+    await expect(p.locator(`a[href="/payroll/${first}"]`).first()).toBeVisible();
     // Both runs of the period are in the list: the restored test run is marked Test, the real one is not.
-    await expect(p.getByRole("row").filter({ has: p.locator(`a[href="/payroll/${first}"]`) }).getByText("Test", { exact: true })).toBeVisible();
-    await expect(p.getByRole("row").filter({ has: p.locator(`a[href="/payroll/${second}"]`) }).getByText("Test", { exact: true })).toHaveCount(0);
+    await expect(p.getByRole("row").filter({ has: p.locator(`a[href="/payroll/${first}"]`).first() }).getByText("Test", { exact: true })).toBeVisible();
+    await expect(p.getByRole("row").filter({ has: p.locator(`a[href="/payroll/${second}"]`).first() }).getByText("Test", { exact: true })).toHaveCount(0);
 
-    // ---- Archive the test run again and delete it for good; a cancelled run can be archived without a test tag ----
-    await p.goto(`/payroll/${first}`);
-    await p.getByRole("button", { name: "Run options" }).click();
-    await p.getByRole("menuitem", { name: "Archive this test run" }).click();
-    await p.getByLabel("Reason").fill("Practice finished");
-    await p.getByRole("dialog").getByRole("button", { name: "Archive this test run" }).click();
-    await expect(p.getByText("Done.")).toBeVisible();
+    // ---- Select one or many: archive the test run and the cancelled run, restore both, delete one by its row and one in bulk ----
+    const rowOf = (id: string) => p.getByRole("row").filter({ has: p.locator(`a[href="/payroll/${id}"]`) });
+    const tick = async (id: string) => {
+      const box = rowOf(id).getByRole("checkbox");
+      await expect(async () => {
+        if ((await box.getAttribute("aria-checked")) !== "true") await box.click();
+        await expect(box).toHaveAttribute("aria-checked", "true", { timeout: 1000 });
+      }).toPass({ timeout: 20_000 });
+    };
+    const apply = async (action: string, confirmLabel: RegExp, reason?: string) => {
+      await p.getByLabel("Bulk actions", { exact: true }).selectOption({ label: action });
+      await p.getByRole("button", { name: "Apply" }).click();
+      if (reason) await p.getByLabel("Reason").fill(reason);
+      await p.getByRole("dialog").getByRole("button", { name: confirmLabel }).click();
+    };
+
+    // Cancel the real run (a cancelled run can be archived without a test tag).
     await p.goto(`/payroll/${second}`);
     await p.getByRole("button", { name: "Cancel run" }).click();
     await p.getByLabel("Reason").fill("Wrong period");
     await p.getByRole("button", { name: "Cancel this run" }).click();
     await expect(p.getByText("Run cancelled.")).toBeVisible();
-    await p.goto(`/payroll/${second}`);
-    await p.getByRole("button", { name: "Run options" }).click();
-    await p.getByRole("menuitem", { name: "Archive this cancelled run" }).click();
-    await p.getByLabel("Reason").fill("Clearing out");
-    await p.getByRole("dialog").getByRole("button", { name: "Archive this cancelled run" }).click();
-    await expect(p.getByText("Done.")).toBeVisible();
-    await p.goto("/payroll?archived=1&size=100");
-    await expect(p.locator(`a[href="/payroll/${first}"]`)).toBeVisible();
-    await expect(p.locator(`a[href="/payroll/${second}"]`)).toBeVisible();
-    await p.getByRole("button", { name: "Delete archived runs for good" }).click();
-    await expect(p.getByText("This cannot be undone.")).toBeVisible();
-    await p.getByRole("dialog").getByRole("button", { name: "Delete archived runs for good" }).click();
-    await expect(p.getByText(/^Deleted \d+ runs?/)).toBeVisible();
-    await p.goto("/payroll?archived=1&size=100");
-    await expect(p.locator(`a[href="/payroll/${first}"]`)).toHaveCount(0);
-    await expect(p.locator(`a[href="/payroll/${second}"]`)).toHaveCount(0);
+
+    // Tick both on the list and archive them with one reason.
+    await p.goto("/payroll?size=100");
+    await tick(first);
+    await tick(second);
+    await expect(p.getByText("2 runs selected")).toBeVisible();
+    await apply("Archive", /^Archive 2 runs$/, "Clearing out");
+    await expect(p.getByText(/^Archived 2 runs\./)).toBeVisible();
+
+    // The Archived view is a link with a count, and both runs are listed in it.
+    await p.goto("/payroll?view=archived&size=100");
+    await expect(p.getByRole("link", { name: /^Archived \(\d+\)$/ })).toHaveAttribute("aria-current", "page");
+    await expect(rowOf(first)).toBeVisible();
+    await expect(rowOf(second)).toBeVisible();
+
+    // Restore both in bulk, then archive them again.
+    await tick(first);
+    await tick(second);
+    await apply("Restore", /^Restore 2 runs$/);
+    await expect(p.getByText(/^Restored 2 runs\./)).toBeVisible();
+    await p.goto("/payroll?size=100");
+    await expect(rowOf(first)).toBeVisible();
+    await tick(first);
+    await tick(second);
+    await apply("Archive", /^Archive 2 runs$/, "Clearing out again");
+    await expect(p.getByText(/^Archived 2 runs\./)).toBeVisible();
+
+    // Delete the cancelled run from its own row action (one item), the test run in bulk (the other ticked item).
+    await p.goto("/payroll?view=archived&size=100");
+    await rowOf(second).getByRole("button", { name: "Delete for good" }).click();
+    await expect(p.getByRole("dialog")).toContainText("This cannot be undone");
+    await p.getByRole("dialog").getByRole("button", { name: /^Delete 1 run$/ }).click();
+    await expect(p.getByText(/^Deleted 1 run\./)).toBeVisible();
+    await expect(rowOf(second)).toHaveCount(0);
+    await expect(rowOf(first)).toBeVisible();
+    await tick(first);
+    await apply("Delete for good", /^Delete 1 run$/);
+    await expect(p.getByText(/^Deleted 1 run\./)).toBeVisible();
+    await p.goto("/payroll?view=archived&size=100");
+    await expect(rowOf(first)).toHaveCount(0);
   } finally {
     await endPayLinesOf(worker.employeeId);
   }

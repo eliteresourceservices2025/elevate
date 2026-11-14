@@ -1,3 +1,4 @@
+import type { BulkAction } from "@/lib/bulk";
 import type { RunStatus } from "./constants";
 
 // The runs list: where a run is in its life, what the viewer should do next, and the summary tiles. Pure: the query passes what it read.
@@ -68,10 +69,34 @@ export function cutoffNote(daysLeft: number): string {
   return `The cutoff ended ${-daysLeft} ${daysLeft === -1 ? "day" : "days"} ago`;
 }
 
-export type RunsView = "all" | "action" | "test";
+export type RunsView = "all" | "action" | "test" | "archived";
 
 export function parseView(raw: unknown): RunsView {
-  return raw === "action" || raw === "test" ? raw : "all";
+  return raw === "action" || raw === "test" || raw === "archived" ? raw : "all";
 }
 
 export { shortRange } from "@/lib/short-range";
+
+export type RunActionFacts = { status: RunStatus; isTest: boolean; archived: boolean; blockedByInvoice: boolean };
+
+/**
+ * What can be done to one run from the list. A test run or a cancelled run can be archived, restored and (when archived) deleted; a real run
+ * that was prepared, reviewed, approved or paid is never archived or deleted. A run with a real invoice, or an invoice that is not archived yet, can't be
+ * deleted until that invoice is dealt with.
+ */
+export function runActions(f: RunActionFacts): { actions: BulkAction[]; whyNot: string | null } {
+  if (!f.isTest && f.status !== "cancelled") return { actions: [], whyNot: "A real run is never archived or deleted. Mark it as a test run first (before it is paid)." };
+  if (!f.archived) return { actions: ["archive"], whyNot: null };
+  if (f.blockedByInvoice) return { actions: ["restore"], whyNot: "It has an invoice that is real or not archived yet. Archive or void that invoice first." };
+  return { actions: ["restore", "delete"], whyNot: null };
+}
+
+/** Why each action does NOT fit this run (an action that fits has no entry). Shown in the confirmation for the ticked rows it skips. */
+export function runWhy(f: RunActionFacts): Partial<Record<BulkAction, string>> {
+  const { actions, whyNot } = runActions(f);
+  const out: Partial<Record<BulkAction, string>> = {};
+  if (!actions.includes("delete")) out.delete = !f.archived && (f.isTest || f.status === "cancelled") ? "Archive this run first. Only an archived run can be deleted." : (whyNot ?? "This run can't be deleted.");
+  if (!actions.includes("archive")) out.archive = f.archived ? "It is already archived." : (whyNot ?? "This run can't be archived.");
+  if (!actions.includes("restore")) out.restore = "It is not archived.";
+  return out;
+}

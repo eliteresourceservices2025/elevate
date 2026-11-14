@@ -17,7 +17,7 @@ const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const { createPayLine, createPayRun, savePayItem, submitRun, approveRun } = await import("@/modules/payroll/actions");
 const { getRuns, getWorksheet } = await import("@/modules/payroll/queries");
-const { createInvoice, addBillRate, voidInvoice, purgeRetiredInvoices } = await import("@/modules/invoices/actions");
+const { createInvoice, addBillRate, voidInvoice, deleteInvoices } = await import("@/modules/invoices/actions");
 const { listInvoices } = await import("@/modules/invoices/queries");
 
 type Row = Record<string, unknown>;
@@ -208,16 +208,16 @@ describe("deleting void and replaced invoices", () => {
     expect(highest).toBeGreaterThan(await seqOf(live.data.invoiceId));
 
     const listed = await listInvoices(PAGE);
-    expect(listed.retiredCount).toBeGreaterThanOrEqual(2);
-    const result = await purgeRetiredInvoices();
-    expect(result.ok && result.data.deleted).toBeGreaterThanOrEqual(2);
+    expect(listed.views.void + listed.views.replaced).toBeGreaterThanOrEqual(2);
+    const result = await deleteInvoices({ ids: [first.data.invoiceId, second.data.invoiceId] });
+    expect(result.ok && result.data.done.length).toBe(2);
     expect(await exists(first.data.invoiceId)).toBe(false);
     expect(await exists(second.data.invoiceId)).toBe(false);
     expect(await rows(sql`select 1 from ops.invoice_events where invoice_id in (${first.data.invoiceId}, ${second.data.invoiceId})`)).toHaveLength(0);
     // The live invoice is untouched, and the audit entry holds counts only.
     expect(await exists(live.data.invoiceId)).toBe(true);
-    const [audit] = await rows<{ metadata: Record<string, unknown> }>(sql`select metadata from ops.audit_log where action = 'invoice.purge_retired' order by id desc limit 1`);
-    expect(Object.keys(audit.metadata).sort()).toEqual(["deleted", "kept"]);
+    const [audit] = await rows<{ metadata: Record<string, unknown> }>(sql`select metadata from ops.audit_log where action = 'invoice.delete' order by id desc limit 1`);
+    expect(Object.keys(audit.metadata).sort()).toEqual(["deleted", "skipped"]);
 
     // The next real invoice starts above the deleted number, not on it.
     const run3 = await approvedRun("2044-04-01", "2044-04-15", "3");
@@ -234,8 +234,8 @@ describe("deleting void and replaced invoices", () => {
 
   it("refuses a person without the right", async () => {
     as(preparer);
-    expect(await purgeRetiredInvoices()).toMatchObject({ ok: false });
+    expect(await deleteInvoices({ ids: [randomUUID()] })).toMatchObject({ ok: false });
     as(approver);
-    expect(await purgeRetiredInvoices()).toMatchObject({ ok: false });
+    expect(await deleteInvoices({ ids: [randomUUID()] })).toMatchObject({ ok: false });
   });
 });

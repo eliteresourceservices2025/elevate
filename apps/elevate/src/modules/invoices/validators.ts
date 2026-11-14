@@ -25,3 +25,8 @@ export const restoreInvoiceSchema = z.object({ invoiceId: uuid });
 
 /** A real invoice is voided with a reason, kept in the encrypted event and never in an audit row. */
 export const voidInvoiceSchema = z.object({ invoiceId: uuid, reason: z.string().trim().min(1, "Give a reason").max(500) });
+
+/** The ticked invoices: at least one, at most 200, each once. */
+const tickedIds = z.array(uuid).min(1).max(200).transform((a) => [...new Set(a)]);
+export const bulkInvoicesSchema = z.object({ ids: tickedIds });
+export const bulkArchiveInvoicesSchema = z.object({ ids: tickedIds, reason: optionalReason });

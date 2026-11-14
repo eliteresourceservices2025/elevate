@@ -18,7 +18,8 @@ import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
 import { releaseRun } from "./statements";
-import { archiveRun, cancelRun, confirmLine, createRun, dismissItem, purgeArchivedRuns, removeRunLine, restoreRun, restoreRunLine, saveItem, setRunTest, syncRunPeople } from "./runs";
+import type { BulkResult } from "@/lib/bulk";
+import { archiveRun, archiveRunsIn, cancelRun, deleteRunsIn, restoreRunsIn, confirmLine, createRun, dismissItem, removeRunLine, restoreRun, restoreRunLine, saveItem, setRunTest, syncRunPeople } from "./runs";
 import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import { readJibbleTimesheet } from "./jibble/timesheet";
 import { MAX_XLSX_BYTES, XlsxError } from "./jibble/xlsx";
@@ -45,6 +46,8 @@ import {
   confirmRunLineSchema,
   createPayLineSchema,
   archiveRunSchema,
+  bulkArchiveRunsSchema,
+  bulkRunsSchema,
   createPayRunSchema,
   dismissPayItemSchema,
   endPayLineSchema,
@@ -415,16 +418,46 @@ export async function markRunAsTest(input: unknown): Promise<ActionResult> {
   });
 }
 
-/** Deletes every archived test run and archived cancelled run for good (with its test invoices). Returns what was deleted and what had to stay. */
-export async function purgeArchivedPayRuns(): Promise<ActionResult<{ runsDeleted: number; invoicesDeleted: number; runsKept: number }>> {
+/** Deletes the ticked archived runs for good (with their test invoices). Returns which were deleted and which were skipped, with the reason. */
+export async function deleteRuns(input: unknown): Promise<ActionResult<BulkResult>> {
   const actor = await requireUser();
 
   return runAction(async () => {
     await authorize(actor, "payroll.purge_archived");
-    const r = await db.transaction((tx) => purgeArchivedRuns(tx, actor));
+    const parsed = bulkRunsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const data = await db.transaction((tx) => deleteRunsIn(tx, actor, parsed.data.ids));
     revalidatePath("/payroll");
     revalidatePath("/invoices");
-    return { ok: true, data: { runsDeleted: r.runsDeleted, invoicesDeleted: r.invoicesDeleted, runsKept: r.runsKept } } as const;
+    return { ok: true, data } as const;
+  });
+}
+
+/** Archives the ticked test runs and cancelled runs, with one reason. */
+export async function archiveRuns(input: unknown): Promise<ActionResult<BulkResult>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_test_runs");
+    const parsed = bulkArchiveRunsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const data = await db.transaction((tx) => archiveRunsIn(tx, actor, parsed.data));
+    revalidatePath("/payroll");
+    return { ok: true, data } as const;
+  });
+}
+
+/** Brings the ticked archived runs back. */
+export async function restoreRuns(input: unknown): Promise<ActionResult<BulkResult>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_test_runs");
+    const parsed = bulkRunsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const data = await db.transaction((tx) => restoreRunsIn(tx, actor, parsed.data.ids));
+    revalidatePath("/payroll");
+    return { ok: true, data } as const;
   });
 }
 
