@@ -262,7 +262,11 @@ export async function createInvoiceIn(tx: Tx, actor: AuthUser, v: { runId: strin
     revision = earlier[earlier.length - 1].revision + 1;
   } else {
     // A test run has its own series, so real invoice numbers never skip because of practice invoices.
-    const [top] = await tx.select({ seq: sql<number>`coalesce(max(${invoices.seq}), 0)::int` }).from(invoices).where(and(eq(invoices.year, year), eq(invoices.isTest, test)));
+    // The floor remembers numbers of deleted invoices, so a number is never used twice.
+    const [top] = await tx
+      .select({ seq: sql<number>`greatest(coalesce(max(${invoices.seq}), 0), coalesce((select f.seq from ops.invoice_number_floor f where f.year = ${year} and f.is_test = ${test}), 0))::int` })
+      .from(invoices)
+      .where(and(eq(invoices.year, year), eq(invoices.isTest, test)));
     seq = (top?.seq ?? 0) + 1;
   }
   if (seq > 9999) throw new ActionFailure("This year's invoice numbers are used up. Ask for help.");
@@ -360,6 +364,18 @@ export async function purgeArchivedInvoicesIn(tx: Tx, actor: AuthUser): Promise<
   const row = (res as unknown as Array<{ invoices_deleted: number; invoices_kept: number }>)[0];
   const out = { deleted: row.invoices_deleted, kept: row.invoices_kept };
   await writeAudit({ actor, action: "invoice.purge", targetType: "invoice", metadata: { ...out } }, tx);
+  return out;
+}
+
+/**
+ * Deletes void and replaced invoices for good (real ones too, with their events). A live invoice is never deleted, and an invoice that a kept
+ * invoice was replaced by stays. A deleted real invoice leaves its number behind (the number floor), so the number is never used twice.
+ */
+export async function purgeRetiredInvoicesIn(tx: Tx, actor: AuthUser): Promise<{ deleted: number; kept: number }> {
+  const res = await tx.execute(sql`select invoices_deleted, invoices_kept from payroll.purge_archived_test_data(false, false, true)`);
+  const row = (res as unknown as Array<{ invoices_deleted: number; invoices_kept: number }>)[0];
+  const out = { deleted: row.invoices_deleted, kept: row.invoices_kept };
+  await writeAudit({ actor, action: "invoice.purge_retired", targetType: "invoice", metadata: { ...out } }, tx);
   return out;
 }
 

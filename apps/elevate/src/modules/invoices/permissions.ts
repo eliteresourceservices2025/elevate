@@ -10,4 +10,6 @@ export const invoicesPermissions = definePermissions({
   "invoices.manage": { roles: { super_admin: "all", hr_admin: "all", executive: "all" } },
   // Deleting archived TEST invoices for good (a real invoice is never deleted).
   "invoices.purge_archived": { roles: { super_admin: "all", hr_admin: "all", executive: "all" } },
+  // Deleting void and replaced invoices for good (real ones too: they were already retired with a reason). Never a live invoice.
+  "invoices.purge_retired": { roles: { super_admin: "all", hr_admin: "all", executive: "all" } },
 });

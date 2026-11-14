@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { formatDollars, formatHours } from "./calc";
-import { addBillRateIn, archiveInvoiceIn, createInvoiceIn, previewRun, purgeArchivedInvoicesIn, restoreInvoiceIn, voidInvoiceIn } from "./service";
+import { addBillRateIn, archiveInvoiceIn, createInvoiceIn, previewRun, purgeArchivedInvoicesIn, purgeRetiredInvoicesIn, restoreInvoiceIn, voidInvoiceIn } from "./service";
 import { addBillRateSchema, archiveInvoiceSchema, createInvoiceSchema, previewInvoiceRunSchema, restoreInvoiceSchema, voidInvoiceSchema } from "./validators";
 
 // Every action: requireUser() first, then authorize() inside runAction, then Zod. Writes and their audit rows share one transaction.
@@ -120,6 +120,18 @@ export async function purgeArchivedInvoices(): Promise<ActionResult<{ deleted: n
   return runAction(async () => {
     await authorize(actor, "invoices.purge_archived");
     const data = await db.transaction((tx) => purgeArchivedInvoicesIn(tx, actor));
+    revalidatePath("/invoices");
+    return { ok: true, data } as const;
+  });
+}
+
+/** Deletes every void and replaced invoice for good (real ones too). The numbers of deleted real invoices are never used again. */
+export async function purgeRetiredInvoices(): Promise<ActionResult<{ deleted: number; kept: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "invoices.purge_retired");
+    const data = await db.transaction((tx) => purgeRetiredInvoicesIn(tx, actor));
     revalidatePath("/invoices");
     return { ok: true, data } as const;
   });

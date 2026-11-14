@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, count, desc, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -7,27 +7,40 @@ import { pageInfo, paginate } from "@/lib/pagination";
 import { writeAudit } from "@/modules/audit/write";
 import { clients, employees } from "@/modules/people/schema";
 import { rateInForce } from "./calc";
+import { likePattern, parseShow, type InvoiceShow } from "./list-options";
 import { invoices } from "./schema";
 import { decryptInvoice, invoiceToday, loadInvoiceView, readBillRates, readEvents, type InvoiceState, type InvoiceView } from "./service";
 
 // Reads for the invoice pages. Each starts with requireUser() and authorize("invoices.view").
+
+export { parseShow, type InvoiceShow };
 
 export type InvoiceListRow = { id: string; number: string; clientName: string; periodStart: string; periodEnd: string; runStatus: string; issuedOn: string; totalCents: bigint; unreadable: boolean; isTest: boolean; state: InvoiceState };
 
 /** Live means no event yet, or the newest one is a restore: the only invoices the default list shows. */
 const LIVE = sql`coalesce((select e.kind from ops.invoice_events e where e.invoice_id = ${invoices.id} order by e.created_at desc, e.id desc limit 1), 'restored') = 'restored'`;
 
-/** One page of invoices, newest first. Archived, void and replaced invoices are left out unless `all` is true. */
-export async function listInvoices(paging: { page: number; pageSize: number }, options: { all?: boolean } = {}) {
+/**
+ * One page of invoices, newest first. By default only live invoices show; `show` can ask for every invoice ("all") or for test invoices
+ * ("test", live or not). `q` narrows by invoice number or client name. `all: true` is the old way to say show "all".
+ * Also returns the summary: what real live invoices issued this month add up to, and how many are live.
+ */
+export async function listInvoices(paging: { page: number; pageSize: number }, options: { all?: boolean; show?: InvoiceShow; q?: string } = {}) {
   const actor = await requireUser();
   await authorize(actor, "invoices.view");
 
-  const showAll = options.all === true;
-  const [{ total }] = await db.select({ total: count() }).from(invoices).where(showAll ? undefined : LIVE);
+  const show: InvoiceShow = options.show ?? (options.all === true ? "all" : "live");
+  const q = (options.q ?? "").trim().slice(0, 80);
+  const pattern = likePattern(q);
+  const search = q === "" ? undefined : or(ilike(invoices.number, pattern), sql`exists (select 1 from core.clients c where c.id = ${invoices.clientId} and c.name ilike ${pattern})`);
+  const scope = show === "live" ? LIVE : show === "test" ? eq(invoices.isTest, true) : undefined;
+  const where = and(scope, search);
+
+  const [{ total }] = await db.select({ total: count() }).from(invoices).where(where);
   const [{ live }] = await db.select({ live: count() }).from(invoices).where(LIVE);
   const [{ every }] = await db.select({ every: count() }).from(invoices);
   const info = pageInfo(total, paging.page, paging.pageSize);
-  const rows = await db.select().from(invoices).where(showAll ? undefined : LIVE).orderBy(desc(invoices.createdAt), desc(invoices.id)).limit(info.pageSize).offset(info.offset);
+  const rows = await db.select().from(invoices).where(where).orderBy(desc(invoices.createdAt), desc(invoices.id)).limit(info.pageSize).offset(info.offset);
   const events = await readEvents(db, rows.map((r) => r.id));
   const list: InvoiceListRow[] = rows.map((r) => {
     try {
@@ -42,7 +55,44 @@ export async function listInvoices(paging: { page: number; pageSize: number }, o
     .select({ archivedTest: count() })
     .from(invoices)
     .where(sql`${invoices.isTest} and (select e.kind from ops.invoice_events e where e.invoice_id = ${invoices.id} order by e.created_at desc, e.id desc limit 1) = 'archived'`);
-  return { rows: list, info, canCreate: can(actor, "invoices.create"), canPurge: can(actor, "invoices.purge_archived"), archivedTestCount: archivedTest, showingAll: showAll, hiddenCount: every - live };
+
+  const [{ retired }] = await db
+    .select({ retired: count() })
+    .from(invoices)
+    .where(sql`(select e.kind from ops.invoice_events e where e.invoice_id = ${invoices.id} order by e.created_at desc, e.id desc limit 1) in ('voided', 'superseded')`);
+
+  // This month's real, live invoices (a practice invoice never counts): the sum of what they bill, in cents.
+  const month = invoiceToday().slice(0, 7);
+  const monthRows = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.isTest, false), LIVE, gte(invoices.issuedOn, `${month}-01`)))
+    .limit(500);
+  let billedThisMonthCents = 0n;
+  for (const r of monthRows) {
+    try {
+      billedThisMonthCents += decryptInvoice(r).totalCents;
+    } catch {
+      // An invoice that can't be read is already flagged in the list; it adds nothing here.
+    }
+  }
+
+  return {
+    rows: list,
+    info,
+    canCreate: can(actor, "invoices.create"),
+    canPurge: can(actor, "invoices.purge_archived"),
+    archivedTestCount: archivedTest,
+    retiredCount: retired,
+    showingAll: show === "all",
+    show,
+    q,
+    hiddenCount: every - live,
+    liveCount: live,
+    billedThisMonthCents,
+    monthIssuedCount: monthRows.length,
+    month,
+  };
 }
 
 export type InvoiceableRun = { id: string; periodStart: string; periodEnd: string; status: string; isTest: boolean };

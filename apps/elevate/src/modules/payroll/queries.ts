@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { users } from "@/modules/core/schema";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -13,6 +13,8 @@ import { lineLastDay, resolveLines } from "./lines";
 import { formatPesos } from "./money";
 import { countAwaiting, hashOf, latestSendBackNote, refusalFor } from "./approval";
 import { readRun, worksheetOf, type Worksheet } from "./runs";
+import { nextCutoff, nextStepOf, stepOf, type RunsView, type ViewerRights } from "./runs-list";
+import { recentPeriods } from "@/modules/attendance/pay-periods";
 import { joinAliases, personName } from "./remitly";
 import { logChange } from "./changes";
 import { payLines, payRunLines, payRuns, paySettings } from "./schema";
@@ -156,20 +158,64 @@ export async function getRateOptions(): Promise<RateOptions> {
   };
 }
 
-export type RunListRow = { id: string; periodStart: string; periodEnd: string; status: RunStatus; lineCount: number; createdAt: string; isTest: boolean };
+export type RunListRow = {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  status: RunStatus;
+  lineCount: number;
+  createdAt: string;
+  isTest: boolean;
+  peopleCount: number;
+  paidCount: number;
+  released: boolean;
+  /** 1 to 4 (prepared, in review, approved, paid); 0 for a cancelled run. */
+  step: 0 | 1 | 2 | 3 | 4;
+  /** What this viewer does next (or is waiting for), and whether the action is theirs. Null when there is nothing to say. */
+  nextStep: { label: string; mine: boolean } | null;
+};
 
-/** One page of runs, newest period first. Archived runs (test runs and cancelled runs) are left out unless `archived` is true. Shows no figures. */
+export type RunsSummary = {
+  /** The oldest recent cutoff with no real run yet, or null when every recent cutoff has one. */
+  nextCutoff: { start: string; end: string; daysLeft: number } | null;
+  inReview: number;
+  /** The newest real run that is approved and not fully paid. */
+  approvedNotPaid: { count: number; periodStart: string; periodEnd: string; paidCount: number; peopleCount: number } | null;
+  lastPaid: { periodStart: string; periodEnd: string; peopleCount: number } | null;
+};
+
+const PEOPLE = (run: ReturnType<typeof sql>) => sql<number>`(select count(distinct l.employee_id)::int from payroll.pay_run_lines l where l.run_id = ${run} and not l.excluded)`;
+const PAID = (run: ReturnType<typeof sql>) => sql<number>`(select count(distinct p.employee_id)::int from payroll.pay_payments p where p.run_id = ${run})`;
+
+/**
+ * One page of runs, newest period first, with the people and payments counted, the step each run is at and what this viewer does next.
+ * Archived runs (test runs and cancelled runs) are left out unless `archived` is true. `view` narrows the list to the runs that need this
+ * viewer ("action") or to test runs. Also returns the summary tiles (real runs only). Counts and dates, never a figure.
+ */
 export async function getRuns(
   paging: { page: number; pageSize: number },
-  options: { archived?: boolean } = {},
-): Promise<{ rows: RunListRow[]; total: number; archivedCount: number; showingArchived: boolean; canPrepare: boolean; canPurge: boolean }> {
+  options: { archived?: boolean; view?: RunsView } = {},
+): Promise<{ rows: RunListRow[]; total: number; archivedCount: number; showingArchived: boolean; canPrepare: boolean; canPurge: boolean; view: RunsView; actionCount: number; summary: RunsSummary }> {
   const actor = await requireUser();
   await authorize(actor, "payroll.view");
 
+  const rights: ViewerRights = { prepare: can(actor, "payroll.prepare"), approve: can(actor, "payroll.approve"), markPaid: can(actor, "payroll.mark_paid"), release: can(actor, "payroll.release_statements") };
   const showingArchived = options.archived === true;
-  const shown = showingArchived ? isNotNull(payRuns.archivedAt) : isNull(payRuns.archivedAt);
+  const view = showingArchived ? "all" : (options.view ?? "all");
+  const released = sql<boolean>`exists (select 1 from payroll.pay_run_releases rr where rr.run_id = ${payRuns.id})`;
+  // The runs that wait for this viewer: a draft for a Preparer, a run in review for an Approver, an approved run for someone who pays, a paid real run nobody has released yet.
+  const mine = or(
+    rights.prepare ? eq(payRuns.status, "draft") : undefined,
+    rights.approve ? eq(payRuns.status, "in_review") : undefined,
+    rights.markPaid ? eq(payRuns.status, "approved") : undefined,
+    rights.release ? and(eq(payRuns.status, "paid"), eq(payRuns.isTest, false), sql`not ${released}`) : undefined,
+  );
+  const base = showingArchived ? isNotNull(payRuns.archivedAt) : isNull(payRuns.archivedAt);
+  const shown = view === "test" ? and(base, eq(payRuns.isTest, true)) : view === "action" ? and(base, mine ?? sql`false`) : base;
+
   const [{ total }] = await db.select({ total: count() }).from(payRuns).where(shown);
   const [{ archivedCount }] = await db.select({ archivedCount: count() }).from(payRuns).where(isNotNull(payRuns.archivedAt));
+  const [{ actionCount }] = await db.select({ actionCount: count() }).from(payRuns).where(and(isNull(payRuns.archivedAt), mine ?? sql`false`));
   const rows = await db
     .select({
       id: payRuns.id,
@@ -179,19 +225,69 @@ export async function getRuns(
       isTest: payRuns.isTest,
       createdAt: payRuns.createdAt,
       lineCount: sql<number>`(select count(*)::int from payroll.pay_run_lines l where l.run_id = ${payRuns.id})`,
+      peopleCount: PEOPLE(sql`${payRuns.id}`),
+      paidCount: PAID(sql`${payRuns.id}`),
+      released,
     })
     .from(payRuns)
     .where(shown)
     .orderBy(desc(payRuns.periodStart), desc(payRuns.createdAt))
     .limit(paging.pageSize)
     .offset((paging.page - 1) * paging.pageSize);
+
+  // The tiles: real runs only (a practice run never counts), nothing archived or cancelled.
+  const recent = recentPeriods("semi_monthly", today(), 3);
+  const real = and(eq(payRuns.isTest, false), isNull(payRuns.archivedAt), ne(payRuns.status, "cancelled"));
+  const realRuns = await db
+    .select({ start: payRuns.periodStart })
+    .from(payRuns)
+    .where(and(real, inArray(payRuns.periodStart, recent.map((p) => p.start))));
+  const [{ inReview }] = await db.select({ inReview: count() }).from(payRuns).where(and(real, eq(payRuns.status, "in_review")));
+  const [approved] = await db
+    .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, peopleCount: PEOPLE(sql`${payRuns.id}`), paidCount: PAID(sql`${payRuns.id}`) })
+    .from(payRuns)
+    .where(and(real, eq(payRuns.status, "approved")))
+    .orderBy(desc(payRuns.periodStart))
+    .limit(1);
+  const [{ approvedCount }] = await db.select({ approvedCount: count() }).from(payRuns).where(and(real, eq(payRuns.status, "approved")));
+  const [paid] = await db
+    .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, peopleCount: PEOPLE(sql`${payRuns.id}`) })
+    .from(payRuns)
+    .where(and(real, eq(payRuns.status, "paid")))
+    .orderBy(desc(payRuns.periodStart))
+    .limit(1);
+
   return {
-    rows: rows.map((r) => ({ ...r, status: r.status as RunStatus, createdAt: r.createdAt.toISOString() })),
+    rows: rows.map((r) => {
+      const status = r.status as RunStatus;
+      return {
+        id: r.id,
+        periodStart: r.periodStart,
+        periodEnd: r.periodEnd,
+        status,
+        lineCount: r.lineCount,
+        createdAt: r.createdAt.toISOString(),
+        isTest: r.isTest,
+        peopleCount: r.peopleCount,
+        paidCount: r.paidCount,
+        released: r.released,
+        step: stepOf(status),
+        nextStep: nextStepOf({ status, isTest: r.isTest, peopleCount: r.peopleCount, paidCount: r.paidCount, released: r.released }, rights),
+      };
+    }),
     total,
     archivedCount,
     showingArchived,
-    canPrepare: can(actor, "payroll.prepare"),
+    canPrepare: rights.prepare,
     canPurge: can(actor, "payroll.purge_archived"),
+    view,
+    actionCount,
+    summary: {
+      nextCutoff: nextCutoff(recent, new Set(realRuns.map((r) => r.start)), today()),
+      inReview,
+      approvedNotPaid: approved ? { count: approvedCount, periodStart: approved.periodStart, periodEnd: approved.periodEnd, paidCount: approved.paidCount, peopleCount: approved.peopleCount } : null,
+      lastPaid: paid ?? null,
+    },
   };
 }
 

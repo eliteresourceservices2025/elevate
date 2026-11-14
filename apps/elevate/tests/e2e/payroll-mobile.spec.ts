@@ -9,10 +9,13 @@ import { createEmployeeAccount, endPayLinesOf, pickFreePayrollPeriod, signInEnro
 
 const SHOTS = "test-results/mobile";
 
-const DEVICES = [
+type Device = { name: string; viewport: { width: number; height: number }; userAgent: string; scale: number; /** A laptop in the dark theme (no touch, not a phone). */ dark?: boolean };
+
+const DEVICES: readonly Device[] = [
   { name: "phone", viewport: { width: 390, height: 844 }, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1", scale: 3 },
   { name: "tablet", viewport: { width: 820, height: 1180 }, userAgent: "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1", scale: 2 },
-] as const;
+  { name: "laptop-dark", viewport: { width: 1366, height: 900 }, userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36", scale: 1, dark: true },
+];
 
 async function setLevel(page: Page, email: string, level: "Preparer" | "Approver") {
   await page.goto("/settings/payroll-access");
@@ -59,8 +62,8 @@ async function onScreen(page: Page, locator: ReturnType<Page["locator"]>, label:
   expect(box!.y, `${label} starts above the screen`).toBeGreaterThanOrEqual(-1);
 }
 
-async function open(browser: Browser, device: (typeof DEVICES)[number]) {
-  const context = await browser.newContext({ viewport: device.viewport, userAgent: device.userAgent, deviceScaleFactor: device.scale, isMobile: true, hasTouch: true });
+async function open(browser: Browser, device: Device) {
+  const context = await browser.newContext({ viewport: device.viewport, userAgent: device.userAgent, deviceScaleFactor: device.scale, isMobile: !device.dark, hasTouch: !device.dark, ...(device.dark ? { colorScheme: "dark" as const } : {}) });
   return context.newPage();
 }
 
@@ -76,6 +79,7 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
   const setup = await createEmployeeAccount("Sue", `Setup${stamp}`); // makes the data on a desktop, so the phone and tablet accounts sign in for the first time on their own device
   const phoneUser = await createEmployeeAccount("Pia", `Phone${stamp}`, { roles: ["executive"] });
   const tabletUser = await createEmployeeAccount("Tia", `Tablet${stamp}`, { roles: ["executive"] });
+  const laptopUser = await createEmployeeAccount("Lia", `Laptop${stamp}`, { roles: ["executive"] });
 
   const desktop = async () => (await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage());
   const adminPage = await desktop();
@@ -87,6 +91,7 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
     await setLevel(adminPage, setup.email, "Preparer");
     await setLevel(adminPage, phoneUser.email, "Preparer");
     await setLevel(adminPage, tabletUser.email, "Preparer");
+    await setLevel(adminPage, laptopUser.email, "Preparer");
     await setLevel(adminPage, approver.email, "Approver");
 
     // Data, made on a desktop: a pay line, a draft run, and a test run that is approved (so there are statements to open).
@@ -127,10 +132,11 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
     const failures: string[] = [];
     for (const device of DEVICES) {
       const page = await open(browser, device);
-      await signInEnrollingMfa(page, device.name === "phone" ? { ...phoneUser } : { ...tabletUser });
+      await signInEnrollingMfa(page, { ...(device.name === "phone" ? phoneUser : device.name === "tablet" ? tabletUser : laptopUser) });
       const pages: { path: string; name: string; heading: RegExp }[] = [
         { path: "/dashboard", name: "dashboard", heading: /./ },
         { path: "/payroll", name: "runs", heading: /^Payroll$/ },
+        { path: "/payroll?view=action", name: "runs-needs-you", heading: /^Payroll$/ },
         { path: `/payroll/${draftRun}`, name: "run-sheet-draft", heading: /^Pay run / },
         { path: `/payroll/${approvedRun}`, name: "run-sheet-approved", heading: /^Pay run / },
         { path: `/payroll/${draftRun}/import`, name: "import", heading: /^Import a Jibble timesheet$/ },
@@ -140,6 +146,7 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
         { path: "/payroll/history", name: "history", heading: /./ },
         { path: "/payroll/settings", name: "settings", heading: /./ },
         { path: "/invoices", name: "invoices", heading: /^Invoices$/ },
+        { path: "/invoices?show=all", name: "invoices-all", heading: /^Invoices$/ },
         { path: "/invoices/rates", name: "billing-rates", heading: /^Billing rates$/ },
       ];
       for (const p of pages) {
@@ -272,7 +279,7 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
           .map((el) => ({ text: (el.textContent ?? "").trim().slice(0, 30), h: el.getBoundingClientRect().height }))
           .filter((b) => b.h > 0 && b.h < 32),
       );
-      if (small.length > 0) failures.push(`${device.name}: buttons under 32px tall: ${small.map((b) => `${b.text} (${Math.round(b.h)})`).join(", ")}`);
+      if (small.length > 0 && !device.dark) failures.push(`${device.name}: buttons under 32px tall: ${small.map((b) => `${b.text} (${Math.round(b.h)})`).join(", ")}`);
     }
     expect(failures, failures.join("\n")).toEqual([]);
   } finally {

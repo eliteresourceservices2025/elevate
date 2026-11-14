@@ -46,7 +46,7 @@ An invoice never changes once it is made. Open it and choose **Invoice options**
 - **Archive this test invoice** hides a test invoice from the list. You can restore it.
 - **Void this invoice** is for a real invoice. Give a reason. It stays on record, is stamped **VOID** on the page and the PDF, leaves the main list and its number is never used again.
 
-Archived, void and replaced invoices are hidden from the list; use **Show archived, void and replaced invoices** to see them.
+The top of the **Invoices** page shows what real, live invoices bill this month, how many are live, and how many are kept out of the list. Use the search box to find an invoice by number or client name. The **Live**, **All** and **Test** buttons choose what the list shows: **Live** hides void, replaced and archived invoices, **All** shows everything, and **Test** shows test invoices. A void or replaced invoice is greyed out with its total crossed through. Click anywhere on a row to open the invoice, or use the download icon to get the PDF. To delete archived test invoices for good, choose **All** or **Test** first. To delete void and replaced invoices for good, choose **All** and then **Delete void and replaced invoices for good**. This removes real invoices too, so download the PDF first if you want a copy. A live invoice is never deleted, and the numbers of deleted invoices are never used again, so the numbering has gaps.
 
 # Invoices from a test run
 

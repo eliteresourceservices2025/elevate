@@ -11,10 +11,12 @@ import { cn } from "@/lib/utils"
  * `stack` turns each row into a card below the tablet width (the first cell is the card title, every other cell shows its `label`),
  * for a list people work through on a phone. Keep a plain scrolling table for a dense comparison.
  * Inside #main every table gets the tinted header and striped rows from globals.css; `plain` opts this table out (data-plain).
+ * `stickyHeader` keeps the header row in view while the page scrolls, from the xl width up: there the box clips instead of scrolling sideways (a
+ * scroll box would stop `position: sticky`), so use it only on a table that fits a wide laptop. Below xl it scrolls sideways as usual (cards on a phone).
  * `dragScroll` lets a mouse user grab the table and drag it sideways (see useDragScroll); the box then takes keyboard focus so the arrow
  * keys scroll it too, and `scrollLabel` names it for a screen reader. Use it on a wide table people read across, like the pay run sheet.
  */
-function Table({ className, containerClassName, plain = false, stack = false, dragScroll = false, scrollLabel, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; plain?: boolean; stack?: boolean; dragScroll?: boolean; scrollLabel?: string }) {
+function Table({ className, containerClassName, plain = false, stack = false, stickyHeader = false, dragScroll = false, scrollLabel, ...props }: React.ComponentProps<"table"> & { containerClassName?: string; plain?: boolean; stack?: boolean; stickyHeader?: boolean; dragScroll?: boolean; scrollLabel?: string }) {
   const box = useDragScroll<HTMLDivElement>(dragScroll)
   return (
     <div
@@ -22,7 +24,8 @@ function Table({ className, containerClassName, plain = false, stack = false, dr
       data-slot="table-container"
       {...(dragScroll ? { role: "region", "aria-label": scrollLabel ?? "Scrollable table" } : {})}
       className={cn(
-        "scroll-shadow-x relative w-full overflow-x-auto rounded-xl border bg-card shadow-sm in-[.scroll-shadow-x]:rounded-none in-[.scroll-shadow-x]:border-0 in-[.scroll-shadow-x]:shadow-none",
+        "scroll-shadow-x relative w-full rounded-xl border bg-card shadow-sm in-[.scroll-shadow-x]:rounded-none in-[.scroll-shadow-x]:border-0 in-[.scroll-shadow-x]:shadow-none",
+        stickyHeader ? "overflow-x-auto xl:overflow-x-clip" : "overflow-x-auto",
         dragScroll && "outline-none focus-visible:ring-2 focus-visible:ring-ring data-scrollable:cursor-grab data-dragging:cursor-grabbing data-dragging:select-none",
         containerClassName
       )}
@@ -31,7 +34,7 @@ function Table({ className, containerClassName, plain = false, stack = false, dr
         data-slot="table"
         data-plain={plain ? "" : undefined}
         data-stack={stack ? "" : undefined}
-        className={cn("w-full caption-bottom text-sm", className)}
+        className={cn("w-full caption-bottom text-sm", stickyHeader && "xl:[&_thead_th]:sticky xl:[&_thead_th]:top-0 xl:[&_thead_th]:z-10 xl:[&_thead_th]:bg-[color-mix(in_oklab,var(--primary)_10%,var(--card))]", className)}
         {...props}
       />
     </div>

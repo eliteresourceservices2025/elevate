@@ -197,6 +197,7 @@ const EXPECTED: Record<string, string> = {
   "invoices.manage_rates": "A A - - A -",
   "invoices.manage": "A A - - A -",
   "invoices.purge_archived": "A A - - A -",
+  "invoices.purge_retired": "A A - - A -",
 };
 
 const SCOPE_CODE: Record<string, Scope | null> = { A: "all", T: "team", O: "own", "-": null };

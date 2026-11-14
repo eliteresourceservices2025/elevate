@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, index, integer, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, primaryKey, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { ops } from "@/modules/audit/schema";
 import { users } from "@/modules/core/schema";
 import { clients, employees } from "@/modules/people/schema";
@@ -92,5 +92,21 @@ export const invoiceEvents = ops
       createdAt: createdAt(),
     },
     (t) => [index("invoice_events_invoice_idx").on(t.invoiceId, t.createdAt), check("invoice_events_kind_chk", sql`${t.kind} in ('archived','restored','voided','superseded')`)],
+  )
+  .enableRLS();
+
+/**
+ * The highest invoice number deleted for each year and series (real or test). A deleted real invoice leaves its number behind here, so the next
+ * invoice starts above it and a number is never used twice. Written only by the delete function; the floor only goes up and a row is never removed.
+ */
+export const invoiceNumberFloor = ops
+  .table(
+    "invoice_number_floor",
+    {
+      year: smallint("year").notNull(),
+      isTest: boolean("is_test").notNull(),
+      seq: integer("seq").notNull(),
+    },
+    (t) => [primaryKey({ columns: [t.year, t.isTest] })],
   )
   .enableRLS();
