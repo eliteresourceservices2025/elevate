@@ -90,7 +90,7 @@ The sheet starts in name order (last name, then first name). To see it another w
 
 - **Name, A to Z** or **Z to A**.
 - **Client, then name.** Clients A to Z, people with no client last, and the people of one client in name order.
-- **Monthly rate**, high to low or low to high. (Turn on **Show every column** to see the rate column.)
+- **Monthly rate**, high to low or low to high. (The rate column is one of the columns the sheet shows by default on a laptop. Untick **Show every column** for a shorter sheet.)
 - **Total payable**, high to low or low to high.
 - **Biggest change from last run.** The people whose total moved the most, up or down, come first; a person with no earlier run comes last.
 - **Not yet checked first** and **Needs attention first**, for reading a run before you send or approve it.

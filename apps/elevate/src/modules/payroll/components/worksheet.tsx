@@ -13,8 +13,8 @@ import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
 import { WorksheetColumns } from "./worksheet-columns";
 
 // The sheet. Below the tablet width each person is a compact card (name, net, status, what needs attention) that opens to every figure,
-// with the Actions menu always beside it. From the tablet width up it is a table with a short set of columns, and "Show every column"
-// adds the rest. Name and client stay in view when the table scrolls sideways. Each person is drawn twice (card and row, one hidden), so the
+// with the Actions menu always beside it. From the tablet width up it is a table with every column (Finance wants to see all items); unticking
+// "Show every column" gives a short set. Name and client stay in view when the table scrolls sideways. Each person is drawn twice (card and row, one hidden), so the
 // two copies have different ids (card-<id>, row-<id>); the readiness screen links to #line-<id> and go-to-line.tsx finds the visible one.
 
 const FROZEN = "md:sticky z-10 bg-card";
