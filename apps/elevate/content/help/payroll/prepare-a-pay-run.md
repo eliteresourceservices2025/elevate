@@ -147,6 +147,7 @@ When everyone is marked paid, the run becomes **Paid**. The contractors' stateme
 
 - **Writing a client's or patient's details in a reason.** Reasons are kept in the change history. Never put client or patient information in them.
 - **Sending a run for review with warnings you have not read.** Read each one.
+- **A person's statement shows "Line: 1" and "Line: 2" with the same client and the same pay.** They have two pay lines for the same client and alias in this cutoff, and each pays a full cutoff, so they would be paid twice. The run warns **Paid twice for the same client**. Usually the old line was replaced by a new one: end the old line the day before the new one starts, then click **Update people**. Or take one off this run: **Actions**, then **Remove from this run**. To pay someone for two roles, give each pay line its own alias. The Rates tab no longer lets you add two overlapping lines for the same client and alias.
 - **Choosing the wrong period.** Cancel and create the run again; do not try to edit it.
 - **Expecting to approve your own run.** The person who prepared or changed a run, checked a line on it, or wrote a rate it pays, can never approve it.
 - **Looking for a dollar rate or dollar allowance.** There are none. Type every amount in pesos.

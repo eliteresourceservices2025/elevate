@@ -110,6 +110,30 @@ const detailOf = (row: Pick<LineRow, "hoursPerDay" | "paymentMethod" | "effectiv
   clientId: row.clientId,
 });
 
+/**
+ * A second pay line for the same person, client and alias whose dates overlap the new one would pay the person twice for the same cutoff
+ * (each line pays a full cutoff). Refused with a plain way out. Different aliases, different clients and lines that do not overlap are fine.
+ */
+async function refuseDuplicateLine(tx: Tx, v: { employeeId: string; clientId: string | null; alias: string | null; from: string; to: string | null; exceptLineKey?: string }) {
+  const rows = await tx.select().from(payLines).where(eq(payLines.employeeId, v.employeeId));
+  const byKey = new Map<string, (typeof rows)[number][]>();
+  for (const r of rows) byKey.set(r.lineKey, [...(byKey.get(r.lineKey) ?? []), r]);
+  const wanted = (v.alias ?? "").trim().toLowerCase();
+  for (const group of byKey.values()) {
+    if (group[0].lineKey === v.exceptLineKey) continue;
+    const newest = [...group].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : a.effectiveFrom > b.effectiveFrom ? -1 : b.createdAt.getTime() - a.createdAt.getTime()))[0];
+    if ((newest.clientId ?? null) !== v.clientId || (newest.alias ?? "").trim().toLowerCase() !== wanted) continue;
+    const start = group.map((g) => g.effectiveFrom).sort()[0];
+    const end = lineLastDay(group);
+    if (start <= (v.to ?? "9999-12-31") && v.from <= (end ?? "9999-12-31")) {
+      return fail(
+        `This person already has a pay line for the same client and alias from ${start}${end ? ` to ${end}` : ""}. A second one for the same dates would pay them twice. Change that line instead (the change keeps its history), or end it before this one starts. To pay them for two roles, give each line its own alias.`,
+      );
+    }
+  }
+  return null;
+}
+
 export async function createPayLine(input: unknown): Promise<ActionResult<{ lineKey: string }>> {
   const actor = await requireUser();
 
@@ -123,6 +147,8 @@ export async function createPayLine(input: unknown): Promise<ActionResult<{ line
     const result = await db.transaction(async (tx) => {
       const refused = await checkPersonAndClient(tx, v.employeeId, v.clientId);
       if (refused) return refused;
+      const duplicate = await refuseDuplicateLine(tx, { employeeId: v.employeeId, clientId: v.clientId ?? null, alias: v.alias ?? null, from: v.effectiveFrom, to: v.endsOn ?? null });
+      if (duplicate) return duplicate;
 
       const id = randomUUID();
       const lineKey = randomUUID();
@@ -171,6 +197,12 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
       if (refused) return refused;
       if (lineLastDay(versions) !== null) return fail("This pay line has ended. Add a new line instead.");
       if (v.effectiveFrom < latest.effectiveFrom) return fail("The new version can't start before the current one does.");
+      // Changing the client or alias must not make this line a twin of another line of the same person.
+      if ((v.clientId ?? null) !== (latest.clientId ?? null) || (v.alias ?? "").trim().toLowerCase() !== (latest.alias ?? "").trim().toLowerCase()) {
+        const from = versions.map((x) => x.effectiveFrom).sort()[0];
+        const twin = await refuseDuplicateLine(tx, { employeeId: latest.employeeId, clientId: v.clientId ?? null, alias: v.alias ?? null, from, to: v.endsOn ?? null, exceptLineKey: lineKey });
+        if (twin) return twin;
+      }
 
       const before = decryptLineAmounts(latest.id, latest.amountsEnc);
       const id = randomUUID();

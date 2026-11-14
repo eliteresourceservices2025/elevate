@@ -857,6 +857,10 @@ function unassignedOf(data: RunData): { employeeId: string; rows: ItemRow[] }[] 
  */
 export async function checkInputsOf(executor: Executor, data: RunData, submitterUserId: string | null): Promise<ChecksInput> {
   const submitterEmployeeId = submitterUserId ? await employeeIdForUser(executor, submitterUserId) : null;
+  // Two live lines for the same person, client and alias each pay a full cutoff: the person would be paid twice.
+  const sameKey = (r: (typeof data.rows)[number]) => `${r.runLine.employeeId}|${r.runLine.clientId ?? ""}|${(r.runLine.alias ?? "").trim().toLowerCase()}`;
+  const seen = new Map<string, number>();
+  for (const r of data.rows) seen.set(sameKey(r), (seen.get(sameKey(r)) ?? 0) + 1);
   const lines: CheckLine[] = data.rows.map((r) => {
     const payload = data.payloads.get(r.runLine.id) ?? null;
     const unreadable = lineUnreadable(data, r.runLine.id);
@@ -877,6 +881,7 @@ export async function checkInputsOf(executor: Executor, data: RunData, submitter
         payload !== null &&
         payload.clientHoursHundredths === 0n &&
         !data.items.some((i) => i.runLineId === r.runLine.id && i.type === "client_hours" && i.state === "suggested"),
+      duplicateLine: (seen.get(sameKey(r)) ?? 0) > 1,
       confirmedBy: r.runLine.confirmedBy,
     };
   });
