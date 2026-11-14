@@ -610,26 +610,45 @@ describe("reopening approved hours", () => {
     expect(!old.ok && old.error).toContain("weeks back");
   });
 
-  it("refuses days that are already in an approved or paid payroll run, and allows them once the run is cancelled", async () => {
-    const lead = await person("RoPayLead", { roles: ["team_lead", "employee"] });
-    const worker = await person("RoPayWorker", { managerId: lead.employeeId });
+  it("sees a day in an approved or paid payroll run, but not a draft, a practice run, or days outside the period", async () => {
+    // Everything here is rolled back: the rows below are not real pay lines and must not stay in the shared test database.
+    class Undo extends Error {}
+    const { hasConfirmedRunOver } = await import("@/modules/payroll/hours-guard");
+    const worker = await person("RoGuard");
     const week = lastWeek();
-    await normalWeek(worker.employeeId, week);
-    as(lead.user);
-    expect((await approve(worker.employeeId, week)).ok).toBe(true);
+    const end = addDays(week, 6);
+    const build = async (tx: Parameters<Parameters<typeof db.transaction>[0]>[0], isTest: boolean) => {
+      const lineId = randomUUID();
+      const runId = randomUUID();
+      await tx.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, effective_from, amounts_enc, created_by) values (${lineId}, ${randomUUID()}, ${worker.employeeId}, 8, '2026-01-01', 'x', ${hr.id})`);
+      await tx.execute(sql`insert into payroll.pay_runs (id, period_start, period_end, status, settings_snapshot, created_by, is_test) values (${runId}, ${week}::date, ${end}::date, 'draft', '{}'::jsonb, ${hr.id}, ${isTest})`);
+      await tx.execute(sql`insert into payroll.pay_run_lines (id, run_id, line_id, employee_id, payload_enc) values (${randomUUID()}, ${runId}, ${lineId}, ${worker.employeeId}, 'x')`);
+      return runId;
+    };
+    const approve = async (tx: Parameters<Parameters<typeof db.transaction>[0]>[0], runId: string) => {
+      await tx.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
+      await tx.execute(sql`update payroll.pay_runs set status = 'approved' where id = ${runId}`);
+    };
 
-    const runId = randomUUID();
-    const lineId = randomUUID();
-    const end = addDays(week, 6 + (Date.now() % 20)); // a period of its own, so reruns do not meet the one-run-per-period rule
-    await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, effective_from, amounts_enc, created_by) values (${lineId}, ${randomUUID()}, ${worker.employeeId}, 8, '2026-01-01', 'x', ${hr.id})`);
-    await db.execute(sql`insert into payroll.pay_runs (id, period_start, period_end, status, settings_snapshot, created_by) values (${runId}, ${week}::date, ${end}::date, 'draft', '{}'::jsonb, ${hr.id})`);
-    await db.execute(sql`insert into payroll.pay_run_lines (id, run_id, line_id, employee_id, payload_enc) values (${randomUUID()}, ${runId}, ${lineId}, ${worker.employeeId}, 'x')`);
+    await expect(
+      db.transaction(async (tx) => {
+        const runId = await build(tx, false);
+        expect(await hasConfirmedRunOver(tx, worker.employeeId, week, week)).toBe(false); // a draft run does not block
+        await approve(tx, runId);
+        expect(await hasConfirmedRunOver(tx, worker.employeeId, week, week)).toBe(true);
+        expect(await hasConfirmedRunOver(tx, worker.employeeId, addDays(week, -3), week)).toBe(true); // a range that touches the period
+        expect(await hasConfirmedRunOver(tx, worker.employeeId, addDays(end, 1), addDays(end, 5))).toBe(false); // outside the period
+        expect(await hasConfirmedRunOver(tx, randomUUID(), week, week)).toBe(false); // someone else's days
+        throw new Undo();
+      }),
+    ).rejects.toThrow(Undo);
 
-    // A draft run does not stop a reopen (its suggestions simply refresh), so check the guard with an approved one
-    await db.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
-    await db.execute(sql`update payroll.pay_runs set status = 'approved' where id = ${runId}`);
-    const blocked = await reopen(worker.employeeId, week, week);
-    expect(blocked).toEqual({ ok: false, error: "Those days are already in an approved or paid payroll run. Correct them in Payroll instead." });
-    expect(await stateOf(worker.employeeId, week)).toBe("approved");
+    await expect(
+      db.transaction(async (tx) => {
+        await approve(tx, await build(tx, true));
+        expect(await hasConfirmedRunOver(tx, worker.employeeId, week, week)).toBe(false); // a practice run never blocks
+        throw new Undo();
+      }),
+    ).rejects.toThrow(Undo);
   });
 });
