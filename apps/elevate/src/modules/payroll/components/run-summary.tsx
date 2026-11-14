@@ -1,7 +1,5 @@
-import Link from "next/link";
-import { cn } from "@/lib/utils";
 import type { RunsSummary } from "../queries";
-import { cutoffNote, shortRange, type RunsView } from "../runs-list";
+import { cutoffNote, shortRange } from "../runs-list";
 
 // The four tiles above the runs list and the filter chips. Dates and counts only: the list never shows an amount.
 
@@ -30,30 +28,5 @@ export function RunSummaryTiles({ summary }: { summary: RunsSummary }) {
       />
       <Tile label="Last fully paid" value={lastPaid ? shortRange(lastPaid.periodStart, lastPaid.periodEnd) : "None yet"} note={lastPaid ? `${lastPaid.peopleCount} ${lastPaid.peopleCount === 1 ? "person" : "people"}` : "No paid run yet"} />
     </div>
-  );
-}
-
-const CHIP = "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors pointer-coarse:h-11";
-
-export function RunFilters({ view, actionCount }: { view: RunsView; actionCount: number }) {
-  const items: { view: RunsView; label: string; count?: number }[] = [
-    { view: "all", label: "All" },
-    { view: "action", label: "Needs you", count: actionCount },
-    { view: "test", label: "Test runs" },
-  ];
-  return (
-    <nav aria-label="Filter runs" className="flex flex-wrap items-center gap-2">
-      {items.map((i) => (
-        <Link
-          key={i.view}
-          href={i.view === "all" ? "/payroll" : `/payroll?view=${i.view}`}
-          aria-current={view === i.view ? "page" : undefined}
-          className={cn(CHIP, view === i.view ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}
-        >
-          {i.label}
-          {i.count !== undefined ? <span className="tabular-nums">{i.count}</span> : null}
-        </Link>
-      ))}
-    </nav>
   );
 }

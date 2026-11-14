@@ -14,7 +14,7 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/modules/audit/write", () => ({ writeAudit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-const { previewInvoiceRun, createInvoice, addBillRate, archiveInvoice, purgeArchivedInvoices, purgeRetiredInvoices, restoreInvoice, voidInvoice } = await import("@/modules/invoices/actions");
+const { previewInvoiceRun, createInvoice, addBillRate, archiveInvoice, archiveInvoices, deleteInvoices, restoreInvoice, restoreInvoices, voidInvoice } = await import("@/modules/invoices/actions");
 const { listInvoices, listInvoiceableRuns, getInvoice, getBillRates, getInvoiceAbilities } = await import("@/modules/invoices/queries");
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -34,6 +34,9 @@ const cases: { name: string; call: () => Promise<{ ok: boolean; error?: string }
   { name: "archiveInvoice", call: () => archiveInvoice({ invoiceId: OTHER, reason: "Practice done" }) },
   { name: "restoreInvoice", call: () => restoreInvoice({ invoiceId: OTHER }) },
   { name: "voidInvoice", call: () => voidInvoice({ invoiceId: OTHER, reason: "Wrong client" }) },
+  { name: "archiveInvoices (bulk)", call: () => archiveInvoices({ ids: [OTHER], reason: "Practice done" }) },
+  { name: "restoreInvoices (bulk)", call: () => restoreInvoices({ ids: [OTHER] }) },
+  { name: "deleteInvoices (bulk)", call: () => deleteInvoices({ ids: [OTHER] }) },
 ];
 
 beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
@@ -67,6 +70,9 @@ describe("invoice actions, every role", () => {
           archiveInvoice: () => archiveInvoice({ invoiceId: "nope" }),
           restoreInvoice: () => restoreInvoice({ invoiceId: "nope" }),
           voidInvoice: () => voidInvoice({ invoiceId: OTHER, reason: "   " }),
+          "archiveInvoices (bulk)": () => archiveInvoices({ ids: [] }),
+          "restoreInvoices (bulk)": () => restoreInvoices({ ids: ["nope"] }),
+          "deleteInvoices (bulk)": () => deleteInvoices({ ids: Array.from({ length: 201 }, (_, i) => `22222222-2222-4222-8222-${String(i).padStart(12, "0")}`) }),
         };
         const bad = (await badCalls[c.name]()) as { ok: boolean; error?: string };
         expect(bad.ok).toBe(false);
@@ -75,44 +81,6 @@ describe("invoice actions, every role", () => {
       });
     });
   }
-});
-
-describe("purgeRetiredInvoices, every role", () => {
-  for (const role of ROLE_SLUGS) {
-    const allowed = ALLOWED.includes(role);
-    it(`${role}: ${allowed ? "passes authorize()" : "is refused"}`, async () => {
-      as(role);
-      const result = (await purgeRetiredInvoices()) as { ok: boolean; error?: string };
-      expect(result.ok).toBe(false); // the mocked database always fails the allowed path
-      if (allowed) expect(result.error).not.toBe(NO_ACCESS);
-      else expect(result.error).toBe(NO_ACCESS);
-    });
-  }
-  it("a payroll level alone opens nothing", async () => {
-    for (const level of ["preparer", "approver", "viewer"] as const) {
-      as("employee", level);
-      expect(((await purgeRetiredInvoices()) as { error?: string }).error).toBe(NO_ACCESS);
-    }
-  });
-});
-
-describe("purgeArchivedInvoices, every role", () => {
-  for (const role of ROLE_SLUGS) {
-    const allowed = ALLOWED.includes(role);
-    it(`${role}: ${allowed ? "passes authorize()" : "is refused"}`, async () => {
-      as(role);
-      const result = (await purgeArchivedInvoices()) as { ok: boolean; error?: string };
-      expect(result.ok).toBe(false); // the mocked database always fails the allowed path
-      if (allowed) expect(result.error).not.toBe(NO_ACCESS);
-      else expect(result.error).toBe(NO_ACCESS);
-    });
-  }
-  it("a payroll level alone opens nothing", async () => {
-    for (const level of ["preparer", "approver", "viewer"] as const) {
-      as("employee", level);
-      expect(((await purgeArchivedInvoices()) as { error?: string }).error).toBe(NO_ACCESS);
-    }
-  });
 });
 
 describe("invoice queries, every role", () => {

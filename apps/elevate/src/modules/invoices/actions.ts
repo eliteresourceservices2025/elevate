@@ -6,8 +6,9 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { formatDollars, formatHours } from "./calc";
-import { addBillRateIn, archiveInvoiceIn, createInvoiceIn, previewRun, purgeArchivedInvoicesIn, purgeRetiredInvoicesIn, restoreInvoiceIn, voidInvoiceIn } from "./service";
-import { addBillRateSchema, archiveInvoiceSchema, createInvoiceSchema, previewInvoiceRunSchema, restoreInvoiceSchema, voidInvoiceSchema } from "./validators";
+import { addBillRateIn, archiveInvoiceIn, archiveInvoicesIn, createInvoiceIn, deleteInvoicesIn, previewRun, restoreInvoiceIn, restoreInvoicesIn, voidInvoiceIn } from "./service";
+import type { BulkResult } from "@/lib/bulk";
+import { addBillRateSchema, archiveInvoiceSchema, bulkArchiveInvoicesSchema, bulkInvoicesSchema, createInvoiceSchema, previewInvoiceRunSchema, restoreInvoiceSchema, voidInvoiceSchema } from "./validators";
 
 // Every action: requireUser() first, then authorize() inside runAction, then Zod. Writes and their audit rows share one transaction.
 // Helpers that take the acting user live in service.ts.
@@ -113,25 +114,43 @@ export async function restoreInvoice(input: unknown): Promise<ActionResult> {
   });
 }
 
-/** Deletes every archived TEST invoice for good. Returns how many were deleted and how many archived ones had to stay. */
-export async function purgeArchivedInvoices(): Promise<ActionResult<{ deleted: number; kept: number }>> {
+/** Archives the ticked test invoices. Returns which were done and which were skipped, with the reason for each. */
+export async function archiveInvoices(input: unknown): Promise<ActionResult<BulkResult>> {
   const actor = await requireUser();
 
   return runAction(async () => {
-    await authorize(actor, "invoices.purge_archived");
-    const data = await db.transaction((tx) => purgeArchivedInvoicesIn(tx, actor));
+    await authorize(actor, "invoices.manage");
+    const parsed = bulkArchiveInvoicesSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const data = await db.transaction((tx) => archiveInvoicesIn(tx, actor, parsed.data));
     revalidatePath("/invoices");
     return { ok: true, data } as const;
   });
 }
 
-/** Deletes every void and replaced invoice for good (real ones too). The numbers of deleted real invoices are never used again. */
-export async function purgeRetiredInvoices(): Promise<ActionResult<{ deleted: number; kept: number }>> {
+/** Brings the ticked archived test invoices back. */
+export async function restoreInvoices(input: unknown): Promise<ActionResult<BulkResult>> {
   const actor = await requireUser();
 
   return runAction(async () => {
-    await authorize(actor, "invoices.purge_retired");
-    const data = await db.transaction((tx) => purgeRetiredInvoicesIn(tx, actor));
+    await authorize(actor, "invoices.manage");
+    const parsed = bulkInvoicesSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const data = await db.transaction((tx) => restoreInvoicesIn(tx, actor, parsed.data.ids));
+    revalidatePath("/invoices");
+    return { ok: true, data } as const;
+  });
+}
+
+/** Deletes the ticked invoices for good: void and replaced ones (real too) and archived test ones. A live invoice is skipped. */
+export async function deleteInvoices(input: unknown): Promise<ActionResult<BulkResult>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "invoices.delete");
+    const parsed = bulkInvoicesSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const data = await db.transaction((tx) => deleteInvoicesIn(tx, actor, parsed.data.ids));
     revalidatePath("/invoices");
     return { ok: true, data } as const;
   });

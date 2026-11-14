@@ -83,7 +83,7 @@ While you are still practising, mark a run as a **test run** so you can repeat t
 - **Start one:** in **New run**, tick **This is a test run**. A test run can repeat a period that already has a run.
 - **Mark one you already made:** open the run, choose **Run options**, then **Mark as a test run**, and give a short reason. This works until the run is marked paid.
 - **Repeat a cycle you already approved:** mark the old run as a test run, then choose **Archive this test run**. Its period is free, so you can create the real run again.
-- **Archive:** a test run can be archived in any status, and so can a cancelled run. It leaves the list and you can bring it back from **Archived runs** (open it, then **Run options**, **Restore this run**). Any other real run can never be archived. **Delete archived runs for good** on that list removes archived test and cancelled runs permanently.
+- **Archive:** a test run can be archived in any status, and so can a cancelled run. It leaves the list and you can bring it back from the **Archived** view (tick it, then **Bulk actions**, **Restore**, **Apply**). To tidy many at once, tick several runs and choose **Archive**. Any other real run can never be archived. To delete archived test and cancelled runs permanently, tick them in the Archived view and choose **Delete for good**.
 - **Nobody sees a statement from a test run.** The people on it are not told, and it never shows under **My pay**. An invoice made from a test run is numbered TEST and stamped TEST, and must not be sent.
 
 A test run can also cover any dates, up to 31 days (a part of a cutoff, or the dates of a Jibble file), while a real run is always one whole cutoff. To rehearse a whole pay cycle, see "Rehearse a pay cycle with a test run".

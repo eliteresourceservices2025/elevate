@@ -1,9 +1,7 @@
 import { Search } from "lucide-react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusChip } from "@/components/status-chip";
-import { cn } from "@/lib/utils";
 import { formatDollars } from "../calc";
 import type { InvoiceShow } from "../list-options";
 import type { InvoiceState } from "../service";
@@ -38,42 +36,19 @@ export function InvoiceSummaryTiles({ billedCents, month, issuedCount, liveCount
   );
 }
 
-const CHIP = "inline-flex h-8 items-center rounded-full px-3 text-sm font-medium transition-colors pointer-coarse:h-11";
-
-export function InvoiceFilters({ show, q }: { show: InvoiceShow; q: string }) {
-  const items: { show: InvoiceShow; label: string }[] = [
-    { show: "live", label: "Live" },
-    { show: "all", label: "All" },
-    { show: "test", label: "Test" },
-  ];
-  const href = (s: InvoiceShow) => {
-    const query = new URLSearchParams();
-    if (s !== "live") query.set("show", s);
-    if (q) query.set("q", q);
-    const text = query.toString();
-    return text ? `/invoices?${text}` : "/invoices";
-  };
+export function InvoiceSearch({ show, q }: { show: InvoiceShow; q: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <form action="/invoices" method="get" role="search" className="flex min-w-60 flex-1 items-center gap-2 sm:max-w-sm">
-        {show !== "live" ? <input type="hidden" name="show" value={show} /> : null}
-        <label className="sr-only" htmlFor="invoice-search">
-          Search invoices by number or client
-        </label>
-        <Input id="invoice-search" name="q" defaultValue={q} placeholder="Number or client" maxLength={80} className="h-(--control-h)" />
-        <Button type="submit" variant="outline" className="h-(--control-h)">
-          <Search className="size-4" aria-hidden />
-          Search
-        </Button>
-      </form>
-      <nav aria-label="Filter invoices" className="flex items-center gap-2">
-        {items.map((i) => (
-          <Link key={i.show} href={href(i.show)} aria-current={show === i.show ? "page" : undefined} className={cn(CHIP, show === i.show ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>
-            {i.label}
-          </Link>
-        ))}
-      </nav>
-    </div>
+    <form action="/invoices" method="get" role="search" className="flex min-w-60 items-center gap-2 sm:max-w-sm sm:flex-1">
+      {show !== "live" ? <input type="hidden" name="show" value={show} /> : null}
+      <label className="sr-only" htmlFor="invoice-search">
+        Search invoices by number or client
+      </label>
+      <Input id="invoice-search" name="q" defaultValue={q} placeholder="Number or client" maxLength={80} className="h-(--control-h)" />
+      <Button type="submit" variant="outline" className="h-(--control-h)">
+        <Search className="size-4" aria-hidden />
+        Search
+      </Button>
+    </form>
   );
 }
 

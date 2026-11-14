@@ -149,3 +149,8 @@ export const markPaidSchema = z.object({ runId: uuid, employeeId: uuid, referenc
 export type PayLineInput = z.input<typeof createPayLineSchema>;
 export type UpdatePayLineInput = z.input<typeof updatePayLineSchema>;
 export type PaySettingsInput = z.input<typeof savePaySettingsSchema>;
+
+/** The ticked runs: at least one, at most 200, each once. */
+const tickedRunIds = z.array(uuid).min(1).max(200).transform((a) => [...new Set(a)]);
+export const bulkRunsSchema = z.object({ ids: tickedRunIds });
+export const bulkArchiveRunsSchema = z.object({ ids: tickedRunIds, reason });

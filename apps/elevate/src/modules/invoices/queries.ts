@@ -7,7 +7,8 @@ import { pageInfo, paginate } from "@/lib/pagination";
 import { writeAudit } from "@/modules/audit/write";
 import { clients, employees } from "@/modules/people/schema";
 import { rateInForce } from "./calc";
-import { likePattern, parseShow, type InvoiceShow } from "./list-options";
+import type { BulkAction } from "@/lib/bulk";
+import { invoiceActions, invoiceWhy, likePattern, parseShow, type InvoiceShow } from "./list-options";
 import { invoices } from "./schema";
 import { decryptInvoice, invoiceToday, loadInvoiceView, readBillRates, readEvents, type InvoiceState, type InvoiceView } from "./service";
 
@@ -15,7 +16,10 @@ import { decryptInvoice, invoiceToday, loadInvoiceView, readBillRates, readEvent
 
 export { parseShow, type InvoiceShow };
 
-export type InvoiceListRow = { id: string; number: string; clientName: string; periodStart: string; periodEnd: string; runStatus: string; issuedOn: string; totalCents: bigint; unreadable: boolean; isTest: boolean; state: InvoiceState };
+export type InvoiceListRow = { id: string; number: string; clientName: string; periodStart: string; periodEnd: string; runStatus: string; issuedOn: string; totalCents: bigint; unreadable: boolean; isTest: boolean; state: InvoiceState; actions: BulkAction[]; whyNot: string | null; why: Partial<Record<BulkAction, string>> };
+
+/** The kind of an invoice's newest event (void, replaced, archived, restored), or null when it has none. */
+const LAST_KIND = sql`(select e.kind from ops.invoice_events e where e.invoice_id = ${invoices.id} order by e.created_at desc, e.id desc limit 1)`;
 
 /** Live means no event yet, or the newest one is a restore: the only invoices the default list shows. */
 const LIVE = sql`coalesce((select e.kind from ops.invoice_events e where e.invoice_id = ${invoices.id} order by e.created_at desc, e.id desc limit 1), 'restored') = 'restored'`;
@@ -33,34 +37,36 @@ export async function listInvoices(paging: { page: number; pageSize: number }, o
   const q = (options.q ?? "").trim().slice(0, 80);
   const pattern = likePattern(q);
   const search = q === "" ? undefined : or(ilike(invoices.number, pattern), sql`exists (select 1 from core.clients c where c.id = ${invoices.clientId} and c.name ilike ${pattern})`);
-  const scope = show === "live" ? LIVE : show === "test" ? eq(invoices.isTest, true) : undefined;
+  const scope =
+    show === "live" ? LIVE : show === "test" ? eq(invoices.isTest, true) : show === "void" ? sql`${LAST_KIND} = 'voided'` : show === "replaced" ? sql`${LAST_KIND} = 'superseded'` : show === "archived" ? sql`${LAST_KIND} = 'archived'` : undefined;
   const where = and(scope, search);
 
   const [{ total }] = await db.select({ total: count() }).from(invoices).where(where);
-  const [{ live }] = await db.select({ live: count() }).from(invoices).where(LIVE);
-  const [{ every }] = await db.select({ every: count() }).from(invoices);
+  // How many invoices each view holds (the numbers beside the view links).
+  const [counts] = await db
+    .select({
+      all: count(),
+      live: sql<number>`count(*) filter (where ${LIVE})::int`,
+      void: sql<number>`count(*) filter (where ${LAST_KIND} = 'voided')::int`,
+      replaced: sql<number>`count(*) filter (where ${LAST_KIND} = 'superseded')::int`,
+      test: sql<number>`count(*) filter (where ${invoices.isTest})::int`,
+      archived: sql<number>`count(*) filter (where ${LAST_KIND} = 'archived')::int`,
+    })
+    .from(invoices);
+  const live = counts.live;
+  const every = counts.all;
   const info = pageInfo(total, paging.page, paging.pageSize);
   const rows = await db.select().from(invoices).where(where).orderBy(desc(invoices.createdAt), desc(invoices.id)).limit(info.pageSize).offset(info.offset);
   const events = await readEvents(db, rows.map((r) => r.id));
   const list: InvoiceListRow[] = rows.map((r) => {
     try {
       const v = decryptInvoice(r, events);
-      return { id: r.id, number: r.number, clientName: v.clientName, periodStart: v.periodStart, periodEnd: v.periodEnd, runStatus: r.runStatus, issuedOn: r.issuedOn, totalCents: v.totalCents, unreadable: false, isTest: r.isTest, state: v.state };
+      return { id: r.id, number: r.number, clientName: v.clientName, periodStart: v.periodStart, periodEnd: v.periodEnd, runStatus: r.runStatus, issuedOn: r.issuedOn, totalCents: v.totalCents, unreadable: false, isTest: r.isTest, state: v.state, ...invoiceActions({ isTest: r.isTest, state: v.state }), why: invoiceWhy({ isTest: r.isTest, state: v.state }) };
     } catch (error) {
       console.error("invoice unreadable:", { invoiceId: r.id, error: error instanceof Error ? error.name : "UnknownError" });
-      return { id: r.id, number: r.number, clientName: "Can't be read", periodStart: "", periodEnd: "", runStatus: r.runStatus, issuedOn: r.issuedOn, totalCents: 0n, unreadable: true, isTest: r.isTest, state: "active" };
+      return { id: r.id, number: r.number, clientName: "Can't be read", periodStart: "", periodEnd: "", runStatus: r.runStatus, issuedOn: r.issuedOn, totalCents: 0n, unreadable: true, isTest: r.isTest, state: "active", actions: [], whyNot: "This invoice can't be read.", why: {} };
     }
   });
-  const [{ archivedTest }] = await db
-    .select({ archivedTest: count() })
-    .from(invoices)
-    .where(sql`${invoices.isTest} and (select e.kind from ops.invoice_events e where e.invoice_id = ${invoices.id} order by e.created_at desc, e.id desc limit 1) = 'archived'`);
-
-  const [{ retired }] = await db
-    .select({ retired: count() })
-    .from(invoices)
-    .where(sql`(select e.kind from ops.invoice_events e where e.invoice_id = ${invoices.id} order by e.created_at desc, e.id desc limit 1) in ('voided', 'superseded')`);
-
   // This month's real, live invoices (a practice invoice never counts): the sum of what they bill, in cents.
   const month = invoiceToday().slice(0, 7);
   const monthRows = await db
@@ -81,10 +87,9 @@ export async function listInvoices(paging: { page: number; pageSize: number }, o
     rows: list,
     info,
     canCreate: can(actor, "invoices.create"),
-    canPurge: can(actor, "invoices.purge_archived"),
-    archivedTestCount: archivedTest,
-    retiredCount: retired,
-    showingAll: show === "all",
+    canDelete: can(actor, "invoices.delete"),
+    canManage: can(actor, "invoices.manage"),
+    views: { all: counts.all, live: counts.live, void: counts.void, replaced: counts.replaced, test: counts.test, archived: counts.archived } satisfies Record<InvoiceShow, number>,
     show,
     q,
     hiddenCount: every - live,

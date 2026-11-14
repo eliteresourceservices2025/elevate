@@ -56,7 +56,7 @@ const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine,
   await import("@/modules/payroll/actions");
 const { payrollRunsAwaitingApproval, getPayments } = await import("@/modules/payroll/queries");
 const { exportRemitlyList, markPaid } = await import("@/modules/payroll/actions");
-const { markRunAsTest, archivePayRun, purgeArchivedPayRuns, restorePayRun, releaseStatements } = await import("@/modules/payroll/actions");
+const { markRunAsTest, archivePayRun, archiveRuns, deleteRuns, restorePayRun, restoreRuns, releaseStatements } = await import("@/modules/payroll/actions");
 
 const LEVELS = [null, "viewer", "approver", "preparer"] as const;
 const GENERIC = "Something went wrong. Try again.";
@@ -109,7 +109,9 @@ const testRunCalls: Record<string, () => Promise<{ ok: boolean; error?: string }
   archivePayRun: () => archivePayRun({ runId: RUN_ID, reason: "Practice cycle done" }),
   restorePayRun: () => restorePayRun({ runId: RUN_ID }),
   // Deleting archived test runs for good: the same two levels.
-  purgeArchivedPayRuns: () => purgeArchivedPayRuns(),
+  archiveRuns: () => archiveRuns({ ids: [RUN_ID], reason: "Practice cycle done" }),
+  restoreRuns: () => restoreRuns({ ids: [RUN_ID] }),
+  deleteRuns: () => deleteRuns({ ids: [RUN_ID] }),
   // Releasing the statements to the contractors works for both levels too (owner decision 2026-11-12).
   releaseStatements: () => releaseStatements({ runId: RUN_ID }),
   // Paying works for both levels too (owner decision 2026-11-12).
@@ -140,6 +142,10 @@ describe("test run requests are checked on the server", () => {
     expect(await markRunAsTest({ runId: RUN_ID, test: "yes", reason: "Practice" })).toEqual({ ok: false, error: BAD });
     expect(await archivePayRun({ runId: RUN_ID, reason: "" })).toEqual({ ok: false, error: BAD });
     expect(await restorePayRun({ runId: "nope" })).toEqual({ ok: false, error: BAD });
+    expect(await archiveRuns({ ids: [RUN_ID], reason: "" })).toEqual({ ok: false, error: BAD });
+    expect(await archiveRuns({ ids: [], reason: "Practice" })).toEqual({ ok: false, error: BAD });
+    expect(await restoreRuns({ ids: ["nope"] })).toEqual({ ok: false, error: BAD });
+    expect(await deleteRuns({ ids: [] })).toEqual({ ok: false, error: BAD });
   });
 
   it("accepts a test flag when creating a run", async () => {
