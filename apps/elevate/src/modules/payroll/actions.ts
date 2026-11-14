@@ -15,7 +15,7 @@ import { HOLIDAY_BP } from "./calculate";
 import { logChange } from "./changes";
 import { applySupersede, lineLastDay, sameJob } from "./lines";
 import { parseMoney } from "./money";
-import { payLines, paySettings } from "./schema";
+import { payLines, payRunLines, payRuns, paySettings } from "./schema";
 import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
 import { releaseRun } from "./statements";
 import type { BulkResult } from "@/lib/bulk";
@@ -55,6 +55,7 @@ import {
   releaseStatementsSchema,
   restoreRunSchema,
   tidyOverlappingLinesSchema,
+  withdrawPayLineSchema,
   savePayItemSchema,
   savePaySettingsSchema,
   updatePayLineSchema,
@@ -257,6 +258,63 @@ async function insertEndVersion(tx: Tx, actorId: string, latest: LineRow, endsOn
     createdBy: actorId,
   });
   return amounts;
+}
+
+/**
+ * Withdraws a line that was added by mistake: a new version marks the whole line as never in force, so it disappears from the Rates tab and
+ * from every run. Allowed only while the line has never been on a real run (a test, archived or cancelled run does not count); a line that was
+ * paid can only be stopped. Nothing is deleted (the history keeps every version and the reason).
+ */
+export async function withdrawPayLine(input: unknown): Promise<ActionResult<{ lineKey: string }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = withdrawPayLineSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const { lineKey, reason } = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      await lock(tx, `pay_line:${lineKey}`);
+      const versions = await versionsOf(tx, lineKey);
+      if (versions.length === 0) return fail("That pay line was not found.");
+      if (versions.some((x) => x.withdrawn)) return fail("This pay line was already removed.");
+      const used = await tx
+        .select({ start: payRuns.periodStart, end: payRuns.periodEnd })
+        .from(payRunLines)
+        .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
+        .innerJoin(payRuns, eq(payRuns.id, payRunLines.runId))
+        .where(and(eq(payLines.lineKey, lineKey), eq(payRuns.isTest, false), ne(payRuns.status, "cancelled")))
+        .orderBy(desc(payRuns.periodStart))
+        .limit(1);
+      if (used.length > 0) return fail(`It was already on the pay run for ${used[0].start} to ${used[0].end}, so it can't be removed. Use Stop paying instead.`);
+
+      const latest = versions[0];
+      const amounts = decryptLineAmounts(latest.id, latest.amountsEnc);
+      const id = randomUUID();
+      await tx.insert(payLines).values({
+        id,
+        lineKey,
+        employeeId: latest.employeeId,
+        clientId: latest.clientId,
+        alias: latest.alias,
+        hoursPerDay: latest.hoursPerDay,
+        paymentMethod: latest.paymentMethod,
+        endsOn: latest.endsOn,
+        effectiveFrom: latest.effectiveFrom,
+        withdrawn: true,
+        amountsEnc: encryptLineAmounts(id, amounts),
+        createdBy: actor.id,
+      });
+      await writeAudit({ actor, action: "payroll.line.withdraw", targetType: "pay_line", targetId: lineKey, metadata: { employeeId: latest.employeeId } }, tx);
+      await logChange(tx, actor, { action: "line_withdrawn", employeeId: latest.employeeId, lineKey, detail: { old: detailOf(latest, amounts), reason } });
+      return { ok: true, data: { lineKey } } as const;
+    });
+
+    if (result.ok) refreshed();
+    return result;
+  });
 }
 
 /**

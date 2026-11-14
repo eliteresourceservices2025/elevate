@@ -38,14 +38,15 @@ test("payroll: fill a draft run from a Jibble timesheet, take a person off and p
 
     // A pay line for the worker and a run for the period.
     await prepPage.goto("/payroll/rates");
-    await prepPage.getByRole("button", { name: "Add pay line" }).click();
+    await prepPage.getByRole("button", { name: "Add contractor" }).click();
     await waitForHydration(prepPage, "#add-person");
     const option = prepPage.locator("#add-person option", { hasText: `Wanda Worker${stamp}` });
     await prepPage.locator("#add-person").selectOption(await option.getAttribute("value"));
     await prepPage.locator("#add-monthly").fill("25,000.00");
+    await prepPage.getByRole("dialog").getByText("Pick another date").click();
     await prepPage.locator("#add-from").fill(period.start);
-    await prepPage.getByRole("dialog").getByRole("button", { name: "Add pay line" }).click();
-    await expect(prepPage.getByText("Pay line added.")).toBeVisible();
+    await prepPage.getByRole("dialog").getByRole("button", { name: "Add contractor" }).click();
+    await expect(prepPage.getByText("Rate added.")).toBeVisible();
 
     await prepPage.goto("/payroll");
     await prepPage.getByRole("button", { name: "New run" }).click();

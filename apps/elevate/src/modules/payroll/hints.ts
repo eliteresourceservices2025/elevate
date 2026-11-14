@@ -13,7 +13,7 @@ export const PAYROLL_HINTS = {
   settingsReason: "Why you are changing the settings. Kept in the change history, never in notices.",
 
   // Pay lines (Rates)
-  lineStartsOn: "The first day this rate applies. A pay run includes the line only if it starts on or before the run's last day, so use the first day of the first cutoff this person is paid for.",
+  lineStartsOn: "The first pay run this counts for. Pick the cutoff being prepared unless the change should wait for a later one. Pay runs that are already made are never changed.",
   linePerson: "Who is paid by this line. Someone who works for two clients has two lines.",
   lineClient: "The client this person works for on this line. It is printed on their statement. Optional.",
   lineAlias: "A short label, such as the role or account name, that tells two lines of the same person apart. Printed on their statement. Optional.",
@@ -26,7 +26,7 @@ export const PAYROLL_HINTS = {
   lineOtRestDay: "OT on a rest day, as a percent of the hourly rate (up to 8 hours).",
   lineOtRestDayOver8: "OT on a rest day beyond 8 hours, as a percent of the hourly rate.",
   lineReason: "Why the rate is changing. Kept in the change history, never in notices.",
-  lineLastDay: "The last day this person is paid on this line. Pay runs after this date leave the line out.",
+  lineLastDay: "The last cutoff this person is paid for. They are paid for all of it; pay runs after it leave this rate out.",
 
   // New run
   runFirstDay: "The first day the pay run covers. A real run is exactly one cutoff: the 1st to the 15th, or the 16th to the end of the month.",

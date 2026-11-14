@@ -206,3 +206,20 @@ describe("a newer line for the same job takes over (the doubled run)", () => {
     expect(applySupersede(one)).toBe(one);
   });
 });
+
+describe("a withdrawn line (added by mistake) never applies", () => {
+  type Job = LineVersion & { id: string; employeeId: string; clientId: string | null; alias: string | null };
+  const line = (key: string, from: string, over: Partial<Job> = {}): Job => ({
+    id: key + from, lineKey: key, effectiveFrom: from, endsOn: null, createdAt: new Date(from), employeeId: "e1", clientId: "c1", alias: null, ...over,
+  });
+  it("is left out of every period, and does not cut off an older line for the same job", () => {
+    const rows = [
+      line("old", "2026-01-01"),
+      line("mistake", "2026-10-16"),
+      line("mistake", "2026-10-16", { withdrawn: true, createdAt: new Date("2026-10-17") }),
+    ];
+    const out = resolveLines(rows, { start: "2026-11-01", end: "2026-11-15" });
+    expect(out.map((r) => r.version.lineKey)).toEqual(["old"]);
+    expect(out[0].flags).toEqual([]);
+  });
+});

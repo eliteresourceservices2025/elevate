@@ -98,14 +98,15 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
     const prep = await desktop();
     await signInEnrollingMfa(prep, { ...setup });
     await prep.goto("/payroll/rates");
-    await prep.getByRole("button", { name: "Add pay line" }).click();
+    await prep.getByRole("button", { name: "Add contractor" }).click();
     await waitForHydration(prep, "#add-person");
     const option = prep.locator("#add-person option", { hasText: `Wanda Worker${stamp}` });
     await prep.locator("#add-person").selectOption(await option.getAttribute("value"));
     await prep.locator("#add-monthly").fill("25,000.00");
+    await prep.getByRole("dialog").getByText("Pick another date").click();
     await prep.locator("#add-from").fill(period.start);
-    await prep.getByRole("dialog").getByRole("button", { name: "Add pay line" }).click();
-    await expect(prep.getByText("Pay line added.")).toBeVisible();
+    await prep.getByRole("dialog").getByRole("button", { name: "Add contractor" }).click();
+    await expect(prep.getByText("Rate added.")).toBeVisible();
 
     const createRun = async (testRun: boolean) => {
       await prep.goto("/payroll");
@@ -245,7 +246,7 @@ test("payroll and invoices work on a phone and a tablet", async ({ browser }) =>
             await expect(tip).toHaveCount(0);
             await page.keyboard.press("Escape");
             await page.goto("/payroll/rates");
-            await page.getByRole("button", { name: "Add pay line" }).click();
+            await page.getByRole("button", { name: "Add contractor" }).click();
             await expect(page.getByRole("dialog").getByLabel("Regular day (%)")).toBeVisible();
             await onScreen(page, page.getByRole("dialog"), "the Add pay line window");
             await page.screenshot({ path: `${SHOTS}/${device.name}-add-pay-line.png` });

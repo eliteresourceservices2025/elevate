@@ -232,20 +232,21 @@ test("take the payroll Help center screenshots", async ({ browser }) => {
 
     // Rates: the pay lines, and adding one.
     await prepPage.goto("/payroll/rates");
-    await snap(prepPage, "prepare-a-pay-run", "03-rates", "Payroll, Rates: one row for each pay line, with the Add pay line button.", {
-      highlight: [prepPage.getByRole("button", { name: "Add pay line" })],
+    await snap(prepPage, "prepare-a-pay-run", "03-rates", "Payroll, Rates: one row for each pay line, with the Add contractor button.", {
+      highlight: [prepPage.getByRole("button", { name: "Add contractor" })],
     });
-    await prepPage.getByRole("button", { name: "Add pay line" }).click();
+    await prepPage.getByRole("button", { name: "Add contractor" }).click();
     await waitForHydration(prepPage, "#add-person");
     const option = prepPage.locator("#add-person option", { hasText: "Rina Alcantara" });
     await prepPage.locator("#add-person").selectOption(await option.getAttribute("value"));
     await prepPage.locator("#add-monthly").fill("24,000.00");
+    await prepPage.getByRole("dialog").getByText("Pick another date").click();
     await prepPage.locator("#add-from").fill(period.start);
-    await snap(prepPage, "prepare-a-pay-run", "04-add-pay-line", "The Add pay line window: the person, the monthly rate in pesos and the date it starts.", {
+    await snap(prepPage, "prepare-a-pay-run", "04-add-pay-line", "The Add a contractor window: the person, the monthly rate in pesos and the cutoff it is paid from.", {
       highlight: [prepPage.locator("#add-person"), prepPage.locator("#add-monthly")],
     });
-    await prepPage.getByRole("dialog").getByRole("button", { name: "Add pay line" }).click();
-    await expect(prepPage.getByText("Pay line added.")).toBeVisible();
+    await prepPage.getByRole("dialog").getByRole("button", { name: "Add contractor" }).click();
+    await expect(prepPage.getByText("Rate added.")).toBeVisible();
 
     // A new run for the cutoff.
     await prepPage.goto("/payroll");

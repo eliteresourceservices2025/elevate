@@ -16,6 +16,7 @@ import { readRun, worksheetOf, type Worksheet } from "./runs";
 import type { BulkAction } from "@/lib/bulk";
 import { nextCutoff, nextStepOf, runActions, runWhy, stepOf, type RunsView, type ViewerRights } from "./runs-list";
 import { recentPeriods } from "@/modules/attendance/pay-periods";
+import { cutoffChoices, type CutoffChoice } from "./rate-start";
 import { joinAliases, personName } from "./remitly";
 import { logChange } from "./changes";
 import { payLines, payRunLines, payRuns, paySettings } from "./schema";
@@ -53,6 +54,8 @@ export type RateRow = {
   endsOn: string | null;
   /** The date of the next version, when one is already scheduled. */
   upcomingFrom: string | null;
+  /** The line has been on a real run (not a test, not cancelled): it can only be stopped, never withdrawn. */
+  onRealRun: boolean;
   /** The line's last day has already passed: it is only listed when ended lines are asked for, and it can still be part of a run for an earlier period. */
   ended: boolean;
   /** Pesos, "31,415.92". */
@@ -91,13 +94,25 @@ export async function getRates(options: { includeEnded?: boolean } = {}): Promis
   const day = today();
   const byId = new Map(rows.map((r) => [r.line.id, r]));
   const out: RateRow[] = [];
-  const all = applySupersede(rows.map((r) => r.line));
+  // A withdrawn line (added by mistake) is not shown at all.
+  const withdrawn = new Set(rows.filter((r) => r.line.withdrawn).map((r) => r.line.lineKey));
+  const all = applySupersede(rows.map((r) => r.line)).filter((l) => !withdrawn.has(l.lineKey));
+  const usedOnRealRun = new Set(
+    (
+      await db
+        .selectDistinct({ lineKey: payLines.lineKey })
+        .from(payRunLines)
+        .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
+        .innerJoin(payRuns, eq(payRuns.id, payRunLines.runId))
+        .where(and(eq(payRuns.isTest, false), ne(payRuns.status, "cancelled")))
+    ).map((r) => r.lineKey),
+  );
   const inForce = resolveLines(all, { start: day, end: day }).map((r) => r.version);
   // A line that has not started yet is still listed (with its future start date), so a Preparer can see what they added.
   const known = new Set(all.filter((l) => l.effectiveFrom <= day).map((l) => l.lineKey));
   const notStarted = [...new Set(all.map((l) => l.lineKey))]
     .filter((key) => !known.has(key))
-    .map((key) => all.filter((l) => l.lineKey === key).sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : 0))[0]);
+    .map((key) => all.filter((l) => l.lineKey === key).sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : b.createdAt.getTime() - a.createdAt.getTime()))[0]); // the first date, newest version on it (a correction on that date wins)
   // Lines whose last day has passed: not in force today, but still part of any run for a period they covered. The version shown is the one
   // in force on the last day.
   const endedVersions = options.includeEnded
@@ -134,6 +149,7 @@ export async function getRates(options: { includeEnded?: boolean } = {}): Promis
       endsOn: lastDay,
       upcomingFrom: upcoming ?? null,
       ended: lastDay !== null && lastDay < day,
+      onRealRun: usedOnRealRun.has(version.lineKey),
       monthly: amounts ? formatPesos(amounts.monthlyCentavos) : UNREADABLE,
       monthlyCentavos: amounts ? amounts.monthlyCentavos.toString() : null,
       otPercent: {
@@ -155,6 +171,17 @@ export async function getRates(options: { includeEnded?: boolean } = {}): Promis
     });
   }
   return out;
+}
+
+/** The cutoffs to choose from on the Rates forms (the one being prepared first), from the real runs that already exist. */
+export async function getRateCutoffs(): Promise<CutoffChoice[]> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.view");
+  const real = await db
+    .select({ start: payRuns.periodStart })
+    .from(payRuns)
+    .where(and(eq(payRuns.isTest, false), ne(payRuns.status, "cancelled")));
+  return cutoffChoices(today(), new Set(real.map((r) => r.start)));
 }
 
 export type RateOptions = {

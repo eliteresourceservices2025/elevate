@@ -7,6 +7,8 @@ export type LineVersion = {
   effectiveFrom: string;
   endsOn: string | null;
   createdAt: Date | string | number;
+  /** A version that withdrew the whole line (it was added by mistake): the line never applies to any period. */
+  withdrawn?: boolean;
 };
 
 export type ResolvedLine<V extends LineVersion = LineVersion> = { version: V; flags: LineFlag[] };
@@ -65,6 +67,7 @@ export function applySupersede<V extends LineVersion & Partial<JobKey>>(versions
   for (const v of versions) byKey.set(v.lineKey, [...(byKey.get(v.lineKey) ?? []), v]);
   const lines: Line[] = [];
   for (const [key, group] of byKey) {
+    if (group.some((v) => v.withdrawn)) continue; // a withdrawn line never applies, so it supersedes nothing
     const head = group[0];
     if (head.employeeId === undefined) continue;
     const last = lineLastDay(group);
@@ -120,6 +123,7 @@ export function resolveLines<V extends LineVersion & Partial<JobKey>>(input: V[]
 
   const out: ResolvedLine<V>[] = [];
   for (const group of byKey.values()) {
+    if (group.some((v) => v.withdrawn)) continue; // added by mistake and withdrawn: never part of any period
     const lastDay = lineLastDay(group);
     // A version dated after the line's last day never applies (a raise saved for later, then the person left).
     const live = lastDay === null ? group : group.filter((v) => v.effectiveFrom <= lastDay);

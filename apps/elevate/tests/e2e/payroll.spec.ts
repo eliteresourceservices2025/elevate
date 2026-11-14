@@ -74,15 +74,17 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
 
     // ...then a pay line for the worker, starting on the first day of the period.
     await prepPage.goto("/payroll/rates");
-    await prepPage.getByRole("button", { name: "Add pay line" }).click();
+    await prepPage.getByRole("button", { name: "Add contractor" }).click();
     await waitForHydration(prepPage, "#add-person");
     const option = prepPage.locator("#add-person option", { hasText: `Wanda Worker${stamp}` });
     await prepPage.locator("#add-person").selectOption(await option.getAttribute("value"));
+    await prepPage.getByText("More options").click();
     await prepPage.locator("#add-alias").fill(alias);
     await prepPage.locator("#add-monthly").fill("25,000.00");
+    await prepPage.getByRole("dialog").getByText("Pick another date").click();
     await prepPage.locator("#add-from").fill(period.start);
-    await prepPage.getByRole("dialog").getByRole("button", { name: "Add pay line" }).click();
-    await expect(prepPage.getByText("Pay line added.")).toBeVisible();
+    await prepPage.getByRole("dialog").getByRole("button", { name: "Add contractor" }).click();
+    await expect(prepPage.getByText("Rate added.")).toBeVisible();
     await expect(prepPage.getByRole("row").filter({ hasText: alias })).toBeVisible();
 
     // The Preparer creates the run for the period.

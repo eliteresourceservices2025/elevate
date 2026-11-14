@@ -4,13 +4,11 @@ import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
 import { orNotFound } from "@/lib/or-not-found";
-import { recentPeriods } from "@/modules/attendance/pay-periods";
-import { payrollToday } from "@/modules/payroll/service";
 import { PayrollTabs } from "@/modules/payroll/components/payroll-tabs";
 import { RatesTable } from "@/modules/payroll/components/rates-table";
 import { SortMenu } from "@/modules/payroll/components/sort-menu";
 import type { SortLinks } from "@/modules/payroll/components/sort-head";
-import { getRateOptions, getRates } from "@/modules/payroll/queries";
+import { getRateCutoffs, getRateOptions, getRates } from "@/modules/payroll/queries";
 import { DEFAULT_SORT, headerState, nextSort, parseSort, SORT_LABELS, sortLines, type SortHeader, type SortValue } from "@/modules/payroll/sort";
 
 export const metadata: Metadata = { title: "Payroll rates" };
@@ -44,19 +42,17 @@ export default async function PayrollRatesPage({ searchParams }: PageProps<"/pay
     sortLinks[h] = { href: hrefWith(RATE_SORTS.includes(next) ? next : DEFAULT_SORT), state: headerState(h, sort) };
   }
   const options = can(user, "payroll.manage_rates") ? await orNotFound(getRateOptions()) : null;
-  const today = payrollToday();
-  // A new pay line starts, by default, on the first day of the cutoff the New run window suggests, so the next run includes it.
-  const addStart = recentPeriods("semi_monthly", today, 2)[1].start;
+  // The cutoffs the forms offer (the one being prepared first), so nobody types a start date.
+  const cutoffs = await orNotFound(getRateCutoffs());
 
   return (
     <PageContainer width="full">
-      <PageHeader title="Payroll" description="Monthly rates and the lines each person is paid on. Each change is a new version with a start date." />
+      <PageHeader title="Payroll" description="Each contractor's monthly rate. Update a rate from a pay run; the old one stays on record." />
       <PayrollTabs current="rates" />
       <RatesTable
         rows={rows}
         options={options}
-        today={today}
-        addStart={addStart}
+        cutoffs={cutoffs}
         sortLinks={sortLinks}
         endedToggle={{ showing: showEnded, href: hrefFor(sort, !showEnded) }}
         sortMenu={loaded.length > 1 ? <SortMenu current={SORT_LABELS[sort]} options={RATE_SORTS.map((v) => ({ value: v, label: SORT_LABELS[v], href: hrefWith(v), active: v === sort }))} /> : null}

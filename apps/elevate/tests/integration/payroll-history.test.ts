@@ -42,7 +42,7 @@ vi.mock("@/modules/payroll/remitly", async (original) => {
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const actions = await import("@/modules/payroll/actions");
-const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = actions;
+const { createPayLine, updatePayLine, endPayLine, withdrawPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = actions;
 const { markRunAsTest, archivePayRun, restorePayRun, releaseStatements } = actions;
 const { updateRunPeople, removePersonFromRun, restorePersonToRun, applyJibbleTimesheet, confirmAllSuggestions } = actions;
 const { saveTimesheetUpload } = await import("@/modules/payroll/timesheet-import");
@@ -181,6 +181,9 @@ describe("the completeness test: one full cycle writes every kind of change", ()
       "update leaver line",
     );
     ok(await endPayLine({ lineKey: leaverKey, endsOn: "2030-09-30", reason: reasonOf(6) }), "end leaver line");
+    // A rate added by mistake is withdrawn (it was never on a real run).
+    const mistake = ok(await createPayLine({ employeeId: empLeaver, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2030-12-01", monthly: "9,000" }), "create mistaken line");
+    ok(await withdrawPayLine({ lineKey: (mistake as { data: { lineKey: string } }).data.lineKey, reason: "Added by mistake" }), "withdraw mistaken line");
 
     // 4. Lines for the cycle's run: A has two lines, B has one.
     const p = slot(0);
