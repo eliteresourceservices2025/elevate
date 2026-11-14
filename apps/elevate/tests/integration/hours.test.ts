@@ -527,3 +527,109 @@ describe("so payroll is not short: reminders and progress", () => {
     expect(settings.progress[0]).toMatchObject({ start: settings.periods[0].start });
   });
 });
+
+describe("reopening approved hours", () => {
+  const reopen = (employeeId: string, from: string, to: string, reason = "Approved by mistake") => actions.reopenApprovedHours({ employeeId, from, to, reason });
+  const stateOf = async (employeeId: string, week: string) => (await queries.getTeamReview(week)).rows.find((r) => r.employeeId === employeeId)?.state;
+  const approve = (employeeId: string, weekStart: string) => actions.approveHoursWeek({ employeeId, weekStart });
+
+  it("takes an approval back without deleting it, shows the days as not approved, tells the person, and lets them be approved again", async () => {
+    const lead = await person("RoLead", { roles: ["team_lead", "employee"] });
+    const worker = await person("RoWorker", { managerId: lead.employeeId });
+    const week = lastWeek();
+    await normalWeek(worker.employeeId, week);
+    as(lead.user);
+    expect((await approve(worker.employeeId, week)).ok).toBe(true);
+    expect(await stateOf(worker.employeeId, week)).toBe("approved");
+
+    expect(await reopen(worker.employeeId, week, addDays(week, 6))).toEqual({ ok: true, data: { reopened: 2 } });
+    expect(await stateOf(worker.employeeId, week)).toBe("none");
+    expect(await approvals(worker.employeeId)).toHaveLength(2); // the approvals stay on record
+    expect(await rows(sql`select 1 from time.hours_reopens where employee_id = ${worker.employeeId}`)).toHaveLength(2);
+    expect(await notes(worker.user.id, "hours.reopened")).toHaveLength(1);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'hours.reopen' and target_id = ${worker.employeeId}`)).toHaveLength(1);
+
+    expect((await approve(worker.employeeId, week)).ok).toBe(true);
+    expect(await stateOf(worker.employeeId, week)).toBe("approved");
+    expect(await approvals(worker.employeeId)).toHaveLength(4);
+  });
+
+  it("keeps reopens append-only", async () => {
+    const lead = await person("RoAppLead", { roles: ["team_lead", "employee"] });
+    const worker = await person("RoAppWorker", { managerId: lead.employeeId });
+    const week = lastWeek();
+    await normalWeek(worker.employeeId, week);
+    as(lead.user);
+    await approve(worker.employeeId, week);
+    await reopen(worker.employeeId, week, week);
+    await expect(db.execute(sql`update time.hours_reopens set reason = 'edited' where employee_id = ${worker.employeeId}`)).rejects.toThrow();
+    await expect(db.execute(sql`delete from time.hours_reopens where employee_id = ${worker.employeeId}`)).rejects.toThrow();
+  });
+
+  it("lets a lead reopen only what they approved, HR anything, and nobody their own hours or someone outside their team", async () => {
+    const lead = await person("RoWho", { roles: ["team_lead", "employee"] });
+    const other = await person("RoOther", { roles: ["team_lead", "employee"] });
+    const worker = await person("RoWhoWorker", { managerId: lead.employeeId });
+    const peer = await person("RoWhoPeer", { roles: ["employee"] });
+    const week = lastWeek();
+    await normalWeek(worker.employeeId, week);
+
+    as(hr);
+    expect((await approve(worker.employeeId, week)).ok).toBe(true);
+
+    as(lead.user); // their own report, but HR approved it
+    const refused = await reopen(worker.employeeId, week, week);
+    expect(!refused.ok && refused.error).toContain("you approved yourself");
+    as(other.user); // not in the chain
+    expect(await reopen(worker.employeeId, week, week)).toEqual({ ok: false, error: NO_ACCESS });
+    as(peer.user); // an employee has no reach at all
+    expect(await reopen(worker.employeeId, week, week)).toEqual({ ok: false, error: NO_ACCESS });
+
+    as(hr);
+    expect(await reopen(worker.employeeId, week, addDays(week, 6))).toEqual({ ok: true, data: { reopened: 2 } });
+
+    // Never one's own hours, even for HR
+    const hrPerson = await person("RoHrSelf", { roles: ["hr_admin", "employee"] });
+    await normalWeek(hrPerson.employeeId, week);
+    as(hr);
+    expect((await approve(hrPerson.employeeId, week)).ok).toBe(true);
+    as(hrPerson.user);
+    expect(await reopen(hrPerson.employeeId, week, week)).toEqual({ ok: false, error: "Someone else must reopen your hours." });
+  });
+
+  it("checks the request: something approved, a reason, at most a week, and not further back than hours can be approved", async () => {
+    const lead = await person("RoChkLead", { roles: ["team_lead", "employee"] });
+    const worker = await person("RoChkWorker", { managerId: lead.employeeId });
+    const week = lastWeek();
+    as(lead.user);
+    expect(await reopen(worker.employeeId, week, week)).toEqual({ ok: false, error: "Nothing is approved in that range, so there is nothing to reopen." });
+    expect((await reopen(worker.employeeId, week, week, "no")).ok).toBe(false); // reason too short
+    expect((await reopen(worker.employeeId, week, addDays(week, 7))).ok).toBe(false); // more than a week
+    expect((await reopen(worker.employeeId, addDays(week, 2), week)).ok).toBe(false); // backwards
+    const old = await reopen(worker.employeeId, addDays(today(), -70), addDays(today(), -64));
+    expect(!old.ok && old.error).toContain("weeks back");
+  });
+
+  it("refuses days that are already in an approved or paid payroll run, and allows them once the run is cancelled", async () => {
+    const lead = await person("RoPayLead", { roles: ["team_lead", "employee"] });
+    const worker = await person("RoPayWorker", { managerId: lead.employeeId });
+    const week = lastWeek();
+    await normalWeek(worker.employeeId, week);
+    as(lead.user);
+    expect((await approve(worker.employeeId, week)).ok).toBe(true);
+
+    const runId = randomUUID();
+    const lineId = randomUUID();
+    const end = addDays(week, 6 + (Date.now() % 20)); // a period of its own, so reruns do not meet the one-run-per-period rule
+    await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, effective_from, amounts_enc, created_by) values (${lineId}, ${randomUUID()}, ${worker.employeeId}, 8, '2026-01-01', 'x', ${hr.id})`);
+    await db.execute(sql`insert into payroll.pay_runs (id, period_start, period_end, status, settings_snapshot, created_by) values (${runId}, ${week}::date, ${end}::date, 'draft', '{}'::jsonb, ${hr.id})`);
+    await db.execute(sql`insert into payroll.pay_run_lines (id, run_id, line_id, employee_id, payload_enc) values (${randomUUID()}, ${runId}, ${lineId}, ${worker.employeeId}, 'x')`);
+
+    // A draft run does not stop a reopen (its suggestions simply refresh), so check the guard with an approved one
+    await db.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
+    await db.execute(sql`update payroll.pay_runs set status = 'approved' where id = ${runId}`);
+    const blocked = await reopen(worker.employeeId, week, week);
+    expect(blocked).toEqual({ ok: false, error: "Those days are already in an approved or paid payroll run. Correct them in Payroll instead." });
+    expect(await stateOf(worker.employeeId, week)).toBe("approved");
+  });
+});

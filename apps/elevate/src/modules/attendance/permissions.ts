@@ -39,6 +39,8 @@ export const attendancePermissions = definePermissions({
   "hours.approve": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   // Mark a day as "test only" (kept, but left out of review, export and the unapproved counts). Same reach as approving.
   "hours.mark_test": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  // Take an approval back (a week approved by mistake, or hours that changed). HR for anyone; a lead only the approvals they gave, within a week.
+  "hours.reopen": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
   "hours.export": { roles: { super_admin: "all", hr_admin: "all" } },
   "attendance.manage_rules": { roles: { super_admin: "all", hr_admin: "all" } },
   "attendance.view_summary": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", executive: "all" } },

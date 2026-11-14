@@ -153,6 +153,7 @@ const EXPECTED: Record<string, string> = {
   "demographics.edit_own": "O O O O O O",
   "demographics.view_summary": "A A - - - -",
   "hours.mark_test": "A A T - - -",
+  "hours.reopen": "A A T - - -",
   "learn.launch": "O O O O O O",
   "learn.view_status": "A A T - - -",
   "learn.view_results": "A A - - - -",
