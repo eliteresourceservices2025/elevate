@@ -15,7 +15,7 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
+const { createPayLine, updatePayLine, endPayLine, tidyOverlappingLines, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
 const { getWorksheet, getRuns, getRates } = await import("@/modules/payroll/queries");
 const { decryptRunLine, encryptItemValue, settingsInForce } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
@@ -1202,6 +1202,39 @@ describe("a person paid twice for the same client", () => {
     expect(sheet.checks.warnings.some((c) => c.code === "duplicate_pay_line" && c.employeeId === roles)).toBe(false);
     // It is a note: the run can still be sent.
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
+  });
+
+  it("an old line and a newer line for the same job pay once: the newer takes over, and Tidy writes that down", async () => {
+    const p = c33(20); // 1 to 15 November 2033
+    const emp = await person();
+    const clinic = await client();
+    current.user = preparer;
+    const oldLine = await createPayLine(lineBase(emp, { clientId: clinic, alias: "Old", effectiveFrom: "2033-01-01" }));
+    const newLine = await createPayLine(lineBase(emp, { clientId: clinic, alias: "New", effectiveFrom: "2033-10-16" }));
+    if (!oldLine.ok || !newLine.ok) throw new Error("lines failed");
+    // The way it happened for real: both lines were added for the same job (the guard now refuses this) and the old one ended later.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local session_replication_role = replica`);
+      await tx.execute(sql`update payroll.pay_lines set alias = 'Same' where line_key in (${oldLine.data.lineKey}, ${newLine.data.lineKey})`);
+    });
+    const runId = await newRun(preparer, p);
+    expect(await rows(sql`select 1 from payroll.pay_run_lines where run_id = ${runId} and employee_id = ${emp}`)).toHaveLength(1);
+    const key = (await rows<{ line_key: string }>(sql`select l.line_key from payroll.pay_run_lines r join payroll.pay_lines l on l.id = r.line_id where r.run_id = ${runId} and r.employee_id = ${emp}`))[0].line_key;
+    expect(key).toBe(newLine.data.lineKey);
+    current.user = preparer;
+    // The sheet shows no "paid twice" note.
+    const sheet = (await getWorksheet(runId))!;
+    expect(sheet.checks.warnings.some((c) => c.code === "duplicate_pay_line" && c.employeeId === emp)).toBe(false);
+
+    // Tidy counts first, then ends the old line the day before the new one starts.
+    const preview = await tidyOverlappingLines({ apply: false });
+    expect(preview).toMatchObject({ ok: true, data: { applied: false } });
+    expect(preview.ok && preview.data.count).toBeGreaterThanOrEqual(1);
+    expect(await tidyOverlappingLines({ apply: true })).toMatchObject({ ok: true, data: { applied: true } });
+    const ended = await rows<{ ends_on: string }>(sql`select ends_on from payroll.pay_lines where line_key = ${oldLine.data.lineKey} order by created_at desc limit 1`);
+    expect(ended[0].ends_on).toBe("2033-10-15");
+    // Run it again: nothing left to tidy.
+    expect(await tidyOverlappingLines({ apply: true })).toMatchObject({ ok: true, data: { count: 0 } });
   });
 
   it("a leftover line with no client next to the client's line for the same alias is a twin too (the case that doubled a whole run)", async () => {

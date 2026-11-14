@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { EmptyState } from "@/components/empty-state";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { createPayLine, endPayLine, updatePayLine } from "../actions";
+import { createPayLine, endPayLine, tidyOverlappingLines, updatePayLine } from "../actions";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, RATES_LABELS as L, UNREADABLE_HINT, unreadableNotice, type PaymentMethod } from "../constants";
 import type { RateOptions, RateRow } from "../queries";
 
@@ -153,6 +153,53 @@ function AddLineForm({ options, addStart }: { options: RateOptions; addStart: st
   );
 }
 
+/** Counts the older lines a newer line for the same job has replaced, then ends them on the day before the newer one starts. */
+function TidyLinesForm() {
+  const { run, pending } = useRun();
+  const dialog = useFormDialog();
+  const [count, setCount] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    tidyOverlappingLines({ apply: false })
+      .then((r) => live && (r.ok ? setCount(r.data.count) : setFailed(true)))
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        When a person has an old line and a newer line for the same job (same alias, and the same client or none), only the newer line should pay. This ends each
+        older line on the day before the newer one starts. Nothing is deleted: every end is a new version in the change history.
+      </p>
+      {failed ? (
+        <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
+          Could not count the lines. Try again.
+        </Alert>
+      ) : count === null ? (
+        <p className="text-sm" role="status">Counting…</p>
+      ) : count === 0 ? (
+        <Alert variant="success" role="status" className="rounded-lg p-3 text-sm">
+          Nothing to tidy: no older line overlaps a newer one.
+        </Alert>
+      ) : (
+        <p className="text-sm font-medium" role="status">
+          {count} older {count === 1 ? "line" : "lines"} will be ended.
+        </p>
+      )}
+      <Button
+        type="button"
+        disabled={pending || !count}
+        onClick={() => run(() => tidyOverlappingLines({ apply: true }), (d) => `Ended ${d?.count ?? 0} older ${d?.count === 1 ? "line" : "lines"}.`, () => dialog?.close(true))}
+      >
+        End the older lines
+      </Button>
+    </div>
+  );
+}
+
 function ChangeLineForm({ row, options, today }: { row: RateRow; options: RateOptions; today: string }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
@@ -247,6 +294,11 @@ export function RatesTable({ rows, options, today, addStart, sortLinks, sortMenu
           </Link>
         ) : null}
         {sortMenu}
+        {options ? (
+          <FormDialog label="Tidy overlapping lines" title="Tidy overlapping lines" description="End the older line when a newer line replaced it." variant="outline" size="md">
+            <TidyLinesForm />
+          </FormDialog>
+        ) : null}
         {options ? (
           <FormDialog label="Add pay line" title="Add a pay line" description="One line per person and role. Someone working for two clients has two lines." icon={<Plus className="size-4" aria-hidden />} size="lg">
             <AddLineForm options={options} addStart={addStart} />

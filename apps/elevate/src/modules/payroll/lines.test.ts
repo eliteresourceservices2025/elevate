@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flagDatesOf, resolveLines, sameJob, type LineVersion } from "./lines";
+import { applySupersede, flagDatesOf, resolveLines, sameJob, type LineVersion } from "./lines";
 
 // Period Nov 16-30. Invented line keys and dates only.
 const period = { start: "2030-11-16", end: "2030-11-30" };
@@ -156,5 +156,53 @@ describe("sameJob", () => {
     expect(sameJob(job("c1", null), job("c2", null))).toBe(false);
     expect(sameJob(job("c1", "Front desk"), job("c1", "Night shift"))).toBe(false);
     expect(sameJob(job(null, "Front desk"), job("c1", "Night shift"))).toBe(false);
+  });
+});
+
+describe("a newer line for the same job takes over (the doubled run)", () => {
+  type Job = LineVersion & { id: string; employeeId: string; clientId: string | null; alias: string | null };
+  const line = (key: string, from: string, endsOn: string | null, over: Partial<Job> = {}): Job => ({
+    id: key + from, lineKey: key, effectiveFrom: from, endsOn, createdAt: new Date(from), employeeId: "e1", clientId: "c1", alias: null, ...over,
+  });
+  const keys = (r: { version: Job }[]) => r.map((x) => x.version.lineKey).sort();
+
+  it("pays only the new line when the old one was ended after the new one began (old ends 12 Nov, new starts 16 Oct)", () => {
+    const rows = [line("old", "2026-01-01", "2026-11-12"), line("new", "2026-10-16", null)];
+    expect(keys(resolveLines(rows, { start: "2026-11-01", end: "2026-11-15" }))).toEqual(["new"]);
+  });
+  it("pays only the old line for a period that ended before the new one began, and not the new one starting on the last day", () => {
+    const rows = [line("old", "2026-01-01", null), line("new", "2026-10-16", null)];
+    expect(keys(resolveLines(rows, { start: "2026-10-01", end: "2026-10-15" }))).toEqual(["old"]);
+    // The new line starts on the run's last day: the old one ends the day before, so this period still pays the old one for 1-15 and flags it.
+    const both = resolveLines(rows, { start: "2026-10-01", end: "2026-10-16" });
+    expect(keys(both)).toEqual(["new", "old"]);
+    expect(both.find((r) => r.version.lineKey === "old")!.flags).toContain("ends_mid_period");
+  });
+  it("keeps two lines for a person with two clients, and different aliases", () => {
+    const rows = [line("a", "2026-01-01", null, { clientId: "c1" }), line("b", "2026-10-16", null, { clientId: "c2" }), line("c", "2026-10-20", null, { clientId: "c1", alias: "Night" })];
+    expect(keys(resolveLines(rows, { start: "2026-11-01", end: "2026-11-15" }))).toEqual(["a", "b", "c"]);
+  });
+  it("lets a newer client line replace an older no-client leftover", () => {
+    const rows = [line("old", "2026-01-01", null, { clientId: null }), line("new", "2026-10-16", null)];
+    expect(keys(resolveLines(rows, { start: "2026-11-01", end: "2026-11-15" }))).toEqual(["new"]);
+  });
+  it("cuts a chain of three at each next start, and keeps an earlier end date", () => {
+    const rows = [line("a", "2026-01-01", null), line("b", "2026-05-01", null), line("c", "2026-09-01", null)];
+    const out = applySupersede(rows);
+    expect(out.find((v) => v.lineKey === "a")!.endsOn).toBe("2026-04-30");
+    expect(out.find((v) => v.lineKey === "b")!.endsOn).toBe("2026-08-31");
+    expect(out.find((v) => v.lineKey === "c")!.endsOn).toBeNull();
+    const early = applySupersede([line("a", "2026-01-01", "2026-03-01"), line("b", "2026-05-01", null)]);
+    expect(early.find((v) => v.lineKey === "a")!.endsOn).toBe("2026-03-01");
+  });
+  it("leaves two lines that start on the same day alone (the paid-twice note covers it), and other people alone", () => {
+    const same = [line("a", "2026-10-01", null), line("b", "2026-10-01", null)];
+    expect(keys(resolveLines(same, { start: "2026-11-01", end: "2026-11-15" }))).toEqual(["a", "b"]);
+    const others = [line("a", "2026-01-01", null), line("b", "2026-10-16", null, { employeeId: "e2" })];
+    expect(keys(resolveLines(others, { start: "2026-11-01", end: "2026-11-15" }))).toEqual(["a", "b"]);
+  });
+  it("is unchanged for versions of one line and for rows with no person", () => {
+    const one = [line("a", "2026-01-01", null), line("a", "2026-10-16", null)];
+    expect(applySupersede(one)).toBe(one);
   });
 });

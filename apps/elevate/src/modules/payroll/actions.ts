@@ -13,7 +13,7 @@ import { clients, employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
 import { HOLIDAY_BP } from "./calculate";
 import { logChange } from "./changes";
-import { lineLastDay, sameJob } from "./lines";
+import { applySupersede, lineLastDay, sameJob } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
@@ -54,6 +54,7 @@ import {
   markRunTestSchema,
   releaseStatementsSchema,
   restoreRunSchema,
+  tidyOverlappingLinesSchema,
   savePayItemSchema,
   savePaySettingsSchema,
   updatePayLineSchema,
@@ -238,6 +239,75 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
   });
 }
 
+/** The new version that carries a line's last day: a copy of `latest` (the version in force on that day) with `endsOn` set. Returns its decrypted amounts. */
+async function insertEndVersion(tx: Tx, actorId: string, latest: LineRow, endsOn: string): Promise<LineAmounts> {
+  const amounts = decryptLineAmounts(latest.id, latest.amountsEnc);
+  const id = randomUUID();
+  await tx.insert(payLines).values({
+    id,
+    lineKey: latest.lineKey,
+    employeeId: latest.employeeId,
+    clientId: latest.clientId,
+    alias: latest.alias,
+    hoursPerDay: latest.hoursPerDay,
+    paymentMethod: latest.paymentMethod,
+    endsOn,
+    effectiveFrom: latest.effectiveFrom,
+    amountsEnc: encryptLineAmounts(id, amounts),
+    createdBy: actorId,
+  });
+  return amounts;
+}
+
+/**
+ * Ends the older line of every job that has a newer line for the same job (same person, same alias, same client or none), the day before the
+ * newer one starts. The pay run already ignores the older line from then on (`applySupersede`); this writes that down on the Rates tab so
+ * the data says the same thing. `apply: false` only counts the lines it would end. Nothing is deleted: each end is a new version with history.
+ */
+export async function tidyOverlappingLines(input: unknown): Promise<ActionResult<{ count: number; applied: boolean }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = tidyOverlappingLinesSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('pay_line_tidy'))`);
+      const rows = await tx.select().from(payLines);
+      const capped = applySupersede(rows);
+      const todo: { latest: LineRow; to: string }[] = [];
+      for (const key of new Set(rows.map((r) => r.lineKey))) {
+        const before = lineLastDay(rows.filter((r) => r.lineKey === key));
+        const after = lineLastDay(capped.filter((r) => r.lineKey === key));
+        if (after === null || after === before) continue;
+        const latest = rows
+          .filter((r) => r.lineKey === key && r.effectiveFrom <= after)
+          .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : a.effectiveFrom > b.effectiveFrom ? -1 : b.createdAt.getTime() - a.createdAt.getTime()))[0];
+        if (latest) todo.push({ latest, to: after });
+      }
+      if (!parsed.data.apply) return { ok: true, data: { count: todo.length, applied: false as boolean } } as const;
+
+      for (const { latest, to } of todo) {
+        await lock(tx, `pay_line:${latest.lineKey}`);
+        const amounts = await insertEndVersion(tx, actor.id, latest, to);
+        await writeAudit({ actor, action: "payroll.line.end", targetType: "pay_line", targetId: latest.lineKey, metadata: { employeeId: latest.employeeId, tidy: true } }, tx);
+        await logChange(tx, actor, {
+          action: "line_ended",
+          employeeId: latest.employeeId,
+          lineKey: latest.lineKey,
+          detail: { old: detailOf(latest, amounts), endsOn: to, reason: "Replaced by a newer line for the same job" },
+        });
+      }
+      return { ok: true, data: { count: todo.length, applied: true as boolean } } as const;
+    });
+
+    if (result.ok && result.data.applied) refreshed();
+    return result;
+  });
+}
+
 /** Ending a line is a new version, dated like the latest one, that carries the last day. */
 export async function endPayLine(input: unknown): Promise<ActionResult<{ lineKey: string }>> {
   const actor = await requireUser();
@@ -260,21 +330,7 @@ export async function endPayLine(input: unknown): Promise<ActionResult<{ lineKey
       const latest = versions.find((x) => x.effectiveFrom <= endsOn);
       if (!latest) return fail("The last day can't be before the line starts.");
 
-      const amounts = decryptLineAmounts(latest.id, latest.amountsEnc);
-      const id = randomUUID();
-      await tx.insert(payLines).values({
-        id,
-        lineKey,
-        employeeId,
-        clientId: latest.clientId,
-        alias: latest.alias,
-        hoursPerDay: latest.hoursPerDay,
-        paymentMethod: latest.paymentMethod,
-        endsOn,
-        effectiveFrom: latest.effectiveFrom,
-        amountsEnc: encryptLineAmounts(id, amounts),
-        createdBy: actor.id,
-      });
+      const amounts = await insertEndVersion(tx, actor.id, latest, endsOn);
       await writeAudit({ actor, action: "payroll.line.end", targetType: "pay_line", targetId: lineKey, metadata: { employeeId } }, tx);
       await logChange(tx, actor, { action: "line_ended", employeeId, lineKey, detail: { old: detailOf(latest, amounts), endsOn, reason } });
       return { ok: true, data: { lineKey } } as const;

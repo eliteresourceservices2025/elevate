@@ -9,7 +9,7 @@ import { clients, employees } from "@/modules/people/schema";
 import type { SettingsSnapshot } from "./calculate";
 import { z } from "zod";
 import type { PaymentMethod, RunStatus } from "./constants";
-import { lineLastDay, resolveLines } from "./lines";
+import { applySupersede, lineLastDay, resolveLines } from "./lines";
 import { formatPesos } from "./money";
 import { countAwaiting, hashOf, latestSendBackNote, refusalFor } from "./approval";
 import { readRun, worksheetOf, type Worksheet } from "./runs";
@@ -91,7 +91,7 @@ export async function getRates(options: { includeEnded?: boolean } = {}): Promis
   const day = today();
   const byId = new Map(rows.map((r) => [r.line.id, r]));
   const out: RateRow[] = [];
-  const all = rows.map((r) => r.line);
+  const all = applySupersede(rows.map((r) => r.line));
   const inForce = resolveLines(all, { start: day, end: day }).map((r) => r.version);
   // A line that has not started yet is still listed (with its future start date), so a Preparer can see what they added.
   const known = new Set(all.filter((l) => l.effectiveFrom <= day).map((l) => l.lineKey));

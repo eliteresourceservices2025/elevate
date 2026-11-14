@@ -46,6 +46,9 @@ export const createPayLineSchema = z.object({ employeeId: uuid, ...lineFields })
 export const updatePayLineSchema = z.object({ lineKey: uuid, ...lineFields, reason }).refine(endsAfterStart, ENDS_MSG);
 export const endPayLineSchema = z.object({ lineKey: uuid, endsOn: isoDate, reason });
 
+/** Ending the older line of every job that has a newer line for the same job. `apply: false` only counts them. */
+export const tidyOverlappingLinesSchema = z.object({ apply: z.boolean() });
+
 export const savePaySettingsSchema = z.object({
   effectiveFrom: isoDate,
   cutoffDivisor: z.number().int().min(1).max(31),
