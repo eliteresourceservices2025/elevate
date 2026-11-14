@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatDateOnly, formatInZone } from "@/lib/time";
 import { MINUTE, formatDuration } from "../clock";
 import { BLOCKING_FLAGS, CLEAN_FLAGS, worstSeverity } from "../flag-severity";
-import { approveCleanWeeks, approveHoursWeek, clearTestDay, exportHours, markTestDay, savePayPeriod } from "../hours-actions";
+import { approveCleanWeeks, approveHoursWeek, clearTestDay, exportHours, markTestDay, reopenApprovedHours, savePayPeriod } from "../hours-actions";
 import type { HoursSettings, ReviewRow, TeamReview } from "../hours-queries";
 import { PAY_PERIOD_LABELS, type PayPeriodKind } from "../pay-periods";
 import { Alert } from "@/components/ui/alert";
@@ -40,12 +40,13 @@ function primaryFlag(row: ReviewRow, label: (flag: string) => string) {
 function useRun() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const run = <T,>(fn: () => Promise<{ ok: boolean; error?: string; data?: T }>, success: (data: T | undefined) => string) =>
+  const run = <T,>(fn: () => Promise<{ ok: boolean; error?: string; data?: T }>, success: (data: T | undefined) => string, onDone?: () => void) =>
     startTransition(async () => {
       try {
         const result = await fn();
         if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
         toast.success(success(result.data));
+        onDone?.();
         router.refresh();
       } catch {
         toast.error("No connection. Try again.");
@@ -93,6 +94,51 @@ function MarkTestButton({ employeeId, date, name }: { employeeId: string; date: 
         Cancel
       </Button>
     </form>
+  );
+}
+
+/** Takes an approval back (a day, or the whole week) with a reason. The days show as not approved again until approved again. */
+function ReopenButton({ employeeId, name, from, to, label, size = "sm" }: { employeeId: string; name: string; from: string; to: string; label: string; size?: "xs" | "sm" }) {
+  const { run, pending } = useRun();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const what = from === to ? formatDateOnly(from) : `${formatDateOnly(from)} to ${formatDateOnly(to)}`;
+  return (
+    <>
+      <Button type="button" size={size} variant="ghost" onClick={() => setOpen(true)} aria-label={`${label}: ${name}, ${what}`}>
+        {label}
+      </Button>
+      <Dialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>
+        <DialogContent>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              run<{ reopened: number }>(
+                () => reopenApprovedHours({ employeeId, from, to, reason }),
+                (d) => `Reopened ${d?.reopened ?? 0} ${(d?.reopened ?? 0) === 1 ? "day" : "days"} for ${name}. They need approving again.`,
+                () => (setOpen(false), setReason("")),
+              );
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Reopen {name}&apos;s hours</DialogTitle>
+              <DialogDescription>
+                {what}. The approved days show as not approved again and leave the payroll export until you approve them again. Nothing is deleted: the reason is kept in the history. Days already in an approved or paid payroll run cannot be reopened here.
+              </DialogDescription>
+            </DialogHeader>
+            <label className="block space-y-1.5 text-sm font-medium">
+              Why is it being reopened?
+              <Textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={5} maxLength={300} required autoFocus rows={3} placeholder="For example: approved by mistake, the week was empty" />
+            </label>
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={pending || reason.trim().length < 5}>Reopen</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -260,6 +306,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels, previewMod
                         previewMode={previewMode}
                         onApprove={(note) => run<{ approved: number }>(() => approveHoursWeek({ employeeId: r.employeeId, weekStart: review.weekStart, note }), (d) => `Approved ${d?.approved ?? 0} ${(d?.approved ?? 0) === 1 ? "day" : "days"} for ${r.name}.`)}
                       />
+                      {r.canReopen && !previewMode ? <ReopenButton employeeId={r.employeeId} name={r.name} from={review.weekStart} to={review.weekEnd} label="Reopen week" /> : null}
                     </TableCell>
                   </TableRow>
                   <TableRow data-detail="" className="bg-muted/30 text-xs">
@@ -288,6 +335,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels, previewMod
                                 ))}
                               </span>
                               <Badge variant={d.state === "approved" ? "default" : d.state === "changed" ? "destructive" : "outline"}>{d.state === "approved" ? "Approved" : d.state === "changed" ? "Changed after approval" : d.finished ? "Not approved" : "Day not over"}</Badge>
+                              {d.canReopen && !previewMode ? <ReopenButton employeeId={r.employeeId} name={r.name} from={d.date} to={d.date} label="Reopen" size="xs" /> : null}
                               {d.flags.includes("long_session") || d.flags.includes("open_session") ? (
                                 <Link href={`/team-attendance?fix=${r.employeeId}&date=${d.date}`} className={buttonVariants({ size: "sm", variant: "outline" })}>
                                   Fix clock-out

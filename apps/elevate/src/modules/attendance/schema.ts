@@ -437,6 +437,27 @@ export const hoursMarks = time
   )
   .enableRLS();
 
+/**
+ * A day whose approval was taken back (approved by mistake, or the hours changed). Append-only: it never edits or removes the approval.
+ * A day is approved only when its newest approval is newer than its newest reopen; approving again is a new approval row.
+ */
+export const hoursReopens = time
+  .table(
+    "hours_reopens",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      date: date("date", { mode: "string" }).notNull(),
+      reopenedBy: uuid("reopened_by").notNull(),
+      reason: text("reason").notNull(),
+      reopenedAt: timestamp("reopened_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [index("hours_reopens_employee_idx").on(t.employeeId, t.date, t.reopenedAt)],
+  )
+  .enableRLS();
+
 export const PAY_PERIOD_KINDS = ["semi_monthly", "weekly", "biweekly", "monthly"] as const;
 
 /** One row: how HR's pay periods are cut, for the hours export. */

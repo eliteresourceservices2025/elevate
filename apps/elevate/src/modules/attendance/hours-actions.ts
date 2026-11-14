@@ -11,11 +11,12 @@ import { writeAudit } from "@/modules/audit/write";
 import { timeDownlineEmployeeIds } from "@/modules/org/service";
 import { buildHoursExport } from "./hours-export";
 import { approvePersonWeek } from "./hours-approve";
+import { reopenHours } from "./hours-reopen";
 import { CLEAN_FLAGS, attendanceRows } from "./hours-service";
 import { addDays, periodContaining, type PayPeriodKind } from "./pay-periods";
 import { hoursSettings } from "./schema";
 import { setTestMark } from "./hours-marks";
-import { approveCleanSchema, approveWeekSchema, clearTestDaySchema, exportHoursSchema, markTestDaySchema, payPeriodSchema } from "./validators";
+import { approveCleanSchema, approveWeekSchema, clearTestDaySchema, exportHoursSchema, markTestDaySchema, payPeriodSchema, reopenHoursSchema } from "./validators";
 
 // Hours approval (lead or HR, per person and week) and the payroll export (HR). ELEVATE labels and totals hours; the export computes nothing (pay is computed in the Payroll module).
 
@@ -34,6 +35,23 @@ export async function approveHoursWeek(input: unknown): Promise<ActionResult<{ a
     const result = await approvePersonWeek(actor, parsed.data.employeeId, parsed.data.weekStart, parsed.data.note);
     refresh();
     return { ok: true, data: { approved: result.approved } };
+  });
+}
+
+/**
+ * Takes back the approval of one person's day, or week, with a reason (approved by mistake, or the hours changed). The days show as not
+ * approved again and leave the export until approved again. HR for anyone; a lead only what they approved, within a week.
+ */
+export async function reopenApprovedHours(input: unknown): Promise<ActionResult<{ reopened: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    const reach = scopeFor(actor, "hours.reopen");
+    if (reach !== "all" && reach !== "team") throw new ForbiddenError("hours.reopen");
+    const parsed = reopenHoursSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const result = await reopenHours(actor, parsed.data);
+    refresh();
+    return { ok: true, data: result };
   });
 }
 
