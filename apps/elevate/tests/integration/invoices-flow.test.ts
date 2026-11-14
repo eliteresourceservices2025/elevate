@@ -516,7 +516,7 @@ describe("what happens to an invoice after it is made", () => {
     expect(live.hiddenCount).toBeGreaterThanOrEqual(2);
     const everything = await as(hr, () => listInvoices({ page: 1, pageSize: 500 }, { all: true }));
     expect(everything.rows.find((r) => r.id === first.invoiceId)).toMatchObject({ state: "superseded" });
-    expect(everything.showingAll).toBe(true);
+    expect(everything.show).toBe("all");
     const [audit] = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where target_id = ${second.data.invoiceId} and action = 'invoice.create'`);
     expect(JSON.stringify(audit.metadata)).toContain(first.invoiceId); // which one it replaced, as an id
   });

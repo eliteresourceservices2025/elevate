@@ -179,7 +179,7 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     // is set (a database that has run other specs has one), so that line is checked in the integration tests, which control the signatory.
     const certification = apprPage.getByRole("region", { name: "Certification" });
     await expect(certification).toContainText(`Pia Preparer${stamp}`);
-    await expect(certification).toContainText(new Date().toISOString().slice(0, 10));
+    await expect(certification).toContainText(new Date().toLocaleDateString("en-CA", { timeZone: "America/Phoenix" }));
 
     // The Preparer releases all of them with one button.
     await prepPage.goto(`/payroll/statements/${runId}`);

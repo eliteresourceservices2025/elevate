@@ -16,6 +16,8 @@ import { CORRECTION_TYPES, isItemized, PAY_ITEM_LABELS, REASON_REQUIRED_TYPES, t
 import { buildLineInput, cleanItemLabel, formatItemValue, noItemizedLines, parseItemValue, type ItemizedLines } from "./items";
 import { resolveLines } from "./lines";
 import { formatPesos } from "./money";
+import type { BulkResult } from "@/lib/bulk";
+import { runActions } from "./runs-list";
 import { payLines, payPayments, payRunItems, payRunLines, payRunReleases, payRuns } from "./schema";
 import {
   assertNotOwnEmployee,
@@ -299,24 +301,78 @@ export async function restoreRun(tx: Tx, actor: Actor, v: { runId: string }): Pr
   await logChange(tx, actor, { action: "run_restored", runId: v.runId, detail: { status: run.status } });
 }
 
-/** What a permanent delete removed, and what is archived but had to stay (a run with a real or still-live invoice, an invoice a kept one was replaced by). */
-export type PurgeResult = { runsDeleted: number; invoicesDeleted: number; runsKept: number; invoicesKept: number };
+const uuidArray = (ids: string[]) => sql`array[${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)}]::uuid[]`;
 
 /**
- * Deletes archived test runs and archived cancelled runs for good, with their lines, payments, history and test invoices. Never a real run
- * that was approved or paid, never a real invoice, never anything not archived. The database function picks the rows and is the only place
- * the append-only protections let a delete through; the audit entry carries counts only.
+ * Deletes the ticked runs for good, with their lines, payments, history and test invoices: an archived test run or an archived cancelled run
+ * with no real or live invoice on it. Anything else ticked is skipped with the reason. The database function does the deleting and is the only
+ * place the append-only protections let a delete through; the audit entry carries counts only.
  */
-export async function purgeArchivedRuns(tx: Tx, actor: Actor): Promise<PurgeResult> {
-  return purgeArchived(tx, actor, { runs: true, invoices: false }, "payroll.run.purge");
+export async function deleteRunsIn(tx: Tx, actor: Actor, ids: string[]): Promise<BulkResult> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('pay_runs'))`);
+  const rows = await tx
+    .select({
+      id: payRuns.id,
+      status: payRuns.status,
+      isTest: payRuns.isTest,
+      archivedAt: payRuns.archivedAt,
+      blockedByInvoice: sql<boolean>`exists (select 1 from ops.invoices i where i.run_id = ${payRuns.id} and (not i.is_test or ops.invoice_last_kind(i.id) not in ('archived', 'superseded')))`,
+    })
+    .from(payRuns)
+    .where(inArray(payRuns.id, ids));
+  const found = new Map(rows.map((r) => [r.id, r]));
+  const skipped: BulkResult["skipped"] = [];
+  const eligible: string[] = [];
+  for (const id of ids) {
+    const r = found.get(id);
+    if (!r) {
+      skipped.push({ id, why: "That pay run was not found." });
+      continue;
+    }
+    if (r.archivedAt === null) {
+      skipped.push({ id, why: "Archive this run first. Only an archived run can be deleted." });
+      continue;
+    }
+    const { actions, whyNot } = runActions({ status: r.status as RunStatus, isTest: r.isTest, archived: true, blockedByInvoice: r.blockedByInvoice });
+    if (actions.includes("delete")) eligible.push(id);
+    else skipped.push({ id, why: whyNot ?? "This run can't be deleted." });
+  }
+  let done: string[] = [];
+  let invoicesDeleted = 0;
+  if (eligible.length > 0) {
+    const res = await tx.execute(sql`select deleted_run_ids, invoices_deleted from payroll.purge_archived_test_data(true, false, false, ${uuidArray(eligible)}, null::uuid[])`);
+    const row = (res as unknown as Array<{ deleted_run_ids: string[]; invoices_deleted: number }>)[0];
+    done = row.deleted_run_ids;
+    invoicesDeleted = row.invoices_deleted;
+    for (const id of eligible) if (!done.includes(id)) skipped.push({ id, why: "It has an invoice that is real or not archived yet. Archive or void that invoice first." });
+  }
+  await writeAudit({ actor, action: "payroll.run.delete", targetType: "pay_run", metadata: { deleted: done.length, skipped: skipped.length, invoices: invoicesDeleted } }, tx);
+  return { done, skipped };
 }
 
-export async function purgeArchived(tx: Tx, actor: Actor, scope: { runs: boolean; invoices: boolean }, action: string): Promise<PurgeResult> {
-  const res = await tx.execute(sql`select * from payroll.purge_archived_test_data(${scope.runs}, ${scope.invoices})`);
-  const row = (res as unknown as Array<{ runs_deleted: number; invoices_deleted: number; runs_kept: number; invoices_kept: number }>)[0];
-  const out: PurgeResult = { runsDeleted: row.runs_deleted, invoicesDeleted: row.invoices_deleted, runsKept: row.runs_kept, invoicesKept: row.invoices_kept };
-  await writeAudit({ actor, action, targetType: "pay_run", metadata: { ...out } }, tx);
+/** Runs `one` for each id; an ActionFailure for one id is recorded as that id's reason and the others carry on. */
+async function eachRun(ids: string[], one: (id: string) => Promise<void>): Promise<BulkResult> {
+  const out: BulkResult = { done: [], skipped: [] };
+  for (const id of ids) {
+    try {
+      await one(id);
+      out.done.push(id);
+    } catch (error) {
+      if (!(error instanceof ActionFailure)) throw error;
+      out.skipped.push({ id, why: error.message });
+    }
+  }
   return out;
+}
+
+/** Archives the ticked runs (test runs and cancelled runs) with one reason for the change history. */
+export async function archiveRunsIn(tx: Tx, actor: Actor, v: { ids: string[]; reason: string }): Promise<BulkResult> {
+  return eachRun(v.ids, (runId) => archiveRun(tx, actor, { runId, reason: v.reason }));
+}
+
+/** Brings the ticked archived runs back. */
+export async function restoreRunsIn(tx: Tx, actor: Actor, ids: string[]): Promise<BulkResult> {
+  return eachRun(ids, (runId) => restoreRun(tx, actor, { runId }));
 }
 
 // ---- Changing a draft run ----

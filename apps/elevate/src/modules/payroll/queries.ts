@@ -13,7 +13,8 @@ import { lineLastDay, resolveLines } from "./lines";
 import { formatPesos } from "./money";
 import { countAwaiting, hashOf, latestSendBackNote, refusalFor } from "./approval";
 import { readRun, worksheetOf, type Worksheet } from "./runs";
-import { nextCutoff, nextStepOf, stepOf, type RunsView, type ViewerRights } from "./runs-list";
+import type { BulkAction } from "@/lib/bulk";
+import { nextCutoff, nextStepOf, runActions, runWhy, stepOf, type RunsView, type ViewerRights } from "./runs-list";
 import { recentPeriods } from "@/modules/attendance/pay-periods";
 import { joinAliases, personName } from "./remitly";
 import { logChange } from "./changes";
@@ -173,6 +174,11 @@ export type RunListRow = {
   step: 0 | 1 | 2 | 3 | 4;
   /** What this viewer does next (or is waiting for), and whether the action is theirs. Null when there is nothing to say. */
   nextStep: { label: string; mine: boolean } | null;
+  /** What the list can do to this run, and why not when nothing fits. */
+  actions: BulkAction[];
+  whyNot: string | null;
+  /** Why each action does not fit this run. */
+  why: Partial<Record<BulkAction, string>>;
 };
 
 export type RunsSummary = {
@@ -195,13 +201,13 @@ const PAID = (run: ReturnType<typeof sql>) => sql<number>`(select count(distinct
 export async function getRuns(
   paging: { page: number; pageSize: number },
   options: { archived?: boolean; view?: RunsView } = {},
-): Promise<{ rows: RunListRow[]; total: number; archivedCount: number; showingArchived: boolean; canPrepare: boolean; canPurge: boolean; view: RunsView; actionCount: number; summary: RunsSummary }> {
+): Promise<{ rows: RunListRow[]; total: number; archivedCount: number; showingArchived: boolean; canPrepare: boolean; canPurge: boolean; view: RunsView; actionCount: number; summary: RunsSummary; views: Record<RunsView, number>; canArchive: boolean }> {
   const actor = await requireUser();
   await authorize(actor, "payroll.view");
 
   const rights: ViewerRights = { prepare: can(actor, "payroll.prepare"), approve: can(actor, "payroll.approve"), markPaid: can(actor, "payroll.mark_paid"), release: can(actor, "payroll.release_statements") };
-  const showingArchived = options.archived === true;
-  const view = showingArchived ? "all" : (options.view ?? "all");
+  const showingArchived = options.archived === true || options.view === "archived";
+  const view: RunsView = showingArchived ? "archived" : (options.view ?? "all");
   const released = sql<boolean>`exists (select 1 from payroll.pay_run_releases rr where rr.run_id = ${payRuns.id})`;
   // The runs that wait for this viewer: a draft for a Preparer, a run in review for an Approver, an approved run for someone who pays, a paid real run nobody has released yet.
   const mine = or(
@@ -216,6 +222,8 @@ export async function getRuns(
   const [{ total }] = await db.select({ total: count() }).from(payRuns).where(shown);
   const [{ archivedCount }] = await db.select({ archivedCount: count() }).from(payRuns).where(isNotNull(payRuns.archivedAt));
   const [{ actionCount }] = await db.select({ actionCount: count() }).from(payRuns).where(and(isNull(payRuns.archivedAt), mine ?? sql`false`));
+  const [{ allCount }] = await db.select({ allCount: count() }).from(payRuns).where(isNull(payRuns.archivedAt));
+  const [{ testCount }] = await db.select({ testCount: count() }).from(payRuns).where(and(isNull(payRuns.archivedAt), eq(payRuns.isTest, true)));
   const rows = await db
     .select({
       id: payRuns.id,
@@ -228,6 +236,7 @@ export async function getRuns(
       peopleCount: PEOPLE(sql`${payRuns.id}`),
       paidCount: PAID(sql`${payRuns.id}`),
       released,
+      blockedByInvoice: sql<boolean>`exists (select 1 from ops.invoices i where i.run_id = ${payRuns.id} and (not i.is_test or ops.invoice_last_kind(i.id) not in ('archived', 'superseded')))`,
     })
     .from(payRuns)
     .where(shown)
@@ -272,6 +281,8 @@ export async function getRuns(
         paidCount: r.paidCount,
         released: r.released,
         step: stepOf(status),
+        ...runActions({ status, isTest: r.isTest, archived: showingArchived, blockedByInvoice: r.blockedByInvoice }),
+        why: runWhy({ status, isTest: r.isTest, archived: showingArchived, blockedByInvoice: r.blockedByInvoice }),
         nextStep: nextStepOf({ status, isTest: r.isTest, peopleCount: r.peopleCount, paidCount: r.paidCount, released: r.released }, rights),
       };
     }),
@@ -282,6 +293,8 @@ export async function getRuns(
     canPurge: can(actor, "payroll.purge_archived"),
     view,
     actionCount,
+    views: { all: allCount, action: actionCount, test: testCount, archived: archivedCount },
+    canArchive: can(actor, "payroll.manage_test_runs"),
     summary: {
       nextCutoff: nextCutoff(recent, new Set(realRuns.map((r) => r.start)), today()),
       inReview,

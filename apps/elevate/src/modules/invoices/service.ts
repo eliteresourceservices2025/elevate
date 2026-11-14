@@ -12,6 +12,8 @@ import { clients, employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
 import { clientHoursForRun } from "@/modules/payroll/client-hours";
 import { buildInvoiceLines, invoiceNumber, parseDollars, rateForPerson } from "./calc";
+import type { BulkResult } from "@/lib/bulk";
+import { invoiceActions, invoiceWhy } from "./list-options";
 import { clientBillRates, invoiceEvents, invoices } from "./schema";
 
 // Everything that touches invoices and billing rates. The caller has already authorized. The ONLY pay-run data read is clientHoursForRun:
@@ -355,28 +357,66 @@ export async function restoreInvoiceIn(tx: Tx, actor: AuthUser, v: { invoiceId: 
   await addEvent(tx, actor, v.invoiceId, "restored", null, "invoice.restore");
 }
 
+/** What a bulk change did: the ids it changed, and the ids it left alone with the reason for each. */
+export type { BulkResult };
+
+const uuidArray = (ids: string[]) => sql`array[${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)}]::uuid[]`;
+
 /**
- * Deletes archived TEST invoices for good (their events go with them). A real invoice, a live one, and an invoice that a kept invoice was
- * replaced by are never deleted. The database function picks the rows; the audit entry carries counts only.
+ * Deletes the ticked invoices for good, with their events: a void or replaced invoice (real ones too) or an archived test invoice. A live invoice
+ * is skipped with the reason, and so is an invoice that a kept invoice was replaced by. A deleted real invoice leaves its number behind (the
+ * number floor), so the number is never used twice. The database function does the deleting; the audit entry carries counts only.
  */
-export async function purgeArchivedInvoicesIn(tx: Tx, actor: AuthUser): Promise<{ deleted: number; kept: number }> {
-  const res = await tx.execute(sql`select invoices_deleted, invoices_kept from payroll.purge_archived_test_data(false, true)`);
-  const row = (res as unknown as Array<{ invoices_deleted: number; invoices_kept: number }>)[0];
-  const out = { deleted: row.invoices_deleted, kept: row.invoices_kept };
-  await writeAudit({ actor, action: "invoice.purge", targetType: "invoice", metadata: { ...out } }, tx);
+export async function deleteInvoicesIn(tx: Tx, actor: AuthUser, ids: string[]): Promise<BulkResult> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"invoices.events"}))`);
+  const rows = await tx.select().from(invoices).where(inArray(invoices.id, ids));
+  const events = await readEvents(tx, rows.map((r) => r.id));
+  const found = new Map(rows.map((r) => [r.id, { isTest: r.isTest, state: stateFrom(events.filter((e) => e.invoiceId === r.id)) }]));
+  const skipped: BulkResult["skipped"] = [];
+  const eligible: string[] = [];
+  for (const id of ids) {
+    const f = found.get(id);
+    if (!f) {
+      skipped.push({ id, why: "That invoice was not found." });
+      continue;
+    }
+    const { actions } = invoiceActions(f);
+    if (actions.includes("delete")) eligible.push(id);
+    else skipped.push({ id, why: invoiceWhy(f).delete ?? "This invoice can't be deleted." });
+  }
+  let done: string[] = [];
+  if (eligible.length > 0) {
+    const res = await tx.execute(sql`select deleted_invoice_ids from payroll.purge_archived_test_data(false, true, true, null::uuid[], ${uuidArray(eligible)})`);
+    done = (res as unknown as Array<{ deleted_invoice_ids: string[] }>)[0].deleted_invoice_ids;
+    for (const id of eligible) if (!done.includes(id)) skipped.push({ id, why: "A newer invoice was made from it, so it stays until that one is deleted too." });
+  }
+  await writeAudit({ actor, action: "invoice.delete", targetType: "invoice", metadata: { deleted: done.length, skipped: skipped.length } }, tx);
+  return { done, skipped };
+}
+
+/** Runs `one` for each id; an ActionFailure for one id (not found, not allowed) is recorded as that id's reason and the others carry on. */
+async function eachInvoice(ids: string[], one: (id: string) => Promise<void>): Promise<BulkResult> {
+  const out: BulkResult = { done: [], skipped: [] };
+  for (const id of ids) {
+    try {
+      await one(id);
+      out.done.push(id);
+    } catch (error) {
+      if (!(error instanceof ActionFailure)) throw error;
+      out.skipped.push({ id, why: error.message });
+    }
+  }
   return out;
 }
 
-/**
- * Deletes void and replaced invoices for good (real ones too, with their events). A live invoice is never deleted, and an invoice that a kept
- * invoice was replaced by stays. A deleted real invoice leaves its number behind (the number floor), so the number is never used twice.
- */
-export async function purgeRetiredInvoicesIn(tx: Tx, actor: AuthUser): Promise<{ deleted: number; kept: number }> {
-  const res = await tx.execute(sql`select invoices_deleted, invoices_kept from payroll.purge_archived_test_data(false, false, true)`);
-  const row = (res as unknown as Array<{ invoices_deleted: number; invoices_kept: number }>)[0];
-  const out = { deleted: row.invoices_deleted, kept: row.invoices_kept };
-  await writeAudit({ actor, action: "invoice.purge_retired", targetType: "invoice", metadata: { ...out } }, tx);
-  return out;
+/** Archives the ticked TEST invoices (a real invoice is skipped with the reason). */
+export async function archiveInvoicesIn(tx: Tx, actor: AuthUser, v: { ids: string[]; reason?: string | null }): Promise<BulkResult> {
+  return eachInvoice(v.ids, (invoiceId) => archiveInvoiceIn(tx, actor, { invoiceId, reason: v.reason }));
+}
+
+/** Brings the ticked archived test invoices back. */
+export async function restoreInvoicesIn(tx: Tx, actor: AuthUser, ids: string[]): Promise<BulkResult> {
+  return eachInvoice(ids, (invoiceId) => restoreInvoiceIn(tx, actor, { invoiceId }));
 }
 
 /** Voids a REAL invoice with a reason: kept, stamped VOID, hidden from the default list, never reused. A test invoice is archived instead. */
