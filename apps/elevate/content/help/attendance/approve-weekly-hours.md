@@ -37,6 +37,14 @@ Open **Days** on a row to see each day.
 
 You approve only the days that have finished. A day still running (**Day not over**) waits.
 
+# Take an approval back
+
+If a week was approved by mistake, or the hours changed, open **Days** on the person's row and click **Reopen** on a day, or click **Reopen week**. Write why (at least 5 characters). The days show **Not approved** again and leave the payroll export until you approve them again. Nothing is deleted: the reason stays in the history, and the person is told.
+
+- HR can reopen any approval. A lead can reopen only the approvals they gave, within 7 days.
+- You cannot reopen your own hours.
+- Days that are already in an approved or paid payroll run cannot be reopened here. Ask payroll to correct them in Payroll.
+
 # Very long sessions
 
 A session longer than 12 hours is flagged **Very long session (check the clock-out)**. It is almost always a forgotten clock-out. The week cannot be approved until it is fixed. Open **Days** on the row and click **Fix clock-out**: it opens **Change someone's time** on that day, where you remove the wrong clock-out and add the real one, with a reason. HR saves the change at once. A lead's change goes to HR to approve. Once the change is saved, approve the week.

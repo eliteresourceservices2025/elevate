@@ -13,14 +13,16 @@ export { BLOCKING_FLAGS, CLEAN_FLAGS, HARD_STOP_FLAGS } from "./flag-severity";
 
 export const approvalKey = (employeeId: string, date: string) => `${employeeId}|${date}`;
 
-/** The newest approval for each person and day in a range. */
+/** The newest approval for each person and day in a range. A day whose newest approval was taken back (a newer reopen) has none. */
 export async function latestApprovals(executor: Executor, employeeIds: string[] | null, from: string, to: string): Promise<Map<string, Approval>> {
   const filter = employeeIds ? sql`and employee_id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})` : sql``;
   if (employeeIds && employeeIds.length === 0) return new Map();
   const rows = (await executor.execute(sql`
-    select distinct on (employee_id, date) employee_id, date::text as date, scheduled_minutes, worked_minutes, break_minutes, extra_minutes, approved_extra_minutes, approved_by, approved_at, note
-    from time.hours_approvals where date between ${from}::date and ${to}::date ${filter}
-    order by employee_id, date, approved_at desc, id desc`)) as unknown as {
+    select * from (
+      select distinct on (employee_id, date) employee_id, date::text as date, scheduled_minutes, worked_minutes, break_minutes, extra_minutes, approved_extra_minutes, approved_by, approved_at, note
+      from time.hours_approvals where date between ${from}::date and ${to}::date ${filter}
+      order by employee_id, date, approved_at desc, id desc
+    ) a where not exists (select 1 from time.hours_reopens r where r.employee_id = a.employee_id and r.date = a.date::date and r.reopened_at > a.approved_at)`)) as unknown as {
     employee_id: string; date: string; scheduled_minutes: number | null; worked_minutes: number; break_minutes: number; extra_minutes: number; approved_extra_minutes: number; approved_by: string; approved_at: Date; note: string | null;
   }[];
   return new Map(
