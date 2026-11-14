@@ -15,7 +15,7 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, updatePayLine, endPayLine, tidyOverlappingLines, withdrawPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
+const { createPayLine, updatePayLine, endPayLine, reviewDoubledRates, removeDoubledRates, removeStoppedRates, withdrawPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
 const { getWorksheet, getRuns, getRates } = await import("@/modules/payroll/queries");
 const { decryptRunLine, encryptItemValue, settingsInForce } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
@@ -1204,7 +1204,7 @@ describe("a person paid twice for the same client", () => {
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
   });
 
-  it("an old line and a newer line for the same job pay once: the newer takes over, and Tidy writes that down", async () => {
+  it("an old line and a newer line for the same job pay once: the newer takes over, and Remove doubled rates writes that down", async () => {
     const p = c33(20); // 1 to 15 November 2033
     const emp = await person();
     const clinic = await client();
@@ -1226,15 +1226,76 @@ describe("a person paid twice for the same client", () => {
     const sheet = (await getWorksheet(runId))!;
     expect(sheet.checks.warnings.some((c) => c.code === "duplicate_pay_line" && c.employeeId === emp)).toBe(false);
 
-    // Tidy counts first, then ends the old line the day before the new one starts.
-    const preview = await tidyOverlappingLines({ apply: false });
+    // The review lists the pair (this person's, among any others), and removing it takes the old line away: it was never on a real run.
+    const review = await reviewDoubledRates();
+    expect(review.ok).toBe(true);
+    const mine = review.ok ? review.data.groups.find((g) => g.keep.lineKey === newLine.data.lineKey) : undefined;
+    expect(mine?.remove).toMatchObject([{ lineKey: oldLine.data.lineKey, how: "withdraw" }]);
+    expect(await removeDoubledRates({ groupIds: [mine!.groupId] })).toMatchObject({ ok: true, data: { removed: 1, stopped: 0 } });
+    expect((await getRates()).filter((r) => r.employeeId === emp).map((r) => r.lineKey)).toEqual([newLine.data.lineKey]);
+    // Run it again: nothing left of this pair.
+    const again = await reviewDoubledRates();
+    expect(again.ok && again.data.groups.some((g) => g.keep.lineKey === newLine.data.lineKey)).toBe(false);
+  });
+
+  it("doubled rates ignore the alias on one client, but never touch the same person's second client", async () => {
+    const emp = await person();
+    const name = uniq("Samename ");
+    const c1 = (await rows<{ id: string }>(sql`insert into core.clients (name) values (${name}) returning id`))[0].id;
+    const other = await client();
+    const a = await giveLine(preparer, emp, { clientId: c1, alias: "Front desk", effectiveFrom: "2033-01-01" });
+    const b = await giveLine(preparer, emp, { clientId: c1, alias: "Billing", effectiveFrom: "2033-06-01" });
+    const second = await giveLine(preparer, emp, { clientId: other, effectiveFrom: "2033-01-01" });
+    current.user = preparer;
+    const review = await reviewDoubledRates();
+    const groups = review.ok ? review.data.groups.filter((g) => [a, b, second].includes(g.keep.lineKey) || g.remove.some((r) => [a, b, second].includes(r.lineKey))) : [];
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ clientName: name, keep: { lineKey: b }, remove: [{ lineKey: a, how: "withdraw" }] });
+    expect(await removeDoubledRates({ groupIds: [groups[0].groupId] })).toMatchObject({ ok: true });
+    const left = (await getRates()).filter((r) => r.employeeId === emp).map((r) => r.lineKey).sort();
+    expect(left).toEqual([b, second].sort());
+    // A group id that does not exist (or no longer holds) changes nothing and is not an error that leaks anything.
+    expect(await removeDoubledRates({ groupIds: ["nope|nobody"] })).toMatchObject({ ok: true, data: { removed: 0, stopped: 0, manual: 0 } });
+  });
+
+  it("a doubled line that was paid on a real run is stopped the day before the newer one starts, not taken away", async () => {
+    const period = c33(23); // 16 to 31 December 2033
+    const emp = await person();
+    const clinic = await client();
+    const paid = await giveLine(preparer, emp, { clientId: clinic, effectiveFrom: period.periodStart });
+    const runId = await newRun(preparer, period);
+    expect((await runLines(runId, emp)).length).toBe(1);
+    // A newer line for the same client appears later (an old line was left behind).
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local session_replication_role = replica`);
+      await tx.execute(
+        sql`insert into payroll.pay_lines (id, line_key, employee_id, client_id, alias, hours_per_day, payment_method, effective_from, amounts_enc, created_by)
+            select gen_random_uuid(), gen_random_uuid(), employee_id, client_id, 'Other', hours_per_day, payment_method, '2034-02-01', amounts_enc, created_by from payroll.pay_lines where line_key = ${paid} limit 1`,
+      );
+    });
+    current.user = preparer;
+    const review = await reviewDoubledRates();
+    const group = review.ok ? review.data.groups.find((g) => g.remove.some((r) => r.lineKey === paid)) : undefined;
+    expect(group?.remove).toMatchObject([{ lineKey: paid, how: "end", endsOn: "2034-01-31" }]);
+  });
+
+  it("removes stopped rates that were never paid, and keeps a stopped rate that was paid", async () => {
+    const emp = await person();
+    const neverPaid = await giveLine(preparer, emp, { effectiveFrom: "2024-01-01", endsOn: "2024-01-31" });
+    const paidEmp = await person();
+    const p = c33(8);
+    const paid = await lineIn(paidEmp, p);
+    await newRun(preparer, p); // a real run: this stopped line is on it
+    current.user = preparer;
+    expect((await getRates({ includeEnded: true })).some((r) => r.lineKey === neverPaid && r.ended)).toBe(true);
+    const preview = await removeStoppedRates({ apply: false });
     expect(preview).toMatchObject({ ok: true, data: { applied: false } });
     expect(preview.ok && preview.data.count).toBeGreaterThanOrEqual(1);
-    expect(await tidyOverlappingLines({ apply: true })).toMatchObject({ ok: true, data: { applied: true } });
-    const ended = await rows<{ ends_on: string }>(sql`select ends_on from payroll.pay_lines where line_key = ${oldLine.data.lineKey} order by created_at desc limit 1`);
-    expect(ended[0].ends_on).toBe("2033-10-15");
-    // Run it again: nothing left to tidy.
-    expect(await tidyOverlappingLines({ apply: true })).toMatchObject({ ok: true, data: { count: 0 } });
+    expect(await removeStoppedRates({ apply: true })).toMatchObject({ ok: true, data: { applied: true } });
+    const after = await getRates({ includeEnded: true });
+    expect(after.some((r) => r.lineKey === neverPaid)).toBe(false);
+    expect(after.some((r) => r.lineKey === paid)).toBe(true);
+    expect(await removeStoppedRates({ apply: true })).toMatchObject({ ok: true, data: { count: 0 } });
   });
 
   it("a leftover line with no client next to the client's line for the same alias is a twin too (the case that doubled a whole run)", async () => {

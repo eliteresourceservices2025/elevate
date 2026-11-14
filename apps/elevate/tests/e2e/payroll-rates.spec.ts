@@ -25,6 +25,7 @@ test("payroll rates: add a contractor, update the rate, stop paying, remove a mi
   const preparer = await createEmployeeAccount("Pia", `Preparer${stamp}`);
   const ann = await createEmployeeAccount("Rate", `Ann${stamp}`);
   const bob = await createEmployeeAccount("Rate", `Bob${stamp}`);
+  const cat = await createEmployeeAccount("Rate", `Cat${stamp}`);
 
   const adminCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -99,12 +100,52 @@ test("payroll rates: add a contractor, update the rate, stop paying, remove a mi
     await p.goto("/payroll/rates?ended=1");
     await expect(rowOf(`Bob${stamp}`)).toHaveCount(0);
 
+    // ---- A stopped rate that was never paid can be removed from the stopped list, one by one ----
+    await p.goto("/payroll/rates?ended=1");
+    await expect(rowOf(`Ann${stamp}`)).toHaveCount(1);
+    await rowOf(`Ann${stamp}`).getByRole("button", { name: "Remove", exact: true }).click();
+    await p.getByRole("dialog").getByRole("button", { name: "Remove this rate" }).click();
+    await expect(p.getByText("Rate removed.")).toBeVisible();
+    await expect(rowOf(`Ann${stamp}`)).toHaveCount(0);
+    // The bulk dialog counts first (it is not applied here: other stopped rates in this database are not ours to remove).
+    await p.getByRole("button", { name: "Remove stopped rates" }).click();
+    await expect(p.getByRole("dialog").getByText(/stopped rates? will be removed|No stopped rates to remove/)).toBeVisible();
+    await p.keyboard.press("Escape");
+
+    // ---- Doubled rates: the same client with two aliases is found and the older one is taken away ----
+    await p.goto("/payroll/rates");
+    for (const alias of ["Front desk", "Billing"]) {
+      dialog = await add(`Cat${stamp}`, "21,000.00");
+      await p.locator("#add-client").selectOption({ index: 1 });
+      await dialog.getByText("More options").click();
+      await p.locator("#add-alias").fill(alias);
+      await dialog.getByRole("button", { name: "Add contractor" }).click();
+      await expect(p.getByText("Rate added.")).toBeVisible();
+    }
+    await expect(rowOf(`Cat${stamp}`)).toHaveCount(2);
+    await p.getByRole("button", { name: "Remove doubled rates" }).click();
+    dialog = p.getByRole("dialog");
+    const ours = dialog.getByRole("listitem").filter({ hasText: `Cat${stamp}` });
+    await expect(ours).toHaveCount(1);
+    await expect(ours).toContainText("Keeps:");
+    await expect(ours).toContainText("Takes away:");
+    await p.screenshot({ path: `${SHOTS}/5-doubled.png` });
+    // Only our own pair: untick every other set the local database may hold.
+    const sets = dialog.getByRole("listitem");
+    for (let i = 0; i < (await sets.count()); i++) {
+      const item = sets.nth(i);
+      if (!(await item.textContent())?.includes(`Cat${stamp}`)) await item.getByRole("checkbox").uncheck();
+    }
+    await dialog.getByRole("button", { name: /^Remove 1 doubled rate$/ }).click();
+    await expect(p.getByText(/Done: 1 taken away/)).toBeVisible();
+    await expect(rowOf(`Cat${stamp}`)).toHaveCount(1);
+
     // ---- A phone: the same actions, in cards ----
     await p.setViewportSize({ width: 390, height: 844 });
     await p.goto("/payroll/rates");
     await expect(p.getByRole("button", { name: "Add contractor" })).toBeVisible();
     await p.screenshot({ path: `${SHOTS}/4-phone.png` });
   } finally {
-    for (const w of [ann, bob]) await endPayLinesOf(w.employeeId);
+    for (const w of [ann, bob, cat]) await endPayLinesOf(w.employeeId);
   }
 });

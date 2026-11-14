@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RATES_LABELS as L, UNREADABLE_HINT, unreadableNotice } from "../constants";
 import type { CutoffChoice } from "../rate-start";
 import type { RateOptions, RateRow } from "../queries";
-import { AddContractorForm, EditDetailsForm, RemoveRateForm, StopPayingForm, TidyLinesForm, UpdateRateForm } from "./rate-forms";
+import { AddContractorForm, DoubledRatesForm, EditDetailsForm, RemoveRateForm, RemoveStoppedForm, StopPayingForm, UpdateRateForm } from "./rate-forms";
 import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
 
 // One row per rate, grouped under the person (the name is written once, on the first row of a person). The main button is "Update rate"; the
@@ -107,9 +107,14 @@ export function RatesTable({
             </Link>
           ) : null}
           {sortMenu}
+          {options && endedToggle?.showing ? (
+            <FormDialog label="Remove stopped rates" title="Remove stopped rates" description="Take stopped rates that were never paid off this list." variant="outline" size="md">
+              <RemoveStoppedForm />
+            </FormDialog>
+          ) : null}
           {options ? (
-            <FormDialog label="Tidy overlapping rates" title="Tidy overlapping rates" description="End the older rate when a newer rate replaced it." variant="outline" size="md">
-              <TidyLinesForm />
+            <FormDialog label="Remove doubled rates" title="Remove doubled rates" description="The same person and client with two overlapping rates would be paid twice." variant="outline" size="lg">
+              <DoubledRatesForm />
             </FormDialog>
           ) : null}
           {options ? (
@@ -169,6 +174,11 @@ export function RatesTable({
                       {row.endsOn ? <span className="block text-xs text-muted-foreground">{row.ended ? "Stopped" : "Stops"} after {row.endsOn}</span> : null}
                     </TableCell>
                     <TableCell label="Actions">
+                      {options && row.endsOn && !row.onRealRun ? (
+                        <FormDialog label="Remove" title={`Remove ${row.name}'s stopped rate`} description="It was never on a real pay run." variant="outline" triggerSize="sm">
+                          <RemoveRateForm row={row} />
+                        </FormDialog>
+                      ) : null}
                       {options && !row.endsOn ? (
                         <div className="flex flex-wrap gap-2">
                           <FormDialog

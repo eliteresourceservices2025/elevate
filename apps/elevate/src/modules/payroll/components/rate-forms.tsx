@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FieldHint, HintedLabel } from "@/components/field-hint";
 import { useFormDialog } from "@/components/form-dialog";
 import { Alert } from "@/components/ui/alert";
@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { createPayLine, endPayLine, tidyOverlappingLines, updatePayLine, withdrawPayLine } from "../actions";
+import { createPayLine, endPayLine, removeDoubledRates, removeStoppedRates, reviewDoubledRates, updatePayLine, withdrawPayLine } from "../actions";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../constants";
+import type { DoubledGroupView, DoubledLineView } from "../doubled";
 import { PAYROLL_HINTS } from "../hints";
 import { sameJob } from "../lines";
 import { DETAIL_REASONS, reasonText, startChoicesFor, STOP_REASONS, UPDATE_REASONS, type CutoffChoice } from "../rate-start";
@@ -348,15 +349,106 @@ export function RemoveRateForm({ row }: { row: RateRow }) {
   );
 }
 
-/** Counts the older rates a newer rate for the same job replaced, then ends them the day before the newer one starts. */
-export function TidyLinesForm() {
+const sinceText = (l: DoubledLineView) => `${l.monthly} a month, since ${l.since}${l.until ? ` to ${l.until}` : ""}${l.alias ? ` (${l.alias})` : ""}`;
+
+/**
+ * Doubled rates: the same person and client with two rates whose dates overlap, which a run pays twice. Lists each set with the newest rate
+ * that stays and the ones that go (each group can be unticked: a real second role on the same client is the one exception), then removes them.
+ */
+export function DoubledRatesForm() {
+  const { run, pending } = useRun();
+  const dialog = useFormDialog();
+  const [groups, setGroups] = useState<DoubledGroupView[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    let live = true;
+    reviewDoubledRates()
+      .then((r) => {
+        if (!live) return;
+        if (!r.ok) return setFailed(true);
+        setGroups(r.data.groups);
+        setChosen(new Set(r.data.groups.map((g) => g.groupId)));
+      })
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const toRemove = useMemo(
+    () => (groups ?? []).filter((g) => chosen.has(g.groupId)).reduce((n, g) => n + g.remove.filter((r) => r.how !== "manual").length, 0),
+    [groups, chosen],
+  );
+  const toggle = (id: string) => {
+    const next = new Set(chosen);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setChosen(next);
+  };
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Two overlapping rates for the same person and client would be paid twice. Each set below keeps the newest rate. A rate that was never on a real pay run is taken
+        away; one that was paid stops the day before the newer rate starts. Nothing is deleted: the change history keeps it. The same person with a different client is never touched.
+      </p>
+      {failed ? (
+        <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
+          Could not check the rates. Try again.
+        </Alert>
+      ) : groups === null ? (
+        <p className="text-sm" role="status">Checking…</p>
+      ) : groups.length === 0 ? (
+        <Alert variant="success" role="status" className="rounded-lg p-3 text-sm">
+          No doubled rates found.
+        </Alert>
+      ) : (
+        <ul className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+          {groups.map((g) => (
+            <li key={g.groupId} className="rounded-md border p-3 text-sm">
+              <label className="flex items-start gap-2">
+                <input type="checkbox" className="mt-1 size-4 accent-primary" checked={chosen.has(g.groupId)} onChange={() => toggle(g.groupId)} />
+                <span className="space-y-1">
+                  <span className="block font-medium">
+                    {g.name} · {g.clientName ?? "No client"}
+                  </span>
+                  <span className="block text-muted-foreground">Keeps: {sinceText(g.keep)}</span>
+                  {g.remove.map((r) => (
+                    <span key={r.lineKey} className="block">
+                      {r.how === "withdraw" ? "Takes away" : r.how === "end" ? `Stops on ${r.endsOn}` : "Needs a manual look"}: {sinceText(r)}
+                    </span>
+                  ))}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button
+        type="button"
+        disabled={pending || toRemove === 0}
+        onClick={() =>
+          run(
+            () => removeDoubledRates({ groupIds: [...chosen] }),
+            (d) => `Done: ${d?.removed ?? 0} taken away, ${d?.stopped ?? 0} stopped${d?.manual ? `, ${d.manual} left for a manual look` : ""}. Now press Fill or update this run on any draft run.`,
+            () => dialog?.close(true),
+          )
+        }
+      >
+        {toRemove === 0 ? "Remove doubled rates" : `Remove ${toRemove} doubled ${toRemove === 1 ? "rate" : "rates"}`}
+      </Button>
+    </div>
+  );
+}
+
+/** Counts the stopped rates that were never paid, then takes them off the list. Paid ones stay: they are part of the pay history. */
+export function RemoveStoppedForm() {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const [count, setCount] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let live = true;
-    tidyOverlappingLines({ apply: false })
+    removeStoppedRates({ apply: false })
       .then((r) => live && (r.ok ? setCount(r.data.count) : setFailed(true)))
       .catch(() => live && setFailed(true));
     return () => {
@@ -366,30 +458,31 @@ export function TidyLinesForm() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        When a person has an old rate and a newer rate for the same job (same alias, and the same client or none), only the newer one should pay. This ends each
-        older rate on the day before the newer one starts. Nothing is deleted: every end is a new version in the change history.
+        This takes stopped rates off the list when they were never on a real pay run. A stopped rate that was paid stays, because it is part of the pay history.
+        Nothing is deleted: the change history keeps every removed rate.
       </p>
       {failed ? (
         <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
-          Could not count the rates. Try again.
+          Could not count the stopped rates. Try again.
         </Alert>
       ) : count === null ? (
         <p className="text-sm" role="status">Counting…</p>
       ) : count === 0 ? (
         <Alert variant="success" role="status" className="rounded-lg p-3 text-sm">
-          Nothing to tidy: no older rate overlaps a newer one.
+          No stopped rates to remove.
         </Alert>
       ) : (
         <p className="text-sm font-medium" role="status">
-          {count} older {count === 1 ? "rate" : "rates"} will be ended.
+          {count} stopped {count === 1 ? "rate" : "rates"} will be removed.
         </p>
       )}
       <Button
         type="button"
+        variant="destructive"
         disabled={pending || !count}
-        onClick={() => run(() => tidyOverlappingLines({ apply: true }), (d) => `Ended ${d?.count ?? 0} older ${d?.count === 1 ? "rate" : "rates"}.`, () => dialog?.close(true))}
+        onClick={() => run(() => removeStoppedRates({ apply: true }), (d) => `Removed ${d?.count ?? 0} stopped ${d?.count === 1 ? "rate" : "rates"}.`, () => dialog?.close(true))}
       >
-        End the older rates
+        Remove stopped rates
       </Button>
     </div>
   );
