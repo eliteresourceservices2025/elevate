@@ -1,232 +1,92 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { ChevronDown, Plus, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { EmptyState } from "@/components/empty-state";
-import { FormDialog, useFormDialog } from "@/components/form-dialog";
-import { FieldHint, HintedLabel } from "@/components/field-hint";
-import { PAYROLL_HINTS } from "../hints";
+import { FormDialog } from "@/components/form-dialog";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
-import { Textarea } from "@/components/ui/textarea";
-import { useRun } from "@/modules/recruiting/components/use-run";
-import { createPayLine, endPayLine, updatePayLine } from "../actions";
-import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, RATES_LABELS as L, UNREADABLE_HINT, unreadableNotice, type PaymentMethod } from "../constants";
+import { RATES_LABELS as L, UNREADABLE_HINT, unreadableNotice } from "../constants";
+import type { CutoffChoice } from "../rate-start";
 import type { RateOptions, RateRow } from "../queries";
+import { AddContractorForm, EditDetailsForm, RemoveRateForm, StopPayingForm, TidyLinesForm, UpdateRateForm } from "./rate-forms";
+import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
 
-type Fields = {
-  clientId: string;
-  alias: string;
-  hoursPerDay: string;
-  paymentMethod: PaymentMethod;
-  effectiveFrom: string;
-  monthly: string;
-  /** This person's own overtime percents as typed; blank = the company standard. */
-  otRegular: string;
-  otRestDay: string;
-  otRestDayOver8: string;
-};
+// One row per rate, grouped under the person (the name is written once, on the first row of a person). The main button is "Update rate"; the
+// less common things (edit details, stop paying, remove a rate added by mistake) are in the menu. The dialogs sit outside the menu: a menu
+// closes as soon as an item is picked, which would close a dialog that lived inside it.
 
-const OT_FIELDS = [
-  { field: "otRegular", label: "Regular day (%)", hint: "lineOtRegular" },
-  { field: "otRestDay", label: "Rest day (%)", hint: "lineOtRestDay" },
-  { field: "otRestDayOver8", label: "Rest day, past 8 hours (%)", hint: "lineOtRestDayOver8" },
-] as const;
-
-const blank = (today: string): Fields => ({
-  clientId: "",
-  alias: "",
-  hoursPerDay: "8",
-  paymentMethod: "remitly",
-  effectiveFrom: today,
-  monthly: "",
-  otRegular: "",
-  otRestDay: "",
-  otRestDayOver8: "",
-});
-
-function LineFields({ value, onChange, clients, idPrefix }: { value: Fields; onChange: (next: Fields) => void; clients: RateOptions["clients"]; idPrefix: string }) {
-  const set = <K extends keyof Fields>(key: K, v: Fields[K]) => onChange({ ...value, [key]: v });
+function RowMenu({ row, options, cutoffs }: { row: RateRow; options: RateOptions; cutoffs: CutoffChoice[] }) {
+  const [details, setDetails] = useState(false);
+  const [stop, setStop] = useState(false);
+  const [remove, setRemove] = useState(false);
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="space-y-1">
-        <HintedLabel htmlFor={`${idPrefix}-client`} hint={PAYROLL_HINTS.lineClient}>{L.client} (optional)</HintedLabel>
-        <NativeSelect id={`${idPrefix}-client`} value={value.clientId} onChange={(e) => set("clientId", e.target.value)}>
-          <option value="">No client</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </NativeSelect>
-      </div>
-      <div className="space-y-1">
-        <HintedLabel htmlFor={`${idPrefix}-alias`} hint={PAYROLL_HINTS.lineAlias}>{L.alias} (optional)</HintedLabel>
-        <Input id={`${idPrefix}-alias`} value={value.alias} onChange={(e) => set("alias", e.target.value)} maxLength={80} />
-      </div>
-      <div className="space-y-1">
-        <HintedLabel htmlFor={`${idPrefix}-hours`} hint={PAYROLL_HINTS.lineHours}>{L.hoursPerDay}</HintedLabel>
-        <Input id={`${idPrefix}-hours`} type="number" inputMode="numeric" min={1} max={12} step={1} value={value.hoursPerDay} onChange={(e) => set("hoursPerDay", e.target.value)} required />
-      </div>
-      <div className="space-y-1">
-        <HintedLabel htmlFor={`${idPrefix}-monthly`} hint={PAYROLL_HINTS.lineMonthly}>{L.monthly}</HintedLabel>
-        <Input id={`${idPrefix}-monthly`} inputMode="decimal" value={value.monthly} onChange={(e) => set("monthly", e.target.value)} placeholder="25,000.00" autoComplete="off" required />
-      </div>
-      <div className="space-y-1">
-        <HintedLabel htmlFor={`${idPrefix}-method`} hint={PAYROLL_HINTS.lineMethod}>{L.paymentMethod}</HintedLabel>
-        <NativeSelect id={`${idPrefix}-method`} value={value.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value as PaymentMethod)}>
-          {PAYMENT_METHODS.map((m) => (
-            <option key={m} value={m}>
-              {PAYMENT_METHOD_LABELS[m]}
-            </option>
-          ))}
-        </NativeSelect>
-      </div>
-      <div className="space-y-1 sm:col-span-2">
-        <HintedLabel htmlFor={`${idPrefix}-from`} hint={PAYROLL_HINTS.lineStartsOn}>{L.startsOn}</HintedLabel>
-        <Input id={`${idPrefix}-from`} type="date" value={value.effectiveFrom} onChange={(e) => set("effectiveFrom", e.target.value)} required />
-      </div>
-      <fieldset className="grid gap-3 sm:col-span-2 sm:grid-cols-3">
-        <legend className="mb-1 flex items-center gap-1 text-sm font-medium">
-          Overtime (OT) for this person (optional)
-          <FieldHint label="Overtime for this person">{PAYROLL_HINTS.lineOt}</FieldHint>
-        </legend>
-        {OT_FIELDS.map((f) => (
-          <div key={f.field} className="space-y-1">
-            <HintedLabel htmlFor={`${idPrefix}-${f.field}`} hint={PAYROLL_HINTS[f.hint]}>{f.label}</HintedLabel>
-            <Input id={`${idPrefix}-${f.field}`} inputMode="decimal" value={value[f.field]} onChange={(e) => set(f.field, e.target.value)} placeholder="Standard" autoComplete="off" />
-          </div>
-        ))}
-      </fieldset>
-    </div>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button type="button" size="sm" variant="outline" aria-label={`More for ${row.name}`} className="pointer-coarse:h-10 pointer-coarse:px-4" />}>
+          More
+          <ChevronDown className="size-4" aria-hidden />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-60">
+          <DropdownMenuItem disabled={row.unreadable} onClick={() => setDetails(true)}>
+            Edit details
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setStop(true)}>Stop paying</DropdownMenuItem>
+          {row.onRealRun ? null : (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => setRemove(true)}>
+                Remove (added by mistake)
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <FormDialog label="Edit details" title={`Edit ${row.name}'s details`} description="Client, alias, hours, payment method and overtime. Saved as a new version; the old one stays on record." size="lg" open={details} onOpenChange={setDetails} hideTrigger>
+        <EditDetailsForm row={row} options={options} cutoffs={cutoffs} />
+      </FormDialog>
+      <FormDialog label="Stop paying" title={`Stop paying ${row.name}`} description="The rate stays on record. Pay runs after the last cutoff leave it out." open={stop} onOpenChange={setStop} hideTrigger>
+        <StopPayingForm row={row} cutoffs={cutoffs} />
+      </FormDialog>
+      <FormDialog label="Remove this rate" title={`Remove ${row.name}'s rate`} description="For a rate added by mistake." open={remove} onOpenChange={setRemove} hideTrigger>
+        <RemoveRateForm row={row} />
+      </FormDialog>
+    </>
   );
 }
 
-const common = (v: Fields) => ({
-  clientId: v.clientId,
-  alias: v.alias,
-  hoursPerDay: Number(v.hoursPerDay),
-  paymentMethod: v.paymentMethod,
-  effectiveFrom: v.effectiveFrom,
-  monthly: v.monthly,
-  otRegular: v.otRegular,
-  otRestDay: v.otRestDay,
-  otRestDayOver8: v.otRestDayOver8,
-});
-
-function AddLineForm({ options, addStart }: { options: RateOptions; addStart: string }) {
-  const { run, pending } = useRun();
-  const dialog = useFormDialog();
-  const [employeeId, setEmployeeId] = useState("");
-  const [fields, setFields] = useState<Fields>(blank(addStart));
-  return (
-    <form
-      className="space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        run(() => createPayLine({ employeeId, ...common(fields) }), "Pay line added.", () => dialog?.close(true));
-      }}
-    >
-      <div className="space-y-1">
-        <HintedLabel htmlFor="add-person" hint={PAYROLL_HINTS.linePerson}>{L.person}</HintedLabel>
-        <NativeSelect id="add-person" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
-          <option value="">Choose a person</option>
-          {options.people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </NativeSelect>
-      </div>
-      <LineFields value={fields} onChange={setFields} clients={options.clients} idPrefix="add" />
-      <Button type="submit" disabled={pending}>
-        Add pay line
-      </Button>
-    </form>
-  );
-}
-
-function ChangeLineForm({ row, options, today }: { row: RateRow; options: RateOptions; today: string }) {
-  const { run, pending } = useRun();
-  const dialog = useFormDialog();
-  const [fields, setFields] = useState<Fields>({
-    clientId: row.clientId ?? "",
-    alias: row.alias ?? "",
-    hoursPerDay: String(row.hoursPerDay),
-    paymentMethod: row.paymentMethod,
-    effectiveFrom: today,
-    monthly: row.monthly,
-    otRegular: row.otPercent.regular,
-    otRestDay: row.otPercent.restDay,
-    otRestDayOver8: row.otPercent.restDayOver8,
-  });
-  const [reason, setReason] = useState("");
-  return (
-    <form
-      className="space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        run(() => updatePayLine({ lineKey: row.lineKey, ...common(fields), reason }), "New version saved.", () => dialog?.close(true));
-      }}
-    >
-      <LineFields value={fields} onChange={setFields} clients={options.clients} idPrefix={`chg-${row.lineKey}`} />
-      <div className="space-y-1">
-        <HintedLabel htmlFor={`chg-${row.lineKey}-reason`} hint={PAYROLL_HINTS.lineReason}>{L.reasonForChange}</HintedLabel>
-        <Textarea id={`chg-${row.lineKey}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} required />
-        <p className="text-xs text-muted-foreground">Kept in the change history, never in notices.</p>
-      </div>
-      <Button type="submit" disabled={pending}>
-        Save new version
-      </Button>
-    </form>
-  );
-}
-
-function EndLineForm({ row, today }: { row: RateRow; today: string }) {
-  const { run, pending } = useRun();
-  const dialog = useFormDialog();
-  const [endsOn, setEndsOn] = useState(today);
-  const [reason, setReason] = useState("");
-  return (
-    <form
-      className="space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        run(() => endPayLine({ lineKey: row.lineKey, endsOn, reason }), "Pay line ended.", () => dialog?.close(true));
-      }}
-    >
-      <div className="space-y-1">
-        <HintedLabel htmlFor={`end-${row.lineKey}-date`} hint={PAYROLL_HINTS.lineLastDay}>{L.lastDay}</HintedLabel>
-        <Input id={`end-${row.lineKey}-date`} type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} required />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor={`end-${row.lineKey}-reason`}>{L.reason}</Label>
-        <Textarea id={`end-${row.lineKey}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} required />
-      </div>
-      <Button type="submit" variant="destructive" disabled={pending}>
-        End pay line
-      </Button>
-    </form>
-  );
-}
-
-export function RatesTable({ rows, options, today, addStart, sortLinks, sortMenu, endedToggle }: { rows: RateRow[]; options: RateOptions | null; today: string; addStart: string; endedToggle?: { showing: boolean; href: string }; sortLinks?: SortLinks; sortMenu?: React.ReactNode }) {
+export function RatesTable({
+  rows,
+  options,
+  cutoffs,
+  sortLinks,
+  sortMenu,
+  endedToggle,
+}: {
+  rows: RateRow[];
+  options: RateOptions | null;
+  cutoffs: CutoffChoice[];
+  endedToggle?: { showing: boolean; href: string };
+  sortLinks?: SortLinks;
+  sortMenu?: React.ReactNode;
+}) {
   const [filter, setFilter] = useState("");
   const needle = filter.trim().toLowerCase();
   const shown = rows.filter((r) => `${r.name} ${r.clientName ?? ""} ${r.alias ?? ""}`.toLowerCase().includes(needle));
   const paged = usePaged(shown, filter);
+  const preparing = cutoffs.find((c) => c.beingPrepared);
 
   return (
     <div className="space-y-4">
       <Alert variant="info" role="note" className="rounded-lg p-3 text-sm">
-        These are pay figures. Opening this page is written to the audit log. A change is a new version with a start date, and the old one stays on record.
+        These are pay figures. Opening this page is written to the audit log.
+        {preparing ? ` A new rate counts from a pay run: the next one to prepare is ${preparing.range}.` : ""} Pay runs that are already made are never changed, and every old rate stays on record.
       </Alert>
       {rows.some((r) => r.unreadable) ? (
         <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
@@ -241,24 +101,29 @@ export function RatesTable({ rows, options, today, addStart, sortLinks, sortMenu
           <Input id="rates-filter" className="h-8 w-64" value={filter} onChange={(e) => setFilter(e.target.value)} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-        {endedToggle ? (
-          <Link href={endedToggle.href} className={buttonVariants({ variant: "outline", size: "sm" })}>
-            {endedToggle.showing ? "Hide ended lines" : "Show ended lines"}
-          </Link>
-        ) : null}
-        {sortMenu}
-        {options ? (
-          <FormDialog label="Add pay line" title="Add a pay line" description="One line per person and role. Someone working for two clients has two lines." icon={<Plus className="size-4" aria-hidden />} size="lg">
-            <AddLineForm options={options} addStart={addStart} />
-          </FormDialog>
-        ) : null}
+          {endedToggle ? (
+            <Link href={endedToggle.href} className={buttonVariants({ variant: "outline", size: "sm" })}>
+              {endedToggle.showing ? "Hide stopped rates" : "Show stopped rates"}
+            </Link>
+          ) : null}
+          {sortMenu}
+          {options ? (
+            <FormDialog label="Tidy overlapping rates" title="Tidy overlapping rates" description="End the older rate when a newer rate replaced it." variant="outline" size="md">
+              <TidyLinesForm />
+            </FormDialog>
+          ) : null}
+          {options ? (
+            <FormDialog label="Add contractor" title="Add a contractor" description="Someone who works for two clients gets one rate for each client." icon={<Plus className="size-4" aria-hidden />} size="lg">
+              <AddContractorForm options={options} cutoffs={cutoffs} rows={rows} />
+            </FormDialog>
+          ) : null}
         </div>
       </div>
       {rows.length === 0 ? (
-        <EmptyState title="No pay lines yet" description={options ? "Add a line for each person you pay." : "A Preparer adds the pay lines."} />
+        <EmptyState title="No rates yet" description={options ? "Add a contractor to start paying them." : "A Preparer adds the rates."} />
       ) : (
         <>
-          <Table stack dragScroll scrollLabel="Pay lines. Drag sideways or use the arrow keys to scroll.">
+          <Table stack dragScroll scrollLabel="Rates. Drag sideways or use the arrow keys to scroll.">
             <TableHeader>
               <TableRow>
                 <TableHead aria-sort={ariaSortOf(sortLinks, "name")}>
@@ -271,57 +136,64 @@ export function RatesTable({ rows, options, today, addStart, sortLinks, sortMenu
                     {L.clientShort}
                   </SortHead>
                 </TableHead>
-                <TableHead>{L.aliasShort}</TableHead>
-                <TableHead>{L.hoursPerDay}</TableHead>
                 <TableHead aria-sort={ariaSortOf(sortLinks, "rate")}>
                   <SortHead header="rate" links={sortLinks}>
                     {L.monthly}
                   </SortHead>
                 </TableHead>
-                <TableHead>{L.starts}</TableHead>
+                <TableHead>{L.paying}</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paged.rows.map((row) => (
-                <TableRow key={row.lineKey}>
-                  <TableCell label={L.person} className="font-medium">
-                    {row.name}
-                  </TableCell>
-                  <TableCell label={L.clientShort}>{row.clientName ?? "None"}</TableCell>
-                  <TableCell label={L.aliasShort}>{row.alias ?? "None"}</TableCell>
-                  <TableCell label={L.hoursPerDay}>{row.hoursPerDay}</TableCell>
-                  <TableCell label={L.monthly} className="tabular-nums">
-                    {row.monthly}
-                  </TableCell>
-                  <TableCell label={L.starts}>
-                    {row.effectiveFrom}
-                    {row.upcomingFrom ? <span className="block text-xs text-muted-foreground">Next change {row.upcomingFrom}</span> : null}
-                    {row.endsOn ? <span className="block text-xs text-muted-foreground">{row.ended ? "Ended" : "Ends"} {row.endsOn}</span> : null}
-                  </TableCell>
-                  <TableCell label="Actions">
-                    {options ? (
-                      <div className="flex flex-wrap gap-2">
-                        {row.endsOn ? null : (
-                          <>
-                            <FormDialog label="Change" title={`Change ${row.name}'s pay line`} description="Saved as a new version with its own start date." variant="outline" triggerSize="sm" size="lg" disabled={row.unreadable} hint={UNREADABLE_HINT}>
-                              <ChangeLineForm row={row} options={options} today={today} />
-                            </FormDialog>
-                            <FormDialog label="End" title={`End ${row.name}'s pay line`} description="The line stays on record. It stops being paid after the last day." variant="outline" triggerSize="sm">
-                              <EndLineForm row={row} today={today} />
-                            </FormDialog>
-                          </>
-                        )}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {paged.rows.map((row, i) => {
+                const repeat = i > 0 && paged.rows[i - 1].employeeId === row.employeeId;
+                const detail = [row.alias, `${row.hoursPerDay} hours a day`].filter(Boolean).join(" · ");
+                return (
+                  <TableRow key={row.lineKey}>
+                    <TableCell label={L.person} className="font-medium">
+                      <span className={repeat ? "text-muted-foreground md:sr-only" : undefined}>{row.name}</span>
+                    </TableCell>
+                    <TableCell label={L.clientShort}>
+                      {row.clientName ?? "No client"}
+                      <span className="block text-xs text-muted-foreground">{detail}</span>
+                    </TableCell>
+                    <TableCell label={L.monthly} className="tabular-nums">
+                      {row.monthly}
+                    </TableCell>
+                    <TableCell label={L.paying}>
+                      Since {row.effectiveFrom}
+                      {row.upcomingFrom ? <span className="block text-xs text-muted-foreground">New rate from {row.upcomingFrom}</span> : null}
+                      {row.endsOn ? <span className="block text-xs text-muted-foreground">{row.ended ? "Stopped" : "Stops"} after {row.endsOn}</span> : null}
+                    </TableCell>
+                    <TableCell label="Actions">
+                      {options && !row.endsOn ? (
+                        <div className="flex flex-wrap gap-2">
+                          <FormDialog
+                            label="Update rate"
+                            title={`Update ${row.name}'s rate`}
+                            description={`${row.clientName ?? "No client"}${row.alias ? `, ${row.alias}` : ""}. Saved as a new version of this rate; the old one stays on record.`}
+                            variant="outline"
+                            triggerSize="sm"
+                            size="lg"
+                            icon={<TrendingUp className="size-4" aria-hidden />}
+                            disabled={row.unreadable}
+                            hint={UNREADABLE_HINT}
+                          >
+                            <UpdateRateForm row={row} cutoffs={cutoffs} />
+                          </FormDialog>
+                          <RowMenu row={row} options={options} cutoffs={cutoffs} />
+                        </div>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
-          <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="pay lines" />
+          <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="rates" />
         </>
       )}
     </div>

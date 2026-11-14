@@ -44,14 +44,15 @@ test("payroll: the checklist, plain flags, filter chips and Go to this line", as
     // Twelve pay lines; the first starts part-way through the cutoff.
     for (let i = 0; i < workers.length; i++) {
       await p.goto("/payroll/rates");
-      await p.getByRole("button", { name: "Add pay line" }).click();
+      await p.getByRole("button", { name: "Add contractor" }).click();
       await waitForHydration(p, "#add-person");
       const option = p.locator("#add-person option", { hasText: `Wnn${String.fromCharCode(97 + i)} Test${stamp}` });
       await p.locator("#add-person").selectOption(await option.getAttribute("value"));
       await p.locator("#add-monthly").fill("25,000.00");
+      await p.getByRole("dialog").getByText("Pick another date").click();
       await p.locator("#add-from").fill(i === 0 ? startsOn : period.start);
-      await p.getByRole("dialog").getByRole("button", { name: "Add pay line" }).click();
-      await expect(p.getByText("Pay line added.")).toBeVisible();
+      await p.getByRole("dialog").getByRole("button", { name: "Add contractor" }).click();
+      await expect(p.getByText("Rate added.")).toBeVisible();
       await expect(p.getByRole("dialog")).toHaveCount(0);
     }
 

@@ -48,6 +48,8 @@ export const payLines = payroll
       paymentMethod: text("payment_method").notNull().default("remitly"),
       endsOn: date("ends_on"),
       effectiveFrom: date("effective_from").notNull(),
+      /** A version that withdraws the whole line (added by mistake, never on a real run): the line is treated as if it never existed. */
+      withdrawn: boolean("withdrawn").notNull().default(false),
       amountsEnc: text("amounts_enc").notNull(),
       createdBy: uuid("created_by")
         .notNull()

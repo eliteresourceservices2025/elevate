@@ -117,6 +117,9 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       changes.push(...diffLines(old, next, names, true));
       facts.push(...fact(H.reason, detail.reason));
       break;
+    case "line_withdrawn":
+      facts.push(...fact(H.reason, detail.reason));
+      break;
     case "line_ended":
       changes.push({ label: R.lastDay, before: str(old?.endsOn) ?? H.notSet, after: str(detail.endsOn) ?? H.notSet });
       facts.push(...fact(H.reason, detail.reason));

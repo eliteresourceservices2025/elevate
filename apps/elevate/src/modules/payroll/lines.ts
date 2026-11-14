@@ -7,6 +7,8 @@ export type LineVersion = {
   effectiveFrom: string;
   endsOn: string | null;
   createdAt: Date | string | number;
+  /** A version that withdrew the whole line (it was added by mistake): the line never applies to any period. */
+  withdrawn?: boolean;
 };
 
 export type ResolvedLine<V extends LineVersion = LineVersion> = { version: V; flags: LineFlag[] };
@@ -46,6 +48,54 @@ export function sameJob(a: JobKey, b: JobKey): boolean {
   return a.clientId === b.clientId || a.clientId === null || b.clientId === null;
 }
 
+/** A date one day earlier (plain YYYY-MM-DD strings, no time zone). */
+function dayBefore(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * A newer line for the same job takes over from its first day: the older line (same person, same alias, same client or one with none) is
+ * cut off the day before, so it can never pay on top of the newer one. Without this, an old line that was only ended later (or never) and a
+ * new line added for the same job both resolve and the person is paid twice for the overlap. Returns the versions with the older line's end
+ * dates lowered to that day (copies; the stored rows are not touched). A line's own earlier end date is kept. Two lines that start on the
+ * same day are left alone (nothing says which one is right: the "paid twice" note covers that). Versions that carry no person are ignored.
+ */
+export function applySupersede<V extends LineVersion & Partial<JobKey>>(versions: V[]): V[] {
+  type Line = { key: string; job: JobKey; first: string; last: string | null };
+  const byKey = new Map<string, V[]>();
+  for (const v of versions) byKey.set(v.lineKey, [...(byKey.get(v.lineKey) ?? []), v]);
+  const lines: Line[] = [];
+  for (const [key, group] of byKey) {
+    if (group.some((v) => v.withdrawn)) continue; // a withdrawn line never applies, so it supersedes nothing
+    const head = group[0];
+    if (head.employeeId === undefined) continue;
+    const last = lineLastDay(group);
+    const live = last === null ? group : group.filter((v) => v.effectiveFrom <= last);
+    if (live.length === 0) continue;
+    const first = live.reduce((min, v) => (v.effectiveFrom < min ? v.effectiveFrom : min), live[0].effectiveFrom);
+    // The newest version names the job (a Change may have moved it to another client or alias).
+    const named = [...live].sort(newestFirst)[0];
+    lines.push({ key, job: { employeeId: named.employeeId!, clientId: named.clientId ?? null, alias: named.alias ?? null }, first, last });
+  }
+  const cap = new Map<string, string>();
+  for (const older of lines) {
+    for (const newer of lines) {
+      if (older === newer || !sameJob(older.job, newer.job)) continue;
+      if (!(older.first < newer.first)) continue;
+      if (older.last !== null && older.last < newer.first) continue; // already ended before the newer one began
+      const to = dayBefore(newer.first);
+      const had = cap.get(older.key);
+      if (had === undefined || to < had) cap.set(older.key, to);
+    }
+  }
+  if (cap.size === 0) return versions;
+  return versions.map((v) => {
+    const to = cap.get(v.lineKey);
+    return to === undefined ? v : { ...v, endsOn: v.endsOn !== null && v.endsOn < to ? v.endsOn : to };
+  });
+}
+
 /** The line's last day: the earliest end date on any of its versions, or null while it has not ended. */
 export function lineLastDay(versions: LineVersion[]): string | null {
   let last: string | null = null;
@@ -63,14 +113,17 @@ const newestFirst = (a: LineVersion, b: LineVersion) =>
  * One result per line key, never two. The version in force on the first day of the period is paid; a raise dated inside the period
  * does not change the pay for this period, it only raises `rate_change_mid_period` so a person looks at it. A line whose first version
  * starts inside the period is included with `starts_mid_period`; one that starts later is left out. A line that ended before the
- * period is left out; one that ends inside it carries `ends_mid_period`.
+ * period is left out; one that ends inside it carries `ends_mid_period`. A line the same job's newer line replaced (`applySupersede`) counts as
+ * ended the day before the newer one starts.
  */
-export function resolveLines<V extends LineVersion>(versions: V[], period: { start: string; end: string }): ResolvedLine<V>[] {
+export function resolveLines<V extends LineVersion & Partial<JobKey>>(input: V[], period: { start: string; end: string }): ResolvedLine<V>[] {
+  const versions = applySupersede(input);
   const byKey = new Map<string, V[]>();
   for (const v of versions) byKey.set(v.lineKey, [...(byKey.get(v.lineKey) ?? []), v]);
 
   const out: ResolvedLine<V>[] = [];
   for (const group of byKey.values()) {
+    if (group.some((v) => v.withdrawn)) continue; // added by mistake and withdrawn: never part of any period
     const lastDay = lineLastDay(group);
     // A version dated after the line's last day never applies (a raise saved for later, then the person left).
     const live = lastDay === null ? group : group.filter((v) => v.effectiveFrom <= lastDay);

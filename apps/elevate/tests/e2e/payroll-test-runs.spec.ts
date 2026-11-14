@@ -32,14 +32,15 @@ test("payroll: drag the run sheet sideways, mark a run as a test, archive it, re
 
     // A pay line and a run.
     await p.goto("/payroll/rates");
-    await p.getByRole("button", { name: "Add pay line" }).click();
+    await p.getByRole("button", { name: "Add contractor" }).click();
     await waitForHydration(p, "#add-person");
     const option = p.locator("#add-person option", { hasText: `Wanda Worker${stamp}` });
     await p.locator("#add-person").selectOption(await option.getAttribute("value"));
     await p.locator("#add-monthly").fill("25,000.00");
+    await p.getByRole("dialog").getByText("Pick another date").click();
     await p.locator("#add-from").fill(period.start);
-    await p.getByRole("dialog").getByRole("button", { name: "Add pay line" }).click();
-    await expect(p.getByText("Pay line added.")).toBeVisible();
+    await p.getByRole("dialog").getByRole("button", { name: "Add contractor" }).click();
+    await expect(p.getByText("Rate added.")).toBeVisible();
 
     const createRun = async (testRun = false) => {
       await p.goto("/payroll");

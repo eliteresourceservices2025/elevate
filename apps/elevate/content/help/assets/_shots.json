@@ -542,12 +542,12 @@
   {
     "article": "prepare-a-pay-run",
     "file": "03-rates.png",
-    "alt": "Payroll, Rates: one row for each pay line, with the Add pay line button."
+    "alt": "Payroll, Rates: one row for each pay line, with the Add contractor button."
   },
   {
     "article": "prepare-a-pay-run",
     "file": "04-add-pay-line.png",
-    "alt": "The Add pay line window: the person, the monthly rate in pesos and the date it starts."
+    "alt": "The Add a contractor window: the person, the monthly rate in pesos and the cutoff it is paid from."
   },
   {
     "article": "prepare-a-pay-run",

@@ -15,7 +15,7 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
+const { createPayLine, updatePayLine, endPayLine, tidyOverlappingLines, withdrawPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
 const { getWorksheet, getRuns, getRates } = await import("@/modules/payroll/queries");
 const { decryptRunLine, encryptItemValue, settingsInForce } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
@@ -1204,6 +1204,39 @@ describe("a person paid twice for the same client", () => {
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
   });
 
+  it("an old line and a newer line for the same job pay once: the newer takes over, and Tidy writes that down", async () => {
+    const p = c33(20); // 1 to 15 November 2033
+    const emp = await person();
+    const clinic = await client();
+    current.user = preparer;
+    const oldLine = await createPayLine(lineBase(emp, { clientId: clinic, alias: "Old", effectiveFrom: "2033-01-01" }));
+    const newLine = await createPayLine(lineBase(emp, { clientId: clinic, alias: "New", effectiveFrom: "2033-10-16" }));
+    if (!oldLine.ok || !newLine.ok) throw new Error("lines failed");
+    // The way it happened for real: both lines were added for the same job (the guard now refuses this) and the old one ended later.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local session_replication_role = replica`);
+      await tx.execute(sql`update payroll.pay_lines set alias = 'Same' where line_key in (${oldLine.data.lineKey}, ${newLine.data.lineKey})`);
+    });
+    const runId = await newRun(preparer, p);
+    expect(await rows(sql`select 1 from payroll.pay_run_lines where run_id = ${runId} and employee_id = ${emp}`)).toHaveLength(1);
+    const key = (await rows<{ line_key: string }>(sql`select l.line_key from payroll.pay_run_lines r join payroll.pay_lines l on l.id = r.line_id where r.run_id = ${runId} and r.employee_id = ${emp}`))[0].line_key;
+    expect(key).toBe(newLine.data.lineKey);
+    current.user = preparer;
+    // The sheet shows no "paid twice" note.
+    const sheet = (await getWorksheet(runId))!;
+    expect(sheet.checks.warnings.some((c) => c.code === "duplicate_pay_line" && c.employeeId === emp)).toBe(false);
+
+    // Tidy counts first, then ends the old line the day before the new one starts.
+    const preview = await tidyOverlappingLines({ apply: false });
+    expect(preview).toMatchObject({ ok: true, data: { applied: false } });
+    expect(preview.ok && preview.data.count).toBeGreaterThanOrEqual(1);
+    expect(await tidyOverlappingLines({ apply: true })).toMatchObject({ ok: true, data: { applied: true } });
+    const ended = await rows<{ ends_on: string }>(sql`select ends_on from payroll.pay_lines where line_key = ${oldLine.data.lineKey} order by created_at desc limit 1`);
+    expect(ended[0].ends_on).toBe("2033-10-15");
+    // Run it again: nothing left to tidy.
+    expect(await tidyOverlappingLines({ apply: true })).toMatchObject({ ok: true, data: { count: 0 } });
+  });
+
   it("a leftover line with no client next to the client's line for the same alias is a twin too (the case that doubled a whole run)", async () => {
     const p = c33(14);
     const left = await person();
@@ -1227,5 +1260,65 @@ describe("a person paid twice for the same client", () => {
     expect(ended).toMatchObject({ employeeId: emp, ended: true, endsOn: "2024-01-31", effectiveFrom: "2024-01-01" });
     // A line still in force is not marked ended.
     expect((await getRates({ includeEnded: true })).filter((r) => r.ended === false).length).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("a rate added by mistake can be removed, and one that was paid cannot", () => {
+  it("removes a rate that was only on a test run: it leaves the Rates tab and every new run, and the history keeps it", async () => {
+    const p = c33(16);
+    const emp = await person();
+    const key = await lineIn(emp, p);
+    // A test run (practice) does not count as having paid the rate.
+    current.user = preparer;
+    const practice = await createPayRun({ ...p, test: true });
+    expect(practice.ok).toBe(true);
+    expect((await getRates()).some((r) => r.lineKey === key && r.onRealRun === false)).toBe(true);
+
+    expect(await withdrawPayLine({ lineKey: key, reason: "Added by mistake" })).toMatchObject({ ok: true });
+    expect((await getRates()).some((r) => r.lineKey === key)).toBe(false);
+    expect((await getRates({ includeEnded: true })).some((r) => r.lineKey === key)).toBe(false);
+    // A run built now leaves it out.
+    const runId = await newRun(preparer, p);
+    expect(await runLines(runId, emp)).toHaveLength(0);
+    // The history (append-only) has the line and its removal.
+    const versions = await rows<{ withdrawn: boolean }>(sql`select withdrawn from payroll.pay_lines where line_key = ${key} order by created_at`);
+    expect(versions.map((v) => v.withdrawn)).toEqual([false, true]);
+    expect(await rows(sql`select 1 from payroll.pay_change_log where line_key = ${key} and action = 'line_withdrawn'`)).toHaveLength(1);
+    // It cannot be removed twice, and it can no longer be changed or stopped.
+    expect(await withdrawPayLine({ lineKey: key, reason: "Again" })).toMatchObject({ ok: false, error: expect.stringMatching(/already removed/) });
+  });
+
+  it("refuses to remove a rate that is on a real run, and a draft run drops a removed rate after Update people", async () => {
+    const p = c33(18);
+    const emp = await person();
+    const key = await lineIn(emp, p);
+    const runId = await newRun(preparer, p);
+    expect(await runLines(runId, emp)).toHaveLength(1);
+    current.user = preparer;
+    expect((await getRates()).find((r) => r.lineKey === key)?.onRealRun).toBe(true);
+    expect(await withdrawPayLine({ lineKey: key, reason: "Added by mistake" })).toMatchObject({ ok: false, error: expect.stringMatching(/already on the pay run for 2033-.*Stop paying/) });
+    expect(await rows<{ withdrawn: boolean }>(sql`select withdrawn from payroll.pay_lines where line_key = ${key}`)).toEqual([{ withdrawn: false }]);
+  });
+
+  it("a line withdrawn after it was put on a draft run drops off that run with Update people (a cancelled run does not count as paid)", async () => {
+    const p = c33(22);
+    const emp = await person();
+    const key = await lineIn(emp, p);
+    const runId = await newRun(preparer, p);
+    current.user = preparer;
+    expect(await cancelPayRun({ runId, reason: "Wrong period" })).toMatchObject({ ok: true });
+    expect(await withdrawPayLine({ lineKey: key, reason: "Added by mistake" })).toMatchObject({ ok: true });
+    const again = await newRun(preparer, p);
+    expect(await runLines(again, emp)).toHaveLength(0);
+  });
+
+  it("a Correction saved on the date the rate started replaces the old figure without a new date", async () => {
+    const emp = await person();
+    const key = await giveLine(preparer, emp, { effectiveFrom: "2033-03-01", monthly: "20,000" });
+    current.user = preparer;
+    expect(await updatePayLine({ ...lineBase(emp, { monthly: "21,500", effectiveFrom: "2033-03-01" }), lineKey: key, reason: "Correction" })).toMatchObject({ ok: true });
+    const shown = (await getRates()).find((r) => r.lineKey === key);
+    expect(shown).toMatchObject({ monthly: "21,500.00", effectiveFrom: "2033-03-01" });
+    expect(await rows(sql`select 1 from payroll.pay_lines where line_key = ${key}`)).toHaveLength(2);
   });
 });

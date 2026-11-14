@@ -21,24 +21,32 @@ Start with **Settings**. It shows the **Cutoff divisor**, the **Warn at** percen
 
 To change them, click **Change settings**. Choose **Starts on**, check the **Cutoff divisor**, and type each overtime rate as a percent of the normal hourly rate: 125 means 1.25 times. Leave a rate blank until the figure is confirmed. Then click **Save settings**. The old version stays on record. Every box has a small **(i)** button: tap or hover it to read what the box is for.
 
-To give one person their own overtime percents, open **Rates**, then **Add pay line** (or **Change** on a line) and fill in **Overtime (OT) for this person**. A box left blank uses the company standard from Settings. The statement shows the percent that was used.
+To give one person their own overtime percents, open **Rates**, then **Add contractor** (under **More options**) or **More**, then **Edit details** on their row, and fill in **Overtime (OT) for this person**. A box left blank uses the company standard from Settings. The statement shows the percent that was used.
 
 ![The Change pay settings window: the start date, the divisor and the overtime (OT) rates.](help:prepare-a-pay-run/02-change-settings.png)
 
-# Add or change a pay line
+# Add a contractor, update a rate, or stop paying
 
-A pay line says what one person is paid. Someone who works for two clients has two lines.
+A rate says what one person is paid. Someone who works for two clients has one rate for each client. You never type a start date: you choose a pay cutoff.
 
-1. Open the **Rates** tab. It shows one row for each pay line in force.
-2. Click **Add pay line**.
-3. Choose the **Person**. Fill in **Client** and **Alias** if you need them, **Hours per day**, **Monthly rate (pesos)**, **Payment method** and **Starts on**. Allowances are not set here: you add them by name on each run.
-4. Click **Add pay line**.
+1. Open the **Rates** tab. It shows one row for each rate in force.
+2. Click **Add contractor**.
+3. Choose the **Person**, the **Client** if there is one, and the **Monthly rate (pesos)**. **Paying from** already has the cutoff being prepared chosen; pick the next one if the rate should wait. **More options** has hours per day, alias, payment method and overtime. Allowances are not set here: you add them by name on each run.
+4. Click **Add contractor**.
 
-![Payroll, Rates: one row for each pay line, with Add pay line.](help:prepare-a-pay-run/03-rates.png)
+If the person already has a rate for the same client, the window tells you to use **Update rate** on that row instead.
 
-![The Add a pay line window: the person, the monthly rate and the start date.](help:prepare-a-pay-run/04-add-pay-line.png)
+![Payroll, Rates: one row for each pay line, with Add contractor.](help:prepare-a-pay-run/03-rates.png)
 
-To change a rate, click **Change** on the person's row, fill in the new details and a **Reason for the change**, then click **Save new version**. The old version stays on record. To stop paying a line, click **End**, choose the **Last day**, write a **Reason** and click **End pay line**.
+![The Add a contractor window: the person, the monthly rate and the cutoff it is paid from.](help:prepare-a-pay-run/04-add-pay-line.png)
+
+**To update a rate,** click **Update rate** on the person's row, type the **New monthly rate**, pick a **Reason** (Raise, New contract, Correction or Other) and the cutoff it counts from, then click **Update rate**. The old rate stays on record, and pay runs already made are never changed. Choose **Correction** to fix a typo from when the rate started.
+
+**To stop paying,** click **More**, then **Stop paying**, choose the **Last cutoff paid** (they are paid for all of it) and a reason, then click **Stop paying**. Tick **Show stopped rates** to see rates that have stopped.
+
+**To change the client, alias, hours, payment method or overtime,** click **More**, then **Edit details**.
+
+**If you added a rate by mistake,** click **More**, then **Remove (added by mistake)**. It is offered only while the rate has never been on a real pay run (a practice run does not count). If the person was paid with it, use **Stop paying** instead.
 
 If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, **another Preparer must check your line**, and a different person records your payment.
 
@@ -147,7 +155,7 @@ When everyone is marked paid, the run becomes **Paid**. The contractors' stateme
 
 - **Writing a client's or patient's details in a reason.** Reasons are kept in the change history. Never put client or patient information in them.
 - **Sending a run for review with warnings you have not read.** Read each one.
-- **A person's statement shows "Line: 1" and "Line: 2" with the same pay.** They have two pay lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each pays a full cutoff, so they would be paid twice. The Rates tab only lists lines still in force today, so an old line that already ended is hidden: tick **Show ended lines** to see it. The run warns **Paid twice for the same job**. Take the extra line off this run (**Actions**, then **Remove from this run**), and end the old pay line on the Rates tab so later runs do not include it. To pay someone for two roles, give each pay line its own alias. The Rates tab no longer lets you add two overlapping lines for the same job.
+- **A person's statement shows "Line: 1" and "Line: 2" with the same pay.** They have two pay lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each pays a full cutoff, so they would be paid twice. The Rates tab only lists lines still in force today, so an old line that already ended is hidden: tick **Show stopped rates** to see it. The run warns **Paid twice for the same job**. ELEVATE now treats the newer line as the one that pays: the older line stops the day before the newer one starts, so a new run (or **Fill or update this run** on a draft) includes only one of them. To write that down on the Rates tab, press **Tidy overlapping rates**: it shows how many older lines it will end, and ends each one the day before the newer one starts (nothing is deleted; the change history keeps it). If you still see the note, the two lines start on the same day: remove one from the run (**Actions**, then **Remove from this run**) and end it on the Rates tab. To pay someone for two roles, give each rate its own alias. You can no longer add two overlapping rates for the same job: use **Update rate**.
 - **Choosing the wrong period.** Cancel and create the run again; do not try to edit it.
 - **Expecting to approve your own run.** The person who prepared or changed a run, checked a line on it, or wrote a rate it pays, can never approve it.
 - **Looking for a dollar rate or dollar allowance.** There are none. Type every amount in pesos.
