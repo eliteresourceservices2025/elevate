@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { createPayLine, endPayLine, updatePayLine } from "../actions";
@@ -215,7 +216,7 @@ function EndLineForm({ row, today }: { row: RateRow; today: string }) {
   );
 }
 
-export function RatesTable({ rows, options, today, addStart }: { rows: RateRow[]; options: RateOptions | null; today: string; addStart: string }) {
+export function RatesTable({ rows, options, today, addStart, sortLinks, sortMenu }: { rows: RateRow[]; options: RateOptions | null; today: string; addStart: string; sortLinks?: SortLinks; sortMenu?: React.ReactNode }) {
   const [filter, setFilter] = useState("");
   const needle = filter.trim().toLowerCase();
   const shown = rows.filter((r) => `${r.name} ${r.clientName ?? ""} ${r.alias ?? ""}`.toLowerCase().includes(needle));
@@ -238,11 +239,14 @@ export function RatesTable({ rows, options, today, addStart }: { rows: RateRow[]
           </Label>
           <Input id="rates-filter" className="h-8 w-64" value={filter} onChange={(e) => setFilter(e.target.value)} />
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        {sortMenu}
         {options ? (
           <FormDialog label="Add pay line" title="Add a pay line" description="One line per person and role. Someone working for two clients has two lines." icon={<Plus className="size-4" aria-hidden />} size="lg">
             <AddLineForm options={options} addStart={addStart} />
           </FormDialog>
         ) : null}
+        </div>
       </div>
       {rows.length === 0 ? (
         <EmptyState title="No pay lines yet" description={options ? "Add a line for each person you pay." : "A Preparer adds the pay lines."} />
@@ -251,11 +255,23 @@ export function RatesTable({ rows, options, today, addStart }: { rows: RateRow[]
           <Table stack dragScroll scrollLabel="Pay lines. Drag sideways or use the arrow keys to scroll.">
             <TableHeader>
               <TableRow>
-                <TableHead>{L.person}</TableHead>
-                <TableHead>{L.clientShort}</TableHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "name")}>
+                  <SortHead header="name" links={sortLinks}>
+                    {L.person}
+                  </SortHead>
+                </TableHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "client")}>
+                  <SortHead header="client" links={sortLinks}>
+                    {L.clientShort}
+                  </SortHead>
+                </TableHead>
                 <TableHead>{L.aliasShort}</TableHead>
                 <TableHead>{L.hoursPerDay}</TableHead>
-                <TableHead>{L.monthly}</TableHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "rate")}>
+                  <SortHead header="rate" links={sortLinks}>
+                    {L.monthly}
+                  </SortHead>
+                </TableHead>
                 <TableHead>{L.starts}</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>

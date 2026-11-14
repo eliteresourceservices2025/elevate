@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 
 export type SheetChip = { key: string; label: string; count: number };
 
-export function SheetFilters({ runId, active, chips, shown, total, sizeQuery }: { runId: string; active: string | undefined; chips: SheetChip[]; shown: number; total: number; sizeQuery: string }) {
-  const href = (key: string) => (key === "all" ? `/payroll/${runId}${sizeQuery ? `?${sizeQuery}` : ""}#pay-sheet` : `/payroll/${runId}?focus=${key}${sizeQuery ? `&${sizeQuery}` : ""}#pay-sheet`);
+export function SheetFilters({ runId, active, chips, shown, total, keepQuery }: { runId: string; active: string | undefined; chips: SheetChip[]; shown: number; total: number; keepQuery: string }) {
+  const href = (key: string) => (key === "all" ? `/payroll/${runId}${keepQuery ? `?${keepQuery}` : ""}#pay-sheet` : `/payroll/${runId}?focus=${key}${keepQuery ? `&${keepQuery}` : ""}#pay-sheet`);
   return (
     <nav aria-label="Filter the sheet" className="space-y-1">
       <ul className="flex flex-wrap items-center gap-2">

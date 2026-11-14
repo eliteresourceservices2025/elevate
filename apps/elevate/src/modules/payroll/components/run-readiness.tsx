@@ -50,7 +50,7 @@ function PersonCard({ person, mine, href }: { person: ReadinessPerson; mine: boo
   );
 }
 
-function IssueRow({ group, runId, focus, canFix, mine, sizeQuery }: { group: IssueGroup; runId: string; focus: string | undefined; canFix: boolean; mine: boolean; sizeQuery: string }) {
+function IssueRow({ group, runId, focus, canFix, mine, keepQuery }: { group: IssueGroup; runId: string; focus: string | undefined; canFix: boolean; mine: boolean; keepQuery: string }) {
   const copy = ISSUE_COPY[group.code];
   const ownOfSender = group.code === "own_line_unconfirmed" && !mine;
   const title = ownOfSender ? "The sender's own line needs another Preparer" : copy.title;
@@ -58,7 +58,7 @@ function IssueRow({ group, runId, focus, canFix, mine, sizeQuery }: { group: Iss
   const showWho = group.runLineIds.length > 0;
   const focused = focus === group.code;
   return (
-    <li className="flex flex-wrap items-start justify-between gap-3 p-3" data-issue={group.code}>
+    <li className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start sm:justify-between" data-issue={group.code}>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-semibold">{title}</h3>
@@ -78,7 +78,7 @@ function IssueRow({ group, runId, focus, canFix, mine, sizeQuery }: { group: Iss
         {canFix && group.code === "lines_out_of_date" ? <UpdatePeopleFix runId={runId} /> : null}
         {showWho ? (
           <Link
-            href={focused ? `/payroll/${runId}${sizeQuery ? `?${sizeQuery}` : ""}#pay-sheet` : `/payroll/${runId}?focus=${group.code}${sizeQuery ? `&${sizeQuery}` : ""}#pay-sheet`}
+            href={focused ? `/payroll/${runId}${keepQuery ? `?${keepQuery}` : ""}#pay-sheet` : `/payroll/${runId}?focus=${group.code}${keepQuery ? `&${keepQuery}` : ""}#pay-sheet`}
             className={buttonVariants({ variant: focused ? "default" : "ghost", size: "sm" })}
             aria-pressed={focused}
           >
@@ -100,7 +100,7 @@ export function RunReadiness({
   checksAreMine = true,
   lineHrefs,
   focus,
-  sizeQuery = "",
+  keepQuery = "",
 }: {
   blocking: RunCheck[];
   warnings: RunCheck[];
@@ -117,7 +117,7 @@ export function RunReadiness({
   /** The check the sheet is filtered to ("Show who"), if any. */
   focus?: string;
   /** The page size in the address (`size=25`), kept when a link changes the filter. */
-  sizeQuery?: string;
+  keepQuery?: string;
 }) {
   const r = groupReadiness(blocking, warnings);
   if (r.mustCount === 0 && r.reviewCount === 0 && unreadableCount === 0) {
@@ -158,7 +158,7 @@ export function RunReadiness({
 
       <ul className="divide-y rounded-lg border" aria-label="What to fix">
         {issues.map((g) => (
-          <IssueRow key={g.code} group={g} runId={runId} focus={focus} canFix={canFix} mine={checksAreMine} sizeQuery={sizeQuery} />
+          <IssueRow key={g.code} group={g} runId={runId} focus={focus} canFix={canFix} mine={checksAreMine} keepQuery={keepQuery} />
         ))}
       </ul>
 
