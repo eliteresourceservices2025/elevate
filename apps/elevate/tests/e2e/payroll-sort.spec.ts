@@ -132,14 +132,14 @@ test("payroll: sort the run sheet and the Rates tab, and group by client", async
     expect(await sheetOrder()).toEqual(["Echo", "Bravo", "Charlie", "Alpha", "Delta"]);
 
     // Column titles: Person sorts A to Z, then Z to A; the arrow and aria-sort show which way.
-    await p.locator("th[aria-sort]").filter({ hasText: /^Person/ }).getByRole("link").click();
+    await p.locator("th").filter({ has: p.getByRole("link", { name: /^Person/ }) }).getByRole("link").click();
     await p.waitForURL((u) => !u.search.includes("sort=net_desc"));
     expect(await sheetOrder()).toEqual(["Alpha", "Bravo", "Charlie", "Delta", "Echo"]);
-    await expect(p.locator("th[aria-sort]").filter({ hasText: /^Person/ })).toHaveAttribute("aria-sort", "ascending");
-    await p.locator("th[aria-sort]").filter({ hasText: /^Person/ }).getByRole("link").click();
+    await expect(p.locator("th").filter({ has: p.getByRole("link", { name: /^Person/ }) })).toHaveAttribute("aria-sort", "ascending");
+    await p.locator("th").filter({ has: p.getByRole("link", { name: /^Person/ }) }).getByRole("link").click();
     await p.waitForURL(/sort=name_desc/);
     expect(await sheetOrder()).toEqual(["Echo", "Delta", "Charlie", "Bravo", "Alpha"]);
-    await expect(p.locator("th[aria-sort]").filter({ hasText: /^Person/ })).toHaveAttribute("aria-sort", "descending");
+    await expect(p.locator("th").filter({ has: p.getByRole("link", { name: /^Person/ }) })).toHaveAttribute("aria-sort", "descending");
 
     // Client, then name: clients A to Z, No client last, people in name order inside each.
     await chooseSort("Client, then name");
