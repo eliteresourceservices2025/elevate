@@ -19,6 +19,7 @@ const line = (over: Partial<CheckLine> = {}): CheckLine => ({
   payoutReady: true,
   pendingSuggestions: 0,
   clientHoursMissing: false,
+  duplicateLine: false,
   confirmedBy: null,
   ...over,
 });
@@ -90,6 +91,15 @@ describe("runChecks", () => {
     const r = runChecks(input([line({ clientHoursMissing: true }), line({ runLineId: "r2", employeeId: "e2", clientHoursMissing: false })]));
     expect(r.blocking).toEqual([]);
     expect(r.warnings).toEqual([{ code: "no_client_hours", employeeId: "e1", runLineId: "r1", name: "Maria Testcruz" }]);
+  });
+
+  it("warns, without blocking, about a person paid twice for the same client and alias", () => {
+    const r = runChecks(input([line({ duplicateLine: true }), line({ runLineId: "r2", duplicateLine: true }), line({ runLineId: "r3", employeeId: "e3" })]));
+    expect(r.blocking).toEqual([]);
+    expect(r.warnings.map((c) => [c.code, c.runLineId])).toEqual([
+      ["duplicate_pay_line", "r1"],
+      ["duplicate_pay_line", "r2"],
+    ]);
   });
 
   it("warns when net pay moved by more than the threshold from the last run, never at exactly the threshold", () => {

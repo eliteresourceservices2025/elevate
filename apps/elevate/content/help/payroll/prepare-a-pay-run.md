@@ -90,7 +90,7 @@ The sheet starts in name order (last name, then first name). To see it another w
 
 - **Name, A to Z** or **Z to A**.
 - **Client, then name.** Clients A to Z, people with no client last, and the people of one client in name order.
-- **Monthly rate**, high to low or low to high. (Turn on **Show every column** to see the rate column.)
+- **Monthly rate**, high to low or low to high. (The rate column is one of the columns the sheet shows by default on a laptop. Untick **Show every column** for a shorter sheet.)
 - **Total payable**, high to low or low to high.
 - **Biggest change from last run.** The people whose total moved the most, up or down, come first; a person with no earlier run comes last.
 - **Not yet checked first** and **Needs attention first**, for reading a run before you send or approve it.
@@ -147,6 +147,7 @@ When everyone is marked paid, the run becomes **Paid**. The contractors' stateme
 
 - **Writing a client's or patient's details in a reason.** Reasons are kept in the change history. Never put client or patient information in them.
 - **Sending a run for review with warnings you have not read.** Read each one.
+- **A person's statement shows "Line: 1" and "Line: 2" with the same pay.** They have two pay lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each pays a full cutoff, so they would be paid twice. The Rates tab only lists lines still in force today, so an old line that already ended is hidden: tick **Show ended lines** to see it. The run warns **Paid twice for the same job**. Take the extra line off this run (**Actions**, then **Remove from this run**), and end the old pay line on the Rates tab so later runs do not include it. To pay someone for two roles, give each pay line its own alias. The Rates tab no longer lets you add two overlapping lines for the same job.
 - **Choosing the wrong period.** Cancel and create the run again; do not try to edit it.
 - **Expecting to approve your own run.** The person who prepared or changed a run, checked a line on it, or wrote a rate it pays, can never approve it.
 - **Looking for a dollar rate or dollar allowance.** There are none. Type every amount in pesos.

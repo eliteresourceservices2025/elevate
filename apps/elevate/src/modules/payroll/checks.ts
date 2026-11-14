@@ -22,6 +22,8 @@ export type CheckLine = {
   pendingSuggestions: number;
   /** The line has a client but no client payroll hours (confirmed or suggested): an invoice would have nothing to bill. */
   clientHoursMissing: boolean;
+  /** Another live line of the same person on this run has the same client and alias: each pays a full cutoff, so the person is paid twice. */
+  duplicateLine: boolean;
   confirmedBy: string | null;
 };
 
@@ -74,6 +76,7 @@ export function runChecks(input: ChecksInput): { blocking: RunCheck[]; warnings:
     if (l.flags.includes("rate_change_mid_period")) add(l, "rate_change_mid_period");
     if (l.pendingSuggestions > 0) add(l, "pending_suggestions", String(l.pendingSuggestions));
     if (l.clientHoursMissing) add(l, "no_client_hours");
+    if (l.duplicateLine) add(l, "duplicate_pay_line");
   }
   if (input.linesOutOfDate) found.push({ code: "lines_out_of_date", employeeId: null, runLineId: null, name: "This run" });
   for (const u of input.unassigned) {

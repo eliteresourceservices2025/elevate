@@ -529,6 +529,7 @@ export const WARNING_CHECKS = [
   "rate_change_mid_period",
   "pending_suggestions",
   "no_client_hours",
+  "duplicate_pay_line",
   "large_change",
 ] as const;
 export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
@@ -547,6 +548,7 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   rate_change_mid_period: "The rate changes during this period",
   pending_suggestions: "Suggested amounts are waiting for a decision",
   no_client_hours: "Has a client but no client payroll hours",
+  duplicate_pay_line: "Another line for the same job (same alias, same client or none) is on this run, so this person is paid twice",
   large_change: "Total payable compensation changed a lot from the last run",
 };
 
@@ -568,6 +570,11 @@ export const ISSUE_COPY: Record<CheckCode, { title: string; meaning: string }> =
   rate_change_mid_period: { title: "New rate part-way through", meaning: "ELEVATE pays the old rate for the whole cutoff and the new rate from the next one. Add an adjustment if it should count sooner." },
   pending_suggestions: { title: "Suggested amounts waiting", meaning: "Read them, then confirm or change them. Nothing changes pay until you confirm." },
   no_client_hours: { title: "No client payroll hours", meaning: "Needed to invoice the client. Fill them from the Jibble file in one go, or type them under Actions, then Amounts." },
+  duplicate_pay_line: {
+    title: "Paid twice for the same job",
+    meaning:
+      "This person has two lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each one pays a full cutoff. Often an old line was left when a new one was added. Take the extra one off this run (Actions, then Remove from this run), and end the old pay line on the Rates tab (tick Show ended lines to see it).",
+  },
   large_change: { title: "Pay changed a lot", meaning: "Their total is much higher or lower than in the last run. Check it is right." },
 };
 

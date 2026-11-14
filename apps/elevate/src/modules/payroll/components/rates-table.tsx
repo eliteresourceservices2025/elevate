@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { EmptyState } from "@/components/empty-state";
@@ -8,7 +9,7 @@ import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { FieldHint, HintedLabel } from "@/components/field-hint";
 import { PAYROLL_HINTS } from "../hints";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -216,7 +217,7 @@ function EndLineForm({ row, today }: { row: RateRow; today: string }) {
   );
 }
 
-export function RatesTable({ rows, options, today, addStart, sortLinks, sortMenu }: { rows: RateRow[]; options: RateOptions | null; today: string; addStart: string; sortLinks?: SortLinks; sortMenu?: React.ReactNode }) {
+export function RatesTable({ rows, options, today, addStart, sortLinks, sortMenu, endedToggle }: { rows: RateRow[]; options: RateOptions | null; today: string; addStart: string; endedToggle?: { showing: boolean; href: string }; sortLinks?: SortLinks; sortMenu?: React.ReactNode }) {
   const [filter, setFilter] = useState("");
   const needle = filter.trim().toLowerCase();
   const shown = rows.filter((r) => `${r.name} ${r.clientName ?? ""} ${r.alias ?? ""}`.toLowerCase().includes(needle));
@@ -240,6 +241,11 @@ export function RatesTable({ rows, options, today, addStart, sortLinks, sortMenu
           <Input id="rates-filter" className="h-8 w-64" value={filter} onChange={(e) => setFilter(e.target.value)} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
+        {endedToggle ? (
+          <Link href={endedToggle.href} className={buttonVariants({ variant: "outline", size: "sm" })}>
+            {endedToggle.showing ? "Hide ended lines" : "Show ended lines"}
+          </Link>
+        ) : null}
         {sortMenu}
         {options ? (
           <FormDialog label="Add pay line" title="Add a pay line" description="One line per person and role. Someone working for two clients has two lines." icon={<Plus className="size-4" aria-hidden />} size="lg">
@@ -293,7 +299,7 @@ export function RatesTable({ rows, options, today, addStart, sortLinks, sortMenu
                   <TableCell label={L.starts}>
                     {row.effectiveFrom}
                     {row.upcomingFrom ? <span className="block text-xs text-muted-foreground">Next change {row.upcomingFrom}</span> : null}
-                    {row.endsOn ? <span className="block text-xs text-muted-foreground">Ends {row.endsOn}</span> : null}
+                    {row.endsOn ? <span className="block text-xs text-muted-foreground">{row.ended ? "Ended" : "Ends"} {row.endsOn}</span> : null}
                   </TableCell>
                   <TableCell label="Actions">
                     {options ? (

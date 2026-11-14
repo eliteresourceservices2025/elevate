@@ -8,7 +8,7 @@ import type { CheckCode } from "./constants";
  * Checks that are easy to overlook and cost the most when they are: waiting suggestions, no client hours, no payout details and pay for
  * part of a period. They come first inside a person's list and carry a stronger mark.
  */
-export const PRIORITY_CHECKS: readonly CheckCode[] = ["pending_suggestions", "no_client_hours", "no_payout_details", "partial_exceeds_cutoff", "new_or_leaving", "rate_change_mid_period"];
+export const PRIORITY_CHECKS: readonly CheckCode[] = ["duplicate_pay_line", "pending_suggestions", "no_client_hours", "no_payout_details", "partial_exceeds_cutoff", "new_or_leaving", "rate_change_mid_period"];
 
 export type ReadinessItem = RunCheck & { priority: boolean };
 

@@ -80,6 +80,11 @@ async function approvedRun(p: { periodStart: string; periodEnd: string }) {
   if (!a.ok) throw new Error(`approve failed: ${a.error}`);
   return runId;
 }
+/** An approved (not paid) run for one person with one line in period `p`. */
+async function approvedRunFor(p: { periodStart: string; periodEnd: string }, employeeId: string) {
+  await giveLine(employeeId, p);
+  return approvedRun(p);
+}
 const today = () => "2029-12-30";
 async function payAll(runId: string, employeeIds: string[]) {
   as(preparer);
@@ -427,6 +432,7 @@ const { savePayrollSignatory } = await import("@/modules/settings/actions");
 const { getMyPayslip } = await import("@/modules/payroll/payslip-queries");
 const { payslipView } = await import("@/modules/payroll/payslip");
 const { currentSignatory } = await import("@/modules/payroll/signatory");
+const { buildStatement } = await import("@/modules/payroll/payslip-queries");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
 
 const seg = (marker: number, body: number[]) => [0xff, marker, (body.length + 2) >> 8, (body.length + 2) & 0xff, ...body];
@@ -546,6 +552,43 @@ describe("the signatory on payslips", () => {
       expect(Buffer.from(await res.arrayBuffer()).subarray(0, 5).toString("latin1")).toBe("%PDF-");
     }
     expect(await rows(sql`select 1 from payroll.pay_run_signatures where run_id in (${run1}, ${run2}, ${run3})`)).toHaveLength(3);
+  });
+
+  it("signs an approved TEST run with the saved signatory (not the Approver's name), while a real approved run still shows its Approver", async () => {
+    const owner = await account();
+    const emp = await person(owner.id);
+    // One free period: a test run may repeat the period of a real run.
+    const real = await approvedRunFor(slot(23), emp);
+    as(preparer);
+    const made = await createPayRun({ ...slot(23), test: true });
+    if (!made.ok) throw new Error(`test run failed: ${made.error}`);
+    const practice = made.data.runId;
+    expect(await submitRun({ runId: practice })).toMatchObject({ ok: true });
+    as(approver);
+    expect(await approveRun({ runId: practice, expectedHash: (await getWorksheet(practice))!.expectedHash! })).toMatchObject({ ok: true });
+
+    const statementOf = async (runId: string) => {
+      const [run] = await rows<{ periodStart: string; periodEnd: string; settingsSnapshot: unknown; isTest: boolean }>(
+        sql`select period_start::text as "periodStart", period_end::text as "periodEnd", settings_snapshot as "settingsSnapshot", is_test as "isTest" from payroll.pay_runs where id = ${runId}`,
+      );
+      return (await buildStatement(db, runId, emp, run))!;
+    };
+
+    // Nothing is frozen until a run is paid, so a real approved run has no signatory yet and falls back to the Approver who approved it.
+    const realSlip = await statementOf(real);
+    expect(realSlip.signatory).toBeNull();
+    expect(realSlip.authorizedBy).toBeTruthy();
+    expect(payslipView(realSlip).signature).toBeNull();
+
+    // The test run shows the saved signatory (name, title and picture as they stand now), dated the approval day.
+    const saved = (await currentSignatory(db))!;
+    const testSlip = await statementOf(practice);
+    expect(testSlip.isTest).toBe(true);
+    expect(testSlip.signatory).toMatchObject({ name: saved.name, title: saved.title, signedOn: testSlip.approvedOn });
+    expect(testSlip.signatory?.signatureBase64).toBe(saved.signatureBase64);
+    expect(payslipView(testSlip).signature).toMatchObject({ name: saved.name, title: saved.title });
+    // Nothing was frozen for it: the saved signatory is read when the statement is made.
+    expect(await rows(sql`select 1 from payroll.pay_run_signatures where run_id = ${practice}`)).toHaveLength(0);
   });
 });
 
