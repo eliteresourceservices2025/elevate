@@ -1,7 +1,7 @@
 "use client";
 
 import { fromZonedTime } from "date-fns-tz";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "@/components/feedback-dialog";
 import { useFormDialog } from "@/components/form-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
@@ -29,12 +29,12 @@ type Add = { type: (typeof TYPES)[number]["key"]; at: string };
  * Change someone's recorded time: pick the person and the day, tick the events that were recorded wrongly (they are marked removed, never
  * deleted), add the right ones, and give a reason. HR and Super Admin save it at once; a Team Lead sends it to HR to approve.
  */
-export function EditHoursForm({ people, applyNow }: { people: FilablePerson[]; applyNow: boolean }) {
+export function EditHoursForm({ people, applyNow, initial }: { people: FilablePerson[]; applyNow: boolean; initial?: { employeeId: string; date: string } }) {
   const dialog = useFormDialog();
   const [pending, start] = useTransition();
   const [find, setFind] = useState("");
-  const [employeeId, setEmployeeId] = useState("");
-  const [date, setDate] = useState(() => new Date().toLocaleDateString("sv-SE"));
+  const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? "");
+  const [date, setDate] = useState(() => initial?.date ?? new Date().toLocaleDateString("sv-SE"));
   const [day, setDay] = useState<{ zone: string; events: DayEvent[] } | null>(null);
   const [voids, setVoids] = useState<Set<string>>(new Set());
   const [adds, setAdds] = useState<Add[]>([]);
@@ -54,6 +54,15 @@ export function EditHoursForm({ people, applyNow }: { people: FilablePerson[]; a
       if (!result.ok) return void toast.error(result.error);
       setDay(result.data);
     });
+
+  // Arriving from "Fix clock-out" in hours review: show that person's day straight away.
+  const autoLoaded = useRef(false);
+  useEffect(() => {
+    if (!initial || autoLoaded.current) return;
+    autoLoaded.current = true;
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const changes = voids.size + adds.filter((a) => a.at).length;
   const ready = Boolean(day) && changes > 0 && reason.trim().length >= 5 && adds.every((a) => a.at !== "");

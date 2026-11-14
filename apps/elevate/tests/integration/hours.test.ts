@@ -125,6 +125,24 @@ describe("approving a week", () => {
     expect(!result.ok && result.error).toContain("still clocked in");
   });
 
+  it("refuses a day with a very long clock session (a forgotten clock-out), even with a note, and flags it in the review", async () => {
+    const lead = await person("LongLead", { roles: ["team_lead", "employee"] });
+    const worker = await person("LongWorker", { managerId: lead.employeeId });
+    const week = lastWeek();
+    // In at 5:50 AM Monday, out at 5:47 AM Tuesday: one session of 23h57m
+    await event(worker.employeeId, "clock_in", at(week, "05:50"));
+    await event(worker.employeeId, "clock_out", at(addDays(week, 1), "05:47"));
+    as(lead.user);
+    const result = await actions.approveHoursWeek({ employeeId: worker.employeeId, weekStart: week, note: "Checked, this is fine" });
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toContain("very long");
+    expect(await approvals(worker.employeeId)).toHaveLength(0);
+
+    const review = await queries.getTeamReview(week);
+    const row = review.rows.find((r) => r.employeeId === worker.employeeId);
+    expect(row?.flags).toContain("long_session");
+  });
+
   it("shows a day as changed after approval when a correction alters it, and approves again as a new row", async () => {
     const W = lastWeek();
     const lead = await person("ChgLead", { roles: ["team_lead", "employee"] });

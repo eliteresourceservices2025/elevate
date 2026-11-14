@@ -5,7 +5,7 @@ import { formatInZone } from "@/lib/time";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { timeChainUserIds, reportName } from "@/modules/org/service";
-import { MAX_OPEN_SESSION_MS, QUIET_AFTER_MS, buildDays } from "./clock";
+import { MAX_OPEN_SESSION_MS, QUIET_AFTER_MS, buildDays, hasLongSession } from "./clock";
 import { attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices, quietNotices } from "./schema";
 import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
 import { EXTRA_THRESHOLD_MINUTES, addDays, earlyLeaveMinutes, extraMinutes, hasScheduleAround, lateMinutes, shiftOn } from "./schedule";
@@ -170,6 +170,7 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
 
       const flags = [
         d.open ? "open_session" : null,
+        hasLongSession(d.sessionList) ? "long_session" : null,
         late > 0 ? "late" : null,
         early > 0 ? "left_early" : null,
         extra > 0 ? "extra_hours" : null,

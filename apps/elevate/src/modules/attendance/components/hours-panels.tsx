@@ -7,12 +7,13 @@ import { toast } from "@/components/feedback-dialog";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateOnly, formatInZone } from "@/lib/time";
 import { MINUTE, formatDuration } from "../clock";
+import { BLOCKING_FLAGS, CLEAN_FLAGS, worstSeverity } from "../flag-severity";
 import { approveCleanWeeks, approveHoursWeek, clearTestDay, exportHours, markTestDay, savePayPeriod } from "../hours-actions";
 import type { HoursSettings, ReviewRow, TeamReview } from "../hours-queries";
 import { PAY_PERIOD_LABELS, type PayPeriodKind } from "../pay-periods";
@@ -21,20 +22,17 @@ import { Alert } from "@/components/ui/alert";
 const STATE_TEXT: Record<ReviewRow["state"], string> = { approved: "Approved", partly: "Partly approved", changed: "Changed after approval", none: "Not approved", empty: "Nothing to approve yet" };
 const STATE_VARIANT: Record<ReviewRow["state"], "default" | "secondary" | "outline" | "destructive"> = { approved: "default", partly: "secondary", changed: "destructive", none: "outline", empty: "outline" };
 const hours = (minutes: number) => (minutes ? formatDuration(minutes * MINUTE) : "-");
-const CLEAN_FLAG = new Set(["on_leave", "corrected", "extra_hours"]);
-const BLOCKING_FLAG = new Set(["open_session", "absent", "unapproved_extra"]);
 
 type ReviewFilter = "all" | "ready" | "review" | "blocked" | "approved";
 
 function flagLevel(row: ReviewRow): "ready" | "review" | "blocked" | "approved" {
   if (row.state === "approved") return "approved";
-  if (row.flags.some((flag) => BLOCKING_FLAG.has(flag))) return "blocked";
-  if (row.flags.some((flag) => !CLEAN_FLAG.has(flag))) return "review";
-  return "ready";
+  const worst = worstSeverity(row.flags);
+  return worst === "blocked" ? "blocked" : worst === "review" ? "review" : "ready";
 }
 
 function primaryFlag(row: ReviewRow, label: (flag: string) => string) {
-  const flags = [...row.flags].sort((a, b) => Number(BLOCKING_FLAG.has(b)) - Number(BLOCKING_FLAG.has(a)) || a.localeCompare(b));
+  const flags = [...row.flags].sort((a, b) => Number(BLOCKING_FLAGS.has(b)) - Number(BLOCKING_FLAGS.has(a)) || a.localeCompare(b));
   if (flags.length === 0) return null;
   return `${label(flags[0])}${flags.length > 1 ? ` +${flags.length - 1}` : ""}`;
 }
@@ -102,7 +100,7 @@ function MarkTestButton({ employeeId, date, name }: { employeeId: string; date: 
 function WeekApproval({ row, pending, previewMode = false, onApprove }: { row: ReviewRow; pending: boolean; previewMode?: boolean; onApprove: (note?: string) => void }) {
   const [reviewing, setReviewing] = useState(false);
   const [note, setNote] = useState("");
-  const exceptional = row.flags.some((flag) => !CLEAN_FLAG.has(flag));
+  const exceptional = row.flags.some((flag) => !CLEAN_FLAGS.has(flag));
   if (!row.canApprove) return null;
   if (!exceptional) {
     return <Button size="sm" disabled={pending || previewMode} onClick={() => onApprove()}>Approve week</Button>;
@@ -278,7 +276,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels, previewMod
                                 {d.firstIn ? formatInZone(d.firstIn, r.zone, "h:mm a") : "-"} to {d.lastOut ? formatInZone(d.lastOut, r.zone, "h:mm a") : "-"}
                               </span>
                               <span className="w-28">Worked {hours(d.workedMinutes)}</span>
-                              <span className="w-28">{d.scheduledMinutes !== null ? `Scheduled ${hours(d.scheduledMinutes)}` : "Rest day"}</span>
+                              <span className="w-28">{d.scheduledMinutes !== null ? `Scheduled ${hours(d.scheduledMinutes)}` : d.hasSchedule ? "Rest day" : "No schedule"}</span>
                               <span className="w-32">{d.extraMinutes ? `Extra +${formatDuration(d.extraMinutes * MINUTE)}` : ""}</span>
                               {/* Where an extra comes from: worked time beyond the scheduled hours. A shorter break than the one scheduled is worked time too. */}
                               {d.extraMinutes && d.scheduledMinutes !== null ? <span className="text-xs text-muted-foreground">Worked {hours(d.workedMinutes)} against {hours(d.scheduledMinutes)} scheduled; break taken {hours(d.breakMinutes)}</span> : null}
@@ -290,6 +288,11 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels, previewMod
                                 ))}
                               </span>
                               <Badge variant={d.state === "approved" ? "default" : d.state === "changed" ? "destructive" : "outline"}>{d.state === "approved" ? "Approved" : d.state === "changed" ? "Changed after approval" : d.finished ? "Not approved" : "Day not over"}</Badge>
+                              {d.flags.includes("long_session") || d.flags.includes("open_session") ? (
+                                <Link href={`/team-attendance?fix=${r.employeeId}&date=${d.date}`} className={buttonVariants({ size: "sm", variant: "outline" })}>
+                                  Fix clock-out
+                                </Link>
+                              ) : null}
                               {review.canMarkTest ? <MarkTestButton employeeId={r.employeeId} date={d.date} name={r.name} /> : null}
                             </li>
                           ))}

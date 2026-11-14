@@ -231,3 +231,10 @@ export const EOD_EDIT_WINDOW_MS = 24 * 60 * MINUTE;
 export const EOD_TEMPLATE = ["Done today:", "- ", "", "In progress:", "- ", "", "Blockers:", "- ", "", "Tomorrow:", "- "].join("\n");
 
 export const MAX_OPEN_SESSION_MS = 12 * 60 * MINUTE;
+
+/** A finished session longer than this (clock-in to clock-out, breaks included) is almost always a forgotten clock-out. */
+export const LONG_SESSION_MS = MAX_OPEN_SESSION_MS;
+
+/** Whether any finished session in a day ran longer than {@link LONG_SESSION_MS}. Open sessions have their own flag. */
+export const hasLongSession = (sessions: readonly { startAt: number; endAt: number | null }[]) =>
+  sessions.some((s) => s.endAt !== null && s.endAt - s.startAt > LONG_SESSION_MS);
