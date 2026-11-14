@@ -49,8 +49,11 @@ export const endPayLineSchema = z.object({ lineKey: uuid, endsOn: isoDate, reaso
 /** Withdrawing a line that was added by mistake (it was never on a real run). */
 export const withdrawPayLineSchema = z.object({ lineKey: uuid, reason });
 
-/** Ending the older line of every job that has a newer line for the same job. `apply: false` only counts them. */
-export const tidyOverlappingLinesSchema = z.object({ apply: z.boolean() });
+/** Removing every stopped rate that was never on a real run. `apply: false` only counts them. */
+export const removeStoppedRatesSchema = z.object({ apply: z.boolean() });
+
+/** The tidied rates to bring back (one contractor's, or every one the tidy took away). */
+export const restoreRemovedRatesSchema = z.object({ lineKeys: z.array(uuid).min(1).max(1000) });
 
 export const savePaySettingsSchema = z.object({
   effectiveFrom: isoDate,

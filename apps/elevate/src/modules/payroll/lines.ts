@@ -9,6 +9,8 @@ export type LineVersion = {
   createdAt: Date | string | number;
   /** A version that withdrew the whole line (it was added by mistake): the line never applies to any period. */
   withdrawn?: boolean;
+  /** "removed" on the version that tidied a doubled rate away, "kept" on the version that restored it. */
+  tidyState?: string | null;
 };
 
 export type ResolvedLine<V extends LineVersion = LineVersion> = { version: V; flags: LineFlag[] };
@@ -48,6 +50,16 @@ export function sameJob(a: JobKey, b: JobKey): boolean {
   return a.clientId === b.clientId || a.clientId === null || b.clientId === null;
 }
 
+/**
+ * A line is withdrawn (added by mistake, or tidied away as a doubled rate) when its NEWEST version, by when it was written, says so. A later
+ * version that restores it (withdrawn false) brings it back. Pay lines are append-only, so "undo" is always a newer version.
+ */
+export function isWithdrawn(versions: LineVersion[]): boolean {
+  let newest: LineVersion | undefined;
+  for (const v of versions) if (!newest || stamp(v) >= stamp(newest)) newest = v;
+  return newest?.withdrawn === true;
+}
+
 /** A date one day earlier (plain YYYY-MM-DD strings, no time zone). */
 function dayBefore(date: string): string {
   const [y, m, d] = date.split("-").map(Number);
@@ -67,7 +79,7 @@ export function applySupersede<V extends LineVersion & Partial<JobKey>>(versions
   for (const v of versions) byKey.set(v.lineKey, [...(byKey.get(v.lineKey) ?? []), v]);
   const lines: Line[] = [];
   for (const [key, group] of byKey) {
-    if (group.some((v) => v.withdrawn)) continue; // a withdrawn line never applies, so it supersedes nothing
+    if (isWithdrawn(group)) continue; // a withdrawn line never applies, so it supersedes nothing
     const head = group[0];
     if (head.employeeId === undefined) continue;
     const last = lineLastDay(group);
@@ -123,7 +135,7 @@ export function resolveLines<V extends LineVersion & Partial<JobKey>>(input: V[]
 
   const out: ResolvedLine<V>[] = [];
   for (const group of byKey.values()) {
-    if (group.some((v) => v.withdrawn)) continue; // added by mistake and withdrawn: never part of any period
+    if (isWithdrawn(group)) continue; // withdrawn: never part of any period
     const lastDay = lineLastDay(group);
     // A version dated after the line's last day never applies (a raise saved for later, then the person left).
     const live = lastDay === null ? group : group.filter((v) => v.effectiveFrom <= lastDay);

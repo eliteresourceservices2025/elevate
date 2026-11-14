@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RATES_LABELS as L, UNREADABLE_HINT, unreadableNotice } from "../constants";
 import type { CutoffChoice } from "../rate-start";
 import type { RateOptions, RateRow } from "../queries";
-import { AddContractorForm, EditDetailsForm, RemoveRateForm, StopPayingForm, TidyLinesForm, UpdateRateForm } from "./rate-forms";
+import { AddContractorForm, AutoTidy, EditDetailsForm, RemovedRatesForm, RemoveRateForm, RemoveStoppedForm, StopPayingForm, UpdateRateForm } from "./rate-forms";
 import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
 
 // One row per rate, grouped under the person (the name is written once, on the first row of a person). The main button is "Update rate"; the
@@ -65,6 +65,7 @@ export function RatesTable({
   rows,
   options,
   cutoffs,
+  tidyKey,
   sortLinks,
   sortMenu,
   endedToggle,
@@ -72,6 +73,8 @@ export function RatesTable({
   rows: RateRow[];
   options: RateOptions | null;
   cutoffs: CutoffChoice[];
+  /** Names the doubled rates that were never paid (empty when none): they are taken away automatically, once for each different value. */
+  tidyKey?: string;
   endedToggle?: { showing: boolean; href: string };
   sortLinks?: SortLinks;
   sortMenu?: React.ReactNode;
@@ -84,6 +87,7 @@ export function RatesTable({
 
   return (
     <div className="space-y-4">
+      <AutoTidy tidyKey={tidyKey ?? ""} />
       <Alert variant="info" role="note" className="rounded-lg p-3 text-sm">
         These are pay figures. Opening this page is written to the audit log.
         {preparing ? ` A new rate counts from a pay run: the next one to prepare is ${preparing.range}.` : ""} Pay runs that are already made are never changed, and every old rate stays on record.
@@ -107,9 +111,14 @@ export function RatesTable({
             </Link>
           ) : null}
           {sortMenu}
+          {options && endedToggle?.showing ? (
+            <FormDialog label="Remove stopped rates" title="Remove stopped rates" description="Take stopped rates that were never paid off this list." variant="outline" size="md">
+              <RemoveStoppedForm />
+            </FormDialog>
+          ) : null}
           {options ? (
-            <FormDialog label="Tidy overlapping rates" title="Tidy overlapping rates" description="End the older rate when a newer rate replaced it." variant="outline" size="md">
-              <TidyLinesForm />
+            <FormDialog label="Removed rates" title="Removed rates" description="Doubled rates that were taken away automatically. Restore any of them." variant="outline" size="lg">
+              <RemovedRatesForm />
             </FormDialog>
           ) : null}
           {options ? (
@@ -169,6 +178,11 @@ export function RatesTable({
                       {row.endsOn ? <span className="block text-xs text-muted-foreground">{row.ended ? "Stopped" : "Stops"} after {row.endsOn}</span> : null}
                     </TableCell>
                     <TableCell label="Actions">
+                      {options && row.endsOn && !row.onRealRun ? (
+                        <FormDialog label="Remove" title={`Remove ${row.name}'s stopped rate`} description="It was never on a real pay run." variant="outline" triggerSize="sm">
+                          <RemoveRateForm row={row} />
+                        </FormDialog>
+                      ) : null}
                       {options && !row.endsOn ? (
                         <div className="flex flex-wrap gap-2">
                           <FormDialog

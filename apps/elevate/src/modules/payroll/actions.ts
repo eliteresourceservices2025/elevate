@@ -13,10 +13,12 @@ import { clients, employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
 import { HOLIDAY_BP } from "./calculate";
 import { logChange } from "./changes";
-import { applySupersede, lineLastDay, sameJob } from "./lines";
+import { autoTidyRates, lineKeysOnRealRuns, removedRatesOf, restoreRemovedRates, type RemovedRateView } from "./doubled-service";
+import { isWithdrawn, lineLastDay, sameJob } from "./lines";
+import { detailOf, insertEndVersion, insertWithdrawnVersion, newestVersion, type LineRow } from "./line-writes";
 import { parseMoney } from "./money";
 import { payLines, payRunLines, payRuns, paySettings } from "./schema";
-import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
+import { amountsToJson, decryptLineAmounts, encryptLineAmounts, payrollToday, settingsInForce, type LineAmounts } from "./service";
 import { releaseRun } from "./statements";
 import type { BulkResult } from "@/lib/bulk";
 import { archiveRun, archiveRunsIn, cancelRun, deleteRunsIn, restoreRunsIn, confirmLine, createRun, dismissItem, removeRunLine, restoreRun, restoreRunLine, saveItem, setRunTest, syncRunPeople } from "./runs";
@@ -54,7 +56,8 @@ import {
   markRunTestSchema,
   releaseStatementsSchema,
   restoreRunSchema,
-  tidyOverlappingLinesSchema,
+  restoreRemovedRatesSchema,
+  removeStoppedRatesSchema,
   withdrawPayLineSchema,
   savePayItemSchema,
   savePaySettingsSchema,
@@ -74,7 +77,6 @@ const refreshed = () => {
 /** One writer per line (or per settings table) at a time, so two edits cannot both pass the date checks. */
 const lock = (tx: Tx, key: string) => tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
 
-type LineRow = typeof payLines.$inferSelect;
 
 /** Every version of a line, newest first (later effective date, then later created_at). */
 async function versionsOf(tx: Tx, lineKey: string): Promise<LineRow[]> {
@@ -103,17 +105,6 @@ const amountsOf = (v: { monthly: string; otRegular?: number | null; otRestDay?: 
   if (v.otRestDayOver8 != null) otBp.restDayOver8 = v.otRestDayOver8;
   return { monthlyCentavos: parseMoney(v.monthly) ?? 0n, ...(Object.keys(otBp).length > 0 ? { otBp } : {}) };
 };
-
-/** What the change log keeps about a line version: the figures (encrypted with the log row) and the non-money fields. */
-const detailOf = (row: Pick<LineRow, "hoursPerDay" | "paymentMethod" | "effectiveFrom" | "endsOn" | "alias" | "clientId">, amounts: LineAmounts) => ({
-  ...amountsToJson(amounts),
-  hoursPerDay: row.hoursPerDay,
-  paymentMethod: row.paymentMethod,
-  effectiveFrom: row.effectiveFrom,
-  endsOn: row.endsOn,
-  alias: row.alias,
-  clientId: row.clientId,
-});
 
 /**
  * A second pay line for the same person, client and alias whose dates overlap the new one would pay the person twice for the same cutoff
@@ -240,26 +231,6 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
   });
 }
 
-/** The new version that carries a line's last day: a copy of `latest` (the version in force on that day) with `endsOn` set. Returns its decrypted amounts. */
-async function insertEndVersion(tx: Tx, actorId: string, latest: LineRow, endsOn: string): Promise<LineAmounts> {
-  const amounts = decryptLineAmounts(latest.id, latest.amountsEnc);
-  const id = randomUUID();
-  await tx.insert(payLines).values({
-    id,
-    lineKey: latest.lineKey,
-    employeeId: latest.employeeId,
-    clientId: latest.clientId,
-    alias: latest.alias,
-    hoursPerDay: latest.hoursPerDay,
-    paymentMethod: latest.paymentMethod,
-    endsOn,
-    effectiveFrom: latest.effectiveFrom,
-    amountsEnc: encryptLineAmounts(id, amounts),
-    createdBy: actorId,
-  });
-  return amounts;
-}
-
 /**
  * Withdraws a line that was added by mistake: a new version marks the whole line as never in force, so it disappears from the Rates tab and
  * from every run. Allowed only while the line has never been on a real run (a test, archived or cancelled run does not count); a line that was
@@ -279,7 +250,7 @@ export async function withdrawPayLine(input: unknown): Promise<ActionResult<{ li
       await lock(tx, `pay_line:${lineKey}`);
       const versions = await versionsOf(tx, lineKey);
       if (versions.length === 0) return fail("That pay line was not found.");
-      if (versions.some((x) => x.withdrawn)) return fail("This pay line was already removed.");
+      if (isWithdrawn(versions)) return fail("This pay line was already removed.");
       const used = await tx
         .select({ start: payRuns.periodStart, end: payRuns.periodEnd })
         .from(payRunLines)
@@ -291,22 +262,7 @@ export async function withdrawPayLine(input: unknown): Promise<ActionResult<{ li
       if (used.length > 0) return fail(`It was already on the pay run for ${used[0].start} to ${used[0].end}, so it can't be removed. Use Stop paying instead.`);
 
       const latest = versions[0];
-      const amounts = decryptLineAmounts(latest.id, latest.amountsEnc);
-      const id = randomUUID();
-      await tx.insert(payLines).values({
-        id,
-        lineKey,
-        employeeId: latest.employeeId,
-        clientId: latest.clientId,
-        alias: latest.alias,
-        hoursPerDay: latest.hoursPerDay,
-        paymentMethod: latest.paymentMethod,
-        endsOn: latest.endsOn,
-        effectiveFrom: latest.effectiveFrom,
-        withdrawn: true,
-        amountsEnc: encryptLineAmounts(id, amounts),
-        createdBy: actor.id,
-      });
+      const amounts = await insertWithdrawnVersion(tx, actor.id, latest);
       await writeAudit({ actor, action: "payroll.line.withdraw", targetType: "pay_line", targetId: lineKey, metadata: { employeeId: latest.employeeId } }, tx);
       await logChange(tx, actor, { action: "line_withdrawn", employeeId: latest.employeeId, lineKey, detail: { old: detailOf(latest, amounts), reason } });
       return { ok: true, data: { lineKey } } as const;
@@ -318,47 +274,95 @@ export async function withdrawPayLine(input: unknown): Promise<ActionResult<{ li
 }
 
 /**
- * Ends the older line of every job that has a newer line for the same job (same person, same alias, same client or none), the day before the
- * newer one starts. The pay run already ignores the older line from then on (`applySupersede`); this writes that down on the Rates tab so
- * the data says the same thing. `apply: false` only counts the lines it would end. Nothing is deleted: each end is a new version with history.
+ * The automatic tidy of doubled rates (the same person and client with overlapping dates): takes away the ones that were never on a real pay
+ * run, keeping the newest of each set. It also runs when a pay run is made or filled. A paid doubled rate is left for a person to stop. Every
+ * rate it takes away is listed under "Removed rates" and can be restored. Safe to call again: it finds nothing the second time.
  */
-export async function tidyOverlappingLines(input: unknown): Promise<ActionResult<{ count: number; applied: boolean }>> {
+export async function tidyDoubledRates(): Promise<ActionResult<{ removed: number; left: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+    const result = await db.transaction(async (tx) => autoTidyRates(tx, actor));
+    if (result.removed > 0) refreshed();
+    return { ok: true, data: result } as const;
+  });
+}
+
+/** The rates the tidy took away that nobody restored, with their figures (a sensitive read: a count in the audit log, never a figure). */
+export async function listRemovedRates(): Promise<ActionResult<{ rates: RemovedRateView[] }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+    const { views } = await removedRatesOf(db);
+    if (views.length > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_lines", metadata: { fields: ["monthly rate"], count: views.length } });
+    return { ok: true, data: { rates: views } } as const;
+  });
+}
+
+/**
+ * Brings tidied rates back: one contractor's, or all of them. A restored rate is marked as decided on, so the tidy does not take it away again
+ * (for example a real second role on the same client). Each restore is a new version with history.
+ */
+export async function restoreTidiedRates(input: unknown): Promise<ActionResult<{ restored: number }>> {
   const actor = await requireUser();
 
   return runAction(async () => {
     await authorize(actor, "payroll.manage_rates");
 
-    const parsed = tidyOverlappingLinesSchema.safeParse(input);
+    const parsed = restoreRemovedRatesSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const result = await db.transaction(async (tx) => ({ restored: await restoreRemovedRates(tx, actor, parsed.data.lineKeys) }));
+    if (result.restored > 0) refreshed();
+    return { ok: true, data: result } as const;
+  });
+}
+
+/**
+ * Takes every stopped rate that was never on a real pay run off the Rates list (a stopped rate whose last day has passed; a paid one stays,
+ * because it is part of the pay history). `apply: false` only counts them. Each removal is a withdrawing version with history, as in Remove.
+ */
+export async function removeStoppedRates(input: unknown): Promise<ActionResult<{ count: number; applied: boolean }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = removeStoppedRatesSchema.safeParse(input);
     if (!parsed.success) return fail(BAD_REQUEST);
 
     const result = await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('pay_line_tidy'))`);
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('pay_line_stopped'))`);
+      const today = payrollToday();
+      const used = await lineKeysOnRealRuns(tx);
       const rows = await tx.select().from(payLines);
-      const capped = applySupersede(rows);
-      const todo: { latest: LineRow; to: string }[] = [];
-      for (const key of new Set(rows.map((r) => r.lineKey))) {
-        const before = lineLastDay(rows.filter((r) => r.lineKey === key));
-        const after = lineLastDay(capped.filter((r) => r.lineKey === key));
-        if (after === null || after === before) continue;
-        const latest = rows
-          .filter((r) => r.lineKey === key && r.effectiveFrom <= after)
-          .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : a.effectiveFrom > b.effectiveFrom ? -1 : b.createdAt.getTime() - a.createdAt.getTime()))[0];
-        if (latest) todo.push({ latest, to: after });
+      const byKey = new Map<string, LineRow[]>();
+      for (const r of rows) byKey.set(r.lineKey, [...(byKey.get(r.lineKey) ?? []), r]);
+      const todo: LineRow[] = [];
+      for (const [lineKey, versions] of byKey) {
+        if (isWithdrawn(versions) || used.has(lineKey)) continue;
+        const last = lineLastDay(versions);
+        if (last === null || last >= today) continue;
+        todo.push([...versions].sort(newestVersion)[0]);
       }
       if (!parsed.data.apply) return { ok: true, data: { count: todo.length, applied: false as boolean } } as const;
 
-      for (const { latest, to } of todo) {
+      let done = 0;
+      for (const latest of todo) {
         await lock(tx, `pay_line:${latest.lineKey}`);
-        const amounts = await insertEndVersion(tx, actor.id, latest, to);
-        await writeAudit({ actor, action: "payroll.line.end", targetType: "pay_line", targetId: latest.lineKey, metadata: { employeeId: latest.employeeId, tidy: true } }, tx);
-        await logChange(tx, actor, {
-          action: "line_ended",
-          employeeId: latest.employeeId,
-          lineKey: latest.lineKey,
-          detail: { old: detailOf(latest, amounts), endsOn: to, reason: "Replaced by a newer line for the same job" },
-        });
+        let amounts;
+        try {
+          amounts = await insertWithdrawnVersion(tx, actor.id, latest);
+        } catch {
+          continue; // a figure that can't be read is decrypted before anything is written: skip this line
+        }
+        done += 1;
+        await writeAudit({ actor, action: "payroll.line.withdraw", targetType: "pay_line", targetId: latest.lineKey, metadata: { employeeId: latest.employeeId, stopped: true } }, tx);
+        await logChange(tx, actor, { action: "line_withdrawn", employeeId: latest.employeeId, lineKey: latest.lineKey, detail: { old: detailOf(latest, amounts), reason: "Stopped rate removed" } });
       }
-      return { ok: true, data: { count: todo.length, applied: true as boolean } } as const;
+      return { ok: true, data: { count: done, applied: true as boolean } } as const;
     });
 
     if (result.ok && result.data.applied) refreshed();

@@ -50,6 +50,8 @@ export const payLines = payroll
       effectiveFrom: date("effective_from").notNull(),
       /** A version that withdraws the whole line (added by mistake, never on a real run): the line is treated as if it never existed. */
       withdrawn: boolean("withdrawn").notNull().default(false),
+      /** Set by the doubled-rates tidy: "removed" on the version that took a doubled rate away, "kept" on the version that restored it (and stops it being tidied again). */
+      tidyState: text("tidy_state"),
       amountsEnc: text("amounts_enc").notNull(),
       createdBy: uuid("created_by")
         .notNull()
@@ -62,6 +64,7 @@ export const payLines = payroll
       index("pay_lines_key_idx").on(t.lineKey, t.effectiveFrom),
       check("pay_lines_hours_chk", sql`${t.hoursPerDay} between 1 and 12`),
       check("pay_lines_ends_chk", sql`${t.endsOn} is null or ${t.endsOn} >= ${t.effectiveFrom}`),
+      check("pay_lines_tidy_chk", sql`${t.tidyState} is null or ${t.tidyState} in ('removed', 'kept')`),
     ],
   )
   .enableRLS();

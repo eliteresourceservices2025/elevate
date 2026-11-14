@@ -15,7 +15,7 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, updatePayLine, endPayLine, tidyOverlappingLines, withdrawPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
+const { createPayLine, updatePayLine, endPayLine, tidyDoubledRates, listRemovedRates, restoreTidiedRates, removeStoppedRates, withdrawPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
 const { getWorksheet, getRuns, getRates } = await import("@/modules/payroll/queries");
 const { decryptRunLine, encryptItemValue, settingsInForce } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
@@ -850,6 +850,12 @@ function c33(n: number) {
 /** A line paid only during cutoff `p`. */
 const lineIn = (emp: string, p: { periodStart: string; periodEnd: string }, over: Record<string, unknown> = {}) =>
   giveLine(preparer, emp, { effectiveFrom: p.periodStart, endsOn: p.periodEnd, ...over });
+/** Marks a person's lines as decided on, so the automatic tidy of doubled rates leaves them alone (the test needs two lines on one client). */
+const leaveAlone = (employeeId: string) =>
+  db.transaction(async (tx) => {
+    await tx.execute(sql`set local session_replication_role = replica`);
+    await tx.execute(sql`update payroll.pay_lines set tidy_state = 'kept' where employee_id = ${employeeId}`);
+  });
 const FROZEN = { ok: false, error: "This run is no longer a draft, so it can't be changed." };
 
 describe("overtime with blank settings pays the standard percents", () => {
@@ -1189,6 +1195,8 @@ describe("a person paid twice for the same client", () => {
     await lineIn(twin, p, { clientId: clinic, alias: "B" });
     await lineIn(roles, p, { clientId: clinic, alias: "Front desk" });
     await lineIn(roles, p, { clientId: clinic, alias: "Night shift" });
+    await leaveAlone(twin);
+    await leaveAlone(roles);
     const runId = await newRun(preparer, p);
     // The way a twin could exist already: the same client and alias on two live lines of one run.
     await db.execute(sql`update payroll.pay_run_lines set alias = 'A' where run_id = ${runId} and employee_id = ${twin} and alias = 'B'`);
@@ -1204,7 +1212,7 @@ describe("a person paid twice for the same client", () => {
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
   });
 
-  it("an old line and a newer line for the same job pay once: the newer takes over, and Tidy writes that down", async () => {
+  it("an old line and a newer line for the same job pay once: the newer takes over, and the tidy takes the older one away", async () => {
     const p = c33(20); // 1 to 15 November 2033
     const emp = await person();
     const clinic = await client();
@@ -1226,15 +1234,92 @@ describe("a person paid twice for the same client", () => {
     const sheet = (await getWorksheet(runId))!;
     expect(sheet.checks.warnings.some((c) => c.code === "duplicate_pay_line" && c.employeeId === emp)).toBe(false);
 
-    // Tidy counts first, then ends the old line the day before the new one starts.
-    const preview = await tidyOverlappingLines({ apply: false });
+    // The older line was tidied away automatically when the run was made (it was never paid), and Removed rates lists it.
+    expect((await getRates()).filter((r) => r.employeeId === emp).map((r) => r.lineKey)).toEqual([newLine.data.lineKey]);
+    const removed = await listRemovedRates();
+    expect(removed.ok && removed.data.rates.some((r) => r.lineKey === oldLine.data.lineKey)).toBe(true);
+    // Nothing is left to tidy now.
+    expect(await tidyDoubledRates()).toMatchObject({ ok: true, data: { removed: 0 } });
+  });
+
+  it("the tidy ignores the alias on one client, never touches the same person's second client, and a restored rate stays for good", async () => {
+    const p = c33(10); // 1 to 15 June 2033
+    const emp = await person();
+    const clinic = await client();
+    const a = await giveLine(preparer, emp, { clientId: clinic, alias: "Front desk", effectiveFrom: "2033-01-01" });
+    const b = await giveLine(preparer, emp, { clientId: clinic, alias: "Billing", effectiveFrom: "2033-05-01" });
+    const second = await giveLine(preparer, emp, { clientId: await client(), effectiveFrom: "2033-01-01" });
+    const runId = await newRun(preparer, p);
+    // Making the run took the older line on the same client away, and kept the other client's line.
+    expect(await runLines(runId, emp)).toHaveLength(2);
+    current.user = preparer;
+    expect((await getRates()).filter((r) => r.employeeId === emp).map((r) => r.lineKey).sort()).toEqual([b, second].sort());
+    const removed = await listRemovedRates();
+    expect(removed.ok && removed.data.rates.filter((r) => r.employeeId === emp).map((r) => r.lineKey)).toEqual([a]);
+
+    // Restore brings it back, marked as decided on: the tidy does not take it away again.
+    expect(await restoreTidiedRates({ lineKeys: [a] })).toMatchObject({ ok: true, data: { restored: 1 } });
+    expect((await getRates()).filter((r) => r.employeeId === emp)).toHaveLength(3);
+    expect(await tidyDoubledRates()).toMatchObject({ ok: true, data: { removed: 0 } });
+    expect((await getRates()).filter((r) => r.employeeId === emp)).toHaveLength(3);
+    // Restoring it again changes nothing, and it is no longer listed as removed.
+    expect(await restoreTidiedRates({ lineKeys: [a] })).toMatchObject({ ok: true, data: { restored: 0 } });
+    const after = await listRemovedRates();
+    expect(after.ok && after.data.rates.some((r) => r.employeeId === emp)).toBe(false);
+    // The history keeps the removal and the restore.
+    const log = await rows<{ action: string }>(sql`select action from payroll.pay_change_log where line_key = ${a} order by created_at`);
+    expect(log.map((r) => r.action)).toEqual(["line_created", "line_withdrawn", "line_restored"]);
+  });
+
+  it("a tidy of two contractors restores one contractor's rates without the other's, and a doubled rate that was paid is left alone", async () => {
+    const period = c33(23); // 16 to 31 December 2033
+    const clinic = await client();
+    const keepOut = await person();
+    const bring = await person();
+    const olds: string[] = [];
+    for (const emp of [keepOut, bring]) {
+      olds.push(await giveLine(preparer, emp, { clientId: clinic, alias: "Old", effectiveFrom: "2033-01-01" }));
+      await giveLine(preparer, emp, { clientId: clinic, alias: "New", effectiveFrom: "2033-11-01" });
+    }
+    current.user = preparer;
+    expect(await tidyDoubledRates()).toMatchObject({ ok: true });
+    const listed = await listRemovedRates();
+    expect(listed.ok && olds.every((k) => listed.data.rates.some((r) => r.lineKey === k))).toBe(true);
+    // One contractor's rate comes back; the other stays removed.
+    expect(await restoreTidiedRates({ lineKeys: [olds[1]] })).toMatchObject({ ok: true, data: { restored: 1 } });
+    const still = await listRemovedRates();
+    expect(still.ok && still.data.rates.filter((r) => olds.includes(r.lineKey)).map((r) => r.lineKey)).toEqual([olds[0]]);
+
+    // A doubled rate that was paid on a real run is not taken away.
+    const paidEmp = await person();
+    const paid = await giveLine(preparer, paidEmp, { clientId: clinic, effectiveFrom: period.periodStart });
+    const runId = await newRun(preparer, period);
+    expect(await runLines(runId, paidEmp)).toHaveLength(1);
+    // A newer line for the same client (another alias, so it may be added) doubles the paid one.
+    await giveLine(preparer, paidEmp, { clientId: clinic, alias: "Other", effectiveFrom: "2034-02-01" });
+    const tidy = await tidyDoubledRates();
+    expect(tidy).toMatchObject({ ok: true });
+    expect(tidy.ok && tidy.data.left).toBeGreaterThanOrEqual(1);
+    expect((await getRates({ includeEnded: true })).some((r) => r.lineKey === paid)).toBe(true);
+  });
+
+  it("removes stopped rates that were never paid, and keeps a stopped rate that was paid", async () => {
+    const emp = await person();
+    const neverPaid = await giveLine(preparer, emp, { effectiveFrom: "2024-01-01", endsOn: "2024-01-31" });
+    const paidEmp = await person();
+    const p = c33(8);
+    const paid = await lineIn(paidEmp, p);
+    await newRun(preparer, p); // a real run: this stopped line is on it
+    current.user = preparer;
+    expect((await getRates({ includeEnded: true })).some((r) => r.lineKey === neverPaid && r.ended)).toBe(true);
+    const preview = await removeStoppedRates({ apply: false });
     expect(preview).toMatchObject({ ok: true, data: { applied: false } });
     expect(preview.ok && preview.data.count).toBeGreaterThanOrEqual(1);
-    expect(await tidyOverlappingLines({ apply: true })).toMatchObject({ ok: true, data: { applied: true } });
-    const ended = await rows<{ ends_on: string }>(sql`select ends_on from payroll.pay_lines where line_key = ${oldLine.data.lineKey} order by created_at desc limit 1`);
-    expect(ended[0].ends_on).toBe("2033-10-15");
-    // Run it again: nothing left to tidy.
-    expect(await tidyOverlappingLines({ apply: true })).toMatchObject({ ok: true, data: { count: 0 } });
+    expect(await removeStoppedRates({ apply: true })).toMatchObject({ ok: true, data: { applied: true } });
+    const after = await getRates({ includeEnded: true });
+    expect(after.some((r) => r.lineKey === neverPaid)).toBe(false);
+    expect(after.some((r) => r.lineKey === paid)).toBe(true);
+    expect(await removeStoppedRates({ apply: true })).toMatchObject({ ok: true, data: { count: 0 } });
   });
 
   it("a leftover line with no client next to the client's line for the same alias is a twin too (the case that doubled a whole run)", async () => {
@@ -1243,6 +1328,7 @@ describe("a person paid twice for the same client", () => {
     const clinic = await client();
     await lineIn(left, p, { clientId: clinic, alias: "X" });
     await lineIn(left, p, { clientId: clinic, alias: "Y" });
+    await leaveAlone(left);
     const runId = await newRun(preparer, p);
     // The run as it would be built from an old no-client line and the new client line for the same job.
     await db.execute(sql`update payroll.pay_run_lines set alias = 'X', client_id = null where run_id = ${runId} and employee_id = ${left} and alias = 'Y'`);
