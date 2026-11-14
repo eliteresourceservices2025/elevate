@@ -16,7 +16,7 @@ import { CORRECTION_TYPES, isItemized, PAY_ITEM_LABELS, REASON_REQUIRED_TYPES, t
 import { buildLineInput, cleanItemLabel, formatItemValue, noItemizedLines, parseItemValue, type ItemizedLines } from "./items";
 import { suggestedDays } from "./flags";
 import type { SortKeys } from "./sort";
-import { flagDatesOf, resolveLines, type FlagDates } from "./lines";
+import { flagDatesOf, resolveLines, sameJob, type FlagDates } from "./lines";
 import { formatPesos } from "./money";
 import { payLines, payPayments, payRunItems, payRunLines, payRunReleases, payRuns } from "./schema";
 import {
@@ -857,10 +857,10 @@ function unassignedOf(data: RunData): { employeeId: string; rows: ItemRow[] }[] 
  */
 export async function checkInputsOf(executor: Executor, data: RunData, submitterUserId: string | null): Promise<ChecksInput> {
   const submitterEmployeeId = submitterUserId ? await employeeIdForUser(executor, submitterUserId) : null;
-  // Two live lines for the same person, client and alias each pay a full cutoff: the person would be paid twice.
-  const sameKey = (r: (typeof data.rows)[number]) => `${r.runLine.employeeId}|${r.runLine.clientId ?? ""}|${(r.runLine.alias ?? "").trim().toLowerCase()}`;
-  const seen = new Map<string, number>();
-  for (const r of data.rows) seen.set(sameKey(r), (seen.get(sameKey(r)) ?? 0) + 1);
+  // Two live lines that are the same job of one person (same alias, and the same client or one with none) each pay a full cutoff: paid twice.
+  const byPerson = new Map<string, typeof data.rows>();
+  for (const r of data.rows) byPerson.set(r.runLine.employeeId, [...(byPerson.get(r.runLine.employeeId) ?? []), r]);
+  const isTwin = (r: (typeof data.rows)[number]) => (byPerson.get(r.runLine.employeeId) ?? []).some((o) => o !== r && sameJob(r.runLine, o.runLine));
   const lines: CheckLine[] = data.rows.map((r) => {
     const payload = data.payloads.get(r.runLine.id) ?? null;
     const unreadable = lineUnreadable(data, r.runLine.id);
@@ -881,7 +881,7 @@ export async function checkInputsOf(executor: Executor, data: RunData, submitter
         payload !== null &&
         payload.clientHoursHundredths === 0n &&
         !data.items.some((i) => i.runLineId === r.runLine.id && i.type === "client_hours" && i.state === "suggested"),
-      duplicateLine: (seen.get(sameKey(r)) ?? 0) > 1,
+      duplicateLine: isTwin(r),
       confirmedBy: r.runLine.confirmedBy,
     };
   });

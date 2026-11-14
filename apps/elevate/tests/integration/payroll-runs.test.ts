@@ -16,7 +16,7 @@ vi.mock("server-only", () => ({}));
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const { createPayLine, updatePayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine } = await import("@/modules/payroll/actions");
-const { getWorksheet, getRuns } = await import("@/modules/payroll/queries");
+const { getWorksheet, getRuns, getRates } = await import("@/modules/payroll/queries");
 const { decryptRunLine, encryptItemValue, settingsInForce } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
 
@@ -1156,6 +1156,8 @@ describe("a person paid twice for the same client", () => {
     expect((await make({ employeeId: emp, clientId: clinic, alias: "Night shift", effectiveFrom: "2033-07-01", endsOn: "2033-07-31" })).ok).toBe(true);
     expect((await make({ employeeId: emp, clientId: await client(), effectiveFrom: "2033-07-01", endsOn: "2033-07-31" })).ok).toBe(true);
     expect((await make({ employeeId: emp, clientId: clinic, effectiveFrom: "2033-08-01", endsOn: "2033-08-31" })).ok).toBe(true);
+    // A line with no client is the same job as the client's line (a leftover): refused too.
+    expect(await make({ employeeId: emp, effectiveFrom: "2033-07-01", endsOn: "2033-07-31" })).toMatchObject({ ok: false, error: expect.stringMatching(TWICE) });
     // The alias match ignores case and spaces.
     expect(await make({ employeeId: emp, clientId: clinic, alias: "  NIGHT shift ", effectiveFrom: "2033-07-05", endsOn: "2033-07-20" })).toMatchObject({ ok: false, error: expect.stringMatching(TWICE) });
     // Nothing is written for a refused line.
@@ -1200,5 +1202,30 @@ describe("a person paid twice for the same client", () => {
     expect(sheet.checks.warnings.some((c) => c.code === "duplicate_pay_line" && c.employeeId === roles)).toBe(false);
     // It is a note: the run can still be sent.
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
+  });
+
+  it("a leftover line with no client next to the client's line for the same alias is a twin too (the case that doubled a whole run)", async () => {
+    const p = c33(14);
+    const left = await person();
+    const clinic = await client();
+    await lineIn(left, p, { clientId: clinic, alias: "X" });
+    await lineIn(left, p, { clientId: clinic, alias: "Y" });
+    const runId = await newRun(preparer, p);
+    // The run as it would be built from an old no-client line and the new client line for the same job.
+    await db.execute(sql`update payroll.pay_run_lines set alias = 'X', client_id = null where run_id = ${runId} and employee_id = ${left} and alias = 'Y'`);
+    current.user = preparer;
+    const sheet = (await getWorksheet(runId))!;
+    expect(sheet.checks.warnings.filter((c) => c.code === "duplicate_pay_line" && c.employeeId === left)).toHaveLength(2);
+  });
+
+  it("lists a line whose last day has passed only when ended lines are asked for (the Rates tab hides them by default)", async () => {
+    const emp = await person();
+    const key = await giveLine(preparer, emp, { effectiveFrom: "2024-01-01", endsOn: "2024-01-31" });
+    current.user = preparer;
+    expect((await getRates()).some((r) => r.lineKey === key)).toBe(false);
+    const ended = (await getRates({ includeEnded: true })).find((r) => r.lineKey === key);
+    expect(ended).toMatchObject({ employeeId: emp, ended: true, endsOn: "2024-01-31", effectiveFrom: "2024-01-01" });
+    // A line still in force is not marked ended.
+    expect((await getRates({ includeEnded: true })).filter((r) => r.ended === false).length).toBeGreaterThanOrEqual(0);
   });
 });

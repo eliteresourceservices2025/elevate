@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flagDatesOf, resolveLines, type LineVersion } from "./lines";
+import { flagDatesOf, resolveLines, sameJob, type LineVersion } from "./lines";
 
 // Period Nov 16-30. Invented line keys and dates only.
 const period = { start: "2030-11-16", end: "2030-11-30" };
@@ -136,5 +136,25 @@ describe("flagDatesOf", () => {
   it("ignores a rate saved for after the line ended", () => {
     const versions = [v("2030-06-01", "2031-01-08"), v("2031-01-12")];
     expect(flagDatesOf(versions, "2030-06-01", period)).toEqual({ startsOn: null, endsOn: "2031-01-08", rateChangeOn: null });
+  });
+});
+
+describe("sameJob", () => {
+  const job = (clientId: string | null, alias: string | null, employeeId = "e1") => ({ employeeId, clientId, alias });
+  it("is the same job for the same client and alias, ignoring case and spaces", () => {
+    expect(sameJob(job("c1", null), job("c1", null))).toBe(true);
+    expect(sameJob(job("c1", "Night shift"), job("c1", "  NIGHT shift "))).toBe(true);
+    expect(sameJob(job("c1", ""), job("c1", null))).toBe(true);
+  });
+  it("treats a line with no client as the same job as one with a client (a leftover), when the alias matches", () => {
+    expect(sameJob(job(null, null), job("c1", null))).toBe(true);
+    expect(sameJob(job("c1", null), job(null, null))).toBe(true);
+    expect(sameJob(job(null, null), job(null, null))).toBe(true);
+  });
+  it("is not the same job for another person, another client (both set) or another alias", () => {
+    expect(sameJob(job("c1", null, "e1"), job("c1", null, "e2"))).toBe(false);
+    expect(sameJob(job("c1", null), job("c2", null))).toBe(false);
+    expect(sameJob(job("c1", "Front desk"), job("c1", "Night shift"))).toBe(false);
+    expect(sameJob(job(null, "Front desk"), job("c1", "Night shift"))).toBe(false);
   });
 });

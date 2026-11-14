@@ -548,7 +548,7 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   rate_change_mid_period: "The rate changes during this period",
   pending_suggestions: "Suggested amounts are waiting for a decision",
   no_client_hours: "Has a client but no client payroll hours",
-  duplicate_pay_line: "Another line for the same client and alias is on this run, so this person is paid twice",
+  duplicate_pay_line: "Another line for the same job (same alias, same client or none) is on this run, so this person is paid twice",
   large_change: "Total payable compensation changed a lot from the last run",
 };
 
@@ -571,9 +571,9 @@ export const ISSUE_COPY: Record<CheckCode, { title: string; meaning: string }> =
   pending_suggestions: { title: "Suggested amounts waiting", meaning: "Read them, then confirm or change them. Nothing changes pay until you confirm." },
   no_client_hours: { title: "No client payroll hours", meaning: "Needed to invoice the client. Fill them from the Jibble file in one go, or type them under Actions, then Amounts." },
   duplicate_pay_line: {
-    title: "Paid twice for the same client",
+    title: "Paid twice for the same job",
     meaning:
-      "This person has two lines for the same client (and the same alias) in this cutoff, and each one pays a full cutoff. If one replaced the other, end the old line before the new one starts, then Update people. Or take one of them off this run with Actions, then Remove.",
+      "This person has two lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each one pays a full cutoff. Often an old line was left when a new one was added. Take the extra one off this run (Actions, then Remove from this run), and end the old pay line on the Rates tab (tick Show ended lines to see it).",
   },
   large_change: { title: "Pay changed a lot", meaning: "Their total is much higher or lower than in the last run. Check it is right." },
 };

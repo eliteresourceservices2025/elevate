@@ -13,7 +13,7 @@ import { clients, employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
 import { HOLIDAY_BP } from "./calculate";
 import { logChange } from "./changes";
-import { lineLastDay } from "./lines";
+import { lineLastDay, sameJob } from "./lines";
 import { parseMoney } from "./money";
 import { payLines, paySettings } from "./schema";
 import { amountsToJson, decryptLineAmounts, encryptLineAmounts, settingsInForce, type LineAmounts } from "./service";
@@ -118,16 +118,15 @@ async function refuseDuplicateLine(tx: Tx, v: { employeeId: string; clientId: st
   const rows = await tx.select().from(payLines).where(eq(payLines.employeeId, v.employeeId));
   const byKey = new Map<string, (typeof rows)[number][]>();
   for (const r of rows) byKey.set(r.lineKey, [...(byKey.get(r.lineKey) ?? []), r]);
-  const wanted = (v.alias ?? "").trim().toLowerCase();
   for (const group of byKey.values()) {
     if (group[0].lineKey === v.exceptLineKey) continue;
     const newest = [...group].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : a.effectiveFrom > b.effectiveFrom ? -1 : b.createdAt.getTime() - a.createdAt.getTime()))[0];
-    if ((newest.clientId ?? null) !== v.clientId || (newest.alias ?? "").trim().toLowerCase() !== wanted) continue;
+    if (!sameJob({ employeeId: v.employeeId, clientId: newest.clientId ?? null, alias: newest.alias ?? null }, { employeeId: v.employeeId, clientId: v.clientId, alias: v.alias })) continue;
     const start = group.map((g) => g.effectiveFrom).sort()[0];
     const end = lineLastDay(group);
     if (start <= (v.to ?? "9999-12-31") && v.from <= (end ?? "9999-12-31")) {
       return fail(
-        `This person already has a pay line for the same client and alias from ${start}${end ? ` to ${end}` : ""}. A second one for the same dates would pay them twice. Change that line instead (the change keeps its history), or end it before this one starts. To pay them for two roles, give each line its own alias.`,
+        `This person already has a pay line for the same job (same alias, and the same client or none) from ${start}${end ? ` to ${end}` : ""}. A second one for the same dates would pay them twice. Change that line instead (the change keeps its history), or end it before this one starts. To pay them for two roles, give each line its own alias.`,
       );
     }
   }

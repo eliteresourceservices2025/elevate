@@ -33,6 +33,19 @@ export function flagDatesOf(versions: LineVersion[], paidFrom: string, period: {
   };
 }
 
+/** What identifies a job: who, for which client (or none), under which alias. */
+export type JobKey = { employeeId: string; clientId: string | null; alias: string | null };
+
+/**
+ * True when two lines are the same job of the same person: the same alias (ignoring case and spaces) and the same client, or one of them has
+ * no client (a leftover line without its client is the same job). Two such lines each pay a full cutoff, so the person is paid twice.
+ */
+export function sameJob(a: JobKey, b: JobKey): boolean {
+  if (a.employeeId !== b.employeeId) return false;
+  if ((a.alias ?? "").trim().toLowerCase() !== (b.alias ?? "").trim().toLowerCase()) return false;
+  return a.clientId === b.clientId || a.clientId === null || b.clientId === null;
+}
+
 /** The line's last day: the earliest end date on any of its versions, or null while it has not ended. */
 export function lineLastDay(versions: LineVersion[]): string | null {
   let last: string | null = null;
