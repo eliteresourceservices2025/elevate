@@ -110,6 +110,16 @@ export async function freezeRunSignatory(tx: Tx, runId: string, signedOn: string
 
 export type RunSignatory = { name: string; title: string; signedOn: string; signatureBase64: string | null };
 
+/**
+ * For a TEST run: the saved signatory as it stands now (name, title and picture), dated `signedOn`. A test run is signed by the saved
+ * signatory like a real one, even before it is paid (nothing is frozen until then), instead of falling back to the name of whichever
+ * account approved it for the test. Null when nobody has been set.
+ */
+export async function savedSignatoryForTest(executor: Reader, signedOn: string): Promise<RunSignatory | null> {
+  const current = await currentSignatory(executor);
+  return current ? { name: current.name, title: current.title, signedOn, signatureBase64: current.signatureBase64 } : null;
+}
+
 /** The signatory a run was paid under, or null when it was paid unsigned. */
 export async function runSignatory(executor: Reader, runId: string): Promise<RunSignatory | null> {
   const [row] = await executor
