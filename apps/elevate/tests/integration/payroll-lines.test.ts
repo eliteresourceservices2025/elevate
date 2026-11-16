@@ -70,14 +70,14 @@ describe("pay lines", () => {
     const preparer = await account();
     const emp = await person();
     current.user = preparer;
-    expect(await createPayLine(base(emp, { effectiveFrom: "2026-01-01", otRegular: "150", otRestDay: "", otRestDayOver8: "180" }))).toMatchObject({ ok: true });
+    expect(await createPayLine(base(emp, { effectiveFrom: "2020-01-01", otRegular: "150", otRestDay: "", otRestDayOver8: "180" }))).toMatchObject({ ok: true });
     const [line] = await lineRows(emp);
     expect(JSON.parse(fieldCrypto().decrypt(line.amounts_enc, `pay_line:${line.id}`))).toEqual({ monthlyCentavos: "3141592", otBp: { regular: 15000, restDayOver8: 18000 } });
     const shown = (await getRates()).find((r) => r.employeeId === emp)!;
     expect(shown.otPercent).toEqual({ regular: "150", restDay: "", restDayOver8: "180" });
 
     // A new version with the boxes blank goes back to the company standard.
-    expect(await updatePayLine({ lineKey: line.line_key, ...base(emp, { effectiveFrom: "2026-02-01", otRegular: "", otRestDay: "", otRestDayOver8: "" }), reason: "Back to standard" })).toMatchObject({ ok: true });
+    expect(await updatePayLine({ lineKey: line.line_key, ...base(emp, { effectiveFrom: "2020-02-01", otRegular: "", otRestDay: "", otRestDayOver8: "" }), reason: "Back to standard" })).toMatchObject({ ok: true });
     const after = (await getRates()).find((r) => r.employeeId === emp)!;
     expect(after.otPercent).toEqual({ regular: "", restDay: "", restDayOver8: "" });
     // Anything that is not a percent is refused.
@@ -314,18 +314,20 @@ describe("pay lines", () => {
     const preparer = await account();
     const emp = await person();
     current.user = preparer;
-    await createPayLine(base(emp, { effectiveFrom: "2026-01-01" }));
+    // Dated 2020, before every period other test files build runs for: an ended line is still in force on its first day, so a 2026 date would
+    // sit in those runs (the unreadable one fails them with "A pay line can't be read").
+    await createPayLine(base(emp, { effectiveFrom: "2020-01-01" }));
     const badId = randomUUID();
     const marker = `not-a-ciphertext-${randomUUID()}`;
     await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, effective_from, amounts_enc, created_by)
-      values (${badId}, ${randomUUID()}, ${emp}, 8, '2026-01-01', ${marker}, ${preparer.id})`);
+      values (${badId}, ${randomUUID()}, ${emp}, 8, '2020-01-01', ${marker}, ${preparer.id})`);
 
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const list = await getRates();
     const logged = spy.mock.calls.filter((c) => c[0] === "payroll rate unreadable:").map((c) => c[1]);
     spy.mockRestore();
-    // End the unreadable line at once (its ciphertext is copied as it is): other test files build runs for 2026 in the same database at the
-    // same time, and an open-ended line nobody can read would fail them ("A pay line can't be read") until this file finishes.
+    // End the unreadable line at once (its ciphertext is copied as it is): other test files build runs in the same database at the same time,
+    // and an open-ended line nobody can read would fail them ("A pay line can't be read") until this file finishes.
     await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, client_id, alias, hours_per_day, payment_method, ends_on, effective_from, amounts_enc, created_by)
       select gen_random_uuid(), line_key, employee_id, client_id, alias, hours_per_day, payment_method, effective_from, effective_from, amounts_enc, created_by
       from payroll.pay_lines where id = ${badId}`);
@@ -368,7 +370,7 @@ describe("pay lines", () => {
     const viewer = await account("viewer");
     const emp = await person();
     current.user = preparer;
-    await createPayLine(base(emp, { monthly: "55,000", effectiveFrom: "2026-01-01" }));
+    await createPayLine(base(emp, { monthly: "55,000", effectiveFrom: "2020-01-01" }));
     await createPayLine(base(emp, { monthly: "10,000", alias: "Second role" })); // starts in 2030: listed, not yet in force
 
     current.user = viewer;
