@@ -65,6 +65,7 @@ export function RatesTable({
   rows,
   options,
   cutoffs,
+  draftCutoffs = [],
   tidyKey,
   sortLinks,
   sortMenu,
@@ -73,6 +74,8 @@ export function RatesTable({
   rows: RateRow[];
   options: RateOptions | null;
   cutoffs: CutoffChoice[];
+  /** Recent cutoffs whose real run is still a draft: only a Correction on Update rate may start there. */
+  draftCutoffs?: CutoffChoice[];
   /** Names the doubled rates that were never paid (empty when none): they are taken away automatically, once for each different value. */
   tidyKey?: string;
   endedToggle?: { showing: boolean; href: string };
@@ -196,7 +199,7 @@ export function RatesTable({
                             disabled={row.unreadable}
                             hint={UNREADABLE_HINT}
                           >
-                            <UpdateRateForm row={row} cutoffs={cutoffs} />
+                            <UpdateRateForm row={row} cutoffs={cutoffs} draftCutoffs={draftCutoffs} />
                           </FormDialog>
                           <RowMenu row={row} options={options} cutoffs={cutoffs} />
                         </div>

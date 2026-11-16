@@ -43,6 +43,23 @@ export function cutoffChoices(today: string, realStarts: ReadonlySet<string>): C
   return out;
 }
 
+/**
+ * The recent cutoffs (this one and the two before) whose real run is still a draft: a Correction may start there, so a raise that should
+ * count for that cutoff reaches its run (the run is then updated with "Fill or update this run"). A cutoff whose run was sent for review,
+ * approved or paid is never offered (the server refuses it too). `draftStarts` holds the first day of every real run that is still a draft.
+ */
+export function draftCutoffs(today: string, draftStarts: ReadonlySet<string>): CutoffChoice[] {
+  const current = cutoff(today);
+  const prev = cutoff(addDays(current.start, -1));
+  const prev2 = cutoff(addDays(prev.start, -1));
+  return [prev2, prev, current]
+    .filter((p) => draftStarts.has(p.start))
+    .map((p) => {
+      const range = shortRange(p.start, p.end);
+      return { start: p.start, end: p.end, range, label: `${range} (draft run: update it after)`, beingPrepared: false };
+    });
+}
+
 /** The choices that can still apply to a line: a new version can't start before the version in force does. */
 export function startChoicesFor(choices: CutoffChoice[], notBefore: string): CutoffChoice[] {
   return choices.filter((c) => c.start >= notBefore);

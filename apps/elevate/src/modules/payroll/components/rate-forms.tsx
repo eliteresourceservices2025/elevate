@@ -216,7 +216,7 @@ export function AddContractorForm({ options, cutoffs, rows }: { options: RateOpt
 }
 
 /** Give the contractor a new monthly rate from a chosen cutoff. It is a new version of the same line, so it can never create a second line. */
-export function UpdateRateForm({ row, cutoffs }: { row: RateRow; cutoffs: CutoffChoice[] }) {
+export function UpdateRateForm({ row, cutoffs, draftCutoffs = [] }: { row: RateRow; cutoffs: CutoffChoice[]; draftCutoffs?: CutoffChoice[] }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const startable = startChoicesFor(cutoffs, row.effectiveFrom);
@@ -225,14 +225,18 @@ export function UpdateRateForm({ row, cutoffs }: { row: RateRow; cutoffs: Cutoff
   const [from, setFrom] = useState(firstChoice);
   const [pick, setPick] = useState<string>("Raise");
   const [other, setOther] = useState("");
-  const options = cutoffOptions(startable, "start");
+  // A correction may also go back to a recent cutoff whose run is still a draft (never before the line began), so a raise counts in that run.
+  const backTo = draftCutoffs.filter((c) => c.start >= row.firstFrom && c.start < row.effectiveFrom);
+  const options = [...(pick === "Correction" ? cutoffOptions(backTo, "start") : []), ...cutoffOptions(startable, "start")];
   if (pick === "Correction" && !options.some((o) => o.value === row.effectiveFrom)) options.push({ value: row.effectiveFrom, label: `From when it started (${row.effectiveFrom})` });
-  const sameRate = monthly.trim() !== "" && amount(monthly) === amount(row.monthly);
+  const backdated = from < row.effectiveFrom ? backTo.find((c) => c.start === from) : undefined;
+  // The same figure is fine when it is moved back to an earlier cutoff (the rate was right, its date was late).
+  const sameRate = !backdated && monthly.trim() !== "" && amount(monthly) === amount(row.monthly);
   const reason = reasonText(pick, other);
   const choose = (next: string) => {
     setPick(next);
     if (next === "Correction") setFrom(row.effectiveFrom);
-    else if (from === row.effectiveFrom) setFrom(firstChoice);
+    else if (from <= row.effectiveFrom) setFrom(firstChoice); // a backdated cutoff is only for a correction
   };
   return (
     <form
@@ -259,7 +263,13 @@ export function UpdateRateForm({ row, cutoffs }: { row: RateRow; cutoffs: Cutoff
         options={options}
         value={from}
         onChange={setFrom}
-        note={pick === "Correction" ? "A correction can replace the rate from when it started, so the old figure is no longer used." : "Pay runs already made are not changed."}
+        note={
+          backdated
+            ? `The ${backdated.range} run is still a draft. After saving, open it and choose Fill or update this run so it pays this rate.`
+            : pick === "Correction"
+              ? "A correction can replace the rate from when it started, so the old figure is no longer used."
+              : "Pay runs already made are not changed."
+        }
       />
       <Button type="submit" disabled={pending || sameRate || monthly.trim() === "" || reason === "" || from === ""}>
         Update rate
