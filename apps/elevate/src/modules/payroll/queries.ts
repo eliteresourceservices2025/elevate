@@ -51,8 +51,6 @@ export type RateRow = {
   hoursPerDay: number;
   paymentMethod: PaymentMethod;
   effectiveFrom: string;
-  /** The line's first day (its earliest version): a correction can't start before it. */
-  firstFrom: string;
   endsOn: string | null;
   /** The date of the next version, when one is already scheduled. */
   upcomingFrom: string | null;
@@ -150,7 +148,6 @@ export async function getRates(options: { includeEnded?: boolean } = {}): Promis
       hoursPerDay: version.hoursPerDay,
       paymentMethod: version.paymentMethod as PaymentMethod,
       effectiveFrom: version.effectiveFrom,
-      firstFrom: rows.filter((x) => x.line.lineKey === version.lineKey).reduce((min, x) => (x.line.effectiveFrom < min ? x.line.effectiveFrom : min), version.effectiveFrom),
       endsOn: lastDay,
       upcomingFrom: upcoming ?? null,
       ended: lastDay !== null && lastDay < day,

@@ -86,13 +86,13 @@ async function versionsOf(tx: Tx, lineKey: string): Promise<LineRow[]> {
 
 /**
  * A new version dated before the line's newest one (a correction that goes back, for example a raise that should count from the cutoff whose
- * run is still a draft). Allowed only from the line's own first day, and only when no real run from that date on has been sent for review,
- * approved or paid: those runs are never changed. A draft run picks the new rate up with "Fill or update this run". The runs from that date
- * on are locked (the same row lock sending for review takes), so a run can't be sent for review while this is checked.
+ * run is still a draft). It may even go before the line's own first day: a raise saved as a separate rate part-way through a cutoff then
+ * starts with that cutoff, and the older rate for the same job is cut off the day before (`applySupersede`). Allowed only when no real run
+ * from that date on has been sent for review, approved or paid: those runs are never changed. A draft run picks the new rate up with "Fill or
+ * update this run". The runs from that date on are locked (the same row lock sending for review takes), so a run can't be sent for review
+ * while this is checked.
  */
-async function refuseEarlierStart(tx: Tx, versions: LineRow[], effectiveFrom: string) {
-  const first = versions.reduce((min, x) => (x.effectiveFrom < min ? x.effectiveFrom : min), versions[0].effectiveFrom);
-  if (effectiveFrom < first) return fail(`This rate starts on ${first}. A new rate can't start before that.`);
+async function refuseEarlierStart(tx: Tx, effectiveFrom: string) {
   const runs = await tx
     .select({ start: payRuns.periodStart, end: payRuns.periodEnd, status: payRuns.status })
     .from(payRuns)
@@ -213,9 +213,11 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
       if (!latest) return fail("That pay line was not found.");
       const refused = await checkPersonAndClient(tx, latest.employeeId, v.clientId);
       if (refused) return refused;
-      if (lineLastDay(versions) !== null) return fail("This pay line has ended. Add a new line instead.");
+      // A rate that stops later can still be corrected up to its last day (the stop date stays: the earliest end on any version counts).
+      const lastDay = lineLastDay(versions);
+      if (lastDay !== null && lastDay < v.effectiveFrom) return fail(`This rate stops after ${lastDay}. Add a new rate instead.`);
       if (v.effectiveFrom < latest.effectiveFrom) {
-        const refusedEarlier = await refuseEarlierStart(tx, versions, v.effectiveFrom);
+        const refusedEarlier = await refuseEarlierStart(tx, v.effectiveFrom);
         if (refusedEarlier) return refusedEarlier;
       }
       // Changing the client or alias must not make this line a twin of another line of the same person.
@@ -413,7 +415,8 @@ export async function endPayLine(input: unknown): Promise<ActionResult<{ lineKey
       if (versions.length === 0) return fail("That pay line was not found.");
       const employeeId = versions[0].employeeId;
       // No status check here: ending a line is what is done for a leaver, who may already be separated or archived.
-      if (lineLastDay(versions) !== null) return fail("This pay line has already ended.");
+      const already = lineLastDay(versions);
+      if (already !== null) return fail(`This rate already stops after ${already}.`);
       // The end is dated like the version in force on the last day, so a version scheduled for after it is ignored.
       const latest = versions.find((x) => x.effectiveFrom <= endsOn);
       if (!latest) return fail("The last day can't be before the line starts.");
