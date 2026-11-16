@@ -225,8 +225,9 @@ export function UpdateRateForm({ row, cutoffs, draftCutoffs = [] }: { row: RateR
   const [from, setFrom] = useState(firstChoice);
   const [pick, setPick] = useState<string>("Raise");
   const [other, setOther] = useState("");
-  // A correction may also go back to a recent cutoff whose run is still a draft (never before the line began), so a raise counts in that run.
-  const backTo = draftCutoffs.filter((c) => c.start >= row.firstFrom && c.start < row.effectiveFrom);
+  // A correction may also go back to a recent cutoff whose run is still a draft, so a raise counts in that run. That can be before this rate
+  // began (a raise saved as its own rate part-way through the cutoff): the older rate for the same job then stops the day before.
+  const backTo = draftCutoffs.filter((c) => c.start < row.effectiveFrom);
   const options = [...(pick === "Correction" ? cutoffOptions(backTo, "start") : []), ...cutoffOptions(startable, "start")];
   if (pick === "Correction" && !options.some((o) => o.value === row.effectiveFrom)) options.push({ value: row.effectiveFrom, label: `From when it started (${row.effectiveFrom})` });
   const backdated = from < row.effectiveFrom ? backTo.find((c) => c.start === from) : undefined;
@@ -279,7 +280,7 @@ export function UpdateRateForm({ row, cutoffs, draftCutoffs = [] }: { row: RateR
 }
 
 /** The rarely changed details of a rate (client, alias, hours, payment method, overtime). The monthly rate itself is changed with Update rate. */
-export function EditDetailsForm({ row, options, cutoffs }: { row: RateRow; options: RateOptions; cutoffs: CutoffChoice[] }) {
+export function EditDetailsForm({ row, options, cutoffs, draftCutoffs = [] }: { row: RateRow; options: RateOptions; cutoffs: CutoffChoice[]; draftCutoffs?: CutoffChoice[] }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const startable = startChoicesFor(cutoffs, row.effectiveFrom);
@@ -287,8 +288,15 @@ export function EditDetailsForm({ row, options, cutoffs }: { row: RateRow; optio
   const [fields, setFields] = useState<Fields>(fieldsOf(row, firstChoice));
   const [pick, setPick] = useState<string>("Correction");
   const [other, setOther] = useState("");
-  const choices = cutoffOptions(startable, "start");
+  // A correction (a client set too late, say) may go back to a recent cutoff whose run is still a draft, as on Update rate.
+  const backTo = pick === "Correction" ? draftCutoffs.filter((c) => c.start < row.effectiveFrom) : [];
+  const choices = [...cutoffOptions(backTo, "start"), ...cutoffOptions(startable, "start")];
   if (!choices.some((o) => o.value === row.effectiveFrom)) choices.push({ value: row.effectiveFrom, label: `From when it started (${row.effectiveFrom})` });
+  const backdated = backTo.find((c) => c.start === fields.effectiveFrom);
+  const pickReason = (next: string) => {
+    setPick(next);
+    if (next !== "Correction" && fields.effectiveFrom < row.effectiveFrom) setFields({ ...fields, effectiveFrom: firstChoice });
+  };
   const reason = reasonText(pick, other);
   return (
     <form
@@ -299,8 +307,20 @@ export function EditDetailsForm({ row, options, cutoffs }: { row: RateRow; optio
       }}
     >
       <DetailFields value={fields} onChange={setFields} idPrefix={`det-${row.lineKey}`} withClient={options.clients} />
-      <ReasonPicker id={`det-${row.lineKey}`} picks={DETAIL_REASONS} pick={pick} onPick={setPick} other={other} onOther={setOther} />
-      <CutoffPicker id={`det-${row.lineKey}-from`} legend="Applies from" hint={PAYROLL_HINTS.lineStartsOn} options={choices} value={fields.effectiveFrom} onChange={(v) => setFields({ ...fields, effectiveFrom: v })} />
+      <ReasonPicker id={`det-${row.lineKey}`} picks={DETAIL_REASONS} pick={pick} onPick={pickReason} other={other} onOther={setOther} />
+      <CutoffPicker
+        id={`det-${row.lineKey}-from`}
+        legend="Applies from"
+        hint={PAYROLL_HINTS.lineStartsOn}
+        options={choices}
+        value={fields.effectiveFrom}
+        onChange={(v) => setFields({ ...fields, effectiveFrom: v })}
+        note={
+          backdated
+            ? `From ${backdated.range} the monthly rate will be ${row.monthly}, as it is now. The ${backdated.range} run is still a draft. After saving, open it and choose Fill or update this run so it uses these details.`
+            : undefined
+        }
+      />
       <Button type="submit" disabled={pending || reason === "" || fields.effectiveFrom === ""}>
         Save details
       </Button>

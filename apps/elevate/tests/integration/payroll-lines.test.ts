@@ -133,21 +133,61 @@ describe("pay lines", () => {
     expect(detail.reason).toBe("Annual raise");
   });
 
-  it("refuses an update before the latest version's date, and an update of an ended line", async () => {
+  it("updates a rate that stops later up to its last day, and refuses a new rate after it", async () => {
     const preparer = await account();
     const emp = await person();
     current.user = preparer;
     await createPayLine(base(emp, { effectiveFrom: "2030-11-10" }));
     const [first] = await lineRows(emp);
-    const early = await updatePayLine({ ...base(emp), lineKey: first.line_key, effectiveFrom: "2030-11-01", reason: "x" });
-    expect(early.ok).toBe(false);
 
     expect(await endPayLine({ lineKey: first.line_key, endsOn: "2030-12-31", reason: "Ended" })).toMatchObject({ ok: true });
     const ended = (await lineRows(emp)).at(-1)!;
     expect(ended.ends_on).toBe("2030-12-31");
     expect(ended.line_key).toBe(first.line_key);
-    const again = await updatePayLine({ ...base(emp), lineKey: first.line_key, effectiveFrom: "2030-12-01", reason: "x" });
-    expect(again.ok).toBe(false);
+    expect(await updatePayLine({ ...base(emp), lineKey: first.line_key, effectiveFrom: "2031-01-01", reason: "x" })).toEqual({
+      ok: false,
+      error: "This rate stops after 2030-12-31. Add a new rate instead.",
+    });
+    // Before it stops, a raise is still a new version, and the stop date stays.
+    expect(await updatePayLine({ ...base(emp, { monthly: "35,000" }), lineKey: first.line_key, effectiveFrom: "2030-12-01", reason: "Raise" })).toMatchObject({ ok: true });
+    const { lineLastDay } = await import("@/modules/payroll/lines");
+    expect(lineLastDay((await lineRows(emp)).map((r) => ({ lineKey: r.line_key, effectiveFrom: r.effective_from, endsOn: r.ends_on, createdAt: 0 })))).toBe("2030-12-31");
+    expect(await endPayLine({ lineKey: first.line_key, endsOn: "2030-12-15", reason: "x" })).toEqual({ ok: false, error: "This rate already stops after 2030-12-31." });
+  });
+
+  it("moves a raise saved as its own rate part-way through a cutoff back to that cutoff's draft run, and the old rate stops the day before", async () => {
+    // The real case: 40,000 from Oct 16 (stopped Nov 11), 42,000 as a separate rate from Nov 12 (to Nov 30), and 42,000 again from Dec 1.
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    await createPayLine(base(emp, { effectiveFrom: "2096-10-16", monthly: "40,000" }));
+    const [old] = await lineRows(emp);
+    expect(await endPayLine({ lineKey: old.line_key, endsOn: "2096-11-11", reason: "Raise" })).toMatchObject({ ok: true });
+    expect(await createPayLine(base(emp, { effectiveFrom: "2096-11-12", monthly: "42,000" }))).toMatchObject({ ok: true });
+    const raise = (await lineRows(emp)).at(-1)!;
+    expect(await endPayLine({ lineKey: raise.line_key, endsOn: "2096-11-30", reason: "x" })).toMatchObject({ ok: true });
+    expect(await createPayLine(base(emp, { effectiveFrom: "2096-12-01", monthly: "42,000" }))).toMatchObject({ ok: true });
+    const runId = randomUUID();
+    await db.execute(sql`insert into payroll.pay_runs (id, period_start, period_end, status, settings_snapshot, created_by)
+      values (${runId}, '2096-11-01', '2096-11-15', 'draft', '{}'::jsonb, ${preparer.id})`);
+
+    // The 42,000 rate is moved back to Nov 1, before its own first day.
+    expect(await updatePayLine({ ...base(emp, { monthly: "42,000" }), lineKey: raise.line_key, effectiveFrom: "2096-11-01", reason: "Correction" })).toMatchObject({ ok: true });
+
+    // The Nov 1 to 15 run now has one line for the job: 42,000 from Nov 1. The 40,000 rate stops on Oct 31.
+    const all = await rows<{ id: string; line_key: string; employee_id: string; client_id: string | null; alias: string | null; effective_from: string; ends_on: string | null; created_at: string }>(
+      sql`select id, line_key, employee_id, client_id, alias, effective_from::text, ends_on::text, created_at::text from payroll.pay_lines where employee_id = ${emp}`,
+    );
+    const { resolveLines } = await import("@/modules/payroll/lines");
+    const versions = all.map((r) => ({ id: r.id, lineKey: r.line_key, employeeId: r.employee_id, clientId: r.client_id, alias: r.alias, effectiveFrom: r.effective_from, endsOn: r.ends_on, createdAt: r.created_at }));
+    const nov = resolveLines(versions, { start: "2096-11-01", end: "2096-11-15" });
+    expect(nov.map((r) => [r.version.lineKey, r.version.effectiveFrom])).toEqual([[raise.line_key, "2096-11-01"]]);
+    const chosen = all.find((r) => r.id === nov[0].version.id)!;
+    const [enc] = await rows<{ amounts_enc: string }>(sql`select amounts_enc from payroll.pay_lines where id = ${chosen.id}`);
+    expect(JSON.parse(fieldCrypto().decrypt(enc.amounts_enc, `pay_line:${chosen.id}`))).toEqual({ monthlyCentavos: "4200000" });
+    expect(resolveLines(versions, { start: "2096-10-16", end: "2096-10-31" }).map((r) => [r.version.lineKey, r.flags])).toEqual([[old.line_key, []]]);
+
+    await db.execute(sql`update payroll.pay_runs set status = 'cancelled' where id = ${runId}`);
   });
 
   it("lets a correction go back to a cutoff whose real run is still a draft, never once that run is sent for review", async () => {
@@ -163,11 +203,6 @@ describe("pay lines", () => {
     await db.execute(sql`insert into payroll.pay_runs (id, period_start, period_end, status, settings_snapshot, created_by)
       values (${runId}, '2095-11-01', '2095-11-15', 'draft', '{}'::jsonb, ${preparer.id})`);
 
-    // Never before the line began.
-    expect(await updatePayLine({ ...base(emp, { monthly: "42,000" }), lineKey: first.line_key, effectiveFrom: "2095-09-16", reason: "Correction" })).toEqual({
-      ok: false,
-      error: "This rate starts on 2095-10-01. A new rate can't start before that.",
-    });
     // The run is a draft: the same rate moves back to the start of its cutoff.
     expect(await updatePayLine({ ...base(emp, { monthly: "42,000" }), lineKey: first.line_key, effectiveFrom: "2095-11-01", reason: "Correction" })).toMatchObject({ ok: true });
     const versions = await lineRows(emp);
