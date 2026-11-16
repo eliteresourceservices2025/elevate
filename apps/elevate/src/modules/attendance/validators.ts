@@ -160,6 +160,9 @@ export const approveWeekSchema = z.object({ employeeId: uuid, weekStart: ymd, no
 /** Mark one person's day as test only (a note says why), or take the mark off. */
 export const markTestDaySchema = z.object({ employeeId: uuid, date: ymd, note: z.string().trim().min(3, "Say why in a few words").max(200, "Use 200 characters or fewer") });
 export const clearTestDaySchema = z.object({ employeeId: uuid, date: ymd });
+export const reopenHoursSchema = z
+  .object({ employeeId: uuid, from: ymd, to: ymd, reason: z.string().trim().min(5, "Say why in a few words").max(300, "Use 300 characters or fewer") })
+  .refine((v) => v.from <= v.to && (Date.parse(`${v.to}T00:00:00Z`) - Date.parse(`${v.from}T00:00:00Z`)) / 86_400_000 <= 6, "Choose one day, or one week at most.");
 export const approveCleanSchema = z.object({ weekStart: ymd });
 export const payPeriodSchema = z.object({ kind: z.enum(["semi_monthly", "weekly", "biweekly", "monthly"]), biweeklyAnchor: z.preprocess(blankToUndefined, ymd.optional()) });
 export const exportHoursSchema = z.object({ periodStart: ymd, kind: z.enum(["daily", "summary"]), includeUnapproved: z.boolean().default(false) });
