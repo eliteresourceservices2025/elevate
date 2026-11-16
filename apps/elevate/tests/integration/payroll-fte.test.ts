@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { endPayrollLinesWhenDone } from "./payroll-test-helpers";
 
 // Real-database test: the FTE count on a rate, the run's total FTE, and an internal-team line paid per FTE (total FTE x its amount). Invented
-// people and figures only. Every period is a half month of 2043, and each test's pay lines start and end inside its own period.
+// people and figures only. Every period is a half month of 2047, and each test's pay lines start and end inside its own period.
 
 const current = vi.hoisted(() => ({ user: null as unknown }));
 vi.mock("@/lib/auth", () => ({ requireUser: vi.fn(async () => current.user) }));
@@ -37,12 +37,12 @@ async function person() {
     values ('Liza', ${uniq("Testreyes")}, ${`${uniq("emp")}@example.com`}, 'active') returning id`);
   return e.id;
 }
-/** Half month `n` of 2043 (0 = 1 to 15 January, 1 = 16 to 31 January, ...). */
+/** Half month `n` of 2047 (0 = 1 to 15 January, 1 = 16 to 31 January, ...). */
 function slot(n: number) {
   const month = Math.floor(n / 2) + 1;
   const mm = String(month).padStart(2, "0");
-  const last = new Date(Date.UTC(2043, month, 0)).getUTCDate();
-  return n % 2 === 0 ? { periodStart: `2043-${mm}-01`, periodEnd: `2043-${mm}-15` } : { periodStart: `2043-${mm}-16`, periodEnd: `2043-${mm}-${last}` };
+  const last = new Date(Date.UTC(2047, month, 0)).getUTCDate();
+  return n % 2 === 0 ? { periodStart: `2047-${mm}-01`, periodEnd: `2047-${mm}-15` } : { periodStart: `2047-${mm}-16`, periodEnd: `2047-${mm}-${last}` };
 }
 const as = (who: unknown) => {
   current.user = who;
@@ -82,7 +82,7 @@ beforeAll(async () => {
   checker = await account("preparer");
   approver = await account("approver");
   as(preparer);
-  const saved = await savePaySettings({ cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "125", extraRestDay: "130", extraRestDayOver8: "169", reason: "Test rates", effectiveFrom: "2043-01-01" });
+  const saved = await savePaySettings({ cutoffDivisor: 11, changeWarnPercent: 10, extraRegular: "125", extraRestDay: "130", extraRestDayOver8: "169", reason: "Test rates", effectiveFrom: "2047-01-01" });
   expect(saved).toMatchObject({ ok: true });
 });
 
