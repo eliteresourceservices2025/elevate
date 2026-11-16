@@ -15,6 +15,7 @@ export const FLAG_LABELS = new Map<string, string>(Object.entries({
   no_screenshots: "No screenshots (Jibble not linked or failed)",
   unapproved_extra: "Unapproved extra hours",
   jibble_mismatch: "Jibble and ELEVATE totals differ",
+  needs_client: "Choose the client",
   on_leave: "On approved leave",
 }));
 
@@ -36,5 +37,6 @@ export const FLAG_HELP = new Map<string, string>(Object.entries({
   no_screenshots: "Jibble was not linked or failed, so no screenshots were taken.",
   unapproved_extra: "Extra time with no approved extra-hours request. Approve a request or leave it as it is.",
   jibble_mismatch: "Jibble's total for this day differs from ELEVATE's.",
+  needs_client: "Some of this day's Jibble time has no client, and the person works for more than one. Map the Jibble project or activity to a client on the Jibble page.",
   on_leave: "They are on approved leave.",
 }));

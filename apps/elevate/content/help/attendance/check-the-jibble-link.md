@@ -58,3 +58,13 @@ Jibble screenshots can show client or patient information. Never download them i
 
 - Open the Jibble page and read the connection status.
 - Find a person who is not matched.
+
+# People who clock in Jibble
+
+Most people use the ELEVATE clock. Some contractors clock in Jibble instead. On the Jibble page, under **Hours from Jibble**, you can set a matched person to **Use the Jibble clock**. Do this only when they are clocked out.
+
+- Their ELEVATE clock is switched off: the header says they clock in Jibble.
+- Every 30 minutes ELEVATE reads their Jibble entries (the times, and the project and activity) and turns them into clock events. Hours review, approval and the payroll export then work for them like for everyone. You can click **Import now** to bring in the last 1 to 14 days at once.
+- If an entry is edited or deleted in Jibble, ELEVATE follows it. A day that was already approved shows **Changed after approval**.
+- If someone works for more than one client, map each Jibble project or activity to a client under **Jibble projects and activities**. Time with no client is flagged **Choose the client** and cannot be approved until you map it.
+- Screenshots stay in Jibble. ELEVATE never copies them.

@@ -1,0 +1,309 @@
+import { randomUUID } from "node:crypto";
+import { fromZonedTime } from "date-fns-tz";
+import { sql } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { RoleSlug } from "@/lib/roles";
+
+// Real-database tests for hours from Jibble: setting someone's clock source, importing their Jibble time entries as clock events
+// (against a fake Jibble client), following edits and deletions, project and activity mapping, and the guards.
+
+const current = vi.hoisted(() => ({ user: null as unknown }));
+vi.mock("@/lib/auth", () => ({ requireUser: vi.fn(async () => current.user) }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": "198.51.100.10" }) }));
+
+const { db } = await import("@/lib/db");
+const { formatInZone } = await import("@/lib/time");
+const clockActions = await import("@/modules/attendance/actions");
+const queries = await import("@/modules/attendance/queries");
+const hoursQueries = await import("@/modules/attendance/hours-queries");
+const { mondayOf } = await import("@/modules/attendance/pay-periods");
+const sourceActions = await import("@/modules/jibble/clock-source-actions");
+const { runJibbleImport } = await import("@/modules/jibble/import");
+const jobs = await import("@/modules/jibble/jobs");
+const { setJibbleClient } = await import("@/modules/jibble/client");
+type JibbleClient = import("@/modules/jibble/http-client").JibbleClient;
+type JibbleTimeEntryRow = import("@/modules/jibble/http-client").JibbleTimeEntryRow;
+
+type TestUser = { id: string; email: string; roles: RoleSlug[] };
+const PHX = "America/Phoenix";
+const NO_ACCESS = "You do not have access to do that.";
+const DAY = 86_400_000;
+let counter = 0;
+const uniq = (p: string) => `${p}${Date.now().toString(36)}${counter++}`;
+const rows = async <T = Record<string, unknown>>(q: ReturnType<typeof sql>) => (await db.execute(q)) as unknown as T[];
+const as = (u: TestUser) => {
+  current.user = u;
+};
+
+class FakeJibble implements JibbleClient {
+  entries = new Map<string, JibbleTimeEntryRow[]>();
+  calls = 0;
+  async listPeople() {
+    return [];
+  }
+  async latestState() {
+    return null;
+  }
+  async listBreaks() {
+    return [];
+  }
+  async clock() {
+    this.calls += 1;
+    return { entryId: null };
+  }
+  async dailyTracked() {
+    return [];
+  }
+  async listTimeEntries(personId: string) {
+    return [...(this.entries.get(personId) ?? [])];
+  }
+}
+const fake = new FakeJibble();
+
+async function makeUser(label: string, roles: RoleSlug[]): Promise<TestUser> {
+  const id = randomUUID();
+  const email = `${uniq(label)}@example.com`;
+  await db.execute(sql`insert into core.users (id, email) values (${id}, ${email})`);
+  for (const r of roles) await db.execute(sql`insert into core.user_roles (user_id, role_slug) values (${id}, ${r})`);
+  return { id, email, roles };
+}
+async function client(name = uniq("Client ")) {
+  const [c] = await rows<{ id: string }>(sql`insert into core.clients (name, time_zone) values (${name}, 'America/New_York') returning id`);
+  return { id: c.id, name };
+}
+/** A person matched to a Jibble account, with the clients they are assigned to. */
+async function person(label: string, clientIds: string[], opts: { matched?: boolean } = {}) {
+  const user = await makeUser(label, ["employee"]);
+  const [e] = await rows<{ id: string }>(sql`
+    insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values (${label}, ${uniq(label)}, ${user.email}, 'active', ${user.id}) returning id`);
+  const jibbleId = randomUUID();
+  if (opts.matched !== false) await db.execute(sql`insert into time.jibble_people (employee_id, jibble_person_id, matched_by) values (${e.id}, ${jibbleId}, 'manual')`);
+  for (const c of clientIds) await db.execute(sql`insert into core.client_assignments (employee_id, client_id, start_date) values (${e.id}, ${c}, current_date - 30)`);
+  return { user, employeeId: e.id, jibbleId };
+}
+
+const day = formatInZone(Date.now() - 2 * DAY, PHX, "yyyy-MM-dd");
+const at = (time: string) => fromZonedTime(`${day}T${time}:00`, PHX).toISOString();
+/** Jibble entry ids are globally unique, so the test ids carry the person. */
+const entry = (personId: string, id: string, type: JibbleTimeEntryRow["type"], time: string, over: Partial<JibbleTimeEntryRow> = {}): JibbleTimeEntryRow => ({ id: `${personId}:${id}`, personId, type, time: at(time), projectId: null, activityId: null, ...over });
+const events = (employeeId: string) => rows<{ type: string; client_id: string | null; source: string; jibble_entry_id: string | null }>(sql`select type, client_id, source, jibble_entry_id from time.v_clock_events where employee_id = ${employeeId} order by occurred_at, created_at`);
+const dayRow = async (employeeId: string) => (await rows<{ worked_minutes: number; flags: string[] }>(sql`select worked_minutes, flags from time.attendance_days where employee_id = ${employeeId} and date = ${day}::date`))[0];
+
+let hr: TestUser;
+beforeAll(async () => {
+  process.env.ELEVATE_ENV = "production"; // the safety lock lets the fake client be used
+  setJibbleClient(fake);
+  hr = await makeUser("hr", ["hr_admin", "employee"]);
+});
+afterAll(() => {
+  delete process.env.ELEVATE_ENV;
+  setJibbleClient(undefined);
+});
+
+/** Puts a person on the Jibble clock (as HR). */
+async function onJibble(p: { employeeId: string }) {
+  as(hr);
+  expect((await sourceActions.setClockSource({ employeeId: p.employeeId, source: "jibble" })).ok).toBe(true);
+}
+
+describe("choosing where someone's hours come from", () => {
+  it("needs a Jibble match, waits until they are clocked out, tells the person, and is append-only and HR only", async () => {
+    const c = await client();
+    const unmatched = await person("NoMatch", [c.id], { matched: false });
+    as(hr);
+    expect(await sourceActions.setClockSource({ employeeId: unmatched.employeeId, source: "jibble" })).toEqual({ ok: false, error: "Match them to their Jibble account first." });
+
+    const p = await person("Source", [c.id]);
+    // Clocked in on ELEVATE right now: not while a session is open
+    as(p.user);
+    expect((await clockActions.clockIn({})).ok).toBe(true);
+    as(hr);
+    expect((await sourceActions.setClockSource({ employeeId: p.employeeId, source: "jibble" })).ok).toBe(false);
+    as(p.user);
+    expect((await clockActions.clockOut()).ok).toBe(true);
+
+    as(hr);
+    expect(await sourceActions.setClockSource({ employeeId: p.employeeId, source: "jibble" })).toEqual({ ok: true, data: { source: "jibble" } });
+    expect(await rows(sql`select 1 from ops.notifications where user_id = ${p.user.id} and kind = 'clock_source.changed'`)).toHaveLength(1);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'clock_source.set' and target_id = ${p.employeeId}`)).toHaveLength(1);
+    expect(await sourceActions.setClockSource({ employeeId: p.employeeId, source: "jibble" })).toEqual({ ok: true, data: { source: "jibble" } }); // no change, no new row
+    expect(await rows(sql`select 1 from time.clock_source where employee_id = ${p.employeeId}`)).toHaveLength(1);
+    await expect(db.execute(sql`update time.clock_source set source = 'elevate' where employee_id = ${p.employeeId}`)).rejects.toThrow();
+
+    for (const role of ["team_lead", "employee", "executive"] as RoleSlug[]) {
+      as(await makeUser("NoJibble", [role]));
+      expect(await sourceActions.setClockSource({ employeeId: p.employeeId, source: "elevate" })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+  });
+
+  it("switches the ELEVATE clock off for someone on the Jibble clock, never sends them to Jibble, and shows it to the widget", async () => {
+    const c = await client();
+    const p = await person("NoClock", [c.id]);
+    await onJibble(p);
+    as(p.user);
+    const result = await clockActions.clockIn({});
+    expect(!result.ok && result.error).toContain("You clock in Jibble");
+    expect((await queries.getClockStatus())?.clockSource).toBe("jibble");
+    expect(await jobs.maySendNow(p.employeeId, p.jibbleId)).toBe(false);
+    expect(fake.calls).toBe(0);
+  });
+});
+
+describe("importing a day from Jibble", () => {
+  it("turns the entries into events with the client, rebuilds the day, and adds nothing the second time", async () => {
+    const c = await client("Import Dental");
+    const p = await person("ImportA", [c.id]);
+    await onJibble(p);
+    fake.entries.set(p.jibbleId, [entry(p.jibbleId, "e1", "In", "09:00"), entry(p.jibbleId, "e2", "StartBreak", "12:00"), entry(p.jibbleId, "e3", "In", "12:30"), entry(p.jibbleId, "e4", "Out", "17:00")]);
+
+    const first = await runJibbleImport({ days: 5, employeeId: p.employeeId });
+    expect(first).toMatchObject({ people: 1, imported: 4, voided: 0, failed: 0, skipped: null });
+    const imported = await events(p.employeeId);
+    expect(imported.map((e) => e.type)).toEqual(["clock_in", "break_start", "break_end", "clock_out"]);
+    expect(imported.every((e) => e.source === "jibble" && e.jibble_entry_id !== null)).toBe(true);
+    expect(imported[0].client_id).toBe(c.id); // the person's only client
+    expect((await dayRow(p.employeeId)).worked_minutes).toBe(450);
+    expect(await rows(sql`select 1 from time.attendance_day_clients where employee_id = ${p.employeeId} and date = ${day}::date and client_id = ${c.id}`)).toHaveLength(1);
+
+    expect(await runJibbleImport({ days: 5, employeeId: p.employeeId })).toMatchObject({ imported: 0, voided: 0 });
+    expect(await events(p.employeeId)).toHaveLength(4);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'jibble.import' and target_id = ${p.employeeId}`)).toHaveLength(1);
+  });
+
+  it("follows an entry edited in Jibble (the old event is voided, never changed) and one that is deleted", async () => {
+    const c = await client();
+    const p = await person("ImportEdit", [c.id]);
+    await onJibble(p);
+    fake.entries.set(p.jibbleId, [entry(p.jibbleId, "e1", "In", "09:00"), entry(p.jibbleId, "e4", "Out", "17:00")]);
+    await runJibbleImport({ days: 5, employeeId: p.employeeId });
+    expect((await dayRow(p.employeeId)).worked_minutes).toBe(480);
+
+    // The clock-in is edited to 9:30 in Jibble
+    fake.entries.set(p.jibbleId, [entry(p.jibbleId, "e1", "In", "09:30"), entry(p.jibbleId, "e4", "Out", "17:00")]);
+    expect(await runJibbleImport({ days: 5, employeeId: p.employeeId })).toMatchObject({ imported: 1, voided: 1 });
+    expect((await dayRow(p.employeeId)).worked_minutes).toBe(450);
+    expect(await rows(sql`select 1 from time.clock_events where employee_id = ${p.employeeId} and type = 'clock_in'`)).toHaveLength(2); // the old row stays, voided
+    expect(await events(p.employeeId)).toHaveLength(2);
+
+    // The clock-out is deleted in Jibble: the session is open again
+    fake.entries.set(p.jibbleId, [entry(p.jibbleId, "e1", "In", "09:30")]);
+    expect(await runJibbleImport({ days: 5, employeeId: p.employeeId })).toMatchObject({ imported: 0, voided: 1 });
+    expect((await events(p.employeeId)).map((e) => e.type)).toEqual(["clock_in"]);
+  });
+
+  it("keeps imported hours when Jibble suddenly returns nothing, and tells HR once", async () => {
+    const c = await client();
+    const p = await person("ImportEmpty", [c.id]);
+    await onJibble(p);
+    fake.entries.set(p.jibbleId, [entry(p.jibbleId, "e1", "In", "09:00"), entry(p.jibbleId, "e2", "Out", "17:00")]);
+    await runJibbleImport({ days: 5, employeeId: p.employeeId });
+    fake.entries.set(p.jibbleId, []);
+    const run = await runJibbleImport({ days: 5, employeeId: p.employeeId });
+    expect(run).toMatchObject({ voided: 0, keptBecauseEmpty: 2 });
+    expect(await events(p.employeeId)).toHaveLength(2);
+    expect((await rows(sql`select 1 from ops.notifications where user_id = ${hr.id} and kind = 'jibble.import_empty'`)).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not bring back an event HR voided, while Jibble still says the same", async () => {
+    const c = await client();
+    const p = await person("ImportVoid", [c.id]);
+    await onJibble(p);
+    fake.entries.set(p.jibbleId, [entry(p.jibbleId, "e1", "In", "09:00"), entry(p.jibbleId, "e2", "Out", "17:00")]);
+    await runJibbleImport({ days: 5, employeeId: p.employeeId });
+    const [out] = await rows<{ id: string }>(sql`select id from time.clock_events where employee_id = ${p.employeeId} and type = 'clock_out'`);
+    await db.execute(sql`insert into time.clock_event_voids (event_id, reason, voided_by) values (${out.id}, 'Corrected by HR', ${hr.id})`);
+    expect(await runJibbleImport({ days: 5, employeeId: p.employeeId })).toMatchObject({ imported: 0, voided: 0 });
+    expect((await events(p.employeeId)).map((e) => e.type)).toEqual(["clock_in"]);
+  });
+
+  it("does nothing for people on the ELEVATE clock, when not configured, or when the link is paused", async () => {
+    const c = await client();
+    const onElevate = await person("StaysElevate", [c.id]);
+    fake.entries.set(onElevate.jibbleId, [entry(onElevate.jibbleId, "x1", "In", "09:00")]);
+    expect(await runJibbleImport({ days: 5, employeeId: onElevate.employeeId })).toMatchObject({ people: 0, imported: 0 });
+    expect(await events(onElevate.employeeId)).toHaveLength(0);
+
+    expect(await runJibbleImport({ client: null })).toMatchObject({ skipped: "not_configured" });
+    await db.execute(sql`insert into time.jibble_settings (id, paused) values (1, true) on conflict (id) do update set paused = true`);
+    try {
+      expect(await runJibbleImport({ days: 5 })).toMatchObject({ skipped: "paused" });
+    } finally {
+      await db.execute(sql`update time.jibble_settings set paused = false where id = 1`);
+    }
+  });
+});
+
+describe("Jibble projects and activities", () => {
+  it("maps a project to a client, switches client on a change of project, splits the day, and flags time with no client", async () => {
+    const a = await client("Map Acme");
+    const b = await client("Map Beta");
+    const lead = await makeUser("MapLead", ["team_lead", "employee"]);
+    const p = await person("MapPerson", [a.id, b.id]);
+    await db.execute(sql`update core.employees set manager_id = (select id from core.employees where user_id = ${lead.id}) where id = ${p.employeeId}`).catch(() => undefined);
+    await onJibble(p);
+
+    as(hr);
+    expect((await sourceActions.saveClientMap({ kind: "project", jibbleId: "proj-a", clientId: a.id })).ok).toBe(true);
+    expect((await sourceActions.saveClientMap({ kind: "activity", jibbleId: "act-b", clientId: b.id })).ok).toBe(true);
+    fake.entries.set(p.jibbleId, [
+      entry(p.jibbleId, "m1", "In", "09:00", { projectId: "proj-a" }),
+      entry(p.jibbleId, "m2", "In", "13:00", { projectId: "proj-a", activityId: "act-b" }), // the activity wins: now Beta
+      entry(p.jibbleId, "m3", "Out", "17:00"),
+    ]);
+    await runJibbleImport({ days: 5, employeeId: p.employeeId });
+    expect((await events(p.employeeId)).map((e) => [e.type, e.client_id])).toEqual([["clock_in", a.id], ["switch_client", b.id], ["clock_out", null]]);
+    const split = await rows<{ client_id: string; worked_minutes: number }>(sql`select client_id, worked_minutes from time.attendance_day_clients where employee_id = ${p.employeeId} and date = ${day}::date`);
+    expect(split.map((r) => r.worked_minutes).sort()).toEqual([240, 240]);
+    expect((await dayRow(p.employeeId)).flags).not.toContain("needs_client");
+
+    // A project nobody mapped, for a person with two clients: no client, the day is flagged, and the id is listed for HR
+    const q = await person("MapUnknown", [a.id, b.id]);
+    await onJibble(q);
+    fake.entries.set(q.jibbleId, [entry(q.jibbleId, "u1", "In", "09:00", { projectId: "proj-new" }), entry(q.jibbleId, "u2", "Out", "17:00")]);
+    await runJibbleImport({ days: 5, employeeId: q.employeeId });
+    expect((await events(q.employeeId))[0].client_id).toBeNull();
+    expect((await dayRow(q.employeeId)).flags).toContain("needs_client");
+    expect(await rows(sql`select 1 from time.jibble_unmapped_ids where kind = 'project' and jibble_id = 'proj-new'`)).toHaveLength(1);
+
+    // HR maps it: the next import re-attributes the day and the flag goes
+    as(hr);
+    expect((await sourceActions.saveClientMap({ kind: "project", jibbleId: "proj-new", clientId: b.id })).ok).toBe(true);
+    expect(await rows(sql`select 1 from time.jibble_unmapped_ids where kind = 'project' and jibble_id = 'proj-new'`)).toHaveLength(0);
+    await runJibbleImport({ days: 5, employeeId: q.employeeId });
+    expect((await events(q.employeeId))[0].client_id).toBe(b.id);
+    expect((await dayRow(q.employeeId)).flags).not.toContain("needs_client");
+  });
+
+  it("is HR only, validates the mapping, and can remove one", async () => {
+    const a = await client();
+    as(await makeUser("MapNo", ["team_lead", "employee"]));
+    expect(await sourceActions.saveClientMap({ kind: "project", jibbleId: "x", clientId: a.id })).toEqual({ ok: false, error: NO_ACCESS });
+    as(hr);
+    expect((await sourceActions.saveClientMap({ kind: "project", jibbleId: "", clientId: a.id })).ok).toBe(false);
+    expect((await sourceActions.saveClientMap({ kind: "project", jibbleId: "x", clientId: randomUUID() })).ok).toBe(false);
+    expect((await sourceActions.saveClientMap({ kind: "project", jibbleId: "to-remove", clientId: a.id })).ok).toBe(true);
+    const [m] = await rows<{ id: string }>(sql`select id from time.jibble_client_map where jibble_id = 'to-remove'`);
+    expect((await sourceActions.removeClientMap({ id: m.id })).ok).toBe(true);
+    expect((await sourceActions.removeClientMap({ id: m.id })).ok).toBe(false);
+  });
+});
+
+describe("what review and approval see", () => {
+  it("shows a Jibble day in hours review like any other, with no screenshot flags", async () => {
+    const c = await client();
+    const lead = await makeUser("RevLead", ["team_lead", "employee"]);
+    const [leadEmp] = await rows<{ id: string }>(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values ('RevLead', ${uniq("L")}, ${lead.email}, 'active', ${lead.id}) returning id`);
+    const p = await person("RevPerson", [c.id]);
+    await db.execute(sql`update core.employees set manager_id = ${leadEmp.id} where id = ${p.employeeId}`);
+    await onJibble(p);
+    fake.entries.set(p.jibbleId, [entry(p.jibbleId, "r1", "In", "09:00"), entry(p.jibbleId, "r2", "Out", "17:00")]);
+    await runJibbleImport({ days: 5, employeeId: p.employeeId });
+    as(lead);
+    const review = await hoursQueries.getTeamReview(mondayOf(day));
+    const d = review.rows.find((r) => r.employeeId === p.employeeId)?.days.find((x) => x.date === day);
+    expect(d?.workedMinutes).toBe(480);
+    expect(d?.flags).not.toContain("no_screenshots");
+    expect(d?.flags).not.toContain("jibble_mismatch");
+  });
+});

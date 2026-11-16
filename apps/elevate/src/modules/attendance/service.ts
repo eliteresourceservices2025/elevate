@@ -14,6 +14,7 @@ import { enqueueMirror, kickMirror } from "@/modules/jibble/enqueue";
 import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
 import { employees } from "@/modules/people/schema";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
+import { clockSourceOf } from "./clock-source";
 import { assignedClients } from "./extra-hours-service";
 import { clockEvents, clockPrefs, clockRules, clockSelfies, correctionEvidence, overbreakNotices } from "./schema";
 
@@ -138,6 +139,7 @@ export type ClockResult = {
  */
 export async function performClock(actor: { id: string; email: string }, type: ClockType, input: ClockInput): Promise<ClockResult> {
   const person = await personForUser(db, actor.id);
+  if ((await clockSourceOf(db, person.id)) === "jibble") throw new ActionFailure("You clock in Jibble. ELEVATE reads your hours from there, so the ELEVATE clock is not used.");
   if (!(await allowRequest("clock", person.id))) throw new ActionFailure("Too many clock actions. Wait a minute and try again.");
   const rawIp = await clientIp();
   const ip = rawIp === "unknown" ? null : rawIp.slice(0, 64);

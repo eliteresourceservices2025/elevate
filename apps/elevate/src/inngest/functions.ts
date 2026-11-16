@@ -3,6 +3,7 @@ import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
 import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runExtraHoursReminders, runHrApprovalSummary, runLeadApprovalReminders, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts, runWeeklyExtraHoursNotice } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
 import { purgeOrphanContentFiles } from "@/modules/announcements/content-files";
+import { runJibbleImport } from "@/modules/jibble/import";
 import { processMirrorQueue, purgeJibbleData, runJibbleComparison, runJibbleRepair, runJibbleUnmatchedReport, syncJibblePeople } from "@/modules/jibble/jobs";
 import { runCredentialReminders } from "@/modules/credentials/jobs";
 import { listLearnCourses } from "@/modules/learn/course-catalog";
@@ -169,6 +170,12 @@ export const jibbleMirror = inngest.createFunction(
   async ({ step }) => step.run("send", () => track("jibble-mirror", () => processMirrorQueue())),
 );
 
+/** Every 30 minutes: bring in the hours of people who clock in Jibble (their time entries become clock events; edits and deletions are followed). */
+export const jibbleImport = inngest.createFunction(
+  { id: "jibble-import", triggers: { cron: "*/30 * * * *" } },
+  async ({ step }) => step.run("import", () => track("jibble-import", () => runJibbleImport())),
+);
+
 /** The experimental checker targets five minutes; the legacy repair schedule remains every 30 minutes. */
 export const jibbleRepair = inngest.createFunction(
   { id: "jibble-repair", triggers: { cron: process.env.JIBBLE_COORDINATION_ENABLED === "true" ? "*/5 * * * *" : "*/30 * * * *" } },
@@ -305,4 +312,4 @@ export const importPurge = inngest.createFunction(
   async ({ step }) => step.run("purge", () => track("import-purge", () => runImportPurge())),
 );
 
-export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge];
+export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge];
