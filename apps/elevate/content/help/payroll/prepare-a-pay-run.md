@@ -152,7 +152,11 @@ When the run is approved, the **Payment** section appears at the bottom.
 
 ![An approved run: the Payment section with Download Remitly list and a Mark paid button for each person.](help:prepare-a-pay-run/10-payment.png)
 
-Type the **Remitly reference** and check the **Paid on** date, then click **Mark paid**. To fix a mistake, click **Correct** and save the right reference.
+Type the **Remitly reference** and check the **Paid on** date. If you want the dollars kept with the payment, type them under **Amount paid in dollars (optional)**, for example 351.66. ELEVATE only records them: it converts nothing and does not check them against the pesos. Then click **Mark paid**. To fix a mistake, click **Correct** and save the right reference or dollars (leave the dollars blank to clear them).
+
+The **Payment** table shows each person's **Client**, **Status**, **Remitly reference** and **Paid (USD)**, and the dollars paid for the whole run at the top. Click a column title to sort by it, and click it again to reverse the order. On a phone, use **Sort by**. The first sort is by **Person**, A to Z. **Status** puts the people not paid yet first, and the people with no payment date or no dollars always stay at the end.
+
+**Which amount do I pay?** Pay each person their **Total payable compensation**, marked **Pay this** on the run. It is the amount on the Remitly list. **Gross** is only the pay before reimbursements, bonuses, adjustments and deductions, so do not pay from it. The (i) beside each name says the same.
 
 ![The Mark paid window: the Remitly reference and the date it was paid.](help:prepare-a-pay-run/11-mark-paid.png)
 

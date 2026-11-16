@@ -106,6 +106,15 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     const line = prepPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` });
     await expect(line).toBeVisible();
 
+    // Gross is not what is paid: the (i) beside Total payable compensation says so, and that column is marked "Pay this".
+    await prepPage.locator('[data-hint-for="Total payable compensation"]').first().click();
+    await expect(prepPage.getByText(/use this one for payment/)).toBeVisible();
+    await prepPage.screenshot({ path: "test-results/payroll-pay-this-hint.png" });
+    await prepPage.keyboard.press("Escape");
+    await expect(prepPage.getByRole("columnheader", { name: /Total payable compensation/ }).first()).toContainText("Pay this");
+    await prepPage.getByRole("heading", { name: "Totals" }).scrollIntoViewIfNeeded();
+    await prepPage.screenshot({ path: "test-results/payroll-totals.png" });
+
     // An overtime (OT) item, entered twice so the history has an old and a new value.
     for (const minutes of ["60", "120"]) {
       await line.getByRole("button", { name: /^Actions for/ }).click();
@@ -181,8 +190,22 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await prepPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` }).last().getByRole("button", { name: "Mark paid" }).click();
     await waitForHydration(prepPage, `#ref-${worker.employeeId}`);
     await prepPage.locator(`#ref-${worker.employeeId}`).fill(`E2E-REF-${stamp}`);
+    await prepPage.locator(`#usd-${worker.employeeId}`).fill("351.66"); // optional: the dollars paid in Remitly
+    await prepPage.screenshot({ path: "test-results/payroll-mark-paid.png" });
     await prepPage.getByRole("dialog").getByRole("button", { name: "Mark paid" }).click();
     await expect(prepPage.getByText("Payment recorded.")).toBeVisible();
+    // The Payment table shows the client (not the alias), the dollars and their total, and its columns sort.
+    const payment = prepPage.getByRole("region", { name: "Payment" });
+    await expect(payment.getByRole("columnheader", { name: "Paid (USD)" })).toBeVisible();
+    await expect(payment.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toContainText("$351.66");
+    await expect(payment).toContainText("Dollars paid: $351.66");
+    await expect(payment.getByRole("columnheader", { name: "Alias" })).toHaveCount(0);
+    await payment.getByRole("button", { name: "Client" }).click();
+    await expect(payment.getByRole("columnheader", { name: /Client/ })).toHaveAttribute("aria-sort", "ascending");
+    await payment.getByRole("button", { name: "Client" }).click();
+    await expect(payment.getByRole("columnheader", { name: /Client/ })).toHaveAttribute("aria-sort", "descending");
+    await payment.scrollIntoViewIfNeeded();
+    await prepPage.screenshot({ path: "test-results/payroll-payment-table.png" });
     await expect(prepPage.getByText("Everyone on this run is paid.")).toBeVisible();
 
     // Paid is not released: the worker sees nothing yet. A Preparer can read the statements and may release them.

@@ -47,4 +47,7 @@ export const PAYROLL_HINTS = {
   // Payments
   paymentReference: "The reference number from Remitly for this payment.",
   paymentPaidOn: "The day the money was sent.",
+  paymentUsd: "The dollars you paid in Remitly for this person, kept for your records, for example 351.66. Optional. ELEVATE converts nothing and does not check it against the pesos.",
+  grossPay: "The pay for the cutoff after absences and late time, plus overtime, holiday pay and allowances. It does NOT include reimbursements, bonuses, adjustments, a loan or other deductions, so do not pay from this number.",
+  totalPayable: "The amount to pay this person. It is the gross pay plus reimbursements, bonuses and adjustments, minus a loan and other deductions. This is the Pesos amount on the Remitly list: use this one for payment.",
 } as const;

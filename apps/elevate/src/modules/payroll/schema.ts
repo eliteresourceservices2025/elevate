@@ -191,6 +191,8 @@ export const payPayments = payroll
         .notNull()
         .references(() => employees.id),
       referenceEnc: text("reference_enc").notNull(),
+      /** The dollars paid in Remitly, in cents as text, encrypted (context pay_payment_usd:<id>). Optional: a record of what was paid, never a conversion. */
+      amountUsdEnc: text("amount_usd_enc"),
       paidOn: date("paid_on").notNull(),
       markedBy: uuid("marked_by")
         .notNull()

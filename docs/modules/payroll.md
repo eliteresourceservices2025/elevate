@@ -193,6 +193,13 @@ Rates stay unrounded; each result is one exact fraction rounded once, half up, t
 
 An approved run never changes. A mistake is fixed on a later run by an `adjustment` (underpaid) or an `other_deduction` (overpaid) naming the approved or paid earlier run (`correctsRunId`, kept in the item value and the change log). A reason is required, amounts stay positive, and the person must have had a line on that run. The worksheet marks a run that includes a correction.
 
+## Payment table: client, sorting and dollars paid (2026-11-16; owner request; migration 0145)
+
+- **Client, not alias.** `getPayments` returns `clients` (the client of each of the person's lines on the run, alphabetical and joined, "No client" when a line has none) instead of `aliases`. The Remitly list keeps its alias column.
+- **Sorting** (`payment-sort.ts`, pure, in the page only, nothing stored): Person, Client, Status (not paid first), Paid on, Paid (USD); the column title flips the direction, a phone gets a Sort by menu. Ties fall back to the name; rows with no payment date or no dollars always go last.
+- **Dollars paid.** `pay_payments.amount_usd_enc` (nullable text, migration 0145): the cents as text, encrypted with the context `pay_payment_usd:<id>`. `markPaid` takes an optional `amountUsd` (blank, or an amount above zero); a correction is a new row, so the newest dollars show and a blank clears them. It is a record of what was paid in Remitly: **nothing is converted or checked against the pesos**, and the Remitly list and statements are unchanged. Only people who hold `payroll.mark_paid` read the dollars (the **Paid (USD)** column and the run's total); a viewer sees neither. The `sensitive.view` row names the field ("payment amounts in dollars") and counts, the audit entry only says whether dollars were recorded, and the change log keeps the cents in its encrypted detail (the history shows "Dollars paid").
+- **Gross or total payable?** The run's worksheet headers and Totals tiles carry an (i) (`PAYROLL_HINTS.grossPay` / `totalPayable`): **Total payable compensation** is what is paid (the Remitly list's Pesos) and is marked **Pay this** and tinted; Gross is labelled "Not the amount to pay". The Payment section's hint says the same.
+
 ## Payments and the Remitly list (`payments.ts`, `remitly.ts`)
 
 - `exportRemitlyList` (`payroll.export`, rate-limited, audited, `list_exported`): only for an approved or paid run with a dollar rate set (always true for a run approved now, since a missing rate blocks review; the refusal stays as a guard); refused if a line is unreadable or negative. CSV columns: Person, Alias, Pesos, Dollars (plain decimals, cells through `csvCell`). Never account numbers.

@@ -1,7 +1,7 @@
 "use client";
 
-import { Download } from "lucide-react";
-import { useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Download } from "lucide-react";
+import { useMemo, useState } from "react";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { HintedLabel } from "@/components/field-hint";
 import { PAYROLL_HINTS } from "../hints";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -21,7 +22,23 @@ import {
 import { useRun } from "@/modules/recruiting/components/use-run";
 import { exportRemitlyList, markPaid } from "../actions";
 import { PAYMENT_LABELS as P } from "../constants";
+import { DEFAULT_PAYMENT_SORT, nextSort, PAYMENT_SORT_CHOICES, sortPayments, type PaymentSort, type PaymentSortKey } from "../payment-sort";
 import type { PaymentsView } from "../queries";
+
+/** Cents as typed in the box ("351.66"), for a payment that is being corrected. */
+const typedUsd = (cents: string | null): string => (cents === null ? "" : `${BigInt(cents) / 100n}.${(BigInt(cents) % 100n).toString().padStart(2, "0")}`);
+
+/** A column title that sorts the table: it names the direction for assistive tools, and shows it with an arrow. */
+function SortTitle({ label, sortKey, sort, onSort }: { label: string; sortKey: PaymentSortKey; sort: PaymentSort; onSort: (key: PaymentSortKey) => void }) {
+  const active = sort.key === sortKey;
+  const Arrow = !active ? ArrowUpDown : sort.dir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <button type="button" onClick={() => onSort(sortKey)} className="inline-flex items-center gap-1 rounded-sm font-semibold outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+      {label}
+      <Arrow className={active ? "size-3.5" : "size-3.5 text-muted-foreground"} aria-hidden />
+    </button>
+  );
+}
 
 // Paying an approved run: the Remitly list, and one reference per person. The server decides everything (approval, own pay, the date);
 // this panel only offers what makes sense.
@@ -30,24 +47,28 @@ function MarkPaidForm({
   runId,
   employeeId,
   current,
+  currentUsd,
   today,
 }: {
   runId: string;
   employeeId: string;
   current: string;
+  /** The dollars recorded with the payment being corrected, as typed ("351.66"); blank when none. */
+  currentUsd: string;
   today: string;
 }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const [reference, setReference] = useState(current);
   const [paidOn, setPaidOn] = useState(today);
+  const [usd, setUsd] = useState(currentUsd);
   return (
     <form
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
         run(
-          () => markPaid({ runId, employeeId, reference, paidOn }),
+          () => markPaid({ runId, employeeId, reference, paidOn, amountUsd: usd }),
           P.marked,
           () => dialog?.close(true),
         );
@@ -75,6 +96,15 @@ function MarkPaidForm({
           required
         />
       </div>
+      <div className="space-y-1">
+        <HintedLabel htmlFor={`usd-${employeeId}`} hint={PAYROLL_HINTS.paymentUsd}>{P.amountUsd}</HintedLabel>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground" aria-hidden>
+            $
+          </span>
+          <Input id={`usd-${employeeId}`} inputMode="decimal" value={usd} onChange={(e) => setUsd(e.target.value)} placeholder="351.66" autoComplete="off" />
+        </div>
+      </div>
       <Button type="submit" disabled={pending}>
         {P.markPaid}
       </Button>
@@ -85,6 +115,11 @@ function MarkPaidForm({
 export function PaymentsPanel({ view, today }: { view: PaymentsView; today: string }) {
   const { run, pending } = useRun();
   const paid = view.people.filter((p) => p.payment !== null).length;
+  const [sort, setSort] = useState<PaymentSort>(DEFAULT_PAYMENT_SORT);
+  const people = useMemo(() => sortPayments(view.people, sort), [view.people, sort]);
+  // The dollars column is for the people who can read what was recorded (the same people who read the references).
+  const showUsd = view.canMarkPaid;
+  const ariaSort = (key: PaymentSortKey) => (sort.key === key ? (sort.dir === "asc" ? "ascending" : "descending") : "none");
 
   const download = () =>
     run<{ fileName: string; csv: string; rows: number; missingDetails: number; test: boolean }>(
@@ -112,6 +147,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm text-muted-foreground">
             {P.progress(paid, view.people.length)}
+            {view.usdTotal ? ` · ${P.usdTotal(view.usdTotal)}` : ""}
           </span>
           {view.canExport ? (
             <Button
@@ -137,25 +173,53 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
           {P.allPaid}
         </Alert>
       ) : null}
+      <div className="flex items-center gap-2 md:hidden">
+        <Label htmlFor="payment-sort" className="text-sm">
+          {P.sortBy}
+        </Label>
+        <NativeSelect
+          id="payment-sort"
+          className="w-auto"
+          value={`${sort.key}:${sort.dir}`}
+          onChange={(e) => setSort(PAYMENT_SORT_CHOICES.find((c) => c.value === e.target.value)?.sort ?? DEFAULT_PAYMENT_SORT)}
+        >
+          {PAYMENT_SORT_CHOICES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </NativeSelect>
+      </div>
       <Table stack>
         <TableHeader>
           <TableRow>
-            <TableHead>{P.person}</TableHead>
-            <TableHead>{P.alias}</TableHead>
-            <TableHead>{P.status}</TableHead>
+            <TableHead aria-sort={ariaSort("name")}>
+              <SortTitle label={P.person} sortKey="name" sort={sort} onSort={(k) => setSort(nextSort(sort, k))} />
+            </TableHead>
+            <TableHead aria-sort={ariaSort("client")}>
+              <SortTitle label={P.client} sortKey="client" sort={sort} onSort={(k) => setSort(nextSort(sort, k))} />
+            </TableHead>
+            <TableHead aria-sort={ariaSort("status")}>
+              <SortTitle label={P.status} sortKey="status" sort={sort} onSort={(k) => setSort(nextSort(sort, k))} />
+            </TableHead>
             <TableHead>{P.reference}</TableHead>
+            {showUsd ? (
+              <TableHead aria-sort={ariaSort("usd")}>
+                <SortTitle label={P.usd} sortKey="usd" sort={sort} onSort={(k) => setSort(nextSort(sort, k))} />
+              </TableHead>
+            ) : null}
             <TableHead>
               <span className="sr-only">{P.actions}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {view.people.map((p) => (
+          {people.map((p) => (
             <TableRow key={p.employeeId}>
               <TableCell label={P.person} className="font-medium">
                 {p.name}
               </TableCell>
-              <TableCell label={P.alias}>{p.aliases || P.none}</TableCell>
+              <TableCell label={P.client}>{p.clients || P.none}</TableCell>
               <TableCell label={P.status}>
                 {p.payment ? (
                   <Badge variant="success">{`${P.paid} ${p.payment.paidOn}`}</Badge>
@@ -172,6 +236,11 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
                     ))
                   : P.none}
               </TableCell>
+              {showUsd ? (
+                <TableCell label={P.usd} className="tabular-nums">
+                  {p.payment?.usd ?? P.none}
+                </TableCell>
+              ) : null}
               <TableCell label={P.actions}>
                 {view.canMarkPaid && !p.isOwn ? (
                   <FormDialog
@@ -183,6 +252,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
                       runId={view.runId}
                       employeeId={p.employeeId}
                       current={p.payment?.reference ?? ""}
+                      currentUsd={typedUsd(p.payment?.usdCents ?? null)}
                       today={today}
                     />
                   </FormDialog>

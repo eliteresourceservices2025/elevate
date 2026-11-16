@@ -1016,6 +1016,13 @@
       "when": 1794858169907,
       "tag": "0144_unapprove_run",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1794868532321,
+      "tag": "0145_payment_amount_usd",
+      "breakpoints": true
     }
   ]
 }

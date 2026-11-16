@@ -10,6 +10,7 @@ import { sensitiveContext } from "@/modules/people/sensitive";
 import type { Tx } from "@/modules/people/service";
 import { logChange } from "./changes";
 import { readRun, type Executor } from "./runs";
+import { parseMoney } from "./money";
 import { buildRemitlyRows, personName, REMITLY_HEADER, REMITLY_TEST_NOTE, type PayoutDetails } from "./remitly";
 import { payPayments, payRunLines, payRuns } from "./schema";
 import { assertNotOwnEmployee, payrollToday } from "./service";
@@ -22,11 +23,15 @@ import { freezeRunSignatory } from "./signatory";
 type Actor = { id: string; email: string };
 
 const referenceContext = (id: string) => `pay_payment:${id}`;
+const usdContext = (id: string) => `pay_payment_usd:${id}`;
 const NOT_APPROVED = "This run has not been approved, so it can't be paid yet.";
 
 /** The reference as stored. Callers must already hold `payroll.view`. */
 export const decryptReference = (id: string, stored: string): string =>
   fieldCrypto().decrypt(stored, referenceContext(id));
+
+/** The dollars paid, in cents, or null when none was recorded. Callers must already hold `payroll.mark_paid`. */
+export const decryptUsdCents = (id: string, stored: string | null): bigint | null => (stored === null ? null : BigInt(fieldCrypto().decrypt(stored, usdContext(id))));
 
 /** The newest payment per person on the run (a correction is a newer row). */
 export async function latestPayments(executor: Pick<Executor, "select">, runId: string) {
@@ -152,7 +157,7 @@ export async function remitlyList(
 export async function recordPayment(
   tx: Tx,
   actor: Actor,
-  v: { runId: string; employeeId: string; reference: string; paidOn: string },
+  v: { runId: string; employeeId: string; reference: string; paidOn: string; amountUsd?: string | null },
 ): Promise<{ runPaid: boolean }> {
   const [run] = await tx.select().from(payRuns).where(eq(payRuns.id, v.runId)).for("update");
   if (!run) throw new ActionFailure("That pay run was not found.");
@@ -171,6 +176,9 @@ export async function recordPayment(
   if (v.paidOn < run.periodStart)
     throw new ActionFailure("The payment date can't be before the pay period starts.");
 
+  // Optional: the dollars paid in Remitly. Typed like an amount (351.66) and kept in cents; blank means none was recorded.
+  const usdCents = v.amountUsd && v.amountUsd.trim() !== "" ? parseMoney(v.amountUsd) : null;
+  if (v.amountUsd && v.amountUsd.trim() !== "" && (usdCents === null || usdCents <= 0n)) throw new ActionFailure("Check the amount in dollars and try again.");
   const id = randomUUID();
   const correction =
     (
@@ -185,6 +193,7 @@ export async function recordPayment(
     runId: v.runId,
     employeeId: v.employeeId,
     referenceEnc: fieldCrypto().encrypt(v.reference, referenceContext(id)),
+    amountUsdEnc: usdCents === null ? null : fieldCrypto().encrypt(usdCents.toString(), usdContext(id)),
     paidOn: v.paidOn,
     markedBy: actor.id,
     // The statement clock, not the transaction start: of two writers the later lock holder must also have the later time.
@@ -196,7 +205,7 @@ export async function recordPayment(
       action: "payroll.payment.mark",
       targetType: "pay_run",
       targetId: v.runId,
-      metadata: { employeeId: v.employeeId, correction },
+      metadata: { employeeId: v.employeeId, correction, usd: usdCents !== null },
     },
     tx,
   );
@@ -204,7 +213,7 @@ export async function recordPayment(
     action: "payment_marked",
     runId: v.runId,
     employeeId: v.employeeId,
-    detail: { paidOn: v.paidOn, correction },
+    detail: { paidOn: v.paidOn, correction, ...(usdCents !== null ? { usdCents: usdCents.toString() } : {}) },
   });
 
   let runPaid = false;

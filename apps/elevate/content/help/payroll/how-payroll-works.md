@@ -21,7 +21,7 @@ The worksheet and the contractor payment statement show these parts. On the stat
 - **Plus: allowances.** Each one has its own name, like Health allowance. This gives the **gross** pay.
 - **Plus: reimbursements, bonuses and adjustments.** Each is a separate section, and each line has its own name.
 - **Less: a loan and other deductions.**
-- **Total payable compensation.** What the person is paid.
+- **Total payable compensation.** What the person is paid. This is the amount to pay, and the one marked **Pay this** on the run and on the Remitly list. **Gross** is the step before it (the pay after absences and late time, plus overtime, holiday pay and allowances), so it is not the amount to pay.
 
 The internal team (the ELITE Resource Services team) is the exception for the first line: instead of half a monthly rate, their cutoff pay is the run's **Total FTE** times their **amount per FTE**. Everything after that works the same. FTE is a count of 1, 0.5 or 0 kept with each contractor's rate. It only sets the internal team's pay, and it is never shown on a contractor's statement.
 

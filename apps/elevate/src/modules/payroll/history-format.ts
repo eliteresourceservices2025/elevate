@@ -15,7 +15,7 @@ import {
 } from "./constants";
 import { formatFte } from "./fte";
 import { formatItemValue } from "./items";
-import { formatPesos } from "./money";
+import { formatPesos, formatUsd } from "./money";
 
 // Turns a decrypted change detail into what the history page shows: old and new values side by side, plus single facts. Pure.
 // Detail is plain JSON written by `logChange`, so every field is read defensively: a missing or odd field is skipped, never a crash.
@@ -178,6 +178,7 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       break;
     case "payment_marked":
       facts.push(...fact(H.paidOn, detail.paidOn));
+      if (typeof detail.usdCents === "string" && /^\d+$/.test(detail.usdCents)) facts.push({ label: H.dollarsPaid, value: formatUsd(BigInt(detail.usdCents)) });
       if (detail.correction === true) facts.push({ label: H.correction, value: H.yes });
       break;
     case "list_exported":

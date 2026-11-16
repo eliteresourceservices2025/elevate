@@ -1,10 +1,12 @@
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { FieldHint } from "@/components/field-hint";
 import { Fragment } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EXTRA_KEYS } from "../calculate";
 import { EXTRA_KEY_ITEM, HISTORY_LABELS, PAY_ITEM_LABELS, WORKSHEET_LABELS as L } from "../constants";
+import { PAYROLL_HINTS } from "../hints";
 import type { Worksheet, WorksheetFigures, WorksheetLine } from "../runs";
 import { LineHashScroller } from "./go-to-line";
 import { LineFlags } from "./line-flags";
@@ -77,7 +79,7 @@ function PhoneCard({ line, runId, period, canActOnLines, correctableRuns, issues
           </span>
           <span className="flex shrink-0 items-start gap-1">
             <span className="text-right">
-              <span className="block text-xs text-muted-foreground">Net</span>
+              <span className="block text-xs font-medium">{L.payThis}</span>
               <span className="block text-base font-semibold tabular-nums">{line.unreadable || !f ? "-" : f.net}</span>
               {f?.netChange ? <span className="block text-xs text-muted-foreground tabular-nums">{f.netChange}</span> : null}
             </span>
@@ -213,16 +215,26 @@ export function Worksheet({
                 <TableHead className={`${head} ${num} ${D}`}>{L.bereavement}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.pto}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.allowances}</TableHead>
-                <TableHead className={`${head} ${num}`}>{L.gross}</TableHead>
+                <TableHead className={`${head} ${num}`}>
+                  <span className="inline-flex items-center gap-1">
+                    {L.gross}
+                    <FieldHint label={L.gross}>{PAYROLL_HINTS.grossPay}</FieldHint>
+                  </span>
+                  <span className="block text-xs font-normal text-muted-foreground">{L.grossNote}</span>
+                </TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.reimbursements}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.bonuses}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.adjustments}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.loan}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.otherDeductions}</TableHead>
-                <TableHead aria-sort={ariaSortOf(sortLinks, "net")} className={`${head} ${num}`}>
-                  <SortHead header="net" links={sortLinks}>
-                    {L.net}
-                  </SortHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "net")} className={`${head} ${num} bg-primary/10`}>
+                  <span className="inline-flex items-center gap-1">
+                    <SortHead header="net" links={sortLinks}>
+                      {L.net}
+                    </SortHead>
+                    <FieldHint label={L.net}>{PAYROLL_HINTS.totalPayable}</FieldHint>
+                  </span>
+                  <Badge className="mt-1">{L.payThis}</Badge>
                 </TableHead>
                 <TableHead aria-sort={ariaSortOf(sortLinks, "change")} className={`${head} ${num}`}>
                   <SortHead header="change" links={sortLinks}>
@@ -302,7 +314,7 @@ export function Worksheet({
                         {cell(f?.adjustments, L.adjustments, D)}
                         {cell(f?.loan, L.loan, D)}
                         {cell(f?.otherDeductions, L.otherDeductions, D)}
-                        {cell(f?.net, L.net, "font-semibold")}
+                        {cell(f?.net, L.net, "font-semibold bg-primary/5")}
                         {cell(f ? (f.netChange ?? "") : undefined, L.netChange, "text-muted-foreground")}
                         {cell(f?.clientHours, L.clientHours)}
                         <TableCell label={L.fte} className={`${num} ${D}`}>

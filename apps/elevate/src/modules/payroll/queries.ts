@@ -10,17 +10,17 @@ import type { SettingsSnapshot } from "./calculate";
 import { z } from "zod";
 import type { PaymentMethod, RunStatus } from "./constants";
 import { applySupersede, isWithdrawn, lineLastDay, resolveLines } from "./lines";
-import { formatPesos } from "./money";
+import { formatPesos, formatUsd } from "./money";
 import { countAwaiting, hashOf, latestSendBackNote, refusalFor, unapproveRefusal } from "./approval";
 import { readRun, worksheetOf, type Worksheet } from "./runs";
 import type { BulkAction } from "@/lib/bulk";
 import { nextCutoff, nextStepOf, runActions, runWhy, stepOf, type RunsView, type ViewerRights } from "./runs-list";
 import { recentPeriods } from "@/modules/attendance/pay-periods";
 import { cutoffChoices, draftCutoffs, type CutoffChoice } from "./rate-start";
-import { joinAliases, personName } from "./remitly";
+import { personName } from "./remitly";
 import { logChange } from "./changes";
 import { payLines, payRunLines, payRuns, paySettings } from "./schema";
-import { decryptReference, latestPayments } from "./payments";
+import { decryptReference, decryptUsdCents, latestPayments } from "./payments";
 import { formatFte } from "./fte";
 import { decryptLineAmounts, employeeIdForUser, payrollToday, snapshotOf } from "./service";
 
@@ -428,11 +428,14 @@ export type PaymentsView = {
   people: {
     employeeId: string;
     name: string;
-    aliases: string;
+    /** The client of each of the person's lines on this run ("Golden Years, Nourish Health"), or "No client". */
+    clients: string;
     isOwn: boolean;
-    /** `reference` is null unless the viewer holds `payroll.mark_paid`: others see who marked it and when, not the reference. */
-    payment: { reference: string | null; paidOn: string; markedBy: string; markedAt: string } | null;
+    /** `reference` and `usd` are null unless the viewer holds `payroll.mark_paid`: others see who marked it and when, not the reference or the dollars. */
+    payment: { reference: string | null; paidOn: string; markedBy: string; markedAt: string; usd: string | null; usdCents: string | null } | null;
   }[];
+  /** The dollars recorded as paid across the run ("$1,250.50"); null unless the viewer holds `payroll.mark_paid` and some were recorded. */
+  usdTotal: string | null;
 };
 
 /**
@@ -451,9 +454,10 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
     const [run] = await tx.select().from(payRuns).where(eq(payRuns.id, runId)).limit(1);
     if (!run) return null;
     const lines = await tx
-      .select({ employeeId: payRunLines.employeeId, alias: payRunLines.alias, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
+      .select({ employeeId: payRunLines.employeeId, alias: payRunLines.alias, clientName: clients.name, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
       .from(payRunLines)
       .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
+      .leftJoin(clients, eq(clients.id, payRunLines.clientId))
       .where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false)))
       .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName), asc(payRunLines.alias));
     const own = await employeeIdForUser(tx, actor.id);
@@ -462,17 +466,22 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
       (paid.size === 0 ? [] : await tx.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, [...new Set([...paid.values()].map((p) => p.markedBy))]))).map((u) => [u.id, u.email]),
     );
 
-    const byPerson = new Map<string, { name: string; aliases: (string | null)[] }>();
+    const byPerson = new Map<string, { name: string; clients: string[] }>();
     for (const l of lines) {
-      const person = byPerson.get(l.employeeId) ?? { name: personName(l), aliases: [] };
-      person.aliases.push(l.alias);
+      const person = byPerson.get(l.employeeId) ?? { name: personName(l), clients: [] };
+      const client = l.clientName ?? "No client";
+      if (!person.clients.includes(client)) person.clients.push(client);
       byPerson.set(l.employeeId, person);
     }
+    let usdSum = 0n;
+    let usdAny = false;
     const people = [...byPerson].map(([employeeId, person]): PaymentsView["people"][number] => {
       const p = paid.get(employeeId);
       let payment: PaymentsView["people"][number]["payment"] = null;
       if (p) {
         let reference: string | null = null;
+        let usd: string | null = null;
+        let usdCents: string | null = null;
         if (canMarkPaid) {
           try {
             reference = decryptReference(p.id, p.referenceEnc);
@@ -481,14 +490,27 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
             reference = UNREADABLE;
           }
           decrypted += 1;
+          try {
+            const cents = decryptUsdCents(p.id, p.amountUsdEnc);
+            if (cents !== null) {
+              usd = formatUsd(cents);
+              usdCents = cents.toString();
+              usdSum += cents;
+              usdAny = true;
+              decrypted += 1;
+            }
+          } catch (error) {
+            console.error("payroll payment dollars unreadable:", { paymentId: p.id, error: error instanceof Error ? error.name : "UnknownError" });
+            usd = UNREADABLE;
+          }
         }
-        payment = { reference, paidOn: p.paidOn, markedBy: markers.get(p.markedBy) ?? "Unknown", markedAt: p.createdAt.toISOString() };
+        payment = { reference, paidOn: p.paidOn, markedBy: markers.get(p.markedBy) ?? "Unknown", markedAt: p.createdAt.toISOString(), usd, usdCents };
       }
-      return { employeeId, name: person.name, aliases: joinAliases(person.aliases), isOwn: own !== null && own === employeeId, payment };
+      return { employeeId, name: person.name, clients: [...person.clients].sort((a, b) => a.localeCompare(b)).join(", "), isOwn: own !== null && own === employeeId, payment };
     });
-    return { runId, status: run.status as RunStatus, isTest: run.isTest, canMarkPaid, canExport: can(actor, "payroll.export"), people };
+    return { runId, status: run.status as RunStatus, isTest: run.isTest, canMarkPaid, canExport: can(actor, "payroll.export"), people, usdTotal: usdAny ? formatUsd(usdSum) : null };
   });
-  if (view && decrypted > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["payment references"], count: decrypted } });
+  if (view && decrypted > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["payment references", "payment amounts in dollars"], count: decrypted } });
   return view;
 }
 

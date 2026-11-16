@@ -731,3 +731,79 @@ describe("the payments view", () => {
     expect(JSON.stringify(entry.metadata)).not.toContain("RMT-VISIBLE-1");
   });
 });
+
+describe("dollars paid and the client of each person", () => {
+  it("keeps the dollars encrypted, shows them to Preparers and Approvers only, and a correction replaces them", async () => {
+    const p = slot(17);
+    const emp = await person();
+    await giveLine(emp, p);
+    const runId = await approvedRun(p);
+
+    as(preparer);
+    expect(await markPaid({ runId, employeeId: emp, reference: "RMT-USD-1", paidOn: today(), amountUsd: "351.66" })).toMatchObject({ ok: true });
+    const [row] = await paymentRows(runId);
+    expect(String(row.amount_usd_enc)).not.toMatch(/35166|351\.66/);
+    expect(fieldCrypto().decrypt(String(row.amount_usd_enc), `pay_payment_usd:${row.id}`)).toBe("35166");
+
+    // Preparers and Approvers read the dollars and the run's total; a viewer reads neither.
+    for (const who of [preparer, approver]) {
+      as(who);
+      const view = (await getPayments(runId))!;
+      expect(view.people[0].payment).toMatchObject({ usd: "$351.66", usdCents: "35166" });
+      expect(view.usdTotal).toBe("$351.66");
+    }
+    as(viewer);
+    const seen = (await getPayments(runId))!;
+    expect(seen.people[0].payment?.usd).toBeNull();
+    expect(seen.usdTotal).toBeNull();
+    expect(JSON.stringify(seen)).not.toContain("351");
+
+    // Nothing about the figure is in the audit log or the clear columns of the change log; the history reads it from the encrypted detail.
+    const audit = JSON.stringify(await rows(sql`select * from ops.audit_log where target_id = ${runId}`));
+    expect(audit).not.toMatch(/351|35166/);
+    expect(audit).toContain("payment amounts in dollars");
+    const [change] = await rows<Row>(sql`select * from payroll.pay_change_log where run_id = ${runId} and action = 'payment_marked'`);
+    expect(JSON.stringify(change)).not.toMatch(/351|35166/);
+
+    // A correction is a new row: the newest dollars show, and a blank clears them.
+    as(preparer);
+    expect(await markPaid({ runId, employeeId: emp, reference: "RMT-USD-1", paidOn: today(), amountUsd: "400" })).toMatchObject({ ok: true });
+    expect((await getPayments(runId))!.people[0].payment?.usd).toBe("$400.00");
+    expect((await getPayments(runId))!.usdTotal).toBe("$400.00");
+    expect(await markPaid({ runId, employeeId: emp, reference: "RMT-USD-1", paidOn: today(), amountUsd: "" })).toMatchObject({ ok: true });
+    expect((await getPayments(runId))!.people[0].payment?.usd).toBeNull();
+    expect((await getPayments(runId))!.usdTotal).toBeNull();
+    expect(await paymentRows(runId)).toHaveLength(3);
+  });
+
+  it("refuses dollars that are not an amount above zero, writing nothing", async () => {
+    const p = slot(18);
+    const emp = await person();
+    await giveLine(emp, p);
+    const runId = await approvedRun(p);
+    as(preparer);
+    const before = await footprint(runId);
+    for (const amountUsd of ["abc", "0", "0.00", "-5", "1,2,3", "12.345", "99999999999"]) {
+      expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today(), amountUsd }), amountUsd).toEqual({ ok: false, error: BAD });
+    }
+    expect(await footprint(runId)).toEqual(before);
+    // Not typing any dollars is still fine.
+    expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today() })).toMatchObject({ ok: true });
+  });
+
+  it("names the client of each line a person has on the run, joined, with No client when a line has none", async () => {
+    const p = slot(19);
+    const [both, none] = [await person(), await person()];
+    const mk = async (name: string) => (await rows<{ id: string }>(sql`insert into core.clients (name) values (${uniq(name)}) returning id`))[0].id;
+    const [zora, alturos] = [await mk("Zora "), await mk("Alturos ")];
+    await giveLine(both, p, { clientId: zora });
+    await giveLine(both, p, { clientId: alturos });
+    await giveLine(none, p);
+    const runId = await approvedRun(p);
+    as(preparer);
+    const people = (await getPayments(runId))!.people;
+    const of = (id: string) => people.find((x) => x.employeeId === id)!.clients;
+    expect(of(both)).toMatch(/^Alturos .*, Zora .*$/); // joined, in alphabetical order
+    expect(of(none)).toBe("No client");
+  });
+});

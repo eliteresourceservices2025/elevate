@@ -186,7 +186,13 @@ export const approveRunSchema = z.object({ runId: uuid, expectedHash: z.string()
 export const exportRemitlySchema = z.object({ runId: uuid });
 
 /** A transfer reference typed by the Preparer who paid. Kept encrypted. */
-export const markPaidSchema = z.object({ runId: uuid, employeeId: uuid, reference: z.string().trim().min(1).max(100), paidOn: isoDate });
+/** The dollars paid in Remitly are optional: blank, or an amount above zero like 351.66. */
+const usdPaid = z
+  .string()
+  .trim()
+  .refine((s) => s === "" || (parseMoney(s) ?? 0n) > 0n, "Enter an amount like 351.66")
+  .optional();
+export const markPaidSchema = z.object({ runId: uuid, employeeId: uuid, reference: z.string().trim().min(1).max(100), paidOn: isoDate, amountUsd: usdPaid });
 
 export type PayLineInput = z.input<typeof createPayLineSchema>;
 export type UpdatePayLineInput = z.input<typeof updatePayLineSchema>;
