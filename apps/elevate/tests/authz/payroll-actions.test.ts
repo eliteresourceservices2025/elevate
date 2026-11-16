@@ -52,7 +52,7 @@ describe("setPayrollAccess, every role", () => {
 const { createPayLine, updatePayLine, endPayLine, tidyDoubledRates, listRemovedRates, restoreTidiedRates, removeStoppedRates, withdrawPayLine, savePaySettings } = await import("@/modules/payroll/actions");
 const { getRates, getPaySettings, getRuns, getWorksheet } = await import("@/modules/payroll/queries");
 const { updateRunPeople, removePersonFromRun, restorePersonToRun } = await import("@/modules/payroll/actions");
-const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun } =
+const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, unapproveRun, approveRun } =
   await import("@/modules/payroll/actions");
 const { payrollRunsAwaitingApproval, getPayments } = await import("@/modules/payroll/queries");
 const { exportRemitlyList, markPaid } = await import("@/modules/payroll/actions");
@@ -165,6 +165,7 @@ const HASH = "a".repeat(64);
 const decisions: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   approveRun: () => approveRun({ runId: RUN_ID, expectedHash: HASH }),
   sendBackRun: () => sendBackRun({ runId: RUN_ID, note: "Check the late minutes" }),
+  unapproveRun: () => unapproveRun({ runId: RUN_ID, note: "A rate was wrong" }),
 };
 
 describe.each(Object.entries(decisions))("%s, every role at every payroll level", (_name, decide) => {
@@ -187,6 +188,9 @@ describe("decisions are checked on the server", () => {
     asLevel("employee", "approver");
     expect(await sendBackRun({ runId: RUN_ID, note: "   " })).toEqual({ ok: false, error: BAD });
     expect(await sendBackRun({ runId: RUN_ID })).toEqual({ ok: false, error: BAD });
+    expect(await unapproveRun({ runId: RUN_ID, note: "   " })).toEqual({ ok: false, error: BAD });
+    expect(await unapproveRun({ runId: RUN_ID })).toEqual({ ok: false, error: BAD });
+    expect(await unapproveRun({ runId: "nope", note: "x" })).toEqual({ ok: false, error: BAD });
     for (const expectedHash of ["", "abc", "A".repeat(64), "g".repeat(64), undefined]) {
       expect(await approveRun({ runId: RUN_ID, expectedHash })).toEqual({ ok: false, error: BAD });
     }

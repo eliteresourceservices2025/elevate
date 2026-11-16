@@ -141,12 +141,14 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
 
   // Who prepared and who approved the run, and when: the certification block fills these in by itself.
   const [meta] = await executor.select({ submittedBy: payRuns.submittedBy, createdBy: payRuns.createdBy, status: payRuns.status }).from(payRuns).where(eq(payRuns.id, runId)).limit(1);
-  const [approval] = await executor
-    .select({ decidedBy: payApprovals.decidedBy, createdAt: payApprovals.createdAt })
+  // The newest approval decision counts: an approval that was taken back (unapproved) leaves nobody under Authorized by until it is approved again.
+  const [decision] = await executor
+    .select({ decision: payApprovals.decision, decidedBy: payApprovals.decidedBy, createdAt: payApprovals.createdAt })
     .from(payApprovals)
-    .where(and(eq(payApprovals.runId, runId), eq(payApprovals.decision, "approved")))
+    .where(and(eq(payApprovals.runId, runId), inArray(payApprovals.decision, ["approved", "unapproved"])))
     .orderBy(desc(payApprovals.createdAt))
     .limit(1);
+  const approval = decision?.decision === "approved" ? decision : undefined;
   const actualPreparerId = meta?.submittedBy ?? meta?.createdBy ?? null;
 
   // Independent of each other: asked together.

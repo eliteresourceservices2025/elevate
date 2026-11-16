@@ -163,6 +163,7 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       facts.push(...fact(H.lines, detail.lines), ...fact(H.warnings, detail.warnings));
       break;
     case "run_sent_back":
+    case "run_unapproved":
       facts.push(...fact(H.note, detail.note));
       break;
     case "run_approved":

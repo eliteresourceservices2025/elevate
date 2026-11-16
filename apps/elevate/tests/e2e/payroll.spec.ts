@@ -57,6 +57,13 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     // The Super Admin chooses a Preparer and an Approver.
     await setLevel(adminPage, preparer.email, "Preparer");
     await setLevel(adminPage, approver.email, "Approver");
+    // ...and chooses who is printed under "Prepared by" on the statements (the signatory's name is filled in only when none is saved yet).
+    await adminPage.goto("/settings/payroll-signatory");
+    const signatoryName = adminPage.getByLabel("Name", { exact: true });
+    if ((await signatoryName.inputValue()) === "") await signatoryName.fill("E2E Director");
+    await adminPage.locator("#signatory-prepared-by").selectOption({ label: `Pia Preparer${stamp}` });
+    await adminPage.getByRole("button", { name: "Save signatory" }).click();
+    await expect(adminPage.getByText("Signatory saved.")).toBeVisible();
     // ...and still sees no Payroll menu item afterwards.
     await adminPage.goto("/dashboard");
     await expect(adminPage.locator('a[href="/payroll"]')).toHaveCount(0);
@@ -138,6 +145,20 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     const approve = apprPage.getByRole("button", { name: "Approve", exact: true });
     await expect(approve).toBeEnabled();
     await approve.click();
+    await expect(apprPage.getByText("Run approved.").first()).toBeVisible();
+
+    // The Approver can take the approval back while nothing is paid: the run is a draft again with the note, and is sent and approved again.
+    await apprPage.getByRole("button", { name: "Unapprove", exact: true }).click();
+    await apprPage.getByLabel("Why the approval is taken back").fill("E2E: look at a rate again");
+    await apprPage.getByRole("dialog").getByRole("button", { name: "Unapprove" }).click();
+    await expect(apprPage.getByText("Approval taken back. The run is a draft again.")).toBeVisible();
+    await prepPage.goto(`/payroll/${runId}`);
+    await expect(prepPage.getByText("This run was unapproved")).toBeVisible();
+    await expect(prepPage.getByText("E2E: look at a rate again")).toBeVisible();
+    await prepPage.getByRole("button", { name: "Send for review" }).click();
+    await expect(prepPage.getByText("Sent for review. The Approvers have been told.")).toBeVisible();
+    await apprPage.goto(`/payroll/${runId}`);
+    await apprPage.getByRole("button", { name: "Approve", exact: true }).click();
     await expect(apprPage.getByText("Run approved.").first()).toBeVisible();
 
     // The Preparer downloads the Remitly list and marks the person paid.

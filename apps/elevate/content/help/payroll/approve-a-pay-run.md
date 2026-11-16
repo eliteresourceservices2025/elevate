@@ -46,9 +46,19 @@ If anything changes while you are reading, ELEVATE asks you to reload and review
 
 If you close this window after typing, ELEVATE asks **Discard what you wrote?** so a long note is not lost by accident.
 
+# Take an approval back
+
+An Approver can take back an approval, until the first payment is recorded or the statements are released.
+
+1. Open the approved run and click **Unapprove** under the worksheet.
+2. Write **Why the approval is taken back** and click **Unapprove**. The run is a draft again and the Preparers are told.
+3. A Preparer changes the run and sends it for review again. It needs a new approval, because anything may have changed.
+
+The note is kept in the change history and shown on the run. The old approval stays in the history; nothing is deleted. Once a payment is recorded or the statements are released, the button is replaced by a note saying why it is no longer possible.
+
 # After approval
 
-An approved run can no longer change. If a mistake is found later, the Preparer fixes it with an adjustment on a later run.
+While it is approved, a run can't change. If a mistake is found after payment, or after the statements are released, the Preparer fixes it with an adjustment on a later run.
 
 # Read the history
 

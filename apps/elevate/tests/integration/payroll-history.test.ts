@@ -46,7 +46,7 @@ const { createPayLine, updatePayLine, endPayLine, withdrawPayLine, tidyDoubledRa
 const { markRunAsTest, archivePayRun, restorePayRun, releaseStatements } = actions;
 const { updateRunPeople, removePersonFromRun, restorePersonToRun, applyJibbleTimesheet, confirmAllSuggestions } = actions;
 const { saveTimesheetUpload } = await import("@/modules/payroll/timesheet-import");
-const { refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun, exportRemitlyList, markPaid } = actions;
+const { refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, unapproveRun, approveRun, exportRemitlyList, markPaid } = actions;
 const { setPayrollAccess } = await import("@/modules/settings/actions");
 const { getWorksheet } = await import("@/modules/payroll/queries");
 const { getPayrollHistory, getHistoryFilterOptions } = await import("@/modules/payroll/history-queries");
@@ -265,6 +265,12 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     as(approver);
     const hash = (await getWorksheet(runId))!.expectedHash!;
     ok(await approveRun({ runId, expectedHash: hash }), "approve");
+    // The approval is taken back (nothing is paid yet), the run is sent again and approved again.
+    ok(await unapproveRun({ runId, note: "A line needs another look" }), "unapprove");
+    as(preparer);
+    ok(await submitRun({ runId }), "resubmit after unapprove");
+    as(approver);
+    ok(await approveRun({ runId, expectedHash: (await getWorksheet(runId))!.expectedHash! }), "approve again");
 
     // 7. Payment: the list, each person marked paid (the last one makes the run paid), a payslip, and a view of the run.
     as(preparer);
@@ -422,7 +428,7 @@ describe("filters", () => {
     as(preparer);
     const r = await all({ actorId: approver.id });
     expect(r.total).toBeGreaterThan(0);
-    expect(new Set(r.rows.map((x) => x.action))).toEqual(new Set(["run_sent_back", "run_approved", "run_viewed", "statements_released"]));
+    expect(new Set(r.rows.map((x) => x.action))).toEqual(new Set(["run_sent_back", "run_approved", "run_unapproved", "run_viewed", "statements_released"]));
     expect(r.rows.every((x) => x.actorName.startsWith("Ariel Approvertan"))).toBe(true);
   });
 

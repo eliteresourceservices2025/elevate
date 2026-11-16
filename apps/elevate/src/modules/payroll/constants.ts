@@ -145,6 +145,7 @@ export const CHANGE_ACTIONS = [
   "run_submitted",
   "run_sent_back",
   "run_approved",
+  "run_unapproved",
   "run_paid",
   "payment_marked",
   "list_exported",
@@ -182,6 +183,7 @@ export const CHANGE_ACTION_LABELS: Record<ChangeAction, string> = {
   run_submitted: "Run sent for review",
   run_sent_back: "Run sent back",
   run_approved: "Run approved",
+  run_unapproved: "Run unapproved",
   run_paid: "Run fully paid",
   payment_marked: "Payment recorded",
   list_exported: "Remitly list downloaded",
@@ -497,7 +499,14 @@ export const APPROVAL_LABELS = {
   approveHint:
     "Approving confirms every line of this run, on every page of the worksheet, as it was when this page loaded. If anything changes before you approve, you'll be asked to reload.",
   approveCount: (n: number) => `${n} ${n === 1 ? "line" : "lines"} in this run`,
-  approvedNotice: "This run is approved. It can no longer change; a mistake is corrected with an adjustment on a later run.",
+  approvedNotice: "This run is approved. It can't change while it is approved; a mistake is corrected with an adjustment on a later run.",
+  unapprove: "Unapprove",
+  unapproveTitle: "Take back the approval",
+  unapproveNote: "Why the approval is taken back",
+  unapproveHint:
+    "The run goes back to draft so a Preparer can change it and send it for review again, which needs a new approval. Kept in the change history and shown on the run. Never sent in a notice. Don't write client or patient details. Not possible once a payment is recorded or the statements are released.",
+  unapproved: "Approval taken back. The run is a draft again.",
+  unapprovedNotice: "This run was unapproved",
   correctionNone: "Not a correction",
   correctionHint: "Choose the approved run this corrects: an adjustment for an underpayment, an other deduction for an overpayment. A reason is needed.",
 } as const;

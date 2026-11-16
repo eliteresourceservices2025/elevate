@@ -174,7 +174,7 @@ export const payApprovals = payroll
         .references(() => users.id),
       createdAt: createdAt(),
     },
-    (t) => [index("pay_approvals_run_idx").on(t.runId, t.createdAt), check("pay_approvals_decision_chk", sql`${t.decision} in ('approved','sent_back')`)],
+    (t) => [index("pay_approvals_run_idx").on(t.runId, t.createdAt), check("pay_approvals_decision_chk", sql`${t.decision} in ('approved','sent_back','unapproved')`)],
   )
   .enableRLS();
 

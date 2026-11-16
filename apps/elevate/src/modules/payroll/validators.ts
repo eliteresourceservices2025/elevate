@@ -147,6 +147,9 @@ export const submitRunSchema = z.object({ runId: uuid });
 /** A send-back always says why. Kept encrypted in the change history; never in a notice. */
 export const sendBackRunSchema = z.object({ runId: uuid, note: z.string().trim().min(1, "Say what needs to change").max(1000) });
 
+/** Taking an approval back needs a note, like sending a run back. */
+export const unapproveRunSchema = z.object({ runId: uuid, note: z.string().trim().min(1, "Say why the approval is taken back").max(1000) });
+
 /** The hash the page was given when it loaded (64 lowercase hex characters). */
 export const approveRunSchema = z.object({ runId: uuid, expectedHash: z.string().regex(/^[0-9a-f]{64}$/) });
 

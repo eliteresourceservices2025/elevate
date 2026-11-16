@@ -27,7 +27,7 @@ import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import { readJibbleTimesheet } from "./jibble/timesheet";
 import { MAX_XLSX_BYTES, XlsxError } from "./jibble/xlsx";
 import { applyTimesheet, confirmAllSuggestions as confirmAll, discardTimesheet, saveTimesheetUpload } from "./timesheet-import";
-import { approve, sendBack, submit } from "./approval";
+import { approve, sendBack, submit, unapprove } from "./approval";
 import { recordPayment, remitlyList } from "./payments";
 import {
   applyTimesheetSchema,
@@ -37,6 +37,7 @@ import {
   exportRemitlySchema,
   markPaidSchema,
   sendBackRunSchema,
+  unapproveRunSchema,
   submitRunSchema,
   assignSuggestionSchema,
   confirmSuggestionSchema,
@@ -708,6 +709,22 @@ export async function sendBackRun(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return fail(BAD_REQUEST);
 
     await db.transaction((tx) => sendBack(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** An Approver takes an approval back: the approved run returns to draft with a note, until a payment is recorded or its statements are released. */
+export async function unapproveRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.approve");
+
+    const parsed = unapproveRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => unapprove(tx, actor, parsed.data));
     refreshedRun(parsed.data.runId);
     return { ok: true, data: undefined } as const;
   });

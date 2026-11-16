@@ -11,7 +11,7 @@ import { z } from "zod";
 import type { PaymentMethod, RunStatus } from "./constants";
 import { applySupersede, isWithdrawn, lineLastDay, resolveLines } from "./lines";
 import { formatPesos } from "./money";
-import { countAwaiting, hashOf, latestSendBackNote, refusalFor } from "./approval";
+import { countAwaiting, hashOf, latestSendBackNote, refusalFor, unapproveRefusal } from "./approval";
 import { readRun, worksheetOf, type Worksheet } from "./runs";
 import type { BulkAction } from "@/lib/bulk";
 import { nextCutoff, nextStepOf, runActions, runWhy, stepOf, type RunsView, type ViewerRights } from "./runs-list";
@@ -367,8 +367,10 @@ export type WorksheetView = Worksheet & {
   expectedHash: string | null;
   /** Only for an Approver looking at a run in review: why they may not approve it, or null when they may. */
   approvalRefusal: string | null;
+  /** An approved run an Approver could take back: why it can't be (payments recorded, statements released), or null when it can. */
+  unapproveRefusal: string | null;
   /** The note of the latest send-back, while the run is back in draft. */
-  sentBackNote: string | null;
+  sentBackNote: { note: string; kind: "sent_back" | "unapproved" } | null;
 };
 
 /**
@@ -396,6 +398,7 @@ export async function getWorksheet(runId: string): Promise<WorksheetView | null>
         canApprove,
         expectedHash: deciding ? await hashOf(tx, data) : null,
         approvalRefusal: deciding ? await refusalFor(tx, data, actor.id) : null,
+        unapproveRefusal: canApprove && data.run.status === "approved" ? await unapproveRefusal(tx, data.run.id) : null,
         sentBackNote: await latestSendBackNote(tx, data.run),
       };
     },

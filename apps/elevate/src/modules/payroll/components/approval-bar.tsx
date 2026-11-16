@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { approveRun, sendBackRun, submitRun } from "../actions";
+import { approveRun, sendBackRun, submitRun, unapproveRun } from "../actions";
 import { APPROVAL_LABELS as A, type RunStatus } from "../constants";
 
 // The review step under the worksheet: a Preparer sends a draft for review; an Approver approves it (against the hash of exactly what
@@ -37,6 +37,30 @@ function SendBackForm({ runId }: { runId: string }) {
   );
 }
 
+function UnapproveForm({ runId }: { runId: string }) {
+  const { run, pending } = useRun();
+  const dialog = useFormDialog();
+  const [note, setNote] = useState("");
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => unapproveRun({ runId, note }), A.unapproved, () => dialog?.close(true));
+      }}
+    >
+      <div className="space-y-1">
+        <Label htmlFor="unapprove-note">{A.unapproveNote}</Label>
+        <Textarea id="unapprove-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} required />
+        <p className="text-xs text-muted-foreground">{A.unapproveHint}</p>
+      </div>
+      <Button type="submit" disabled={pending || note.trim() === ""}>
+        {A.unapprove}
+      </Button>
+    </form>
+  );
+}
+
 export function ApprovalBar({
   runId,
   status,
@@ -46,6 +70,7 @@ export function ApprovalBar({
   expectedHash,
   refusal,
   sentBackNote,
+  unapproveRefusal,
   lineCount,
 }: {
   runId: string;
@@ -57,7 +82,9 @@ export function ApprovalBar({
   blocking: number;
   expectedHash: string | null;
   refusal: string | null;
-  sentBackNote: string | null;
+  sentBackNote: { note: string; kind: "sent_back" | "unapproved" } | null;
+  /** Why an approved run can't be unapproved (payments recorded, statements released); null when it can. */
+  unapproveRefusal: string | null;
 }) {
   const { run, pending } = useRun();
 
@@ -66,8 +93,8 @@ export function ApprovalBar({
       <div className="space-y-3">
         {sentBackNote ? (
           <Alert variant="warning" className="rounded-lg p-3 text-sm">
-            <p className="font-medium">{A.sentBackNotice}</p>
-            <p className="whitespace-pre-line">{sentBackNote}</p>
+            <p className="font-medium">{sentBackNote.kind === "unapproved" ? A.unapprovedNotice : A.sentBackNotice}</p>
+            <p className="whitespace-pre-line">{sentBackNote.note}</p>
           </Alert>
         ) : null}
         {canPrepare ? (
@@ -84,9 +111,20 @@ export function ApprovalBar({
 
   if (status === "approved") {
     return (
-      <Alert variant="success" className="rounded-lg p-3 text-sm">
-        {A.approvedNotice}
-      </Alert>
+      <div className="space-y-3">
+        <Alert variant="success" className="rounded-lg p-3 text-sm">
+          {A.approvedNotice}
+        </Alert>
+        {canApprove ? (
+          unapproveRefusal ? (
+            <p className="text-sm text-muted-foreground">{unapproveRefusal}</p>
+          ) : (
+            <FormDialog label={A.unapprove} title={A.unapproveTitle} variant="outline">
+              <UnapproveForm runId={runId} />
+            </FormDialog>
+          )
+        ) : null}
+      </div>
     );
   }
 
