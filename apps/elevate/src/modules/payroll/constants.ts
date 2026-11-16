@@ -264,6 +264,8 @@ export const HISTORY_LABELS = {
   signatoryName: "Signatory name",
   signatoryTitle: "Signatory title",
   signatoryPicture: "Signature picture",
+  signatoryPreparer: "Prepared by on statements",
+  signatoryAutoPreparer: "Whoever sent the run for review",
   onFile: "On file",
 } as const;
 
@@ -467,6 +469,10 @@ export const SIGNATORY_LABELS = {
   current: "Signature now",
   none: "No signature picture yet. Statements will show the name and title with a line.",
   remove: "Remove the signature picture",
+  preparedBy: "Prepared by",
+  preparedByHint: "Printed under Prepared by on every contractor payment statement, so it does not depend on which preparer sent the run for review.",
+  preparedByAuto: "Whoever sent the run for review",
+  preparedByNone: "Nobody has the Preparer payroll level yet. Give it to someone under Settings, Payroll access.",
   save: "Save signatory",
   saved: "Signatory saved.",
   unreadable: "The saved signature can't be read. Choose the picture again.",

@@ -14,7 +14,7 @@ import { users } from "@/modules/core/schema";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { payApprovals, payLines, payPayments, payRunLines, payRunReleases, payRuns } from "./schema";
 import { decryptRunLine, employeeIdForUser } from "./service";
-import { runSignatory, savedSignatoryForTest } from "./signatory";
+import { runSignatory, savedSignatoryForUnpaid } from "./signatory";
 import type { SettingsSnapshot } from "./calculate";
 
 // A person's own payslips. Scoped through the signed-in person's own people record, never by a payroll level or a role: nobody, not even
@@ -140,15 +140,14 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
     .limit(1);
 
   // Who prepared and who approved the run, and when: the certification block fills these in by itself.
-  const [meta] = await executor.select({ submittedBy: payRuns.submittedBy, createdBy: payRuns.createdBy }).from(payRuns).where(eq(payRuns.id, runId)).limit(1);
+  const [meta] = await executor.select({ submittedBy: payRuns.submittedBy, createdBy: payRuns.createdBy, status: payRuns.status }).from(payRuns).where(eq(payRuns.id, runId)).limit(1);
   const [approval] = await executor
     .select({ decidedBy: payApprovals.decidedBy, createdAt: payApprovals.createdAt })
     .from(payApprovals)
     .where(and(eq(payApprovals.runId, runId), eq(payApprovals.decision, "approved")))
     .orderBy(desc(payApprovals.createdAt))
     .limit(1);
-  const preparerId = meta?.submittedBy ?? meta?.createdBy ?? null;
-  const names = await namesOfUsers(executor, [preparerId, approval?.decidedBy ?? null]);
+  const actualPreparerId = meta?.submittedBy ?? meta?.createdBy ?? null;
 
   // Independent of each other: asked together.
   const [[payment], signatory] = await Promise.all([
@@ -161,9 +160,15 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
     runSignatory(executor, runId),
   ]);
 
-  // A test run is signed by the saved signatory too, even before it is paid and whoever approved it for the test (it is only used for testing).
+  // A run that is paid keeps the signatory (and the preparer) it was paid under. Until then (a test run, or a real run waiting for payment) its
+  // statements follow the saved signatory and the chosen preparer as they stand now, instead of the name of whichever account approved or
+  // prepared it. A real run paid with nobody set stays unsigned: setting someone later does not rewrite a statement that was already paid.
   const approvedOn = approval ? formatInZone(approval.createdAt.getTime(), DEFAULT_TIMEZONE, "yyyy-MM-dd") : null;
-  const shownSignatory = signatory ?? (run.isTest ? await savedSignatoryForTest(executor, approvedOn ?? formatInZone(Date.now(), DEFAULT_TIMEZONE, "yyyy-MM-dd")) : null);
+  const shownSignatory =
+    signatory ?? (run.isTest || meta?.status !== "paid" ? await savedSignatoryForUnpaid(executor, approvedOn ?? formatInZone(Date.now(), DEFAULT_TIMEZONE, "yyyy-MM-dd")) : null);
+  // "Prepared by": the preparer chosen in Settings (the one saved with the signatory the statement uses), else whoever sent the run for review.
+  const preparerId = shownSignatory?.preparedByUserId ?? actualPreparerId;
+  const names = await namesOfUsers(executor, [preparerId, approval?.decidedBy ?? null]);
 
   const decrypted = lines.map((l) => ({ alias: l.alias, clientName: l.clientName, payload: readable(l.id, l.payloadEnc) }));
   if (decrypted.some((l) => l.payload === null)) throw new PayslipUnreadable();

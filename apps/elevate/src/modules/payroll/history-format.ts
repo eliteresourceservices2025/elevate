@@ -212,6 +212,8 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       if (str(old?.name) !== str(next?.name)) changes.push({ label: H.signatoryName, before: before("name"), after: str(next?.name) ?? H.notSet });
       if (str(old?.title) !== str(next?.title)) changes.push({ label: H.signatoryTitle, before: before("title"), after: str(next?.title) ?? H.notSet });
       if (detail.signatureChanged === true) changes.push({ label: H.signatoryPicture, before: picture(old), after: picture(next) });
+      // Older entries carry no preparer: nothing is shown for them.
+      if (next && "preparedBy" in next && str(old?.preparedBy) !== str(next.preparedBy)) changes.push({ label: H.signatoryPreparer, before: str(old?.preparedBy) ?? H.signatoryAutoPreparer, after: str(next.preparedBy) ?? H.signatoryAutoPreparer });
       break;
     }
     case "line_confirmed":

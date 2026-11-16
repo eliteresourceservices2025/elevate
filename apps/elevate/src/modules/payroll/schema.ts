@@ -238,6 +238,8 @@ export const paySignatory = payroll
       name: text("name").notNull(),
       title: text("title").notNull(),
       signatureEnc: text("signature_enc"),
+      /** The preparer printed under "Prepared by" on the statements of runs that use this version. Null: the person who sent the run for review. */
+      preparedByUserId: uuid("prepared_by_user_id").references(() => users.id),
       createdBy: uuid("created_by").references(() => users.id),
       // clock_timestamp(), not now(): the newest version is picked by this, so it must follow the order the saves were made in.
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`clock_timestamp()`),

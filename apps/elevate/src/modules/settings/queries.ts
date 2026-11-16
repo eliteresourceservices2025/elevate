@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -108,7 +108,25 @@ export async function getPayrollAccessList(): Promise<PayrollAccessRow[]> {
   }));
 }
 
-export type PayrollSignatoryView = { name: string; title: string; signatureDataUrl: string | null; signatureUnreadable: boolean };
+export type PayrollSignatoryView = { name: string; title: string; signatureDataUrl: string | null; signatureUnreadable: boolean; preparedByUserId: string | null };
+
+export type StatementPreparer = { userId: string; name: string; email: string };
+
+/** The people who can be printed under "Prepared by" on the statements: active accounts with the Preparer payroll level. Names only. */
+export async function listStatementPreparers(): Promise<StatementPreparer[]> {
+  const actor = await requireUser();
+  await authorize(actor, "settings.set_payroll_signatory");
+
+  const rows = await db
+    .select({ userId: users.id, email: users.email, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
+    .from(users)
+    .leftJoin(employees, eq(employees.userId, users.id))
+    .where(and(eq(users.payrollAccess, "preparer"), isNull(users.archivedAt)))
+    .orderBy(users.email);
+  return rows
+    .map((r) => ({ userId: r.userId, email: r.email, name: r.first ? `${r.preferred?.trim() || r.first} ${r.last}` : r.email }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 /** The name, title and signature printed on payslips, for the Super Admin's page. Null when nobody has been set yet. */
 export async function getPayrollSignatory(): Promise<PayrollSignatoryView | null> {
@@ -122,6 +140,7 @@ export async function getPayrollSignatory(): Promise<PayrollSignatoryView | null
     title: current.title,
     signatureDataUrl: current.signatureBase64 ? `data:image/jpeg;base64,${current.signatureBase64}` : null,
     signatureUnreadable: current.signatureUnreadable,
+    preparedByUserId: current.preparedByUserId,
   };
 }
 

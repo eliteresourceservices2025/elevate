@@ -1,0 +1,2 @@
+ALTER TABLE "payroll"."pay_signatory" ADD COLUMN "prepared_by_user_id" uuid;--> statement-breakpoint
+ALTER TABLE "payroll"."pay_signatory" ADD CONSTRAINT "pay_signatory_prepared_by_user_id_users_id_fk" FOREIGN KEY ("prepared_by_user_id") REFERENCES "core"."users"("id") ON DELETE no action ON UPDATE no action;
