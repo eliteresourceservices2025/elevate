@@ -150,6 +150,43 @@ describe("pay lines", () => {
     expect(again.ok).toBe(false);
   });
 
+  it("lets a correction go back to a cutoff whose real run is still a draft, never once that run is sent for review", async () => {
+    // A year no other test file runs payroll in, so no later approved run of another file gets in the way.
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    await createPayLine(base(emp, { effectiveFrom: "2095-10-01", monthly: "40,000" }));
+    const [first] = await lineRows(emp);
+    // The raise was saved part-way through the Nov 1 to 15 cutoff.
+    expect(await updatePayLine({ ...base(emp, { monthly: "42,000" }), lineKey: first.line_key, effectiveFrom: "2095-11-12", reason: "Raise" })).toMatchObject({ ok: true });
+    const runId = randomUUID();
+    await db.execute(sql`insert into payroll.pay_runs (id, period_start, period_end, status, settings_snapshot, created_by)
+      values (${runId}, '2095-11-01', '2095-11-15', 'draft', '{}'::jsonb, ${preparer.id})`);
+
+    // Never before the line began.
+    expect(await updatePayLine({ ...base(emp, { monthly: "42,000" }), lineKey: first.line_key, effectiveFrom: "2095-09-16", reason: "Correction" })).toEqual({
+      ok: false,
+      error: "This rate starts on 2095-10-01. A new rate can't start before that.",
+    });
+    // The run is a draft: the same rate moves back to the start of its cutoff.
+    expect(await updatePayLine({ ...base(emp, { monthly: "42,000" }), lineKey: first.line_key, effectiveFrom: "2095-11-01", reason: "Correction" })).toMatchObject({ ok: true });
+    const versions = await lineRows(emp);
+    expect(versions.map((v) => v.effective_from)).toEqual(["2095-10-01", "2095-11-12", "2095-11-01"]);
+    const paid = versions[2];
+    expect(JSON.parse(fieldCrypto().decrypt(paid.amounts_enc, `pay_line:${paid.id}`))).toEqual({ monthlyCentavos: "4200000" });
+
+    // Once the run is sent for review it can't change, so going back into it is refused.
+    await db.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
+    expect(await updatePayLine({ ...base(emp, { monthly: "43,000" }), lineKey: first.line_key, effectiveFrom: "2095-11-01", reason: "Correction" })).toEqual({
+      ok: false,
+      error: "The run for Nov 1 to 15 is already sent for review or approved, and it can't change. Pick a later cutoff, or add an adjustment in that run.",
+    });
+    expect(await lineRows(emp)).toHaveLength(3);
+    // Back to a draft, then cancelled, so no other test sees a real run in this cutoff.
+    await db.execute(sql`update payroll.pay_runs set status = 'draft' where id = ${runId}`);
+    await db.execute(sql`update payroll.pay_runs set status = 'cancelled' where id = ${runId}`);
+  });
+
   it("ends a leaver's line before a raise already scheduled, and the later version stops applying", async () => {
     const preparer = await account();
     const emp = await person();
