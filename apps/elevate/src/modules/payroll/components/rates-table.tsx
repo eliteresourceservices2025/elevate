@@ -22,7 +22,7 @@ import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
 // less common things (edit details, stop paying, remove a rate added by mistake) are in the menu. The dialogs sit outside the menu: a menu
 // closes as soon as an item is picked, which would close a dialog that lived inside it.
 
-function RowMenu({ row, options, cutoffs }: { row: RateRow; options: RateOptions; cutoffs: CutoffChoice[] }) {
+function RowMenu({ row, options, cutoffs, draftCutoffs }: { row: RateRow; options: RateOptions; cutoffs: CutoffChoice[]; draftCutoffs: CutoffChoice[] }) {
   const [details, setDetails] = useState(false);
   const [stop, setStop] = useState(false);
   const [remove, setRemove] = useState(false);
@@ -49,7 +49,7 @@ function RowMenu({ row, options, cutoffs }: { row: RateRow; options: RateOptions
         </DropdownMenuContent>
       </DropdownMenu>
       <FormDialog label="Edit details" title={`Edit ${row.name}'s details`} description="Client, alias, hours, payment method and overtime. Saved as a new version; the old one stays on record." size="lg" open={details} onOpenChange={setDetails} hideTrigger>
-        <EditDetailsForm row={row} options={options} cutoffs={cutoffs} />
+        <EditDetailsForm row={row} options={options} cutoffs={cutoffs} draftCutoffs={draftCutoffs} />
       </FormDialog>
       <FormDialog label="Stop paying" title={`Stop paying ${row.name}`} description="The rate stays on record. Pay runs after the last cutoff leave it out." open={stop} onOpenChange={setStop} hideTrigger>
         <StopPayingForm row={row} cutoffs={cutoffs} />
@@ -65,6 +65,7 @@ export function RatesTable({
   rows,
   options,
   cutoffs,
+  draftCutoffs = [],
   tidyKey,
   sortLinks,
   sortMenu,
@@ -73,6 +74,8 @@ export function RatesTable({
   rows: RateRow[];
   options: RateOptions | null;
   cutoffs: CutoffChoice[];
+  /** Recent cutoffs whose real run is still a draft: only a Correction on Update rate may start there. */
+  draftCutoffs?: CutoffChoice[];
   /** Names the doubled rates that were never paid (empty when none): they are taken away automatically, once for each different value. */
   tidyKey?: string;
   endedToggle?: { showing: boolean; href: string };
@@ -178,12 +181,14 @@ export function RatesTable({
                       {row.endsOn ? <span className="block text-xs text-muted-foreground">{row.ended ? "Stopped" : "Stops"} after {row.endsOn}</span> : null}
                     </TableCell>
                     <TableCell label="Actions">
-                      {options && row.endsOn && !row.onRealRun ? (
+                      {options && row.ended && !row.onRealRun ? (
                         <FormDialog label="Remove" title={`Remove ${row.name}'s stopped rate`} description="It was never on a real pay run." variant="outline" triggerSize="sm">
                           <RemoveRateForm row={row} />
                         </FormDialog>
                       ) : null}
-                      {options && !row.endsOn ? (
+                      {options && row.ended && row.onRealRun ? <span className="text-xs text-muted-foreground">Paid on a run, kept on record</span> : null}
+                      {/* A rate that stops later (a stop date, or a newer rate for the same job from that day) can still be updated up to its last day. */}
+                      {options && !row.ended ? (
                         <div className="flex flex-wrap gap-2">
                           <FormDialog
                             label="Update rate"
@@ -196,9 +201,9 @@ export function RatesTable({
                             disabled={row.unreadable}
                             hint={UNREADABLE_HINT}
                           >
-                            <UpdateRateForm row={row} cutoffs={cutoffs} />
+                            <UpdateRateForm row={row} cutoffs={cutoffs} draftCutoffs={draftCutoffs} />
                           </FormDialog>
-                          <RowMenu row={row} options={options} cutoffs={cutoffs} />
+                          <RowMenu row={row} options={options} cutoffs={cutoffs} draftCutoffs={draftCutoffs} />
                         </div>
                       ) : null}
                     </TableCell>

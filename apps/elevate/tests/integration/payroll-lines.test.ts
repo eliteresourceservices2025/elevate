@@ -70,14 +70,14 @@ describe("pay lines", () => {
     const preparer = await account();
     const emp = await person();
     current.user = preparer;
-    expect(await createPayLine(base(emp, { effectiveFrom: "2026-01-01", otRegular: "150", otRestDay: "", otRestDayOver8: "180" }))).toMatchObject({ ok: true });
+    expect(await createPayLine(base(emp, { effectiveFrom: "2020-01-01", otRegular: "150", otRestDay: "", otRestDayOver8: "180" }))).toMatchObject({ ok: true });
     const [line] = await lineRows(emp);
     expect(JSON.parse(fieldCrypto().decrypt(line.amounts_enc, `pay_line:${line.id}`))).toEqual({ monthlyCentavos: "3141592", otBp: { regular: 15000, restDayOver8: 18000 } });
     const shown = (await getRates()).find((r) => r.employeeId === emp)!;
     expect(shown.otPercent).toEqual({ regular: "150", restDay: "", restDayOver8: "180" });
 
     // A new version with the boxes blank goes back to the company standard.
-    expect(await updatePayLine({ lineKey: line.line_key, ...base(emp, { effectiveFrom: "2026-02-01", otRegular: "", otRestDay: "", otRestDayOver8: "" }), reason: "Back to standard" })).toMatchObject({ ok: true });
+    expect(await updatePayLine({ lineKey: line.line_key, ...base(emp, { effectiveFrom: "2020-02-01", otRegular: "", otRestDay: "", otRestDayOver8: "" }), reason: "Back to standard" })).toMatchObject({ ok: true });
     const after = (await getRates()).find((r) => r.employeeId === emp)!;
     expect(after.otPercent).toEqual({ regular: "", restDay: "", restDayOver8: "" });
     // Anything that is not a percent is refused.
@@ -133,21 +133,93 @@ describe("pay lines", () => {
     expect(detail.reason).toBe("Annual raise");
   });
 
-  it("refuses an update before the latest version's date, and an update of an ended line", async () => {
+  it("updates a rate that stops later up to its last day, and refuses a new rate after it", async () => {
     const preparer = await account();
     const emp = await person();
     current.user = preparer;
     await createPayLine(base(emp, { effectiveFrom: "2030-11-10" }));
     const [first] = await lineRows(emp);
-    const early = await updatePayLine({ ...base(emp), lineKey: first.line_key, effectiveFrom: "2030-11-01", reason: "x" });
-    expect(early.ok).toBe(false);
 
     expect(await endPayLine({ lineKey: first.line_key, endsOn: "2030-12-31", reason: "Ended" })).toMatchObject({ ok: true });
     const ended = (await lineRows(emp)).at(-1)!;
     expect(ended.ends_on).toBe("2030-12-31");
     expect(ended.line_key).toBe(first.line_key);
-    const again = await updatePayLine({ ...base(emp), lineKey: first.line_key, effectiveFrom: "2030-12-01", reason: "x" });
-    expect(again.ok).toBe(false);
+    expect(await updatePayLine({ ...base(emp), lineKey: first.line_key, effectiveFrom: "2031-01-01", reason: "x" })).toEqual({
+      ok: false,
+      error: "This rate stops after 2030-12-31. Add a new rate instead.",
+    });
+    // Before it stops, a raise is still a new version, and the stop date stays.
+    expect(await updatePayLine({ ...base(emp, { monthly: "35,000" }), lineKey: first.line_key, effectiveFrom: "2030-12-01", reason: "Raise" })).toMatchObject({ ok: true });
+    const { lineLastDay } = await import("@/modules/payroll/lines");
+    expect(lineLastDay((await lineRows(emp)).map((r) => ({ lineKey: r.line_key, effectiveFrom: r.effective_from, endsOn: r.ends_on, createdAt: 0 })))).toBe("2030-12-31");
+    expect(await endPayLine({ lineKey: first.line_key, endsOn: "2030-12-15", reason: "x" })).toEqual({ ok: false, error: "This rate already stops after 2030-12-31." });
+  });
+
+  it("moves a raise saved as its own rate part-way through a cutoff back to that cutoff's draft run, and the old rate stops the day before", async () => {
+    // The real case: 40,000 from Oct 16 (stopped Nov 11), 42,000 as a separate rate from Nov 12 (to Nov 30), and 42,000 again from Dec 1.
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    await createPayLine(base(emp, { effectiveFrom: "2096-10-16", monthly: "40,000" }));
+    const [old] = await lineRows(emp);
+    expect(await endPayLine({ lineKey: old.line_key, endsOn: "2096-11-11", reason: "Raise" })).toMatchObject({ ok: true });
+    expect(await createPayLine(base(emp, { effectiveFrom: "2096-11-12", monthly: "42,000" }))).toMatchObject({ ok: true });
+    const raise = (await lineRows(emp)).at(-1)!;
+    expect(await endPayLine({ lineKey: raise.line_key, endsOn: "2096-11-30", reason: "x" })).toMatchObject({ ok: true });
+    expect(await createPayLine(base(emp, { effectiveFrom: "2096-12-01", monthly: "42,000" }))).toMatchObject({ ok: true });
+    const runId = randomUUID();
+    await db.execute(sql`insert into payroll.pay_runs (id, period_start, period_end, status, settings_snapshot, created_by)
+      values (${runId}, '2096-11-01', '2096-11-15', 'draft', '{}'::jsonb, ${preparer.id})`);
+
+    // The 42,000 rate is moved back to Nov 1, before its own first day.
+    expect(await updatePayLine({ ...base(emp, { monthly: "42,000" }), lineKey: raise.line_key, effectiveFrom: "2096-11-01", reason: "Correction" })).toMatchObject({ ok: true });
+
+    // The Nov 1 to 15 run now has one line for the job: 42,000 from Nov 1. The 40,000 rate stops on Oct 31.
+    const all = await rows<{ id: string; line_key: string; employee_id: string; client_id: string | null; alias: string | null; effective_from: string; ends_on: string | null; created_at: string }>(
+      sql`select id, line_key, employee_id, client_id, alias, effective_from::text, ends_on::text, created_at::text from payroll.pay_lines where employee_id = ${emp}`,
+    );
+    const { resolveLines } = await import("@/modules/payroll/lines");
+    const versions = all.map((r) => ({ id: r.id, lineKey: r.line_key, employeeId: r.employee_id, clientId: r.client_id, alias: r.alias, effectiveFrom: r.effective_from, endsOn: r.ends_on, createdAt: r.created_at }));
+    const nov = resolveLines(versions, { start: "2096-11-01", end: "2096-11-15" });
+    expect(nov.map((r) => [r.version.lineKey, r.version.effectiveFrom])).toEqual([[raise.line_key, "2096-11-01"]]);
+    const chosen = all.find((r) => r.id === nov[0].version.id)!;
+    const [enc] = await rows<{ amounts_enc: string }>(sql`select amounts_enc from payroll.pay_lines where id = ${chosen.id}`);
+    expect(JSON.parse(fieldCrypto().decrypt(enc.amounts_enc, `pay_line:${chosen.id}`))).toEqual({ monthlyCentavos: "4200000" });
+    expect(resolveLines(versions, { start: "2096-10-16", end: "2096-10-31" }).map((r) => [r.version.lineKey, r.flags])).toEqual([[old.line_key, []]]);
+
+    await db.execute(sql`update payroll.pay_runs set status = 'cancelled' where id = ${runId}`);
+  });
+
+  it("lets a correction go back to a cutoff whose real run is still a draft, never once that run is sent for review", async () => {
+    // A year no other test file runs payroll in, so no later approved run of another file gets in the way.
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    await createPayLine(base(emp, { effectiveFrom: "2095-10-01", monthly: "40,000" }));
+    const [first] = await lineRows(emp);
+    // The raise was saved part-way through the Nov 1 to 15 cutoff.
+    expect(await updatePayLine({ ...base(emp, { monthly: "42,000" }), lineKey: first.line_key, effectiveFrom: "2095-11-12", reason: "Raise" })).toMatchObject({ ok: true });
+    const runId = randomUUID();
+    await db.execute(sql`insert into payroll.pay_runs (id, period_start, period_end, status, settings_snapshot, created_by)
+      values (${runId}, '2095-11-01', '2095-11-15', 'draft', '{}'::jsonb, ${preparer.id})`);
+
+    // The run is a draft: the same rate moves back to the start of its cutoff.
+    expect(await updatePayLine({ ...base(emp, { monthly: "42,000" }), lineKey: first.line_key, effectiveFrom: "2095-11-01", reason: "Correction" })).toMatchObject({ ok: true });
+    const versions = await lineRows(emp);
+    expect(versions.map((v) => v.effective_from)).toEqual(["2095-10-01", "2095-11-12", "2095-11-01"]);
+    const paid = versions[2];
+    expect(JSON.parse(fieldCrypto().decrypt(paid.amounts_enc, `pay_line:${paid.id}`))).toEqual({ monthlyCentavos: "4200000" });
+
+    // Once the run is sent for review it can't change, so going back into it is refused.
+    await db.execute(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
+    expect(await updatePayLine({ ...base(emp, { monthly: "43,000" }), lineKey: first.line_key, effectiveFrom: "2095-11-01", reason: "Correction" })).toEqual({
+      ok: false,
+      error: "The run for Nov 1 to 15 is already sent for review or approved, and it can't change. Pick a later cutoff, or add an adjustment in that run.",
+    });
+    expect(await lineRows(emp)).toHaveLength(3);
+    // Back to a draft, then cancelled, so no other test sees a real run in this cutoff.
+    await db.execute(sql`update payroll.pay_runs set status = 'draft' where id = ${runId}`);
+    await db.execute(sql`update payroll.pay_runs set status = 'cancelled' where id = ${runId}`);
   });
 
   it("ends a leaver's line before a raise already scheduled, and the later version stops applying", async () => {
@@ -242,16 +314,23 @@ describe("pay lines", () => {
     const preparer = await account();
     const emp = await person();
     current.user = preparer;
-    await createPayLine(base(emp, { effectiveFrom: "2026-01-01" }));
+    // Dated 2020, before every period other test files build runs for: an ended line is still in force on its first day, so a 2026 date would
+    // sit in those runs (the unreadable one fails them with "A pay line can't be read").
+    await createPayLine(base(emp, { effectiveFrom: "2020-01-01" }));
     const badId = randomUUID();
     const marker = `not-a-ciphertext-${randomUUID()}`;
     await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, effective_from, amounts_enc, created_by)
-      values (${badId}, ${randomUUID()}, ${emp}, 8, '2026-01-01', ${marker}, ${preparer.id})`);
+      values (${badId}, ${randomUUID()}, ${emp}, 8, '2020-01-01', ${marker}, ${preparer.id})`);
 
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const list = await getRates();
     const logged = spy.mock.calls.filter((c) => c[0] === "payroll rate unreadable:").map((c) => c[1]);
     spy.mockRestore();
+    // End the unreadable line at once (its ciphertext is copied as it is): other test files build runs in the same database at the same time,
+    // and an open-ended line nobody can read would fail them ("A pay line can't be read") until this file finishes.
+    await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, client_id, alias, hours_per_day, payment_method, ends_on, effective_from, amounts_enc, created_by)
+      select gen_random_uuid(), line_key, employee_id, client_id, alias, hours_per_day, payment_method, effective_from, effective_from, amounts_enc, created_by
+      from payroll.pay_lines where id = ${badId}`);
 
     const mine = list.filter((r) => r.employeeId === emp);
     expect(mine.filter((r) => r.unreadable)).toHaveLength(1);
@@ -291,7 +370,7 @@ describe("pay lines", () => {
     const viewer = await account("viewer");
     const emp = await person();
     current.user = preparer;
-    await createPayLine(base(emp, { monthly: "55,000", effectiveFrom: "2026-01-01" }));
+    await createPayLine(base(emp, { monthly: "55,000", effectiveFrom: "2020-01-01" }));
     await createPayLine(base(emp, { monthly: "10,000", alias: "Second role" })); // starts in 2030: listed, not yet in force
 
     current.user = viewer;

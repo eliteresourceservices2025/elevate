@@ -16,7 +16,7 @@ import { readRun, worksheetOf, type Worksheet } from "./runs";
 import type { BulkAction } from "@/lib/bulk";
 import { nextCutoff, nextStepOf, runActions, runWhy, stepOf, type RunsView, type ViewerRights } from "./runs-list";
 import { recentPeriods } from "@/modules/attendance/pay-periods";
-import { cutoffChoices, type CutoffChoice } from "./rate-start";
+import { cutoffChoices, draftCutoffs, type CutoffChoice } from "./rate-start";
 import { joinAliases, personName } from "./remitly";
 import { logChange } from "./changes";
 import { payLines, payRunLines, payRuns, paySettings } from "./schema";
@@ -175,15 +175,22 @@ export async function getRates(options: { includeEnded?: boolean } = {}): Promis
   return out;
 }
 
-/** The cutoffs to choose from on the Rates forms (the one being prepared first), from the real runs that already exist. */
-export async function getRateCutoffs(): Promise<CutoffChoice[]> {
+/**
+ * The cutoffs to choose from on the Rates forms (the one being prepared first), from the real runs that already exist, and the recent
+ * cutoffs whose real run is still a draft (only a Correction on Update rate may start there).
+ */
+export async function getRateCutoffs(): Promise<{ choices: CutoffChoice[]; drafts: CutoffChoice[] }> {
   const actor = await requireUser();
   await authorize(actor, "payroll.view");
   const real = await db
-    .select({ start: payRuns.periodStart })
+    .select({ start: payRuns.periodStart, status: payRuns.status })
     .from(payRuns)
     .where(and(eq(payRuns.isTest, false), ne(payRuns.status, "cancelled")));
-  return cutoffChoices(today(), new Set(real.map((r) => r.start)));
+  const day = today();
+  // A cutoff counts as a draft only when every real run for it is still a draft.
+  const made = new Set(real.filter((r) => r.status !== "draft").map((r) => r.start));
+  const drafts = new Set(real.filter((r) => r.status === "draft" && !made.has(r.start)).map((r) => r.start));
+  return { choices: cutoffChoices(day, new Set(real.map((r) => r.start))), drafts: draftCutoffs(day, drafts) };
 }
 
 export type RateOptions = {
