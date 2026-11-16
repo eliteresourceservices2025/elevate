@@ -222,6 +222,45 @@ describe("pay lines", () => {
     await db.execute(sql`update payroll.pay_runs set status = 'cancelled' where id = ${runId}`);
   });
 
+  it("sets the client on a rate even when an older stopped rate for the same job overlaps its dates, and the newer rate pays alone", async () => {
+    // Luigi's case: 40,000 with no client from Oct 16, stopped Nov 12; the current rate (no client yet) was added from Nov 1. The older rate
+    // is cut off the day before the newer one starts (applySupersede), so nobody is paid twice and changing the client must not be refused.
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    expect(await createPayLine(base(emp, { effectiveFrom: "2097-11-01", monthly: "40,000" }))).toMatchObject({ ok: true });
+    const [now] = await lineRows(emp);
+    const oldKey = randomUUID();
+    const oldId = randomUUID();
+    await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, hours_per_day, payment_method, ends_on, effective_from, amounts_enc, created_by)
+      values (${oldId}, ${oldKey}, ${emp}, 8, 'remitly', '2097-11-12', '2097-10-16', ${fieldCrypto().encrypt(JSON.stringify({ monthlyCentavos: "4000000" }), `pay_line:${oldId}`)}, ${preparer.id})`);
+    const [client] = await rows<{ id: string }>(sql`insert into core.clients (name) values (${uniq("Golden Years ")}) returning id`);
+
+    expect(await updatePayLine({ ...base(emp, { monthly: "40,000", clientId: client.id }), lineKey: now.line_key, effectiveFrom: "2097-11-01", reason: "Correction" })).toMatchObject({ ok: true });
+
+    const { resolveLines } = await import("@/modules/payroll/lines");
+    const all = await rows<{ id: string; line_key: string; employee_id: string; client_id: string | null; alias: string | null; effective_from: string; ends_on: string | null; created_at: string }>(
+      sql`select id, line_key, employee_id, client_id, alias, effective_from::text, ends_on::text, created_at::text from payroll.pay_lines where employee_id = ${emp}`,
+    );
+    const versions = all.map((r) => ({ id: r.id, lineKey: r.line_key, employeeId: r.employee_id, clientId: r.client_id, alias: r.alias, effectiveFrom: r.effective_from, endsOn: r.ends_on, createdAt: r.created_at }));
+    const nov = resolveLines(versions, { start: "2097-11-01", end: "2097-11-15" });
+    expect(nov.map((r) => [r.version.lineKey, r.version.clientId])).toEqual([[now.line_key, client.id]]);
+
+    // Two lines that start on the same day are still refused: nothing says which one is right.
+    const [other] = await rows<{ id: string }>(sql`insert into core.clients (name) values (${uniq("Other ")}) returning id`);
+    const sameKey = randomUUID();
+    const sameId = randomUUID();
+    await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, client_id, hours_per_day, payment_method, effective_from, amounts_enc, created_by)
+      values (${sameId}, ${sameKey}, ${emp}, ${other.id}, 8, 'remitly', '2097-11-01', ${fieldCrypto().encrypt(JSON.stringify({ monthlyCentavos: "4000000" }), `pay_line:${sameId}`)}, ${preparer.id})`);
+    expect(await updatePayLine({ ...base(emp, { monthly: "40,000", clientId: other.id }), lineKey: now.line_key, effectiveFrom: "2097-11-16", reason: "Correction" })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("already has a pay line for the same job"),
+    });
+    // Close the extra line so no later file sees it.
+    await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, client_id, hours_per_day, payment_method, ends_on, effective_from, amounts_enc, created_by)
+      select gen_random_uuid(), line_key, employee_id, client_id, hours_per_day, payment_method, effective_from, effective_from, amounts_enc, created_by from payroll.pay_lines where id = ${sameId}`);
+  });
+
   it("ends a leaver's line before a raise already scheduled, and the later version stops applying", async () => {
     const preparer = await account();
     const emp = await person();
