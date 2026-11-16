@@ -324,6 +324,11 @@ describe("pay lines", () => {
     const list = await getRates();
     const logged = spy.mock.calls.filter((c) => c[0] === "payroll rate unreadable:").map((c) => c[1]);
     spy.mockRestore();
+    // End the unreadable line at once (its ciphertext is copied as it is): other test files build runs for 2026 in the same database at the
+    // same time, and an open-ended line nobody can read would fail them ("A pay line can't be read") until this file finishes.
+    await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, client_id, alias, hours_per_day, payment_method, ends_on, effective_from, amounts_enc, created_by)
+      select gen_random_uuid(), line_key, employee_id, client_id, alias, hours_per_day, payment_method, effective_from, effective_from, amounts_enc, created_by
+      from payroll.pay_lines where id = ${badId}`);
 
     const mine = list.filter((r) => r.employeeId === emp);
     expect(mine.filter((r) => r.unreadable)).toHaveLength(1);
