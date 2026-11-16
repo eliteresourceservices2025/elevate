@@ -14,13 +14,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { formatDateOnly } from "@/lib/time";
-import { endSchedule, assignSchedule, correctSchedule } from "../schedule-actions";
+import { endSchedule, endSchedules, assignSchedule, correctSchedule } from "../schedule-actions";
 import { describeSchedule, WEEKDAYS } from "../schedule";
 import type { ScheduleListRow } from "../queries";
 
 const ZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "Asia/Manila", "Europe/London", "Australia/Sydney", "UTC"];
 
-type RunFn = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string, after?: () => void) => void;
+type RunFn = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string | (() => string), after?: () => void) => void;
 
 /** The shift form for the people ticked in the list (in a modal, so its fields start fresh each time it opens). */
 function SetScheduleForm({ picked, today, run, pending, onDone }: { picked: string[]; today: string; run: RunFn; pending: boolean; onDone: () => void }) {
@@ -98,6 +98,42 @@ function SetScheduleForm({ picked, today, run, pending, onDone }: { picked: stri
   );
 }
 
+/** Ends the current schedule of the people ticked in the list, on a date up to a week back. Their days are rebuilt afterwards. */
+function EndSchedulesForm({ picked, today, run, pending, onDone }: { picked: string[]; today: string; run: RunFn; pending: boolean; onDone: () => void }) {
+  const dialog = useFormDialog();
+  const [endDate, setEndDate] = useState(today);
+  const earliest = useMemo(() => new Date(Date.parse(`${today}T00:00:00Z`) - 7 * 86_400_000).toISOString().slice(0, 10), [today]);
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        let message = "Schedules ended.";
+        run(
+          async () => {
+            const result = await endSchedules({ employeeIds: picked, endDate });
+            if (result.ok) message = `Ended ${result.data.ended} ${result.data.ended === 1 ? "schedule" : "schedules"}${result.data.skipped > 0 ? `. ${result.data.skipped} had no schedule to end.` : "."}`;
+            return result;
+          },
+          () => message,
+          () => {
+            onDone();
+            dialog?.close(true);
+          },
+        );
+      }}
+    >
+      <p className="text-sm text-muted-foreground">
+        The current schedule ends after the day you choose. From the next day, ELEVATE no longer uses it to flag late arrivals, absences, early leaves or extra hours. Their days are rebuilt, the history stays recorded, and each person is notified. People with no schedule are skipped. Earlier days keep the schedule they had.
+      </p>
+      <TextField id="es-date" label="Last day of the schedule" type="date" value={endDate} min={earliest} onChange={(e) => setEndDate(e.target.value)} required hint="Up to 7 days back. Today is the usual choice." />
+      <Button type="submit" variant="destructive" disabled={pending || picked.length === 0 || !endDate}>
+        End schedule for {picked.length} {picked.length === 1 ? "person" : "people"}
+      </Button>
+    </form>
+  );
+}
+
 /** HR: give people shifts (one at a time or many at once), and see who has none. Times are in the schedule's zone, shown in Manila too. */
 export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: ScheduleListRow[]; withoutSchedule: number; today: string }) {
   const router = useRouter();
@@ -140,12 +176,12 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
 
   const paged = usePaged(shown, `${filter}|${view}`);
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success: string, after?: () => void) =>
+  const run: RunFn = (fn, success, after) =>
     startTransition(async () => {
       try {
         const result = await fn();
         if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
-        toast.success(success);
+        toast.success(typeof success === "function" ? success() : success);
         after?.();
         router.refresh();
       } catch {
@@ -258,6 +294,9 @@ export function SchedulesPanel({ rows, withoutSchedule, today }: { rows: Schedul
                 <Button type="button" size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Clear selection</Button>
                 <FormDialog label={`Set schedule for ${picked.size}`} title="Set a schedule" description="Times are in the schedule's time zone. Choosing a new schedule ends an existing schedule the day before, while keeping its history." size="xl">
                   <SetScheduleForm picked={[...picked]} today={today} run={run} pending={pending} onDone={() => setPicked(new Set())} />
+                </FormDialog>
+                <FormDialog label={`End schedule for ${picked.size}`} title="End schedules" description="Ends the current schedule of everyone selected." variant="outline" size="md">
+                  <EndSchedulesForm picked={[...picked]} today={today} run={run} pending={pending} onDone={() => setPicked(new Set())} />
                 </FormDialog>
               </div>
             </div>
