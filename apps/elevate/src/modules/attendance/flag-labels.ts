@@ -17,3 +17,24 @@ export const FLAG_LABELS = new Map<string, string>(Object.entries({
   jibble_mismatch: "Jibble and ELEVATE totals differ",
   on_leave: "On approved leave",
 }));
+
+/** One plain sentence for each flag: what it means and what to do. Shown when a reviewer opens a day's status. */
+export const FLAG_HELP = new Map<string, string>(Object.entries({
+  open_session: "They have not clocked out. The hours are not final until they do.",
+  long_session: "A session longer than 12 hours is almost always a forgotten clock-out. Fix the clock-out before approving.",
+  outside_range: "They clocked in from outside the allowed IP range.",
+  corrected: "A time correction was approved for this day.",
+  idle_unanswered: "An idle prompt went unanswered while they were clocked in.",
+  overbreak: "A break ran longer than planned.",
+  no_eod: "No end-of-day report was written.",
+  late: "They clocked in after the shift started.",
+  left_early: "They clocked out before the shift ended.",
+  extra_hours: "They worked beyond the scheduled hours, or inside an approved extra-hours window.",
+  rest_day_work: "They worked on a day with no shift.",
+  holiday_work: "They worked on a holiday.",
+  absent: "A scheduled day with no clocking, leave or holiday. Check whether they were really absent.",
+  no_screenshots: "Jibble was not linked or failed, so no screenshots were taken.",
+  unapproved_extra: "Extra time with no approved extra-hours request. Approve a request or leave it as it is.",
+  jibble_mismatch: "Jibble's total for this day differs from ELEVATE's.",
+  on_leave: "They are on approved leave.",
+}));

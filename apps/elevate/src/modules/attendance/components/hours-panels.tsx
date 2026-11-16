@@ -1,20 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Fragment, useState, useTransition } from "react";
-import { toast } from "@/components/feedback-dialog";
+import { Fragment, useState } from "react";
 import { ClientPager, usePaged } from "@/components/client-pager";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDateOnly, formatInZone } from "@/lib/time";
+import { formatDateOnly } from "@/lib/time";
 import { MINUTE, formatDuration } from "../clock";
-import { BLOCKING_FLAGS, CLEAN_FLAGS, worstSeverity } from "../flag-severity";
-import { approveCleanWeeks, approveHoursWeek, clearTestDay, exportHours, markTestDay, reopenApprovedHours, savePayPeriod } from "../hours-actions";
+import { CLEAN_FLAGS, worstSeverity } from "../flag-severity";
+import { DayList, ReopenWeekButton, WeekSignal } from "./hours-day-detail";
+import { useRun } from "./use-run";
+import { approveCleanWeeks, approveHoursWeek, clearTestDay, exportHours, savePayPeriod } from "../hours-actions";
 import type { HoursSettings, ReviewRow, TeamReview } from "../hours-queries";
 import { PAY_PERIOD_LABELS, type PayPeriodKind } from "../pay-periods";
 import { Alert } from "@/components/ui/alert";
@@ -29,117 +29,6 @@ function flagLevel(row: ReviewRow): "ready" | "review" | "blocked" | "approved" 
   if (row.state === "approved") return "approved";
   const worst = worstSeverity(row.flags);
   return worst === "blocked" ? "blocked" : worst === "review" ? "review" : "ready";
-}
-
-function primaryFlag(row: ReviewRow, label: (flag: string) => string) {
-  const flags = [...row.flags].sort((a, b) => Number(BLOCKING_FLAGS.has(b)) - Number(BLOCKING_FLAGS.has(a)) || a.localeCompare(b));
-  if (flags.length === 0) return null;
-  return `${label(flags[0])}${flags.length > 1 ? ` +${flags.length - 1}` : ""}`;
-}
-
-function useRun() {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const run = <T,>(fn: () => Promise<{ ok: boolean; error?: string; data?: T }>, success: (data: T | undefined) => string, onDone?: () => void) =>
-    startTransition(async () => {
-      try {
-        const result = await fn();
-        if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
-        toast.success(success(result.data));
-        onDone?.();
-        router.refresh();
-      } catch {
-        toast.error("No connection. Try again.");
-      }
-    });
-  return { run, pending, router };
-}
-
-/** "Mark as test" on one day: asks for a few words, then marks it. The day leaves this list and appears under "Marked test only". */
-function MarkTestButton({ employeeId, date, name }: { employeeId: string; date: string; name: string }) {
-  const { run, pending } = useRun();
-  const [open, setOpen] = useState(false);
-  const [note, setNote] = useState("");
-  if (!open) {
-    return (
-      <Button type="button" size="xs" variant="ghost" onClick={() => setOpen(true)} aria-label={`Mark ${name} on ${date} as test only`}>
-        Mark as test
-      </Button>
-    );
-  }
-  return (
-    <form
-      className="flex flex-wrap items-center gap-1"
-      onSubmit={(e) => {
-        e.preventDefault();
-        run(() => markTestDay({ employeeId, date, note }), () => "Marked test only. It is left out of review and payroll.");
-      }}
-    >
-      <label className="sr-only" htmlFor={`test-note-${employeeId}-${date}`}>
-        Why is this a test?
-      </label>
-      <input
-        id={`test-note-${employeeId}-${date}`}
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        maxLength={200}
-        placeholder="Why? For example: testing the time clock"
-        className="h-7 w-64 max-w-full rounded-md border bg-background px-2 text-xs"
-        autoFocus
-      />
-      <Button type="submit" size="xs" disabled={pending || note.trim().length < 3}>
-        Mark
-      </Button>
-      <Button type="button" size="xs" variant="ghost" onClick={() => setOpen(false)}>
-        Cancel
-      </Button>
-    </form>
-  );
-}
-
-/** Takes an approval back (a day, or the whole week) with a reason. The days show as not approved again until approved again. */
-function ReopenButton({ employeeId, name, from, to, label, size = "sm" }: { employeeId: string; name: string; from: string; to: string; label: string; size?: "xs" | "sm" }) {
-  const { run, pending } = useRun();
-  const [open, setOpen] = useState(false);
-  const [reason, setReason] = useState("");
-  const what = from === to ? formatDateOnly(from) : `${formatDateOnly(from)} to ${formatDateOnly(to)}`;
-  return (
-    <>
-      <Button type="button" size={size} variant="ghost" onClick={() => setOpen(true)} aria-label={`${label}: ${name}, ${what}`}>
-        {label}
-      </Button>
-      <Dialog open={open} onOpenChange={(next) => !pending && setOpen(next)}>
-        <DialogContent>
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              run<{ reopened: number }>(
-                () => reopenApprovedHours({ employeeId, from, to, reason }),
-                (d) => `Reopened ${d?.reopened ?? 0} ${(d?.reopened ?? 0) === 1 ? "day" : "days"} for ${name}. They need approving again.`,
-                () => (setOpen(false), setReason("")),
-              );
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Reopen {name}&apos;s hours</DialogTitle>
-              <DialogDescription>
-                {what}. The approved days show as not approved again and leave the payroll export until you approve them again. Nothing is deleted: the reason is kept in the history. Days already in an approved or paid payroll run cannot be reopened here.
-              </DialogDescription>
-            </DialogHeader>
-            <label className="block space-y-1.5 text-sm font-medium">
-              Why is it being reopened?
-              <Textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={5} maxLength={300} required autoFocus rows={3} placeholder="For example: approved by mistake, the week was empty" />
-            </label>
-            <DialogFooter>
-              <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={pending || reason.trim().length < 5}>Reopen</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
 }
 
 /** Approval is deliberately a two-step action when the week has exceptions. */
@@ -290,11 +179,7 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels, previewMod
                       )}
                     </TableCell>
                     <TableCell label="Review status">
-                      {primaryFlag(r, label) ? (
-                        <Badge variant={flagLevel(r) === "blocked" ? "destructive" : flagLevel(r) === "review" ? "warning" : "outline"}>
-                          {primaryFlag(r, label)}
-                        </Badge>
-                      ) : <span className="text-muted-foreground">Ready</span>}
+                      <WeekSignal row={r} />
                     </TableCell>
                     <TableCell label="Status">
                       <Badge variant={STATE_VARIANT[r.state]}>{STATE_TEXT[r.state]}</Badge>
@@ -306,45 +191,14 @@ export function ReviewPanel({ review, prevHref, nextHref, flagLabels, previewMod
                         previewMode={previewMode}
                         onApprove={(note) => run<{ approved: number }>(() => approveHoursWeek({ employeeId: r.employeeId, weekStart: review.weekStart, note }), (d) => `Approved ${d?.approved ?? 0} ${(d?.approved ?? 0) === 1 ? "day" : "days"} for ${r.name}.`)}
                       />
-                      {r.canReopen && !previewMode ? <ReopenButton employeeId={r.employeeId} name={r.name} from={review.weekStart} to={review.weekEnd} label="Reopen week" /> : null}
+                      {r.canReopen && !previewMode ? <ReopenWeekButton employeeId={r.employeeId} name={r.name} from={review.weekStart} to={review.weekEnd} /> : null}
                     </TableCell>
                   </TableRow>
                   <TableRow data-detail="" className="bg-muted/30 text-xs">
                     <TableCell colSpan={7} className="py-1">
                       <details>
                         <summary className="cursor-pointer font-medium text-foreground">Review daily detail ({r.days.length} days)</summary>
-                        <ul className="mt-2 space-y-1">
-                          {r.days.map((d) => (
-                            <li key={d.date} className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                              <span className="w-28 font-medium">
-                                {d.weekday}, {formatDateOnly(d.date)}
-                              </span>
-                              <span className="w-40">
-                                {d.firstIn ? formatInZone(d.firstIn, r.zone, "h:mm a") : "-"} to {d.lastOut ? formatInZone(d.lastOut, r.zone, "h:mm a") : "-"}
-                              </span>
-                              <span className="w-28">Worked {hours(d.workedMinutes)}</span>
-                              <span className="w-28">{d.scheduledMinutes !== null ? `Scheduled ${hours(d.scheduledMinutes)}` : d.hasSchedule ? "Rest day" : "No schedule"}</span>
-                              <span className="w-32">{d.extraMinutes ? `Extra +${formatDuration(d.extraMinutes * MINUTE)}` : ""}</span>
-                              {/* Where an extra comes from: worked time beyond the scheduled hours. A shorter break than the one scheduled is worked time too. */}
-                              {d.extraMinutes && d.scheduledMinutes !== null ? <span className="text-xs text-muted-foreground">Worked {hours(d.workedMinutes)} against {hours(d.scheduledMinutes)} scheduled; break taken {hours(d.breakMinutes)}</span> : null}
-                              <span className="space-x-1">
-                                {d.flags.map((f) => (
-                                  <Badge key={f} variant="outline">
-                                    {label(f)}
-                                  </Badge>
-                                ))}
-                              </span>
-                              <Badge variant={d.state === "approved" ? "default" : d.state === "changed" ? "destructive" : "outline"}>{d.state === "approved" ? "Approved" : d.state === "changed" ? "Changed after approval" : d.finished ? "Not approved" : "Day not over"}</Badge>
-                              {d.canReopen && !previewMode ? <ReopenButton employeeId={r.employeeId} name={r.name} from={d.date} to={d.date} label="Reopen" size="xs" /> : null}
-                              {d.flags.includes("long_session") || d.flags.includes("open_session") ? (
-                                <Link href={`/team-attendance?fix=${r.employeeId}&date=${d.date}`} className={buttonVariants({ size: "sm", variant: "outline" })}>
-                                  Fix clock-out
-                                </Link>
-                              ) : null}
-                              {review.canMarkTest ? <MarkTestButton employeeId={r.employeeId} date={d.date} name={r.name} /> : null}
-                            </li>
-                          ))}
-                        </ul>
+                        <DayList row={r} canMarkTest={review.canMarkTest} previewMode={previewMode} label={label} />
                       </details>
                     </TableCell>
                   </TableRow>
