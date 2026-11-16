@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { formatInZone } from "@/lib/time";
 import { MINUTE, replayClock } from "@/modules/attendance/clock";
+import { clockSourceOf } from "@/modules/attendance/clock-source";
 import { loadRecentEvents, monitoringPolicyPublished, prefsFor } from "@/modules/attendance/service";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { reportName } from "@/modules/org/service";
@@ -32,7 +33,7 @@ type Due = {
 };
 
 /** HR is told about one kind of Jibble trouble at most once in the window (hours), so a long outage is one alert, not hundreds. */
-async function alertHr(kind: string, title: string, body: string, windowHours: number): Promise<void> {
+export async function alertHr(kind: string, title: string, body: string, windowHours: number): Promise<void> {
   const since = new Date(Date.now() - windowHours * 3_600_000).toISOString();
   const [recent] = (await db.execute(sql`select 1 as ok from ops.notifications where kind = ${kind} and created_at > ${since}::timestamptz limit 1`)) as unknown as { ok: number }[];
   if (recent) return;
@@ -51,6 +52,8 @@ export type MirrorRun = { sent: number; retrying: number; failed: number; skippe
 /** A queued event does not grant ongoing permission after a mapping, policy or team rule changes. */
 export async function maySendNow(employeeId: string, personId: string): Promise<boolean> {
   if (!mirrorSendsEnabled() || !sendsAllowed(personId)) return false;
+  // Someone who clocks in Jibble is never clocked in or out there by ELEVATE: their hours come from Jibble.
+  if ((await clockSourceOf(db, employeeId)) === "jibble") return false;
   const [row] = (await db.execute(sql`select p.jibble_person_id, u.email, coalesce(r.jibble_mirror, false) as enabled
     from core.employees e join time.jibble_people p on p.employee_id = e.id
     left join core.users u on u.id = e.user_id left join time.clock_rules r on r.team_id = e.team_id
@@ -435,7 +438,8 @@ export async function runJibbleComparison(now = new Date(), client: JibbleClient
     select e.id as employee_id, p.jibble_person_id from core.employees e
     join time.clock_rules r on r.team_id = e.team_id and r.jibble_mirror
     join time.jibble_people p on p.employee_id = e.id
-    where e.archived_at is null and e.status <> 'separated'`)) as unknown as { employee_id: string; jibble_person_id: string }[];
+    where e.archived_at is null and e.status <> 'separated'
+      and coalesce((select s.source from time.clock_source s where s.employee_id = e.id order by s.set_at desc, s.id desc limit 1), 'elevate') <> 'jibble'`)) as unknown as { employee_id: string; jibble_person_id: string }[];
 
   // Each person's "yesterday" depends on their own zone, so group people by the date they need.
   const byDate = new Map<string, { employee_id: string; jibble_person_id: string }[]>();

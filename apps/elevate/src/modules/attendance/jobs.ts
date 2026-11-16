@@ -6,12 +6,13 @@ import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { MAX_OPEN_SESSION_MS, QUIET_AFTER_MS, buildDays, hasLongSession } from "./clock";
+import { clockSourceOf } from "./clock-source";
 import { attendanceDayClients, attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices, quietNotices } from "./schema";
 import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
 import { EXTRA_THRESHOLD_MINUTES, addDays, earlyLeaveMinutes, extraMinutes, hasScheduleAround, lateMinutes, shiftOn } from "./schedule";
 import { loadSchedules, loadSchedulesFor } from "./schedule-service";
 import { approvedExtra, effectiveEndMs, grantedByDate, minutesInWindows } from "./extra-hours";
-import { approvedWindows } from "./extra-hours-service";
+import { approvedWindows, assignedClients } from "./extra-hours-service";
 import { historicalHolidayDatesFor } from "@/modules/timeoff/service";
 import { approvalKey, attendanceRows, dayState, latestApprovals } from "./hours-service";
 import { mondayOf } from "./pay-periods";
@@ -121,6 +122,10 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
   for (const { employee_id: employeeId } of people) {
     const prefs = await prefsFor(db, employeeId);
     const rules = await rulesFor(db, employeeId);
+    // Someone whose hours come from Jibble: the screenshot checks do not apply (there is no ELEVATE clock call to compare), and time with
+    // no client is flagged when they work for more than one client, so a lead maps it before approving.
+    const fromJibble = (await clockSourceOf(db, employeeId)) === "jibble";
+    const multiClient = fromJibble && (await assignedClients(db, employeeId)).length > 1;
     const earliest = normalDaysBack === undefined ? from : formatInZone(now.getTime() - normalDaysBack * DAY_MS, prefs.zone, "yyyy-MM-dd");
     const today = normalDaysBack === undefined ? to : formatInZone(now, prefs.zone, "yyyy-MM-dd");
     // A two-day margin pairs overnight sessions at either edge without reading unrelated attendance history.
@@ -186,8 +191,9 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         idle.n > 0 ? "idle_unanswered" : null,
         d.overbreakMinutes > 0 ? "overbreak" : null,
         missingEod ? "no_eod" : null,
-        jibbleFlag ? "jibble_mismatch" : null,
-        noShots ? "no_screenshots" : null,
+        jibbleFlag && !fromJibble ? "jibble_mismatch" : null,
+        noShots && !fromJibble ? "no_screenshots" : null,
+        multiClient && d.sessionList.some((x) => x.clients.some((c) => c.clientId === null)) ? "needs_client" : null,
         (await onFullDayLeave(db, employeeId, d.date)) ? "on_leave" : null,
       ].filter((f): f is string => f !== null);
 
@@ -335,6 +341,8 @@ export async function runQuietSessionAlerts(now = new Date()): Promise<{ noticed
     left join time.clock_presence p on p.employee_id = s.employee_id
     where s.last_type in ('clock_in', 'break_end', 'switch_client') and s.event_id is not null
       and greatest(s.last_event, coalesce(p.last_seen_at, s.last_event)) < ${cutoff.toISOString()}::timestamptz
+      -- Someone whose hours come from Jibble never opens ELEVATE's clock page, so there is no presence to miss.
+      and coalesce((select cs.source from time.clock_source cs where cs.employee_id = s.employee_id order by cs.set_at desc, cs.id desc limit 1), 'elevate') <> 'jibble'
       and not exists (select 1 from time.quiet_notices n where n.event_id = s.event_id)`)) as unknown as {
     employee_id: string; event_id: string; user_id: string | null; first: string; last: string; preferred: string | null;
   }[];

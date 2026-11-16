@@ -5,7 +5,7 @@
 export const CLEAN_FLAGS: ReadonlySet<string> = new Set(["on_leave", "corrected", "extra_hours"]);
 
 /** Flags that mark a day as "Blocked" in hours review: it needs a decision or a fix before it is approved. */
-export const BLOCKING_FLAGS: ReadonlySet<string> = new Set(["open_session", "long_session", "absent", "unapproved_extra"]);
+export const BLOCKING_FLAGS: ReadonlySet<string> = new Set(["open_session", "long_session", "absent", "unapproved_extra", "needs_client"]);
 
 /** Flags whose hours are probably wrong: the server refuses to approve the day until the cause is fixed (no "approve with a note"). */
 export const HARD_STOP_FLAGS: ReadonlySet<string> = new Set(["open_session", "long_session"]);

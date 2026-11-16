@@ -10,6 +10,7 @@ import { teams } from "@/modules/org/schema";
 import { employees } from "@/modules/people/schema";
 import { EOD_EDIT_WINDOW_MS, MAX_OPEN_SESSION_MS, buildDays, isPossiblyOffline, needsHrDecision, replayClock, type ClockState, type DayTotals, type SessionDetail } from "./clock";
 import { approvedExtra, grantedByDate } from "./extra-hours";
+import { clockSourceOf } from "./clock-source";
 import { approvedWindows, assignedClients } from "./extra-hours-service";
 import { describeSchedule, extraMinutes, hasScheduleAround, scheduleFor, shiftOn, shiftRange } from "./schedule";
 import { clockRules } from "./schema";
@@ -52,6 +53,8 @@ export type ClockStatus = {
   clients: { id: string; name: string }[];
   /** The client the session is working for now (null when not working, or when the session has no client). */
   currentClientId: string | null;
+  /** Where this person's hours come from. "jibble": they clock in Jibble and ELEVATE shows the state but has no clock buttons. */
+  clockSource: "elevate" | "jibble";
 };
 
 /** The signed-in person's clock: what the header widget shows. Null when they have no people record. */
@@ -84,6 +87,7 @@ export async function getClockStatus(): Promise<ClockStatus | null> {
     extraWindows: (await approvedWindows(db, me.id, Date.now() - 12 * 3_600_000, Date.now() + DAY_MS)).map((w) => ({ startMs: w.startMs, endMs: w.endMs })),
     clients: (await assignedClients(db, me.id)).map((c) => ({ id: c.id, name: c.name })),
     currentClientId: live ? (live.switches[live.switches.length - 1]?.clientId ?? live.clientId) : null,
+    clockSource: await clockSourceOf(db, me.id),
   };
 }
 

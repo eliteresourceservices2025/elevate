@@ -14,6 +14,12 @@ export type JibbleEntry = { id: string; state: JibbleState; time: string };
 /** Minimal source facts for a candidate correction. Device identifiers are not returned or stored. */
 export type JibbleEntryEvidence = JibbleEntry & { personId: string; createdAt: string; updatedAt: string; clientType: string; elevateOrigin: boolean; hasDeviceEvidence: boolean };
 
+/**
+ * One active time entry of a person, for importing hours of people who clock in Jibble. Only the kind of entry, its time and the project
+ * and activity ids are read: never screenshots, location, device facts or activity tracking.
+ */
+export type JibbleTimeEntryRow = { id: string; personId: string; type: "In" | "Out" | "StartBreak"; time: string; projectId: string | null; activityId: string | null };
+
 /** Extra facts for a break call: the length ELEVATE's break was set to (to pick the matching Jibble break), and the entry that started it. */
 export type ClockOptions = { breakMinutes?: number | null; previousEntryId?: string | null; requestId?: string };
 
@@ -27,6 +33,8 @@ export interface JibbleClient {
   listBreaks(personId: string): Promise<JibbleBreak[]>;
   /** Sends one clock action for a person. Returns the new time entry's id when Jibble gives one. */
   clock(personId: string, action: JibbleAction, options?: ClockOptions): Promise<{ entryId: string | null }>;
+  /** The active time entries of one person between two instants (ISO), oldest first. Optional: a client without it cannot import hours. */
+  listTimeEntries?(personId: string, fromIso: string, toIso: string): Promise<JibbleTimeEntryRow[]>;
   /** Tracked minutes per person and day, for the nightly comparison. Totals only: nothing else is read. */
   dailyTracked(personIds: string[], fromDate: string, toDate: string): Promise<JibbleDay[]>;
 }
@@ -250,6 +258,43 @@ export class JibbleHttpClient implements JibbleClient {
     const url = action === "EndBreak" ? `${this.config.timeTrackingUrl}/v1/TimeEntries/EndBreak` : `${this.config.timeTrackingUrl}/v1/TimeEntries`;
     const json = (await this.send("POST", url, { json: action === "EndBreak" ? { model: entry } : entry })) as Json;
     return { entryId: typeof json.id === "string" ? json.id : null };
+  }
+
+  /** Whether Jibble accepted the project and activity ids in the entries select. Starts true; set false for good if Jibble refuses them (entries then come without them). */
+  private entryExtrasSelectable = true;
+
+  async listTimeEntries(personId: string, fromIso: string, toIso: string): Promise<JibbleTimeEntryRow[]> {
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const instant = (value: unknown) => (typeof value === "string" && /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? Date.parse(value) : Number.NaN);
+    if (!uuid.test(personId) || !Number.isFinite(Date.parse(fromIso)) || !Number.isFinite(Date.parse(toIso))) return [];
+    const out: JibbleTimeEntryRow[] = [];
+    for (let skip = 0; skip < 2000; skip += 200) {
+      const fields = this.entryExtrasSelectable ? "id,type,time,personId,status,projectId,activityId" : "id,type,time,personId,status";
+      const params = new URLSearchParams({ "$filter": `(personId eq ${personId} and time ge ${new Date(fromIso).toISOString()} and time lt ${new Date(toIso).toISOString()})`, "$select": fields, "$orderby": "time", "$top": "200", "$skip": String(skip) });
+      let page: { value?: Json[] };
+      try {
+        page = (await this.send("GET", `${this.config.timeTrackingUrl}/v1/TimeEntries?${params}`)) as { value?: Json[] };
+      } catch (error) {
+        // A refused select (400) means this Jibble does not expose project and activity ids: carry on without them rather than losing the hours.
+        if (this.entryExtrasSelectable && error instanceof JibbleError && error.status === 400) {
+          this.entryExtrasSelectable = false;
+          skip -= 200;
+          continue;
+        }
+        throw error;
+      }
+      const rows = Array.isArray(page.value) ? page.value : [];
+      for (const r of rows) {
+        const type = r.type === "In" || r.type === "Out" || r.type === "StartBreak" ? r.type : null;
+        const ms = instant(r.time);
+        const id = typeof r.id === "string" ? r.id.trim() : "";
+        // An entry that is not active (deleted) is left out; the import then removes the hours it had made.
+        if (!type || !id || id.length > 120 || !Number.isFinite(ms) || r.personId !== personId || (typeof r.status === "string" && r.status !== "Active")) continue;
+        out.push({ id, personId, type, time: new Date(ms).toISOString(), projectId: typeof r.projectId === "string" && r.projectId ? r.projectId : null, activityId: typeof r.activityId === "string" && r.activityId ? r.activityId : null });
+      }
+      if (rows.length < 200) break;
+    }
+    return out;
   }
 
   async dailyTracked(personIds: string[], fromDate: string, toDate: string): Promise<JibbleDay[]> {

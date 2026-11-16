@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
+import { ClockSourcePanel } from "@/modules/jibble/components/clock-source-panel";
 import { JibblePanel } from "@/modules/jibble/components/jibble-panel";
+import { getClockSourceOverview } from "@/modules/jibble/clock-source-queries";
 import { getJibbleOverview } from "@/modules/jibble/queries";
 import { PageHeader } from "@/components/page-header";
 import { PageContainer } from "@/components/page-container";
@@ -12,6 +14,7 @@ export default async function JibblePage({ searchParams }: { searchParams: Promi
   await requireUser();
   const params = await searchParams;
   const overview = await orNotFound(getJibbleOverview({ search: params.callSearch, status: params.callStatus, page: params.callPage, exceptionPage: params.exceptionPage }));
+  const clockSource = await orNotFound(getClockSourceOverview());
   const requestedPreview = params.preview;
   const preview = process.env.NODE_ENV === "development" && (requestedPreview === "shifts" || requestedPreview === "shifts50");
   const exampleShifts = [
@@ -37,6 +40,7 @@ export default async function JibblePage({ searchParams }: { searchParams: Promi
       <PageHeader title="Jibble" description="Connection status, people matching and the latest calls." />
       {preview ? <p role="status" className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">Local preview: shifts, calls and call counts are fictional examples. No clock records or Jibble calls were created. Retry is disabled in preview. <a href="/jibble" className="font-medium underline">Exit preview</a></p> : null}
       <JibblePanel overview={display} previewMode={preview ? requestedPreview : undefined} />
+      <ClockSourcePanel overview={clockSource} />
     </PageContainer>
   );
 }

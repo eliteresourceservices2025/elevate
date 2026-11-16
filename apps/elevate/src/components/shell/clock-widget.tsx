@@ -273,7 +273,8 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const idleRef = useRef<{ detector: IdleDetectorLike | null; abort: AbortController | null }>({ detector: null, abort: null });
   const promptShown = useRef(false);
 
-  const working = status?.state === "working" || status?.state === "break";
+  // Someone whose hours come from Jibble has no ELEVATE clock: no idle prompts, welcome-back or shift-end questions (their time is read from Jibble).
+  const working = status?.clockSource !== "jibble" && (status?.state === "working" || status?.state === "break");
 
   // Count from the server's clock.
   useEffect(() => {
@@ -444,7 +445,11 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
         </span>
       ) : null}
 
-      {!working ? (
+      {status.clockSource === "jibble" ? (
+        <span className="max-w-64 text-xs leading-tight text-muted-foreground" role="status">
+          You clock in Jibble. ELEVATE reads your hours from there.
+        </span>
+      ) : !working ? (
         <div className="relative">
           <Button
             size="lg"

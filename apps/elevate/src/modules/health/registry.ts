@@ -43,6 +43,7 @@ export const JOBS: Record<string, JobInfo> = {
   "evidence-purge": { label: "Screenshot proof cleanup", everyMinutes: DAILY },
   "jibble-mirror": { label: "Sending clock calls to Jibble", everyMinutes: 15 },
   "jibble-repair": { label: "Jibble repair", everyMinutes: 30 },
+  "jibble-import": { label: "Importing hours from Jibble", everyMinutes: 30 },
   "jibble-people-sync": { label: "Matching people to Jibble", everyMinutes: DAILY },
   "jibble-unmatched": { label: "Unmatched Jibble people report", everyMinutes: DAILY },
   "jibble-comparison": { label: "Nightly Jibble comparison", everyMinutes: DAILY },

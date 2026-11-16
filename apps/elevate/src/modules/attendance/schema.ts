@@ -37,16 +37,43 @@ export const clockEvents = time
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       /** clock_in and switch_client only: the client the time that follows belongs to. Null: no client (people with no assignments). */
       clientId: uuid("client_id").references(() => clients.id),
+      /** Events imported from Jibble only (source 'jibble'): the Jibble time entry they came from. Never any screenshot, location or activity data. */
+      jibbleEntryId: text("jibble_entry_id"),
     },
     (t) => [
       index("clock_events_employee_idx").on(t.employeeId, t.occurredAt),
+      // One imported event per Jibble entry, type, time and client: an entry edited in Jibble (or mapped to another client) becomes a new row and the old one is voided.
+      uniqueIndex("clock_events_jibble_entry_idx").on(t.jibbleEntryId, t.type, t.occurredAt, sql`coalesce(${t.clientId}, '00000000-0000-0000-0000-000000000000'::uuid)`).where(sql`${t.jibbleEntryId} is not null`),
+      check("clock_events_jibble_chk", sql`(${t.source} = 'jibble') = (${t.jibbleEntryId} is not null)`),
       check("clock_events_type_chk", sql`${t.type} in ('clock_in','break_start','break_end','clock_out','switch_client')`),
       check("clock_events_client_chk", sql`(${t.clientId} is null or ${t.type} in ('clock_in','switch_client')) and (${t.type} <> 'switch_client' or ${t.clientId} is not null)`),
-      check("clock_events_source_chk", sql`${t.source} in ('web','admin_correction')`),
-      check("clock_events_correction_chk", sql`(${t.source} = 'web') or (${t.correctionId} is not null and coalesce(length(trim(${t.correctionReason})), 0) > 0)`),
+      check("clock_events_source_chk", sql`${t.source} in ('web','admin_correction','jibble')`),
+      check("clock_events_correction_chk", sql`(${t.source} in ('web','jibble')) or (${t.correctionId} is not null and coalesce(length(trim(${t.correctionReason})), 0) > 0)`),
       check("clock_events_planned_chk", sql`${t.plannedBreakMinutes} is null or (${t.type} = 'break_start' and ${t.plannedBreakMinutes} in (15, 30, 60))`),
       check("clock_events_location_chk", sql`(${t.approxLat} is null) = (${t.approxLng} is null)`),
     ],
+  )
+  .enableRLS();
+
+export const CLOCK_SOURCES = ["elevate", "jibble"] as const;
+
+/**
+ * Where a person's hours come from. Append-only: the newest row per person decides (a person with no row uses the ELEVATE clock).
+ * "jibble" = they clock in Jibble and a job imports their time entries as clock events (source 'jibble'); they do not use the ELEVATE clock.
+ */
+export const clockSource = time
+  .table(
+    "clock_source",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      employeeId: uuid("employee_id")
+        .notNull()
+        .references(() => employees.id),
+      source: text("source").notNull(),
+      setBy: uuid("set_by").notNull(),
+      setAt: timestamp("set_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [index("clock_source_employee_idx").on(t.employeeId, t.setAt), check("clock_source_source_chk", sql`${t.source} in ('elevate','jibble')`)],
   )
   .enableRLS();
 
