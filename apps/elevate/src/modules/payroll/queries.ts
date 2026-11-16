@@ -9,7 +9,7 @@ import { clients, employees } from "@/modules/people/schema";
 import type { SettingsSnapshot } from "./calculate";
 import { z } from "zod";
 import type { PaymentMethod, RunStatus } from "./constants";
-import { applySupersede, lineLastDay, resolveLines } from "./lines";
+import { applySupersede, isWithdrawn, lineLastDay, resolveLines } from "./lines";
 import { formatPesos } from "./money";
 import { countAwaiting, hashOf, latestSendBackNote, refusalFor } from "./approval";
 import { readRun, worksheetOf, type Worksheet } from "./runs";
@@ -95,7 +95,9 @@ export async function getRates(options: { includeEnded?: boolean } = {}): Promis
   const byId = new Map(rows.map((r) => [r.line.id, r]));
   const out: RateRow[] = [];
   // A withdrawn line (added by mistake) is not shown at all.
-  const withdrawn = new Set(rows.filter((r) => r.line.withdrawn).map((r) => r.line.lineKey));
+  const byLineKey = new Map<string, (typeof rows)[number]["line"][]>();
+  for (const r of rows) byLineKey.set(r.line.lineKey, [...(byLineKey.get(r.line.lineKey) ?? []), r.line]);
+  const withdrawn = new Set([...byLineKey].filter(([, versions]) => isWithdrawn(versions)).map(([key]) => key));
   const all = applySupersede(rows.map((r) => r.line)).filter((l) => !withdrawn.has(l.lineKey));
   const usedOnRealRun = new Set(
     (

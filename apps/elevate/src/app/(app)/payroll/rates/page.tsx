@@ -3,7 +3,9 @@ import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/authz";
+import { db } from "@/lib/db";
 import { orNotFound } from "@/lib/or-not-found";
+import { doubledToTidyKey } from "@/modules/payroll/doubled-service";
 import { PayrollTabs } from "@/modules/payroll/components/payroll-tabs";
 import { RatesTable } from "@/modules/payroll/components/rates-table";
 import { SortMenu } from "@/modules/payroll/components/sort-menu";
@@ -44,6 +46,8 @@ export default async function PayrollRatesPage({ searchParams }: PageProps<"/pay
   const options = can(user, "payroll.manage_rates") ? await orNotFound(getRateOptions()) : null;
   // The cutoffs the forms offer (the one being prepared first), so nobody types a start date.
   const cutoffs = await orNotFound(getRateCutoffs());
+  // Doubled rates that were never paid are tidied automatically when a Preparer opens this page (see AutoTidy); this names the ones to tidy.
+  const tidyKey = options ? await doubledToTidyKey(db) : "";
 
   return (
     <PageContainer width="full">
@@ -53,6 +57,7 @@ export default async function PayrollRatesPage({ searchParams }: PageProps<"/pay
         rows={rows}
         options={options}
         cutoffs={cutoffs}
+        tidyKey={tidyKey}
         sortLinks={sortLinks}
         endedToggle={{ showing: showEnded, href: hrefFor(sort, !showEnded) }}
         sortMenu={loaded.length > 1 ? <SortMenu current={SORT_LABELS[sort]} options={RATE_SORTS.map((v) => ({ value: v, label: SORT_LABELS[v], href: hrefWith(v), active: v === sort }))} /> : null}

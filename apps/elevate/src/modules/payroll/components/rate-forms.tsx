@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FieldHint, HintedLabel } from "@/components/field-hint";
 import { useFormDialog } from "@/components/form-dialog";
 import { Alert } from "@/components/ui/alert";
@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { createPayLine, endPayLine, tidyOverlappingLines, updatePayLine, withdrawPayLine } from "../actions";
+import { createPayLine, endPayLine, listRemovedRates, removeStoppedRates, restoreTidiedRates, tidyDoubledRates, updatePayLine, withdrawPayLine } from "../actions";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../constants";
+import type { RemovedRateView } from "../doubled-service";
 import { PAYROLL_HINTS } from "../hints";
 import { sameJob } from "../lines";
 import { DETAIL_REASONS, reasonText, startChoicesFor, STOP_REASONS, UPDATE_REASONS, type CutoffChoice } from "../rate-start";
@@ -348,15 +349,109 @@ export function RemoveRateForm({ row }: { row: RateRow }) {
   );
 }
 
-/** Counts the older rates a newer rate for the same job replaced, then ends them the day before the newer one starts. */
-export function TidyLinesForm() {
+/**
+ * Takes doubled rates (the same person and client with overlapping dates, never paid) away automatically when a Preparer opens the Rates tab,
+ * and again after a rate is added or changed. Shows a short note with where to restore them. It renders nothing.
+ */
+export function AutoTidy({ tidyKey }: { tidyKey: string }) {
+  const { run } = useRun();
+  const doneFor = useRef("");
+  useEffect(() => {
+    // One tidy for each different set of doubled rates: a new double is tidied, and one that cannot be removed does not loop.
+    if (tidyKey === "" || doneFor.current === tidyKey) return;
+    doneFor.current = tidyKey;
+    run(
+      () => tidyDoubledRates(),
+      (d) => (d && d.removed > 0 ? `Removed ${d.removed} doubled ${d.removed === 1 ? "rate" : "rates"} automatically. Restore any of them under Removed rates.` : ""),
+    );
+  }, [tidyKey, run]);
+  return null;
+}
+
+const removedText = (r: RemovedRateView) => `${r.clientName ?? "No client"}${r.alias ? ` (${r.alias})` : ""}: ${r.monthly} a month, since ${r.since}`;
+
+/**
+ * The doubled rates the tidy took away, grouped by contractor. Restore one contractor's, or all of them. A restored rate is left alone by the
+ * tidy from then on (a real second role on the same client, for example).
+ */
+export function RemovedRatesForm() {
+  const { run, pending } = useRun();
+  const dialog = useFormDialog();
+  const [rates, setRates] = useState<RemovedRateView[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    listRemovedRates()
+      .then((r) => live && (r.ok ? setRates(r.data.rates) : setFailed(true)))
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const people = useMemo(() => {
+    const byPerson = new Map<string, { name: string; rates: RemovedRateView[] }>();
+    for (const r of rates ?? []) byPerson.set(r.employeeId, { name: r.name, rates: [...(byPerson.get(r.employeeId)?.rates ?? []), r] });
+    return [...byPerson.values()];
+  }, [rates]);
+  const restore = (lineKeys: string[]) =>
+    run(
+      () => restoreTidiedRates({ lineKeys }),
+      (d) => `Restored ${d?.restored ?? 0} ${d?.restored === 1 ? "rate" : "rates"}. The tidy will leave them alone.`,
+      () => dialog?.close(true),
+    );
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Two overlapping rates for the same person and client would be paid twice, so ELEVATE takes the older one away automatically (never one that was paid).
+        Nothing is deleted. Restore a rate here if it is real, for example a second role on the same client; it will not be taken away again.
+      </p>
+      {failed ? (
+        <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
+          Could not load the removed rates. Try again.
+        </Alert>
+      ) : rates === null ? (
+        <p className="text-sm" role="status">Loading…</p>
+      ) : rates.length === 0 ? (
+        <Alert variant="success" role="status" className="rounded-lg p-3 text-sm">
+          Nothing has been removed automatically.
+        </Alert>
+      ) : (
+        <>
+          <ul className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+            {people.map((p) => (
+              <li key={p.name + p.rates[0].lineKey} className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm">
+                <span className="space-y-1">
+                  <span className="block font-medium">{p.name}</span>
+                  {p.rates.map((r) => (
+                    <span key={r.lineKey} className="block text-muted-foreground">
+                      {removedText(r)}
+                    </span>
+                  ))}
+                </span>
+                <Button type="button" size="sm" variant="outline" disabled={pending} aria-label={`Restore ${p.name}'s removed rates`} onClick={() => restore(p.rates.map((r) => r.lineKey))}>
+                  Restore
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <Button type="button" disabled={pending} onClick={() => restore((rates ?? []).map((r) => r.lineKey))}>
+            Restore all ({rates.length})
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Counts the stopped rates that were never paid, then takes them off the list. Paid ones stay: they are part of the pay history. */
+export function RemoveStoppedForm() {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const [count, setCount] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let live = true;
-    tidyOverlappingLines({ apply: false })
+    removeStoppedRates({ apply: false })
       .then((r) => live && (r.ok ? setCount(r.data.count) : setFailed(true)))
       .catch(() => live && setFailed(true));
     return () => {
@@ -366,30 +461,31 @@ export function TidyLinesForm() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        When a person has an old rate and a newer rate for the same job (same alias, and the same client or none), only the newer one should pay. This ends each
-        older rate on the day before the newer one starts. Nothing is deleted: every end is a new version in the change history.
+        This takes stopped rates off the list when they were never on a real pay run. A stopped rate that was paid stays, because it is part of the pay history.
+        Nothing is deleted: the change history keeps every removed rate.
       </p>
       {failed ? (
         <Alert variant="warning" role="alert" className="rounded-lg p-3 text-sm">
-          Could not count the rates. Try again.
+          Could not count the stopped rates. Try again.
         </Alert>
       ) : count === null ? (
         <p className="text-sm" role="status">Counting…</p>
       ) : count === 0 ? (
         <Alert variant="success" role="status" className="rounded-lg p-3 text-sm">
-          Nothing to tidy: no older rate overlaps a newer one.
+          No stopped rates to remove.
         </Alert>
       ) : (
         <p className="text-sm font-medium" role="status">
-          {count} older {count === 1 ? "rate" : "rates"} will be ended.
+          {count} stopped {count === 1 ? "rate" : "rates"} will be removed.
         </p>
       )}
       <Button
         type="button"
+        variant="destructive"
         disabled={pending || !count}
-        onClick={() => run(() => tidyOverlappingLines({ apply: true }), (d) => `Ended ${d?.count ?? 0} older ${d?.count === 1 ? "rate" : "rates"}.`, () => dialog?.close(true))}
+        onClick={() => run(() => removeStoppedRates({ apply: true }), (d) => `Removed ${d?.count ?? 0} stopped ${d?.count === 1 ? "rate" : "rates"}.`, () => dialog?.close(true))}
       >
-        End the older rates
+        Remove stopped rates
       </Button>
     </div>
   );

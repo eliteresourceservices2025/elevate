@@ -118,6 +118,7 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       facts.push(...fact(H.reason, detail.reason));
       break;
     case "line_withdrawn":
+    case "line_restored":
       facts.push(...fact(H.reason, detail.reason));
       break;
     case "line_ended":

@@ -1,5 +1,5 @@
 {
-  "id": "38f95330-fb0c-450e-aa0e-030668504f5b",
+  "id": "461b8464-c0a4-433d-bb9f-cd3a8c315652",
   "prevId": "4320bb1a-9649-46db-b475-01796f0d83d6",
   "version": "7",
   "dialect": "postgresql",
@@ -3764,100 +3764,6 @@
         "hours_marks_employee_id_employees_id_fk": {
           "name": "hours_marks_employee_id_employees_id_fk",
           "tableFrom": "hours_marks",
-          "tableTo": "employees",
-          "schemaTo": "core",
-          "columnsFrom": [
-            "employee_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": true
-    },
-    "time.hours_reopens": {
-      "name": "hours_reopens",
-      "schema": "time",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "employee_id": {
-          "name": "employee_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "date": {
-          "name": "date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reopened_by": {
-          "name": "reopened_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reopened_at": {
-          "name": "reopened_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "hours_reopens_employee_idx": {
-          "name": "hours_reopens_employee_idx",
-          "columns": [
-            {
-              "expression": "employee_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "date",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "reopened_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hours_reopens_employee_id_employees_id_fk": {
-          "name": "hours_reopens_employee_id_employees_id_fk",
-          "tableFrom": "hours_reopens",
           "tableTo": "employees",
           "schemaTo": "core",
           "columnsFrom": [
@@ -14611,6 +14517,12 @@
           "notNull": true,
           "default": false
         },
+        "tidy_state": {
+          "name": "tidy_state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "amounts_enc": {
           "name": "amounts_enc",
           "type": "text",
@@ -14730,6 +14642,10 @@
         "pay_lines_ends_chk": {
           "name": "pay_lines_ends_chk",
           "value": "\"payroll\".\"pay_lines\".\"ends_on\" is null or \"payroll\".\"pay_lines\".\"ends_on\" >= \"payroll\".\"pay_lines\".\"effective_from\""
+        },
+        "pay_lines_tidy_chk": {
+          "name": "pay_lines_tidy_chk",
+          "value": "\"payroll\".\"pay_lines\".\"tidy_state\" is null or \"payroll\".\"pay_lines\".\"tidy_state\" in ('removed', 'kept')"
         }
       },
       "isRLSEnabled": true
