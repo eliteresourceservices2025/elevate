@@ -115,6 +115,37 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await prepPage.getByRole("heading", { name: "Totals" }).scrollIntoViewIfNeeded();
     await prepPage.screenshot({ path: "test-results/payroll-totals.png" });
 
+    // The column headings stay in view while the table scrolls in its own box. A short window makes even one person's row overflow the box.
+    await prepPage.setViewportSize({ width: 1280, height: 300 });
+    const sheet = prepPage.getByRole("region", { name: /^Pay run sheet/ });
+    await sheet.scrollIntoViewIfNeeded();
+    // The heading cells stick, not their rows: measure a cell of each row.
+    const groupRow = sheet.locator("thead tr").first();
+    const columnRow = sheet.locator("thead tr").last();
+    const groupCell = groupRow.locator("th").first();
+    const columnCell = columnRow.locator("th").first();
+    const scrolledTo = await sheet.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+      return el.scrollTop;
+    });
+    expect(scrolledTo).toBeGreaterThan(0); // the box really scrolled
+    const boxTop = (await sheet.boundingBox())!.y;
+    expect(Math.abs((await groupCell.boundingBox())!.y - boxTop)).toBeLessThan(3); // the group row is at the top of the box
+    const groupHeight = (await groupCell.boundingBox())!.height;
+    expect(Math.abs((await columnCell.boundingBox())!.y - boxTop - groupHeight)).toBeLessThan(3); // and the column row right under it
+    await expect(columnRow.getByRole("columnheader", { name: /Total payable compensation/ })).toBeInViewport();
+    await expect(columnRow.getByRole("columnheader", { name: /^Person/ })).toBeInViewport();
+    await prepPage.screenshot({ path: "test-results/payroll-sticky-headings.png" });
+    // With "Show every column" off the group row is hidden and the column row sits at the very top.
+    await prepPage.getByLabel("Show every column").uncheck();
+    await sheet.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    expect(Math.abs((await columnCell.boundingBox())!.y - (await sheet.boundingBox())!.y)).toBeLessThan(3);
+    await prepPage.getByLabel("Show every column").check();
+    await prepPage.setViewportSize({ width: 1280, height: 720 });
+    await prepPage.screenshot({ path: "test-results/payroll-sticky-headings-tall.png" });
+
     // An overtime (OT) item, entered twice so the history has an old and a new value.
     for (const minutes of ["60", "120"]) {
       await line.getByRole("button", { name: /^Actions for/ }).click();
@@ -200,6 +231,9 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await expect(payment.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toContainText("$351.66");
     await expect(payment).toContainText("Dollars paid: $351.66");
     await expect(payment.getByRole("columnheader", { name: "Alias" })).toHaveCount(0);
+    // Its headings stick to the top of the page's scroll area (from the xl width up).
+    const paymentHead = payment.getByRole("columnheader", { name: "Person" });
+    expect(await paymentHead.evaluate((el) => getComputedStyle(el).position)).toBe("sticky");
     await payment.getByRole("button", { name: "Client" }).click();
     await expect(payment.getByRole("columnheader", { name: /Client/ })).toHaveAttribute("aria-sort", "ascending");
     await payment.getByRole("button", { name: "Client" }).click();

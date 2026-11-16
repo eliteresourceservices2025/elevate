@@ -22,6 +22,12 @@ import { WorksheetColumns } from "./worksheet-columns";
 const FROZEN = "md:sticky z-10 bg-card";
 const num = "text-right tabular-nums";
 const head = "whitespace-normal align-bottom";
+// The table scrolls in its own box (at most about a screen tall), so both rows of headings can stick to its top while the rows scroll under
+// them: the group row at the top and the column row right under it (its offset, --group-h, is set in worksheet-columns.tsx). The cells need an
+// opaque tint of their own. The Person and Client headings (and the Actions one) sit above the other headings at the corners.
+const STICKY_HEAD =
+  "md:[&_thead_th]:sticky md:[&_thead_th]:z-20 md:[&_thead_th]:bg-[color-mix(in_oklab,var(--primary)_10%,var(--card))] md:[&_thead_tr:first-child_th]:top-0 md:[&_thead_tr:last-child_th]:top-(--group-h)";
+const CORNER = "md:z-30!";
 // Cells that only show under "Show every column" (the frame in worksheet-columns.tsx sets data-detail on an ancestor).
 const D = "group-data-[detail=off]:hidden";
 
@@ -166,11 +172,16 @@ export function Worksheet({
 
       <div className="hidden md:block">
         <WorksheetColumns>
-          <p className="text-xs text-muted-foreground">Drag the table sideways to move across it, or hold Shift and use the mouse wheel.</p>
-          <Table dragScroll scrollLabel="Pay run sheet. Drag sideways or use the arrow keys to scroll.">
+          <p className="text-xs text-muted-foreground">Drag the table sideways to move across it, or hold Shift and use the mouse wheel. Scroll down inside it and the headings stay in view.</p>
+          <Table
+            dragScroll
+            scrollLabel="Pay run sheet. Drag sideways or use the arrow keys to scroll."
+            containerClassName="md:max-h-[calc(100dvh-8rem)] md:overflow-y-auto md:scroll-pt-24"
+            className={STICKY_HEAD}
+          >
             <TableHeader>
               <TableRow className={`${D} hover:bg-transparent`}>
-                <TableHead colSpan={2} className={`${FROZEN} md:left-0 border-r`}>
+                <TableHead colSpan={2} className={`${FROZEN} ${CORNER} md:left-0 border-r`}>
                   {L.groups.person}
                 </TableHead>
                 <TableHead colSpan={3}>{L.groups.basis}</TableHead>
@@ -187,12 +198,12 @@ export function Worksheet({
                 </TableHead>
               </TableRow>
               <TableRow>
-                <TableHead aria-sort={ariaSortOf(sortLinks, "name")} className={`${FROZEN} md:left-0 min-w-44`}>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "name")} className={`${FROZEN} ${CORNER} md:left-0 min-w-44`}>
                   <SortHead header="name" links={sortLinks}>
                     {L.person}
                   </SortHead>
                 </TableHead>
-                <TableHead aria-sort={ariaSortOf(sortLinks, "client")} className={`${FROZEN} md:left-44 min-w-36 border-r`}>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "client")} className={`${FROZEN} ${CORNER} md:left-44 min-w-36 border-r`}>
                   <SortHead header="client" links={sortLinks}>
                     {L.client}
                   </SortHead>
@@ -248,7 +259,7 @@ export function Worksheet({
                     {L.confirmation}
                   </SortHead>
                 </TableHead>
-                <TableHead className="md:sticky md:right-0 z-10 bg-card">
+                <TableHead className={`md:sticky md:right-0 z-10 bg-card ${CORNER}`}>
                   <span className="sr-only">{L.actions}</span>
                 </TableHead>
               </TableRow>

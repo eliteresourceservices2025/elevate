@@ -190,7 +190,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
           ))}
         </NativeSelect>
       </div>
-      <Table stack>
+      <Table stack stickyHeader>
         <TableHeader>
           <TableRow>
             <TableHead aria-sort={ariaSort("name")}>

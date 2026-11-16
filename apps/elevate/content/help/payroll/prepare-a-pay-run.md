@@ -50,6 +50,8 @@ If the person already has a rate for the same client, the window tells you to us
 
 If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, **another Preparer must check your line**, and a different person records your payment.
 
+On a laptop, the table of people scrolls inside its own box. Scroll down in it and the column headings, with the **Person** and **Client** columns, stay in view, so you always see which number is which. When you reach the last person, the page scrolls on. The **Payment** table at the bottom keeps its headings in view the same way.
+
 # FTE and the internal team
 
 The internal team (the ELITE Resource Services team) is paid by **FTE**: each cutoff, their pay is the run's **Total FTE** times their **amount per FTE**.

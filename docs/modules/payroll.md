@@ -193,6 +193,11 @@ Rates stay unrounded; each result is one exact fraction rounded once, half up, t
 
 An approved run never changes. A mistake is fixed on a later run by an `adjustment` (underpaid) or an `other_deduction` (overpaid) naming the approved or paid earlier run (`correctsRunId`, kept in the item value and the change log). A reason is required, amounts stay positive, and the person must have had a line on that run. The worksheet marks a run that includes a correction.
 
+## Headings stay in view (2026-11-16; owner request)
+
+- **The run worksheet** (laptop and wider) scrolls in its own box: `containerClassName="md:max-h-[calc(100dvh-8rem)] md:overflow-y-auto md:scroll-pt-24"` on its `<Table dragScroll>`, so it scrolls on both axes (the existing drag, keyboard focus and edge shadows are unchanged) and a short list is not stretched. Both heading rows are `position: sticky` (`STICKY_HEAD` in `worksheet.tsx`: the group row at `top-0`, the column row at `top-(--group-h)`, each cell with an opaque tint of its own); `--group-h` (2.5rem, the `h-10` of the group row) is set on the `WorksheetColumns` frame and is 0 when "Show every column" is off (that hides the group row). The Person, Client and Actions headings (`CORNER`, `z-30`) sit above the other headings, and the frozen body cells stay at `z-10`. The table's own `stickyHeader` can't be used here: it clips sideways instead of scrolling, which only suits a table that fits the screen. Phones keep their cards.
+- **The Payment table** uses `stickyHeader` (it fits a laptop), so its headings stick to the top of the page's scroll area from the xl width up. Checked in `tests/e2e/payroll.spec.ts` (a short window so one row overflows the box).
+
 ## Payment table: client, sorting and dollars paid (2026-11-16; owner request; migration 0145)
 
 - **Client, not alias.** `getPayments` returns `clients` (the client of each of the person's lines on the run, alphabetical and joined, "No client" when a line has none) instead of `aliases`. The Remitly list keeps its alias column.
