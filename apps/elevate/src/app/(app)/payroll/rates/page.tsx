@@ -45,7 +45,7 @@ export default async function PayrollRatesPage({ searchParams }: PageProps<"/pay
   }
   const options = can(user, "payroll.manage_rates") ? await orNotFound(getRateOptions()) : null;
   // The cutoffs the forms offer (the one being prepared first), so nobody types a start date.
-  const cutoffs = await orNotFound(getRateCutoffs());
+  const { choices: cutoffs, drafts: draftCutoffs } = await orNotFound(getRateCutoffs());
   // Doubled rates that were never paid are tidied automatically when a Preparer opens this page (see AutoTidy); this names the ones to tidy.
   const tidyKey = options ? await doubledToTidyKey(db) : "";
 
@@ -57,6 +57,7 @@ export default async function PayrollRatesPage({ searchParams }: PageProps<"/pay
         rows={rows}
         options={options}
         cutoffs={cutoffs}
+        draftCutoffs={draftCutoffs}
         tidyKey={tidyKey}
         sortLinks={sortLinks}
         endedToggle={{ showing: showEnded, href: hrefFor(sort, !showEnded) }}

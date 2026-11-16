@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cutoffChoices, reasonText, startChoicesFor } from "./rate-start";
+import { cutoffChoices, draftCutoffs, reasonText, startChoicesFor } from "./rate-start";
 
 const starts = (s: string[]) => new Set(s);
 
@@ -30,6 +30,19 @@ describe("cutoffChoices", () => {
       ["2027-03-01", "2027-03-15"],
     ]);
     expect(cutoffChoices("2027-01-03", starts(["2026-12-01", "2026-12-16", "2027-01-01"])).map((x) => x.start)).toEqual(["2027-01-16", "2027-02-01"]);
+  });
+});
+
+describe("draftCutoffs", () => {
+  it("offers only recent cutoffs whose real run is still a draft, oldest first", () => {
+    // 16 Nov: the Nov 1 run is a draft; an old Sep draft is too far back to offer.
+    const c = draftCutoffs("2026-11-16", starts(["2026-11-01", "2026-09-01"]));
+    expect(c).toEqual([{ start: "2026-11-01", end: "2026-11-15", range: "Nov 1 to 15", label: "Nov 1 to 15 (draft run: update it after)", beingPrepared: false }]);
+    expect(draftCutoffs("2026-11-16", starts(["2026-10-16", "2026-11-16"])).map((x) => x.start)).toEqual(["2026-10-16", "2026-11-16"]);
+  });
+
+  it("offers nothing when no recent run is a draft", () => {
+    expect(draftCutoffs("2026-11-16", starts([]))).toEqual([]);
   });
 });
 

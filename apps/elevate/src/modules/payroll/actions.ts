@@ -1,7 +1,8 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, ne, sql } from "drizzle-orm";
+import { shortRange } from "@/lib/short-range";
 import { revalidatePath } from "next/cache";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -82,6 +83,28 @@ const lock = (tx: Tx, key: string) => tx.execute(sql`select pg_advisory_xact_loc
 async function versionsOf(tx: Tx, lineKey: string): Promise<LineRow[]> {
   return tx.select().from(payLines).where(eq(payLines.lineKey, lineKey)).orderBy(desc(payLines.effectiveFrom), desc(payLines.createdAt));
 }
+
+/**
+ * A new version dated before the line's newest one (a correction that goes back, for example a raise that should count from the cutoff whose
+ * run is still a draft). Allowed only from the line's own first day, and only when no real run from that date on has been sent for review,
+ * approved or paid: those runs are never changed. A draft run picks the new rate up with "Fill or update this run". The runs from that date
+ * on are locked (the same row lock sending for review takes), so a run can't be sent for review while this is checked.
+ */
+async function refuseEarlierStart(tx: Tx, versions: LineRow[], effectiveFrom: string) {
+  const first = versions.reduce((min, x) => (x.effectiveFrom < min ? x.effectiveFrom : min), versions[0].effectiveFrom);
+  if (effectiveFrom < first) return fail(`This rate starts on ${first}. A new rate can't start before that.`);
+  const runs = await tx
+    .select({ start: payRuns.periodStart, end: payRuns.periodEnd, status: payRuns.status })
+    .from(payRuns)
+    .where(and(eq(payRuns.isTest, false), gte(payRuns.periodEnd, effectiveFrom)))
+    .orderBy(payRuns.periodStart)
+    .for("update");
+  const made = runs.find((r) => MADE_STATUSES.includes(r.status));
+  if (made) return fail(`The run for ${shortRange(made.start, made.end)} is already sent for review or approved, and it can't change. Pick a later cutoff, or add an adjustment in that run.`);
+  return null;
+}
+
+const MADE_STATUSES = ["in_review", "approved", "paid"];
 
 /** The person must not be separated or archived (onboarding, active, probation and on leave are all paid), and the client (when given) must not be archived. */
 async function checkPersonAndClient(tx: Tx, employeeId: string, clientId: string | null | undefined) {
@@ -191,7 +214,10 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
       const refused = await checkPersonAndClient(tx, latest.employeeId, v.clientId);
       if (refused) return refused;
       if (lineLastDay(versions) !== null) return fail("This pay line has ended. Add a new line instead.");
-      if (v.effectiveFrom < latest.effectiveFrom) return fail("The new version can't start before the current one does.");
+      if (v.effectiveFrom < latest.effectiveFrom) {
+        const refusedEarlier = await refuseEarlierStart(tx, versions, v.effectiveFrom);
+        if (refusedEarlier) return refusedEarlier;
+      }
       // Changing the client or alias must not make this line a twin of another line of the same person.
       if ((v.clientId ?? null) !== (latest.clientId ?? null) || (v.alias ?? "").trim().toLowerCase() !== (latest.alias ?? "").trim().toLowerCase()) {
         const from = versions.map((x) => x.effectiveFrom).sort()[0];
