@@ -16,13 +16,22 @@ import { loadSchedulesFor, workingWeekdaysFor } from "./schedule-service";
 
 type Person = { id: string; name: string; email: string | null; team: string | null; clients: string };
 
-async function peopleFor(ids: string[]): Promise<Map<string, Person>> {
+/** `clients` lists only the clients a person was assigned to during the period. */
+async function peopleFor(ids: string[], periodStart: string, periodEnd: string): Promise<Map<string, Person>> {
   if (ids.length === 0) return new Map();
   const rows = (await db.execute(sql`
     select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, e.work_email as email, t.name as team,
-      (select coalesce(string_agg(distinct c.name, '; '), '') from core.client_assignments a join core.clients c on c.id = a.client_id where a.employee_id = e.id) as clients
+      (select coalesce(string_agg(distinct c.name, '; '), '') from core.client_assignments a join core.clients c on c.id = a.client_id where a.employee_id = e.id and a.start_date <= ${periodEnd}::date and (a.end_date is null or a.end_date >= ${periodStart}::date)) as clients
     from core.employees e left join core.teams t on t.id = e.team_id where e.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { id: string; first: string; last: string; preferred: string | null; email: string | null; team: string | null; clients: string }[];
   return new Map(rows.map((r) => [r.id, { id: r.id, name: reportName({ first: r.first, last: r.last, preferred: r.preferred }), email: r.email, team: r.team, clients: r.clients }]));
+}
+
+/** Names of clients by id (a missing client id, time with no client, is left out). */
+async function clientNamesFor(ids: (string | null)[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((id): id is string => id !== null))];
+  if (unique.length === 0) return new Map();
+  const rows = (await db.execute(sql`select id, name from core.clients where id in (${sql.join(unique.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { id: string; name: string }[];
+  return new Map(rows.map((r) => [r.id, r.name]));
 }
 
 async function approverNames(userIds: string[]): Promise<Map<string, string>> {
@@ -42,7 +51,8 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
   const days = await attendanceRows(db, null, periodStart, periodEnd);
   const ids = [...new Set(days.map((d) => d.employeeId))];
   const approvals = await latestApprovals(db, ids, periodStart, periodEnd);
-  const people = await peopleFor(ids);
+  const people = await peopleFor(ids, periodStart, periodEnd);
+  const clientNames = await clientNamesFor(days.flatMap((d) => d.clientSplit.map((c) => c.clientId)));
   const zones = await zonesFor(db, ids);
   const schedules = await loadSchedulesFor(db, ids);
   const names = await approverNames([...approvals.values()].map((a) => a.approvedBy));
@@ -60,7 +70,7 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
   const stamp = `${periodStart}_to_${periodEnd}`;
 
   if (input.kind === "daily") {
-    const header = ["Person", "Work email", "Team", "Client(s)", "Date", "Shift", "Scheduled hours", "First in", "Last out", "Breaks (hours)", "Worked hours", "Regular hours", "Extra hours (approved)", "Extra hours (not approved)", "Late (minutes)", "Left early (minutes)", "Flags", "Approval", "Approved by", "Approved on"];
+    const header = ["Person", "Work email", "Team", "Client(s)", "Date", "Shift", "Scheduled hours", "First in", "Last out", "Breaks (hours)", "Worked hours", "Regular hours", "Extra hours (approved)", "Extra hours (not approved)", "Late (minutes)", "Left early (minutes)", "Flags", "Approval", "Approved by", "Approved on", "Hours by client"];
     const rows = included.map(({ d, state, approval }) => {
       const p = people.get(d.employeeId)!;
       const zone = resolveTimeZone(zones.get(d.employeeId));
@@ -86,6 +96,8 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
         STATE_TEXT.get(state),
         approval && state !== "none" ? (names.get(approval.approvedBy) ?? "") : "",
         approval && state !== "none" ? formatInZone(approval.approvedAt, undefined, "yyyy-MM-dd") : "",
+        // A day worked for more than one client: each client's worked hours. The extra-hours columns above stay for the whole day.
+        d.clientSplit.length > 1 ? d.clientSplit.map((c) => `${c.clientId ? (clientNames.get(c.clientId) ?? "Client") : "No client"} ${toHours(c.workedMinutes)}`).join("; ") : "",
       ];
     });
     return { fileName: `hours-daily-${stamp}.csv`, csv: toCsv(header, rows), rows: rows.length, unapprovedDays, testDays };
@@ -100,7 +112,7 @@ export async function buildHoursExport(input: { periodStart: string; periodEnd: 
     select employee_id, start_date::text as start_date, end_date::text as end_date, half_day from time.leave_requests
     where status = 'approved' and start_date <= ${periodEnd}::date and end_date >= ${periodStart}::date`)) as unknown as { employee_id: string; start_date: string; end_date: string; half_day: boolean }[];
   const leaveIds = [...new Set(leave.map((l) => l.employee_id))].filter((id) => !people.has(id));
-  const extraPeople = await peopleFor(leaveIds);
+  const extraPeople = await peopleFor(leaveIds, periodStart, periodEnd);
   for (const [id, p] of extraPeople) people.set(id, p);
 
   const rows: (string | number | null)[][] = [];

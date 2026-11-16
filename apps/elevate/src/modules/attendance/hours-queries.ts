@@ -33,6 +33,8 @@ export type ReviewDay = {
   firstIn: number | null;
   lastOut: number | null;
   state: DayState;
+  /** The day's worked and break time by client, when some of it belongs to a client (empty otherwise). */
+  clients: { clientId: string | null; name: string; workedMinutes: number; breakMinutes: number }[];
   /** The signed-in person may take this day's approval back now. */
   canReopen: boolean;
   /** The day is over in the person's own zone, so it can be approved. */
@@ -84,6 +86,10 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
   const approvals = await latestApprovals(db, ids, weekStart, weekEnd);
   const zones = await zonesFor(db, ids);
   const schedules = await loadSchedulesFor(db, ids);
+  const clientIds = [...new Set(days.flatMap((d) => d.clientSplit.map((c) => c.clientId)).filter((id): id is string => id !== null))];
+  const clientNames = new Map(
+    clientIds.length === 0 ? [] : ((await db.execute(sql`select id, name from core.clients where id in (${sql.join(clientIds.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { id: string; name: string }[]).map((c) => [c.id, c.name] as const),
+  );
   const reopenScope = scopeFor(user, "hours.reopen");
   const people = (await db.execute(sql`
     select e.id, e.user_id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team
@@ -115,6 +121,7 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
         firstIn: d.firstIn?.getTime() ?? null,
         lastOut: d.lastOut?.getTime() ?? null,
         state: dayState(d, approvals.get(approvalKey(id, d.date))),
+        clients: d.clientSplit.map((c) => ({ clientId: c.clientId, name: c.clientId ? (clientNames.get(c.clientId) ?? "Client") : "No client", workedMinutes: c.workedMinutes, breakMinutes: c.breakMinutes })),
         canReopen: canReopenDay(approvals.get(approvalKey(id, d.date))),
         finished: d.date < today,
       }));

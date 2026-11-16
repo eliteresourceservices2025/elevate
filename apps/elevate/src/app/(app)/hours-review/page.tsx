@@ -17,6 +17,7 @@ const sampleDays = (flagsByDate: Record<string, string[]> = {}, approved = false
     weekday: ["Mon", "Tue", "Wed", "Thu", "Fri"][index],
     scheduledMinutes: 480,
     hasSchedule: true,
+    clients: [],
     canReopen: false,
     workedMinutes: index === 2 ? 485 : 480,
     breakMinutes: 30,

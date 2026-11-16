@@ -60,7 +60,7 @@ export async function approvePersonWeek(actor: Actor, employeeId: string, weekSt
     const todo = rows.filter((r) => dayState(r, current.get(approvalKey(r.employeeId, r.date))) !== "approved");
     if (todo.length === 0) return { approved: 0, skipped: null };
     await tx.insert(hoursApprovals).values(
-      todo.map((r) => ({ employeeId, date: r.date, scheduledMinutes: r.scheduledMinutes, workedMinutes: r.workedMinutes, breakMinutes: r.breakMinutes, extraMinutes: r.extraMinutes, approvedExtraMinutes: r.approvedExtraMinutes, approvedBy: actor.id, note: note ?? null })),
+      todo.map((r) => ({ employeeId, date: r.date, scheduledMinutes: r.scheduledMinutes, workedMinutes: r.workedMinutes, breakMinutes: r.breakMinutes, extraMinutes: r.extraMinutes, approvedExtraMinutes: r.approvedExtraMinutes, clientSplit: r.clientSplit, approvedBy: actor.id, note: note ?? null })),
     );
     await writeAudit({ actor: actor as never, action: "hours.approve", targetType: "employee", targetId: employeeId, after: { weekStart, days: todo.length, workedMinutes: todo.reduce((n, r) => n + r.workedMinutes, 0), extraMinutes: todo.reduce((n, r) => n + r.extraMinutes, 0), approvedExtraMinutes: todo.reduce((n, r) => n + r.approvedExtraMinutes, 0) }, metadata: { note: note ?? null } }, tx);
     if (person.userId) await notify(tx, { userId: person.userId, kind: "hours.approved", title: "Your hours were approved", body: `Week of ${weekStart}: ${todo.length} ${todo.length === 1 ? "day" : "days"}.${note ? ` ${note}` : ""}`, link: "/attendance" });

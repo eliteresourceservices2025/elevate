@@ -20,7 +20,7 @@ const TYPES = [
   { key: "break_end", label: "Break end" },
   { key: "clock_out", label: "Clock out" },
 ] as const;
-const TYPE_LABEL = new Map<string, string>(TYPES.map((t) => [t.key, t.label]));
+const TYPE_LABEL = new Map<string, string>([...TYPES.map((t) => [t.key, t.label] as const), ["switch_client", "Switch client"]]);
 const MAX_CHANGES = 6;
 
 type Add = { type: (typeof TYPES)[number]["key"]; at: string };
