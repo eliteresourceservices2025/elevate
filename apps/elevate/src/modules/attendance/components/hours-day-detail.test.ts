@@ -15,6 +15,7 @@ const day = (over: Partial<ReviewDay>): ReviewDay => ({
   weekday: "Wed",
   scheduledMinutes: null,
   hasSchedule: false,
+  clients: [],
   workedMinutes: 480,
   breakMinutes: 30,
   extraMinutes: 0,

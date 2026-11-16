@@ -231,7 +231,10 @@ export function DayList({ row, canMarkTest, previewMode, label }: { row: ReviewR
                 <span className="block font-medium">
                   {d.weekday}, {formatDateOnly(d.date)}
                 </span>
-                <span className="block text-muted-foreground">{d.scheduledMinutes !== null ? `Scheduled ${hours(d.scheduledMinutes)}` : d.hasSchedule ? "Rest day" : "No schedule"}</span>
+                <span className="block text-muted-foreground">
+                  {d.scheduledMinutes !== null ? `Scheduled ${hours(d.scheduledMinutes)}` : d.hasSchedule ? "Rest day" : "No schedule"}
+                  {d.clients.length === 1 ? ` · ${d.clients[0].name}` : ""}
+                </span>
               </span>
               <span>
                 <span className="text-muted-foreground md:hidden">In to out: </span>
@@ -255,6 +258,20 @@ export function DayList({ row, canMarkTest, previewMode, label }: { row: ReviewR
                 <ApprovalState day={d} />
               </span>
               <span className="justify-self-end">{previewMode ? null : <DayActions row={row} day={d} canMarkTest={canMarkTest} />}</span>
+              {/* A day worked for more than one client: a line for each client, so the hours can be checked client by client. */}
+              {d.clients.length > 1 ? (
+                <ul className="col-span-full mt-1 space-y-0.5 border-l-2 border-primary/30 pl-3" aria-label={`Hours by client on ${formatDateOnly(d.date)}`}>
+                  {d.clients.map((c) => (
+                    <li key={c.clientId ?? "none"} className="flex flex-wrap items-baseline gap-x-4">
+                      <span className="min-w-40 font-medium">{c.name}</span>
+                      <span>
+                        Worked <span className="font-medium">{hours(c.workedMinutes)}</span>
+                      </span>
+                      <span className="text-muted-foreground">Break {hours(c.breakMinutes)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </li>
           );
         })}

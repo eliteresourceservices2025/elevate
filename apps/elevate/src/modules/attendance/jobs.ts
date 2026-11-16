@@ -1,12 +1,12 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { formatInZone } from "@/lib/time";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { MAX_OPEN_SESSION_MS, QUIET_AFTER_MS, buildDays, hasLongSession } from "./clock";
-import { attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices, quietNotices } from "./schema";
+import { attendanceDayClients, attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices, quietNotices } from "./schema";
 import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
 import { EXTRA_THRESHOLD_MINUTES, addDays, earlyLeaveMinutes, extraMinutes, hasScheduleAround, lateMinutes, shiftOn } from "./schedule";
 import { loadSchedules, loadSchedulesFor } from "./schedule-service";
@@ -206,7 +206,14 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         flags,
         builtAt: new Date(),
       };
-      await db.insert(attendanceDays).values({ employeeId, date: d.date, ...values }).onConflictDoUpdate({ target: [attendanceDays.employeeId, attendanceDays.date], set: values });
+      await db.transaction(async (tx) => {
+        await tx.insert(attendanceDays).values({ employeeId, date: d.date, ...values }).onConflictDoUpdate({ target: [attendanceDays.employeeId, attendanceDays.date], set: values });
+        // The day's time by client (rebuilt with the day; only days with time that belongs to a client have rows).
+        await tx.delete(attendanceDayClients).where(and(eq(attendanceDayClients.employeeId, employeeId), eq(attendanceDayClients.date, d.date)));
+        if (d.clients.length > 0) {
+          await tx.insert(attendanceDayClients).values(d.clients.map((c) => ({ employeeId, date: d.date, clientId: c.clientId, workedMinutes: c.workedMinutes, breakMinutes: c.breakMinutes })));
+        }
+      });
       written += 1;
     }
   }
@@ -326,7 +333,7 @@ export async function runQuietSessionAlerts(now = new Date()): Promise<{ noticed
     ) s
     join core.employees e on e.id = s.employee_id
     left join time.clock_presence p on p.employee_id = s.employee_id
-    where s.last_type in ('clock_in', 'break_end') and s.event_id is not null
+    where s.last_type in ('clock_in', 'break_end', 'switch_client') and s.event_id is not null
       and greatest(s.last_event, coalesce(p.last_seen_at, s.last_event)) < ${cutoff.toISOString()}::timestamptz
       and not exists (select 1 from time.quiet_notices n where n.event_id = s.event_id)`)) as unknown as {
     employee_id: string; event_id: string; user_id: string | null; first: string; last: string; preferred: string | null;

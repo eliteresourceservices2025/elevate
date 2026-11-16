@@ -34,6 +34,8 @@ Open **Review daily detail** on a row to see each day: when they clocked in and 
 - **Check** (amber): look at it first. The number says how many things.
 - **OK**: nothing to look at.
 
+A day worked for more than one client shows a line for each client under it, with the hours worked and the break for that client. They add up to the day.
+
 Click the status to read, in plain words, what each flag means. The **...** button at the end of a day has the actions for it: **Fix clock-out**, **Reopen this day** and **Mark as test**.
 
 # Approve

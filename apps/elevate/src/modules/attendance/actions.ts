@@ -52,7 +52,7 @@ function refresh() {
 
 // --- The clock -----------------------------------------------------------------------------------
 
-async function clock(type: "clock_in" | "break_start" | "break_end" | "clock_out", input: unknown): Promise<ActionResult<ClockResult>> {
+async function clock(type: "clock_in" | "break_start" | "break_end" | "clock_out" | "switch_client", input: unknown): Promise<ActionResult<ClockResult>> {
   const actor = await requireUser();
   return runAction(async () => {
     await authorize(actor, "attendance.clock", { ownerUserId: actor.id });
@@ -77,6 +77,11 @@ export async function startBreak(input?: unknown): Promise<ActionResult<ClockRes
 export async function endBreak(): Promise<ActionResult<ClockResult>> {
   await requireUser();
   return clock("break_end", {});
+}
+/** Moves the rest of the session to another client, without clocking out. Only while working (not on a break). */
+export async function switchClient(input: unknown): Promise<ActionResult<ClockResult>> {
+  await requireUser();
+  return clock("switch_client", input ?? {});
 }
 export async function clockOut(): Promise<ActionResult<ClockResult>> {
   await requireUser();
