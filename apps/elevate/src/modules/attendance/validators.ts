@@ -103,6 +103,11 @@ export const assignScheduleSchema = z.object({
   zone: z.preprocess(blankToUndefined, z.string().refine(isValidTimeZone, "Choose a valid time zone").optional()),
 });
 export const endScheduleSchema = z.object({ employeeId: uuid, endDate: ymd });
+/** HR ends the current schedule of many people on the same date (for example imported schedules that should not have been set). */
+export const endSchedulesSchema = z.object({
+  employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),
+  endDate: ymd,
+});
 /** HR fixes a recent schedule in place (a mistake), with a reason. Dates are not changed here. */
 export const correctScheduleSchema = z.object({
   employeeId: uuid,

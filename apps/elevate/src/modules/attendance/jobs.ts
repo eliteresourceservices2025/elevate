@@ -10,7 +10,7 @@ import { attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices
 import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
 import { EXTRA_THRESHOLD_MINUTES, addDays, earlyLeaveMinutes, extraMinutes, hasScheduleAround, lateMinutes, shiftOn } from "./schedule";
 import { loadSchedules, loadSchedulesFor } from "./schedule-service";
-import { approvedExtra, effectiveEndMs, grantedByDate } from "./extra-hours";
+import { approvedExtra, effectiveEndMs, grantedByDate, minutesInWindows } from "./extra-hours";
 import { approvedWindows } from "./extra-hours-service";
 import { historicalHolidayDatesFor } from "@/modules/timeoff/service";
 import { approvalKey, attendanceRows, dayState, latestApprovals } from "./hours-service";
@@ -128,7 +128,8 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
     const days = buildDays(events, prefs.zone).filter((d) => d.date >= earliest && d.date <= today);
     const schedules = await loadSchedules(db, employeeId);
     const holidays = await historicalHolidayDatesFor(db, employeeId, earliest, today);
-    const granted = grantedByDate(await approvedWindows(db, employeeId, eventFromMs, eventToMs + DAY_MS), prefs.zone);
+    const approved = await approvedWindows(db, employeeId, eventFromMs, eventToMs + DAY_MS);
+    const granted = grantedByDate(approved, prefs.zone);
 
     for (const d of days) {
       const end = d.lastOut ?? (normalDaysBack === undefined ? eventToMs : now.getTime());
@@ -164,9 +165,12 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
       const holiday = holidays.has(d.date);
       const late = shift && !holiday ? lateMinutes(d.firstIn, shift, rules.lateGraceMinutes) : 0;
       const early = shift && !holiday && d.lastOut !== null && !d.open ? earlyLeaveMinutes(d.lastOut, shift, rules.lateGraceMinutes) : 0;
-      const extra = extraMinutes({ workedMinutes: d.workedMinutes, breakMinutes: d.breakMinutes, shift, hasSchedule, holiday });
+      // A person with no schedule has no regular hours to measure against, so only time worked INSIDE an approved extra-hours window
+      // is extra (and it is approved by definition). Everything else is plain worked time, with nothing flagged.
+      const inWindows = hasSchedule ? 0 : minutesInWindows(d.sessionList, approved);
+      const extra = hasSchedule ? extraMinutes({ workedMinutes: d.workedMinutes, breakMinutes: d.breakMinutes, shift, hasSchedule, holiday }) : inWindows >= EXTRA_THRESHOLD_MINUTES ? inWindows : 0;
       // What approved extra hours requests cover, and what is left over (unapproved).
-      const split = approvedExtra(extra, granted.get(d.date) ?? 0);
+      const split = hasSchedule ? approvedExtra(extra, granted.get(d.date) ?? 0) : { approved: extra, unapproved: 0 };
 
       const flags = [
         d.open ? "open_session" : null,

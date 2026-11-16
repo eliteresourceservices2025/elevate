@@ -16,7 +16,7 @@ import { schedules } from "./schema";
 import { defaultScheduleZone, loadSchedules } from "./schedule-service";
 import { lockEmployeeClock } from "./service";
 import { rebuildAttendanceDays } from "./jobs";
-import { assignScheduleSchema, correctScheduleSchema, endScheduleSchema } from "./validators";
+import { assignScheduleSchema, correctScheduleSchema, endScheduleSchema, endSchedulesSchema } from "./validators";
 
 // HR (and Super Admin) set shifts. Leads and people read them. Every change is a dated row; the past is never edited.
 
@@ -145,6 +145,68 @@ export async function correctSchedule(input: unknown): Promise<ActionResult<{ co
     }
     refresh();
     return { ok: true, data: { corrected, joined } };
+  });
+}
+
+/** How many people are rebuilt at the same time after a bulk change (the database limiter keeps the total in check). */
+const REBUILD_PARALLEL = 4;
+
+/**
+ * Ends the current schedule of one or many people on the same date (inclusive: they are still scheduled that day). People with no
+ * schedule in force that day are skipped and counted. All or nothing for real problems: someone who was not found, or whose next
+ * schedule only starts after the end date. Nothing is deleted; the history stays. Their days are then rebuilt, so late, absence and
+ * extra-hours flags after that date go away.
+ */
+export async function endSchedules(input: unknown): Promise<ActionResult<{ ended: number; skipped: number }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "schedules.manage");
+    const parsed = endSchedulesSchema.safeParse(input);
+    if (!parsed.success) return fail(first(parsed.error));
+    const { endDate } = parsed.data;
+    const ids = [...new Set(parsed.data.employeeIds)];
+    if (endDate < addDays(todayInZone(), -MAX_BACKDATE_DAYS)) return fail(`A schedule cannot end more than ${MAX_BACKDATE_DAYS} days ago.`);
+
+    const endedIds: string[] = [];
+    await db.transaction(async (tx) => {
+      for (const employeeId of ids) {
+        const [person] = await tx
+          .select({ userId: employees.userId, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
+          .from(employees)
+          .where(and(eq(employees.id, employeeId), isNull(employees.archivedAt), sql`${employees.status} <> 'separated'`));
+        if (!person) throw new ActionFailure("One of those people was not found.");
+        const name = reportName({ first: person.first, last: person.last, preferred: person.preferred });
+
+        await lockEmployeeClock(tx, employeeId);
+        const existing = await loadSchedules(tx, employeeId);
+        const inForce = existing.find((s) => s.effectiveFrom <= endDate && (s.effectiveTo === null || s.effectiveTo >= endDate));
+        const later = existing.find((s) => s.effectiveFrom > endDate);
+        if (later) throw new ActionFailure(`${name} has a schedule that starts ${formatDateOnly(later.effectiveFrom)}, after that date. Choose a later end date.`);
+        if (!inForce) continue;
+        if (inForce.effectiveTo === endDate) continue; // already ends that day
+
+        await tx.update(schedules).set({ effectiveTo: endDate }).where(eq(schedules.id, inForce.id));
+        await writeAudit({ actor, action: "schedule.end", targetType: "employee", targetId: employeeId, before: { effectiveTo: inForce.effectiveTo }, after: { effectiveTo: endDate }, metadata: { bulk: ids.length } }, tx);
+        if (person.userId) {
+          await notify(tx, {
+            userId: person.userId,
+            kind: "schedule.assigned",
+            title: "Your schedule ended",
+            body: `Your schedule ends after ${formatDateOnly(endDate)}. ELEVATE will no longer use it for attendance flags after that date.`,
+            link: "/schedules",
+          });
+        }
+        endedIds.push(employeeId);
+      }
+    });
+
+    // The saved change stands even if a refresh fails: the nightly job rebuilds recent days again.
+    const days = Math.min(14, Math.max(1, Math.round((Date.parse(`${todayInZone()}T00:00:00Z`) - Date.parse(`${endDate}T00:00:00Z`)) / 86_400_000) + 1));
+    for (let i = 0; i < endedIds.length; i += REBUILD_PARALLEL) {
+      await Promise.all(endedIds.slice(i, i + REBUILD_PARALLEL).map((id) => rebuildAttendanceDays(new Date(), days, id).catch(() => undefined)));
+    }
+    refresh();
+    return { ok: true, data: { ended: endedIds.length, skipped: ids.length - endedIds.length } };
   });
 }
 
