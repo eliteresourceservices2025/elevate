@@ -132,8 +132,11 @@ const amountsOf = (v: { monthly: string; otRegular?: number | null; otRestDay?: 
 /**
  * A second pay line for the same person, client and alias whose dates overlap the new one would pay the person twice for the same cutoff
  * (each line pays a full cutoff). Refused with a plain way out. Different aliases, different clients and lines that do not overlap are fine.
+ * `staggered` (a change to a line that already exists): lines for the same job that start on different days are fine too, because a run takes
+ * the newer one over from its first day and cuts the older one off the day before (`applySupersede`), so they never both pay for a day.
+ * Only two lines that start on the very same day are refused (nothing says which is right).
  */
-async function refuseDuplicateLine(tx: Tx, v: { employeeId: string; clientId: string | null; alias: string | null; from: string; to: string | null; exceptLineKey?: string }) {
+async function refuseDuplicateLine(tx: Tx, v: { employeeId: string; clientId: string | null; alias: string | null; from: string; to: string | null; exceptLineKey?: string; staggered?: boolean }) {
   const rows = await tx.select().from(payLines).where(eq(payLines.employeeId, v.employeeId));
   const byKey = new Map<string, (typeof rows)[number][]>();
   for (const r of rows) byKey.set(r.lineKey, [...(byKey.get(r.lineKey) ?? []), r]);
@@ -143,6 +146,7 @@ async function refuseDuplicateLine(tx: Tx, v: { employeeId: string; clientId: st
     if (!sameJob({ employeeId: v.employeeId, clientId: newest.clientId ?? null, alias: newest.alias ?? null }, { employeeId: v.employeeId, clientId: v.clientId, alias: v.alias })) continue;
     const start = group.map((g) => g.effectiveFrom).sort()[0];
     const end = lineLastDay(group);
+    if (v.staggered && start !== v.from) continue;
     if (start <= (v.to ?? "9999-12-31") && v.from <= (end ?? "9999-12-31")) {
       return fail(
         `This person already has a pay line for the same job (same alias, and the same client or none) from ${start}${end ? ` to ${end}` : ""}. A second one for the same dates would pay them twice. Change that line instead (the change keeps its history), or end it before this one starts. To pay them for two roles, give each line its own alias.`,
@@ -222,8 +226,9 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
       }
       // Changing the client or alias must not make this line a twin of another line of the same person.
       if ((v.clientId ?? null) !== (latest.clientId ?? null) || (v.alias ?? "").trim().toLowerCase() !== (latest.alias ?? "").trim().toLowerCase()) {
-        const from = versions.map((x) => x.effectiveFrom).sort()[0];
-        const twin = await refuseDuplicateLine(tx, { employeeId: latest.employeeId, clientId: v.clientId ?? null, alias: v.alias ?? null, from, to: v.endsOn ?? null, exceptLineKey: lineKey });
+        // The line's first day, or the earlier day a correction moves it back to.
+        const from = [...versions.map((x) => x.effectiveFrom), v.effectiveFrom].sort()[0];
+        const twin = await refuseDuplicateLine(tx, { employeeId: latest.employeeId, clientId: v.clientId ?? null, alias: v.alias ?? null, from, to: v.endsOn ?? null, exceptLineKey: lineKey, staggered: true });
         if (twin) return twin;
       }
 
