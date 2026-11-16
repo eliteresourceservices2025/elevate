@@ -20,7 +20,7 @@ A Team Lead sees their own team. HR sees everyone.
 
 # Read a person's week
 
-Each row shows the person's **Scheduled** time, **Worked** time, **Extra** time and any **Flags**. The status tells you where it stands:
+Each row shows the person's **Scheduled** time, **Worked** time and **Extra** time. **Review status** counts the days that need you: **2 days to fix** (red), **1 day to check** (amber), or **Ready**. The status tells you where the week stands:
 
 - **Not approved**
 - **Partly approved**
@@ -28,7 +28,13 @@ Each row shows the person's **Scheduled** time, **Worked** time, **Extra** time 
 - **Changed after approval** means a correction changed a day after it was approved. Approve it again.
 - **Nothing to approve yet**
 
-Open **Days** on a row to see each day.
+Open **Review daily detail** on a row to see each day: when they clocked in and out, hours worked, break, extra time, and one status:
+
+- **Fix needed** (red): the hours are probably wrong, or the day cannot be approved yet. For example a very long session.
+- **Check** (amber): look at it first. The number says how many things.
+- **OK**: nothing to look at.
+
+Click the status to read, in plain words, what each flag means. The **...** button at the end of a day has the actions for it: **Fix clock-out**, **Reopen this day** and **Mark as test**.
 
 # Approve
 
@@ -39,7 +45,7 @@ You approve only the days that have finished. A day still running (**Day not ove
 
 # Take an approval back
 
-If a week was approved by mistake, or the hours changed, open **Days** on the person's row and click **Reopen** on a day, or click **Reopen week**. Write why (at least 5 characters). The days show **Not approved** again and leave the payroll export until you approve them again. Nothing is deleted: the reason stays in the history, and the person is told.
+If a week was approved by mistake, or the hours changed, open the daily detail on the person's row and use **...** > **Reopen this day** on a day, or click **Reopen week**. Write why (at least 5 characters). The days show **Not approved** again and leave the payroll export until you approve them again. Nothing is deleted: the reason stays in the history, and the person is told.
 
 - HR can reopen any approval. A lead can reopen only the approvals they gave, within 7 days.
 - You cannot reopen your own hours.
@@ -47,7 +53,7 @@ If a week was approved by mistake, or the hours changed, open **Days** on the pe
 
 # Very long sessions
 
-A session longer than 12 hours is flagged **Very long session (check the clock-out)**. It is almost always a forgotten clock-out. The week cannot be approved until it is fixed. Open **Days** on the row and click **Fix clock-out**: it opens **Change someone's time** on that day, where you remove the wrong clock-out and add the real one, with a reason. HR saves the change at once. A lead's change goes to HR to approve. Once the change is saved, approve the week.
+A session longer than 12 hours is flagged **Very long session (check the clock-out)**. It is almost always a forgotten clock-out. The week cannot be approved until it is fixed. Open the daily detail on the row and use **...** > **Fix clock-out**: it opens **Change someone's time** on that day, where you remove the wrong clock-out and add the real one, with a reason. HR saves the change at once. A lead's change goes to HR to approve. Once the change is saved, approve the week.
 
 A day with no schedule shows **No schedule**. **Rest day** means the person has a schedule but no shift that day.
 
