@@ -20,6 +20,7 @@ const line = (over: Partial<CheckLine> = {}): CheckLine => ({
   pendingSuggestions: 0,
   clientHoursMissing: false,
   duplicateLine: false,
+  fteNotSet: false,
   confirmedBy: null,
   ...over,
 });
@@ -29,6 +30,7 @@ const input = (lines: CheckLine[], over: Partial<ChecksInput> = {}): ChecksInput
   submitter: { userId: ME, employeeId: EMP_ME },
   changeWarnBp: 1000,
   linesOutOfDate: false,
+  perFteWithoutTotal: false,
   ...over,
 });
 const codes = (r: { code: string }[]) => r.map((c) => c.code);
@@ -85,6 +87,18 @@ describe("runChecks", () => {
     expect(codes(r.warnings).sort()).toEqual(
       ["new_or_leaving", "new_or_leaving", "new_or_leaving", "no_payout_details", "pending_suggestions", "rate_change_mid_period", "unapproved_days"].sort(),
     );
+  });
+
+  it("warns, without blocking, about a contractor line with no FTE count when the run has internal-team lines paid per FTE", () => {
+    const r = runChecks(input([line({ fteNotSet: true }), line({ runLineId: "r2", employeeId: "e2" })]));
+    expect(r.blocking).toEqual([]);
+    expect(r.warnings).toEqual([{ code: "fte_not_set", employeeId: "e1", runLineId: "r1", name: "Maria Testcruz" }]);
+  });
+
+  it("warns, without blocking, once for the run when lines are paid per FTE but the total FTE is 0", () => {
+    const r = runChecks(input([line()], { perFteWithoutTotal: true }));
+    expect(r.blocking).toEqual([]);
+    expect(r.warnings).toEqual([{ code: "per_fte_without_total", employeeId: null, runLineId: null, name: "This run" }]);
   });
 
   it("notes a line that has a client but no client payroll hours, without blocking", () => {

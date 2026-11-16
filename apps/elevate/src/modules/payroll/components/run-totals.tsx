@@ -12,10 +12,11 @@ export function RunTotals({ sheet }: { sheet: Worksheet }) {
       <h2 id="run-totals" className="text-lg font-semibold">
         {L.totals}
       </h2>
-      <dl className="grid gap-3 sm:grid-cols-2">
+      <dl className="grid gap-3 sm:grid-cols-3">
         {[
           [L.grossTotal, t.gross],
           [L.netTotal, t.net],
+          [L.fteTotal, t.fte],
         ].map(([label, value]) => (
           <div key={label} className="rounded-xl border bg-card p-3">
             <dt className="text-xs text-muted-foreground">{label}</dt>

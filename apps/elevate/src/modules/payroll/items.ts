@@ -1,11 +1,12 @@
 import { EXTRA_KEYS, type ItemLine, type LineInput } from "./calculate";
 import { EXTRA_KEY_ITEM, ITEMIZED_TYPES, type ItemizedType, type PayItemType } from "./constants";
+import { FTE_MAX_HUNDREDTHS, formatFte, parseFte } from "./fte";
 import { formatPesos, parseMoney } from "./money";
 
 // Run items: what a Preparer types for one pay line in one run, and how those values become calculator input. Pure.
 // The calculator has no input guards, so every value is checked here: whole minutes, day hundredths and non-negative money only.
 
-type Unit = "minutes" | "days" | "hours" | "money";
+type Unit = "minutes" | "days" | "hours" | "money" | "fte";
 
 const UNIT: Record<PayItemType, Unit> = {
   absence_days: "days",
@@ -26,6 +27,7 @@ const UNIT: Record<PayItemType, Unit> = {
   loan: "money",
   other_deduction: "money",
   client_hours: "hours",
+  fte: "fte",
 };
 
 const MAX_MINUTES = 44_640n; // 31 days
@@ -62,6 +64,7 @@ export const ITEM_UNIT_HINTS: Record<Unit, string> = {
   days: "Days, like 1 or 0.5.",
   hours: "Hours, like 86 or 86.5.",
   money: "An amount like 1,250.50.",
+  fte: "1, 0.5 or 0. It counts toward this run's total FTE, instead of the FTE saved with the rate.",
 };
 
 /** A typed value in the item's smallest unit (minutes, hundredths of a day or hour, centavos or cents), or null when it isn't clearly valid. */
@@ -83,6 +86,11 @@ export function parseItemValue(type: PayItemType, raw: string): bigint | null {
       const n = parseMoney(text);
       return n !== null && n > 0n ? n : null;
     }
+    case "fte": {
+      // The only item that may be 0: "does not count for this run".
+      const n = parseFte(text);
+      return n !== null && n <= FTE_MAX_HUNDREDTHS ? BigInt(n) : null;
+    }
   }
 }
 
@@ -98,6 +106,8 @@ export function formatItemValue(type: PayItemType, value: bigint): string {
       if (cents === 0n) return whole.toString();
       return `${whole}.${cents.toString().padStart(2, "0").replace(/0$/, "")}`;
     }
+    case "fte":
+      return formatFte(value);
     default:
       return formatPesos(value);
   }

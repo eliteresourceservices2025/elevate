@@ -21,6 +21,7 @@ import { joinAliases, personName } from "./remitly";
 import { logChange } from "./changes";
 import { payLines, payRunLines, payRuns, paySettings } from "./schema";
 import { decryptReference, latestPayments } from "./payments";
+import { formatFte } from "./fte";
 import { decryptLineAmounts, employeeIdForUser, payrollToday, snapshotOf } from "./service";
 
 const today = payrollToday;
@@ -58,8 +59,12 @@ export type RateRow = {
   onRealRun: boolean;
   /** The line's last day has already passed: it is only listed when ended lines are asked for, and it can still be part of a run for an earlier period. */
   ended: boolean;
-  /** Pesos, "31,415.92". */
+  /** Pesos, "31,415.92": the monthly rate, or for a per-FTE (internal team) rate the amount per FTE per cutoff (see `basis`). */
   monthly: string;
+  /** How the person is paid: a monthly rate, or an amount per FTE (internal team). */
+  basis: "monthly" | "per_fte";
+  /** The line's default FTE count as people read it ("1", "0.5", "0"), or null when not set. Always null for a per-FTE rate. */
+  fte: string | null;
   /** The monthly rate as whole centavos in text, for sorting; null when it can't be read. */
   monthlyCentavos: string | null;
   /** This person's own overtime percents as typed ("125"); blank means the company standard from Settings applies. */
@@ -152,8 +157,10 @@ export async function getRates(options: { includeEnded?: boolean } = {}): Promis
       upcomingFrom: upcoming ?? null,
       ended: lastDay !== null && lastDay < day,
       onRealRun: usedOnRealRun.has(version.lineKey),
-      monthly: amounts ? formatPesos(amounts.monthlyCentavos) : UNREADABLE,
-      monthlyCentavos: amounts ? amounts.monthlyCentavos.toString() : null,
+      monthly: amounts ? formatPesos(amounts.perFteCentavos ?? amounts.monthlyCentavos) : UNREADABLE,
+      monthlyCentavos: amounts ? (amounts.perFteCentavos ?? amounts.monthlyCentavos).toString() : null,
+      basis: amounts?.perFteCentavos !== undefined ? "per_fte" : "monthly",
+      fte: amounts && amounts.perFteCentavos === undefined && amounts.fteHundredths !== undefined ? formatFte(amounts.fteHundredths) : null,
       otPercent: {
         regular: otText(amounts?.otBp?.regular),
         restDay: otText(amounts?.otBp?.restDay),
@@ -169,7 +176,7 @@ export async function getRates(options: { includeEnded?: boolean } = {}): Promis
       actor,
       action: "sensitive.view",
       targetType: "pay_lines",
-      metadata: { fields: ["monthly rate", "allowances"], count: shown },
+      metadata: { fields: ["monthly rate", "FTE", "amount per FTE", "allowances"], count: shown },
     });
   }
   return out;

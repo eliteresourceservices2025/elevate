@@ -226,3 +226,37 @@ describe("payslipView", () => {
     expect(payslipView(slip([lineOf(null)], { paidOn: null })).paidOn).toBeNull();
   });
 });
+
+describe("FTE on a statement: only the internal team's per-FTE line", () => {
+  // 28 FTE x 1,500.00 = 42,000.00 for the cutoff, so the calculator is given 84,000.00 as the monthly figure.
+  const perFteLine = (alias: string | null = null) => {
+    const input = { ...baseInput, monthlyCentavos: 8_400_000n };
+    return { alias, clientName: null, input, result: calculateLine(input, settings), perFte: { totalFteHundredths: 2800, amountCentavos: 150_000n } };
+  };
+
+  it("says how a per-FTE line was worked out, on the base pay row and in place of the monthly rate", () => {
+    const view = payslipView(slip([perFteLine()]));
+    const line = view.lines[0];
+    expect(row(line.compensation, "Base pay for the period")).toMatchObject({ detail: "28 FTE × 1,500.00", amount: "42,000.00" });
+    expect(line.computation.map((r) => [r.label, r.amount])).toEqual([
+      ["Amount per FTE (per cutoff)", "1,500.00"],
+      ["Total FTE", "28"],
+      ["Daily rate", "3,818.18"],
+      ["Hourly rate", "477.27"],
+      ["Hours per day", "8"],
+    ]);
+    expect(line.net).toBe("42,000.00");
+  });
+
+  it("writes nothing about FTE on a contractor's statement, whatever the run's total is", () => {
+    const view = payslipView(slip([lineOf("Front desk", {}, "Testclinic"), lineOf("Billing", { absenceDayHundredths: 100 }, "Testclinic")]));
+    expect(everything(view)).not.toMatch(/bFTEb/i);
+    expect(view.lines[0].computation.map((r) => r.label)).toContain("Monthly rate");
+  });
+
+  it("shows FTE only on the internal-team line of a person who also has a contractor line", () => {
+    const view = payslipView(slip([lineOf("Front desk", {}, "Testclinic"), perFteLine("Internal team")]));
+    expect(JSON.stringify(view.lines[0])).not.toMatch(/bFTEb/i);
+    expect(JSON.stringify(view.lines[1])).toMatch(/28 FTE/);
+  });
+});

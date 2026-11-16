@@ -24,6 +24,8 @@ export type CheckLine = {
   clientHoursMissing: boolean;
   /** Another live line of the same person on this run has the same client and alias: each pays a full cutoff, so the person is paid twice. */
   duplicateLine: boolean;
+  /** The run has internal-team lines paid per FTE and this contractor line has no FTE count (it counts as 0). */
+  fteNotSet: boolean;
   confirmedBy: string | null;
 };
 
@@ -35,6 +37,8 @@ export type ChecksInput = {
   changeWarnBp: number;
   /** The pay lines now in force for the period differ from the lines this run was built with. */
   linesOutOfDate: boolean;
+  /** The run has lines paid per FTE but its total FTE is 0, so they pay nothing. */
+  perFteWithoutTotal: boolean;
 };
 
 const BLOCKING: ReadonlySet<string> = new Set(BLOCKING_CHECKS);
@@ -77,7 +81,9 @@ export function runChecks(input: ChecksInput): { blocking: RunCheck[]; warnings:
     if (l.pendingSuggestions > 0) add(l, "pending_suggestions", String(l.pendingSuggestions));
     if (l.clientHoursMissing) add(l, "no_client_hours");
     if (l.duplicateLine) add(l, "duplicate_pay_line");
+    if (l.fteNotSet) add(l, "fte_not_set");
   }
+  if (input.perFteWithoutTotal) found.push({ code: "per_fte_without_total", employeeId: null, runLineId: null, name: "This run" });
   if (input.linesOutOfDate) found.push({ code: "lines_out_of_date", employeeId: null, runLineId: null, name: "This run" });
   for (const u of input.unassigned) {
     found.push({ code: "unassigned_suggestion", employeeId: u.employeeId, runLineId: null, name: u.name, detail: String(u.count) });

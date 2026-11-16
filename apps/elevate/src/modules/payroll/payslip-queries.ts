@@ -185,7 +185,15 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
     paymentMethods: lines.map((l) => l.paymentMethod),
     multipliersBp: (run.settingsSnapshot as SettingsSnapshot | null)?.multipliersBp ?? null,
     signatory: shownSignatory,
-    lines: decrypted.map((l) => ({ alias: l.alias, clientName: l.clientName, multipliersBp: l.payload!.rate.otBp ?? null, input: l.payload!.input, result: l.payload!.result })),
+    lines: decrypted.map((l) => ({
+      alias: l.alias,
+      clientName: l.clientName,
+      multipliersBp: l.payload!.rate.otBp ?? null,
+      input: l.payload!.input,
+      result: l.payload!.result,
+      // Only an internal-team line paid per FTE says how it was worked out; a contractor's payload has no perFte, so nothing FTE-related reaches their statement.
+      ...(l.payload!.perFte ? { perFte: { totalFteHundredths: l.payload!.perFte.totalFteHundredths, amountCentavos: l.payload!.rate.perFteCentavos ?? 0n } } : {}),
+    })),
     isTest: run.isTest,
     preparedBy: preparerId ? names.get(preparerId) ?? null : null,
     authorizedBy: approval ? names.get(approval.decidedBy) ?? null : null,

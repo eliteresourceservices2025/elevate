@@ -120,7 +120,7 @@ function ItemForm({ runId, line, correctableRuns, initialType }: { runId: string
         <div className="space-y-1">
           <HintedLabel htmlFor={`item-type-${line.runLineId}`} hint={PAYROLL_HINTS.itemType}>What to enter</HintedLabel>
           <NativeSelect id={`item-type-${line.runLineId}`} value={type} onChange={(e) => setType(e.target.value as PayItemType)}>
-            {PAY_ITEM_TYPES.map((t) => (
+            {PAY_ITEM_TYPES.filter((t) => !(t === "fte" && line.perFte)).map((t) => (
               <option key={t} value={t}>
                 {PAY_ITEM_LABELS[t]}
               </option>
@@ -150,7 +150,8 @@ function ItemForm({ runId, line, correctableRuns, initialType }: { runId: string
               </NativeSelect>
             ) : null}
           </div>
-          <p className="text-xs text-muted-foreground">{ITEM_UNIT_HINTS[itemUnit(type)]} A reduction is entered as a loan or other deduction, never as a negative amount.</p>
+          <p className="text-xs text-muted-foreground">{ITEM_UNIT_HINTS[itemUnit(type)]}
+            {itemUnit(type) === "fte" ? "" : " A reduction is entered as a loan or other deduction, never as a negative amount."}</p>
         </div>
         {canCorrect && correctableRuns.length > 0 ? (
           <div className="space-y-1">

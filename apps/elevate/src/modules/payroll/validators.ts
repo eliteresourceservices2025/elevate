@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isoDate } from "@/modules/people/validators";
 import { isItemized, PAY_ITEM_TYPES, PAYMENT_METHODS } from "./constants";
+import { parseFte } from "./fte";
 import { cleanItemLabel, ITEM_UNIT_HINTS, itemUnit, MAX_ITEM_LABEL, parseItemValue } from "./items";
 import { parseMoney } from "./money";
 
@@ -26,6 +27,16 @@ const percentToBp = z.preprocess(
     .transform((s) => (s === "" ? null : Number(parseMoney(s)))),
 );
 
+/** An FTE count typed as "1", "0.5" or "0"; blank means not set. Stored in hundredths (null when blank). */
+const fteField = z.preprocess(
+  blankTo(""),
+  z
+    .string()
+    .trim()
+    .refine((s) => s === "" || parseFte(s) !== null, "Enter 1, 0.5 or 0")
+    .transform((s) => (s === "" ? null : parseFte(s))),
+);
+
 const lineFields = {
   clientId: z.preprocess((v) => (v === "" ? null : v), uuid.nullish()),
   alias: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().trim().max(80).nullish()),
@@ -33,17 +44,36 @@ const lineFields = {
   paymentMethod: z.enum(PAYMENT_METHODS),
   effectiveFrom: isoDate,
   endsOn: z.preprocess((v) => (v === "" ? null : v), isoDate.nullish()),
-  monthly: positiveMoney,
+  /** How the person is paid: a monthly rate, or (internal team) an amount per FTE per cutoff. The amount that applies is checked by `amountsRule`. */
+  basis: z.enum(["monthly", "per_fte"]).default("monthly"),
+  monthly: z.string().trim().default(""),
+  perFte: z.string().trim().default(""),
+  /** The line's default FTE count (a contractor on a client). Ignored for a per-FTE rate. */
+  fte: fteField.optional(),
   /** This person's own overtime percents (125 = 1.25 times their hourly rate). Blank = the company standard from Settings. */
   otRegular: percentToBp.optional(),
   otRestDay: percentToBp.optional(),
   otRestDayOver8: percentToBp.optional(),
 };
 const endsAfterStart = (v: { effectiveFrom: string; endsOn?: string | null }) => !v.endsOn || v.endsOn >= v.effectiveFrom;
+/** The amount that applies to the chosen basis must be above zero: the monthly rate, or the amount per FTE. */
+const amountsRule = (v: { basis: "monthly" | "per_fte"; monthly: string; perFte: string }, ctx: z.RefinementCtx) => {
+  const path = v.basis === "per_fte" ? "perFte" : "monthly";
+  const amount = parseMoney(v.basis === "per_fte" ? v.perFte : v.monthly);
+  if (amount === null || amount <= 0n) ctx.addIssue({ code: "custom", message: "Enter an amount above zero", path: [path] });
+};
 const ENDS_MSG = { message: "The end date can't be before the start date", path: ["endsOn"] };
 
-export const createPayLineSchema = z.object({ employeeId: uuid, ...lineFields }).refine(endsAfterStart, ENDS_MSG);
-export const updatePayLineSchema = z.object({ lineKey: uuid, ...lineFields, reason }).refine(endsAfterStart, ENDS_MSG);
+export const createPayLineSchema = z.object({ employeeId: uuid, ...lineFields }).refine(endsAfterStart, ENDS_MSG).superRefine(amountsRule);
+export const updatePayLineSchema = z.object({ lineKey: uuid, ...lineFields, reason }).refine(endsAfterStart, ENDS_MSG).superRefine(amountsRule);
+
+/** Setting the FTE count on many rates at once (the Set FTE table). A blank count is not allowed here: it would only clear one. */
+export const setLineFtesSchema = z.object({
+  rows: z
+    .array(z.object({ lineKey: uuid, fte: z.string().trim().refine((s) => parseFte(s) !== null, "Enter 1, 0.5 or 0").transform((s) => parseFte(s) as number) }))
+    .min(1)
+    .max(300),
+});
 export const endPayLineSchema = z.object({ lineKey: uuid, endsOn: isoDate, reason });
 
 /** Withdrawing a line that was added by mistake (it was never on a real run). */

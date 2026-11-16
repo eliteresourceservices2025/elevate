@@ -31,7 +31,7 @@ A rate says what one person is paid. Someone who works for two clients has one r
 
 1. Open the **Rates** tab. It shows one row for each rate in force.
 2. Click **Add contractor**.
-3. Choose the **Person**, the **Client** if there is one, and the **Monthly rate (pesos)**. **Paying from** already has the cutoff being prepared chosen; pick the next one if the rate should wait. **More options** has hours per day, alias, payment method and overtime. Allowances are not set here: you add them by name on each run.
+3. Choose the **Person**, the **Client** if there is one, and the **Monthly rate (pesos)**. Set the **FTE** too: 1 for a full-time person on that client, 0.5 for half-time, or 0 when the line does not count. FTE only sets the pay of the internal team and is never shown to a contractor; leave it **Not set** if you don't know yet. **Paying from** already has the cutoff being prepared chosen; pick the next one if the rate should wait. **More options** has hours per day, alias, payment method and overtime. Allowances are not set here: you add them by name on each run.
 4. Click **Add contractor**.
 
 If the person already has a rate for the same client, the window tells you to use **Update rate** on that row instead.
@@ -49,6 +49,15 @@ If the person already has a rate for the same client, the window tells you to us
 **If you added a rate by mistake,** click **More**, then **Remove (added by mistake)**. It is offered only while the rate has never been on a real pay run (a practice run does not count). If the person was paid with it, use **Stop paying** instead.
 
 If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, **another Preparer must check your line**, and a different person records your payment.
+
+# FTE and the internal team
+
+The internal team (the ELITE Resource Services team) is paid by **FTE**: each cutoff, their pay is the run's **Total FTE** times their **amount per FTE**.
+
+- **Set FTE.** On the **Rates** tab click **Set FTE**. Every rate is listed under its client with an FTE box. Type 1, 0.5 or 0 for each, and click **Save FTE**. The total at the top should match your payroll sheet. A run already started picks the new counts up with **Update people**; people who were already checked stay checked.
+- **Add an internal-team member.** Click **Add contractor**, choose the person, and under **How is this person paid?** choose **Per FTE (internal team)**. Type the **Amount per FTE per cutoff**, for example 1,500.00. Someone who is also a VA gets this as a second rate, so give it its own alias, for example Internal team.
+- **In a run.** The **Total FTE** tile shows the total of everyone on the run. An internal-team line shows its pay as "28 × 1,500.00", and it follows the total when someone is added, taken off or given a different count.
+- **A new contractor or client in this run.** Open **Actions**, then **Amounts**, choose **FTE for this run** and type 1, 0.5 or 0. It counts for this run only. A line with no count counts as 0, and a note reminds you.
 
 # Start a run
 

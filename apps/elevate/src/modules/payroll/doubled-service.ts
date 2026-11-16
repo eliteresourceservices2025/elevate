@@ -131,7 +131,8 @@ export async function removedRatesOf(executor: Reader): Promise<{ views: Removed
     latestOf.set(lineKey, written);
     let monthly = "Can't be read";
     try {
-      monthly = formatPesos(decryptLineAmounts(written.id, written.amountsEnc).monthlyCentavos);
+      const amounts = decryptLineAmounts(written.id, written.amountsEnc);
+      monthly = amounts.perFteCentavos !== undefined ? `${formatPesos(amounts.perFteCentavos)} per FTE` : formatPesos(amounts.monthlyCentavos);
     } catch {
       // The dialog just says the figure can't be read; nothing about the stored text is kept.
     }

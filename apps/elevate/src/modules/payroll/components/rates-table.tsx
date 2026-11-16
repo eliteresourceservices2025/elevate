@@ -16,6 +16,7 @@ import { RATES_LABELS as L, UNREADABLE_HINT, unreadableNotice } from "../constan
 import type { CutoffChoice } from "../rate-start";
 import type { RateOptions, RateRow } from "../queries";
 import { AddContractorForm, AutoTidy, EditDetailsForm, RemovedRatesForm, RemoveRateForm, RemoveStoppedForm, StopPayingForm, UpdateRateForm } from "./rate-forms";
+import { SetFteForm } from "./set-fte-form";
 import { ariaSortOf, SortHead, type SortLinks } from "./sort-head";
 
 // One row per rate, grouped under the person (the name is written once, on the first row of a person). The main button is "Update rate"; the
@@ -125,6 +126,11 @@ export function RatesTable({
             </FormDialog>
           ) : null}
           {options ? (
+            <FormDialog label="Set FTE" title="Set FTE" description="How much of a full-time person each rate counts for. It sets the internal team's pay and is never shown to contractors." variant="outline" size="lg">
+              <SetFteForm rows={rows} />
+            </FormDialog>
+          ) : null}
+          {options ? (
             <FormDialog label="Add contractor" title="Add a contractor" description="Someone who works for two clients gets one rate for each client." icon={<Plus className="size-4" aria-hidden />} size="lg">
               <AddContractorForm options={options} cutoffs={cutoffs} rows={rows} />
             </FormDialog>
@@ -153,6 +159,7 @@ export function RatesTable({
                     {L.monthly}
                   </SortHead>
                 </TableHead>
+                <TableHead>{L.fte}</TableHead>
                 <TableHead>{L.paying}</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
@@ -174,6 +181,10 @@ export function RatesTable({
                     </TableCell>
                     <TableCell label={L.monthly} className="tabular-nums">
                       {row.monthly}
+                      {row.basis === "per_fte" ? <span className="block text-xs text-muted-foreground">per FTE, each cutoff</span> : null}
+                    </TableCell>
+                    <TableCell label={L.fte} className="tabular-nums">
+                      {row.basis === "per_fte" ? <span className="text-muted-foreground">Paid per FTE</span> : row.fte !== null ? row.fte : <span className="text-muted-foreground">Not set</span>}
                     </TableCell>
                     <TableCell label={L.paying}>
                       Since {row.effectiveFrom}

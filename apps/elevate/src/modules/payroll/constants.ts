@@ -23,6 +23,7 @@ export const PAY_ITEM_TYPES = [
   "loan",
   "other_deduction",
   "client_hours",
+  "fte",
 ] as const;
 export type PayItemType = (typeof PAY_ITEM_TYPES)[number];
 
@@ -45,6 +46,7 @@ export const PAY_ITEM_LABELS: Record<PayItemType, string> = {
   loan: "Loan",
   other_deduction: "Other deduction",
   client_hours: "Client hours (reference only)",
+  fte: "FTE for this run",
 };
 
 export const PAYMENT_METHODS = ["remitly"] as const;
@@ -91,6 +93,8 @@ export const RATES_LABELS = {
   aliasShort: "Alias",
   hoursPerDay: "Hours per day",
   monthly: "Monthly rate (pesos)",
+  fte: "FTE",
+  perFte: "Amount per FTE (pesos)",
   paymentMethod: "Payment method",
   startsOn: "Starts on",
   starts: "Starts",
@@ -304,6 +308,11 @@ export const WORKSHEET_LABELS = {
   gross: "Gross",
   net: "Total payable compensation",
   clientHours: "Client hours",
+  fte: "FTE",
+  fteTotal: "Total FTE",
+  perFteLine: "Paid per FTE",
+  fteNotSet: "Not set",
+  fteForRun: "set for this run",
   confirmation: "Checked by",
   actions: "Actions",
   unconfirmed: "Not yet",
@@ -416,6 +425,8 @@ export const PAYSLIP_LABELS = {
   client: "Client",
   hiredOn: "Date of hire",
   monthlyRate: "Monthly rate",
+  perFteAmount: "Amount per FTE (per cutoff)",
+  totalFte: "Total FTE",
   dailyRate: "Daily rate",
   hourlyRate: "Hourly rate",
   hoursPerDay: "Hours per day",
@@ -551,6 +562,8 @@ export const WARNING_CHECKS = [
   "no_client_hours",
   "duplicate_pay_line",
   "large_change",
+  "fte_not_set",
+  "per_fte_without_total",
 ] as const;
 export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
 
@@ -570,6 +583,8 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   no_client_hours: "Has a client but no client payroll hours",
   duplicate_pay_line: "Another line for the same job (same alias, same client or none) is on this run, so this person is paid twice",
   large_change: "Total payable compensation changed a lot from the last run",
+  fte_not_set: "No FTE count on this line, so it counts as 0 toward the internal team's pay",
+  per_fte_without_total: "The run's total FTE is 0, so the lines paid per FTE (internal team) pay nothing",
 };
 
 /**
@@ -596,6 +611,14 @@ export const ISSUE_COPY: Record<CheckCode, { title: string; meaning: string }> =
       "This person has two lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each one pays a full cutoff. Often an old line was left when a new one was added. Take the extra one off this run (Actions, then Remove from this run), and end the old pay line on the Rates tab (tick Show ended lines to see it).",
   },
   large_change: { title: "Pay changed a lot", meaning: "Their total is much higher or lower than in the last run. Check it is right." },
+  fte_not_set: {
+    title: "FTE not set",
+    meaning: "This run has internal-team lines paid per FTE, and these lines have no FTE count (1, 0.5 or 0), so they count as 0. Set it on the Rates tab (Set FTE), or type FTE for this run under Actions, then Amounts.",
+  },
+  per_fte_without_total: {
+    title: "Total FTE is 0",
+    meaning: "The lines paid per FTE (internal team) are paid the run's total FTE times their amount, and the total is 0. Set the FTE counts on the Rates tab (Set FTE), then use Update people.",
+  },
 };
 
 // Plain names for the raw flags. The sheet shows pills with the real date instead ("Starts 6 Nov", see flags.ts); these are the fallback.

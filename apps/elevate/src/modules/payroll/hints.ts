@@ -19,6 +19,9 @@ export const PAYROLL_HINTS = {
   lineAlias: "A short label, such as the role or account name, that tells two lines of the same person apart. Printed on their statement. Optional.",
   lineHours: "How many hours are in this person's normal workday (1 to 12). The hourly rate is the daily rate ÷ this number. It is used for overtime, late time and part days.",
   lineMonthly: "The person's full monthly rate in pesos. Each cutoff pays half of it.",
+  lineBasis: "A contractor is paid a monthly rate. A member of the internal team (the ELITE Resource Services team) can instead be paid per FTE: each cutoff pays the run's total FTE times the amount below.",
+  linePerFte: "The amount in pesos for one FTE for one cutoff. The cutoff pay is the run's total FTE times this amount (28 FTE times 1,500.00 is 42,000.00).",
+  lineFte: "How much of a full-time person this line counts for in the run's total FTE: 1, 0.5 or 0. 0 means it does not count. It only sets the internal team's pay and is never shown to the contractor. Leave it as Not set if you don't know yet; the run will remind you.",
   lineMethod: "How this person is paid. Remitly lines appear on the Remitly payment list.",
   lineOt:
     "This person's own overtime (OT) percent of their hourly rate, for when it differs from the company standard. 125 means 1.25 times. Leave a box blank to use the standard from Settings.",

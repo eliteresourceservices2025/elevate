@@ -50,6 +50,7 @@ function figureRows(f: WorksheetFigures, hoursPerDay: number): [string, string][
     [L.loan, f.loan],
     [L.otherDeductions, f.otherDeductions],
     [L.clientHours, f.clientHours],
+    [L.fte, f.fte === null ? "" : f.fte],
   ];
 }
 
@@ -178,7 +179,7 @@ export function Worksheet({
                 <TableHead colSpan={3}>{L.groups.additions}</TableHead>
                 <TableHead colSpan={2}>{L.groups.loans}</TableHead>
                 <TableHead colSpan={2}>{L.groups.result}</TableHead>
-                <TableHead colSpan={1}>{L.groups.reference}</TableHead>
+                <TableHead colSpan={2}>{L.groups.reference}</TableHead>
                 <TableHead colSpan={2}>
                   <span className="sr-only">{L.actions}</span>
                 </TableHead>
@@ -229,6 +230,7 @@ export function Worksheet({
                   </SortHead>
                 </TableHead>
                 <TableHead className={`${head} ${num}`}>{L.clientHours}</TableHead>
+                <TableHead className={`${head} ${num} ${D}`}>{L.fte}</TableHead>
                 <TableHead aria-sort={ariaSortOf(sortLinks, "checked")} className={head}>
                   <SortHead header="checked" links={sortLinks}>
                     {L.confirmation}
@@ -275,7 +277,7 @@ export function Worksheet({
                       {line.clientName ?? L.noClient}
                     </TableCell>
                     {line.unreadable ? (
-                      <TableCell label={L.net} colSpan={22} className="text-destructive">
+                      <TableCell label={L.net} colSpan={23} className="text-destructive">
                         {L.unreadable}
                       </TableCell>
                     ) : (
@@ -303,6 +305,20 @@ export function Worksheet({
                         {cell(f?.net, L.net, "font-semibold")}
                         {cell(f ? (f.netChange ?? "") : undefined, L.netChange, "text-muted-foreground")}
                         {cell(f?.clientHours, L.clientHours)}
+                        <TableCell label={L.fte} className={`${num} ${D}`}>
+                          {f === null || f === undefined
+                            ? ""
+                            : line.perFte
+                              ? <span className="text-muted-foreground">{L.perFteLine}</span>
+                              : f.fte === null
+                                ? <span className="text-muted-foreground">{L.fteNotSet}</span>
+                                : (
+                                    <>
+                                      {f.fte}
+                                      {f.fteFromRun ? <span className="block text-xs text-muted-foreground">{L.fteForRun}</span> : null}
+                                    </>
+                                  )}
+                        </TableCell>
                       </>
                     )}
                     <TableCell label={L.confirmation}>{line.confirmedByName ?? <span className="text-muted-foreground">{L.unconfirmed}</span>}</TableCell>

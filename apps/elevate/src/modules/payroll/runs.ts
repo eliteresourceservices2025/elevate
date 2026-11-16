@@ -13,6 +13,7 @@ import { calculateLine, EXTRA_KEYS, type ExtraKey, type SettingsSnapshot } from 
 import { logChange } from "./changes";
 import { runChecks, type CheckLine, type ChecksInput, type RunCheck } from "./checks";
 import { CORRECTION_TYPES, isItemized, PAY_ITEM_LABELS, REASON_REQUIRED_TYPES, type PayItemState, type PayItemType, type RunStatus } from "./constants";
+import { effectiveFte, formatFte, perFteMonthlyCentavos, runFteTotal } from "./fte";
 import { buildLineInput, cleanItemLabel, formatItemValue, noItemizedLines, parseItemValue, type ItemizedLines } from "./items";
 import { suggestedDays } from "./flags";
 import type { SortKeys } from "./sort";
@@ -32,10 +33,12 @@ import {
   encryptRunLine,
   lockDraftRun,
   payloadText,
+  payloadTextWithoutFte,
   payrollToday,
   settingsInForce,
   withOtOverride,
   type ItemValue,
+  type LineAmounts,
   type RunLinePayload,
 } from "./service";
 
@@ -88,9 +91,47 @@ function confirmedValues(items: ItemRow[], runLineId: string): Confirmed {
 
 // ---- Computing a line ----
 
-function computePayload(line: { hoursPerDay: number }, rate: RunLinePayload["rate"], confirmed: Confirmed, settings: SettingsSnapshot): RunLinePayload {
-  const { input, clientHoursHundredths } = buildLineInput(rate, line.hoursPerDay, confirmed.values, confirmed.itemized);
-  return { rate, hoursPerDay: line.hoursPerDay, input, clientHoursHundredths, result: calculateLine(input, { ...settings, multipliersBp: withOtOverride(settings.multipliersBp, rate.otBp) }) };
+/**
+ * What a line is worked out with. `totalFteHundredths` is the run's total FTE: a line paid per FTE (internal team) is paid that total times its
+ * amount per FTE for the cutoff (the calculator is given twice that as its monthly figure, so absences, late time, overtime and the named
+ * amounts all work as for anyone). Every other line keeps its own monthly rate and just records its FTE for the run.
+ */
+function computePayload(line: { hoursPerDay: number }, rate: RunLinePayload["rate"], confirmed: Confirmed, settings: SettingsSnapshot, totalFteHundredths: number): RunLinePayload {
+  const perFteLine = rate.perFteCentavos !== undefined;
+  const monthlyCentavos = perFteLine ? perFteMonthlyCentavos(rate.perFteCentavos!, totalFteHundredths) : rate.monthlyCentavos;
+  const { input, clientHoursHundredths } = buildLineInput({ monthlyCentavos }, line.hoursPerDay, confirmed.values, confirmed.itemized);
+  const typed = confirmed.values.get("fte");
+  const fte = perFteLine ? undefined : typed !== undefined ? Number(typed) : rate.fteHundredths;
+  return {
+    rate,
+    hoursPerDay: line.hoursPerDay,
+    input,
+    clientHoursHundredths,
+    result: calculateLine(input, { ...settings, multipliersBp: withOtOverride(settings.multipliersBp, rate.otBp) }),
+    ...(fte !== undefined ? { fteHundredths: fte } : {}),
+    ...(typed !== undefined && !perFteLine ? { fteFromRun: true as const } : {}),
+    ...(perFteLine ? { perFte: { totalFteHundredths } } : {}),
+  };
+}
+
+/** The FTE counts typed for this run, by run line: the newest confirmed "FTE for this run" of each line. Decrypts only those items. */
+function fteItemsOf(items: ItemRow[]): Map<string, bigint> {
+  const out = new Map<string, bigint>();
+  for (const item of items) {
+    if (item.type !== "fte" || item.state !== "confirmed" || item.runLineId === null) continue;
+    try {
+      out.set(item.runLineId, decryptItemValue(item.id, item.valueEnc).value);
+    } catch (error) {
+      console.error("payroll item unreadable:", { itemId: item.id, error: error instanceof Error ? error.name : "UnknownError" });
+      throw new ActionFailure("An amount on this run can't be read. This usually means a problem with the encryption key.");
+    }
+  }
+  return out;
+}
+
+/** The run's total FTE in hundredths, from each line's rate and the counts typed for the run (lines paid per FTE never count). */
+function totalFteOf(lines: { runLineId: string; rate: LineAmounts }[], typed: Map<string, bigint>): number {
+  return runFteTotal(lines.map((l) => ({ perFte: l.rate.perFteCentavos !== undefined, effectiveHundredths: effectiveFte(l.rate.fteHundredths, typed.get(l.runLineId)) })));
 }
 
 function readRate(lineId: string, stored: string) {
@@ -117,31 +158,49 @@ export async function recomputeRun(tx: Tx, runId: string, options: { employeeId?
   if (settingsChanged) await tx.update(payRuns).set({ settingsSnapshot: settings }).where(eq(payRuns.id, runId));
 
   const scoped = options.employeeId && !settingsChanged ? options.employeeId : null;
-  const rows = await tx
+  const everyLine = await tx
     .select({ runLine: payRunLines, version: payLines })
     .from(payRunLines)
     .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
-    .where(scoped ? and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false), eq(payRunLines.employeeId, scoped)) : and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false)));
+    .where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false)));
 
   const items = await latestItems(tx, runId);
   const forceClear = new Set(options.clearConfirmationFor ?? []);
   const changedLineIds: string[] = [];
 
-  for (const { runLine, version } of rows) {
-    const rate = readRate(version.id, version.amountsEnc);
-    const next = computePayload(version, rate, confirmedValues(items, runLine.id), settings);
-    let before: string | null = null;
+  // The run's total FTE comes from every line still on it, so lines paid per FTE are worked out again whenever anyone's line is: even a
+  // recompute for one person moves the total when that person's FTE changed, or they were removed or put back.
+  // A rate that can't be read is left out of the total (the run is blocked from approval for it anyway) and only fails the recompute of its own line.
+  const rated = everyLine.map((r) => {
     try {
-      before = payloadText(decryptRunLine(runLine.id, runLine.payloadEnc));
+      return { ...r, rate: decryptLineAmounts(r.version.id, r.version.amountsEnc) as LineAmounts | null };
+    } catch {
+      return { ...r, rate: null as LineAmounts | null };
+    }
+  });
+  const totalFte = totalFteOf(
+    rated.flatMap((r) => (r.rate ? [{ runLineId: r.runLine.id, rate: r.rate }] : [])),
+    fteItemsOf(items),
+  );
+  const targets = scoped ? rated.filter((r) => r.runLine.employeeId === scoped || r.rate?.perFteCentavos !== undefined) : rated;
+
+  for (const { runLine, version, rate: readOk } of targets) {
+    const rate = readOk ?? readRate(version.id, version.amountsEnc); // throws the plain "can't be read" failure
+    const next = computePayload(version, rate, confirmedValues(items, runLine.id), settings, totalFte);
+    let before: RunLinePayload | null = null;
+    try {
+      before = decryptRunLine(runLine.id, runLine.payloadEnc);
     } catch (error) {
       console.error("payroll run line unreadable:", { runLineId: runLine.id, error: error instanceof Error ? error.name : "UnknownError" });
       before = null; // unreadable before: rewritten now
     }
-    const changed = before !== payloadText(next);
+    const changed = before === null || payloadText(before) !== payloadText(next);
     if (!changed && !forceClear.has(runLine.id)) continue;
+    // A change of FTE count alone rewrites the payload but leaves the line's check in place (see payloadTextWithoutFte).
+    const checkLost = forceClear.has(runLine.id) || before === null || payloadTextWithoutFte(before) !== payloadTextWithoutFte(next);
     await tx
       .update(payRunLines)
-      .set({ payloadEnc: encryptRunLine(runLine.id, next), ...(changed || forceClear.has(runLine.id) ? { confirmedBy: null, confirmedAt: null } : {}) })
+      .set({ payloadEnc: encryptRunLine(runLine.id, next), ...(checkLost ? { confirmedBy: null, confirmedAt: null } : {}) })
       .where(eq(payRunLines.id, runLine.id));
     changedLineIds.push(runLine.id);
   }
@@ -209,8 +268,11 @@ export async function createRun(tx: Tx, actor: Actor, period: { periodStart: str
   }
 
   const runId = randomUUID();
+  // The total FTE of the lines this run starts with: the rates' own counts (nothing is typed for a new run yet).
+  const rates = new Map(resolved.map(({ version }) => [version.id, readRate(version.id, version.amountsEnc)]));
+  const totalFte = totalFteOf([...rates.entries()].map(([id, rate]) => ({ runLineId: id, rate })), new Map());
   const prepared = resolved.map(({ version, flags }) => {
-    const rate = readRate(version.id, version.amountsEnc);
+    const rate = rates.get(version.id)!;
     const who = person.get(version.employeeId);
     const lineFlags: string[] = [...flags];
     if (who && (who.status === "separated" || who.archivedAt !== null)) lineFlags.push("person_left");
@@ -223,7 +285,7 @@ export async function createRun(tx: Tx, actor: Actor, period: { periodStart: str
       clientId: version.clientId,
       alias: version.alias,
       flags: lineFlags,
-      payloadEnc: encryptRunLine(id, computePayload(version, rate, noConfirmed(), settings)),
+      payloadEnc: encryptRunLine(id, computePayload(version, rate, noConfirmed(), settings, totalFte)),
     };
   });
 
@@ -446,6 +508,11 @@ export async function saveItem(
     .where(and(eq(payRunLines.id, v.runLineId), eq(payRunLines.runId, v.runId), eq(payRunLines.excluded, false), eq(payRunLines.employeeId, v.employeeId)))
     .limit(1);
   if (!line) throw new ActionFailure("That line is not on this run.");
+  // An internal-team line paid per FTE is not counted in the total, so it has no FTE of its own to type.
+  if (v.type === "fte") {
+    const [version] = await tx.select({ id: payLines.id, amountsEnc: payLines.amountsEnc }).from(payLines).where(eq(payLines.id, line.lineId)).limit(1);
+    if (version && readRate(version.id, version.amountsEnc).perFteCentavos !== undefined) throw new ActionFailure("This line is paid per FTE, so it has no FTE of its own.");
+  }
   const value = parseItemValue(v.type, v.value);
   if (value === null) throw new ActionFailure("Check the amount and try again.");
   const correctsRunId = v.correctsRunId ?? null;
@@ -612,17 +679,24 @@ export async function syncRunPeople(tx: Tx, actor: Actor, runId: string): Promis
         clientId: version.clientId,
         alias: version.alias,
         flags: lineFlags,
-        payloadEnc: encryptRunLine(id, computePayload(version, rate, noConfirmed(), settings)),
+        payloadEnc: encryptRunLine(id, computePayload(version, rate, noConfirmed(), settings, 0)), // worked out again, with the run's total FTE, by the recompute below
       });
       added += 1;
     } else if (found.runLine.excluded) {
       continue; // taken off on purpose: only Restore brings it back
     } else if (found.runLine.lineId !== version.id || canon([...found.runLine.flags].sort()) !== canon([...lineFlags].sort())) {
       const rate = readRate(version.id, version.amountsEnc);
-      const payload = computePayload(version, rate, confirmedValues(items, found.runLine.id), settings);
+      const payload = computePayload(version, rate, confirmedValues(items, found.runLine.id), settings, 0); // the recompute below sets the total FTE
+      // A newer version of the rate that only changed the FTE count (the Set FTE table) leaves the line's check in place.
+      let onlyFte = false;
+      try {
+        onlyFte = canon([...found.runLine.flags].sort()) === canon([...lineFlags].sort()) && payloadTextWithoutFte(decryptRunLine(found.runLine.id, found.runLine.payloadEnc)) === payloadTextWithoutFte(payload);
+      } catch {
+        onlyFte = false;
+      }
       await tx
         .update(payRunLines)
-        .set({ lineId: version.id, clientId: version.clientId, alias: version.alias, flags: lineFlags, payloadEnc: encryptRunLine(found.runLine.id, payload), confirmedBy: null, confirmedAt: null })
+        .set({ lineId: version.id, clientId: version.clientId, alias: version.alias, flags: lineFlags, payloadEnc: encryptRunLine(found.runLine.id, payload), ...(onlyFte ? {} : { confirmedBy: null, confirmedAt: null }) })
         .where(eq(payRunLines.id, found.runLine.id));
       updated += 1;
     }
@@ -649,6 +723,7 @@ export async function removeRunLine(tx: Tx, actor: Actor, v: { runId: string; ru
     .limit(1);
   if (!line) throw new ActionFailure("That line is not on this run.");
   await tx.update(payRunLines).set({ excluded: true, confirmedBy: null, confirmedAt: null }).where(eq(payRunLines.id, line.id));
+  await recomputeRun(tx, v.runId, { employeeId: line.employeeId }); // the run's total FTE moved: lines paid per FTE follow it
   await writeAudit({ actor, action: "payroll.run.remove_line", targetType: "pay_run", targetId: v.runId, metadata: { employeeId: line.employeeId } }, tx);
   await logChange(tx, actor, { action: "run_line_removed", runId: v.runId, employeeId: line.employeeId, detail: { runLineId: line.id, reason: v.reason } });
 }
@@ -706,6 +781,10 @@ export type WorksheetFigures = {
   /** Total payable compensation. */
   net: string;
   clientHours: string;
+  /** The line's FTE for this run as people read it ("1", "0.5", "0"); null when it has none (not set) or the line is paid per FTE. */
+  fte: string | null;
+  /** The count was typed for this run, not taken from the rate. */
+  fteFromRun: boolean;
   /** Total payable minus the same line's total in the last approved or paid run ("+1,250.00"); null when there is none to compare with. */
   netChange: string | null;
 };
@@ -719,6 +798,8 @@ export type WorksheetLine = {
   clientName: string | null;
   alias: string | null;
   hoursPerDay: number;
+  /** An internal-team line paid per FTE: its pay is the run's total FTE times its amount per FTE. */
+  perFte: boolean;
   flags: string[];
   /** The dates behind the part-period flags (when the line starts, when a new rate starts, when it ends), for wording like "Starts 6 Nov". */
   flagDates: FlagDates;
@@ -742,7 +823,7 @@ export type Worksheet = {
   /** Suggestions no pay line has been chosen for. */
   unassigned: { employeeId: string; name: string; items: WorksheetItem[] }[];
   /** Null when any line can't be read: a partial total is never shown. All in pesos. */
-  totals: { gross: string; net: string } | null;
+  totals: { gross: string; net: string; fte: string } | null;
   byClient: ClientTotals[] | null;
   checks: { blocking: RunCheck[]; warnings: RunCheck[] };
   /** True when the "own line" check above is about the viewer (a Preparer about to send the run); otherwise it is about the submitter. */
@@ -921,6 +1002,13 @@ export async function checkInputsOf(executor: Executor, data: RunData, submitter
   const byPerson = new Map<string, typeof data.rows>();
   for (const r of data.rows) byPerson.set(r.runLine.employeeId, [...(byPerson.get(r.runLine.employeeId) ?? []), r]);
   const isTwin = (r: (typeof data.rows)[number]) => (byPerson.get(r.runLine.employeeId) ?? []).some((o) => o !== r && sameJob(r.runLine, o.runLine));
+  // FTE only matters when a line is paid per FTE: then every contractor line should say how much it counts for.
+  const perFteLines = data.rows.filter((r) => data.payloads.get(r.runLine.id)?.perFte !== undefined);
+  const hasPerFteLine = perFteLines.length > 0;
+  const totalFte = data.rows.reduce((sum, r) => {
+    const p = data.payloads.get(r.runLine.id);
+    return sum + (p && p.perFte === undefined ? (p.fteHundredths ?? 0) : 0);
+  }, 0);
   const lines: CheckLine[] = data.rows.map((r) => {
     const payload = data.payloads.get(r.runLine.id) ?? null;
     const unreadable = lineUnreadable(data, r.runLine.id);
@@ -942,6 +1030,7 @@ export async function checkInputsOf(executor: Executor, data: RunData, submitter
         payload.clientHoursHundredths === 0n &&
         !data.items.some((i) => i.runLineId === r.runLine.id && i.type === "client_hours" && i.state === "suggested"),
       duplicateLine: isTwin(r),
+      fteNotSet: hasPerFteLine && payload !== null && !unreadable && payload.perFte === undefined && payload.fteHundredths === undefined,
       confirmedBy: r.runLine.confirmedBy,
     };
   });
@@ -952,6 +1041,7 @@ export async function checkInputsOf(executor: Executor, data: RunData, submitter
     submitter: { userId: submitterUserId ?? "", employeeId: submitterEmployeeId },
     changeWarnBp: (data.run.settingsSnapshot as SettingsSnapshot).changeWarnBp,
     linesOutOfDate: data.linesOutOfDate,
+    perFteWithoutTotal: hasPerFteLine && totalFte === 0,
   };
 }
 
@@ -1004,6 +1094,7 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
   const clientTotals = new Map<string, { clientId: string | null; clientName: string; lines: number; hours: bigint; net: bigint }>();
   let gross = 0n;
   let net = 0n;
+  let fteTotal = 0;
   let unreadableCount = 0;
 
   for (const r of rows) {
@@ -1020,7 +1111,8 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
       for (const key of EXTRA_KEYS) extra[key] = formatPesos(x.extra[key]); // eslint-disable-line security/detect-object-injection
       const previousNet = data.previousNets.get(r.lineKey);
       figures = {
-        monthly: formatPesos(payload.rate.monthlyCentavos),
+        // A line paid per FTE shows how its pay was worked out ("28 × 1,500.00"), not a monthly rate it does not have.
+        monthly: payload.perFte ? `${formatFte(payload.perFte.totalFteHundredths)} × ${formatPesos(payload.rate.perFteCentavos ?? 0n)}` : formatPesos(payload.rate.monthlyCentavos),
         cutoff: formatPesos(x.cutoff),
         base: formatPesos(x.base),
         absences: formatPesos(x.absences),
@@ -1038,9 +1130,12 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
         otherDeductions: formatPesos(payload.input.otherDeductions),
         net: formatPesos(x.net),
         clientHours: formatItemValue("client_hours", payload.clientHoursHundredths),
+        fte: payload.perFte === undefined && payload.fteHundredths !== undefined ? formatFte(payload.fteHundredths) : null,
+        fteFromRun: payload.fteFromRun === true,
         netChange: previousNet === undefined ? null : signedPesos(x.net - previousNet),
       };
-      sortKeys = { monthly: payload.rate.monthlyCentavos.toString(), net: x.net.toString(), change: previousNet === undefined ? null : (x.net - previousNet).toString() };
+      if (payload.perFte === undefined) fteTotal += payload.fteHundredths ?? 0;
+      sortKeys = { monthly: (payload.perFte ? payload.input.monthlyCentavos : payload.rate.monthlyCentavos).toString(), net: x.net.toString(), change: previousNet === undefined ? null : (x.net - previousNet).toString() };
       gross += x.gross;
       net += x.net;
       const key = r.runLine.clientId ?? "none";
@@ -1060,6 +1155,7 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
       clientName: r.clientName,
       alias: r.runLine.alias,
       hoursPerDay: payload?.hoursPerDay ?? 0,
+      perFte: payload?.perFte !== undefined,
       flags: r.runLine.flags,
       flagDates,
       suggestedDays: r.runLine.flags.some((f) => f === "starts_mid_period" || f === "ends_mid_period") ? suggestedDays(flagDates, { start: run.periodStart, end: run.periodEnd }, (run.settingsSnapshot as SettingsSnapshot).cutoffDivisor) : null,
@@ -1101,7 +1197,7 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
     run: { id: run.id, periodStart: run.periodStart, periodEnd: run.periodEnd, status: run.status as RunStatus, isTest: run.isTest, archivedAt: run.archivedAt ? run.archivedAt.toISOString() : null },
     lines,
     unassigned,
-    totals: complete ? { gross: formatPesos(gross), net: formatPesos(net) } : null,
+    totals: complete ? { gross: formatPesos(gross), net: formatPesos(net), fte: formatFte(fteTotal) } : null,
     byClient: complete
       ? [...clientTotals.values()]
           .sort((a, b) => a.clientName.localeCompare(b.clientName))

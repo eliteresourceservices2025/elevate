@@ -13,6 +13,7 @@ import {
   type PayItemType,
   type PaymentMethod,
 } from "./constants";
+import { formatFte } from "./fte";
 import { formatItemValue } from "./items";
 import { formatPesos } from "./money";
 
@@ -54,6 +55,9 @@ function lineFields(v: Json | null, names: NameLookup): Record<string, string | 
   const method = str(v.paymentMethod);
   return {
     [R.monthly]: centavos(v.monthlyCentavos),
+    // An internal-team rate paid per FTE has an amount per FTE (and a monthly of 0); a contractor has a default FTE count (or none yet).
+    [R.perFte]: v.perFteCentavos === undefined || v.perFteCentavos === null ? null : centavos(v.perFteCentavos),
+    [R.fte]: typeof v.fteHundredths === "number" ? formatFte(v.fteHundredths) : v.perFteCentavos === undefined || v.perFteCentavos === null ? H.notSet : null,
     [R.hoursPerDay]: str(v.hoursPerDay),
     [R.client]: client ? (names.client(client) ?? null) : H.none,
     [R.alias]: str(v.alias) ?? H.none,

@@ -23,6 +23,8 @@ The worksheet and the contractor payment statement show these parts. On the stat
 - **Less: a loan and other deductions.**
 - **Total payable compensation.** What the person is paid.
 
+The internal team (the ELITE Resource Services team) is the exception for the first line: instead of half a monthly rate, their cutoff pay is the run's **Total FTE** times their **amount per FTE**. Everything after that works the same. FTE is a count of 1, 0.5 or 0 kept with each contractor's rate. It only sets the internal team's pay, and it is never shown on a contractor's statement.
+
 Bereavement and PTO days are **paid days**. They are written on the statement but take nothing off the pay. Sick leave (SL) days are unpaid and are taken off like an absence.
 
 # Who does what
