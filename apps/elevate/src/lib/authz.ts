@@ -77,6 +77,8 @@ export type AuthzUser = {
   payrollAccess?: PayrollLevel | null;
   /** Named individually (privacy incident inbox); a role never grants it. */
   isPrivacyOfficer?: boolean;
+  /** A client guest: no roles, Messages only (see requireUser). */
+  isGuest?: boolean;
 };
 
 /**
@@ -121,6 +123,7 @@ function grantedScopes(user: AuthzUser, rule: PermissionRule): Scope[] {
     if (scope) scopes.push(scope);
   }
   if (user.isPrivacyOfficer && rule.alsoFlag?.privacy_officer) scopes.push(rule.alsoFlag.privacy_officer);
+  if (user.isGuest && rule.alsoFlag?.guest) scopes.push(rule.alsoFlag.guest);
   return scopes.sort((a, b) => rank(b) - rank(a));
 }
 

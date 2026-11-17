@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { ManageGroups } from "@/modules/messages/components/manage-groups";
+import { listActiveClients, listGuests } from "@/modules/messages/guests";
 import { listManagedGroups } from "@/modules/messages/queries";
 
 export const metadata: Metadata = { title: "Manage groups" };
@@ -13,6 +14,7 @@ export const metadata: Metadata = { title: "Manage groups" };
 export default async function Page() {
   await requireUser();
   const groups = await orNotFound(listManagedGroups());
+  const [clients, { guests }] = await Promise.all([listActiveClients(), listGuests()]);
   return (
     <PageContainer width="wide">
       <PageHeader
@@ -20,7 +22,7 @@ export default async function Page() {
         description="Create, rename and delete group chats, and choose who is in them."
         breadcrumbs={[{ label: "Messages", href: "/messages" }, { label: "Manage groups" }]}
       />
-      <ManageGroups groups={groups} timeZone={DEFAULT_TIMEZONE} />
+      <ManageGroups groups={groups} timeZone={DEFAULT_TIMEZONE} clients={clients} guests={guests} />
     </PageContainer>
   );
 }

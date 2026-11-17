@@ -11,7 +11,7 @@ import { loadAttachmentForViewer } from "@/modules/messages/uploads";
 const COMMON = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'", "X-Frame-Options": "SAMEORIGIN" } as const;
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response("Not found", { status: 404 });
   try {

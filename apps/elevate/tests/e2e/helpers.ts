@@ -218,3 +218,43 @@ export async function anotherPayRunId(notThis: string): Promise<string | null> {
     await sql.end();
   }
 }
+
+/** A throwaway client (a company the team serves), for client guests and client groups. */
+export async function createTestClientRecord(name: string): Promise<string> {
+  assertLocal();
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    const [row] = await sql<{ id: string }[]>`insert into core.clients (name) values (${name}) returning id`;
+    return row.id;
+  } finally {
+    await sql.end();
+  }
+}
+
+/**
+ * Only the sign-in account (confirmed email and password), nothing in ELEVATE: the person was invited in the app, and the app's own
+ * first-sign-in set-up makes them a guest. Returns the password.
+ */
+export async function createSignInOnlyAccount(email: string): Promise<TestAccount> {
+  assertLocal();
+  const password = randomBytes(15).toString("base64url");
+  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
+  const { error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+  if (error) throw new Error(`Could not create test account: ${error.message}`);
+  return { email, password };
+}
+
+/** Like signInEnrollingMfa, but a client guest lands on Messages (their only page), not the dashboard. */
+export async function signInGuestEnrollingMfa(page: Page, account: TestAccount) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(account.email);
+  await page.getByLabel("Password", { exact: true }).fill(account.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.waitForURL(/\/mfa(\?|$)/);
+  const secretEl = page.locator("span.font-mono");
+  await expect(secretEl).toBeVisible();
+  const secret = (await secretEl.textContent())!.trim();
+  await page.getByLabel("6-digit code").fill(totp(secret));
+  await page.getByRole("button", { name: "Verify" }).click();
+  await page.waitForURL(/\/(dashboard|messages)/, { timeout: 45_000 });
+}

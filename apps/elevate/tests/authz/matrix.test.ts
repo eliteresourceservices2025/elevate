@@ -51,6 +51,7 @@ const EXPECTED: Record<string, string> = {
   "messages.use": "O O O O O O",
   "messages.create_group": "A A - - - -",
   "messages.manage_group": "A A - - - -",
+  "messages.invite_guests": "A A - - - -",
   "privacy.view_my_data": "O O O O O O",
   "privacy.export_my_data": "O O O O O O",
   "privacy.request_data_rights": "O O O O O O",

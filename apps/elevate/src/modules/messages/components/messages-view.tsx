@@ -28,7 +28,7 @@ function mergeNewest(previous: ThreadData | null, next: ThreadData): ThreadData 
 
 export type { ThreadData };
 
-export function MessagesView({ userId, timeZone, canManage, initialConversations, initialConversationId, initialThread }: { userId: string; timeZone: string; canManage: boolean; initialConversations: ConversationSummary[]; initialConversationId: string | null; initialThread: ThreadData | null }) {
+export function MessagesView({ userId, timeZone, canManage, isGuest = false, initialConversations, initialConversationId, initialThread }: { userId: string; timeZone: string; canManage: boolean; isGuest?: boolean; initialConversations: ConversationSummary[]; initialConversationId: string | null; initialThread: ThreadData | null }) {
   const [conversations, setConversations] = useState(initialConversations);
   const [activeId, setActiveId] = useState<string | null>(initialConversationId);
   const [thread, setThread] = useState<ThreadData | null>(initialThread);
@@ -187,7 +187,7 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
   return (
     <div className="flex h-[calc(100dvh-13rem)] min-h-[34rem] overflow-hidden rounded-xl border bg-card">
       <div className={`w-full shrink-0 border-r md:block md:w-80 ${active ? "hidden" : "block"}`}>
-        <ConversationList conversations={conversations} activeId={activeId} onOpen={open} newButton={<NewConversationDialog onOpened={(id) => void opened(id)} canCreateGroup={canManage} />} timeZone={timeZone} />
+        <ConversationList conversations={conversations} activeId={activeId} onOpen={open} newButton={isGuest ? null : <NewConversationDialog onOpened={(id) => void opened(id)} canCreateGroup={canManage} />} timeZone={timeZone} />
       </div>
 
       <div className={`min-w-0 flex-1 ${active ? (showDetails || openRoot ? "hidden md:block" : "block") : "hidden md:block"}`}>
@@ -269,7 +269,7 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
                   {m.name}
                   {m.userId === userId ? <span className="text-muted-foreground"> (you)</span> : null}
                 </span>
-                {canManage && active.kind === "group" ? (
+                {canManage && (active.kind === "group" || active.kind === "client") ? (
                   <Button type="button" variant="ghost" size="xs" onClick={() => void removePerson(active.id, m)} aria-label={`Remove ${m.name}`}>
                     Remove
                   </Button>
@@ -277,7 +277,7 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
               </li>
             ))}
           </ul>
-          {canManage && active.kind === "group" ? (
+          {canManage && (active.kind === "group" || active.kind === "client") ? (
             <div className="mt-auto flex flex-col gap-2">
               <RenameGroupDialog conversationId={active.id} current={active.title} onDone={() => { void loadThread(active.id, false); void refreshList(); }} />
               <AddPeopleDialog conversationId={active.id} existing={thread.members.map((m) => m.userId)} onAdded={() => { void loadThread(active.id, false); void refreshList(); }} />

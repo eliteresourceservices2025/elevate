@@ -8,6 +8,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { users } from "@/modules/core/schema";
 import { notify } from "@/modules/notifications/service";
 import { isAllowedEmoji } from "./emoji";
+import { membersFit } from "./guests";
 import { extractMentions } from "./mentions";
 import { clearSearchIndex, indexMessage } from "./search-index";
 import { broadcastChatSignal, type ChatSignal } from "./realtime";
@@ -62,10 +63,10 @@ async function currentMemberIds(executor: Db, conversationId: string): Promise<s
   return rows.map((r) => r.userId);
 }
 
-/** People who exist and are not archived. */
+/** Staff who exist and are not archived. A client guest is never included: guests only ever join a client's own group (see guests.ts). */
 async function activeUserIds(executor: Db, ids: string[]): Promise<string[]> {
   if (ids.length === 0) return [];
-  const rows = await executor.select({ id: users.id }).from(users).where(and(inArray(users.id, ids), isNull(users.archivedAt)));
+  const rows = await executor.select({ id: users.id }).from(users).where(and(inArray(users.id, ids), isNull(users.archivedAt), eq(users.isGuest, false)));
   return rows.map((r) => r.id);
 }
 
@@ -88,6 +89,8 @@ async function insertMessage(executor: Db, input: { conversationId: string; send
 const signal = (userIds: string[], s: ChatSignal) => broadcastChatSignal(userIds, s);
 
 export async function openDirect(actor: Actor, otherUserId: string): Promise<{ conversationId: string; created: boolean }> {
+  // Guests cannot start chats, and nobody can open a direct chat with one (clients talk in their client group only).
+  if ((await activeUserIds(db, [actor.id])).length !== 1) throw new ActionFailure("You can't start a chat.");
   if (otherUserId === actor.id) throw new ActionFailure("You can't message yourself.");
   if ((await activeUserIds(db, [otherUserId])).length !== 1) throw new ActionFailure("That person can't be messaged.");
   const dmKey = [actor.id, otherUserId].sort().join(":");
@@ -134,23 +137,25 @@ export async function createGroup(actor: Actor, input: { title: string; memberUs
  * removals emptying it, a removal racing a re-add) take turns instead of both reading the old state. For the people who manage groups:
  * they need not be a member, and managing never lets them read the group. The action has already checked `messages.manage_group`.
  */
-async function lockGroup(tx: Pick<typeof db, "select">, conversationId: string): Promise<void> {
+async function lockGroup(tx: Pick<typeof db, "select">, conversationId: string): Promise<{ kind: string; clientId: string | null }> {
   const [row] = await tx
-    .select({ id: conversations.id })
+    .select({ id: conversations.id, kind: conversations.kind, clientId: conversations.clientId })
     .from(conversations)
-    .where(and(eq(conversations.id, conversationId), eq(conversations.kind, "group"), isNull(conversations.archivedAt)))
+    .where(and(eq(conversations.id, conversationId), inArray(conversations.kind, ["group", "client"]), isNull(conversations.archivedAt)))
     .for("update")
     .limit(1);
   if (!row) throw new ActionFailure("Group not found.");
+  return { kind: row.kind, clientId: row.clientId };
 }
 
 export async function addMembers(actor: Actor, conversationId: string, userIds: string[]): Promise<void> {
   const wanted = [...new Set(userIds)];
-  const valid = await activeUserIds(db, wanted);
-  if (valid.length !== wanted.length) throw new ActionFailure("Some of those people can't be added.");
 
   const everyone = await db.transaction(async (tx) => {
-    await lockGroup(tx, conversationId);
+    const group = await lockGroup(tx, conversationId);
+    // A plain group takes staff only; a client group takes staff and guests of exactly that client.
+    const fits = group.kind === "client" && group.clientId ? await membersFit(tx, group.clientId, wanted) : (await activeUserIds(tx, wanted)).length === wanted.length;
+    if (!fits) throw new ActionFailure("Some of those people can't be added.");
     const before = new Set(await currentMemberIds(tx, conversationId));
     // Adding yourself to a group you are not in would be a way to read it, which only an approved access request may do.
     if (wanted.includes(actor.id) && !before.has(actor.id)) throw new ActionFailure("You can't add yourself to a chat you're not in.");

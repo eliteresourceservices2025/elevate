@@ -60,6 +60,12 @@ const valid: Call[] = [
   { name: "listGroupsToManage", run: () => actions.listGroupsToManage(), adminOnly: true },
   { name: "syncChatChannels", run: () => actions.syncChatChannels(), adminOnly: true },
   { name: "loadGroupPeopleToManage", run: () => actions.loadGroupPeopleToManage({ conversationId: ID }), adminOnly: true },
+  { name: "inviteChatGuest", run: () => actions.inviteChatGuest({ email: "guest@client.example", clientId: ID }), adminOnly: true },
+  { name: "listChatGuests", run: () => actions.listChatGuests(), adminOnly: true },
+  { name: "archiveChatGuest", run: () => actions.archiveChatGuest({ userId: ID }), adminOnly: true },
+  { name: "createClientGroupConversation", run: () => actions.createClientGroupConversation({ clientId: ID, title: "Clinic", guestUserIds: [ID2], staffUserIds: [ID3] }), adminOnly: true },
+  { name: "getGuestNotice", run: () => actions.getGuestNotice(), adminOnly: false },
+  { name: "acceptChatGuestNotice", run: () => actions.acceptChatGuestNotice(), adminOnly: false },
 ];
 const badInput: { name: string; run: () => Promise<{ ok: boolean; error?: string }>; role: RoleSlug }[] = [
   { name: "openDirectMessage", run: () => actions.openDirectMessage({}), role: "employee" },
@@ -87,6 +93,9 @@ const badInput: { name: string; run: () => Promise<{ ok: boolean; error?: string
   { name: "renameGroupChat", run: () => actions.renameGroupChat({}), role: "super_admin" },
   { name: "deleteGroupChat", run: () => actions.deleteGroupChat({}), role: "super_admin" },
   { name: "loadGroupPeopleToManage", run: () => actions.loadGroupPeopleToManage({}), role: "hr_admin" },
+  { name: "inviteChatGuest", run: () => actions.inviteChatGuest({ email: "not an email", clientId: ID }), role: "hr_admin" },
+  { name: "archiveChatGuest", run: () => actions.archiveChatGuest({}), role: "super_admin" },
+  { name: "createClientGroupConversation", run: () => actions.createClientGroupConversation({}), role: "hr_admin" },
 ];
 
 beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));

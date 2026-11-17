@@ -86,5 +86,14 @@ export const finalizeUploadSchema = z.object({ attachmentId: id });
 
 export const searchMessagesSchema = z.object({ q: z.string().trim().max(100) });
 
+export const inviteGuestSchema = z.object({ email: z.string().trim().toLowerCase().email("Enter a valid email address.").max(254), clientId: id });
+export const archiveGuestSchema = z.object({ userId: id });
+export const createClientGroupSchema = z.object({
+  clientId: id,
+  title: z.string().trim().min(1, "Give the group a name.").max(MAX_TITLE),
+  guestUserIds: z.array(id).max(MAX_GROUP),
+  staffUserIds: z.array(id).max(MAX_GROUP),
+});
+
 export const muteSchema = z.object({ conversationId: id, until: z.enum(["1h", "8h", "forever", "off"]) });
 export const chatSettingsSchema = z.object({ appearOffline: z.boolean(), emailDigest: z.boolean() });

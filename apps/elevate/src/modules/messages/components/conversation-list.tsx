@@ -32,7 +32,7 @@ export function ConversationAvatar({ conversation, size = "default" }: { convers
     <Avatar size={size}>
       {conversation.photoUserId ? <AvatarImage src={`/api/profile-photo/${conversation.photoUserId}`} alt="" /> : null}
       <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
-        {conversation.kind === "group" ? <Users className="size-4" aria-hidden /> : conversation.kind === "dm" ? initials(conversation.title) : <Hash className="size-4" aria-hidden />}
+        {conversation.kind === "group" || conversation.kind === "client" ? <Users className="size-4" aria-hidden /> : conversation.kind === "dm" ? initials(conversation.title) : <Hash className="size-4" aria-hidden />}
       </AvatarFallback>
     </Avatar>
   );
@@ -57,7 +57,7 @@ export function ConversationList({
   conversations: ConversationSummary[];
   activeId: string | null;
   onOpen: (id: string) => void;
-  newButton: ReactNode;
+  newButton?: ReactNode;
   timeZone: string;
 }) {
   const [filter, setFilter] = useState<Filter>("all");

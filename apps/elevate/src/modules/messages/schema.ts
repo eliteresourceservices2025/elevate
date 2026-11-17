@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { bigint, boolean, check, index, integer, smallint, type AnyPgColumn, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
 import { departments, teams } from "@/modules/org/schema";
+import { clients } from "@/modules/people/schema";
 
 // Messages (chat). Text is encrypted with fieldCrypto (context "chat_message:<conversationId>:<messageId>"; edits use
 // "chat_message_rev:<messageId>:<revisionId>"), so ids are generated in the app. Messages are insert-only by trigger
@@ -17,11 +18,13 @@ export const conversations = chat
     "conversations",
     {
       id: uuid("id").primaryKey().defaultRandom(),
-      /** 'dm' (two people), 'group' (made by HR), 'team', 'department' or 'company' (automatic channels kept in sync with ELEVATE's teams). Phase 3 adds 'client'. */
+      /** 'dm' (two people), 'group' (made by HR), 'team', 'department' or 'company' (automatic channels kept in sync with ELEVATE's teams), or 'client' (a group with a client's guests, attendance matters only). */
       kind: text("kind").notNull(),
       /** The team or department a channel belongs to (one channel each). */
       teamId: uuid("team_id").references(() => teams.id),
       departmentId: uuid("department_id").references(() => departments.id),
+      /** The client a 'client' group belongs to. */
+      clientId: uuid("client_id").references(() => clients.id),
       /** 'admins': only HR Admins and Super Admins post root messages here (the company channel); replies and reactions stay open. */
       posting: text("posting").notNull().default("everyone"),
       /** A group's name (plain text, shown to its members). Null for a direct message. */
@@ -39,7 +42,8 @@ export const conversations = chat
       uniqueIndex("conversations_team_idx").on(t.teamId).where(sql`${t.teamId} is not null`),
       uniqueIndex("conversations_department_idx").on(t.departmentId).where(sql`${t.departmentId} is not null`),
       uniqueIndex("conversations_company_idx").on(t.kind).where(sql`${t.kind} = 'company'`),
-      check("conversations_kind_chk", sql`${t.kind} in ('dm','group','team','department','company')`),
+      check("conversations_kind_chk", sql`${t.kind} in ('dm','group','team','department','company','client')`),
+      check("conversations_client_chk", sql`(${t.kind} = 'client') = (${t.clientId} is not null)`),
       check("conversations_posting_chk", sql`${t.posting} in ('everyone','admins')`),
       check("conversations_dm_key_chk", sql`(${t.kind} = 'dm') = (${t.dmKey} is not null)`),
     ],
@@ -281,4 +285,25 @@ export const userSettings = chat
     emailDigest: boolean("email_digest").notNull().default(true),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   })
+  .enableRLS();
+
+/** A client guest: signs in to Messages only. Owned by a client; archived when the relationship ends (their memberships end with it). */
+export const guests = chat
+  .table(
+    "guests",
+    {
+      userId: uuid("user_id")
+        .primaryKey()
+        .references(() => users.id),
+      clientId: uuid("client_id")
+        .notNull()
+        .references(() => clients.id),
+      invitedBy: uuid("invited_by").references(() => users.id),
+      /** When the guest accepted the guest notice (no patient details, attendance matters only). Null until then: nothing opens. */
+      noticeAcceptedAt: timestamp("notice_accepted_at", { withTimezone: true }),
+      createdAt: createdAt(),
+      archivedAt: timestamp("archived_at", { withTimezone: true }),
+    },
+    (t) => [index("guests_client_idx").on(t.clientId)],
+  )
   .enableRLS();

@@ -7,10 +7,13 @@ import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import * as queries from "./queries";
 import type { ChatMessage, ConversationSummary, ManagedGroup } from "./queries";
 import { syncChannels, type SyncResult } from "./channels";
+import * as guestService from "./guests";
+import { assertGuestReady } from "./guests";
 import * as service from "./service";
 import * as settings from "./settings";
 import * as uploads from "./uploads";
 import { writeAudit } from "@/modules/audit/write";
+import { sendInvitationEmail } from "@/modules/settings/invitation-email";
 import {
   addMembersSchema,
   createGroupSchema,
@@ -18,6 +21,9 @@ import {
   createPollSchema,
   deleteGroupSchema,
   deleteMessageSchema,
+  archiveGuestSchema,
+  createClientGroupSchema,
+  inviteGuestSchema,
   editMessageSchema,
   finalizeUploadSchema,
   markReadSchema,
@@ -41,13 +47,15 @@ type Actor = Awaited<ReturnType<typeof requireUser>>;
 
 function run<S extends z.ZodType, T>(
   actor: Actor,
-  action: "messages.use" | "messages.create_group" | "messages.manage_group",
+  action: "messages.use" | "messages.create_group" | "messages.manage_group" | "messages.invite_guests",
   schema: S,
   input: unknown,
   body: (actor: Actor, data: z.infer<S>) => Promise<T>,
 ): Promise<ActionResult<T>> {
   return runAction(async () => {
     await authorize(actor, action, { ownerUserId: actor.id });
+    // A guest who has not accepted the notice (or whose access ended) can do nothing here.
+    await assertGuestReady(actor);
     const parsed = schema.safeParse(input);
     if (!parsed.success) return fail(BAD);
     return { ok: true, data: await body(actor, parsed.data) };
@@ -65,22 +73,22 @@ export async function createGroupConversation(input: unknown): Promise<ActionRes
 }
 
 export async function sendChatMessage(input: unknown): Promise<ActionResult<{ id: string; seq: number }>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", sendMessageSchema, input, (a, data) => service.sendMessage(a, { ...data, canManage: can(a, "messages.manage_group") }));
 }
 
 export async function editChatMessage(input: unknown): Promise<ActionResult<undefined>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", editMessageSchema, input, async (a, data) => void (await service.editMessage(a, data)));
 }
 
 export async function deleteChatMessage(input: unknown): Promise<ActionResult<undefined>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", deleteMessageSchema, input, async (a, data) => void (await service.deleteMessage(a, data.messageId)));
 }
 
 export async function markConversationRead(input: unknown): Promise<ActionResult<undefined>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", markReadSchema, input, async (a, data) => void (await service.markRead(a, data)));
 }
 
@@ -115,27 +123,27 @@ export async function loadGroupPeopleToManage(input: unknown): Promise<ActionRes
 }
 
 export async function toggleChatReaction(input: unknown): Promise<ActionResult<{ active: boolean }>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", reactSchema, input, (a, data) => service.toggleReaction(a, data));
 }
 
 export async function pinChatMessage(input: unknown): Promise<ActionResult<undefined>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", pinSchema, input, async (a, data) => void (await service.pinMessage(a, data)));
 }
 
 export async function unpinChatMessage(input: unknown): Promise<ActionResult<undefined>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", pinSchema, input, async (a, data) => void (await service.unpinMessage(a, data)));
 }
 
 export async function loadChatThread(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadThread>>>> {
-  await requireUser();
+  await requireUser({ allowGuest: true });
   return runAction(async () => ({ ok: true, data: await queries.loadThread(input) }));
 }
 
 export async function listChatPins(input: unknown): Promise<ActionResult<queries.PinnedMessage[]>> {
-  await requireUser();
+  await requireUser({ allowGuest: true });
   return runAction(async () => ({ ok: true, data: await queries.listPins(input) }));
 }
 
@@ -150,53 +158,99 @@ export async function syncChatChannels(): Promise<ActionResult<SyncResult & { sk
   });
 }
 
-export async function createChatPoll(input: unknown): Promise<ActionResult<{ id: string; seq: number }>> {
+/** HR / Super Admin: invite one client person as a guest (Messages only). emailed = the invitation email was handed to the email service. */
+export async function inviteChatGuest(input: unknown): Promise<ActionResult<{ emailed: boolean }>> {
   const actor = await requireUser();
+  return run(actor, "messages.invite_guests", inviteGuestSchema, input, async (a, data) => {
+    const { expiresAt } = await guestService.inviteGuest(a, data);
+    return { emailed: await sendInvitationEmail(data.email, expiresAt) };
+  });
+}
+
+export async function listChatGuests(): Promise<ActionResult<Awaited<ReturnType<typeof guestService.listGuests>>>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "messages.invite_guests");
+    return { ok: true, data: await guestService.listGuests() };
+  });
+}
+
+export async function archiveChatGuest(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return run(actor, "messages.invite_guests", archiveGuestSchema, input, async (a, data) => void (await guestService.archiveGuest(a, data.userId)));
+}
+
+export async function createClientGroupConversation(input: unknown): Promise<ActionResult<{ conversationId: string }>> {
+  const actor = await requireUser();
+  return run(actor, "messages.create_group", createClientGroupSchema, input, (a, data) => guestService.createClientGroup(a, data));
+}
+
+/** A guest reads the notice they must accept (title, text and whether they already did). */
+export async function getGuestNotice(): Promise<ActionResult<{ title: string; body: string; accepted: boolean; clientName: string | null }>> {
+  const actor = await requireUser({ allowGuest: true });
+  return runAction(async () => {
+    await authorize(actor, "messages.use", { ownerUserId: actor.id });
+    const status = await guestService.guestStatus(actor.id);
+    return { ok: true, data: { title: guestService.GUEST_NOTICE_TITLE, body: guestService.GUEST_NOTICE_BODY, accepted: status.noticeAccepted, clientName: status.clientName } };
+  });
+}
+
+export async function acceptChatGuestNotice(): Promise<ActionResult<undefined>> {
+  const actor = await requireUser({ allowGuest: true });
+  return runAction(async () => {
+    await authorize(actor, "messages.use", { ownerUserId: actor.id });
+    await guestService.acceptGuestNotice(actor);
+    return { ok: true, data: undefined };
+  });
+}
+
+export async function createChatPoll(input: unknown): Promise<ActionResult<{ id: string; seq: number }>> {
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", createPollSchema, input, (a, data) => service.createPoll(a, { ...data, canManage: can(a, "messages.manage_group") }));
 }
 
 export async function voteChatPoll(input: unknown): Promise<ActionResult<undefined>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", votePollSchema, input, async (a, data) => void (await service.votePoll(a, data)));
 }
 
 export async function requestChatUpload(input: unknown): Promise<ActionResult<uploads.UploadTicket>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", requestUploadSchema, input, (a, data) => uploads.requestUpload(a, data));
 }
 
 export async function finalizeChatUpload(input: unknown): Promise<ActionResult<uploads.FinishedUpload>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", finalizeUploadSchema, input, (a, data) => uploads.finalizeUpload(a, data));
 }
 
 export async function searchChatMessages(input: unknown): Promise<ActionResult<queries.SearchHit[]>> {
-  await requireUser();
+  await requireUser({ allowGuest: true });
   return runAction(async () => ({ ok: true, data: await queries.searchMessages(input) }));
 }
 
 export async function muteChatConversation(input: unknown): Promise<ActionResult<undefined>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", muteSchema, input, async (a, data) => void (await settings.muteConversation(a, data)));
 }
 
 export async function getMyChatSettings(): Promise<ActionResult<settings.ChatSettings>> {
-  await requireUser();
+  await requireUser({ allowGuest: true });
   return runAction(async () => ({ ok: true, data: await settings.getChatSettings() }));
 }
 
 export async function saveMyChatSettings(input: unknown): Promise<ActionResult<undefined>> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", chatSettingsSchema, input, async (a, data) => void (await settings.saveChatSettings(a, data)));
 }
 
 export async function loadChatMessages(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadMessages>>>> {
-  await requireUser();
+  await requireUser({ allowGuest: true });
   return runAction(async () => ({ ok: true, data: await queries.loadMessages(input) }));
 }
 
 export async function loadConversationList(): Promise<ActionResult<ConversationSummary[]>> {
-  await requireUser();
+  await requireUser({ allowGuest: true });
   return runAction(async () => ({ ok: true, data: await queries.listMyConversations() }));
 }
 

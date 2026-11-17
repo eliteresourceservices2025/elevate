@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatInZone } from "@/lib/time";
 import { loadGroupPeopleToManage, syncChatChannels } from "../actions";
+import type { GuestRow } from "../guests";
 import type { ManagedGroup } from "../queries";
+import { ClientGroupDialog } from "./guest-admin";
 import { RenameGroupDialog, useDeleteGroup, useRemovePerson } from "./group-admin";
 import { AddPeopleDialog, NewGroupDialog } from "./new-conversation-dialog";
 
@@ -20,7 +22,7 @@ type Person = { userId: string; name: string };
  * Every group, for HR Admins and Super Admins: create, rename, add and remove people, delete. It shows names and counts only;
  * it never shows what was said, and managing a group does not make you a member of it.
  */
-export function ManageGroups({ groups, timeZone }: { groups: ManagedGroup[]; timeZone: string }) {
+export function ManageGroups({ groups, timeZone, clients, guests }: { groups: ManagedGroup[]; timeZone: string; clients: { id: string; name: string }[]; guests: GuestRow[] }) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [people, setPeople] = useState<Person[] | null>(null);
@@ -80,6 +82,16 @@ export function ManageGroups({ groups, timeZone }: { groups: ManagedGroup[]; tim
         <Button type="button" variant="outline" onClick={() => void syncChannels()} disabled={syncing}>
           {syncing ? "Updating…" : "Update channels now"}
         </Button>
+        {clients.length > 0 ? (
+          <ClientGroupDialog
+            clients={clients}
+            guests={guests}
+            onOpened={(id) => {
+              router.refresh();
+              void select(id);
+            }}
+          />
+        ) : null}
         <NewGroupDialog
           onOpened={(id) => {
             router.refresh();
@@ -110,6 +122,7 @@ export function ManageGroups({ groups, timeZone }: { groups: ManagedGroup[]; tim
               <TableRow key={g.id} data-state={g.id === selectedId ? "selected" : undefined}>
                 <TableCell className="font-medium">
                   {g.title}
+                  {g.kind === "client" ? <span className="ml-2 rounded bg-info-surface px-1.5 py-0.5 text-xs font-medium">Client: {g.clientName}</span> : null}
                   {g.amMember ? <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground">You&apos;re in it</span> : null}
                 </TableCell>
                 <TableCell label="People">{g.memberCount}</TableCell>

@@ -1,5 +1,6 @@
 import "server-only";
-import { and, asc, eq, ilike, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { assertGuestReady } from "./guests";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { fieldCrypto } from "@/lib/crypto";
@@ -24,7 +25,7 @@ const PEOPLE_LIMIT_MANAGER = 200;
 
 export type ConversationSummary = {
   id: string;
-  kind: "dm" | "group" | "team" | "department" | "company";
+  kind: "dm" | "group" | "team" | "department" | "company" | "client";
   title: string;
   /** "admins": only HR posts root messages here (the company channel). */
   posting: "everyone" | "admins";
@@ -67,8 +68,10 @@ export type PollView = { multiple: boolean; anonymous: boolean; totalVoters: num
 type Person = { name: string; position: string | null };
 
 async function actorWithAccess() {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   await authorize(actor, "messages.use", { ownerUserId: actor.id });
+  // A guest who has not accepted the notice (or whose access ended) reads nothing.
+  await assertGuestReady(actor);
   return actor;
 }
 
@@ -353,7 +356,7 @@ export async function listPins(input: unknown): Promise<PinnedMessage[]> {
   });
 }
 
-export type ManagedGroup = { id: string; title: string; memberCount: number; createdAt: string; createdByName: string; amMember: boolean };
+export type ManagedGroup = { id: string; title: string; kind: "group" | "client"; clientName: string | null; memberCount: number; createdAt: string; createdByName: string; amMember: boolean };
 
 /**
  * Every live group, for the people who manage groups (HR Admin, Super Admin): name, size, who made it and whether they are in it.
@@ -363,17 +366,19 @@ export async function listManagedGroups(): Promise<ManagedGroup[]> {
   const actor = await requireUser();
   await authorize(actor, "messages.manage_group");
   const rows = (await db.execute(sql`
-    select c.id, c.title, c.created_by, c.created_at,
+    select c.id, c.title, c.kind, c.created_by, c.created_at, (select name from core.clients cl where cl.id = c.client_id) as client_name,
       (select count(*)::int from chat.conversation_members m where m.conversation_id = c.id and m.left_at is null) as member_count,
       exists (select 1 from chat.conversation_members m where m.conversation_id = c.id and m.user_id = ${actor.id} and m.left_at is null) as am_member
     from chat.conversations c
-    where c.kind = 'group' and c.archived_at is null
+    where c.kind in ('group','client') and c.archived_at is null
     order by c.created_at desc
-    limit 500`)) as unknown as { id: string; title: string | null; created_by: string; created_at: Date; member_count: number; am_member: boolean }[];
+    limit 500`)) as unknown as { id: string; title: string | null; kind: "group" | "client"; client_name: string | null; created_by: string; created_at: Date; member_count: number; am_member: boolean }[];
   const people = await peopleByUserId(rows.map((r) => r.created_by));
   return rows.map((r) => ({
     id: r.id,
     title: r.title ?? "Group",
+    kind: r.kind,
+    clientName: r.client_name,
     memberCount: r.member_count,
     createdAt: new Date(r.created_at).toISOString(),
     createdByName: people.get(r.created_by)?.name ?? "Someone",
@@ -390,7 +395,7 @@ export async function loadGroupPeople(input: unknown): Promise<{ userId: string;
   const [group] = await db
     .select({ id: conversations.id })
     .from(conversations)
-    .where(and(eq(conversations.id, parsed.data.conversationId), eq(conversations.kind, "group"), isNull(conversations.archivedAt)))
+    .where(and(eq(conversations.id, parsed.data.conversationId), inArray(conversations.kind, ["group", "client"]), isNull(conversations.archivedAt)))
     .limit(1);
   if (!group) throw new ActionFailure("Group not found.");
   const rows = await db
@@ -469,6 +474,8 @@ export async function countMyUnread(): Promise<number> {
 
 export async function searchChatPeople(input: unknown): Promise<{ userId: string; name: string; position: string | null }[]> {
   const actor = await actorWithAccess();
+  // Guests cannot look people up.
+  if (actor.isGuest) throw new ActionFailure("You can't search for people.");
   const parsed = searchPeopleSchema.safeParse(input);
   if (!parsed.success) throw new ActionFailure("Check the request and try again.");
   const q = parsed.data.q;

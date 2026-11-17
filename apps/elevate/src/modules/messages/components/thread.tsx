@@ -101,7 +101,7 @@ export function Thread({
         <ConversationAvatar conversation={conversation} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-heading text-base font-semibold">{conversation.title}</h2>
-          <p className="truncate text-xs text-muted-foreground">{conversation.kind === "dm" ? "Direct message" : conversation.kind === "group" ? `${conversation.memberCount} people` : `${conversation.kind === "company" ? "Company" : conversation.kind === "team" ? "Team" : "Department"} channel · ${conversation.memberCount} people`}</p>
+          <p className="truncate text-xs text-muted-foreground">{conversation.kind === "dm" ? "Direct message" : conversation.kind === "group" ? `${conversation.memberCount} people` : conversation.kind === "client" ? `Client group · ${conversation.memberCount} people` : `${conversation.kind === "company" ? "Company" : conversation.kind === "team" ? "Team" : "Department"} channel · ${conversation.memberCount} people`}</p>
         </div>
         <MuteDialog conversationId={conversation.id} muted={!!conversation.mutedUntil} onDone={onMuted} />
         <Button type="button" variant="outline" size="sm" onClick={onToggleDetails} aria-label="Show people in this chat">
@@ -109,6 +109,11 @@ export function Thread({
           <span className="hidden sm:inline">People</span>
         </Button>
       </div>
+      {conversation.kind === "client" ? (
+        <p role="note" className="border-b bg-warning-surface px-3 py-1.5 text-xs font-medium text-foreground">
+          Attendance matters only. Never share patient details.
+        </p>
+      ) : null}
 
       {pins.length > 0 ? (
         <div className="flex items-start gap-2 border-b bg-muted/40 px-3 py-2 text-sm" role="region" aria-label="Pinned messages">

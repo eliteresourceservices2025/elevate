@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import postgres from "postgres";
-import { createEmployeeAccount, createHrAccount, hydrated, signInEnrollingMfa } from "./helpers";
+import { createEmployeeAccount, createHrAccount, createSignInOnlyAccount, createTestClientRecord, hydrated, signInEnrollingMfa, signInGuestEnrollingMfa } from "./helpers";
 
 // Needs the local Supabase with migrations applied (including 0147, which lets a person join only their own Realtime channel).
 // Two or three people chat in separate browser windows: live delivery, unread badges, edit, delete, a group, a 404 for a stranger, phone width.
@@ -378,4 +378,75 @@ test("search finds a word in my chats; muting a chat takes it out of the unread 
   await pageB.getByRole("dialog").getByLabel("Appear offline").check();
   await pageB.getByRole("dialog").getByRole("button", { name: "Save" }).click();
   await expect(pageB.getByRole("dialog")).toBeHidden();
+});
+
+test("a client guest: invited by HR, accepts the notice, sees only their client group, reaches nothing else, and loses access when ended", async ({ browser }) => {
+  test.setTimeout(420_000);
+  const stamp = Date.now();
+  const hr = await createHrAccount();
+  const staff = await createEmployeeAccount("Sam", `Gst${stamp}s`);
+  const clientName = `Clinic ${stamp}`;
+  await createTestClientRecord(clientName);
+  const guestEmail = `e2e.guest.${stamp}@client.example`;
+  const pageHr = await (await browser.newContext()).newPage();
+  const pageG = await (await browser.newContext()).newPage();
+  const pageS = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageHr, hr);
+  await signInEnrollingMfa(pageS, staff);
+
+  // HR invites the guest from Client guests.
+  await pageHr.goto("/messages/guests");
+  await (await hydrated(pageHr.getByRole("button", { name: "Invite a guest" }))).click();
+  const invite = pageHr.getByRole("dialog");
+  await invite.getByLabel("Their work email").fill(guestEmail);
+  await invite.getByLabel("Client").selectOption({ label: clientName });
+  await invite.getByRole("button", { name: "Send invitation" }).click();
+  await expect(pageHr.getByRole("listitem").filter({ hasText: guestEmail })).toBeVisible({ timeout: 20_000 });
+
+  // The guest signs up for a sign-in account, and the app's first-sign-in set-up makes them a guest: notice first.
+  const guest = await createSignInOnlyAccount(guestEmail);
+  await signInGuestEnrollingMfa(pageG, guest);
+  await expect(pageG.getByRole("heading", { level: 1, name: /how to use ELEVATE Messages/ })).toBeVisible({ timeout: 45_000 });
+  await expect(pageG.getByText("Never share patient details.")).toBeVisible();
+  await pageG.getByRole("button", { name: "I have read and agree" }).click();
+  await expect(pageG.getByRole("heading", { level: 1, name: "Messages" })).toBeVisible({ timeout: 45_000 });
+  await expect(pageG.getByRole("button", { name: "New message" })).toHaveCount(0);
+
+  // Everything else leads back to Messages, and nothing of the staff app shows.
+  await pageG.goto("/people");
+  await expect(pageG).toHaveURL(/\/messages$/);
+  await pageG.goto("/messages/manage");
+  await expect(pageG).toHaveURL(/\/messages$/);
+  await expect(pageG.getByRole("link", { name: "Dashboard" })).toHaveCount(0);
+
+  // HR makes a client group with the guest and Sam.
+  await pageHr.goto("/messages/manage");
+  await (await hydrated(pageHr.getByRole("button", { name: "New client group" }))).click();
+  const group = pageHr.getByRole("dialog");
+  await group.getByLabel("Client").selectOption({ label: clientName });
+  await group.getByLabel("Group name").fill(`Attendance ${stamp}`);
+  await group.getByLabel(guestEmail).check();
+  await group.getByLabel("Find people").fill(`Gst${stamp}s`);
+  await group.getByRole("button", { name: new RegExp(`Sam Gst${stamp}s`) }).click();
+  await group.getByRole("button", { name: "Create group" }).click();
+  await expect(pageHr.getByRole("cell", { name: new RegExp(`Attendance ${stamp}`) })).toBeVisible({ timeout: 20_000 });
+
+  // The guest sees the group (and only it), with the reminder, and chats with Sam.
+  await pageG.goto("/messages");
+  await pageG.getByRole("button", { name: new RegExp(`Attendance ${stamp}`) }).click();
+  await expect(pageG.getByRole("note")).toContainText("Attendance matters only. Never share patient details.");
+  await say(pageG, `Attendance ${stamp}`, "Is Sam on at 9?");
+  await pageS.goto("/messages");
+  await pageS.getByRole("button", { name: new RegExp(`Attendance ${stamp}`) }).click();
+  await expect(pageS.getByRole("log").getByText("Is Sam on at 9?")).toBeVisible({ timeout: 15_000 });
+  await say(pageS, `Attendance ${stamp}`, "Yes, from 9.");
+  await expect(pageG.getByRole("log").getByText("Yes, from 9.")).toBeVisible({ timeout: 15_000 });
+
+  // HR ends the guest's access: they are signed out of everything.
+  await pageHr.goto("/messages/guests");
+  await pageHr.getByRole("row").filter({ hasText: guestEmail }).getByRole("button", { name: "End access" }).click();
+  await pageHr.getByRole("alertdialog").getByRole("button", { name: "End access" }).click();
+  await expect(pageHr.getByRole("row").filter({ hasText: guestEmail })).toContainText("Access ended", { timeout: 20_000 });
+  await pageG.goto("/messages");
+  await expect(pageG).toHaveURL(/\/login/, { timeout: 30_000 });
 });

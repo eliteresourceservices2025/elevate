@@ -14,7 +14,7 @@ export type ChatSettings = { appearOffline: boolean; emailDigest: boolean };
 const DEFAULTS: ChatSettings = { appearOffline: false, emailDigest: true };
 
 export async function getChatSettings(): Promise<ChatSettings> {
-  const actor = await requireUser();
+  const actor = await requireUser({ allowGuest: true });
   await authorize(actor, "messages.use", { ownerUserId: actor.id });
   const [row] = await db.select({ appearOffline: userSettings.appearOffline, emailDigest: userSettings.emailDigest }).from(userSettings).where(eq(userSettings.userId, actor.id)).limit(1);
   return row ?? DEFAULTS;
