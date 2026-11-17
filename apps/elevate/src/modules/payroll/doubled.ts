@@ -18,6 +18,8 @@ export type DoubledInput = {
   createdAt: number;
   /** The line has been on a real pay run (not a test, not cancelled): it can be stopped but not taken away. */
   onRealRun: boolean;
+  /** The line is paid per FTE (internal team). It is a second role of the person, never a double of their monthly rate, so it is left out. */
+  perFte?: boolean;
 };
 
 export type DoubledRemoval = {
@@ -64,7 +66,8 @@ const overlaps = (a: DoubledInput, b: DoubledInput) => a.first <= (b.last ?? FAR
  * person has exactly one client among these lines and the line has no alias or the client's alias (a leftover from before the client was
  * filled in); otherwise it stays with the other no-client lines of the same alias. Lines that follow each other without overlapping are not doubled.
  */
-export function findDoubledRates(lines: DoubledInput[]): DoubledGroup[] {
+export function findDoubledRates(all: DoubledInput[]): DoubledGroup[] {
+  const lines = all.filter((l) => !l.perFte);
   const aliasOf = (l: DoubledInput) => (l.alias ?? "").trim().toLowerCase().replace(/\s+/g, " ");
   const namedOf = new Map<string, Set<string>>();
   const aliasesWithClient = new Map<string, Set<string>>();

@@ -79,6 +79,9 @@ const rateText = (row: Pick<RateRow, "monthly" | "basis">) => (row.basis === "pe
 
 const FTE_CHOICES = ["1", "0.5", "0"] as const;
 
+/** The alias suggested for a rate paid per FTE: a person who already has a rate (for example as a VA) is paid for a second role, which needs its own alias. */
+const INTERNAL_ALIAS = "Internal team";
+
 /** The default FTE count of a contractor on a client: Not set, 1, 0.5 or 0 (a value saved earlier that is none of these stays choosable). */
 function FteSelect({ id, value, onChange }: { id: string; value: string; onChange: (next: string) => void }) {
   return (
@@ -98,7 +101,7 @@ function FteSelect({ id, value, onChange }: { id: string; value: string; onChang
 }
 
 /** Hours, alias, payment method and the person's own overtime percents: the rarely changed details, shown on request. */
-function DetailFields({ value, onChange, idPrefix, withClient, showFte = true }: { value: Fields; onChange: (next: Fields) => void; idPrefix: string; withClient?: RateOptions["clients"] | null; showFte?: boolean }) {
+function DetailFields({ value, onChange, idPrefix, withClient, showFte = true, showAlias = true }: { value: Fields; onChange: (next: Fields) => void; idPrefix: string; withClient?: RateOptions["clients"] | null; showFte?: boolean; showAlias?: boolean }) {
   const set = <K extends keyof Fields>(key: K, v: Fields[K]) => onChange({ ...value, [key]: v });
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -116,10 +119,12 @@ function DetailFields({ value, onChange, idPrefix, withClient, showFte = true }:
         </div>
       ) : null}
       {showFte && value.basis === "monthly" ? <FteSelect id={`${idPrefix}-fte`} value={value.fte} onChange={(v) => set("fte", v)} /> : null}
-      <div className="space-y-1">
-        <HintedLabel htmlFor={`${idPrefix}-alias`} hint={PAYROLL_HINTS.lineAlias}>Alias (optional)</HintedLabel>
-        <Input id={`${idPrefix}-alias`} value={value.alias} onChange={(e) => set("alias", e.target.value)} maxLength={80} />
-      </div>
+      {showAlias ? (
+        <div className="space-y-1">
+          <HintedLabel htmlFor={`${idPrefix}-alias`} hint={PAYROLL_HINTS.lineAlias}>Alias (optional)</HintedLabel>
+          <Input id={`${idPrefix}-alias`} value={value.alias} onChange={(e) => set("alias", e.target.value)} maxLength={80} />
+        </div>
+      ) : null}
       <div className="space-y-1">
         <HintedLabel htmlFor={`${idPrefix}-hours`} hint={PAYROLL_HINTS.lineHours}>Hours per day</HintedLabel>
         <Input id={`${idPrefix}-hours`} type="number" inputMode="numeric" min={1} max={12} step={1} value={value.hoursPerDay} onChange={(e) => set("hoursPerDay", e.target.value)} required />
@@ -189,8 +194,16 @@ export function AddContractorForm({ options, cutoffs, rows }: { options: RateOpt
     otRestDayOver8: "",
   });
   const set = <K extends keyof Fields>(key: K, v: Fields[K]) => setFields({ ...fields, [key]: v });
+  // Paying per FTE (internal team) suggests the alias "Internal team", and going back to a monthly rate takes back a suggestion nobody edited.
+  const chooseBasis = (basis: Fields["basis"]) =>
+    setFields((f) => ({ ...f, basis, alias: basis === "per_fte" ? (f.alias.trim() === "" ? INTERNAL_ALIAS : f.alias) : f.alias === INTERNAL_ALIAS ? "" : f.alias }));
+  // The same test the server makes: the same job, and the other rate still in force on the day this one would start (a rate that stops later counts).
   const twin = employeeId
-    ? rows.find((r) => !r.endsOn && sameJob({ employeeId: r.employeeId, clientId: r.clientId, alias: r.alias }, { employeeId, clientId: fields.clientId || null, alias: fields.alias || null }))
+    ? rows.find(
+        (r) =>
+          (r.endsOn === null || r.endsOn >= fields.effectiveFrom) &&
+          sameJob({ employeeId: r.employeeId, clientId: r.clientId, alias: r.alias }, { employeeId, clientId: fields.clientId || null, alias: fields.alias || null }),
+      )
     : undefined;
   return (
     <form
@@ -225,7 +238,7 @@ export function AddContractorForm({ options, cutoffs, rows }: { options: RateOpt
         </div>
         <div className="space-y-1">
           <HintedLabel htmlFor="add-basis" hint={PAYROLL_HINTS.lineBasis}>How is this person paid?</HintedLabel>
-          <NativeSelect id="add-basis" value={fields.basis} onChange={(e) => set("basis", e.target.value as Fields["basis"])}>
+          <NativeSelect id="add-basis" value={fields.basis} onChange={(e) => chooseBasis(e.target.value as Fields["basis"])}>
             <option value="monthly">Monthly rate</option>
             <option value="per_fte">Per FTE (internal team)</option>
           </NativeSelect>
@@ -239,15 +252,22 @@ export function AddContractorForm({ options, cutoffs, rows }: { options: RateOpt
             <FteSelect id="add-fte" value={fields.fte} onChange={(v) => set("fte", v)} />
           </>
         ) : (
-          <div className="space-y-1">
-            <HintedLabel htmlFor="add-per-fte" hint={PAYROLL_HINTS.linePerFte}>Amount per FTE per cutoff (pesos)</HintedLabel>
-            <Input id="add-per-fte" inputMode="decimal" value={fields.perFte} onChange={(e) => set("perFte", e.target.value)} placeholder="1,500.00" autoComplete="off" required />
-          </div>
+          <>
+            <div className="space-y-1">
+              <HintedLabel htmlFor="add-per-fte" hint={PAYROLL_HINTS.linePerFte}>Amount per FTE per cutoff (pesos)</HintedLabel>
+              <Input id="add-per-fte" inputMode="decimal" value={fields.perFte} onChange={(e) => set("perFte", e.target.value)} placeholder="1,500.00" autoComplete="off" required />
+            </div>
+            <div className="space-y-1">
+              <HintedLabel htmlFor="add-alias" hint={PAYROLL_HINTS.lineAlias}>Alias (optional)</HintedLabel>
+              <Input id="add-alias" value={fields.alias} onChange={(e) => set("alias", e.target.value)} maxLength={80} />
+            </div>
+          </>
         )}
       </div>
       {twin ? (
         <Alert variant="info" role="status" className="rounded-lg p-3 text-sm">
-          {twin.name} already has a rate for {twin.clientName ?? "no client"} ({rateText(twin)}). To change it, close this window and use <strong>Update rate</strong> on that row. A second client or role gets its own rate here.
+          {twin.name} already has a rate for {twin.clientName ?? "no client"} ({rateText(twin)}){twin.endsOn ? `, which stops after ${twin.endsOn}` : ""}. To change it, close this window and use <strong>Update rate</strong> on that row. To pay them for a second role, give this one its own <strong>alias</strong>
+          {fields.basis === "per_fte" ? "" : " (under More options)"}, for example {INTERNAL_ALIAS}. A second client gets its own rate here too.
         </Alert>
       ) : null}
       <CutoffPicker
@@ -261,7 +281,7 @@ export function AddContractorForm({ options, cutoffs, rows }: { options: RateOpt
       <details className="text-sm">
         <summary className="cursor-pointer font-medium">More options (hours per day, alias, payment method, overtime)</summary>
         <div className="mt-3">
-          <DetailFields value={fields} onChange={setFields} idPrefix="add" showFte={false} />
+          <DetailFields value={fields} onChange={setFields} idPrefix="add" showFte={false} showAlias={fields.basis !== "per_fte"} />
         </div>
       </details>
       <Button type="submit" disabled={pending || !!twin || !employeeId}>
@@ -456,7 +476,7 @@ export function AutoTidy({ tidyKey }: { tidyKey: string }) {
   return null;
 }
 
-const removedText = (r: RemovedRateView) => `${r.clientName ?? "No client"}${r.alias ? ` (${r.alias})` : ""}: ${r.monthly.endsWith("per FTE") ? r.monthly : `${r.monthly} a month`}, since ${r.since}`;
+const removedText = (r: RemovedRateView) => `${r.clientName ?? "No client"}${r.alias ? ` (${r.alias})` : ""}: ${r.monthly.endsWith("per FTE") ? `${r.monthly} per cutoff` : r.monthly === "Can't be read" ? r.monthly : `${r.monthly} a month`}, since ${r.since}`;
 
 /**
  * The doubled rates the tidy took away, grouped by contractor. Restore one contractor's, or all of them. A restored rate is left alone by the

@@ -102,7 +102,7 @@ describe("the run's total FTE and a line paid per FTE", () => {
     expect(sheet.totals?.fte).toBe("2.5");
     const line = sheet.lines.find((l) => l.employeeId === internal)!;
     expect(line.perFte).toBe(true);
-    expect(line.figures).toMatchObject({ monthly: "2.5 × 1,500.00", cutoff: "3,750.00", base: "3,750.00", net: "3,750.00", fte: null });
+    expect(line.figures).toMatchObject({ monthly: "2.5 FTE × 1,500.00", cutoff: "3,750.00", base: "3,750.00", net: "3,750.00", fte: null });
     expect(sheet.lines.find((l) => l.employeeId === b)!.figures).toMatchObject({ fte: "0.5", fteFromRun: false });
     expect(sheet.lines.find((l) => l.employeeId === c)!.figures?.fte).toBe("0");
     expect(sheet.lines.find((l) => l.employeeId === d)!.figures?.fte).toBeNull();
@@ -118,14 +118,23 @@ describe("the run's total FTE and a line paid per FTE", () => {
     expect(warned.map((w) => w.employeeId)).toEqual([d]);
   });
 
-  it("says so once when the run's total FTE is 0, and warns about nothing when no line is paid per FTE", async () => {
+  it("blocks sending the run for review once when the run's total FTE is 0, and warns about nothing when no line is paid per FTE", async () => {
     const p = slot(1);
     const [a, internal] = [await person(), await person()];
     await giveLine(a, p, { fte: "0" });
     await giveLine(internal, p, { basis: "per_fte", perFte: "1,500", monthly: "" });
-    const sheet = await sheetOf(await newRun(p));
-    expect(sheet.checks.warnings.filter((w) => w.code === "per_fte_without_total")).toHaveLength(1);
+    const zeroRun = await newRun(p);
+    const sheet = await sheetOf(zeroRun);
+    expect(sheet.checks.blocking.filter((w) => w.code === "per_fte_without_total")).toHaveLength(1);
+    expect(sheet.checks.warnings.filter((w) => w.code === "per_fte_without_total")).toHaveLength(0);
     expect(sheet.lines.find((l) => l.employeeId === internal)!.figures?.net).toBe("0.00");
+    // The internal team would be paid nothing, so the run can't be sent until a count is set.
+    as(preparer);
+    expect((await submitRun({ runId: zeroRun })).ok).toBe(false);
+    const lineA = await runLineOf(zeroRun, a);
+    expect(await savePayItem({ runId: zeroRun, employeeId: a, runLineId: lineA.id, type: "fte", value: "1" })).toMatchObject({ ok: true });
+    expect((await sheetOf(zeroRun)).checks.blocking).toEqual([]);
+    expect(await submitRun({ runId: zeroRun })).toMatchObject({ ok: true });
 
     // A run with contractors only needs no FTE at all.
     const q = slot(2);
@@ -227,6 +236,45 @@ describe("setting FTE on the rates", () => {
     expect(sheet.totals?.fte).toBe("2");
     expect(sheet.lines.find((l) => l.employeeId === internal)!.figures?.base).toBe("3,000.00");
     expect((await runLineOf(runId, b)).confirmed_by).toBe(checker.id);
+  });
+
+  it("clears a count with Not set, and keeps a check when an FTE is typed for the run", async () => {
+    const p = slot(10);
+    const [a, b, internal] = [await person(), await person(), await person()];
+    const keyA = await giveLine(a, p, { fte: "1" });
+    await giveLine(b, p, { fte: "1" });
+    await giveLine(internal, p, { basis: "per_fte", perFte: "1,500", monthly: "" });
+    as(preparer);
+    expect(await setLineFtes({ rows: [{ lineKey: keyA, fte: "" }] })).toEqual({ ok: true, data: { changed: 1, skipped: 0 } });
+    expect((await getRates()).find((r) => r.lineKey === keyA)).toMatchObject({ fte: null });
+    // Clearing a count that is already not set changes nothing.
+    expect(await setLineFtes({ rows: [{ lineKey: keyA, fte: "" }] })).toEqual({ ok: true, data: { changed: 0, skipped: 1 } });
+
+    // Typing an FTE for the run leaves the contractor's own check in place: their pay did not change.
+    const runId = await newRun(p);
+    as(checker);
+    const lineB = await runLineOf(runId, b);
+    expect(await confirmRunLine({ runLineId: lineB.id })).toMatchObject({ ok: true });
+    as(preparer);
+    expect(await savePayItem({ runId, employeeId: b, runLineId: lineB.id, type: "fte", value: "0.5" })).toMatchObject({ ok: true });
+    expect((await runLineOf(runId, b)).confirmed_by).toBe(checker.id);
+    expect((await sheetOf(runId)).totals?.fte).toBe("0.5");
+  });
+
+  it("reaches a draft run built for an earlier cutoff, including a rate that stopped inside it", async () => {
+    // A practice run on a past cutoff is still a draft that reads the counts of its time: Set FTE starts from that day, not from today.
+    const p = { periodStart: "2019-03-01", periodEnd: "2019-03-15" };
+    const [a, internal] = [await person(), await person()];
+    const ended = await giveLine(a, { periodStart: p.periodStart, periodEnd: "2019-03-10" }, { fte: "0.5" });
+    await giveLine(internal, p, { basis: "per_fte", perFte: "1,500", monthly: "" });
+    as(preparer);
+    const made = await createPayRun({ ...p, test: true });
+    if (!made.ok) throw new Error(made.error);
+    expect(await setLineFtes({ rows: [{ lineKey: ended, fte: "1" }] })).toEqual({ ok: true, data: { changed: 1, skipped: 0 } });
+    as(preparer);
+    expect(await updateRunPeople({ runId: made.data.runId })).toMatchObject({ ok: true });
+    expect((await sheetOf(made.data.runId)).totals?.fte).toBe("1");
+    expect(await actions.cancelPayRun({ runId: made.data.runId, reason: "Practice run for a test" })).toMatchObject({ ok: true });
   });
 
   it("skips a rate paid per FTE and a rate that was removed, and records the change without a figure in the audit log", async () => {

@@ -48,7 +48,14 @@ export async function doubledRatesOf(executor: Reader) {
     if (live.length === 0) continue;
     const latest = [...live].sort(newestVersion)[0];
     latestOf.set(lineKey, latest);
+    let perFte = false;
+    try {
+      perFte = decryptLineAmounts(latest.id, latest.amountsEnc).perFteCentavos !== undefined;
+    } catch {
+      // An unreadable rate is compared like any other; the run blocks on it anyway.
+    }
     inputs.push({
+      perFte,
       lineKey,
       employeeId: latest.employeeId,
       clientName: latest.clientId ? (clientName.get(latest.clientId) ?? null) : null,

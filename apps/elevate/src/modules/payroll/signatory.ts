@@ -78,13 +78,14 @@ export async function saveSignatory(actor: AuthUser, v: SignatoryInput): Promise
     // One save at a time, so a save that only changes the name cannot carry forward a picture an earlier save just replaced.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"payroll.signatory"}))`);
     const previous = await currentSignatory(tx);
-    if (v.preparedByUserId) {
+    // Only a newly chosen preparer is checked: someone saved earlier who has since lost the level doesn't stop the name, title or picture being fixed.
+    if (v.preparedByUserId && v.preparedByUserId !== (previous?.preparedByUserId ?? null)) {
       const [preparer] = await tx
         .select({ id: users.id })
         .from(users)
         .where(and(eq(users.id, v.preparedByUserId), eq(users.payrollAccess, "preparer"), isNull(users.archivedAt)))
         .limit(1);
-      if (!preparer) throw new ActionFailure("Choose someone who has the Preparer payroll level.");
+      if (!preparer) throw new ActionFailure("That person doesn't have the Preparer payroll level (or has left). Choose someone else, or give them the level first.");
     }
     let keep: string | null = null;
     if (v.signatureBase64) {

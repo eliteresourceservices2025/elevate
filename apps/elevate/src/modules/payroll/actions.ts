@@ -72,6 +72,13 @@ import {
 
 const BAD_REQUEST = "Check the request and try again.";
 
+/** Fields whose Zod message is plain enough to show as it is ("Enter an amount above zero"); every other failure stays the generic line. */
+const SHOWN_FIELDS = new Set(["monthly", "perFte", "fte", "amountUsd"]);
+function badRequestOf(error: { issues: readonly { path: readonly PropertyKey[]; message: string }[] }): string {
+  const shown = error.issues.find((i) => i.path.some((p) => typeof p === "string" && SHOWN_FIELDS.has(p)));
+  return shown?.message ?? BAD_REQUEST;
+}
+
 const refreshed = () => {
   revalidatePath("/payroll/rates");
   revalidatePath("/payroll/settings");
@@ -150,6 +157,8 @@ const amountsOf = (v: AmountFields): LineAmounts => {
  * `staggered` (a change to a line that already exists): lines for the same job that start on different days are fine too, because a run takes
  * the newer one over from its first day and cuts the older one off the day before (`applySupersede`), so they never both pay for a day.
  * Only two lines that start on the very same day are refused (nothing says which is right).
+ * A line that was removed (added by mistake, or tidied away) never applies to any period, so it is not compared; neither are the versions of a
+ * stopped line dated after its last day.
  */
 async function refuseDuplicateLine(tx: Tx, v: { employeeId: string; clientId: string | null; alias: string | null; from: string; to: string | null; exceptLineKey?: string; staggered?: boolean }) {
   const rows = await tx.select().from(payLines).where(eq(payLines.employeeId, v.employeeId));
@@ -157,14 +166,17 @@ async function refuseDuplicateLine(tx: Tx, v: { employeeId: string; clientId: st
   for (const r of rows) byKey.set(r.lineKey, [...(byKey.get(r.lineKey) ?? []), r]);
   for (const group of byKey.values()) {
     if (group[0].lineKey === v.exceptLineKey) continue;
-    const newest = [...group].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : a.effectiveFrom > b.effectiveFrom ? -1 : b.createdAt.getTime() - a.createdAt.getTime()))[0];
-    if (!sameJob({ employeeId: v.employeeId, clientId: newest.clientId ?? null, alias: newest.alias ?? null }, { employeeId: v.employeeId, clientId: v.clientId, alias: v.alias })) continue;
-    const start = group.map((g) => g.effectiveFrom).sort()[0];
+    if (isWithdrawn(group)) continue; // removed: the Rates tab no longer shows it and nothing is paid from it
     const end = lineLastDay(group);
+    const live = end === null ? group : group.filter((g) => g.effectiveFrom <= end);
+    if (live.length === 0) continue;
+    const newest = [...live].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : a.effectiveFrom > b.effectiveFrom ? -1 : b.createdAt.getTime() - a.createdAt.getTime()))[0];
+    if (!sameJob({ employeeId: v.employeeId, clientId: newest.clientId ?? null, alias: newest.alias ?? null }, { employeeId: v.employeeId, clientId: v.clientId, alias: v.alias })) continue;
+    const start = live.map((g) => g.effectiveFrom).sort()[0];
     if (v.staggered && start !== v.from) continue;
     if (start <= (v.to ?? "9999-12-31") && v.from <= (end ?? "9999-12-31")) {
       return fail(
-        `This person already has a pay line for the same job (same alias, and the same client or none) from ${start}${end ? ` to ${end}` : ""}. A second one for the same dates would pay them twice. Change that line instead (the change keeps its history), or end it before this one starts. To pay them for two roles, give each line its own alias.`,
+        `This person already has a pay line for the same job (same alias, and the same client or none) from ${start}${end ? ` to ${end}` : ""}. A second one for the same dates would pay them twice. ${end ? `It stops after ${end}, so a new rate that starts the day after is fine. ` : ""}Change that line instead (the change keeps its history), or give the new rate its own alias, for example "Internal team", to pay them for a second role.`,
       );
     }
   }
@@ -178,7 +190,7 @@ export async function createPayLine(input: unknown): Promise<ActionResult<{ line
     await authorize(actor, "payroll.manage_rates");
 
     const parsed = createPayLineSchema.safeParse(input);
-    if (!parsed.success) return fail(BAD_REQUEST);
+    if (!parsed.success) return fail(badRequestOf(parsed.error));
     const v = parsed.data;
 
     const result = await db.transaction(async (tx) => {
@@ -222,7 +234,7 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
     await authorize(actor, "payroll.manage_rates");
 
     const parsed = updatePayLineSchema.safeParse(input);
-    if (!parsed.success) return fail(BAD_REQUEST);
+    if (!parsed.success) return fail(badRequestOf(parsed.error));
     const { reason, lineKey, ...v } = parsed.data;
 
     const result = await db.transaction(async (tx) => {
@@ -249,7 +261,8 @@ export async function updatePayLine(input: unknown): Promise<ActionResult<{ line
 
       const before = decryptLineAmounts(latest.id, latest.amountsEnc);
       const id = randomUUID();
-      const amounts = amountsOf(v);
+      // A blank FTE on the form keeps the count the rate already had (it is cleared on the Set FTE table, with "Not set").
+      const amounts = amountsOf({ ...v, fte: v.fte ?? before.fteHundredths ?? null });
       const row = {
         id,
         lineKey,
@@ -333,18 +346,27 @@ export async function setLineFtes(input: unknown): Promise<ActionResult<{ change
     await authorize(actor, "payroll.manage_rates");
 
     const parsed = setLineFtesSchema.safeParse(input);
-    if (!parsed.success) return fail(BAD_REQUEST);
-    const rows = [...new Map(parsed.data.rows.map((r) => [r.lineKey, r])).values()];
-    const day = payrollToday();
+    if (!parsed.success) return fail(badRequestOf(parsed.error));
+    // Sorted, so two people saving at once take the locks in the same order.
+    const rows = [...new Map(parsed.data.rows.map((r) => [r.lineKey, r])).values()].sort((a, b) => (a.lineKey < b.lineKey ? -1 : 1));
 
     const result = await db.transaction(async (tx) => {
+      // A draft built for an earlier cutoff still uses the counts of that time, so start from the earlier of today and the first draft day.
+      const [firstDraft] = await tx
+        .select({ start: payRuns.periodStart })
+        .from(payRuns)
+        .where(and(eq(payRuns.status, "draft"), isNull(payRuns.archivedAt)))
+        .orderBy(payRuns.periodStart)
+        .limit(1);
+      const today = payrollToday();
+      const from = firstDraft && firstDraft.start < today ? firstDraft.start : today;
       let changed = 0;
       for (const row of rows) {
         await lock(tx, `pay_line:${row.lineKey}`);
         const versions = await versionsOf(tx, row.lineKey);
         const last = lineLastDay(versions);
-        if (versions.length === 0 || isWithdrawn(versions) || (last !== null && last < day)) continue;
-        const done = await setFteOnLine(tx, actor.id, versions, row.fte, day);
+        if (versions.length === 0 || isWithdrawn(versions) || (last !== null && last < from)) continue;
+        const done = await setFteOnLine(tx, actor.id, versions, row.fte, from, last);
         if (!done) continue;
         changed += 1;
         await logChange(tx, actor, { action: "line_updated", employeeId: versions[0].employeeId, lineKey: row.lineKey, detail: { old: done.old, new: done.new, reason: "FTE set" } });
@@ -824,7 +846,7 @@ export async function markPaid(input: unknown): Promise<ActionResult<{ runPaid: 
     await authorize(actor, "payroll.mark_paid");
 
     const parsed = markPaidSchema.safeParse(input);
-    if (!parsed.success) return fail(BAD_REQUEST);
+    if (!parsed.success) return fail(badRequestOf(parsed.error));
 
     const result = await db.transaction((tx) => recordPayment(tx, actor, parsed.data));
     refreshedRun(parsed.data.runId);

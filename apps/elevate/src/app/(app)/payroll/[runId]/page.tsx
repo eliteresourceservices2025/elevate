@@ -170,6 +170,7 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
         refusal={sheet.approvalRefusal}
         sentBackNote={sheet.sentBackNote}
         unapproveRefusal={sheet.unapproveRefusal}
+        listDownloaded={sheet.listDownloaded}
         lineCount={sheet.lines.length}
       />
       {payments ? <PaymentsPanel view={payments} today={payrollToday()} /> : null}

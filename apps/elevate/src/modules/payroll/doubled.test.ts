@@ -13,6 +13,12 @@ const line = (lineKey: string, first: string, last: string | null, over: Partial
 });
 
 describe("findDoubledRates", () => {
+  it("never treats a line paid per FTE (internal team) as a double of the same person's monthly rate on the same client", () => {
+    expect(findDoubledRates([line("va", "2026-01-01", null), line("internal", "2026-10-16", null, { perFte: true })])).toEqual([]);
+    // Two per-FTE lines are not compared either: that is a person to sort out on the Rates tab, not a tidy.
+    expect(findDoubledRates([line("i1", "2026-01-01", null, { perFte: true }), line("i2", "2026-10-16", null, { perFte: true })])).toEqual([]);
+  });
+
   it("finds the pair from the Oct and Nov runs: old ends 12 Nov, new starts 16 Oct, same person and client", () => {
     const [g] = findDoubledRates([line("old", "2026-01-01", "2026-11-12"), line("new", "2026-10-16", null)]);
     expect(g.keep).toBe("new");

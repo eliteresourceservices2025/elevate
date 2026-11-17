@@ -26,7 +26,7 @@ import { DEFAULT_PAYMENT_SORT, nextSort, PAYMENT_SORT_CHOICES, sortPayments, typ
 import type { PaymentsView } from "../queries";
 
 /** Cents as typed in the box ("351.66"), for a payment that is being corrected. */
-const typedUsd = (cents: string | null): string => (cents === null ? "" : `${BigInt(cents) / 100n}.${(BigInt(cents) % 100n).toString().padStart(2, "0")}`);
+const typedUsd = (cents: string | null): string => (cents === null || BigInt(cents) < 0n ? "" : `${BigInt(cents) / 100n}.${(BigInt(cents) % 100n).toString().padStart(2, "0")}`);
 
 /** A column title that sorts the table: it names the direction for assistive tools, and shows it with an arrow. */
 function SortTitle({ label, sortKey, sort, onSort }: { label: string; sortKey: PaymentSortKey; sort: PaymentSort; onSort: (key: PaymentSortKey) => void }) {
@@ -48,6 +48,7 @@ function MarkPaidForm({
   employeeId,
   current,
   currentUsd,
+  usdUnreadable,
   today,
 }: {
   runId: string;
@@ -55,6 +56,8 @@ function MarkPaidForm({
   current: string;
   /** The dollars recorded with the payment being corrected, as typed ("351.66"); blank when none. */
   currentUsd: string;
+  /** The dollars saved with this payment can't be read: saving would replace them. */
+  usdUnreadable: boolean;
   today: string;
 }) {
   const { run, pending } = useRun();
@@ -104,6 +107,7 @@ function MarkPaidForm({
           </span>
           <Input id={`usd-${employeeId}`} inputMode="decimal" value={usd} onChange={(e) => setUsd(e.target.value)} placeholder="351.66" autoComplete="off" />
         </div>
+        {usdUnreadable ? <p className="text-xs text-warning">{P.usdUnreadableWarning}</p> : null}
       </div>
       <Button type="submit" disabled={pending}>
         {P.markPaid}
@@ -119,6 +123,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
   const people = useMemo(() => sortPayments(view.people, sort), [view.people, sort]);
   // The dollars column is for the people who can read what was recorded (the same people who read the references).
   const showUsd = view.canMarkPaid;
+  const someUnreadable = showUsd && view.people.some((p) => p.payment?.usd === P.usdUnreadable);
   const ariaSort = (key: PaymentSortKey) => (sort.key === key ? (sort.dir === "asc" ? "ascending" : "descending") : "none");
 
   const download = () =>
@@ -148,6 +153,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
           <span className="text-sm text-muted-foreground">
             {P.progress(paid, view.people.length)}
             {view.usdTotal ? ` · ${P.usdTotal(view.usdTotal)}` : ""}
+            {someUnreadable ? ` · ${P.usdSomeUnreadable}` : ""}
           </span>
           {view.canExport ? (
             <Button
@@ -183,7 +189,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
           value={`${sort.key}:${sort.dir}`}
           onChange={(e) => setSort(PAYMENT_SORT_CHOICES.find((c) => c.value === e.target.value)?.sort ?? DEFAULT_PAYMENT_SORT)}
         >
-          {PAYMENT_SORT_CHOICES.map((c) => (
+          {PAYMENT_SORT_CHOICES.filter((c) => showUsd || c.sort.key !== "usd").map((c) => (
             <option key={c.value} value={c.value}>
               {c.label}
             </option>
@@ -253,6 +259,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
                       employeeId={p.employeeId}
                       current={p.payment?.reference ?? ""}
                       currentUsd={typedUsd(p.payment?.usdCents ?? null)}
+                      usdUnreadable={p.payment?.usd === P.usdUnreadable}
                       today={today}
                     />
                   </FormDialog>

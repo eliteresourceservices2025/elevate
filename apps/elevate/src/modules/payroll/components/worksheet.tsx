@@ -176,7 +176,7 @@ export function Worksheet({
           <Table
             dragScroll
             scrollLabel="Pay run sheet. Drag sideways or use the arrow keys to scroll."
-            containerClassName="md:max-h-[calc(100dvh-8rem)] md:overflow-y-auto md:scroll-pt-24"
+            containerClassName="md:max-h-[calc(100dvh-8rem)] md:overflow-y-auto md:scroll-pt-32 print:max-h-none print:overflow-visible"
             className={STICKY_HEAD}
           >
             <TableHeader>
@@ -238,7 +238,7 @@ export function Worksheet({
                 <TableHead className={`${head} ${num} ${D}`}>{L.adjustments}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.loan}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.otherDeductions}</TableHead>
-                <TableHead aria-sort={ariaSortOf(sortLinks, "net")} className={`${head} ${num} bg-primary/10`}>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "net")} className={`${head} ${num} md:bg-[color-mix(in_oklab,var(--primary)_20%,var(--card))]!`}>
                   <span className="inline-flex items-center gap-1">
                     <SortHead header="net" links={sortLinks}>
                       {L.net}

@@ -52,6 +52,13 @@ test("FTE on the rates and the run", async ({ browser }) => {
       await page.locator("#add-basis").selectOption("per_fte");
       await expect(page.locator("#add-monthly")).toHaveCount(0);
       await page.locator("#add-per-fte").fill("1,500.00");
+      // Paying per FTE suggests the alias "Internal team" and shows the Alias box in the main form; going back to monthly takes it back.
+      await expect(page.locator("#add-alias")).toHaveValue("Internal team");
+      await page.locator("#add-basis").selectOption("monthly");
+      await expect(page.locator("#add-alias")).toHaveCount(0);
+      await page.locator("#add-basis").selectOption("per_fte");
+      await expect(page.locator("#add-alias")).toHaveValue("Internal team");
+      await page.locator("#add-per-fte").fill("1,500.00");
       await page.screenshot({ path: "test-results/fte/add-per-fte.png" });
     });
 
@@ -82,7 +89,7 @@ test("FTE on the rates and the run", async ({ browser }) => {
     const totalFte = p.locator("dl").filter({ hasText: "Total FTE" });
     await expect(totalFte).toContainText("2.5"); // 1 + 0.5 + 1
     const internal = p.getByRole("row").filter({ hasText: `Ii${stamp}` });
-    await expect(internal).toContainText("2.5 × 1,500.00");
+    await expect(internal).toContainText("2.5 FTE × 1,500.00");
     await expect(internal).toContainText("3,750.00");
     await p.screenshot({ path: "test-results/fte/run.png", fullPage: false });
 
@@ -97,7 +104,7 @@ test("FTE on the rates and the run", async ({ browser }) => {
     await p.getByRole("button", { name: "Save amount" }).click();
     await expect(p.getByText("Amount saved.").first()).toBeVisible();
     await expect(totalFte).toContainText("3");
-    await expect(internal).toContainText("3 × 1,500.00");
+    await expect(internal).toContainText("3 FTE × 1,500.00");
     await expect(internal).toContainText("4,500.00");
     await expect(line).toContainText("set for this run");
   } finally {

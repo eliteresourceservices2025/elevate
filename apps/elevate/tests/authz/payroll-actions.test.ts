@@ -304,17 +304,24 @@ describe("pay line input is checked on the server", () => {
     ["zero hours a day", { hoursPerDay: 0 }],
     ["13 hours a day", { hoursPerDay: 13 }],
     ["fractional hours a day", { hoursPerDay: 7.5 }],
-    ["a negative amount", { monthly: "-100" }],
-    ["a dollar sign", { monthly: "$50" }],
-    ["a misplaced comma", { monthly: "1,25.0" }],
-    ["three decimals", { monthly: "1.255" }],
-    ["an empty monthly rate", { monthly: "" }],
     ["an unknown payment method", { paymentMethod: "crypto" }],
     ["a date that is not real", { effectiveFrom: "2030-02-31" }],
     ["an end before the start", { endsOn: "2030-10-01" }],
   ])("refuses %s", async (_label, patch) => {
     asLevel("employee", "preparer");
     expect(await createPayLine({ ...valid, ...patch })).toEqual({ ok: false, error: BAD });
+  });
+
+  // A problem with the amount says so (the other failures stay generic, above).
+  it.each([
+    ["a negative amount", { monthly: "-100" }],
+    ["a dollar sign", { monthly: "$50" }],
+    ["a misplaced comma", { monthly: "1,25.0" }],
+    ["three decimals", { monthly: "1.255" }],
+    ["an empty monthly rate", { monthly: "" }],
+  ])("refuses %s and says the amount is wrong", async (_label, patch) => {
+    asLevel("employee", "preparer");
+    expect(await createPayLine({ ...valid, ...patch })).toEqual({ ok: false, error: "Enter an amount above zero" });
   });
 
   it("accepts a pasted amount with a thousands comma (it then reaches the database)", async () => {

@@ -351,6 +351,9 @@ export const PAYMENT_LABELS = {
   status: "Status",
   usd: "Paid (USD)",
   usdTotal: (total: string) => `Dollars paid: ${total}`,
+  usdUnreadable: "Can't be read",
+  usdSomeUnreadable: "Some dollar amounts can't be read, so the total leaves them out.",
+  usdUnreadableWarning: "The dollars saved with this payment can't be read. Saving here replaces them with what you type (or clears them if you leave the box empty).",
   amountUsd: "Amount paid in dollars (optional)",
   sortBy: "Sort by",
   paid: "Paid",
@@ -521,6 +524,7 @@ export const APPROVAL_LABELS = {
   approvedNotice: "This run is approved. It can't change while it is approved; a mistake is corrected with an adjustment on a later run.",
   unapprove: "Unapprove",
   unapproveTitle: "Take back the approval",
+  unapproveListWarning: "The Remitly list for this run was already downloaded. If anyone has started paying in Remitly, finish or stop that first: payments can't be recorded on a run that is back in draft until it is approved again.",
   unapproveNote: "Why the approval is taken back",
   unapproveHint:
     "The run goes back to draft so a Preparer can change it and send it for review again, which needs a new approval. Kept in the change history and shown on the run. Never sent in a notice. Don't write client or patient details. Not possible once a payment is recorded or the statements are released.",
@@ -552,9 +556,10 @@ export const REASON_REQUIRED_TYPES: readonly PayItemType[] = ["loan", "other_ded
 
 /**
  * Only a line that cannot be read stops a run from being sent (there is nothing to approve). Everything else is a note for the Preparer and
- * the Approver to read: the Approver still decides. (Changed 2026-11-12 so the team can push runs through while they test.)
+ * the Approver to read: the Approver still decides. (Changed 2026-11-12 so the team can push runs through while they test.) The one other
+ * stop: lines paid per FTE on a run whose total FTE is 0 would pay the internal team nothing (owner decision 2026-11-17).
  */
-export const BLOCKING_CHECKS = ["unreadable_line"] as const;
+export const BLOCKING_CHECKS = ["unreadable_line", "per_fte_without_total"] as const;
 export const WARNING_CHECKS = [
   "missing_multiplier",
   "negative_net",
@@ -571,7 +576,6 @@ export const WARNING_CHECKS = [
   "duplicate_pay_line",
   "large_change",
   "fte_not_set",
-  "per_fte_without_total",
 ] as const;
 export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
 
@@ -592,7 +596,7 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   duplicate_pay_line: "Another line for the same job (same alias, same client or none) is on this run, so this person is paid twice",
   large_change: "Total payable compensation changed a lot from the last run",
   fte_not_set: "No FTE count on this line, so it counts as 0 toward the internal team's pay",
-  per_fte_without_total: "The run's total FTE is 0, so the lines paid per FTE (internal team) pay nothing",
+  per_fte_without_total: "The run's total FTE is 0, so the lines paid per FTE (internal team) would pay nothing. Set the FTE counts before sending it for review",
 };
 
 /**
@@ -609,7 +613,7 @@ export const ISSUE_COPY: Record<CheckCode, { title: string; meaning: string }> =
   lines_out_of_date: { title: "The pay lines changed", meaning: "People or rates changed after this run was made. Update people to bring the run up to date." },
   unapproved_days: { title: "Some days are not approved", meaning: "A lead hasn't approved their hours yet. The run can still go; ask the lead to approve them in Hours review." },
   no_payout_details: { title: "No payout details", meaning: "They can't be paid until HR adds how to pay them. Ask HR to add it on their profile." },
-  new_or_leaving: { title: "Paid for part of the cutoff", meaning: "They started, ended or left part-way. ELEVATE pays a full cutoff until you enter the days they worked. Open the flag on their row." },
+  new_or_leaving: { title: "Paid for part of the cutoff", meaning: "They started, ended or left part-way. ELEVATE pays a full cutoff until you enter the days they worked (and an internal-team person still counts their full FTE unless you type FTE for this run). Open the flag on their row." },
   rate_change_mid_period: { title: "New rate part-way through", meaning: "ELEVATE pays the old rate for the whole cutoff and the new rate from the next one. Add an adjustment if it should count sooner." },
   pending_suggestions: { title: "Suggested amounts waiting", meaning: "Read them, then confirm or change them. Nothing changes pay until you confirm." },
   no_client_hours: { title: "No client payroll hours", meaning: "Needed to invoice the client. Fill them from the Jibble file in one go, or type them under Actions, then Amounts." },
@@ -625,7 +629,7 @@ export const ISSUE_COPY: Record<CheckCode, { title: string; meaning: string }> =
   },
   per_fte_without_total: {
     title: "Total FTE is 0",
-    meaning: "The lines paid per FTE (internal team) are paid the run's total FTE times their amount, and the total is 0. Set the FTE counts on the Rates tab (Set FTE), then use Update people.",
+    meaning: "The lines paid per FTE (internal team) are paid the run's total FTE times their amount, and the total is 0, so they would be paid nothing. The run can't be sent for review until it is fixed: set the FTE counts on the Rates tab (Set FTE), then use Update people.",
   },
 };
 

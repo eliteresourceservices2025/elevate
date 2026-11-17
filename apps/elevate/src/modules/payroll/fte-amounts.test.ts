@@ -58,9 +58,10 @@ describe("the rate forms", () => {
     expect(updatePayLineSchema.safeParse({ ...update, monthly: "30,000", fte: "1" }).success).toBe(true);
   });
 
-  it("takes the Set FTE table as rows of a line and a count, 1 to 300 of them, never blank", () => {
+  it("takes the Set FTE table as rows of a line and a count, 1 to 300 of them; a blank count clears it", () => {
     expect(setLineFtesSchema.parse({ rows: [{ lineKey: LINE, fte: "0.5" }] })).toEqual({ rows: [{ lineKey: LINE, fte: 50 }] });
-    for (const rows of [[], [{ lineKey: LINE, fte: "" }], [{ lineKey: LINE, fte: "3" }], [{ lineKey: "nope", fte: "1" }], Array.from({ length: 301 }, () => ({ lineKey: LINE, fte: "1" }))]) {
+    expect(setLineFtesSchema.parse({ rows: [{ lineKey: LINE, fte: "" }] })).toEqual({ rows: [{ lineKey: LINE, fte: null }] });
+    for (const rows of [[], [{ lineKey: LINE, fte: "3" }], [{ lineKey: "nope", fte: "1" }], Array.from({ length: 301 }, () => ({ lineKey: LINE, fte: "1" }))]) {
       expect(setLineFtesSchema.safeParse({ rows }).success).toBe(false);
     }
   });
