@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { fieldCrypto } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
@@ -8,6 +8,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { users } from "@/modules/core/schema";
 import { notify } from "@/modules/notifications/service";
 import { isAllowedEmoji } from "./emoji";
+import { isAllowedGifUrl } from "./gif-rules";
 import { membersFit } from "./guests";
 import { extractMentions } from "./mentions";
 import { clearSearchIndex, indexMessage } from "./search-index";
@@ -289,7 +290,7 @@ export async function sendMessage(actor: Actor, input: { conversationId: string;
   const [recent] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(messages)
-    .where(and(eq(messages.senderUserId, actor.id), eq(messages.kind, "text"), sql`${messages.createdAt} > now() - make_interval(secs => ${RATE_WINDOW_SECONDS})`));
+    .where(and(eq(messages.senderUserId, actor.id), ne(messages.kind, "system"), sql`${messages.createdAt} > now() - make_interval(secs => ${RATE_WINDOW_SECONDS})`));
   if (recent.n >= RATE_LIMIT) throw new ActionFailure("You are sending messages too fast. Wait a few seconds.");
 
   let kind: "text" | "image" | "file" | "voice" = "text";
@@ -306,6 +307,40 @@ export async function sendMessage(actor: Actor, input: { conversationId: string;
   await notifyMentions(actor, input.conversationId, body);
   await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: sent.id });
   return sent;
+}
+
+/** Sends a GIF the person picked: only an https KLIPY address is accepted; the address is stored (encrypted) and shown through our own route. */
+export async function sendGif(actor: Actor, input: { conversationId: string; url: string; threadRootId?: string | null; canManage?: boolean }): Promise<{ id: string; seq: number }> {
+  if (!isAllowedGifUrl(input.url)) throw new ActionFailure("That GIF can't be sent.");
+  const member = await requireMember(db, actor.id, input.conversationId);
+  if (!input.threadRootId && member.posting === "admins" && !input.canManage) throw new ActionFailure("Only HR can post in this channel.");
+  if (input.threadRootId) {
+    const [root] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.id, input.threadRootId), eq(messages.conversationId, input.conversationId), isNull(messages.threadRootId), isNull(messages.deletedAt)))
+      .limit(1);
+    if (!root) throw new ActionFailure(MESSAGE_NOT_FOUND);
+  }
+  const [recent] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(messages)
+    .where(and(eq(messages.senderUserId, actor.id), ne(messages.kind, "system"), sql`${messages.createdAt} > now() - make_interval(secs => ${RATE_WINDOW_SECONDS})`));
+  if (recent.n >= RATE_LIMIT) throw new ActionFailure("You are sending messages too fast. Wait a few seconds.");
+  const posted = await insertMessage(db, { conversationId: input.conversationId, senderUserId: actor.id, body: input.url, kind: "gif", threadRootId: input.threadRootId ?? null });
+  await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: posted.id });
+  return posted;
+}
+
+/** The address of a GIF message the person may see now (a current member, from their join time, not removed). */
+export async function gifUrlForViewer(actor: Actor, messageId: string): Promise<string> {
+  const msg = await requireVisibleMessage(db, actor.id, messageId);
+  if (msg.kind !== "gif") throw new ActionFailure(MESSAGE_NOT_FOUND);
+  const [row] = await db.select({ bodyEnc: messages.bodyEnc }).from(messages).where(eq(messages.id, msg.id)).limit(1);
+  if (!row) throw new ActionFailure(MESSAGE_NOT_FOUND);
+  const url = fieldCrypto().decrypt(row.bodyEnc, bodyContext(msg.conversationId, msg.id));
+  if (!isAllowedGifUrl(url)) throw new ActionFailure(MESSAGE_NOT_FOUND);
+  return url;
 }
 
 /** The sender's own live text message, in a conversation they still belong to. */

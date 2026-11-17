@@ -44,6 +44,7 @@ export function Thread({
   hasMore,
   members,
   myUserId,
+  onlineCount = 0,
   timeZone,
   loadingEarlier,
   pins,
@@ -60,6 +61,8 @@ export function Thread({
   hasMore: boolean;
   members: ThreadMember[];
   myUserId: string;
+  /** How many other people are looking at this chat right now. */
+  onlineCount?: number;
   timeZone: string;
   loadingEarlier: boolean;
   pins: PinnedMessage[];
@@ -101,7 +104,7 @@ export function Thread({
         <ConversationAvatar conversation={conversation} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-heading text-base font-semibold">{conversation.title}</h2>
-          <p className="truncate text-xs text-muted-foreground">{conversation.kind === "dm" ? "Direct message" : conversation.kind === "group" ? `${conversation.memberCount} people` : conversation.kind === "client" ? `Client group · ${conversation.memberCount} people` : `${conversation.kind === "company" ? "Company" : conversation.kind === "team" ? "Team" : "Department"} channel · ${conversation.memberCount} people`}</p>
+          <p className="truncate text-xs text-muted-foreground">{onlineCount > 0 ? <span className="mr-1.5 inline-block size-2 rounded-full bg-success align-middle" aria-hidden /> : null}{onlineCount > 0 ? `${onlineCount} online · ` : ""}{conversation.kind === "dm" ? "Direct message" : conversation.kind === "group" ? `${conversation.memberCount} people` : conversation.kind === "client" ? `Client group · ${conversation.memberCount} people` : `${conversation.kind === "company" ? "Company" : conversation.kind === "team" ? "Team" : "Department"} channel · ${conversation.memberCount} people`}</p>
         </div>
         <MuteDialog conversationId={conversation.id} muted={!!conversation.mutedUntil} onDone={onMuted} />
         <Button type="button" variant="outline" size="sm" onClick={onToggleDetails} aria-label="Show people in this chat">
@@ -294,7 +297,10 @@ export function MessageRow({
                     ) : null}
                   </span>
                 ) : null}
-                {m.kind === "poll" && m.poll ? (
+                {m.kind === "gif" ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- shown through our own authenticated route
+                  <img src={`/api/messages/gif/${m.id}`} alt="A GIF" loading="lazy" className="max-h-56 max-w-full rounded-xl border" />
+                ) : m.kind === "poll" && m.poll ? (
                   <PollCard messageId={m.id} question={m.body ?? ""} poll={m.poll} onChanged={onChanged} />
                 ) : (
                   <div className={cn("flex flex-col gap-1.5", mine ? "items-end" : "items-start")}>

@@ -3,11 +3,13 @@
 import type { z } from "zod";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
-import { fail, runAction, type ActionResult } from "@/lib/run-action";
+import { ActionFailure, fail, runAction, type ActionResult } from "@/lib/run-action";
 import * as queries from "./queries";
 import type { ChatMessage, ConversationSummary, ManagedGroup } from "./queries";
 import { syncChannels, type SyncResult } from "./channels";
 import * as guestService from "./guests";
+import { gifsEnabled, searchGifs } from "./klipy";
+import type { GifResult } from "./gif-rules";
 import { assertGuestReady } from "./guests";
 import * as service from "./service";
 import * as settings from "./settings";
@@ -24,6 +26,8 @@ import {
   archiveGuestSchema,
   createClientGroupSchema,
   inviteGuestSchema,
+  searchGifsSchema,
+  sendGifSchema,
   editMessageSchema,
   finalizeUploadSchema,
   markReadSchema,
@@ -202,6 +206,24 @@ export async function acceptChatGuestNotice(): Promise<ActionResult<undefined>> 
     await guestService.acceptGuestNotice(actor);
     return { ok: true, data: undefined };
   });
+}
+
+/** Searches GIFs through our server. `enabled: false` means no KLIPY key is set up here, so the picker says so. */
+export async function searchChatGifs(input: unknown): Promise<ActionResult<{ enabled: boolean; gifs: GifResult[] }>> {
+  const actor = await requireUser({ allowGuest: true });
+  return run(actor, "messages.use", searchGifsSchema, input, async (_a, data) => {
+    if (!gifsEnabled()) return { enabled: false, gifs: [] };
+    try {
+      return { enabled: true, gifs: await searchGifs(data.q) };
+    } catch {
+      throw new ActionFailure("GIF search isn't available right now.");
+    }
+  });
+}
+
+export async function sendChatGif(input: unknown): Promise<ActionResult<{ id: string; seq: number }>> {
+  const actor = await requireUser({ allowGuest: true });
+  return run(actor, "messages.use", sendGifSchema, input, (a, data) => service.sendGif(a, { ...data, canManage: can(a, "messages.manage_group") }));
 }
 
 export async function createChatPoll(input: unknown): Promise<ActionResult<{ id: string; seq: number }>> {

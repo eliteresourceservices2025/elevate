@@ -9,6 +9,7 @@ import { orNotFound } from "@/lib/or-not-found";
 import { ActionFailure } from "@/lib/run-action";
 import { DEFAULT_TIMEZONE } from "@/lib/time";
 import { listMyConversations, loadMessages } from "../queries";
+import { getChatSettings } from "../settings";
 import { MessagesView } from "./messages-view";
 
 /** The Messages page, with one chat open when `conversationId` is given. A chat that is not in the person's own list is a 404. */
@@ -16,6 +17,7 @@ export async function MessagesPage({ conversationId = null }: { conversationId?:
   const user = await requireUser({ allowGuest: true });
   const canManage = can(user, "messages.manage_group");
   const conversations = await orNotFound(listMyConversations());
+  const settings = await orNotFound(getChatSettings());
   if (conversationId && !conversations.some((c) => c.id === conversationId)) notFound();
   let initialThread = null;
   if (conversationId) {
@@ -45,7 +47,7 @@ export async function MessagesPage({ conversationId = null }: { conversationId?:
           ) : undefined
         }
       />
-      <MessagesView userId={user.id} timeZone={DEFAULT_TIMEZONE} canManage={canManage} isGuest={Boolean(user.isGuest)} initialConversations={conversations} initialConversationId={conversationId} initialThread={initialThread} />
+      <MessagesView userId={user.id} timeZone={DEFAULT_TIMEZONE} canManage={canManage} isGuest={Boolean(user.isGuest)} appearOffline={settings.appearOffline} initialConversations={conversations} initialConversationId={conversationId} initialThread={initialThread} />
     </PageContainer>
   );
 }

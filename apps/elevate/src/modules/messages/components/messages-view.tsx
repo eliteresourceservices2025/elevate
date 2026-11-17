@@ -15,6 +15,7 @@ import { AddPeopleDialog, NewConversationDialog } from "./new-conversation-dialo
 import { Thread, type ThreadMember } from "./thread";
 import { ThreadPanel } from "./thread-panel";
 import { useChatLive } from "./use-chat-live";
+import { usePresence } from "./use-presence";
 
 type ThreadData = { messages: ChatMessage[]; hasMore: boolean; members: ThreadMember[] };
 
@@ -28,7 +29,7 @@ function mergeNewest(previous: ThreadData | null, next: ThreadData): ThreadData 
 
 export type { ThreadData };
 
-export function MessagesView({ userId, timeZone, canManage, isGuest = false, initialConversations, initialConversationId, initialThread }: { userId: string; timeZone: string; canManage: boolean; isGuest?: boolean; initialConversations: ConversationSummary[]; initialConversationId: string | null; initialThread: ThreadData | null }) {
+export function MessagesView({ userId, timeZone, canManage, isGuest = false, appearOffline = false, initialConversations, initialConversationId, initialThread }: { userId: string; timeZone: string; canManage: boolean; isGuest?: boolean; appearOffline?: boolean; initialConversations: ConversationSummary[]; initialConversationId: string | null; initialThread: ThreadData | null }) {
   const [conversations, setConversations] = useState(initialConversations);
   const [activeId, setActiveId] = useState<string | null>(initialConversationId);
   const [thread, setThread] = useState<ThreadData | null>(initialThread);
@@ -119,6 +120,8 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, ini
     [refreshListSoon, loadThread],
   );
   useChatLive(userId, onSignal);
+  // Who else is looking at the open chat (an online dot). Someone who chose "Appear offline" watches without announcing themself.
+  const online = usePresence(activeId, userId, !appearOffline);
 
   useEffect(
     () => () => {
@@ -203,6 +206,7 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, ini
               hasMore={thread.hasMore}
               members={thread.members}
               myUserId={userId}
+              onlineCount={[...online].filter((id) => id !== userId).length}
               timeZone={timeZone}
               loadingEarlier={loadingEarlier}
               pins={pins}
@@ -266,6 +270,7 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, ini
             {thread.members.map((m) => (
               <li key={m.userId} className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate">
+                  {online.has(m.userId) ? <span role="img" aria-label="Online now" className="mr-1.5 inline-block size-2 rounded-full bg-success align-middle" /> : null}
                   {m.name}
                   {m.userId === userId ? <span className="text-muted-foreground"> (you)</span> : null}
                 </span>

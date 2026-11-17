@@ -95,5 +95,8 @@ export const createClientGroupSchema = z.object({
   staffUserIds: z.array(id).max(MAX_GROUP),
 });
 
+export const searchGifsSchema = z.object({ q: z.string().trim().min(1).max(60) });
+export const sendGifSchema = z.object({ conversationId: id, url: z.string().max(600), threadRootId: id.optional() });
+
 export const muteSchema = z.object({ conversationId: id, until: z.enum(["1h", "8h", "forever", "off"]) });
 export const chatSettingsSchema = z.object({ appearOffline: z.boolean(), emailDigest: z.boolean() });

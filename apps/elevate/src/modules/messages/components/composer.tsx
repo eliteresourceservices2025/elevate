@@ -12,6 +12,7 @@ import { MAX_ATTACHMENTS, MAX_VOICE_SECONDS } from "../media";
 import type { FinishedUpload } from "../uploads";
 import { MAX_BODY } from "../validators";
 import { EmojiPicker } from "./emoji-picker";
+import { GifDialog } from "./gif-dialog";
 import { PollDialog } from "./poll-dialog";
 import { uploadAttachment } from "./upload-attachment";
 
@@ -197,6 +198,7 @@ export function Composer({
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Record a voice note" onClick={() => void startVoice()} disabled={uploading || recordingSeconds !== null}>
           <Mic aria-hidden />
         </Button>
+        <GifDialog conversationId={conversationId} threadRootId={threadRootId} onSent={onSent} />
         {!threadRootId ? <PollDialog conversationId={conversationId} onCreated={onSent} /> : null}
         {members.length > 0 ? (
           <span className="relative inline-flex">

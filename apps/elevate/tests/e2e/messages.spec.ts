@@ -450,3 +450,31 @@ test("a client guest: invited by HR, accepts the notice, sees only their client 
   await pageG.goto("/messages");
   await expect(pageG).toHaveURL(/\/login/, { timeout: 30_000 });
 });
+
+test("presence: an online dot shows who has the chat open, and Appear offline hides you", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Pres${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Pres${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  await startDirect(pageA, `Pres${stamp}b`, `Bea Pres${stamp}b`);
+  await say(pageA, `Bea Pres${stamp}b`, "Hi Bea");
+  await pageB.goto("/messages");
+  await pageB.getByRole("button", { name: new RegExp(`Ana Pres${stamp}a`) }).click();
+  // Both have the chat open: each sees the other online.
+  await expect(pageA.getByRole("heading", { level: 2, name: `Bea Pres${stamp}b` }).locator("xpath=following-sibling::p")).toContainText("1 online", { timeout: 20_000 });
+  await expect(pageB.getByRole("heading", { level: 2, name: `Ana Pres${stamp}a` }).locator("xpath=following-sibling::p")).toContainText("1 online", { timeout: 20_000 });
+  // Bea appears offline and reloads: Ana no longer sees her.
+  await pageB.getByRole("button", { name: "Settings" }).click();
+  await pageB.getByRole("dialog").getByLabel("Appear offline").check();
+  await pageB.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await expect(pageB.getByRole("dialog")).toBeHidden();
+  await pageB.reload();
+  await pageB.getByRole("button", { name: new RegExp(`Ana Pres${stamp}a`) }).click();
+  await expect(pageA.getByRole("heading", { level: 2, name: `Bea Pres${stamp}b` }).locator("xpath=following-sibling::p")).not.toContainText("online", { timeout: 20_000 });
+  // She still sees Ana (watching does not announce).
+  await expect(pageB.getByRole("heading", { level: 2, name: `Ana Pres${stamp}a` }).locator("xpath=following-sibling::p")).toContainText("1 online", { timeout: 20_000 });
+});

@@ -56,7 +56,9 @@ Body 1 to 4,000 characters; groups 3 to 200 members (owner decision 2026-11-17; 
 - **Phase 1 chat core, group management (200 cap, HR/Super Admin only).**
 - **Phase 2 rich chat:** threads (one level), reactions (fixed emoji set), pins, @mentions (a notice saying where, never what), automatic team, department and company channels (daily sync; the company channel is HR-post-only), polls, pictures/files/voice notes (3-step upload, bytes-based type check, location data removed from pictures, served only through the authenticated route `/api/messages/attachments/[id]`), message search (a blind index of HMAC word tokens, never plain text), muting a chat, personal settings (appear offline, daily email), a daily unread email (`chat_unread`, lowest priority, count and link only; job `chat-digest`, 8:00 AM Phoenix).
 - **Phase 3 client guests** (below).
-- **Not built yet:** GIFs (KLIPY needs a key; the plan is a server proxy with an https `.klipy.com` allowlist), presence/online dot, a live unread badge outside the Messages page, calls (Phase 4), town hall and recording (5), HR access requests (6), rollout (7).
+- **Presence (online dot):** Supabase Presence on the private `conv:<id>` channel (already authorized by `chat.can_join`): only the person's id is shared, nothing is stored, shown as "N online" in the chat header and a green dot in the People list of the open chat. "Appear offline" (chat settings) watches without announcing (takes effect on reload). It says nothing about activity or time and is never a monitoring tool.
+- **GIFs (built, UNVERIFIED against the real service):** `KLIPY_API_KEY` (server env only) turns them on; without it the picker says GIFs aren't set up. Search and previews go through our server (`searchChatGifs`, `/api/messages/gif-preview`), a sent GIF stores only an https KLIPY address (encrypted like any message body, kind `gif`) and is shown through `/api/messages/gif/[messageId]` (current members only), so KLIPY never sees who is looking. Only https `klipy.com`/`klipy.co` hosts are ever fetched (`gif-rules.ts`: no redirects, 5 MB cap, gif/webp only). KLIPY's per-GIF response fields could not be read when this was built, so `parseGifResults` is tolerant and fails closed: **check it against a real response when the key exists** and confirm the allowed hosts.
+- **Not built yet:** a live unread badge outside the Messages page, calls (Phase 4), town hall and recording (5), HR access requests (6), rollout (7).
 
 ## Client guests (Phase 3, owner decision 2026-11-17)
 
@@ -72,7 +74,7 @@ Body 1 to 4,000 characters; groups 3 to 200 members (owner decision 2026-11-17; 
 
 ## Phases
 
-0 docs and prototype, 1 chat core, 2 rich chat (GIFs and presence still open), 3 guests (done), 4 calls, 5 all-hands and recording, 6 HR access requests, 7 rollout and pilot.
+0 docs and prototype, 1 chat core, 2 rich chat (done; GIFs await a KLIPY key to verify), 3 guests (done), 4 calls, 5 all-hands and recording, 6 HR access requests, 7 rollout and pilot.
 
 ## Free-tier guardrails
 
