@@ -10,7 +10,7 @@ import { notify } from "@/modules/notifications/service";
 import { isAllowedEmoji } from "./emoji";
 import { isAllowedGifUrl } from "./gif-rules";
 import { membersFit } from "./guests";
-import { extractMentions } from "./mentions";
+import { extractMentions, mentionsEveryone } from "./mentions";
 import { clearSearchIndex, indexMessage } from "./search-index";
 import { broadcastChatSignal, type ChatSignal } from "./realtime";
 import { conversationMembers, conversations, messageAttachments, messagePins, messageReactions, messageRevisions, messages, pollOptions, polls, pollVotes } from "./schema";
@@ -239,10 +239,19 @@ export async function requireVisibleMessage(executor: Db, userId: string, messag
 
 /** Tells the mentioned people (current members, not the sender) that they were mentioned: where, never what. */
 async function notifyMentions(actor: Actor, conversationId: string, body: string): Promise<void> {
+  const everyone = mentionsEveryone(body);
   const mentioned = extractMentions(body).filter((id) => id !== actor.id).slice(0, 20);
-  if (mentioned.length === 0) return;
-  const members = new Set(await currentMemberIds(db, conversationId));
-  const targets = mentioned.filter((id) => members.has(id));
+  if (mentioned.length === 0 && !everyone) return;
+  const memberIds = await currentMemberIds(db, conversationId);
+  const members = new Set(memberIds);
+  let targets = mentioned.filter((id) => members.has(id));
+  if (everyone) {
+    // "@everyone" / "@all" tells everyone else in the chat, except people who muted it (a muted chat stays quiet).
+    const muted = new Set(
+      (await db.select({ userId: conversationMembers.userId }).from(conversationMembers).where(and(eq(conversationMembers.conversationId, conversationId), isNull(conversationMembers.leftAt), sql`${conversationMembers.mutedUntil} > now()`))).map((m) => m.userId),
+    );
+    targets = [...new Set([...targets, ...memberIds.filter((id) => id !== actor.id && !muted.has(id))])];
+  }
   if (targets.length === 0) return;
   const [conv] = await db.select({ kind: conversations.kind, title: conversations.title }).from(conversations).where(eq(conversations.id, conversationId)).limit(1);
   const where = conv?.title ? conv.title : "a direct message";

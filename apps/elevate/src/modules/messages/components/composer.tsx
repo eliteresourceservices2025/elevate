@@ -207,6 +207,22 @@ export function Composer({
             </Button>
             {mentioning ? (
               <ul role="listbox" aria-label="Mention someone" className="absolute bottom-full left-0 z-30 mb-1 max-h-56 w-56 overflow-y-auto rounded-xl border bg-popover p-1 shadow-lg">
+                {members.length > 1 ? (
+                  <li>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={false}
+                      className="w-full truncate rounded-md px-2 py-1.5 text-left text-sm font-semibold outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                      onClick={() => {
+                        insert("@everyone ");
+                        setMentioning(false);
+                      }}
+                    >
+                      @everyone (notify all)
+                    </button>
+                  </li>
+                ) : null}
                 {members.map((m) => (
                   <li key={m.userId}>
                     <button

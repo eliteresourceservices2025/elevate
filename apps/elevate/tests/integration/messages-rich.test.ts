@@ -244,3 +244,25 @@ describe("polls (Phase 2c)", () => {
     await expect(service.createPoll(stranger, { conversationId: conv, question: "Hi?", options: ["A", "B"], multiple: false, anonymous: false })).rejects.toThrow("Conversation not found.");
   });
 });
+
+describe("@everyone and @all", () => {
+  it("notifies everyone else in the chat, except people who muted it, and nobody outside it", async () => {
+    const a = await makeUser("a");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const d = await makeUser("d");
+    const outsider = await makeUser("o");
+    const { conversationId } = await service.createGroup(a, { title: "Crew", memberUserIds: [b.id, c.id, d.id] });
+    await db.execute(sql`update chat.conversation_members set muted_until = now() + interval '1 hour' where conversation_id = ${conversationId} and user_id = ${d.id}`);
+    await service.sendMessage(a, { conversationId, body: "Meeting at 9 @everyone" });
+    const who = async (id: string) => (await db.execute(sql`select 1 from ops.notifications where user_id = ${id} and kind = 'chat.mention' and link = ${`/messages/${conversationId}`}`)) as unknown as unknown[];
+    expect(await who(b.id)).toHaveLength(1);
+    expect(await who(c.id)).toHaveLength(1);
+    expect(await who(a.id)).toHaveLength(0); // not the sender
+    expect(await who(d.id)).toHaveLength(0); // muted
+    expect(await who(outsider.id)).toHaveLength(0);
+    // A look-alike notifies nobody.
+    await service.sendMessage(a, { conversationId, body: "write to ana@all.com or @allison" });
+    expect(await who(b.id)).toHaveLength(1);
+  });
+});

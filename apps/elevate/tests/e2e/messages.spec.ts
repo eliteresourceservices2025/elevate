@@ -541,3 +541,28 @@ test("a GIF: search through our server, send, and the other person sees it throu
   await expect.poll(() => seen.evaluate((el: HTMLImageElement) => el.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0);
   expect(direct).toEqual([]);
 });
+
+test("@all typed in a message shows as a highlighted mention and notifies the other person", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Evr${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Evr${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  await pageB.goto("/dashboard");
+  await startDirect(pageA, `Evr${stamp}b`, `Bea Evr${stamp}b`);
+  // Typed.
+  const box = pageA.getByLabel(`Message Bea Evr${stamp}b`);
+  await box.fill("Standup at 9 @all");
+  await box.press("Enter");
+  const chip = pageA.getByRole("log").getByText("@all", { exact: true });
+  await expect(chip).toBeVisible({ timeout: 15_000 });
+  // (The "@everyone" entry in the @ list only appears in chats of three or more people; typing works everywhere.)
+  // The other person is told, wherever they are.
+  await expect(pageB.getByRole("link", { name: /Messages, 1 unread/ }).first()).toBeVisible({ timeout: 15_000 });
+  await pageB.goto("/messages");
+  await pageB.getByRole("button", { name: new RegExp(`Ana Evr${stamp}a`) }).click();
+  await expect(pageB.getByRole("log").getByText("@all", { exact: true })).toBeVisible({ timeout: 15_000 });
+});
