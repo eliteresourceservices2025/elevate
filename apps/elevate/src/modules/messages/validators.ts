@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CHAT_SOUNDS } from "./sound-options";
 
 // One schema per action, used by the server action (never trust the form alone).
 
@@ -99,4 +100,4 @@ export const searchGifsSchema = z.object({ q: z.string().trim().min(1).max(60) }
 export const sendGifSchema = z.object({ conversationId: id, url: z.string().max(600), threadRootId: id.optional() });
 
 export const muteSchema = z.object({ conversationId: id, until: z.enum(["1h", "8h", "forever", "off"]) });
-export const chatSettingsSchema = z.object({ appearOffline: z.boolean(), emailDigest: z.boolean() });
+export const chatSettingsSchema = z.object({ appearOffline: z.boolean(), emailDigest: z.boolean(), sound: z.enum(CHAT_SOUNDS) });

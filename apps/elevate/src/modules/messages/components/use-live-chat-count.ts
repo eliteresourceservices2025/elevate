@@ -9,8 +9,15 @@ import { useChatLive } from "./use-chat-live";
  * signal (a message, a chat read, someone muting) asks the server for the count again, a moment later and at most once in that moment.
  * A new server render replaces what was fetched. Chat text never travels here: only a number comes back.
  */
-export function useLiveChatCount(userId: string, serverCount: number): number {
+export function useLiveChatCount(userId: string, serverCount: number, onIncrease?: () => void): number {
   const [state, setState] = useState({ base: serverCount, value: serverCount });
+  const shown = state.base === serverCount ? state.value : serverCount;
+  const shownRef = useRef(shown);
+  const increase = useRef(onIncrease);
+  useEffect(() => {
+    shownRef.current = shown;
+    increase.current = onIncrease;
+  });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refresh = useCallback(() => {
     if (timer.current) return;
@@ -18,7 +25,11 @@ export function useLiveChatCount(userId: string, serverCount: number): number {
       timer.current = null;
       try {
         const result = await loadChatUnreadCount();
-        if (result.ok) setState((s) => ({ ...s, value: result.data }));
+        if (result.ok) {
+          // More unread than a moment ago means a new message from someone else in a chat that is not muted (muted chats are not counted).
+          if (result.data > shownRef.current) increase.current?.();
+          setState((s) => ({ ...s, value: result.data }));
+        }
       } catch {
         // Keep showing the last number.
       }
@@ -32,5 +43,5 @@ export function useLiveChatCount(userId: string, serverCount: number): number {
     [],
   );
   // A fresh server render (a new page load) is newer than anything fetched before it.
-  return state.base === serverCount ? state.value : serverCount;
+  return shown;
 }

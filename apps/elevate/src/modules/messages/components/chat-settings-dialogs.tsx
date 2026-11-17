@@ -1,11 +1,14 @@
 "use client";
 
-import { BellOff, Settings } from "lucide-react";
+import { BellOff, Settings, Volume2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "@/components/feedback-dialog";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { getMyChatSettings, muteChatConversation, saveMyChatSettings } from "../actions";
+import { CHAT_SOUNDS, CHAT_SOUND_LABELS, DEFAULT_CHAT_SOUND, type ChatSound } from "../sound-options";
+import { playChatSound, unlockAudio } from "./play-sound";
 
 type MuteChoice = "1h" | "8h" | "forever" | "off";
 const CHOICES: { value: MuteChoice; label: string }[] = [
@@ -69,6 +72,8 @@ export function ChatSettingsDialog() {
 
 function SettingsForm() {
   const dialog = useFormDialog();
+  const router = useRouter();
+  const [sound, setSound] = useState<ChatSound>(DEFAULT_CHAT_SOUND);
   const [appearOffline, setAppearOffline] = useState(false);
   const [emailDigest, setEmailDigest] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -81,6 +86,7 @@ function SettingsForm() {
       if (cancelled || !result?.ok) return;
       setAppearOffline(result.data.appearOffline);
       setEmailDigest(result.data.emailDigest);
+      setSound(result.data.sound);
       setLoaded(true);
     }, 0);
     return () => {
@@ -95,13 +101,43 @@ function SettingsForm() {
       onSubmit={(e) => {
         e.preventDefault();
         startTransition(async () => {
-          const result = await saveMyChatSettings({ appearOffline, emailDigest });
+          const result = await saveMyChatSettings({ appearOffline, emailDigest, sound });
           if (!result.ok) return void toast.error(result.error);
           toast.success("Saved.");
+          router.refresh(); // the sound is read when the page loads
           await dialog?.close(true);
         });
       }}
     >
+      <div className="flex flex-col gap-1.5 text-sm">
+        <label htmlFor="chat-sound" className="font-medium">
+          Sound for new messages
+        </label>
+        <div className="flex items-center gap-2">
+          <select
+            id="chat-sound"
+            value={sound}
+            disabled={!loaded}
+            onChange={(e) => {
+              const next = e.target.value as ChatSound;
+              setSound(next);
+              unlockAudio();
+              playChatSound(next, true);
+            }}
+            className="h-(--control-h) rounded-lg border border-input bg-background px-3 text-sm"
+          >
+            {CHAT_SOUNDS.map((s) => (
+              <option key={s} value={s}>
+                {CHAT_SOUND_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <Button type="button" variant="outline" size="sm" disabled={!loaded || sound === "off"} onClick={() => playChatSound(sound, true)}>
+            <Volume2 aria-hidden /> Play
+          </Button>
+        </div>
+        <span className="text-muted-foreground">Plays when a message arrives in a chat you have not muted, and you are not already looking at Messages. Mute a chat to silence just that chat.</span>
+      </div>
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={appearOffline} onChange={(e) => setAppearOffline(e.target.checked)} disabled={!loaded} className="mt-0.5 size-4" />
         <span>

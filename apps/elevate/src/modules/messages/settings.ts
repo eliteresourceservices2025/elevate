@@ -6,27 +6,28 @@ import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { assertGuestReady } from "./guests";
 import { requireMember, type Actor } from "./service";
+import { DEFAULT_CHAT_SOUND, isChatSound, type ChatSound } from "./sound-options";
 import { conversationMembers, userSettings } from "./schema";
 
 // A person's own chat settings (online dot, the daily email) and muting a chat. Everything here is about the person themself.
 
-export type ChatSettings = { appearOffline: boolean; emailDigest: boolean };
+export type ChatSettings = { appearOffline: boolean; emailDigest: boolean; sound: ChatSound };
 
-const DEFAULTS: ChatSettings = { appearOffline: false, emailDigest: true };
+const DEFAULTS: ChatSettings = { appearOffline: false, emailDigest: true, sound: DEFAULT_CHAT_SOUND };
 
 export async function getChatSettings(): Promise<ChatSettings> {
   const actor = await requireUser({ allowGuest: true });
   await authorize(actor, "messages.use", { ownerUserId: actor.id });
   await assertGuestReady(actor);
-  const [row] = await db.select({ appearOffline: userSettings.appearOffline, emailDigest: userSettings.emailDigest }).from(userSettings).where(eq(userSettings.userId, actor.id)).limit(1);
-  return row ?? DEFAULTS;
+  const [row] = await db.select({ appearOffline: userSettings.appearOffline, emailDigest: userSettings.emailDigest, sound: userSettings.sound }).from(userSettings).where(eq(userSettings.userId, actor.id)).limit(1);
+  return row ? { ...row, sound: isChatSound(row.sound) ? row.sound : DEFAULT_CHAT_SOUND } : DEFAULTS;
 }
 
 export async function saveChatSettings(actor: Actor, input: ChatSettings): Promise<void> {
   await db
     .insert(userSettings)
-    .values({ userId: actor.id, appearOffline: input.appearOffline, emailDigest: input.emailDigest })
-    .onConflictDoUpdate({ target: userSettings.userId, set: { appearOffline: input.appearOffline, emailDigest: input.emailDigest, updatedAt: new Date() } });
+    .values({ userId: actor.id, appearOffline: input.appearOffline, emailDigest: input.emailDigest, sound: input.sound })
+    .onConflictDoUpdate({ target: userSettings.userId, set: { appearOffline: input.appearOffline, emailDigest: input.emailDigest, sound: input.sound, updatedAt: new Date() } });
 }
 
 /** Mutes a chat for an hour, eight hours or until the person turns it back on ("off" unmutes). A muted chat stops adding to their unread total and email. */

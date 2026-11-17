@@ -154,7 +154,7 @@ Start at `docs/RUNBOOK.md`. For a stuck or slow page: Vercel > Logs for the requ
 
 ## Messages (chat) go-live
 
-- [ ] **Migrations 0146 to 0155 applied** (the chat tables, guards, channels, polls, files, search, settings and guests), *before* the new code runs: `pnpm db:migrate` with the session pooler string, as in DEPLOY Part 1 step 5. Check: `select count(*) from drizzle.__drizzle_migrations;` is 10 higher than before. Migration 0147 also creates the two Realtime policies (it skips them quietly on a plain Postgres, so confirm in Supabase > Database > Policies, schema `realtime`, table `messages`, that `chat_receive` and `chat_send` exist).
+- [ ] **Migrations 0146 to 0156 applied** (the chat tables, guards, channels, polls, files, search, settings, guests and the notification sound), *before* the new code runs: `pnpm db:migrate` with the session pooler string, as in DEPLOY Part 1 step 5. Check: `select count(*) from drizzle.__drizzle_migrations;` is 11 higher than before. Migration 0147 also creates the two Realtime policies (it skips them quietly on a plain Postgres, so confirm in Supabase > Database > Policies, schema `realtime`, table `messages`, that `chat_receive` and `chat_send` exist).
 - [ ] **Storage bucket `chat-files`** exists and is private: run `pnpm storage:setup` from your computer against production (it creates any missing bucket).
 - [ ] **Supabase Realtime settings:** turn OFF "Allow public access" (Project settings > Realtime). Chat uses private channels only.
 - [ ] **The new privacy notice and Monitoring policy are published** (drafts in `docs/policies/`) before anyone uses chat with real data. Publishing is permanent and makes everyone accept at next sign-in.
