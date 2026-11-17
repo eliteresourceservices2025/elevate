@@ -19,3 +19,10 @@ Drafts: `privacy-notice.md` and `monitoring-policy.md` in this folder. Each is p
 - US healthcare clients: screenshots may capture patient data. Whether a business associate agreement or client notice is needed is for counsel and the client contracts. The draft only commits to confidentiality, limited access and prompt deletion.
 - Safe Voice has its own page; confirm it needs no mention here.
 - The optional location setting stays available in ELEVATE once a monitoring policy is published. The draft describes it as optional and rounded (about 1 km). If ERS does not want it at all, say so and the option can be switched off in the app.
+
+## Messages and calls (owner decisions 2026-11-17; for counsel before real use)
+- **HR access requests:** an HR Admin asks and a different Super Admin approves; read-only, the requested dates only, 72 hours, every page read logged. Confirm the rules and whether the people in the chat must be told, and when.
+- **Recording calls:** only people a Super Admin picks, with every participant's consent, never in calls with a client. Confirm the consent wording under the Data Privacy Act.
+- **Retention (proposed):** messages and files 1 year, call history 3 years, recordings 30 days. Nothing is deleted automatically until counsel approves.
+- **Deleted messages:** proposed to be kept (encrypted, hidden) until the retention period ends, disclosed in the privacy notice. Confirm.
+- **Client groups:** the owner decided clients (guests) may join groups for attendance matters under a written never-share-patient-details rule, with no vendor BAAs. Confirm the guest notice wording and whether that is enough for the client contracts.

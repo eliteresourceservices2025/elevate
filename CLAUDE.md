@@ -39,7 +39,7 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 1. **Modular monolith.** Each module lives in `src/modules/<module>/` with `schema.ts`, `actions.ts`, `queries.ts`, `validators.ts`, `permissions.ts`, `components/`. A module never imports another module's `schema.ts` directly for writes; call that module's exported functions.
 2. **Server Components by default.** Add `"use client"` only for interactivity. No Redux/Zustand; URL state via `nuqs`; TanStack Query only for live-refresh grids.
-3. **All data access is server-side through Drizzle** (`src/lib/db.ts`, which imports `server-only`). Never query app tables with supabase-js from the browser. supabase-js is used only for auth and signed storage URLs.
+3. **All data access is server-side through Drizzle** (`src/lib/db.ts`, which imports `server-only`). Never query app tables with supabase-js from the browser. supabase-js is used only for auth and signed storage URLs. **One exception (owner decision 2026-11-17, Messages):** the browser may subscribe to Supabase Realtime private channels that carry ids only (no message text); every read still goes through server actions.
 4. **Every server action and query starts with** `const user = await requireUser()` (AAL2 enforced) and `await authorize(user, "<module>.<action>", resource)`. Hiding a button is never the only guard.
 5. **Validate every input with Zod on the server**, even if the form already did.
 6. Leave balances come only from the append-only `time.leave_ledger`; never store a mutable balance number.
@@ -249,6 +249,15 @@ Plain-English how-to guides (files in `apps/elevate/content/help`), role-aware, 
 - Guides name real buttons: after changing a screen a guide shows, run `pnpm help:shots` and re-read the guide. Fake data only; never client or patient information.
 - The tool runs against the local database only; reset it first for clean pictures (see the note).
 
+### Messages and calls — `docs/modules/messages.md`
+Internal chat (direct, groups, later channels and client groups) and calls; chat first, calls second.
+
+- Message text is encrypted and never travels in Realtime payloads, notifications, email, audit rows, logs or Sentry; Realtime carries ids only (`ChatSignal`).
+- Membership is checked on every read, write and channel join; a member who left sees only what came before.
+- HR reads a chat only through a logged request approved by a different Super Admin (read-only, dated, 72 hours). Nobody else can.
+- Recording only by people a Super Admin picks, with consent, never in client calls. Client groups are attendance only: never patient details.
+- Messages are insert-only (a delete sets `deleted_at`, an edit adds a revision); message rate limits live in Postgres, not Upstash.
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.
@@ -279,7 +288,7 @@ The audit log is insert-only at the database level (trigger). Test data written 
 - **Files:** private buckets only; signed URLs expire in 60 seconds; allowlist PDF, JPG, PNG, WEBP, DOC, DOCX up to 10 MB, judged by the file's bytes (`sniffFileKind`), never its name; check MIME type server-side. An old-format Word file (DOC) is accepted only when it holds a Word part and no macro project, a DOCX only with no `vbaProject`; Excel, PowerPoint, Outlook files and anything with macros stay refused.
 - **Rate limit** login, careers apply, and Safe Voice endpoints with Upstash.
 - **Safe Voice** is anonymous: it runs on its own subdomain/app, never reads auth cookies or sessions, never stores user ID, IP, user agent or file metadata. Reporters get a random case code + passphrase (hashed with a pepper). Only designated handlers can read cases.
-- **No patient data (HIPAA):** no module may have fields for client patient information. Upload screens show a warning not to upload client records.
+- **No patient data (HIPAA):** no module may have fields for client patient information. Upload screens show a warning not to upload client records. **Messages (owner decision 2026-11-17):** client groups are for attendance matters only under a written never-share-patient-details rule, with no vendor BAAs; the guest notice and banners enforce it, but free text cannot be technically blocked.
 - **Real data only in production.** Seeds and tests use fake data (Filipino and US names, fake IDs).
 
 ## Conventions
