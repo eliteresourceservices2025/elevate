@@ -356,7 +356,7 @@ export async function listPins(input: unknown): Promise<PinnedMessage[]> {
   });
 }
 
-export type ManagedGroup = { id: string; title: string; kind: "group" | "client"; clientName: string | null; memberCount: number; createdAt: string; createdByName: string; amMember: boolean };
+export type ManagedGroup = { id: string; title: string; kind: "group" | "client"; clientId: string | null; clientName: string | null; memberCount: number; createdAt: string; createdByName: string; amMember: boolean };
 
 /**
  * Every live group, for the people who manage groups (HR Admin, Super Admin): name, size, who made it and whether they are in it.
@@ -366,18 +366,19 @@ export async function listManagedGroups(): Promise<ManagedGroup[]> {
   const actor = await requireUser();
   await authorize(actor, "messages.manage_group");
   const rows = (await db.execute(sql`
-    select c.id, c.title, c.kind, c.created_by, c.created_at, (select name from core.clients cl where cl.id = c.client_id) as client_name,
+    select c.id, c.title, c.kind, c.client_id, c.created_by, c.created_at, (select name from core.clients cl where cl.id = c.client_id) as client_name,
       (select count(*)::int from chat.conversation_members m where m.conversation_id = c.id and m.left_at is null) as member_count,
       exists (select 1 from chat.conversation_members m where m.conversation_id = c.id and m.user_id = ${actor.id} and m.left_at is null) as am_member
     from chat.conversations c
     where c.kind in ('group','client') and c.archived_at is null
     order by c.created_at desc
-    limit 500`)) as unknown as { id: string; title: string | null; kind: "group" | "client"; client_name: string | null; created_by: string; created_at: Date; member_count: number; am_member: boolean }[];
+    limit 500`)) as unknown as { id: string; title: string | null; kind: "group" | "client"; client_id: string | null; client_name: string | null; created_by: string; created_at: Date; member_count: number; am_member: boolean }[];
   const people = await peopleByUserId(rows.map((r) => r.created_by));
   return rows.map((r) => ({
     id: r.id,
     title: r.title ?? "Group",
     kind: r.kind,
+    clientId: r.client_id,
     clientName: r.client_name,
     memberCount: r.member_count,
     createdAt: new Date(r.created_at).toISOString(),

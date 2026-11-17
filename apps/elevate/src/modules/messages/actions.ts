@@ -271,6 +271,12 @@ export async function loadChatMessages(input: unknown): Promise<ActionResult<Awa
   return runAction(async () => ({ ok: true, data: await queries.loadMessages(input) }));
 }
 
+/** Just the unread number, for the header and menu (staff only; guests have no shell). */
+export async function loadChatUnreadCount(): Promise<ActionResult<number>> {
+  await requireUser();
+  return runAction(async () => ({ ok: true, data: await queries.countMyUnread() }));
+}
+
 export async function loadConversationList(): Promise<ActionResult<ConversationSummary[]>> {
   await requireUser({ allowGuest: true });
   return runAction(async () => ({ ok: true, data: await queries.listMyConversations() }));

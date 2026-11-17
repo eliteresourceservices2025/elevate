@@ -12,7 +12,7 @@ import { formatInZone } from "@/lib/time";
 import { loadGroupPeopleToManage, syncChatChannels } from "../actions";
 import type { GuestRow } from "../guests";
 import type { ManagedGroup } from "../queries";
-import { ClientGroupDialog } from "./guest-admin";
+import { AddGuestControl, ClientGroupDialog } from "./guest-admin";
 import { RenameGroupDialog, useDeleteGroup, useRemovePerson } from "./group-admin";
 import { AddPeopleDialog, NewGroupDialog } from "./new-conversation-dialog";
 
@@ -160,6 +160,17 @@ export function ManageGroups({ groups, timeZone, clients, guests }: { groups: Ma
                 void reloadPeople(selected.id);
               }}
             />
+            {selected.kind === "client" ? (
+              <AddGuestControl
+                conversationId={selected.id}
+                disabled={people === null}
+                options={guests.filter((g) => g.clientId === selected.clientId && !g.archivedAt && !(people ?? []).some((p) => p.userId === g.userId))}
+                onAdded={() => {
+                  router.refresh();
+                  void reloadPeople(selected.id);
+                }}
+              />
+            ) : null}
             <Button type="button" variant="outline" size="sm" onClick={() => void deleteGroup(selected.id, selected.title)}>
               Delete group
             </Button>

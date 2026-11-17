@@ -19,8 +19,11 @@ async function startDirect(page: Page, otherLastName: string, otherFullName: str
 async function say(page: Page, label: string, text: string) {
   const box = page.getByLabel(`Message ${label}`);
   await box.fill(text);
-  await box.press("Enter");
-  await expect(page.getByRole("log").getByText(text, { exact: true })).toBeVisible();
+  // Enter is ignored while the previous send is still settling, so press it again until the box has emptied.
+  await expect(async () => {
+    if ((await box.inputValue()) !== "") await box.press("Enter");
+    await expect(page.getByRole("log").getByText(text, { exact: true })).toBeVisible({ timeout: 2_500 });
+  }).toPass({ timeout: 15_000 });
 }
 
 test("two people chat live, edit, delete, and a stranger gets a 404", async ({ browser }) => {
@@ -477,4 +480,29 @@ test("presence: an online dot shows who has the chat open, and Appear offline hi
   await expect(pageA.getByRole("heading", { level: 2, name: `Bea Pres${stamp}b` }).locator("xpath=following-sibling::p")).not.toContainText("online", { timeout: 20_000 });
   // She still sees Ana (watching does not announce).
   await expect(pageB.getByRole("heading", { level: 2, name: `Ana Pres${stamp}a` }).locator("xpath=following-sibling::p")).toContainText("1 online", { timeout: 20_000 });
+});
+
+test("the unread badge in the header updates live on any page, and clears after reading", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Bdg${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Bdg${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  // Bea sits on the dashboard (not Messages) with nothing unread.
+  await pageB.goto("/dashboard");
+  await expect(pageB.getByRole("link", { name: "Messages", exact: true }).first()).toBeVisible();
+  await startDirect(pageA, `Bdg${stamp}b`, `Bea Bdg${stamp}b`);
+  await say(pageA, `Bea Bdg${stamp}b`, "Badge test one");
+  // The badge appears without a reload.
+  await expect(pageB.getByRole("link", { name: "Messages, 1 unread" }).first()).toBeVisible({ timeout: 15_000 });
+  await say(pageA, `Bea Bdg${stamp}b`, "Badge test two");
+  await expect(pageB.getByRole("link", { name: "Messages, 2 unread" }).first()).toBeVisible({ timeout: 15_000 });
+  // Reading the chat clears it.
+  await pageB.goto("/messages");
+  await pageB.getByRole("button", { name: new RegExp(`Ana Bdg${stamp}a`) }).click();
+  await expect(pageB.getByRole("log").getByText("Badge test two", { exact: true })).toBeVisible();
+  await expect(pageB.getByRole("link", { name: /^Messages, \d+ unread$/ })).toHaveCount(0, { timeout: 15_000 });
 });

@@ -6,6 +6,7 @@ import { ConfirmProvider } from "@/components/confirm-dialog";
 import { OperationResultProvider } from "@/components/operation-result";
 import { UnsavedChangesProvider } from "@/components/unsaved-changes";
 import { PopupQueue, type PopupItem } from "@/modules/announcements/components/popup-queue";
+import { useLiveChatCount } from "@/modules/messages/components/use-live-chat-count";
 import { AppHeader } from "./app-header";
 import { QuickTour } from "./quick-tour";
 import { SidebarNav } from "./sidebar-nav";
@@ -19,6 +20,9 @@ type HeaderProps = Omit<ComponentProps<typeof AppHeader>, "collapsed" | "onToggl
  */
 export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [], banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; tourAutoStart?: boolean; popups?: PopupItem[]; banner: ReactNode; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
+  // The chat count in the header and the menu stays current on every page (a shared live connection), not only on the Messages page.
+  const liveChat = useLiveChatCount(header.userId ?? "", header.workCounts?.["/messages"] ?? 0);
+  const workCounts = { ...header.workCounts, "/messages": liveChat || undefined };
   // Queued announcements and policies come first; the quick tour waits until they are closed or acknowledged.
   const [popupsDone, setPopupsDone] = useState(popups.length === 0);
   const onPopupsDone = useCallback(() => setPopupsDone(true), []);
@@ -53,10 +57,10 @@ export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [],
           collapsed ? "w-16" : "w-64",
         )}
       >
-        <SidebarNav hidden={header.hiddenNav} safeVoiceUrl={header.safeVoiceUrl} workCounts={header.workCounts} collapsed={collapsed} />
+        <SidebarNav hidden={header.hiddenNav} safeVoiceUrl={header.safeVoiceUrl} workCounts={workCounts} collapsed={collapsed} />
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
-        <AppHeader {...header} collapsed={collapsed} onToggleSidebar={toggle} />
+        <AppHeader {...header} workCounts={workCounts} collapsed={collapsed} onToggleSidebar={toggle} />
         <div className="flex-1 scroll-smooth overflow-y-auto motion-reduce:scroll-auto print:overflow-visible">
           {banner}
           {/* Side padding: 16px on a phone, 40px on a tablet or laptop, 48px on a large screen. Pages fill the width between. */}

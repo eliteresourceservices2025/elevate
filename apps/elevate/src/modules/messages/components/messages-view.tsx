@@ -44,19 +44,13 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, app
   const listTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const router = useRouter();
-  const lastUnreadTotal = useRef(initialConversations.reduce((sum, c) => sum + (c.mutedUntil ? 0 : c.unread), 0));
 
   const refreshList = useCallback(async () => {
     const result = await loadConversationList();
     if (!result.ok) return;
     setConversations(result.data);
-    // The header and menu counts come from the server render; when the total changes here (new message, or a chat just read), refresh them too.
-    const total = result.data.reduce((sum, c) => sum + (c.mutedUntil ? 0 : c.unread), 0);
-    if (total !== lastUnreadTotal.current) {
-      lastUnreadTotal.current = total;
-      router.refresh();
-    }
-  }, [router]);
+    // The header and menu counts update themselves (useLiveChatCount in the app shell).
+  }, []);
 
   const refreshListSoon = useCallback(() => {
     if (listTimer.current) clearTimeout(listTimer.current);

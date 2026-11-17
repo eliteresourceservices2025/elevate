@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatInZone } from "@/lib/time";
-import { archiveChatGuest, createClientGroupConversation, inviteChatGuest } from "../actions";
+import { addGroupMembers, archiveChatGuest, createClientGroupConversation, inviteChatGuest } from "../actions";
 import type { GuestRow, PendingGuestInvite } from "../guests";
 import { MAX_TITLE } from "../validators";
 import { PeoplePicker, type ChatPerson } from "./people-picker";
@@ -237,5 +237,43 @@ function ClientGroupForm({ clients, guests, onOpened }: { clients: ClientOption[
         </Button>
       </div>
     </form>
+  );
+}
+
+/** On a client group: add another guest of that client (one at a time). Guests of other clients are never offered. */
+export function AddGuestControl({ conversationId, options, onAdded, disabled }: { conversationId: string; options: GuestRow[]; onAdded: () => void; disabled: boolean }) {
+  const [choice, setChoice] = useState("");
+  const [pending, startTransition] = useTransition();
+  if (options.length === 0) return null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <label htmlFor={`add-guest-${conversationId}`} className="sr-only">
+        Add a client guest
+      </label>
+      <select id={`add-guest-${conversationId}`} value={choice} onChange={(e) => setChoice(e.target.value)} className={`${selectClass} w-auto max-w-56`} disabled={disabled}>
+        <option value="">Add a client guest…</option>
+        {options.map((g) => (
+          <option key={g.userId} value={g.userId}>
+            {g.email}
+          </option>
+        ))}
+      </select>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={!choice || pending || disabled}
+        onClick={() =>
+          startTransition(async () => {
+            const result = await addGroupMembers({ conversationId, userIds: [choice] });
+            if (!result.ok) return void toast.error(result.error);
+            setChoice("");
+            onAdded();
+          })
+        }
+      >
+        Add
+      </Button>
+    </div>
   );
 }

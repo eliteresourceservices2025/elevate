@@ -38,6 +38,7 @@ const valid: Call[] = [
   { name: "markConversationRead", run: () => actions.markConversationRead({ conversationId: ID, seq: 3 }), adminOnly: false },
   { name: "loadChatMessages", run: () => actions.loadChatMessages({ conversationId: ID }), adminOnly: false },
   { name: "loadConversationList", run: () => actions.loadConversationList(), adminOnly: false },
+  { name: "loadChatUnreadCount", run: () => actions.loadChatUnreadCount(), adminOnly: false },
   { name: "searchPeopleForChat", run: () => actions.searchPeopleForChat({ q: "ana" }), adminOnly: false },
   { name: "toggleChatReaction", run: () => actions.toggleChatReaction({ messageId: ID, emoji: "👍" }), adminOnly: false },
   { name: "createChatPoll", run: () => actions.createChatPoll({ conversationId: ID, question: "Lunch?", options: ["Pizza", "Noodles"], multiple: false, anonymous: false }), adminOnly: false },
