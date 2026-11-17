@@ -48,6 +48,8 @@ const EXPECTED: Record<string, string> = {
   "announcements.manage_popups": "A A - - - -",
   "announcements.export": "A A - - - -",
   "notifications.read": "O O O O O O",
+  "messages.use": "O O O O O O",
+  "messages.create_group": "O O O O O O",
   "privacy.view_my_data": "O O O O O O",
   "privacy.export_my_data": "O O O O O O",
   "privacy.request_data_rights": "O O O O O O",

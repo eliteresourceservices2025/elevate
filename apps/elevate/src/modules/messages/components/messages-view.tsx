@@ -1,0 +1,236 @@
+"use client";
+
+import { MessageSquare, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useConfirm } from "@/components/confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
+import { toast } from "@/components/feedback-dialog";
+import { Button } from "@/components/ui/button";
+import { leaveGroupConversation, loadChatMessages, loadConversationList, markConversationRead } from "../actions";
+import type { ChatMessage, ConversationSummary } from "../queries";
+import type { ChatSignal } from "../realtime-types";
+import { ConversationList } from "./conversation-list";
+import { AddPeopleDialog, NewConversationDialog } from "./new-conversation-dialog";
+import { Thread, type ThreadMember } from "./thread";
+import { useChatLive } from "./use-chat-live";
+
+type ThreadData = { messages: ChatMessage[]; hasMore: boolean; members: ThreadMember[] };
+
+/** Newest page from the server, keeping any older messages the person already scrolled back to. */
+function mergeNewest(previous: ThreadData | null, next: ThreadData): ThreadData {
+  if (!previous || next.messages.length === 0) return next;
+  const firstNew = next.messages[0].seq;
+  const older = previous.messages.filter((m) => m.seq < firstNew);
+  return { messages: [...older, ...next.messages], hasMore: older.length > 0 ? previous.hasMore : next.hasMore, members: next.members };
+}
+
+export type { ThreadData };
+
+export function MessagesView({ userId, timeZone, initialConversations, initialConversationId, initialThread }: { userId: string; timeZone: string; initialConversations: ConversationSummary[]; initialConversationId: string | null; initialThread: ThreadData | null }) {
+  const confirm = useConfirm();
+  const [conversations, setConversations] = useState(initialConversations);
+  const [activeId, setActiveId] = useState<string | null>(initialConversationId);
+  const [thread, setThread] = useState<ThreadData | null>(initialThread);
+  const [showDetails, setShowDetails] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [threadError, setThreadError] = useState<string | null>(null);
+  const request = useRef(0);
+  const activeRef = useRef(initialConversationId);
+  const listTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const router = useRouter();
+  const lastUnreadTotal = useRef(initialConversations.reduce((sum, c) => sum + c.unread, 0));
+
+  const refreshList = useCallback(async () => {
+    const result = await loadConversationList();
+    if (!result.ok) return;
+    setConversations(result.data);
+    // The header and menu counts come from the server render; when the total changes here (new message, or a chat just read), refresh them too.
+    const total = result.data.reduce((sum, c) => sum + c.unread, 0);
+    if (total !== lastUnreadTotal.current) {
+      lastUnreadTotal.current = total;
+      router.refresh();
+    }
+  }, [router]);
+
+  const refreshListSoon = useCallback(() => {
+    if (listTimer.current) clearTimeout(listTimer.current);
+    listTimer.current = setTimeout(() => void refreshList(), 250);
+  }, [refreshList]);
+
+  const loadThread = useCallback(async (id: string, reset: boolean) => {
+    const mine = ++request.current;
+    let result: Awaited<ReturnType<typeof loadChatMessages>>;
+    try {
+      result = await loadChatMessages({ conversationId: id });
+    } catch {
+      // A dropped connection must not leave "Loading messages…" on screen for good.
+      result = { ok: false, error: "Could not reach ELEVATE. Check your connection and try again." };
+    }
+    if (mine !== request.current || activeRef.current !== id) return; // a newer request or another chat took over
+    if (!result.ok) {
+      setThreadError(result.error);
+      setThread(null);
+      return;
+    }
+    setThreadError(null);
+    setThread((previous) => (reset ? result.data : mergeNewest(previous, result.data)));
+  }, []);
+
+  // Opening a chat with unread messages marks it read up to the newest message.
+  useEffect(() => {
+    if (!activeId || !thread || thread.messages.length === 0) return;
+    const summary = conversations.find((c) => c.id === activeId);
+    if (!summary || summary.unread === 0) return;
+    const newest = thread.messages[thread.messages.length - 1].seq;
+    void markConversationRead({ conversationId: activeId, seq: newest }).then(() => refreshListSoon());
+  }, [activeId, thread, conversations, refreshListSoon]);
+
+  const onSignal = useCallback(
+    (signal: ChatSignal) => {
+      refreshListSoon();
+      const active = activeRef.current;
+      if (!active || signal.type === "read") return;
+      if (signal.conversationId !== "" && signal.conversationId !== active) return;
+      if (signal.type === "delete" && signal.messageId) {
+        // A removed message disappears at once, even one far back in an open history (the newest-page merge would never touch it).
+        const removed = signal.messageId;
+        setThread((previous) => (previous ? { ...previous, messages: previous.messages.map((m) => (m.id === removed ? { ...m, deleted: true, body: null } : m)) } : previous));
+        return;
+      }
+      // An edit can be to a message anywhere in the history, so reload it from the newest page (the live list merge only fills in new messages).
+      void loadThread(active, signal.type === "edit");
+    },
+    [refreshListSoon, loadThread],
+  );
+  useChatLive(userId, onSignal);
+
+  useEffect(
+    () => () => {
+      if (listTimer.current) clearTimeout(listTimer.current);
+    },
+    [],
+  );
+
+  function open(id: string) {
+    activeRef.current = id;
+    setShowDetails(false);
+    setActiveId(id);
+    setThread(null);
+    setThreadError(null);
+    void loadThread(id, true);
+    window.history.replaceState(null, "", `/messages/${id}`);
+  }
+
+  function close() {
+    activeRef.current = null;
+    request.current += 1;
+    setShowDetails(false);
+    setActiveId(null);
+    setThread(null);
+    window.history.replaceState(null, "", "/messages");
+  }
+
+  async function opened(id: string) {
+    await refreshList();
+    open(id);
+  }
+
+  async function loadEarlier() {
+    if (!activeId || !thread || thread.messages.length === 0) return;
+    const id = activeId;
+    setLoadingEarlier(true);
+    try {
+      const result = await loadChatMessages({ conversationId: id, beforeSeq: thread.messages[0].seq });
+      if (activeRef.current !== id) return; // the person opened another chat meanwhile: these belong to the old one
+      if (!result.ok) return void toast.error(result.error);
+      setThread((previous) => (previous ? { messages: [...result.data.messages, ...previous.messages], hasMore: result.data.hasMore, members: previous.members } : previous));
+    } catch {
+      toast.error("Could not reach ELEVATE. Check your connection and try again.");
+    } finally {
+      setLoadingEarlier(false);
+    }
+  }
+
+  async function leave(conversation: ConversationSummary) {
+    const ok = await confirm({ title: `Leave ${conversation.title}?`, description: "You will no longer get new messages. People there are told you left.", confirmLabel: "Leave group", destructive: true });
+    if (!ok) return;
+    const result = await leaveGroupConversation({ conversationId: conversation.id });
+    if (!result.ok) return void toast.error(result.error);
+    close();
+    void refreshList();
+  }
+
+  const active = conversations.find((c) => c.id === activeId) ?? null;
+
+  return (
+    <div className="flex h-[calc(100dvh-13rem)] min-h-[34rem] overflow-hidden rounded-xl border bg-card">
+      <div className={`w-full shrink-0 border-r md:block md:w-80 ${active ? "hidden" : "block"}`}>
+        <ConversationList conversations={conversations} activeId={activeId} onOpen={open} newButton={<NewConversationDialog onOpened={(id) => void opened(id)} />} timeZone={timeZone} />
+      </div>
+
+      <div className={`min-w-0 flex-1 ${active ? (showDetails ? "hidden md:block" : "block") : "hidden md:block"}`}>
+        {active ? (
+          threadError ? (
+            <div className="p-4">
+              <EmptyState icon={MessageSquare} title="This chat isn't available" description={threadError} action={<Button type="button" variant="outline" onClick={close}>Back to chats</Button>} />
+            </div>
+          ) : thread ? (
+            <Thread
+              conversation={active}
+              messages={thread.messages}
+              hasMore={thread.hasMore}
+              members={thread.members}
+              myUserId={userId}
+              timeZone={timeZone}
+              loadingEarlier={loadingEarlier}
+              onLoadEarlier={() => void loadEarlier()}
+              onBack={close}
+              onChanged={() => {
+                void loadThread(active.id, false);
+                refreshListSoon();
+              }}
+              onToggleDetails={() => setShowDetails((v) => !v)}
+            />
+          ) : (
+            <p className="p-6 text-sm text-muted-foreground" role="status">
+              Loading messages…
+            </p>
+          )
+        ) : (
+          <div className="flex h-full items-center justify-center p-6">
+            <EmptyState icon={MessageSquare} title="Pick a chat" description="Choose a conversation on the left, or start a new message." className="border-0" />
+          </div>
+        )}
+      </div>
+
+      {active && showDetails && thread ? (
+        <aside aria-label="People in this chat" className="flex w-full shrink-0 flex-col gap-4 border-l p-4 md:w-64">
+          <div className="flex items-center justify-between">
+            <h3 className="font-heading text-base font-semibold">People</h3>
+            <Button type="button" variant="ghost" size="icon-sm" onClick={() => setShowDetails(false)} aria-label="Close people list">
+              <X aria-hidden />
+            </Button>
+          </div>
+          <ul className="flex flex-col gap-1 text-sm">
+            {thread.members.map((m) => (
+              <li key={m.userId} className="truncate">
+                {m.name}
+                {m.userId === userId ? <span className="text-muted-foreground"> (you)</span> : null}
+              </li>
+            ))}
+          </ul>
+          {active.kind === "group" ? (
+            <div className="mt-auto flex flex-col gap-2">
+              <AddPeopleDialog conversationId={active.id} existing={thread.members.map((m) => m.userId)} onAdded={() => { void loadThread(active.id, false); void refreshList(); }} />
+              <Button type="button" variant="outline" size="sm" onClick={() => void leave(active)}>
+                Leave group
+              </Button>
+            </div>
+          ) : null}
+        </aside>
+      ) : null}
+    </div>
+  );
+}

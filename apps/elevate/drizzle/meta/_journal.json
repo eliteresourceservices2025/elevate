@@ -1023,6 +1023,20 @@
       "when": 1794868532321,
       "tag": "0145_payment_amount_usd",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1794916042754,
+      "tag": "0146_chat_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1794916059629,
+      "tag": "0147_chat_guards",
+      "breakpoints": true
     }
   ]
 }

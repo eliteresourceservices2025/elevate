@@ -1,0 +1,110 @@
+import { sql } from "drizzle-orm";
+import { bigint, check, index, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { users } from "@/modules/core/schema";
+
+// Messages (chat). Text is encrypted with fieldCrypto (context "chat_message:<conversationId>:<messageId>"; edits use
+// "chat_message_rev:<messageId>:<revisionId>"), so ids are generated in the app. Messages are insert-only by trigger
+// (migration 0147): a delete stamps deleted_at once, an edit stamps edited_at and adds a revision row. Realtime only ever
+// carries ids; see docs/modules/messages.md.
+
+export const chat = pgSchema("chat");
+
+const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
+
+export const conversations = chat
+  .table(
+    "conversations",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      /** 'dm' (exactly two people) or 'group'. Later phases add team, department, company and client. */
+      kind: text("kind").notNull(),
+      /** A group's name (plain text, shown to its members). Null for a direct message. */
+      title: text("title"),
+      /** "<smaller user id>:<larger user id>" for a direct message, so a pair has one conversation. */
+      dmKey: text("dm_key"),
+      createdBy: uuid("created_by")
+        .notNull()
+        .references(() => users.id),
+      createdAt: createdAt(),
+      archivedAt: timestamp("archived_at", { withTimezone: true }),
+    },
+    (t) => [
+      uniqueIndex("conversations_dm_key_idx").on(t.dmKey).where(sql`${t.dmKey} is not null`),
+      check("conversations_kind_chk", sql`${t.kind} in ('dm','group')`),
+      check("conversations_dm_key_chk", sql`(${t.kind} = 'dm') = (${t.dmKey} is not null)`),
+    ],
+  )
+  .enableRLS();
+
+export const conversationMembers = chat
+  .table(
+    "conversation_members",
+    {
+      conversationId: uuid("conversation_id")
+        .notNull()
+        .references(() => conversations.id),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      /** 'owner' or 'member'. */
+      role: text("role").notNull().default("member"),
+      joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+      /** Set when the person leaves; they keep seeing what came before and nothing after. */
+      leftAt: timestamp("left_at", { withTimezone: true }),
+      /** The newest message seq this person has seen; unread = others' messages above it. */
+      lastReadSeq: bigint("last_read_seq", { mode: "number" }).notNull().default(0),
+      mutedUntil: timestamp("muted_until", { withTimezone: true }),
+    },
+    (t) => [
+      primaryKey({ columns: [t.conversationId, t.userId] }),
+      index("conversation_members_user_idx").on(t.userId, t.leftAt),
+      check("conversation_members_role_chk", sql`${t.role} in ('owner','member')`),
+    ],
+  )
+  .enableRLS();
+
+export const messages = chat
+  .table(
+    "messages",
+    {
+      /** Generated in the app so the encryption context is known before insert. */
+      id: uuid("id").primaryKey(),
+      /** Orders messages and marks read position. */
+      seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity().notNull(),
+      conversationId: uuid("conversation_id")
+        .notNull()
+        .references(() => conversations.id),
+      senderUserId: uuid("sender_user_id")
+        .notNull()
+        .references(() => users.id),
+      bodyEnc: text("body_enc").notNull(),
+      /** 'text' or 'system' (for example "A person left"). */
+      kind: text("kind").notNull().default("text"),
+      createdAt: createdAt(),
+      editedAt: timestamp("edited_at", { withTimezone: true }),
+      deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    },
+    (t) => [
+      index("messages_conversation_seq_idx").on(t.conversationId, t.seq),
+      index("messages_sender_created_idx").on(t.senderUserId, t.createdAt),
+      uniqueIndex("messages_seq_idx").on(t.seq),
+      check("messages_kind_chk", sql`${t.kind} in ('text','system')`),
+    ],
+  )
+  .enableRLS();
+
+/** An edit adds a row here; the original body in messages never changes. The newest revision is what people see. */
+export const messageRevisions = chat
+  .table(
+    "message_revisions",
+    {
+      id: uuid("id").primaryKey(),
+      messageId: uuid("message_id")
+        .notNull()
+        .references(() => messages.id),
+      bodyEnc: text("body_enc").notNull(),
+      createdAt: createdAt(),
+    },
+    (t) => [index("message_revisions_message_idx").on(t.messageId, t.createdAt)],
+  )
+  .enableRLS();

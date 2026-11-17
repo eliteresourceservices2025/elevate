@@ -11,6 +11,7 @@ import { scheduleImportPermissions } from "@/modules/schedule-import/permissions
 import { incidentsPermissions } from "@/modules/incidents/permissions";
 import { healthPermissions } from "@/modules/health/permissions";
 import { jibblePermissions } from "@/modules/jibble/permissions";
+import { messagesPermissions } from "@/modules/messages/permissions";
 import { notificationsPermissions } from "@/modules/notifications/permissions";
 import { offersPermissions } from "@/modules/offers/permissions";
 import { onboardingPermissions } from "@/modules/onboarding/permissions";
@@ -39,6 +40,7 @@ export const PERMISSIONS = {
   ...documentsPermissions,
   ...announcementsPermissions,
   ...notificationsPermissions,
+  ...messagesPermissions,
   ...privacyPermissions,
   ...timeoffPermissions,
   ...attendancePermissions,
