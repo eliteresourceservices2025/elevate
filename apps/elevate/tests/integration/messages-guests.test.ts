@@ -20,6 +20,9 @@ type Actor = { id: string; email: string; roles: string[]; isGuest?: boolean };
 let counter = 0;
 const uniq = (p: string) => `${p}${Date.now().toString(36)}${counter++}`;
 const rows = async <T = Record<string, unknown>>(q: ReturnType<typeof sql>) => (await db.execute(q)) as unknown as T[];
+// The throwaway test database has no Supabase auth schema; archiving a guest ends their sessions there.
+await db.execute(sql`create schema if not exists auth`);
+await db.execute(sql`create table if not exists auth.sessions (user_id uuid)`);
 const as = (u: Actor) => {
   current.user = u;
 };
@@ -194,6 +197,35 @@ describe("client groups and what a guest can reach", () => {
     await guestService.acceptGuestNotice(guest);
     const audit = await rows(sql`select 1 from ops.audit_log where action = 'guest.notice_accepted' and target_id = ${guest.id}`);
     expect(audit).toHaveLength(1);
+  });
+});
+
+describe("review fixes", () => {
+  it("a guest can never be linked to a people record, in the app or the database, and is left out of channels", async () => {
+    const hr = await makeStaff("hr");
+    const guest = await makeGuest(hr, await makeClient("a"));
+    await expect(db.execute(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values ('G', 'Guest', ${guest.email}, 'active', ${guest.id})`)).rejects.toThrow();
+    const { accountsWithoutRecord } = await import("@/modules/people/duplicates-service");
+    expect((await accountsWithoutRecord(db)).some((a) => a.userId === guest.id)).toBe(false);
+    await expect(db.execute(sql`update core.users set payroll_access = 'viewer' where id = ${guest.id}`)).rejects.toThrow();
+    await expect(db.execute(sql`update core.users set is_privacy_officer = true where id = ${guest.id}`)).rejects.toThrow();
+  });
+
+  it("a guest's access ends when their client becomes inactive, and a listed Super Admin email cannot be invited", async () => {
+    const hr = await makeStaff("hr");
+    const client = await makeClient("a");
+    const guest = await makeGuest(hr, client);
+    await guestService.acceptGuestNotice(guest);
+    await expect(guestService.assertGuestReady(guest)).resolves.toBeUndefined();
+    await db.execute(sql`update core.clients set is_active = false where id = ${client}`);
+    await expect(guestService.assertGuestReady(guest)).rejects.toThrow("Accept the guest notice");
+    await expect(guestService.createClientGroup(hr, { clientId: client, title: "Old", guestUserIds: [guest.id], staffUserIds: [hr.id] })).rejects.toThrow();
+    process.env.SUPER_ADMIN_EMAILS = "boss@example.com";
+    try {
+      await expect(guestService.inviteGuest(hr, { email: "Boss@Example.com", clientId: await makeClient("b") })).rejects.toThrow("can't be invited");
+    } finally {
+      delete process.env.SUPER_ADMIN_EMAILS;
+    }
   });
 });
 

@@ -26,7 +26,7 @@ export async function ensureInvitation(tx: Tx, actor: { id: string; email: strin
   // Re-inviting refreshes the expiry. The unique index on lower(email) guards against a race.
   const [existing] = await tx.select({ id: invitations.id, guestClientId: invitations.guestClientId }).from(invitations).where(sql`lower(${invitations.email}) = ${email}`).limit(1);
   // An email invited as a client guest can't also be invited as staff: revoke the guest invitation first.
-  if (existing?.guestClientId) throw new ActionFailure("That email is invited as a client guest. Revoke that invitation first.");
+  if (existing?.guestClientId) throw new ActionFailure("That email is invited as a client guest. Revoke that invitation in Settings > Invitations first.");
   if (existing) {
     await tx
       .update(invitations)

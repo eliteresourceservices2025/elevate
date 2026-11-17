@@ -51,9 +51,28 @@ Fallback: poll every 20 s while the socket is not subscribed.
 
 Body 1 to 4,000 characters; groups 3 to 200 members (owner decision 2026-11-17; up to 50 people added per step; Realtime signals go out in batches of 100);  30 messages per sender per 10 seconds (counted in Postgres, not Upstash, to protect the free tier); page size 50 (max 100).
 
+## What is built (state at 2026-11-17)
+
+- **Phase 1 chat core, group management (200 cap, HR/Super Admin only).**
+- **Phase 2 rich chat:** threads (one level), reactions (fixed emoji set), pins, @mentions (a notice saying where, never what), automatic team, department and company channels (daily sync; the company channel is HR-post-only), polls, pictures/files/voice notes (3-step upload, bytes-based type check, location data removed from pictures, served only through the authenticated route `/api/messages/attachments/[id]`), message search (a blind index of HMAC word tokens, never plain text), muting a chat, personal settings (appear offline, daily email), a daily unread email (`chat_unread`, lowest priority, count and link only; job `chat-digest`, 8:00 AM Phoenix).
+- **Phase 3 client guests** (below).
+- **Not built yet:** GIFs (KLIPY needs a key; the plan is a server proxy with an https `.klipy.com` allowlist), presence/online dot, a live unread badge outside the Messages page, calls (Phase 4), town hall and recording (5), HR access requests (6), rollout (7).
+
+## Client guests (Phase 3, owner decision 2026-11-17)
+
+- A guest is `core.users.is_guest = true` with **no roles at all** (not even Employee). A database trigger (`core.guest_roles_guard`) refuses to give a guest a role, and `is_guest` cannot change once set.
+- **Default deny everywhere:** `requireUser()` sends a guest to `/messages` unless the caller passes `{ allowGuest: true }`. Only Messages (actions, queries, the attachment route, the `(app)` layout) opts in. The permission registry grants guests `messages.use` alone, through `alsoFlag.guest`; `tests/authz/guest-access.test.ts` checks every registered action.
+- **Invite:** HR Admin or Super Admin (`messages.invite_guests`) on `/messages/guests`. The invitation carries `guest_client_id`; first sign-in set-up (`provisionCoreUser`) then makes the account a guest and a `chat.guests` row (no Employee role, no Super Admin bootstrap, no people record). An expired guest invitation still never produces staff. An email already invited as staff, or already holding an account, is refused, and staff invitations refuse an email that has a guest invitation.
+- **Notice first:** nothing opens until the guest accepts the short guest notice (`GUEST_NOTICE_BODY` in `guests.ts`; counsel to finalize). Enforced on the server (`assertGuestReady` in `run()` and `actorWithAccess`), not only by the screen.
+- **What a guest can do:** read and write in the client groups they were added to, vote, react, upload, search their own chats, mute. They cannot start chats, create groups, look people up, or be added to a plain group or a direct message (`activeUserIds` excludes guests). A client group (`kind = 'client'`, `client_id`) takes staff and only guests of **that** client (`membersFit`). HR/Super Admin create and manage them from Manage groups ("New client group").
+- **Every client chat shows** "Attendance matters only. Never share patient details."
+- **Ending access:** HR archives the guest (`archiveGuest`): the account is archived (requireUser signs them out), they leave every chat, nothing is deleted.
+- **Known limit (key rotation):** the search index (`chat.search_tokens`) is keyed from the FIRST key in `FIELD_ENCRYPTION_KEYS`. Rotating keys makes older messages stop matching in search until the index is rebuilt; there is no rebuild job yet. Do not rotate until one exists (or accept search gaps).
+- **Not yet:** adding a guest to an existing client group later from the Manage screen (create a new client group, or add through the action), Team Lead invites (HR and Super Admin only for now), guest sign-up wording in the invitation email (the generic ELEVATE invitation is reused).
+
 ## Phases
 
-0 docs and prototype, **1 chat core (current)**, 2 rich chat, 3 guests, 4 calls, 5 all-hands and recording, 6 HR access requests, 7 rollout and pilot.
+0 docs and prototype, 1 chat core, 2 rich chat (GIFs and presence still open), 3 guests (done), 4 calls, 5 all-hands and recording, 6 HR access requests, 7 rollout and pilot.
 
 ## Free-tier guardrails
 

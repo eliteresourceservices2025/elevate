@@ -4,6 +4,7 @@ import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
+import { assertGuestReady } from "./guests";
 import { requireMember, type Actor } from "./service";
 import { conversationMembers, userSettings } from "./schema";
 
@@ -16,6 +17,7 @@ const DEFAULTS: ChatSettings = { appearOffline: false, emailDigest: true };
 export async function getChatSettings(): Promise<ChatSettings> {
   const actor = await requireUser({ allowGuest: true });
   await authorize(actor, "messages.use", { ownerUserId: actor.id });
+  await assertGuestReady(actor);
   const [row] = await db.select({ appearOffline: userSettings.appearOffline, emailDigest: userSettings.emailDigest }).from(userSettings).where(eq(userSettings.userId, actor.id)).limit(1);
   return row ?? DEFAULTS;
 }

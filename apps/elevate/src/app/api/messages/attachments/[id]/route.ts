@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { assertGuestReady } from "@/modules/messages/guests";
 import { authorize, ForbiddenError } from "@/lib/authz";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
@@ -16,6 +17,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response("Not found", { status: 404 });
   try {
     await authorize(actor, "messages.use", { ownerUserId: actor.id });
+    await assertGuestReady(actor);
     const file = await loadAttachmentForViewer(actor, id);
     // A document someone opens is worth a trace (ids and the kind only, never the name); pictures and voice notes are not.
     if (file.kind === "file") await writeAudit({ actor, action: "chat.attachment.view", targetType: "chat_attachment", targetId: id, metadata: { conversationId: file.conversationId } });

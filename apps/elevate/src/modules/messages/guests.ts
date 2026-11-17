@@ -38,6 +38,8 @@ export type PendingGuestInvite = { invitationId: string; email: string; clientId
 export async function inviteGuest(actor: Actor, input: { email: string; clientId: string }): Promise<{ expiresAt: Date }> {
   const email = input.email.trim().toLowerCase();
   return db.transaction(async (tx) => {
+    // A listed Super Admin email must never become a guest (the guest flag is permanent).
+    if ((process.env.SUPER_ADMIN_EMAILS ?? "").toLowerCase().split(",").map((e) => e.trim()).includes(email)) throw new ActionFailure("That email can't be invited as a guest.");
     const [client] = await tx
       .select({ id: clients.id })
       .from(clients)
@@ -96,6 +98,8 @@ export async function archiveGuest(actor: Actor, userId: string): Promise<void> 
       .limit(1);
     if (!guest) throw new ActionFailure("That guest was not found.");
     await tx.update(guests).set({ archivedAt: sql`now()` }).where(eq(guests.userId, userId));
+    // End their sign-in sessions too, like deactivating an account.
+    await tx.execute(sql`delete from auth.sessions where user_id = ${userId}`);
     await tx.update(users).set({ archivedAt: sql`now()` }).where(and(eq(users.id, userId), isNull(users.archivedAt)));
     const left = await tx
       .update(conversationMembers)
@@ -125,7 +129,7 @@ export async function createClientGroup(
   if (!title || people.length < 1 || people.length + 1 > MAX_GROUP) throw new ActionFailure("Check the group and try again.");
   const conversationId = randomUUID();
   await db.transaction(async (tx) => {
-    const [client] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.id, input.clientId), isNull(clients.archivedAt))).limit(1);
+    const [client] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.id, input.clientId), isNull(clients.archivedAt), eq(clients.isActive, true))).limit(1);
     if (!client) throw new ActionFailure("Choose an active client.");
     if (!(await membersFit(tx, input.clientId, people))) throw new ActionFailure("Some of those people can't be added.");
     await tx.insert(conversations).values({ id: conversationId, kind: "client", clientId: input.clientId, title, createdBy: actor.id });
@@ -149,10 +153,12 @@ export async function membersFit(executor: Pick<typeof db, "select">, clientId: 
   if (rows.length !== ids.length) return false;
   const guestIds = rows.filter((r) => r.isGuest).map((r) => r.id);
   if (guestIds.length === 0) return true;
+  // Guests of a client that is archived or inactive no longer count.
   const mine = await executor
     .select({ userId: guests.userId })
     .from(guests)
-    .where(and(inArray(guests.userId, guestIds), eq(guests.clientId, clientId), isNull(guests.archivedAt)));
+    .innerJoin(clients, eq(clients.id, guests.clientId))
+    .where(and(inArray(guests.userId, guestIds), eq(guests.clientId, clientId), isNull(guests.archivedAt), isNull(clients.archivedAt), eq(clients.isActive, true)));
   return mine.length === guestIds.length;
 }
 
@@ -162,8 +168,9 @@ export async function guestStatus(userId: string): Promise<{ ready: boolean; not
     .select({ noticeAcceptedAt: guests.noticeAcceptedAt, archivedAt: guests.archivedAt, clientName: clients.name })
     .from(guests)
     .innerJoin(clients, eq(clients.id, guests.clientId))
-    .where(eq(guests.userId, userId))
+    .where(and(eq(guests.userId, userId), isNull(clients.archivedAt), eq(clients.isActive, true)))
     .limit(1);
+  // No row also covers a client that was archived or made inactive: the relationship ended, so access ends with it.
   if (!row || row.archivedAt) return { ready: false, noticeAccepted: false, clientName: null };
   return { ready: row.noticeAcceptedAt !== null, noticeAccepted: row.noticeAcceptedAt !== null, clientName: row.clientName };
 }

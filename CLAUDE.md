@@ -250,7 +250,7 @@ Plain-English how-to guides (files in `apps/elevate/content/help`), role-aware, 
 - The tool runs against the local database only; reset it first for clean pictures (see the note).
 
 ### Messages and calls — `docs/modules/messages.md`
-Internal chat (direct, groups, later channels and client groups) and calls; chat first, calls second.
+Internal chat (direct, groups, channels, polls, files, search, client groups with guests) and later calls; chat first, calls second.
 
 - Message text is encrypted and never travels in Realtime payloads, notifications, email, audit rows, logs or Sentry; Realtime carries ids only (`ChatSignal`).
 - Membership is checked on every read, write and channel join; a member who left sees only what came before.
@@ -258,6 +258,7 @@ Internal chat (direct, groups, later channels and client groups) and calls; chat
 - Recording only by people a Super Admin picks, with consent, never in client calls. Client groups are attendance only: never patient details.
 - Messages are insert-only (a delete sets `deleted_at`, an edit adds a revision); message rate limits live in Postgres, not Upstash.
 - Only HR Admin and Super Admin create, rename, change the people of and delete (archive) group chats, up to 200 people each (owner decision 2026-11-17); managing a group never lets them read it or add themself to it.
+- Client guests (`core.users.is_guest`, no roles ever, trigger-enforced) may use Messages only: `requireUser()` redirects a guest unless the caller passes `{ allowGuest: true }` (only Messages does), the registry grants guests `messages.use` alone (`alsoFlag.guest`), a guest accepts the guest notice before anything opens, joins only client groups of their own client, and cannot start chats or look people up. Only HR Admin and Super Admin invite guests and make client groups. Never add `allowGuest` outside Messages.
 
 ## Adding a permission or action
 

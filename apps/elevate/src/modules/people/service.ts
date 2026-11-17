@@ -117,7 +117,7 @@ export async function findLinkableUser(tx: Tx, emails: (string | null | undefine
   const rows = await tx
     .select({ id: users.id })
     .from(users)
-    .where(sql`lower(${users.email}) in (${sql.join(wanted.map((e) => sql`${e}`), sql`, `)}) and ${users.archivedAt} is null`);
+    .where(sql`lower(${users.email}) in (${sql.join(wanted.map((e) => sql`${e}`), sql`, `)}) and ${users.archivedAt} is null and not ${users.isGuest}`);
 
   const free: string[] = [];
   for (const { id } of rows) {

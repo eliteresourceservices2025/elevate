@@ -422,6 +422,8 @@ export async function votePoll(actor: Actor, input: { messageId: string; optionI
   if (!option) throw new ActionFailure("That option isn't in this poll.");
   const [poll] = await db.select({ multiple: polls.multiple }).from(polls).where(eq(polls.messageId, msg.id)).limit(1);
   await db.transaction(async (tx) => {
+    // Two quick votes from one person take turns, so a single-choice poll never counts both.
+    await tx.select({ id: polls.messageId }).from(polls).where(eq(polls.messageId, msg.id)).for("update");
     const mine = await tx.select({ optionId: pollVotes.optionId }).from(pollVotes).where(and(eq(pollVotes.messageId, msg.id), eq(pollVotes.userId, actor.id)));
     const already = mine.some((v) => v.optionId === option.id);
     if (already) {

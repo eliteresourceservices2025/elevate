@@ -49,7 +49,7 @@ export async function accountsWithoutRecord(tx: Reader): Promise<{ userId: strin
   const rows = await tx
     .select({ userId: users.id, email: users.email, createdAt: users.createdAt })
     .from(users)
-    .where(and(isNull(users.archivedAt), sql`not exists (select 1 from core.employees e where e.user_id = ${users.id} and e.archived_at is null)`));
+    .where(and(isNull(users.archivedAt), eq(users.isGuest, false), sql`not exists (select 1 from core.employees e where e.user_id = ${users.id} and e.archived_at is null)`));
   return rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
@@ -172,7 +172,8 @@ export async function mergeEmployees(tx: Tx, actor: Actor, p: { keepId: string; 
  * If the record already has another account, that account is detached (it stays, without a record), with `replaceExisting`.
  */
 export async function relinkAccount(tx: Tx, actor: Actor, p: { userId: string; employeeId: string; replaceExisting: boolean }): Promise<{ replaced: boolean }> {
-  const [user] = await tx.select({ id: users.id, archivedAt: users.archivedAt }).from(users).where(eq(users.id, p.userId));
+  const [user] = await tx.select({ id: users.id, archivedAt: users.archivedAt, isGuest: users.isGuest }).from(users).where(eq(users.id, p.userId));
+  if (user?.isGuest) throw new ActionFailure("A client guest account can't be linked to a people record.");
   if (!user || user.archivedAt) throw new ActionFailure("That account was not found or is deactivated.");
   const [taken] = await tx.select({ id: employees.id }).from(employees).where(and(eq(employees.userId, p.userId), isNull(employees.archivedAt))).limit(1);
   if (taken) throw new ActionFailure("That account already belongs to a people record.");

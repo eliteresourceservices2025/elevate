@@ -26,7 +26,7 @@ async function loadPeople(tx: Tx): Promise<{ userId: string; teamId: string | nu
     .from(employees)
     .innerJoin(users, eq(users.id, employees.userId))
     .leftJoin(teams, eq(teams.id, employees.teamId))
-    .where(and(isNotNull(employees.userId), isNull(employees.archivedAt), isNull(employees.retentionArchivedAt), ne(employees.status, "separated"), isNull(users.archivedAt)));
+    .where(and(isNotNull(employees.userId), isNull(employees.archivedAt), isNull(employees.retentionArchivedAt), ne(employees.status, "separated"), isNull(users.archivedAt), eq(users.isGuest, false)));
   return rows.flatMap((r) => (r.userId ? [{ userId: r.userId, teamId: r.teamId, departmentId: r.departmentId }] : []));
 }
 
