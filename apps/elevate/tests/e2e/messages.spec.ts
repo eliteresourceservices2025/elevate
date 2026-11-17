@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import postgres from "postgres";
 import { createEmployeeAccount, createHrAccount, hydrated, signInEnrollingMfa } from "./helpers";
 
 // Needs the local Supabase with migrations applied (including 0147, which lets a person join only their own Realtime channel).
@@ -224,4 +225,36 @@ test("reactions, a thread, a pin and an @mention", async ({ browser }) => {
   await message.hover();
   await pageA.getByRole("button", { name: "Pin message" }).first().click();
   await expect(pageB.getByRole("region", { name: "Pinned messages" })).toContainText("can you cover Friday?", { timeout: 12_000 });
+});
+
+test("team and company channels appear after HR updates them; only HR posts in the company channel", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const hr = await createHrAccount();
+  const a = await createEmployeeAccount("Ana", `Chan${stamp}a`);
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  const teamName = `Channel team ${stamp}`;
+  try {
+    const [dept] = await sql<{ id: string }[]>`insert into core.departments (name) values (${`Channel dept ${stamp}`}) returning id`;
+    const [team] = await sql<{ id: string }[]>`insert into core.teams (department_id, name) values (${dept.id}, ${teamName}) returning id`;
+    await sql`update core.employees set team_id = ${team.id} where id = ${a.employeeId}`;
+  } finally {
+    await sql.end();
+  }
+  const pageH = await (await browser.newContext()).newPage();
+  const pageA = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageH, hr);
+  await signInEnrollingMfa(pageA, a);
+
+  await pageH.goto("/messages/manage");
+  await (await hydrated(pageH.getByRole("button", { name: "Update channels now" }))).click();
+  await expect(pageH.getByText(/Channels updated/)).toBeVisible({ timeout: 45_000 });
+
+  await pageA.goto("/messages");
+  await expect(pageA.getByRole("button", { name: new RegExp(teamName) })).toBeVisible({ timeout: 45_000 });
+  await pageA.getByRole("group", { name: "Show" }).getByRole("button", { name: "Channels" }).click();
+  await pageA.getByRole("button", { name: /Everyone at ERS/ }).click();
+  await expect(pageA.getByText("Only HR can post in this channel.")).toBeVisible();
+  await pageA.getByRole("button", { name: new RegExp(teamName) }).click();
+  await say(pageA, teamName, "Hello team");
 });

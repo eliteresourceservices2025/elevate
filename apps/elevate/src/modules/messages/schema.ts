@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { bigint, check, index, type AnyPgColumn, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
+import { departments, teams } from "@/modules/org/schema";
 
 // Messages (chat). Text is encrypted with fieldCrypto (context "chat_message:<conversationId>:<messageId>"; edits use
 // "chat_message_rev:<messageId>:<revisionId>"), so ids are generated in the app. Messages are insert-only by trigger
@@ -16,8 +17,13 @@ export const conversations = chat
     "conversations",
     {
       id: uuid("id").primaryKey().defaultRandom(),
-      /** 'dm' (exactly two people) or 'group'. Later phases add team, department, company and client. */
+      /** 'dm' (two people), 'group' (made by HR), 'team', 'department' or 'company' (automatic channels kept in sync with ELEVATE's teams). Phase 3 adds 'client'. */
       kind: text("kind").notNull(),
+      /** The team or department a channel belongs to (one channel each). */
+      teamId: uuid("team_id").references(() => teams.id),
+      departmentId: uuid("department_id").references(() => departments.id),
+      /** 'admins': only HR Admins and Super Admins post root messages here (the company channel); replies and reactions stay open. */
+      posting: text("posting").notNull().default("everyone"),
       /** A group's name (plain text, shown to its members). Null for a direct message. */
       title: text("title"),
       /** "<smaller user id>:<larger user id>" for a direct message, so a pair has one conversation. */
@@ -30,7 +36,11 @@ export const conversations = chat
     },
     (t) => [
       uniqueIndex("conversations_dm_key_idx").on(t.dmKey).where(sql`${t.dmKey} is not null`),
-      check("conversations_kind_chk", sql`${t.kind} in ('dm','group')`),
+      uniqueIndex("conversations_team_idx").on(t.teamId).where(sql`${t.teamId} is not null`),
+      uniqueIndex("conversations_department_idx").on(t.departmentId).where(sql`${t.departmentId} is not null`),
+      uniqueIndex("conversations_company_idx").on(t.kind).where(sql`${t.kind} = 'company'`),
+      check("conversations_kind_chk", sql`${t.kind} in ('dm','group','team','department','company')`),
+      check("conversations_posting_chk", sql`${t.posting} in ('everyone','admins')`),
       check("conversations_dm_key_chk", sql`(${t.kind} = 'dm') = (${t.dmKey} is not null)`),
     ],
   )

@@ -50,6 +50,7 @@ const valid: Call[] = [
   { name: "renameGroupChat", run: () => actions.renameGroupChat({ conversationId: ID, title: "New name" }), adminOnly: true },
   { name: "deleteGroupChat", run: () => actions.deleteGroupChat({ conversationId: ID }), adminOnly: true },
   { name: "listGroupsToManage", run: () => actions.listGroupsToManage(), adminOnly: true },
+  { name: "syncChatChannels", run: () => actions.syncChatChannels(), adminOnly: true },
   { name: "loadGroupPeopleToManage", run: () => actions.loadGroupPeopleToManage({ conversationId: ID }), adminOnly: true },
 ];
 const badInput: { name: string; run: () => Promise<{ ok: boolean; error?: string }>; role: RoleSlug }[] = [

@@ -206,7 +206,7 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
               timeZone={timeZone}
               loadingEarlier={loadingEarlier}
               pins={pins}
-              restricted={false}
+              restricted={active.posting === "admins" && !canManage}
               onOpenThread={(rootId) => {
                 setShowDetails(false);
                 setOpenRoot(rootId);

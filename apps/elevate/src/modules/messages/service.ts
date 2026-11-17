@@ -37,7 +37,7 @@ function cleanBody(body: string): string {
 /** The person's current membership in a live conversation, or the not-found failure. */
 async function requireMember(executor: Db, userId: string, conversationId: string) {
   const [row] = await executor
-    .select({ kind: conversations.kind, role: conversationMembers.role })
+    .select({ kind: conversations.kind, role: conversationMembers.role, posting: conversations.posting })
     .from(conversationMembers)
     .innerJoin(conversations, eq(conversations.id, conversationMembers.conversationId))
     .where(
@@ -242,9 +242,11 @@ async function notifyMentions(actor: Actor, conversationId: string, body: string
   await notify(db, targets.map((userId) => ({ userId, kind: "chat.mention", title: `You were mentioned in ${where}`, link: `/messages/${conversationId}` })));
 }
 
-export async function sendMessage(actor: Actor, input: { conversationId: string; body: string; threadRootId?: string | null }): Promise<{ id: string; seq: number }> {
+/** `canManage` is whether the sender may post where only HR posts (the company channel); the action works it out from their role. */
+export async function sendMessage(actor: Actor, input: { conversationId: string; body: string; threadRootId?: string | null; canManage?: boolean }): Promise<{ id: string; seq: number }> {
   const body = cleanBody(input.body);
-  await requireMember(db, actor.id, input.conversationId);
+  const member = await requireMember(db, actor.id, input.conversationId);
+  if (!input.threadRootId && member.posting === "admins" && !input.canManage) throw new ActionFailure("Only HR can post in this channel.");
   if (input.threadRootId) {
     // A reply goes under a message of the same conversation that is itself not a reply (a thread has one level).
     const [root] = await db

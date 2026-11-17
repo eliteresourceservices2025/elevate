@@ -23,8 +23,10 @@ const PEOPLE_LIMIT_MANAGER = 200;
 
 export type ConversationSummary = {
   id: string;
-  kind: "dm" | "group";
+  kind: "dm" | "group" | "team" | "department" | "company";
   title: string;
+  /** "admins": only HR posts root messages here (the company channel). */
+  posting: "everyone" | "admins";
   memberCount: number;
   lastSeq: number;
   lastPreview: string | null;
@@ -83,7 +85,7 @@ const truncate = (text: string) => (text.length > PREVIEW_CHARS ? `${text.slice(
 export async function listMyConversations(): Promise<ConversationSummary[]> {
   const actor = await actorWithAccess();
   const mine = await db
-    .select({ id: conversations.id, kind: conversations.kind, title: conversations.title, createdAt: conversations.createdAt })
+    .select({ id: conversations.id, kind: conversations.kind, title: conversations.title, posting: conversations.posting, createdAt: conversations.createdAt })
     .from(conversationMembers)
     .innerJoin(conversations, eq(conversations.id, conversationMembers.conversationId))
     .where(and(eq(conversationMembers.userId, actor.id), isNull(conversationMembers.leftAt), isNull(conversations.archivedAt)))
@@ -139,7 +141,8 @@ export async function listMyConversations(): Promise<ConversationSummary[]> {
       sortAt: lastAt.getTime(),
       summary: {
         id: c.id,
-        kind: c.kind as "dm" | "group",
+        kind: c.kind as ConversationSummary["kind"],
+        posting: c.posting as ConversationSummary["posting"],
         title: c.kind === "dm" ? (otherId ? (people.get(otherId)?.name ?? "Someone") : "Someone") : (c.title ?? "Group"),
         memberCount: counts.find((x) => x.id === c.id)?.n ?? 0,
         lastSeq: s?.last_seq ?? 0,

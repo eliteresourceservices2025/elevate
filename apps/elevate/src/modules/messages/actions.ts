@@ -1,12 +1,14 @@
 "use server";
 
 import type { z } from "zod";
-import { authorize } from "@/lib/authz";
+import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import * as queries from "./queries";
 import type { ChatMessage, ConversationSummary, ManagedGroup } from "./queries";
+import { syncChannels, type SyncResult } from "./channels";
 import * as service from "./service";
+import { writeAudit } from "@/modules/audit/write";
 import {
   addMembersSchema,
   createGroupSchema,
@@ -56,7 +58,7 @@ export async function createGroupConversation(input: unknown): Promise<ActionRes
 
 export async function sendChatMessage(input: unknown): Promise<ActionResult<{ id: string; seq: number }>> {
   const actor = await requireUser();
-  return run(actor, "messages.use", sendMessageSchema, input, (a, data) => service.sendMessage(a, data));
+  return run(actor, "messages.use", sendMessageSchema, input, (a, data) => service.sendMessage(a, { ...data, canManage: can(a, "messages.manage_group") }));
 }
 
 export async function editChatMessage(input: unknown): Promise<ActionResult<undefined>> {
@@ -127,6 +129,17 @@ export async function loadChatThread(input: unknown): Promise<ActionResult<Await
 export async function listChatPins(input: unknown): Promise<ActionResult<queries.PinnedMessage[]>> {
   await requireUser();
   return runAction(async () => ({ ok: true, data: await queries.listPins(input) }));
+}
+
+/** HR's "Update channels now": brings the team, department and company channels in line with the organization. */
+export async function syncChatChannels(): Promise<ActionResult<SyncResult & { skipped?: string }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "messages.manage_group");
+    const result = await syncChannels();
+    await writeAudit({ actor, action: "chat.channels.sync", targetType: "chat_channels", metadata: { ...result } });
+    return { ok: true, data: result };
+  });
 }
 
 export async function loadChatMessages(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadMessages>>>> {

@@ -96,7 +96,7 @@ export function Thread({
         <ConversationAvatar conversation={conversation} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-heading text-base font-semibold">{conversation.title}</h2>
-          <p className="truncate text-xs text-muted-foreground">{conversation.kind === "dm" ? "Direct message" : `${conversation.memberCount} people`}</p>
+          <p className="truncate text-xs text-muted-foreground">{conversation.kind === "dm" ? "Direct message" : conversation.kind === "group" ? `${conversation.memberCount} people` : `${conversation.kind === "company" ? "Company" : conversation.kind === "team" ? "Team" : "Department"} channel · ${conversation.memberCount} people`}</p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onToggleDetails} aria-label="Show people in this chat">
           <Users aria-hidden />

@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatInZone } from "@/lib/time";
-import { loadGroupPeopleToManage } from "../actions";
+import { loadGroupPeopleToManage, syncChatChannels } from "../actions";
 import type { ManagedGroup } from "../queries";
 import { RenameGroupDialog, useDeleteGroup, useRemovePerson } from "./group-admin";
 import { AddPeopleDialog, NewGroupDialog } from "./new-conversation-dialog";
@@ -24,6 +24,7 @@ export function ManageGroups({ groups, timeZone }: { groups: ManagedGroup[]; tim
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [people, setPeople] = useState<Person[] | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const selected = groups.find((g) => g.id === selectedId) ?? null;
 
@@ -48,6 +49,20 @@ export function ManageGroups({ groups, timeZone }: { groups: ManagedGroup[]; tim
     }
   }
 
+  async function syncChannels() {
+    setSyncing(true);
+    try {
+      const result = await syncChatChannels();
+      if (!result.ok) return void toast.error(result.error);
+      if (result.data.skipped) return void toast.error(result.data.skipped);
+      toast.success(`Channels updated: ${result.data.created} new, ${result.data.membersAdded} people added, ${result.data.membersRemoved} removed.`);
+    } catch {
+      toast.error("Could not reach ELEVATE. Check your connection and try again.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const removePerson = useRemovePerson(() => {
     if (selectedId) void reloadPeople(selectedId);
     router.refresh();
@@ -61,7 +76,10 @@ export function ManageGroups({ groups, timeZone }: { groups: ManagedGroup[]; tim
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">{groups.length} {groups.length === 1 ? "group" : "groups"}. Groups hold up to 200 people.</p>
+        <p className="text-sm text-muted-foreground">{groups.length} {groups.length === 1 ? "group" : "groups"}. Groups hold up to 200 people. Team, department and company channels are automatic and follow the organization.</p>
+        <Button type="button" variant="outline" onClick={() => void syncChannels()} disabled={syncing}>
+          {syncing ? "Updating…" : "Update channels now"}
+        </Button>
         <NewGroupDialog
           onOpened={(id) => {
             router.refresh();
