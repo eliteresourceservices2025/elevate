@@ -283,8 +283,10 @@ export const userSettings = chat
     appearOffline: boolean("appear_offline").notNull().default(false),
     /** One email a day when there are unread messages (a count and a link, never the messages). */
     emailDigest: boolean("email_digest").notNull().default(true),
+    /** The sound for a new message in a chat that is not muted: chime, pop, bell, ding, or off. */
+    sound: text("sound").notNull().default("chime"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  })
+  }, (t) => [check("user_settings_sound_chk", sql`${t.sound} in ('chime','pop','bell','ding','off')`)])
   .enableRLS();
 
 /** A client guest: signs in to Messages only. Owned by a client; archived when the relationship ends (their memberships end with it). */

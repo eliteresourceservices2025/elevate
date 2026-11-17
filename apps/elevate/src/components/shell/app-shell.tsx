@@ -1,12 +1,15 @@
 "use client";
 
-import { Suspense, useCallback, useState, type ComponentProps, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { ConfirmProvider } from "@/components/confirm-dialog";
 import { OperationResultProvider } from "@/components/operation-result";
 import { UnsavedChangesProvider } from "@/components/unsaved-changes";
 import { PopupQueue, type PopupItem } from "@/modules/announcements/components/popup-queue";
+import { playChatSound, unlockAudio } from "@/modules/messages/components/play-sound";
 import { useLiveChatCount } from "@/modules/messages/components/use-live-chat-count";
+import type { ChatSound } from "@/modules/messages/sound-options";
 import { AppHeader } from "./app-header";
 import { QuickTour } from "./quick-tour";
 import { SidebarNav } from "./sidebar-nav";
@@ -18,10 +21,19 @@ type HeaderProps = Omit<ComponentProps<typeof AppHeader>, "collapsed" | "onToggl
  * The frame of every signed-in page: the menu and the header stay put and only the content scrolls.
  * The menu can be narrowed to icons; the choice is a plain cookie so the server renders the right width at once.
  */
-export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [], banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; tourAutoStart?: boolean; popups?: PopupItem[]; banner: ReactNode; children: ReactNode }) {
+export function AppShell({ initialCollapsed, chatSound = "chime", tourAutoStart = false, popups = [], banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; chatSound?: ChatSound; tourAutoStart?: boolean; popups?: PopupItem[]; banner: ReactNode; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
+  const pathname = usePathname();
   // The chat count in the header and the menu stays current on every page (a shared live connection), not only on the Messages page.
-  const liveChat = useLiveChatCount(header.userId ?? "", header.workCounts?.["/messages"] ?? 0);
+  const liveChat = useLiveChatCount(header.userId ?? "", header.workCounts?.["/messages"] ?? 0, () => {
+    // A new message plays the person's chosen sound, unless they are looking at Messages right now.
+    if (chatSound === "off") return;
+    if (document.hasFocus() && pathname.startsWith("/messages")) return;
+    playChatSound(chatSound);
+  });
+  useEffect(() => {
+    if (chatSound !== "off") unlockAudio();
+  }, [chatSound]);
   const workCounts = { ...header.workCounts, "/messages": liveChat || undefined };
   // Queued announcements and policies come first; the quick tour waits until they are closed or acknowledged.
   const [popupsDone, setPopupsDone] = useState(popups.length === 0);

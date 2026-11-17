@@ -27,6 +27,8 @@ import { roleLabel } from "@/lib/roles";
 import { PrivacyGate } from "@/modules/privacy/components/privacy-gate";
 import { getPrivacyGate } from "@/modules/privacy/queries";
 import { getNavWorkCounts } from "@/modules/dashboard/nav-work-counts";
+import { getChatSettings } from "@/modules/messages/settings";
+import { DEFAULT_CHAT_SOUND } from "@/modules/messages/sound-options";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   // AAL2 or redirect. Pages and actions still call requireUser() and authorize() themselves.
@@ -41,7 +43,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     console.error("layout read skipped:", error instanceof Error ? error.name : "unknown error");
     return fallback;
   });
-  const [gate, unread, pending, clock, accountName, tourAutoStart, photoVersion, popupRead, workCounts] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null), optional(tourStartsByItself(), false), optional(getMyPhotoVersion(), null), optional(listMyPopups().then((items) => ({ items, failed: false })), { items: [], failed: true }), optional(getNavWorkCounts(), {})]);
+  const [gate, unread, pending, clock, accountName, tourAutoStart, photoVersion, popupRead, workCounts, chatSettings] = await Promise.all([getPrivacyGate(), optional(countMyUnread(), 0), optional(listMyPending(), []), getClockStatus(), optional(getMyDisplayName(), null), optional(tourStartsByItself(), false), optional(getMyPhotoVersion(), null), optional(listMyPopups().then((items) => ({ items, failed: false })), { items: [], failed: true }), optional(getNavWorkCounts(), {}), optional(getChatSettings(), { appearOffline: false, emailDigest: true, sound: DEFAULT_CHAT_SOUND })]);
   if (gate) {
     return (
       <PrivacyGate versionId={gate.versionId} title={gate.title} updated={gate.updated} changeNote={gate.changeNote}>
@@ -81,6 +83,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <AppShell
       initialCollapsed={initialCollapsed}
+      chatSound={chatSettings.sound}
       tourAutoStart={tourAutoStart && !popupRead.failed}
       popups={popups}
       hiddenNav={hiddenNav}

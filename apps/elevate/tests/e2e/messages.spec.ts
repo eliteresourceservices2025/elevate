@@ -541,3 +541,80 @@ test("a GIF: search through our server, send, and the other person sees it throu
   await expect.poll(() => seen.evaluate((el: HTMLImageElement) => el.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0);
   expect(direct).toEqual([]);
 });
+
+test("@all typed in a message shows as a highlighted mention and notifies the other person", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Evr${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Evr${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  await pageB.goto("/dashboard");
+  await startDirect(pageA, `Evr${stamp}b`, `Bea Evr${stamp}b`);
+  // Typed.
+  const box = pageA.getByLabel(`Message Bea Evr${stamp}b`);
+  await box.fill("Standup at 9 @all");
+  await box.press("Enter");
+  const chip = pageA.getByRole("log").getByText("@all", { exact: true });
+  await expect(chip).toBeVisible({ timeout: 15_000 });
+  // (The "@everyone" entry in the @ list only appears in chats of three or more people; typing works everywhere.)
+  // The other person is told, wherever they are.
+  await expect(pageB.getByRole("link", { name: /Messages, 1 unread/ }).first()).toBeVisible({ timeout: 15_000 });
+  await pageB.goto("/messages");
+  await pageB.getByRole("button", { name: new RegExp(`Ana Evr${stamp}a`) }).click();
+  await expect(pageB.getByRole("log").getByText("@all", { exact: true })).toBeVisible({ timeout: 15_000 });
+});
+
+test("a new message plays the chosen sound when you are elsewhere, and nothing when it is off", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Snd${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Snd${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const contextB = await browser.newContext();
+  // Count the tones the page makes (each note is one oscillator).
+  await contextB.addInitScript(() => {
+    const w = window as unknown as { __tones: number };
+    w.__tones = 0;
+    const proto = (window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext).prototype;
+    const original = proto.createOscillator;
+    proto.createOscillator = function (this: AudioContext) {
+      w.__tones += 1;
+      return original.call(this);
+    };
+  });
+  const pageB = await contextB.newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  const tones = () => pageB.evaluate(() => (window as unknown as { __tones: number }).__tones);
+
+  await startDirect(pageA, `Snd${stamp}b`, `Bea Snd${stamp}b`);
+  // Bea picks the Bell and saves (the settings button is on the Messages page).
+  await pageB.goto("/messages");
+  await pageB.getByRole("button", { name: "Settings" }).click();
+  await pageB.getByRole("dialog").getByLabel("Sound for new messages").selectOption("bell");
+  await pageB.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await expect(pageB.getByRole("dialog")).toBeHidden();
+  // She is on another page and has used it (the browser only allows sound after a click).
+  await pageB.goto("/dashboard");
+  await pageB.locator("body").click({ position: { x: 5, y: 5 } });
+  const before = await tones();
+  await say(pageA, `Bea Snd${stamp}b`, "Sound check one");
+  await expect.poll(tones, { timeout: 20_000 }).toBeGreaterThan(before);
+
+  // She turns it off: the next message is silent.
+  await pageB.goto("/messages");
+  await pageB.getByRole("button", { name: "Settings" }).click();
+  await pageB.getByRole("dialog").getByLabel("Sound for new messages").selectOption("off");
+  await pageB.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await expect(pageB.getByRole("dialog")).toBeHidden();
+  await pageB.goto("/dashboard");
+  await pageB.locator("body").click({ position: { x: 5, y: 5 } });
+  const after = await tones();
+  await say(pageA, `Bea Snd${stamp}b`, "Sound check two");
+  await expect(pageB.getByRole("link", { name: /Messages, \d+ unread/ }).first()).toBeVisible({ timeout: 20_000 });
+  await pageB.waitForTimeout(1500);
+  expect(await tones()).toBe(after);
+});

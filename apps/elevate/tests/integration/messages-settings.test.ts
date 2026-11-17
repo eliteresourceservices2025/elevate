@@ -83,11 +83,11 @@ describe("personal settings", () => {
     const a = await makeUser("a");
     const b = await makeUser("b");
     as(a);
-    expect(await settings.getChatSettings()).toEqual({ appearOffline: false, emailDigest: true });
-    await settings.saveChatSettings(a, { appearOffline: true, emailDigest: false });
-    expect(await settings.getChatSettings()).toEqual({ appearOffline: true, emailDigest: false });
+    expect(await settings.getChatSettings()).toEqual({ appearOffline: false, emailDigest: true, sound: "chime" });
+    await settings.saveChatSettings(a, { appearOffline: true, emailDigest: false, sound: "bell" });
+    expect(await settings.getChatSettings()).toEqual({ appearOffline: true, emailDigest: false, sound: "bell" });
     as(b);
-    expect(await settings.getChatSettings()).toEqual({ appearOffline: false, emailDigest: true });
+    expect(await settings.getChatSettings()).toEqual({ appearOffline: false, emailDigest: true, sound: "chime" });
   });
 });
 
@@ -101,7 +101,7 @@ describe("the daily digest", () => {
     const secret = `secret plan ${uniq("x")}`;
     await service.sendMessage(a, { conversationId: conv, body: secret });
     await service.sendMessage(a, { conversationId: conv, body: "second" });
-    await settings.saveChatSettings(c, { appearOffline: false, emailDigest: false }); // c switched the digest off
+    await settings.saveChatSettings(c, { appearOffline: false, emailDigest: false, sound: "off" }); // c switched the digest off
     await settings.muteConversation(d, { conversationId: conv, until: "forever" }); // d muted the only chat
     const first = await jobs.runChatDigest("2026-11-17");
     expect(first.queued).toBeGreaterThanOrEqual(1);

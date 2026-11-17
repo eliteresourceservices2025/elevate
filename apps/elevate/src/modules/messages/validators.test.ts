@@ -86,3 +86,11 @@ describe("loading and searching", () => {
     expect(searchPeopleSchema.safeParse({ q: "x".repeat(61) }).success).toBe(false);
   });
 });
+
+describe("chat sound setting", () => {
+  it("accepts the listed sounds and off, and refuses anything else", async () => {
+    const { chatSettingsSchema } = await import("./validators");
+    for (const sound of ["chime", "pop", "bell", "ding", "off"]) expect(chatSettingsSchema.safeParse({ appearOffline: false, emailDigest: true, sound }).success).toBe(true);
+    for (const sound of ["", "boom", "CHIME", undefined, 3]) expect(chatSettingsSchema.safeParse({ appearOffline: false, emailDigest: true, sound }).success).toBe(false);
+  });
+});
