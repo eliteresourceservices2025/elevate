@@ -190,7 +190,12 @@ export const payPayments = payroll
       employeeId: uuid("employee_id")
         .notNull()
         .references(() => employees.id),
-      referenceEnc: text("reference_enc").notNull(),
+      /** The transfer reference, encrypted. Null only on a skip (the person could not be paid on this run). */
+      referenceEnc: text("reference_enc"),
+      /** True when a Preparer recorded that this person could not be paid on this run (left, no bank details, disputed, ...). A skip counts as handled; a later real payment replaces it. */
+      skipped: boolean("skipped").notNull().default(false),
+      /** Why the person was skipped, encrypted (context pay_payment_skip:<id>). Set exactly when `skipped`. */
+      skipReasonEnc: text("skip_reason_enc"),
       /** The dollars paid in Remitly, in cents as text, encrypted (context pay_payment_usd:<id>). Optional: a record of what was paid, never a conversion. */
       amountUsdEnc: text("amount_usd_enc"),
       paidOn: date("paid_on").notNull(),
@@ -199,7 +204,10 @@ export const payPayments = payroll
         .references(() => users.id),
       createdAt: createdAt(),
     },
-    (t) => [index("pay_payments_run_idx").on(t.runId, t.employeeId, t.createdAt)],
+    (t) => [
+      index("pay_payments_run_idx").on(t.runId, t.employeeId, t.createdAt),
+      check("pay_payments_skip_chk", sql`(${t.skipped} and ${t.referenceEnc} is null and ${t.skipReasonEnc} is not null) or (not ${t.skipped} and ${t.referenceEnc} is not null and ${t.skipReasonEnc} is null)`),
+    ],
   )
   .enableRLS();
 

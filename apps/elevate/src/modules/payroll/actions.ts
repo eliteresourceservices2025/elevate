@@ -28,7 +28,7 @@ import { readJibbleTimesheet } from "./jibble/timesheet";
 import { MAX_XLSX_BYTES, XlsxError } from "./jibble/xlsx";
 import { applyTimesheet, confirmAllSuggestions as confirmAll, discardTimesheet, saveTimesheetUpload } from "./timesheet-import";
 import { approve, sendBack, submit, unapprove } from "./approval";
-import { recordPayment, remitlyList } from "./payments";
+import { recordPayment, recordSkip, remitlyList } from "./payments";
 import {
   applyTimesheetSchema,
   approveRunSchema,
@@ -36,6 +36,7 @@ import {
   discardTimesheetSchema,
   exportRemitlySchema,
   markPaidSchema,
+  skipPaymentSchema,
   sendBackRunSchema,
   unapproveRunSchema,
   submitRunSchema,
@@ -849,6 +850,22 @@ export async function markPaid(input: unknown): Promise<ActionResult<{ runPaid: 
     if (!parsed.success) return fail(badRequestOf(parsed.error));
 
     const result = await db.transaction((tx) => recordPayment(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: result } as const;
+  });
+}
+
+/** Records that a person could not be paid this time, with a reason. They count as handled; a later payment replaces it. Never your own line. */
+export async function skipPayment(input: unknown): Promise<ActionResult<{ runPaid: boolean }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.mark_paid");
+
+    const parsed = skipPaymentSchema.safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues.some((i) => i.path[0] === "reason") ? "Give a reason." : BAD_REQUEST);
+
+    const result = await db.transaction((tx) => recordSkip(tx, actor, parsed.data));
     refreshedRun(parsed.data.runId);
     return { ok: true, data: result } as const;
   });

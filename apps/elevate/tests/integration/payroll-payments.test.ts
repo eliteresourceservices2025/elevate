@@ -24,11 +24,12 @@ const {
   approveRun,
   exportRemitlyList,
   markPaid,
+  skipPayment,
   markRunAsTest,
   releaseStatements,
 } = await import("@/modules/payroll/actions");
-const { getWorksheet, getPayments } = await import("@/modules/payroll/queries");
-const { countMyPayslips } = await import("@/modules/payroll/payslip-queries");
+const { getWorksheet, getPayments, payrollRunsAwaitingPayment } = await import("@/modules/payroll/queries");
+const { countMyPayslips, getMyPayslip } = await import("@/modules/payroll/payslip-queries");
 const { PAYSLIP_LABELS } = await import("@/modules/payroll/constants");
 const { sensitiveContext, maskFor } = await import("@/modules/people/sensitive");
 const { decryptRunLine, payrollToday } = await import("@/modules/payroll/service");
@@ -805,5 +806,114 @@ describe("dollars paid and the client of each person", () => {
     const of = (id: string) => people.find((x) => x.employeeId === id)!.clients;
     expect(of(both)).toMatch(/^Alturos .*, Zora .*$/); // joined, in alphabetical order
     expect(of(none)).toBe("No client");
+  });
+});
+
+describe("paying over several days and skipping someone", () => {
+  it("lets the run finish with a recorded skip, hides the skipped person's statement, and a later payment replaces the skip", async () => {
+    // Its own period (2040), so no other test file shares it; only the fake clock moves for it.
+    vi.setSystemTime(new Date("2040-06-30T12:00:00Z"));
+    const p = { periodStart: "2040-06-16", periodEnd: "2040-06-30" };
+    const workerA = await account("viewer");
+    const workerB = await account("viewer");
+    const [a, b, c] = [await person(workerA.id), await person(workerB.id), await person()];
+    const lineOwner = await account("preparer"); // a Preparer who is also on the run
+    const own = await person(lineOwner.id);
+    for (const e of [a, b, c, own]) await giveLine(e, p);
+    const runId = await approvedRun(p);
+
+    // The reminder for the dashboard: a count and days, for people who record payments only.
+    as(preparer);
+    expect(await payrollRunsAwaitingPayment()).toMatchObject({ count: expect.any(Number) });
+    expect((await payrollRunsAwaitingPayment()).count).toBeGreaterThanOrEqual(1);
+    as(viewer);
+    await expect(payrollRunsAwaitingPayment()).rejects.toThrow();
+
+    // What the payer sees: the figure to pay and who has no payout details (nothing for a viewer).
+    as(preparer);
+    const before = (await getPayments(runId))!;
+    expect(before.people.map((x) => x.pesos)).toEqual(["11,000.00", "11,000.00", "11,000.00", "11,000.00"]);
+    expect(before.people.every((x) => x.noPayoutDetails === true)).toBe(true);
+    as(viewer);
+    const seen = (await getPayments(runId))!;
+    expect(seen.people.every((x) => x.pesos === null && x.noPayoutDetails === null)).toBe(true);
+    expect(JSON.stringify(seen)).not.toContain("11,000");
+
+    // A reason is needed, and nothing is written without one.
+    as(preparer);
+    expect(await skipPayment({ runId, employeeId: b, reason: "  " })).toEqual({ ok: false, error: "Give a reason." });
+    expect(await paymentRows(runId)).toHaveLength(0);
+    // Nobody skips their own line, a viewer can't, and a draft run can't be skipped on.
+    as(lineOwner);
+    expect(await skipPayment({ runId, employeeId: own, reason: "Not me" })).toMatchObject({ ok: false });
+    as(viewer);
+    expect(await skipPayment({ runId, employeeId: b, reason: "Left" })).toEqual({ ok: false, error: NO_ACCESS });
+    as(preparer);
+    const practice = await createPayRun({ ...p, test: true });
+    if (!practice.ok) throw new Error(practice.error);
+    expect(await skipPayment({ runId: practice.data.runId, employeeId: b, reason: "Left" })).toEqual({ ok: false, error: "This run has not been approved, so it can't be paid yet." });
+
+    // Skip B, pay the others: the run is paid only when everyone is handled.
+    as(preparer);
+    expect(await skipPayment({ runId, employeeId: b, reason: "Has left the company" })).toEqual({ ok: true, data: { runPaid: false } });
+    expect(await markPaid({ runId, employeeId: a, reference: "RMT-A", paidOn: today() })).toMatchObject({ ok: true, data: { runPaid: false } });
+    expect(await markPaid({ runId, employeeId: c, reference: "RMT-C", paidOn: today() })).toMatchObject({ ok: true, data: { runPaid: false } });
+    as(lineOwner);
+    expect(await markPaid({ runId, employeeId: own, reference: "x", paidOn: today() })).toMatchObject({ ok: false }); // not your own
+    as(preparer);
+    const markedOwn = await skipPayment({ runId, employeeId: own, reason: "Waiting for HR to confirm the bank account" });
+    expect(markedOwn).toEqual({ ok: true, data: { runPaid: true } });
+    expect(await status(runId)).toBe("paid");
+
+    // The skip is encrypted and holds no reference, paid date meaning or dollars; the audit and change log never carry the reason.
+    const skipRow = (await paymentRows(runId)).find((r) => r.employee_id === b)!;
+    expect(skipRow).toMatchObject({ skipped: true, reference_enc: null, amount_usd_enc: null });
+    expect(String(skipRow.skip_reason_enc)).not.toContain("Has left");
+    expect(fieldCrypto().decrypt(String(skipRow.skip_reason_enc), `pay_payment_skip:${skipRow.id}`)).toBe("Has left the company");
+    const logged = JSON.stringify(await rows(sql`select * from ops.audit_log where target_id = ${runId}`)) + JSON.stringify(await rows(sql`select * from payroll.pay_change_log where run_id = ${runId}`));
+    expect(logged).not.toContain("Has left the company");
+    expect(logged).toContain("payroll.payment.skip");
+    // The database refuses a half-written skip.
+    await expect(db.execute(sql`insert into payroll.pay_payments (id, run_id, employee_id, skipped, paid_on, marked_by) values (${randomUUID()}, ${runId}, ${b}, true, '2028-12-30', ${preparer.id})`)).rejects.toThrow();
+
+    // The payer reads the reason; a viewer does not. Skipped counts show.
+    as(preparer);
+    const view = (await getPayments(runId))!;
+    expect(view.skippedCount).toBe(2);
+    expect(view.people.find((x) => x.employeeId === b)!.payment).toMatchObject({ skipped: true, skipReason: "Has left the company", reference: null });
+    as(viewer);
+    expect((await getPayments(runId))!.people.find((x) => x.employeeId === b)!.payment).toMatchObject({ skipped: true, skipReason: null });
+
+    // A skip over someone already paid is refused (correct the payment instead), and a paid run takes no more skips.
+    as(preparer);
+    expect(await skipPayment({ runId, employeeId: a, reason: "Oops" })).toEqual({ ok: false, error: "This run is already paid. To pay someone who was skipped, record their payment." });
+
+    // Statements: released to the people who were paid, not to the skipped person.
+    as(approver);
+    expect(await releaseStatements({ runId })).toMatchObject({ ok: true });
+    const notices = async (userId: string) =>
+      (await rows<{ n: number }>(sql`select count(*)::int as n from ops.notifications where user_id = ${userId} and kind = ${PAYSLIP_LABELS.noticeKind}`))[0].n;
+    expect(await notices(workerA.id)).toBe(1);
+    expect(await notices(workerB.id)).toBe(0);
+    as(workerA);
+    expect(await countMyPayslips()).toBe(1);
+    as(workerB);
+    expect(await countMyPayslips()).toBe(0);
+    expect(await getMyPayslip(workerB as never, runId)).toBeNull();
+    // The payroll team still reads every statement, and the skipped person's has no "paid on" date.
+
+    // Paying the skipped person afterwards replaces the skip: they now see the statement, and it is not flagged as a correction.
+    as(preparer);
+    expect(await markPaid({ runId, employeeId: b, reference: "RMT-B", paidOn: today() })).toMatchObject({ ok: true });
+    const [audit] = await rows<{ metadata: { correction: boolean } }>(
+      sql`select metadata from ops.audit_log where action = 'payroll.payment.mark' and target_id = ${runId} and metadata->>'employeeId' = ${b} order by id desc limit 1`,
+    );
+    expect(audit.metadata.correction).toBe(false);
+    as(workerB);
+    expect(await countMyPayslips()).toBe(1);
+    expect((await getMyPayslip(workerB as never, runId))?.paidOn).toBe(today());
+    as(preparer);
+    expect((await getPayments(runId))!.people.find((x) => x.employeeId === b)!.payment).toMatchObject({ skipped: false, reference: "RMT-B" });
+    vi.setSystemTime(new Date("2028-12-30T12:00:00Z"));
   });
 });

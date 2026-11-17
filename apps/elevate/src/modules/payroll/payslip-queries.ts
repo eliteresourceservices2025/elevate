@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, countDistinct, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { authorize, type AuthzUser } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -43,7 +43,13 @@ export function readable(runLineId: string, stored: string) {
   }
 }
 
-const ownReleasedRuns = (employeeId: string) => and(eq(payRunLines.employeeId, employeeId), eq(payRunLines.excluded, false), eq(payRuns.isTest, false));
+/** True when the person's newest payment row on the run is a skip: they were not paid this time, so no statement is shown to them. */
+const notSkipped = sql`not exists (
+  select 1 from payroll.pay_payments p
+  where p.run_id = ${payRunLines.runId} and p.employee_id = ${payRunLines.employeeId} and p.skipped
+    and p.id = (select p2.id from payroll.pay_payments p2 where p2.run_id = p.run_id and p2.employee_id = p.employee_id order by p2.created_at desc, p2.id desc limit 1)
+)`;
+const ownReleasedRuns = (employeeId: string) => and(eq(payRunLines.employeeId, employeeId), eq(payRunLines.excluded, false), eq(payRuns.isTest, false), notSkipped);
 
 /** How many payslips the signed-in person has. */
 export async function countMyPayslips(): Promise<number> {
@@ -114,6 +120,13 @@ export async function getMyPayslip(actor: AuthzUser, runId: string): Promise<(Pa
     .where(and(eq(payRuns.id, runId), eq(payRuns.isTest, false)))
     .limit(1);
   if (!run) return null;
+  const [newest] = await db
+    .select({ skipped: payPayments.skipped })
+    .from(payPayments)
+    .where(and(eq(payPayments.runId, runId), eq(payPayments.employeeId, employeeId)))
+    .orderBy(desc(payPayments.createdAt), desc(payPayments.id))
+    .limit(1);
+  if (newest?.skipped) return null; // skipped on this run: nothing was paid, so there is no statement to show them
   return buildStatement(db, runId, employeeId, run);
 }
 
@@ -154,10 +167,10 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
   // Independent of each other: asked together.
   const [[payment], signatory] = await Promise.all([
     executor
-      .select({ paidOn: payPayments.paidOn })
+      .select({ paidOn: payPayments.paidOn, skipped: payPayments.skipped })
       .from(payPayments)
       .where(and(eq(payPayments.runId, runId), eq(payPayments.employeeId, employeeId)))
-      .orderBy(desc(payPayments.createdAt))
+      .orderBy(desc(payPayments.createdAt), desc(payPayments.id))
       .limit(1),
     runSignatory(executor, runId),
   ]);
@@ -180,7 +193,7 @@ export async function buildStatement(executor: Pick<typeof db, "select">, runId:
     periodStart: run.periodStart,
     periodEnd: run.periodEnd,
     hiredOn: who.startDate,
-    paidOn: payment?.paidOn ?? null,
+    paidOn: payment && !payment.skipped ? payment.paidOn : null,
     payslipNumber: `PS-${runId.slice(0, 8).toUpperCase()}-${employeeId.slice(0, 4).toUpperCase()}`,
     paymentMethods: lines.map((l) => l.paymentMethod),
     multipliersBp: (run.settingsSnapshot as SettingsSnapshot | null)?.multipliersBp ?? null,

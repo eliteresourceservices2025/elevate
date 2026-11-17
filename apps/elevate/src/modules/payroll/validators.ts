@@ -204,6 +204,9 @@ const usdPaid = z
   .optional();
 export const markPaidSchema = z.object({ runId: uuid, employeeId: uuid, reference: z.string().trim().min(1).max(100), paidOn: isoDate, amountUsd: usdPaid });
 
+/** Recording that a person could not be paid on this run: the reason is required (it is kept encrypted). */
+export const skipPaymentSchema = z.object({ runId: uuid, employeeId: uuid, reason: z.string().trim().min(1, "Give a reason").max(500) });
+
 export type PayLineInput = z.input<typeof createPayLineSchema>;
 export type UpdatePayLineInput = z.input<typeof updatePayLineSchema>;
 export type PaySettingsInput = z.input<typeof savePaySettingsSchema>;

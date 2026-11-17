@@ -15,7 +15,7 @@ import { getMyPayslip, PayslipUnreadable } from "@/modules/payroll/payslip-queri
 
 export const metadata: Metadata = { title: L.pageTitle };
 
-// One payslip on screen. Only the person it belongs to can open it, and only once the run is paid: someone else's run, an unpaid run and a
+// One payslip on screen. Only the person it belongs to can open it, and only once the statements are released (and not if you were skipped on that run): someone else's run, an unreleased run and a
 // run that does not exist all give the same not-found page. Opening it is audited with the run id only (never an amount).
 
 export default async function PayslipPage({ params }: PageProps<"/my-pay/[runId]">) {

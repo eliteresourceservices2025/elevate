@@ -24,11 +24,21 @@ type Actor = { id: string; email: string };
 
 const referenceContext = (id: string) => `pay_payment:${id}`;
 const usdContext = (id: string) => `pay_payment_usd:${id}`;
+const skipContext = (id: string) => `pay_payment_skip:${id}`;
 const NOT_APPROVED = "This run has not been approved, so it can't be paid yet.";
 
 /** The reference as stored. Callers must already hold `payroll.view`. */
 export const decryptReference = (id: string, stored: string): string =>
   fieldCrypto().decrypt(stored, referenceContext(id));
+
+/** Why a person was skipped. Callers must already hold `payroll.mark_paid`. */
+export const decryptSkipReason = (id: string, stored: string): string => fieldCrypto().decrypt(stored, skipContext(id));
+
+/** The people whose newest payment row is a skip: nothing was paid to them on this run, so no statement is released to them. */
+export async function skippedPeople(executor: Pick<Executor, "select">, runId: string): Promise<Set<string>> {
+  const newest = await latestPayments(executor, runId);
+  return new Set([...newest.values()].filter((p) => p.skipped).map((p) => p.employeeId));
+}
 
 /** The dollars paid, in cents, or null when none was recorded. Callers must already hold `payroll.mark_paid`. */
 export const decryptUsdCents = (id: string, stored: string | null): bigint | null => (stored === null ? null : BigInt(fieldCrypto().decrypt(stored, usdContext(id))));
@@ -152,7 +162,7 @@ export async function remitlyList(
  * Records that a person on an approved run was paid. A second call for the same person is a correction: a new row, and the newest shows.
  * When every person on the run has a payment the run becomes paid, in the same transaction (the status trigger allows approved to
  * paid only). A correction after that adds a row and leaves the paid run as it is. The run row is locked, so two last payments at once
- * make it paid exactly once.
+ * make it paid exactly once. A payment recorded over a skip replaces the skip (it is not flagged as a correction).
  */
 export async function recordPayment(
   tx: Tx,
@@ -180,14 +190,13 @@ export async function recordPayment(
   const usdCents = v.amountUsd && v.amountUsd.trim() !== "" ? parseMoney(v.amountUsd) : null;
   if (v.amountUsd && v.amountUsd.trim() !== "" && (usdCents === null || usdCents <= 0n)) throw new ActionFailure("Check the amount in dollars and try again.");
   const id = randomUUID();
-  const correction =
-    (
-      await tx
-        .select({ id: payPayments.id })
-        .from(payPayments)
-        .where(and(eq(payPayments.runId, v.runId), eq(payPayments.employeeId, v.employeeId)))
-        .limit(1)
-    ).length > 0;
+  const [earlier] = await tx
+    .select({ skipped: payPayments.skipped })
+    .from(payPayments)
+    .where(and(eq(payPayments.runId, v.runId), eq(payPayments.employeeId, v.employeeId)))
+    .orderBy(desc(payPayments.createdAt), desc(payPayments.id))
+    .limit(1);
+  const correction = earlier !== undefined && !earlier.skipped;
   await tx.insert(payPayments).values({
     id,
     runId: v.runId,
@@ -216,6 +225,16 @@ export async function recordPayment(
     detail: { paidOn: v.paidOn, correction, ...(usdCents !== null ? { usdCents: usdCents.toString() } : {}) },
   });
 
+  const runPaid = await markRunPaidWhenHandled(tx, actor, run, people);
+  return { runPaid };
+}
+
+/**
+ * When everyone on an approved run has a payment or a skip, the run becomes paid (same transaction; the status trigger allows approved to
+ * paid only) and its signatory is frozen. Returns true when it just became paid.
+ */
+async function markRunPaidWhenHandled(tx: Tx, actor: Actor, run: { id: string; status: string }, people: string[]): Promise<boolean> {
+  const v = { runId: run.id };
   let runPaid = false;
   if (run.status === "approved") {
     const paid = await latestPayments(tx, v.runId);
@@ -241,5 +260,43 @@ export async function recordPayment(
       runPaid = true;
     }
   }
-  return { runPaid };
+  return runPaid;
+}
+
+/**
+ * Records that a person on an approved run could not be paid this time (they left, have no bank details, the pay is disputed, ...), with the
+ * reason kept encrypted. A skip counts as handled, so the run can become paid and its statements can be released; nothing is released to the
+ * skipped person. Recording a real payment later replaces it. Refused for someone already marked paid (correct that payment instead), for
+ * your own line, and for a run that is not approved.
+ */
+export async function recordSkip(tx: Tx, actor: Actor, v: { runId: string; employeeId: string; reason: string }): Promise<{ runPaid: boolean }> {
+  const [run] = await tx.select().from(payRuns).where(eq(payRuns.id, v.runId)).for("update");
+  if (!run) throw new ActionFailure("That pay run was not found.");
+  if (run.status !== "approved") throw new ActionFailure(run.status === "paid" ? "This run is already paid. To pay someone who was skipped, record their payment." : NOT_APPROVED);
+  const people = (await tx.selectDistinct({ id: payRunLines.employeeId }).from(payRunLines).where(and(eq(payRunLines.runId, v.runId), eq(payRunLines.excluded, false)))).map((r) => r.id);
+  if (!people.includes(v.employeeId)) throw new ActionFailure("That person is not on this run.");
+  await assertNotOwnEmployee(actor, v.employeeId, tx);
+  const [earlier] = await tx
+    .select({ skipped: payPayments.skipped })
+    .from(payPayments)
+    .where(and(eq(payPayments.runId, v.runId), eq(payPayments.employeeId, v.employeeId)))
+    .orderBy(desc(payPayments.createdAt), desc(payPayments.id))
+    .limit(1);
+  if (earlier && !earlier.skipped) throw new ActionFailure("This person is already marked paid. Correct that payment instead.");
+
+  const id = randomUUID();
+  await tx.insert(payPayments).values({
+    id,
+    runId: v.runId,
+    employeeId: v.employeeId,
+    referenceEnc: null,
+    skipped: true,
+    skipReasonEnc: fieldCrypto().encrypt(v.reason, skipContext(id)),
+    paidOn: payrollToday(), // the day it was recorded; a skip never shows as a paid date
+    markedBy: actor.id,
+    createdAt: sql`clock_timestamp()` as unknown as Date,
+  });
+  await writeAudit({ actor, action: "payroll.payment.skip", targetType: "pay_run", targetId: v.runId, metadata: { employeeId: v.employeeId } }, tx);
+  await logChange(tx, actor, { action: "payment_skipped", runId: v.runId, employeeId: v.employeeId, detail: { reason: v.reason } });
+  return { runPaid: await markRunPaidWhenHandled(tx, actor, run, people) };
 }
