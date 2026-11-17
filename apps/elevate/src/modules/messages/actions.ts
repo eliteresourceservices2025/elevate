@@ -8,6 +8,7 @@ import * as queries from "./queries";
 import type { ChatMessage, ConversationSummary, ManagedGroup } from "./queries";
 import { syncChannels, type SyncResult } from "./channels";
 import * as service from "./service";
+import * as uploads from "./uploads";
 import { writeAudit } from "@/modules/audit/write";
 import {
   addMembersSchema,
@@ -16,12 +17,14 @@ import {
   deleteGroupSchema,
   deleteMessageSchema,
   editMessageSchema,
+  finalizeUploadSchema,
   markReadSchema,
   openDirectSchema,
   pinSchema,
   reactSchema,
   removeMemberSchema,
   renameGroupSchema,
+  requestUploadSchema,
   sendMessageSchema,
   votePollSchema,
 } from "./validators";
@@ -152,6 +155,16 @@ export async function createChatPoll(input: unknown): Promise<ActionResult<{ id:
 export async function voteChatPoll(input: unknown): Promise<ActionResult<undefined>> {
   const actor = await requireUser();
   return run(actor, "messages.use", votePollSchema, input, async (a, data) => void (await service.votePoll(a, data)));
+}
+
+export async function requestChatUpload(input: unknown): Promise<ActionResult<uploads.UploadTicket>> {
+  const actor = await requireUser();
+  return run(actor, "messages.use", requestUploadSchema, input, (a, data) => uploads.requestUpload(a, data));
+}
+
+export async function finalizeChatUpload(input: unknown): Promise<ActionResult<uploads.FinishedUpload>> {
+  const actor = await requireUser();
+  return run(actor, "messages.use", finalizeUploadSchema, input, (a, data) => uploads.finalizeUpload(a, data));
 }
 
 export async function loadChatMessages(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadMessages>>>> {

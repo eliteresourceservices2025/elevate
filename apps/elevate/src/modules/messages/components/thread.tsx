@@ -15,6 +15,7 @@ import { MAX_BODY } from "../validators";
 import { Composer } from "./composer";
 import { ConversationAvatar } from "./conversation-list";
 import { EmojiPicker } from "./emoji-picker";
+import { AttachmentList } from "./attachment-list";
 import { MessageBody } from "./message-body";
 import { PollCard } from "./poll-card";
 
@@ -212,7 +213,7 @@ export function MessageRow({
   }
 
   const react = (emoji: string) => run(() => toggleChatReaction({ messageId: m.id, emoji }));
-  const canInteract = (m.kind === "text" || m.kind === "poll") && !m.deleted;
+  const canInteract = m.kind !== "system" && !m.deleted;
 
   return (
     <>
@@ -287,9 +288,14 @@ export function MessageRow({
                 {m.kind === "poll" && m.poll ? (
                   <PollCard messageId={m.id} question={m.body ?? ""} poll={m.poll} onChanged={onChanged} />
                 ) : (
-                  <p className={cn("rounded-2xl px-3 py-1.5 text-sm break-words whitespace-pre-wrap", mine ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border bg-card")}>
-                    <MessageBody body={m.body ?? ""} myUserId={myUserId} />
-                  </p>
+                  <div className={cn("flex flex-col gap-1.5", mine ? "items-end" : "items-start")}>
+                    <AttachmentList attachments={m.attachments} />
+                    {m.body ? (
+                      <p className={cn("rounded-2xl px-3 py-1.5 text-sm break-words whitespace-pre-wrap", mine ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border bg-card")}>
+                        <MessageBody body={m.body} myUserId={myUserId} />
+                      </p>
+                    ) : null}
+                  </div>
                 )}
               </div>
             )}

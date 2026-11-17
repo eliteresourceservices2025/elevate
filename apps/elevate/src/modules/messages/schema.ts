@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, index, smallint, type AnyPgColumn, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, index, integer, smallint, type AnyPgColumn, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
 import { departments, teams } from "@/modules/org/schema";
 
@@ -210,5 +210,41 @@ export const pollVotes = chat
       votedAt: timestamp("voted_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [primaryKey({ columns: [t.optionId, t.userId] }), index("poll_votes_message_idx").on(t.messageId, t.userId)],
+  )
+  .enableRLS();
+
+/** A file, picture or voice note. Uploaded first (status 'pending'), checked by its bytes, then 'active'; it joins a message when that is sent. */
+export const messageAttachments = chat
+  .table(
+    "message_attachments",
+    {
+      id: uuid("id").primaryKey(),
+      conversationId: uuid("conversation_id")
+        .notNull()
+        .references(() => conversations.id),
+      messageId: uuid("message_id").references(() => messages.id),
+      uploaderUserId: uuid("uploader_user_id")
+        .notNull()
+        .references(() => users.id),
+      kind: text("kind").notNull(),
+      bucket: text("bucket").notNull(),
+      path: text("path").notNull(),
+      /** The real type, judged by the file's bytes (never the name or what the browser said). */
+      mime: text("mime").notNull(),
+      size: integer("size").notNull().default(0),
+      sha256: text("sha256"),
+      durationS: integer("duration_s"),
+      /** The file name, encrypted with context "chat_attachment_name:<id>". */
+      nameEnc: text("name_enc").notNull(),
+      status: text("status").notNull().default("pending"),
+      createdAt: createdAt(),
+    },
+    (t) => [
+      uniqueIndex("message_attachments_path_idx").on(t.bucket, t.path),
+      index("message_attachments_message_idx").on(t.messageId),
+      index("message_attachments_uploader_idx").on(t.uploaderUserId, t.status, t.createdAt),
+      check("message_attachments_kind_chk", sql`${t.kind} in ('image','file','voice')`),
+      check("message_attachments_status_chk", sql`${t.status} in ('pending','active','rejected')`),
+    ],
   )
   .enableRLS();

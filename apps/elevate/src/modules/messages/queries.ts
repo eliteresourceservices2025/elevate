@@ -55,6 +55,8 @@ export type ChatMessage = {
   pinned: boolean;
   /** For a poll message: its options, counts and (unless anonymous) who voted. */
   poll: PollView | null;
+  /** Files, pictures and voice notes sent with the message (served by /api/messages/attachments/<id>). */
+  attachments: { id: string; kind: "image" | "file" | "voice"; name: string; mime: string; size: number; durationS: number | null }[];
 };
 
 export type PollView = { multiple: boolean; anonymous: boolean; totalVoters: number; options: { id: string; label: string; count: number; mine: boolean; voters?: string[] }[] };
@@ -203,6 +205,11 @@ async function buildMessages(actorId: string, conversationId: string, page: Mess
         select thread_root_id as id, count(*)::int as n, max(created_at) as last_at from chat.messages
         where deleted_at is null and thread_root_id in (${idList(roots)}) group by thread_root_id`)) as unknown as { id: string; n: number; last_at: Date }[])
     : [];
+  const attachmentRows = live.length
+    ? ((await db.execute(sql`
+        select id, message_id, kind, mime, size, duration_s, name_enc from chat.message_attachments
+        where status = 'active' and message_id in (${idList(live)}) order by created_at`)) as unknown as { id: string; message_id: string; kind: "image" | "file" | "voice"; mime: string; size: number; duration_s: number | null; name_enc: string }[])
+    : [];
   const pollMessages = live.filter((m) => m.kind === "poll");
   const pollRows = pollMessages.length
     ? ((await db.execute(sql`select message_id, multiple, anonymous from chat.polls where message_id in (${idList(pollMessages)})`)) as unknown as { message_id: string; multiple: boolean; anonymous: boolean }[])
@@ -263,6 +270,11 @@ async function buildMessages(actorId: string, conversationId: string, page: Mess
       reactions: m.deleted_at ? [] : reactionRows.filter((r) => r.message_id === m.id).map((r) => ({ emoji: r.emoji, count: r.n, mine: r.mine })),
       pinned: pinRows.some((r) => r.message_id === m.id),
       poll: m.kind === "poll" && !m.deleted_at ? pollView(m.id) : null,
+      attachments: m.deleted_at
+        ? []
+        : attachmentRows
+            .filter((a) => a.message_id === m.id)
+            .map((a) => ({ id: a.id, kind: a.kind, name: crypto.decrypt(a.name_enc, `chat_attachment_name:${a.id}`), mime: a.mime, size: a.size, durationS: a.duration_s })),
     };
   });
   return { messages, nameOf };

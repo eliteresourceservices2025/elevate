@@ -1058,6 +1058,13 @@
       "when": 1794944531408,
       "tag": "0150_chat_polls",
       "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1794945080106,
+      "tag": "0151_chat_attachments",
+      "breakpoints": true
     }
   ]
 }

@@ -19,7 +19,11 @@ const body = z
   .min(1, "Write a message first.")
   .max(MAX_BODY, `Messages can be up to ${MAX_BODY} characters.`);
 
-export const sendMessageSchema = z.object({ conversationId: id, body, threadRootId: id.optional() });
+// A message with attachments may have no text (a picture or a voice note on its own).
+const caption = z.string().trim().max(MAX_BODY, `Messages can be up to ${MAX_BODY} characters.`);
+export const sendMessageSchema = z
+  .object({ conversationId: id, body: caption, threadRootId: id.optional(), attachmentIds: z.array(id).max(5).optional() })
+  .refine((m) => m.body.length > 0 || (m.attachmentIds?.length ?? 0) > 0, { message: "Write a message first.", path: ["body"] });
 export const editMessageSchema = z.object({ messageId: id, body });
 export const deleteMessageSchema = z.object({ messageId: id });
 export const openDirectSchema = z.object({ userId: id });
@@ -69,3 +73,13 @@ export const createPollSchema = z.object({
   anonymous: z.boolean().default(false),
 });
 export const votePollSchema = z.object({ messageId: id, optionId: id });
+
+export const requestUploadSchema = z.object({
+  conversationId: id,
+  fileName: z.string().min(1).max(200),
+  size: z.number().int().min(1),
+  mime: z.string().min(1).max(100),
+  kind: z.enum(["image", "file", "voice"]),
+  durationS: z.number().int().min(0).max(100000).optional(),
+});
+export const finalizeUploadSchema = z.object({ attachmentId: id });

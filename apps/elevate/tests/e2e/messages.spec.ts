@@ -287,3 +287,59 @@ test("a poll: create, vote, and everyone sees the counts", async ({ browser }) =
   await expect(pageA.getByRole("group", { name: "Poll: Friday huddle time?" }).getByRole("button", { name: /10 PM/ })).toContainText("1", { timeout: 12_000 });
   await expect(pageA.getByText("1 person voted")).toBeVisible();
 });
+
+test("a picture, a file and a voice note travel with messages; only members can open them", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `File${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `File${stamp}b`);
+  const c = await createEmployeeAccount("Cy", `File${stamp}c`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  const pageC = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  await signInEnrollingMfa(pageC, c);
+  await pageB.goto("/messages");
+  const bName = `Bea File${stamp}b`;
+  await startDirect(pageA, `File${stamp}b`, bName);
+
+  // A tiny real PNG and a minimal PDF.
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  const pdf = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n");
+  await pageA.getByTestId("chat-file-input").setInputFiles([
+    { name: "front desk.png", mimeType: "image/png", buffer: png },
+    { name: "schedule.pdf", mimeType: "application/pdf", buffer: pdf },
+  ]);
+  await expect(pageA.getByRole("list", { name: "Attachments" })).toContainText("front desk.png", { timeout: 45_000 });
+  await expect(pageA.getByRole("list", { name: "Attachments" })).toContainText("schedule.pdf", { timeout: 45_000 });
+  await expect(pageA.getByText("Don't upload client records or anything with patient details.")).toBeVisible();
+  await pageA.getByLabel(`Message ${bName}`).fill("Here is the desk and the schedule");
+  await pageA.getByRole("button", { name: "Send message" }).click();
+
+  // Bea sees the picture (it really loads) and the file card.
+  await pageB.getByRole("button", { name: new RegExp(`Ana File${stamp}a`) }).click();
+  const image = pageB.getByRole("log").getByRole("img", { name: "front desk.png" });
+  await expect(image).toBeVisible({ timeout: 12_000 });
+  await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
+  await expect(pageB.getByRole("log").getByRole("link", { name: /schedule\.pdf/ })).toBeVisible();
+  const href = await pageB.getByRole("log").getByRole("link", { name: /schedule\.pdf/ }).getAttribute("href");
+
+  // Members can open it; Cy (not in the chat) gets a 404.
+  const asB = await pageB.request.get(href!);
+  expect(asB.status()).toBe(200);
+  expect(asB.headers()["content-type"]).toContain("application/pdf");
+  expect(asB.headers()["x-content-type-options"]).toBe("nosniff");
+  expect(asB.headers()["content-disposition"]).toContain("attachment");
+  const asC = await pageC.request.get(href!);
+  expect(asC.status()).toBe(404);
+
+  // A voice note with the fake microphone.
+  await pageA.getByRole("button", { name: "Record a voice note" }).click();
+  await expect(pageA.getByText(/Recording a voice note/)).toBeVisible();
+  await pageA.waitForTimeout(1500);
+  await pageA.getByRole("button", { name: /Stop and attach/ }).click();
+  await expect(pageA.getByRole("list", { name: "Attachments" })).toContainText("Voice note", { timeout: 45_000 });
+  await pageA.getByRole("button", { name: "Send message" }).click();
+  await expect(pageB.getByRole("log").locator("audio")).toBeVisible({ timeout: 12_000 });
+});

@@ -10,7 +10,7 @@ import { notify } from "@/modules/notifications/service";
 import { isAllowedEmoji } from "./emoji";
 import { extractMentions } from "./mentions";
 import { broadcastChatSignal, type ChatSignal } from "./realtime";
-import { conversationMembers, conversations, messagePins, messageReactions, messageRevisions, messages, pollOptions, polls, pollVotes } from "./schema";
+import { conversationMembers, conversations, messageAttachments, messagePins, messageReactions, messageRevisions, messages, pollOptions, polls, pollVotes } from "./schema";
 import { MAX_BODY, MAX_GROUP, MAX_POLL_OPTIONS, MAX_TITLE, MIN_GROUP } from "./validators";
 
 // Domain functions for chat. They take the acting user, so they live here (server-only), never in a "use server" file.
@@ -35,7 +35,7 @@ function cleanBody(body: string): string {
 }
 
 /** The person's current membership in a live conversation, or the not-found failure. */
-async function requireMember(executor: Db, userId: string, conversationId: string) {
+export async function requireMember(executor: Db, userId: string, conversationId: string) {
   const [row] = await executor
     .select({ kind: conversations.kind, role: conversationMembers.role, posting: conversations.posting })
     .from(conversationMembers)
@@ -218,7 +218,7 @@ export async function deleteGroup(actor: Actor, conversationId: string): Promise
 }
 
 /** A message the person may see right now: a current member of a live conversation, from their join time on, and not removed. */
-async function requireVisibleMessage(executor: Db, userId: string, messageId: string) {
+export async function requireVisibleMessage(executor: Db, userId: string, messageId: string) {
   const [row] = await executor
     .select({ id: messages.id, conversationId: messages.conversationId, threadRootId: messages.threadRootId, senderUserId: messages.senderUserId, kind: messages.kind })
     .from(messages)
@@ -243,8 +243,30 @@ async function notifyMentions(actor: Actor, conversationId: string, body: string
 }
 
 /** `canManage` is whether the sender may post where only HR posts (the company channel); the action works it out from their role. */
-export async function sendMessage(actor: Actor, input: { conversationId: string; body: string; threadRootId?: string | null; canManage?: boolean }): Promise<{ id: string; seq: number }> {
-  const body = cleanBody(input.body);
+/** Marks the attachments as part of a message. All must be the sender's finished, unsent uploads of this conversation. */
+async function linkAttachments(tx: Pick<typeof db, "update">, input: { messageId: string; conversationId: string; senderId: string; attachmentIds: string[] }): Promise<void> {
+  const linked = await tx
+    .update(messageAttachments)
+    .set({ messageId: input.messageId })
+    .where(
+      and(
+        inArray(messageAttachments.id, input.attachmentIds),
+        eq(messageAttachments.uploaderUserId, input.senderId),
+        eq(messageAttachments.conversationId, input.conversationId),
+        eq(messageAttachments.status, "active"),
+        isNull(messageAttachments.messageId),
+      ),
+    )
+    .returning({ id: messageAttachments.id });
+  if (linked.length !== input.attachmentIds.length) throw new ActionFailure("One of those attachments can't be sent. Upload it again.");
+}
+
+export async function sendMessage(actor: Actor, input: { conversationId: string; body: string; threadRootId?: string | null; canManage?: boolean; attachmentIds?: string[] }): Promise<{ id: string; seq: number }> {
+  const attachmentIds = [...new Set(input.attachmentIds ?? [])];
+  if (attachmentIds.length > 5) throw new ActionFailure("A message can have up to 5 attachments.");
+  // A message with attachments may have no text (a picture or a voice note on its own).
+  const body = attachmentIds.length > 0 ? input.body.trim() : cleanBody(input.body);
+  if (body.length > MAX_BODY) throw new ActionFailure("Check the message and try again.");
   const member = await requireMember(db, actor.id, input.conversationId);
   if (!input.threadRootId && member.posting === "admins" && !input.canManage) throw new ActionFailure("Only HR can post in this channel.");
   if (input.threadRootId) {
@@ -264,7 +286,16 @@ export async function sendMessage(actor: Actor, input: { conversationId: string;
     .where(and(eq(messages.senderUserId, actor.id), eq(messages.kind, "text"), sql`${messages.createdAt} > now() - make_interval(secs => ${RATE_WINDOW_SECONDS})`));
   if (recent.n >= RATE_LIMIT) throw new ActionFailure("You are sending messages too fast. Wait a few seconds.");
 
-  const sent = await insertMessage(db, { conversationId: input.conversationId, senderUserId: actor.id, body, kind: "text", threadRootId: input.threadRootId ?? null });
+  let kind: "text" | "image" | "file" | "voice" = "text";
+  if (attachmentIds.length > 0) {
+    const kinds = await db.select({ kind: messageAttachments.kind }).from(messageAttachments).where(and(inArray(messageAttachments.id, attachmentIds), eq(messageAttachments.status, "active")));
+    kind = kinds.length > 0 && kinds.every((k) => k.kind === "image") ? "image" : kinds.length > 0 && kinds.every((k) => k.kind === "voice") ? "voice" : "file";
+  }
+  const sent = await db.transaction(async (tx) => {
+    const posted = await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body, kind, threadRootId: input.threadRootId ?? null });
+    if (attachmentIds.length > 0) await linkAttachments(tx, { messageId: posted.id, conversationId: input.conversationId, senderId: actor.id, attachmentIds });
+    return posted;
+  });
   await notifyMentions(actor, input.conversationId, body);
   await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: sent.id });
   return sent;
@@ -277,7 +308,7 @@ async function ownMessage(actor: Actor, messageId: string) {
     .from(messages)
     .where(eq(messages.id, messageId))
     .limit(1);
-  if (!msg || msg.senderUserId !== actor.id || (msg.kind !== "text" && msg.kind !== "poll")) throw new ActionFailure(MESSAGE_NOT_FOUND);
+  if (!msg || msg.senderUserId !== actor.id || msg.kind === "system") throw new ActionFailure(MESSAGE_NOT_FOUND);
   await requireMember(db, actor.id, msg.conversationId);
   if (msg.deletedAt) throw new ActionFailure("This message was removed.");
   return msg;
@@ -313,7 +344,7 @@ export async function markRead(actor: Actor, input: { conversationId: string; se
   await signal([actor.id], { type: "read", conversationId: input.conversationId });
 }
 
-export { bodyContext, revisionContext, requireMember, currentMemberIds };
+export { bodyContext, revisionContext, currentMemberIds };
 
 /** Adds the person's reaction, or removes it if they already made it. */
 export async function toggleReaction(actor: Actor, input: { messageId: string; emoji: string }): Promise<{ active: boolean }> {
