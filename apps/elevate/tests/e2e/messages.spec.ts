@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createEmployeeAccount, hydrated, signInEnrollingMfa } from "./helpers";
+import { createEmployeeAccount, createHrAccount, hydrated, signInEnrollingMfa } from "./helpers";
 
 // Needs the local Supabase with migrations applied (including 0147, which lets a person join only their own Realtime channel).
 // Two or three people chat in separate browser windows: live delivery, unread badges, edit, delete, a group, a 404 for a stranger, phone width.
@@ -96,48 +96,85 @@ test("two people chat live, edit, delete, and a stranger gets a 404", async ({ b
   await expect(pageB.getByRole("heading", { level: 2, name: "Chats" })).toBeVisible();
 });
 
-test("a group of three: everyone sees messages, and a person who leaves stops getting them", async ({ browser }) => {
-  test.setTimeout(240_000);
+test("only HR makes and manages groups: create, rename, remove a person, delete; everyone else just chats", async ({ browser }) => {
+  test.setTimeout(300_000);
   const stamp = Date.now();
+  const hr = await createHrAccount();
   const a = await createEmployeeAccount("Ana", `Grp${stamp}a`);
   const b = await createEmployeeAccount("Bea", `Grp${stamp}b`);
   const c = await createEmployeeAccount("Cy", `Grp${stamp}c`);
+  const pageH = await (await browser.newContext()).newPage();
   const pageA = await (await browser.newContext()).newPage();
   const pageB = await (await browser.newContext()).newPage();
   const pageC = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageH, hr);
   await signInEnrollingMfa(pageA, a);
   await signInEnrollingMfa(pageB, b);
   await signInEnrollingMfa(pageC, c);
-  await pageB.goto("/messages");
-  await pageC.goto("/messages");
+  for (const page of [pageA, pageB, pageC]) await page.goto("/messages");
 
-  const title = `Crew ${stamp}`;
-  await pageA.goto("/messages");
+  // Someone who is not HR cannot start a group, has no Manage groups link, and the manage page is a 404.
   await (await hydrated(pageA.getByRole("button", { name: "New message" }))).click();
-  const dialog = pageA.getByRole("dialog");
+  await expect(pageA.getByRole("dialog").getByRole("button", { name: "Group" })).toHaveCount(0);
+  await pageA.keyboard.press("Escape");
+  await expect(pageA.getByRole("link", { name: "Manage groups" })).toHaveCount(0);
+  expect((await pageA.goto("/messages/manage"))?.status()).toBe(404);
+  await pageA.goto("/messages"); // back to the Messages page so live updates arrive
+
+  // HR makes a group of everyone with the shared tag (Ana, Bea and Cy), using "Add everyone shown".
+  const title = `Crew ${stamp}`;
+  await pageH.goto("/messages");
+  await (await hydrated(pageH.getByRole("button", { name: "New message" }))).click();
+  const dialog = pageH.getByRole("dialog");
   await dialog.getByRole("button", { name: "Group" }).click();
   await dialog.getByLabel("Group name").fill(title);
   await dialog.getByLabel("Find people").fill(`Grp${stamp}`);
-  await dialog.getByRole("button", { name: new RegExp(`Bea Grp${stamp}b`) }).click();
-  await dialog.getByRole("button", { name: new RegExp(`Cy Grp${stamp}c`) }).click();
+  await dialog.getByRole("button", { name: "Add everyone shown (3)" }).click();
+  await expect(dialog.getByText("3 chosen")).toBeVisible();
   await dialog.getByRole("button", { name: "Create group" }).click();
-  await expect(pageA.getByRole("heading", { level: 2, name: title })).toBeVisible();
+  await expect(pageH.getByRole("heading", { level: 2, name: title })).toBeVisible({ timeout: 45_000 });
 
-  await say(pageA, title, "Welcome to the crew");
-  for (const page of [pageB, pageC]) {
+  await say(pageH, title, "Welcome to the crew");
+  for (const page of [pageA, pageB, pageC]) {
     await expect(page.getByRole("button", { name: new RegExp(title) })).toBeVisible({ timeout: 12_000 });
     await expect(page.getByRole("button", { name: new RegExp(title) })).toContainText("Welcome to the crew");
   }
 
-  // C opens the chat, then leaves it; later messages never reach C.
-  await pageC.getByRole("button", { name: new RegExp(title) }).click();
-  await pageC.getByRole("button", { name: "Show people in this chat" }).click();
-  await pageC.getByRole("button", { name: "Leave group" }).click();
-  await pageC.getByRole("alertdialog").getByRole("button", { name: "Leave group" }).click();
-  await expect(pageC.getByRole("button", { name: new RegExp(title) })).toHaveCount(0, { timeout: 12_000 });
+  // An ordinary member sees who is in the group but has no controls.
+  await pageA.getByRole("button", { name: new RegExp(title) }).click();
+  await pageA.getByRole("button", { name: "Show people in this chat" }).click();
+  await expect(pageA.getByRole("complementary", { name: "People in this chat" })).toContainText(`Cy Grp${stamp}c`);
+  await expect(pageA.getByRole("button", { name: /^Remove /i })).toHaveCount(0);
+  await expect(pageA.getByRole("button", { name: "Delete group" })).toHaveCount(0);
+  await expect(pageA.getByRole("button", { name: "Rename" })).toHaveCount(0);
 
-  await say(pageA, title, "Only two of us now");
-  await expect(pageB.getByRole("button", { name: new RegExp(title) })).toContainText("Only two of us now", { timeout: 12_000 });
+  // HR renames the group; everyone's list shows the new name.
+  const renamed = `Front desk crew ${stamp}`;
+  await pageH.getByRole("button", { name: "Show people in this chat" }).click();
+  await pageH.getByRole("button", { name: "Rename" }).click();
+  await pageH.getByRole("dialog").getByLabel("Group name").fill(renamed);
+  await pageH.getByRole("dialog").getByRole("button", { name: "Save name" }).click();
+  await expect(pageB.getByRole("button", { name: new RegExp(renamed) })).toBeVisible({ timeout: 12_000 });
+
+  // HR removes Cy: Cy loses the group at once and later messages never reach Cy.
+  await pageH.getByRole("button", { name: `Remove Cy Grp${stamp}c` }).click();
+  await pageH.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
+  await expect(pageC.getByRole("button", { name: new RegExp(renamed) })).toHaveCount(0, { timeout: 12_000 });
+  await say(pageH, renamed, "Only three of us now");
+  await expect(pageB.getByRole("button", { name: new RegExp(renamed) })).toContainText("Only three of us now", { timeout: 12_000 });
   await pageC.goto("/messages");
-  await expect(pageC.getByText(title)).toHaveCount(0);
+  await expect(pageC.getByText(renamed)).toHaveCount(0);
+
+  // HR deletes the group on the Manage groups page; it disappears for everyone.
+  await pageH.getByRole("link", { name: "Manage groups" }).click();
+  await expect(pageH.getByRole("heading", { level: 1, name: "Manage groups" })).toBeVisible({ timeout: 45_000 });
+  const row = pageH.getByRole("row", { name: new RegExp(renamed) });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "Manage" }).click();
+  await pageH.getByRole("button", { name: "Delete group" }).click();
+  await pageH.getByRole("alertdialog").getByRole("button", { name: "Delete group" }).click();
+  await expect(pageH.getByRole("row", { name: new RegExp(renamed) })).toHaveCount(0, { timeout: 12_000 });
+  await expect(pageB.getByRole("button", { name: new RegExp(renamed) })).toHaveCount(0, { timeout: 12_000 });
+  await pageA.goto("/messages");
+  await expect(pageA.getByText(renamed)).toHaveCount(0);
 });

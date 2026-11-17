@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ROLE_SLUGS, type RoleSlug } from "@/lib/roles";
 
-// Messages actions as each of the six roles, database mocked to throw: every role may chat (membership is checked later, against the
-// data), bad input is refused before anything touches data, and nobody unauthenticated gets in.
+// Messages actions as each of the six roles, database mocked to throw: everyone may chat (membership is checked later, against the data),
+// but only HR Admin and Super Admin may create, rename, change the people of, or delete a group. Bad input is refused before anything
+// touches data, and nobody unauthenticated gets in.
 
 const currentUser = vi.hoisted(() => ({ value: null as unknown, fail: false }));
 vi.mock("@/lib/auth", () => ({
@@ -22,60 +23,70 @@ const ID2 = "22222222-2222-4222-8222-222222222222";
 const ID3 = "33333333-3333-4333-8333-333333333333";
 const NO_ACCESS = "You do not have access to do that.";
 const BAD = "Check the request and try again.";
+const ADMINS: RoleSlug[] = ["super_admin", "hr_admin"];
 const as = (role: RoleSlug) => {
   currentUser.fail = false;
   currentUser.value = { id: "44444444-4444-4444-8444-444444444444", email: "actor@example.com", roles: [role] };
 };
 
-type Call = [name: string, run: () => Promise<{ ok: boolean; error?: string }>];
+type Call = { name: string; run: () => Promise<{ ok: boolean; error?: string }>; adminOnly: boolean };
 const valid: Call[] = [
-  ["openDirectMessage", () => actions.openDirectMessage({ userId: ID })],
-  ["createGroupConversation", () => actions.createGroupConversation({ title: "Crew", memberUserIds: [ID, ID2] })],
-  ["sendChatMessage", () => actions.sendChatMessage({ conversationId: ID, body: "hello" })],
-  ["editChatMessage", () => actions.editChatMessage({ messageId: ID, body: "edited" })],
-  ["deleteChatMessage", () => actions.deleteChatMessage({ messageId: ID })],
-  ["markConversationRead", () => actions.markConversationRead({ conversationId: ID, seq: 3 })],
-  ["addGroupMembers", () => actions.addGroupMembers({ conversationId: ID, userIds: [ID2, ID3] })],
-  ["leaveGroupConversation", () => actions.leaveGroupConversation({ conversationId: ID })],
-  ["loadChatMessages", () => actions.loadChatMessages({ conversationId: ID })],
-  ["loadConversationList", () => actions.loadConversationList()],
-  ["searchPeopleForChat", () => actions.searchPeopleForChat({ q: "ana" })],
+  { name: "openDirectMessage", run: () => actions.openDirectMessage({ userId: ID }), adminOnly: false },
+  { name: "sendChatMessage", run: () => actions.sendChatMessage({ conversationId: ID, body: "hello" }), adminOnly: false },
+  { name: "editChatMessage", run: () => actions.editChatMessage({ messageId: ID, body: "edited" }), adminOnly: false },
+  { name: "deleteChatMessage", run: () => actions.deleteChatMessage({ messageId: ID }), adminOnly: false },
+  { name: "markConversationRead", run: () => actions.markConversationRead({ conversationId: ID, seq: 3 }), adminOnly: false },
+  { name: "loadChatMessages", run: () => actions.loadChatMessages({ conversationId: ID }), adminOnly: false },
+  { name: "loadConversationList", run: () => actions.loadConversationList(), adminOnly: false },
+  { name: "searchPeopleForChat", run: () => actions.searchPeopleForChat({ q: "ana" }), adminOnly: false },
+  { name: "createGroupConversation", run: () => actions.createGroupConversation({ title: "Crew", memberUserIds: [ID, ID2] }), adminOnly: true },
+  { name: "addGroupMembers", run: () => actions.addGroupMembers({ conversationId: ID, userIds: [ID2, ID3] }), adminOnly: true },
+  { name: "removeGroupMember", run: () => actions.removeGroupMember({ conversationId: ID, userId: ID2 }), adminOnly: true },
+  { name: "renameGroupChat", run: () => actions.renameGroupChat({ conversationId: ID, title: "New name" }), adminOnly: true },
+  { name: "deleteGroupChat", run: () => actions.deleteGroupChat({ conversationId: ID }), adminOnly: true },
+  { name: "listGroupsToManage", run: () => actions.listGroupsToManage(), adminOnly: true },
+  { name: "loadGroupPeopleToManage", run: () => actions.loadGroupPeopleToManage({ conversationId: ID }), adminOnly: true },
 ];
-const badInput: Call[] = [
-  ["openDirectMessage", () => actions.openDirectMessage({})],
-  ["createGroupConversation", () => actions.createGroupConversation({})],
-  ["sendChatMessage", () => actions.sendChatMessage({})],
-  ["editChatMessage", () => actions.editChatMessage({})],
-  ["deleteChatMessage", () => actions.deleteChatMessage({})],
-  ["markConversationRead", () => actions.markConversationRead({})],
-  ["addGroupMembers", () => actions.addGroupMembers({})],
-  ["leaveGroupConversation", () => actions.leaveGroupConversation({})],
-  ["loadChatMessages", () => actions.loadChatMessages({})],
-  ["searchPeopleForChat", () => actions.searchPeopleForChat({ q: "x".repeat(61) })],
+const badInput: { name: string; run: () => Promise<{ ok: boolean; error?: string }>; role: RoleSlug }[] = [
+  { name: "openDirectMessage", run: () => actions.openDirectMessage({}), role: "employee" },
+  { name: "sendChatMessage", run: () => actions.sendChatMessage({}), role: "employee" },
+  { name: "editChatMessage", run: () => actions.editChatMessage({}), role: "employee" },
+  { name: "deleteChatMessage", run: () => actions.deleteChatMessage({}), role: "employee" },
+  { name: "markConversationRead", run: () => actions.markConversationRead({}), role: "employee" },
+  { name: "loadChatMessages", run: () => actions.loadChatMessages({}), role: "employee" },
+  { name: "searchPeopleForChat", run: () => actions.searchPeopleForChat({ q: "x".repeat(61) }), role: "employee" },
+  { name: "createGroupConversation", run: () => actions.createGroupConversation({}), role: "hr_admin" },
+  { name: "addGroupMembers", run: () => actions.addGroupMembers({}), role: "hr_admin" },
+  { name: "removeGroupMember", run: () => actions.removeGroupMember({}), role: "hr_admin" },
+  { name: "renameGroupChat", run: () => actions.renameGroupChat({}), role: "super_admin" },
+  { name: "deleteGroupChat", run: () => actions.deleteGroupChat({}), role: "super_admin" },
+  { name: "loadGroupPeopleToManage", run: () => actions.loadGroupPeopleToManage({}), role: "hr_admin" },
 ];
 
 beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
 
 describe("messages actions, every role", () => {
   for (const role of ROLE_SLUGS) {
-    for (const [name, run] of valid) {
-      it(`${role}: may ${name} (refused only later, by membership, not by role)`, async () => {
+    for (const { name, run, adminOnly } of valid) {
+      const allowed = !adminOnly || ADMINS.includes(role);
+      it(`${role}: ${allowed ? `may ${name} (refused only later, by membership, not by role)` : `is refused ${name}`}`, async () => {
         as(role);
         const result = await run();
-        expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
+        if (allowed) expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
+        else expect(result).toEqual({ ok: false, error: NO_ACCESS });
       });
     }
   }
 });
 
 describe("messages actions, input and sign-in", () => {
-  for (const [name, run] of badInput) {
+  for (const { name, run, role } of badInput) {
     it(`${name}: bad input is refused before the database`, async () => {
-      as("employee");
+      as(role);
       expect(await run()).toEqual({ ok: false, error: BAD });
     });
   }
-  for (const [name, run] of valid) {
+  for (const { name, run } of valid) {
     it(`${name}: someone who is not signed in gets nothing`, async () => {
       currentUser.fail = true;
       await expect(run()).rejects.toThrow("not signed in");

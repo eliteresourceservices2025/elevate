@@ -15,10 +15,18 @@ One company-controlled place for internal chat (direct messages, private groups,
 - Recording only by people a Super Admin picks, with consent from everyone in the call, never in calls that include a client.
 - GIFs come from KLIPY through our server. No phone-number calling.
 
+## Who manages groups (owner decision 2026-11-17)
+
+Only **HR Admins and Super Admins** create, rename, change the people of, and delete group chats (`messages.create_group`, `messages.manage_group`, scope all). Everyone else chats in the groups they were added to and in direct messages, and cannot leave a group on their own (HR removes people). Deleting is the usual ELEVATE soft delete: the group is archived for everyone and its encrypted messages stay until the retention period ends.
+
+- HR manages groups from the **Manage groups** page (`/messages/manage`: names, counts, people; never message text) and from the People panel of a group they are in. Everything is audited with ids and counts only (`chat.group.create|rename|delete`, `chat.members.add|remove`; an add lists the ids of who was added, a remove the id of who was removed).
+- **Managing is not reading.** An admin who is not in a group cannot read it and cannot add themself to it (that would be a way around the two-person access request, Phase 6). A group they create includes them as a member until they remove themself.
+- The server checks `messages.manage_group` on every action; the buttons are only hidden for convenience.
+
 ## Hard rules
 
 1. Message text is encrypted (`fieldCrypto`, context `chat_message:<conversationId>:<messageId>`). It never appears in Realtime payloads, notifications, email, audit rows, logs or Sentry. Audit rows carry ids and counts; individual sends are not audited.
-2. Membership is checked on every read, write, channel join and call join. A permission never replaces membership. A person who left a group sees only what was sent before they left, and a person added later (or added back) sees only what is sent from the moment they were added: thread, list preview and unread counts all use that window (tested).
+2. Membership is checked on every read, write, channel join and call join. A permission never replaces membership. A person who was removed from a group loses all access at once (no list, no history, no sending, not even what came before), and a person added later (or added back) sees only what is sent from the moment they were added: thread, list preview and unread counts all use that window (tested). A deleted group (archived) cannot be read or written by anyone.
 3. Realtime carries ids only (`ChatSignal`, no text field). The browser subscribes to its own private channel `user:<id>`, authorized by one policy on `realtime.messages` calling `chat.can_join(topic, uid)`; every read still goes through server actions.
 4. HR access to a conversation is only through an approved two-person request (Phase 6). Nobody else can read a chat.
 5. No patient details: warnings above the composer and on file attachments, a banner and guest notice in client groups. Free text cannot be technically blocked.
@@ -40,7 +48,7 @@ Fallback: poll every 20 s while the socket is not subscribed.
 
 ## Limits
 
-Body 1 to 4,000 characters; groups 3 to 50 members; 30 messages per sender per 10 seconds (counted in Postgres, not Upstash, to protect the free tier); page size 50 (max 100).
+Body 1 to 4,000 characters; groups 3 to 200 members (owner decision 2026-11-17; up to 50 people added per step; Realtime signals go out in batches of 100);  30 messages per sender per 10 seconds (counted in Postgres, not Upstash, to protect the free tier); page size 50 (max 100).
 
 ## Phases
 

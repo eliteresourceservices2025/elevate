@@ -1,6 +1,6 @@
 import "server-only";
 import { and, asc, eq, ilike, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
-import { authorize } from "@/lib/authz";
+import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { fieldCrypto } from "@/lib/crypto";
 import { db } from "@/lib/db";
@@ -8,7 +8,7 @@ import { ActionFailure } from "@/lib/run-action";
 import { users } from "@/modules/core/schema";
 import { employees } from "@/modules/people/schema";
 import { conversationMembers, conversations } from "./schema";
-import { loadMessagesSchema, searchPeopleSchema } from "./validators";
+import { deleteGroupSchema, loadMessagesSchema, searchPeopleSchema } from "./validators";
 import { bodyContext, revisionContext } from "./service";
 
 // Reads for chat. Each starts by asking who is calling, and every conversation read checks membership: someone who is not a member
@@ -17,6 +17,9 @@ import { bodyContext, revisionContext } from "./service";
 const NOT_FOUND = "Conversation not found.";
 const PREVIEW_CHARS = 80;
 const LIST_LIMIT = 200;
+/** An ordinary person finds someone to message; the people who build groups (HR Admin, Super Admin) can pull up to a whole 200-person group at once ("Add everyone shown"). */
+const PEOPLE_LIMIT = 20;
+const PEOPLE_LIMIT_MANAGER = 200;
 
 export type ConversationSummary = {
   id: string;
@@ -154,14 +157,14 @@ export async function loadMessages(input: unknown): Promise<{ messages: ChatMess
     .select({ userId: conversationMembers.userId })
     .from(conversationMembers)
     .innerJoin(conversations, eq(conversations.id, conversationMembers.conversationId))
-    .where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, actor.id), isNull(conversations.archivedAt)))
+    .where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, actor.id), isNull(conversationMembers.leftAt), isNull(conversations.archivedAt)))
     .limit(1);
+  // Someone who was removed (or a deleted group) gets nothing: not even what was said before.
   if (!membership) throw new ActionFailure(NOT_FOUND);
 
-  // A person sees only what was created from the moment they joined (or were added back) and, if they left, before they left.
+  // A person sees only what was created from the moment they joined (or were added back).
   // Compared inside the database so microseconds are not lost on the way through JavaScript dates.
-  const window = sql`and created_at >= (select joined_at from chat.conversation_members where conversation_id = ${conversationId} and user_id = ${actor.id})
-    and created_at <= coalesce((select left_at from chat.conversation_members where conversation_id = ${conversationId} and user_id = ${actor.id}), 'infinity'::timestamptz)`;
+  const window = sql`and created_at >= (select joined_at from chat.conversation_members where conversation_id = ${conversationId} and user_id = ${actor.id})`;
   const range = beforeSeq !== undefined ? sql`and seq < ${beforeSeq}` : afterSeq !== undefined ? sql`and seq > ${afterSeq}` : sql``;
   const newestFirst = afterSeq === undefined;
   const fetched = (await db.execute(sql`
@@ -180,17 +183,11 @@ export async function loadMessages(input: unknown): Promise<{ messages: ChatMess
         where message_id in (${sql.join(live.map((m) => sql`${m.id}`), sql`, `)}) order by message_id, created_at desc`)) as unknown as { message_id: string; id: string; body_enc: string }[])
     : [];
 
-  // The people list: current members only (so someone who left can be added back), and a person who left sees only those who had joined by then.
+  // The people list: current members only (so someone who was removed can be added back).
   const memberRows = await db
     .select({ userId: conversationMembers.userId, lastReadSeq: conversationMembers.lastReadSeq })
     .from(conversationMembers)
-    .where(
-      and(
-        eq(conversationMembers.conversationId, conversationId),
-        isNull(conversationMembers.leftAt),
-        sql`${conversationMembers.joinedAt} <= coalesce((select left_at from chat.conversation_members where conversation_id = ${conversationId} and user_id = ${actor.id}), 'infinity'::timestamptz)`,
-      ),
-    )
+    .where(and(eq(conversationMembers.conversationId, conversationId), isNull(conversationMembers.leftAt)))
     .orderBy(asc(conversationMembers.joinedAt));
   const people = await peopleByUserId([...memberRows.map((r) => r.userId), ...page.map((m) => m.sender_user_id)]);
   const nameOf = (id: string) => people.get(id)?.name ?? "Someone";
@@ -215,6 +212,55 @@ export async function loadMessages(input: unknown): Promise<{ messages: ChatMess
     };
   });
   return { messages, hasMore, members: memberRows.map((r) => ({ userId: r.userId, name: nameOf(r.userId), lastReadSeq: r.lastReadSeq })) };
+}
+
+export type ManagedGroup = { id: string; title: string; memberCount: number; createdAt: string; createdByName: string; amMember: boolean };
+
+/**
+ * Every live group, for the people who manage groups (HR Admin, Super Admin): name, size, who made it and whether they are in it.
+ * Never any message text, and being listed here does not let them read the group.
+ */
+export async function listManagedGroups(): Promise<ManagedGroup[]> {
+  const actor = await requireUser();
+  await authorize(actor, "messages.manage_group");
+  const rows = (await db.execute(sql`
+    select c.id, c.title, c.created_by, c.created_at,
+      (select count(*)::int from chat.conversation_members m where m.conversation_id = c.id and m.left_at is null) as member_count,
+      exists (select 1 from chat.conversation_members m where m.conversation_id = c.id and m.user_id = ${actor.id} and m.left_at is null) as am_member
+    from chat.conversations c
+    where c.kind = 'group' and c.archived_at is null
+    order by c.created_at desc
+    limit 500`)) as unknown as { id: string; title: string | null; created_by: string; created_at: Date; member_count: number; am_member: boolean }[];
+  const people = await peopleByUserId(rows.map((r) => r.created_by));
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title ?? "Group",
+    memberCount: r.member_count,
+    createdAt: new Date(r.created_at).toISOString(),
+    createdByName: people.get(r.created_by)?.name ?? "Someone",
+    amMember: r.am_member,
+  }));
+}
+
+/** The current people of one live group, for managing it (names only). */
+export async function loadGroupPeople(input: unknown): Promise<{ userId: string; name: string }[]> {
+  const actor = await requireUser();
+  await authorize(actor, "messages.manage_group");
+  const parsed = deleteGroupSchema.safeParse(input);
+  if (!parsed.success) throw new ActionFailure("Check the request and try again.");
+  const [group] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.id, parsed.data.conversationId), eq(conversations.kind, "group"), isNull(conversations.archivedAt)))
+    .limit(1);
+  if (!group) throw new ActionFailure("Group not found.");
+  const rows = await db
+    .select({ userId: conversationMembers.userId })
+    .from(conversationMembers)
+    .where(and(eq(conversationMembers.conversationId, group.id), isNull(conversationMembers.leftAt)))
+    .orderBy(asc(conversationMembers.joinedAt));
+  const people = await peopleByUserId(rows.map((r) => r.userId));
+  return rows.map((r) => ({ userId: r.userId, name: people.get(r.userId)?.name ?? "Someone" }));
 }
 
 export async function countMyUnread(): Promise<number> {
@@ -250,6 +296,6 @@ export async function searchChatPeople(input: unknown): Promise<{ userId: string
       ),
     )
     .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName))
-    .limit(20);
+    .limit(can(actor, "messages.manage_group") ? PEOPLE_LIMIT_MANAGER : PEOPLE_LIMIT);
   return rows.map((r) => ({ userId: r.userId!, name: `${r.preferred?.trim() || r.first} ${r.last}`.trim(), position: r.position ?? null }));
 }

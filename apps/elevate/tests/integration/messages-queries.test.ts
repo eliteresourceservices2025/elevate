@@ -20,7 +20,7 @@ const as = (u: Actor) => {
   current.user = u;
 };
 
-async function makeUser(label: string, person?: { first: string; last: string; position?: string }): Promise<Actor> {
+async function makeUser(label: string, person?: { first: string; last: string; position?: string }, roles: string[] = ["employee"]): Promise<Actor> {
   const id = randomUUID();
   const email = `${uniq(label)}@example.com`;
   await db.execute(sql`insert into core.users (id, email) values (${id}, ${email})`);
@@ -28,8 +28,46 @@ async function makeUser(label: string, person?: { first: string; last: string; p
     await db.execute(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id, position, start_date)
       values (${person.first}, ${person.last}, ${email}, 'active', ${id}, ${person.position ?? null}, '2026-01-05')`);
   }
-  return { id, email, roles: ["employee"] };
+  return { id, email, roles };
 }
+
+describe("managing groups: what HR sees", () => {
+  it("listManagedGroups lists every group, including ones the admin is not in, with names and counts but no message text", async () => {
+    const admin = await makeUser("admin", { first: "Gina", last: "HR" }, ["employee", "hr_admin"]);
+    const creator = await makeUser("creator", { first: "Cora", last: "Creator" });
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const title = `Secret crew ${uniq("t")}`;
+    const { conversationId } = await service.createGroup(creator, { title, memberUserIds: [b.id, c.id] });
+    await service.sendMessage(creator, { conversationId, body: "the secret plan" });
+    as(admin);
+    const groups = await queries.listManagedGroups();
+    const g = groups.find((x) => x.id === conversationId)!;
+    expect(g).toMatchObject({ title, memberCount: 3, amMember: false, createdByName: "Cora Creator" });
+    expect(JSON.stringify(groups)).not.toContain("the secret plan");
+    await expect(queries.loadMessages({ conversationId })).rejects.toThrow("Conversation not found."); // managing is not reading
+  });
+
+  it("loadGroupPeople lists the current people of a group; a deleted group and a direct message are not found", async () => {
+    const admin = await makeUser("admin", undefined, ["employee", "super_admin"]);
+    const b = await makeUser("b", { first: "Bea", last: "Bee" });
+    const c = await makeUser("c", { first: "Cy", last: "Sea" });
+    const { conversationId } = await service.createGroup(admin, { title: "Crew", memberUserIds: [b.id, c.id] });
+    as(admin);
+    const people = await queries.loadGroupPeople({ conversationId });
+    expect(people.map((p) => p.name).sort()).toEqual(["Bea Bee", "Cy Sea", people.find((p) => p.userId === admin.id)!.name].sort());
+    const { conversationId: dm } = await service.openDirect(b, c.id);
+    await expect(queries.loadGroupPeople({ conversationId: dm })).rejects.toThrow();
+    await service.deleteGroup(admin, conversationId);
+    await expect(queries.loadGroupPeople({ conversationId })).rejects.toThrow();
+  });
+
+  it("a person without the manage right gets nothing from the manage queries", async () => {
+    const worker = await makeUser("w");
+    as(worker);
+    await expect(queries.listManagedGroups()).rejects.toMatchObject({ name: "ForbiddenError" });
+  });
+});
 
 describe("unread and previews", () => {
   it("unread counts only others' undeleted text messages after last_read_seq", async () => {
@@ -102,20 +140,30 @@ describe("loadMessages", () => {
     await expect(queries.loadMessages({ conversationId: randomUUID() })).rejects.toThrow("Conversation not found.");
   });
 
-  it("a person who left does not see messages created after they left", async () => {
+  it("a person who was removed can no longer load the conversation at all, not even what came before", async () => {
     const a = await makeUser("a");
     const b = await makeUser("b");
     const c = await makeUser("c");
     const { conversationId } = await service.createGroup(a, { title: "Crew", memberUserIds: [b.id, c.id] });
-    await service.sendMessage(a, { conversationId, body: "before leaving" });
-    await service.leaveConversation(c, conversationId);
-    await db.execute(sql`select pg_sleep(0.05)`);
-    await service.sendMessage(a, { conversationId, body: "after leaving" });
+    await service.sendMessage(a, { conversationId, body: "before the removal" });
+    await service.removeMember(a, { conversationId, userId: c.id });
     as(c);
-    const { messages } = await queries.loadMessages({ conversationId });
-    const bodies = messages.map((m) => m.body);
-    expect(bodies).toContain("before leaving");
-    expect(bodies).not.toContain("after leaving");
+    await expect(queries.loadMessages({ conversationId })).rejects.toThrow("Conversation not found.");
+    expect((await queries.listMyConversations()).some((x) => x.id === conversationId)).toBe(false);
+  });
+
+  it("nobody can load a deleted group", async () => {
+    const a = await makeUser("a");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const { conversationId } = await service.createGroup(a, { title: "Doomed", memberUserIds: [b.id, c.id] });
+    await service.sendMessage(a, { conversationId, body: "gone soon" });
+    await service.deleteGroup(a, conversationId);
+    for (const viewer of [a, b]) {
+      as(viewer);
+      await expect(queries.loadMessages({ conversationId })).rejects.toThrow("Conversation not found.");
+      expect((await queries.listMyConversations()).some((x) => x.id === conversationId)).toBe(false);
+    }
   });
 
   it("pages: the latest 2 first, then earlier ones with beforeSeq, and hasMore says so", async () => {
@@ -170,7 +218,7 @@ describe("a person added later", () => {
     const b = await makeUser("b");
     const c = await makeUser("c");
     const { conversationId } = await service.createGroup(a, { title: "Crew", memberUserIds: [b.id, c.id] });
-    await service.leaveConversation(c, conversationId);
+    await service.removeMember(a, { conversationId, userId: c.id });
     await db.execute(sql`select pg_sleep(0.05)`);
     await service.sendMessage(a, { conversationId, body: "said while c was away" });
     await db.execute(sql`select pg_sleep(0.05)`);
@@ -182,24 +230,19 @@ describe("a person added later", () => {
 });
 
 describe("the people list", () => {
-  it("shows only current members, and a person who left sees nobody added after they left", async () => {
+  it("shows only current members, so a removed person is not listed and can be added back", async () => {
     const a = await makeUser("a");
     const b = await makeUser("b");
     const c = await makeUser("c");
     const d = await makeUser("d");
     const { conversationId } = await service.createGroup(a, { title: "Crew", memberUserIds: [b.id, c.id] });
-    await service.leaveConversation(c, conversationId);
+    await service.removeMember(a, { conversationId, userId: c.id });
     await db.execute(sql`select pg_sleep(0.05)`);
     await service.addMembers(a, conversationId, [d.id]);
 
     as(a);
     const current = (await queries.loadMessages({ conversationId })).members.map((m) => m.userId).sort();
-    expect(current).toEqual([a.id, b.id, d.id].sort()); // c left, so c is not listed (and can be added back)
-
-    as(c);
-    const seenByLeaver = (await queries.loadMessages({ conversationId })).members.map((m) => m.userId);
-    expect(seenByLeaver).not.toContain(d.id); // d joined after c left
-    expect(seenByLeaver).toEqual(expect.arrayContaining([a.id, b.id]));
+    expect(current).toEqual([a.id, b.id, d.id].sort());
   });
 });
 
@@ -229,5 +272,21 @@ describe("searchChatPeople", () => {
     expect(found.map((p) => p.name)).toEqual([`Alma${tag} Other`]);
     expect(found[0].position).toBe("Front desk");
     expect(await queries.searchChatPeople({ q: "%" })).toEqual([]);
+  });
+});
+
+describe("people search size", () => {
+  it("an ordinary person gets at most 20 results, an HR Admin (who builds big groups) gets them all", async () => {
+    const tag = uniq("sz").replace(/[^a-z0-9]/g, "");
+    await db.execute(sql`with u as (
+        insert into core.users (id, email) select gen_random_uuid(), 'sz' || md5(random()::text || g::text) || '@example.com' from generate_series(1, 25) g returning id, email)
+      insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id, start_date)
+      select ${`Zed${tag}`}, 'Person', email, 'active', id, '2026-01-05' from u`);
+    const worker = await makeUser("w");
+    const admin = await makeUser("adm", undefined, ["employee", "hr_admin"]);
+    as(worker);
+    expect(await queries.searchChatPeople({ q: `Zed${tag}` })).toHaveLength(20);
+    as(admin);
+    expect(await queries.searchChatPeople({ q: `Zed${tag}` })).toHaveLength(25);
   });
 });

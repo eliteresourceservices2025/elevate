@@ -3,14 +3,14 @@
 import { MessageSquare, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useConfirm } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { toast } from "@/components/feedback-dialog";
 import { Button } from "@/components/ui/button";
-import { leaveGroupConversation, loadChatMessages, loadConversationList, markConversationRead } from "../actions";
+import { loadChatMessages, loadConversationList, markConversationRead } from "../actions";
 import type { ChatMessage, ConversationSummary } from "../queries";
 import type { ChatSignal } from "../realtime-types";
 import { ConversationList } from "./conversation-list";
+import { RenameGroupDialog, useDeleteGroup, useRemovePerson } from "./group-admin";
 import { AddPeopleDialog, NewConversationDialog } from "./new-conversation-dialog";
 import { Thread, type ThreadMember } from "./thread";
 import { useChatLive } from "./use-chat-live";
@@ -27,8 +27,7 @@ function mergeNewest(previous: ThreadData | null, next: ThreadData): ThreadData 
 
 export type { ThreadData };
 
-export function MessagesView({ userId, timeZone, initialConversations, initialConversationId, initialThread }: { userId: string; timeZone: string; initialConversations: ConversationSummary[]; initialConversationId: string | null; initialThread: ThreadData | null }) {
-  const confirm = useConfirm();
+export function MessagesView({ userId, timeZone, canManage, initialConversations, initialConversationId, initialThread }: { userId: string; timeZone: string; canManage: boolean; initialConversations: ConversationSummary[]; initialConversationId: string | null; initialThread: ThreadData | null }) {
   const [conversations, setConversations] = useState(initialConversations);
   const [activeId, setActiveId] = useState<string | null>(initialConversationId);
   const [thread, setThread] = useState<ThreadData | null>(initialThread);
@@ -153,21 +152,23 @@ export function MessagesView({ userId, timeZone, initialConversations, initialCo
     }
   }
 
-  async function leave(conversation: ConversationSummary) {
-    const ok = await confirm({ title: `Leave ${conversation.title}?`, description: "You will no longer get new messages. People there are told you left.", confirmLabel: "Leave group", destructive: true });
-    if (!ok) return;
-    const result = await leaveGroupConversation({ conversationId: conversation.id });
-    if (!result.ok) return void toast.error(result.error);
+  // HR Admin / Super Admin controls (the server checks the right on every action).
+  const removePerson = useRemovePerson((removedUserId) => {
+    if (removedUserId === userId) close(); // they took themself out: the chat is no longer theirs
+    else if (activeRef.current) void loadThread(activeRef.current, false);
+    void refreshList();
+  });
+  const deleteGroup = useDeleteGroup(() => {
     close();
     void refreshList();
-  }
+  });
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
 
   return (
     <div className="flex h-[calc(100dvh-13rem)] min-h-[34rem] overflow-hidden rounded-xl border bg-card">
       <div className={`w-full shrink-0 border-r md:block md:w-80 ${active ? "hidden" : "block"}`}>
-        <ConversationList conversations={conversations} activeId={activeId} onOpen={open} newButton={<NewConversationDialog onOpened={(id) => void opened(id)} />} timeZone={timeZone} />
+        <ConversationList conversations={conversations} activeId={activeId} onOpen={open} newButton={<NewConversationDialog onOpened={(id) => void opened(id)} canCreateGroup={canManage} />} timeZone={timeZone} />
       </div>
 
       <div className={`min-w-0 flex-1 ${active ? (showDetails ? "hidden md:block" : "block") : "hidden md:block"}`}>
@@ -213,19 +214,28 @@ export function MessagesView({ userId, timeZone, initialConversations, initialCo
               <X aria-hidden />
             </Button>
           </div>
-          <ul className="flex flex-col gap-1 text-sm">
+          <p className="text-xs text-muted-foreground">{thread.members.length} {thread.members.length === 1 ? "person" : "people"}</p>
+          <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto text-sm">
             {thread.members.map((m) => (
-              <li key={m.userId} className="truncate">
-                {m.name}
-                {m.userId === userId ? <span className="text-muted-foreground"> (you)</span> : null}
+              <li key={m.userId} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate">
+                  {m.name}
+                  {m.userId === userId ? <span className="text-muted-foreground"> (you)</span> : null}
+                </span>
+                {canManage && active.kind === "group" ? (
+                  <Button type="button" variant="ghost" size="xs" onClick={() => void removePerson(active.id, m)} aria-label={`Remove ${m.name}`}>
+                    Remove
+                  </Button>
+                ) : null}
               </li>
             ))}
           </ul>
-          {active.kind === "group" ? (
+          {canManage && active.kind === "group" ? (
             <div className="mt-auto flex flex-col gap-2">
+              <RenameGroupDialog conversationId={active.id} current={active.title} onDone={() => { void loadThread(active.id, false); void refreshList(); }} />
               <AddPeopleDialog conversationId={active.id} existing={thread.members.map((m) => m.userId)} onAdded={() => { void loadThread(active.id, false); void refreshList(); }} />
-              <Button type="button" variant="outline" size="sm" onClick={() => void leave(active)}>
-                Leave group
+              <Button type="button" variant="outline" size="sm" onClick={() => void deleteGroup(active.id, active.title)}>
+                Delete group
               </Button>
             </div>
           ) : null}

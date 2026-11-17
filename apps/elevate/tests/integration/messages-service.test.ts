@@ -113,13 +113,13 @@ describe("groups", () => {
     expect(text).toContain('"memberCount":3');
   });
 
-  it("a member who left cannot send or mark read, and the others still can", async () => {
+  it("a removed member cannot send or mark read, and the others still can", async () => {
     const a = await makeUser("a");
     const b = await makeUser("b");
     const c = await makeUser("c");
     const { conversationId } = await service.createGroup(a, { title: "Crew", memberUserIds: [b.id, c.id] });
     const { seq } = await service.sendMessage(a, { conversationId, body: "before" });
-    await service.leaveConversation(c, conversationId);
+    await service.removeMember(a, { conversationId, userId: c.id });
     await expect(service.sendMessage(c, { conversationId, body: "after" })).rejects.toThrow(NOT_FOUND);
     await expect(service.markRead(c, { conversationId, seq })).rejects.toThrow(NOT_FOUND);
     await expect(service.sendMessage(b, { conversationId, body: "still here" })).resolves.toBeDefined();
@@ -137,7 +137,7 @@ describe("groups", () => {
     expect(Number(m.last_read_seq)).toBe(second.seq);
   });
 
-  it("addMembers brings a new person in and the group cannot pass 50", async () => {
+  it("addMembers brings a new person in", async () => {
     const a = await makeUser("a");
     const b = await makeUser("b");
     const c = await makeUser("c");
@@ -146,7 +146,143 @@ describe("groups", () => {
     await service.addMembers(a, conversationId, [d.id]);
     const members = await rows<{ n: string }>(sql`select count(*)::text as n from chat.conversation_members where conversation_id = ${conversationId} and left_at is null`);
     expect(members[0].n).toBe("4");
-    const stranger = await makeUser("s");
-    await expect(service.addMembers(stranger, conversationId, [stranger.id])).rejects.toThrow(NOT_FOUND);
+  });
+});
+
+async function makeUsers(n: number): Promise<string[]> {
+  const out = await rows<{ id: string }>(sql`insert into core.users (id, email) select gen_random_uuid(), 'bulk' || md5(random()::text || g::text) || '@example.com' from generate_series(1, ${n}) g returning id`);
+  return out.map((r) => r.id);
+}
+
+describe("a group of up to 200 people", () => {
+  it("can have 200 in total (199 others), and neither creating nor adding goes past 200", async () => {
+    const a = await makeUser("a");
+    const others = await makeUsers(199);
+    const { conversationId } = await service.createGroup(a, { title: "Everyone", memberUserIds: others });
+    const [count] = await rows<{ n: string }>(sql`select count(*)::text as n from chat.conversation_members where conversation_id = ${conversationId} and left_at is null`);
+    expect(count.n).toBe("200");
+    const extra = await makeUser("extra");
+    await expect(service.addMembers(a, conversationId, [extra.id])).rejects.toThrow("up to 200");
+    const tooMany = await makeUsers(200);
+    await expect(service.createGroup(a, { title: "Too big", memberUserIds: tooMany })).rejects.toThrow();
+    // A message still reaches everyone's list (the unread count is per person).
+    await service.sendMessage(a, { conversationId, body: "hello all" });
+  });
+});
+
+describe("managing groups (HR and Super Admin)", () => {
+  it("renameGroup changes the name, adds a system message and audits ids only", async () => {
+    const admin = await makeUser("admin");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const { conversationId } = await service.createGroup(admin, { title: "Old name", memberUserIds: [b.id, c.id] });
+    const fresh = `Brand new ${uniq("n")}`;
+    await service.renameGroup(admin, { conversationId, title: fresh });
+    const [conv] = await rows<{ title: string }>(sql`select title from chat.conversations where id = ${conversationId}`);
+    expect(conv.title).toBe(fresh);
+    const audit = await rows<{ metadata: unknown; before: unknown; after: unknown }>(sql`select metadata, before, after from ops.audit_log where action = 'chat.group.rename' and target_id = ${conversationId}`);
+    expect(audit).toHaveLength(1);
+    expect(JSON.stringify(audit[0])).not.toContain(fresh);
+    expect(JSON.stringify(audit[0])).not.toContain("Old name");
+  });
+
+  it("removeMember removes one person, tells the group, and refuses to empty the group", async () => {
+    const admin = await makeUser("admin");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const { conversationId } = await service.createGroup(admin, { title: "Crew", memberUserIds: [b.id, c.id] });
+    await service.removeMember(admin, { conversationId, userId: c.id });
+    const [left] = await rows<{ left_at: string | null }>(sql`select left_at from chat.conversation_members where conversation_id = ${conversationId} and user_id = ${c.id}`);
+    expect(left.left_at).not.toBeNull();
+    await expect(service.removeMember(admin, { conversationId, userId: c.id })).rejects.toThrow("isn't in this group");
+    await service.removeMember(admin, { conversationId, userId: b.id });
+    await expect(service.removeMember(admin, { conversationId, userId: admin.id })).rejects.toThrow("at least one person");
+  });
+
+  it("deleteGroup archives it: nobody can send, the audit row has ids and a count, and it cannot be done to a direct message", async () => {
+    const admin = await makeUser("admin");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const { conversationId } = await service.createGroup(admin, { title: "Doomed", memberUserIds: [b.id, c.id] });
+    await service.sendMessage(b, { conversationId, body: "before the end" });
+    await service.deleteGroup(admin, conversationId);
+    await expect(service.sendMessage(b, { conversationId, body: "after" })).rejects.toThrow(NOT_FOUND);
+    const [row] = await rows<{ archived_at: string | null; n: string }>(sql`select archived_at, (select count(*)::text from chat.messages where conversation_id = ${conversationId}) as n from chat.conversations where id = ${conversationId}`);
+    expect(row.archived_at).not.toBeNull();
+    expect(Number(row.n)).toBeGreaterThan(0); // soft delete: the encrypted rows stay until the retention period
+    const audit = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where action = 'chat.group.delete' and target_id = ${conversationId}`);
+    expect(JSON.stringify(audit[0])).toContain('"memberCount":3');
+    const { conversationId: dm } = await service.openDirect(b, c.id);
+    await expect(service.deleteGroup(admin, dm)).rejects.toThrow();
+    await expect(service.renameGroup(admin, { conversationId: dm, title: "x" })).rejects.toThrow();
+    await expect(service.deleteGroup(admin, conversationId)).rejects.toThrow(); // already deleted
+  });
+
+  it("an admin who is not in a group can rename, add others, remove and delete, but cannot add themself", async () => {
+    const creator = await makeUser("creator");
+    const admin = await makeUser("admin");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const d = await makeUser("d");
+    const { conversationId } = await service.createGroup(creator, { title: "Private crew", memberUserIds: [b.id, c.id] });
+    await service.renameGroup(admin, { conversationId, title: "Renamed by HR" });
+    await service.addMembers(admin, conversationId, [d.id]);
+    await expect(service.addMembers(admin, conversationId, [admin.id])).rejects.toThrow("not in");
+    await service.removeMember(admin, { conversationId, userId: d.id });
+    await expect(service.sendMessage(admin, { conversationId, body: "sneaking in" })).rejects.toThrow(NOT_FOUND);
+    await service.deleteGroup(admin, conversationId);
+  });
+
+  it("an added-back member is a fresh start: they were removed, then added, and can send again", async () => {
+    const admin = await makeUser("admin");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const { conversationId } = await service.createGroup(admin, { title: "Crew", memberUserIds: [b.id, c.id] });
+    await service.removeMember(admin, { conversationId, userId: c.id });
+    await service.addMembers(admin, conversationId, [c.id]);
+    await expect(service.sendMessage(c, { conversationId, body: "back again" })).resolves.toBeDefined();
+  });
+});
+
+describe("changing a group's people is traceable and safe under simultaneous changes", () => {
+  it("addMembers records WHO was added (ids, never names or text) so the change can be reviewed", async () => {
+    const admin = await makeUser("admin");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const d = await makeUser("d");
+    const { conversationId } = await service.createGroup(admin, { title: "Crew", memberUserIds: [b.id, c.id] });
+    await service.addMembers(admin, conversationId, [d.id]);
+    const audit = await rows<{ metadata: unknown }>(sql`select metadata from ops.audit_log where action = 'chat.members.add' and target_id = ${conversationId}`);
+    expect(audit).toHaveLength(1);
+    expect(JSON.stringify(audit[0].metadata)).toContain(d.id);
+    expect(JSON.stringify(audit[0].metadata)).toContain('"count":1');
+  });
+
+  it("two adds at the same moment cannot push a group past 200: exactly one of them is refused", async () => {
+    const admin = await makeUser("admin");
+    const members = await makeUsers(179); // 180 with the admin
+    const { conversationId } = await service.createGroup(admin, { title: "Almost full", memberUserIds: members });
+    const first = await makeUsers(15);
+    const second = await makeUsers(15);
+    const results = await Promise.allSettled([service.addMembers(admin, conversationId, first), service.addMembers(admin, conversationId, second)]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+    const [count] = await rows<{ n: string }>(sql`select count(*)::text as n from chat.conversation_members where conversation_id = ${conversationId} and left_at is null`);
+    expect(Number(count.n)).toBeLessThanOrEqual(200);
+  });
+
+  it("two removals at the same moment cannot empty a group", async () => {
+    const admin = await makeUser("admin");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const { conversationId } = await service.createGroup(admin, { title: "Three", memberUserIds: [b.id, c.id] });
+    await service.removeMember(admin, { conversationId, userId: c.id }); // two left: admin and b
+    const results = await Promise.allSettled([
+      service.removeMember(admin, { conversationId, userId: admin.id }),
+      service.removeMember(admin, { conversationId, userId: b.id }),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const [count] = await rows<{ n: string }>(sql`select count(*)::text as n from chat.conversation_members where conversation_id = ${conversationId} and left_at is null`);
+    expect(count.n).toBe("1");
   });
 });

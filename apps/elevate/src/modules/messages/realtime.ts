@@ -6,6 +6,7 @@ import type { ChatSignal } from "./realtime-types";
 export type { ChatSignal };
 
 const TIMEOUT_MS = 2000;
+const BATCH = 100;
 
 /**
  * Sends the signal to each person's private channel `user:<id>` through Supabase Realtime's REST broadcast.
@@ -16,14 +17,21 @@ export async function broadcastChatSignal(userIds: string[], signal: ChatSignal)
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY;
   if (!url || !key || userIds.length === 0) return;
-  try {
-    await fetch(`${url}/realtime/v1/api/broadcast`, {
-      method: "POST",
-      headers: { apikey: key, "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: userIds.map((id) => ({ topic: `user:${id}`, event: "chat", payload: signal, private: true })) }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch {
-    // Swallowed on purpose: a missed signal is recovered by polling, and nothing sensitive is logged.
-  }
+  // A group can have 200 people: send in batches so one request never carries more than BATCH messages.
+  const batches: string[][] = [];
+  for (let i = 0; i < userIds.length; i += BATCH) batches.push(userIds.slice(i, i + BATCH));
+  await Promise.all(
+    batches.map(async (batch) => {
+      try {
+        await fetch(`${url}/realtime/v1/api/broadcast`, {
+          method: "POST",
+          headers: { apikey: key, "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: batch.map((id) => ({ topic: `user:${id}`, event: "chat", payload: signal, private: true })) }),
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+      } catch {
+        // Swallowed on purpose: a missed signal is recovered by polling, and nothing sensitive is logged.
+      }
+    }),
+  );
 }

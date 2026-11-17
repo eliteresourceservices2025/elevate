@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { fieldCrypto } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
@@ -8,7 +8,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { users } from "@/modules/core/schema";
 import { broadcastChatSignal, type ChatSignal } from "./realtime";
 import { conversationMembers, conversations, messageRevisions, messages } from "./schema";
-import { MAX_BODY, MAX_GROUP, MIN_GROUP } from "./validators";
+import { MAX_BODY, MAX_GROUP, MAX_TITLE, MIN_GROUP } from "./validators";
 
 // Domain functions for chat. They take the acting user, so they live here (server-only), never in a "use server" file.
 // Every function checks membership first; "not a member" and "no such conversation" give the same answer so nothing leaks.
@@ -124,15 +124,31 @@ export async function createGroup(actor: Actor, input: { title: string; memberUs
   return { conversationId };
 }
 
+/**
+ * Locks a live (not deleted) group for the rest of the transaction, so two changes at the same moment (two adds past the 200 cap, two
+ * removals emptying it, a removal racing a re-add) take turns instead of both reading the old state. For the people who manage groups:
+ * they need not be a member, and managing never lets them read the group. The action has already checked `messages.manage_group`.
+ */
+async function lockGroup(tx: Pick<typeof db, "select">, conversationId: string): Promise<void> {
+  const [row] = await tx
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.id, conversationId), eq(conversations.kind, "group"), isNull(conversations.archivedAt)))
+    .for("update")
+    .limit(1);
+  if (!row) throw new ActionFailure("Group not found.");
+}
+
 export async function addMembers(actor: Actor, conversationId: string, userIds: string[]): Promise<void> {
-  const { kind } = await requireMember(db, actor.id, conversationId);
-  if (kind !== "group") throw new ActionFailure("You can't add people to this conversation.");
   const wanted = [...new Set(userIds)];
   const valid = await activeUserIds(db, wanted);
   if (valid.length !== wanted.length) throw new ActionFailure("Some of those people can't be added.");
 
   const everyone = await db.transaction(async (tx) => {
+    await lockGroup(tx, conversationId);
     const before = new Set(await currentMemberIds(tx, conversationId));
+    // Adding yourself to a group you are not in would be a way to read it, which only an approved access request may do.
+    if (wanted.includes(actor.id) && !before.has(actor.id)) throw new ActionFailure("You can't add yourself to a chat you're not in.");
     const adding = wanted.filter((id) => !before.has(id));
     if (adding.length === 0) return [...before];
     if (before.size + adding.length > MAX_GROUP) throw new ActionFailure(`A group can have up to ${MAX_GROUP} people.`);
@@ -143,42 +159,58 @@ export async function addMembers(actor: Actor, conversationId: string, userIds: 
         .onConflictDoUpdate({ target: [conversationMembers.conversationId, conversationMembers.userId], set: { leftAt: null, joinedAt: sql`now()` } });
     }
     await insertMessage(tx, { conversationId, senderUserId: actor.id, body: adding.length === 1 ? "A person was added" : `${adding.length} people were added`, kind: "system" });
-    await writeAudit({ actor, action: "chat.members.add", targetType: "chat_conversation", targetId: conversationId, metadata: { count: adding.length } }, tx);
+    // Ids only (never names or text): who was added is reviewable, the way a removal already is.
+    await writeAudit({ actor, action: "chat.members.add", targetType: "chat_conversation", targetId: conversationId, metadata: { count: adding.length, userIds: adding } }, tx);
     return [...before, ...adding];
   });
   await signal(everyone, { type: "members", conversationId });
 }
 
-export async function leaveConversation(actor: Actor, conversationId: string): Promise<void> {
-  const { kind } = await requireMember(db, actor.id, conversationId);
-  if (kind !== "group") throw new ActionFailure("You can't leave a direct message.");
-  const remaining = await db.transaction(async (tx) => {
-    const members = await currentMemberIds(tx, conversationId);
-    if (members.length <= 1) throw new ActionFailure("You are the last person here.");
-    await insertMessage(tx, { conversationId, senderUserId: actor.id, body: "A person left", kind: "system" });
+/** Takes one person out of a group. They lose all access at once (list, history, sending); they can be added back as a fresh start. */
+export async function removeMember(actor: Actor, input: { conversationId: string; userId: string }): Promise<void> {
+  const everyone = await db.transaction(async (tx) => {
+    await lockGroup(tx, input.conversationId);
+    const members = await currentMemberIds(tx, input.conversationId);
+    if (!members.includes(input.userId)) throw new ActionFailure("That person isn't in this group.");
+    if (members.length <= 1) throw new ActionFailure("A group needs at least one person. Delete it instead.");
+    await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body: "A person was removed", kind: "system" });
     await tx
       .update(conversationMembers)
       .set({ leftAt: sql`now()` })
-      .where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, actor.id)));
-    // The longest-standing member takes over as owner when the owner leaves.
-    const [owner] = await tx
-      .select({ userId: conversationMembers.userId })
-      .from(conversationMembers)
-      .where(and(eq(conversationMembers.conversationId, conversationId), isNull(conversationMembers.leftAt), eq(conversationMembers.role, "owner")))
-      .limit(1);
-    if (!owner) {
-      const [next] = await tx
-        .select({ userId: conversationMembers.userId })
-        .from(conversationMembers)
-        .where(and(eq(conversationMembers.conversationId, conversationId), isNull(conversationMembers.leftAt)))
-        .orderBy(asc(conversationMembers.joinedAt))
-        .limit(1);
-      if (next) await tx.update(conversationMembers).set({ role: "owner" }).where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, next.userId)));
-    }
-    await writeAudit({ actor, action: "chat.members.leave", targetType: "chat_conversation", targetId: conversationId }, tx);
-    return members.filter((id) => id !== actor.id);
+      .where(and(eq(conversationMembers.conversationId, input.conversationId), eq(conversationMembers.userId, input.userId)));
+    await writeAudit({ actor, action: "chat.members.remove", targetType: "chat_conversation", targetId: input.conversationId, metadata: { removedUserId: input.userId } }, tx);
+    return members;
   });
-  await signal([actor.id, ...remaining], { type: "members", conversationId });
+  await signal(everyone, { type: "members", conversationId: input.conversationId });
+}
+
+/** Renames a group. The new name is shown to its members as a system message (encrypted like any message); the audit row has ids only. */
+export async function renameGroup(actor: Actor, input: { conversationId: string; title: string }): Promise<void> {
+  const title = input.title.trim();
+  if (!title || title.length > MAX_TITLE) throw new ActionFailure("Check the name and try again.");
+  const everyone = await db.transaction(async (tx) => {
+    await lockGroup(tx, input.conversationId);
+    await tx.update(conversations).set({ title }).where(eq(conversations.id, input.conversationId));
+    await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body: `The group was renamed to "${title}"`, kind: "system" });
+    await writeAudit({ actor, action: "chat.group.rename", targetType: "chat_conversation", targetId: input.conversationId }, tx);
+    return currentMemberIds(tx, input.conversationId);
+  });
+  await signal(everyone, { type: "members", conversationId: input.conversationId });
+}
+
+/**
+ * Deletes a group the way ELEVATE deletes everything: it is archived (disappears for everyone, nobody can read or send), and the
+ * encrypted messages stay until the retention period counsel approves ends.
+ */
+export async function deleteGroup(actor: Actor, conversationId: string): Promise<void> {
+  const everyone = await db.transaction(async (tx) => {
+    await lockGroup(tx, conversationId);
+    const members = await currentMemberIds(tx, conversationId);
+    await tx.update(conversations).set({ archivedAt: sql`now()` }).where(eq(conversations.id, conversationId));
+    await writeAudit({ actor, action: "chat.group.delete", targetType: "chat_conversation", targetId: conversationId, metadata: { memberCount: members.length } }, tx);
+    return members;
+  });
+  await signal(everyone, { type: "members", conversationId });
 }
 
 export async function sendMessage(actor: Actor, input: { conversationId: string; body: string }): Promise<{ id: string; seq: number }> {

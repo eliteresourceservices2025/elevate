@@ -257,6 +257,7 @@ Internal chat (direct, groups, later channels and client groups) and calls; chat
 - HR reads a chat only through a logged request approved by a different Super Admin (read-only, dated, 72 hours). Nobody else can.
 - Recording only by people a Super Admin picks, with consent, never in client calls. Client groups are attendance only: never patient details.
 - Messages are insert-only (a delete sets `deleted_at`, an edit adds a revision); message rate limits live in Postgres, not Upstash.
+- Only HR Admin and Super Admin create, rename, change the people of and delete (archive) group chats, up to 200 people each (owner decision 2026-11-17); managing a group never lets them read it or add themself to it.
 
 ## Adding a permission or action
 

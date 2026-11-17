@@ -3,9 +3,11 @@ import { z } from "zod";
 // One schema per action, used by the server action (never trust the form alone).
 
 export const MAX_BODY = 4000;
-/** People in a group besides the creator: at least 2 (a group is 3 or more in total), at most 49 (50 in total). */
+/** People in a group in total: at least 3, at most 200 (owner decision 2026-11-17, with the company growing in mind). */
 export const MIN_GROUP = 3;
-export const MAX_GROUP = 50;
+export const MAX_GROUP = 200;
+/** People added to a group in one go (up to 200 can be there in total). */
+export const MAX_ADD_AT_ONCE = 50;
 export const MAX_TITLE = 80;
 export const PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 100;
@@ -36,11 +38,13 @@ export const addMembersSchema = z.object({
   userIds: z
     .array(id)
     .min(1)
-    .max(20)
+    .max(MAX_ADD_AT_ONCE, `Add up to ${MAX_ADD_AT_ONCE} people at a time.`)
     .refine((ids) => new Set(ids).size === ids.length, "Each person can be added once."),
 });
 
-export const leaveSchema = z.object({ conversationId: id });
+export const renameGroupSchema = z.object({ conversationId: id, title: z.string().trim().min(1, "Give the group a name.").max(MAX_TITLE) });
+export const removeMemberSchema = z.object({ conversationId: id, userId: id });
+export const deleteGroupSchema = z.object({ conversationId: id });
 
 export const loadMessagesSchema = z.object({
   conversationId: id,

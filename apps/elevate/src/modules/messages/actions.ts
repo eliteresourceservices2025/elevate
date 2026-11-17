@@ -5,16 +5,18 @@ import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import * as queries from "./queries";
-import type { ChatMessage, ConversationSummary } from "./queries";
+import type { ChatMessage, ConversationSummary, ManagedGroup } from "./queries";
 import * as service from "./service";
 import {
   addMembersSchema,
   createGroupSchema,
+  deleteGroupSchema,
   deleteMessageSchema,
   editMessageSchema,
-  leaveSchema,
   markReadSchema,
   openDirectSchema,
+  removeMemberSchema,
+  renameGroupSchema,
   sendMessageSchema,
 } from "./validators";
 
@@ -27,7 +29,7 @@ type Actor = Awaited<ReturnType<typeof requireUser>>;
 
 function run<S extends z.ZodType, T>(
   actor: Actor,
-  action: "messages.use" | "messages.create_group",
+  action: "messages.use" | "messages.create_group" | "messages.manage_group",
   schema: S,
   input: unknown,
   body: (actor: Actor, data: z.infer<S>) => Promise<T>,
@@ -72,12 +74,32 @@ export async function markConversationRead(input: unknown): Promise<ActionResult
 
 export async function addGroupMembers(input: unknown): Promise<ActionResult<undefined>> {
   const actor = await requireUser();
-  return run(actor, "messages.use", addMembersSchema, input, async (a, data) => void (await service.addMembers(a, data.conversationId, data.userIds)));
+  return run(actor, "messages.manage_group", addMembersSchema, input, async (a, data) => void (await service.addMembers(a, data.conversationId, data.userIds)));
 }
 
-export async function leaveGroupConversation(input: unknown): Promise<ActionResult<undefined>> {
+export async function removeGroupMember(input: unknown): Promise<ActionResult<undefined>> {
   const actor = await requireUser();
-  return run(actor, "messages.use", leaveSchema, input, async (a, data) => void (await service.leaveConversation(a, data.conversationId)));
+  return run(actor, "messages.manage_group", removeMemberSchema, input, async (a, data) => void (await service.removeMember(a, data)));
+}
+
+export async function renameGroupChat(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return run(actor, "messages.manage_group", renameGroupSchema, input, async (a, data) => void (await service.renameGroup(a, data)));
+}
+
+export async function deleteGroupChat(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return run(actor, "messages.manage_group", deleteGroupSchema, input, async (a, data) => void (await service.deleteGroup(a, data.conversationId)));
+}
+
+export async function listGroupsToManage(): Promise<ActionResult<ManagedGroup[]>> {
+  await requireUser();
+  return runAction(async () => ({ ok: true, data: await queries.listManagedGroups() }));
+}
+
+export async function loadGroupPeopleToManage(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadGroupPeople>>>> {
+  await requireUser();
+  return runAction(async () => ({ ok: true, data: await queries.loadGroupPeople(input) }));
 }
 
 export async function loadChatMessages(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadMessages>>>> {
@@ -95,4 +117,4 @@ export async function searchPeopleForChat(input: unknown): Promise<ActionResult<
   return runAction(async () => ({ ok: true, data: await queries.searchChatPeople(input) }));
 }
 
-export type { ChatMessage, ConversationSummary };
+export type { ChatMessage, ConversationSummary, ManagedGroup };

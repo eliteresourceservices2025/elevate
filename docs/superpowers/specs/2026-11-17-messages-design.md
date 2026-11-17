@@ -25,6 +25,7 @@ The executives and the internal team asked for chat and video calls inside ELEVA
 - **Clients (outsiders):** allowed, for attendance matters only, under a written "never share patient details in ELEVATE" rule. No vendor BAAs (the owner accepted this). This relaxes the CLAUDE.md "no patient data" rule for the Messages module only: it stays "no fields for patient data", and chat is free text guarded by warnings and the guest notice.
 - **HR reading a chat:** only through a logged request an HR Admin makes and a *different* Super Admin approves; read-only, the requested dates only, 72 hours, every page read audited.
 - **Recording:** a per-person flag set by a Super Admin (`can_record_calls`, like `payroll_access`), company switch off by default, consent from everyone in the call.
+- **Groups (owner decision 2026-11-17):** up to **200 people** per group; only **HR Admins and Super Admins** create, rename, change the people of and delete groups (delete = archive); managing a group never lets them read it. Everyone else chats and cannot leave a group on their own.
 - **Free tiers:** rate-limit messages in Postgres (Upstash free tier is 500K commands a month); chat emails are the lowest priority (Brevo is 300 a day); no job runs more often than every 30 minutes (Inngest).
 - **Policy gates:** monitoring policy v2 and a privacy notice entry (the notice is already over its 10,000-character limit) must be published before real people use it; retention periods wait for counsel.
 

@@ -43,6 +43,17 @@ describe("broadcastChatSignal", () => {
     expect(body.messages[0].payload).toEqual({ type: "message", conversationId: CONV, messageId: ID1 });
   });
 
+  it("splits a big group into requests of at most 100 people (a 200-person group)", async () => {
+    configured();
+    const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const people = Array.from({ length: 250 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`);
+    await broadcastChatSignal(people, { type: "message", conversationId: CONV, messageId: ID1 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const sizes = fetchMock.mock.calls.map((call) => (JSON.parse((call as unknown as [string, RequestInit])[1].body as string) as { messages: unknown[] }).messages.length);
+    expect(sizes).toEqual([100, 100, 50]);
+  });
+
   it("never throws when the request fails", async () => {
     configured();
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("network down"); }));

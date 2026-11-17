@@ -1,6 +1,6 @@
 "use client";
 
-import { SquarePen } from "lucide-react";
+import { SquarePen, Users } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "@/components/feedback-dialog";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
@@ -8,31 +8,55 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { addGroupMembers, createGroupConversation, openDirectMessage } from "../actions";
-import { MAX_GROUP, MAX_TITLE, MIN_GROUP } from "../validators";
+import { MAX_ADD_AT_ONCE, MAX_GROUP, MAX_TITLE, MIN_GROUP } from "../validators";
 import { PeoplePicker, type ChatPerson } from "./people-picker";
 
-/** "New message" button: a message to one person, or a group of 3 or more. */
-export function NewConversationDialog({ onOpened }: { onOpened: (conversationId: string) => void }) {
+/** "New message" button: a message to one person; HR Admins and Super Admins can also make a group (3 to 200 people). */
+export function NewConversationDialog({ onOpened, canCreateGroup }: { onOpened: (conversationId: string) => void; canCreateGroup: boolean }) {
   return (
-    <FormDialog label="New message" title="New message" description="Message one person, or make a group of three or more." size="md" icon={<SquarePen aria-hidden />} triggerSize="sm">
-      <NewConversationForm onOpened={onOpened} />
+    <FormDialog
+      label="New message"
+      title="New message"
+      description={canCreateGroup ? "Message one person, or make a group of up to 200 people." : "Message one person."}
+      size="md"
+      icon={<SquarePen aria-hidden />}
+      triggerSize="sm"
+    >
+      <NewConversationForm onOpened={onOpened} canCreateGroup={canCreateGroup} />
     </FormDialog>
   );
 }
 
-function NewConversationForm({ onOpened }: { onOpened: (conversationId: string) => void }) {
+/** "New group" button on the manage page (HR Admin and Super Admin). */
+export function NewGroupDialog({ onOpened }: { onOpened: (conversationId: string) => void }) {
+  return (
+    <FormDialog label="New group" title="New group" description="Pick 2 to 199 people. You are in the group too; if you take yourself out, another HR Admin or Super Admin has to add you back." size="md" icon={<Users aria-hidden />}>
+      <NewConversationForm onOpened={onOpened} canCreateGroup groupOnly />
+    </FormDialog>
+  );
+}
+
+function NewConversationForm({ onOpened, canCreateGroup, groupOnly = false }: { onOpened: (conversationId: string) => void; canCreateGroup: boolean; groupOnly?: boolean }) {
   const dialog = useFormDialog();
-  const [mode, setMode] = useState<"dm" | "group">("dm");
+  const [mode, setMode] = useState<"dm" | "group">(groupOnly ? "group" : "dm");
   const [selected, setSelected] = useState<ChatPerson[]>([]);
   const [title, setTitle] = useState("");
   const [pending, startTransition] = useTransition();
+  const limit = MAX_GROUP - 1; // the creator makes it 200 in total
 
   function toggle(person: ChatPerson) {
     setSelected((current) => {
       const has = current.some((p) => p.userId === person.userId);
       if (has) return current.filter((p) => p.userId !== person.userId);
       if (mode === "dm") return [person];
-      return current.length >= MAX_GROUP - 1 ? current : [...current, person];
+      return current.length >= limit ? current : [...current, person];
+    });
+  }
+
+  function addAll(people: ChatPerson[]) {
+    setSelected((current) => {
+      const have = new Set(current.map((p) => p.userId));
+      return [...current, ...people.filter((p) => !have.has(p.userId))].slice(0, limit);
     });
   }
 
@@ -63,23 +87,27 @@ function NewConversationForm({ onOpened }: { onOpened: (conversationId: string) 
         if (ready && !pending) submit();
       }}
     >
-      <div className="inline-flex rounded-lg border p-0.5" role="group" aria-label="Kind of message">
-        {(["dm", "group"] as const).map((k) => (
-          <button key={k} type="button" aria-pressed={mode === k} onClick={() => switchMode(k)} className={cn("rounded-md px-3 py-1 text-sm font-medium", mode === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
-            {k === "dm" ? "One person" : "Group"}
-          </button>
-        ))}
-      </div>
+      {canCreateGroup && !groupOnly ? (
+        <div className="inline-flex rounded-lg border p-0.5" role="group" aria-label="Kind of message">
+          {(["dm", "group"] as const).map((k) => (
+            <button key={k} type="button" aria-pressed={mode === k} onClick={() => switchMode(k)} className={cn("rounded-md px-3 py-1 text-sm font-medium", mode === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
+              {k === "dm" ? "One person" : "Group"}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {mode === "group" ? (
         <div className="flex flex-col gap-1.5">
           <label htmlFor="chat-group-title" className="text-sm font-medium">
             Group name
           </label>
           <Input id="chat-group-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={MAX_TITLE} placeholder="For example, Cutoff check crew" />
-          <p className="text-xs text-muted-foreground">Pick at least {MIN_GROUP - 1} other people. You can add more later.</p>
+          <p className="text-xs text-muted-foreground">
+            Pick at least {MIN_GROUP - 1} other people, up to {limit}. {selected.length >= limit ? "That is the most a group can hold." : ""}
+          </p>
         </div>
       ) : null}
-      <PeoplePicker selected={selected} onToggle={toggle} />
+      <PeoplePicker selected={selected} onToggle={toggle} onAddAll={mode === "group" ? addAll : undefined} />
       <div className="flex justify-end">
         <Button type="submit" disabled={!ready || pending}>
           {mode === "dm" ? "Open chat" : "Create group"}
@@ -89,10 +117,10 @@ function NewConversationForm({ onOpened }: { onOpened: (conversationId: string) 
   );
 }
 
-/** "Add people" on a group's details: pick more people (they see the chat from the moment they are added). */
-export function AddPeopleDialog({ conversationId, existing, onAdded }: { conversationId: string; existing: string[]; onAdded: () => void }) {
+/** "Add people" on a group (HR Admin and Super Admin): pick more people; they read new messages from the moment they are added. */
+export function AddPeopleDialog({ conversationId, existing, onAdded, disabled = false }: { conversationId: string; existing: string[]; onAdded: () => void; disabled?: boolean }) {
   return (
-    <FormDialog label="Add people" title="Add people" description="They can read new messages from now on." size="md" variant="outline" triggerSize="sm">
+    <FormDialog label="Add people" title="Add people" description="They can read new messages from now on, not what was said before." size="md" variant="outline" triggerSize="sm" disabled={disabled} hint={disabled ? "Loading the people in this group…" : undefined}>
       <AddPeopleForm conversationId={conversationId} existing={existing} onAdded={onAdded} />
     </FormDialog>
   );
@@ -102,7 +130,14 @@ function AddPeopleForm({ conversationId, existing, onAdded }: { conversationId: 
   const dialog = useFormDialog();
   const [selected, setSelected] = useState<ChatPerson[]>([]);
   const [pending, startTransition] = useTransition();
-  const toggle = (person: ChatPerson) => setSelected((c) => (c.some((p) => p.userId === person.userId) ? c.filter((p) => p.userId !== person.userId) : [...c, person]));
+  const room = MAX_GROUP - existing.length; // how many more fit (200 in total)
+  const most = Math.min(MAX_ADD_AT_ONCE, room);
+  const toggle = (person: ChatPerson) => setSelected((c) => (c.some((p) => p.userId === person.userId) ? c.filter((p) => p.userId !== person.userId) : c.length >= most ? c : [...c, person]));
+  const addAll = (people: ChatPerson[]) =>
+    setSelected((c) => {
+      const have = new Set(c.map((p) => p.userId));
+      return [...c, ...people.filter((p) => !have.has(p.userId))].slice(0, most);
+    });
 
   return (
     <form
@@ -117,9 +152,12 @@ function AddPeopleForm({ conversationId, existing, onAdded }: { conversationId: 
         });
       }}
     >
-      <PeoplePicker selected={selected} onToggle={toggle} hide={existing} />
+      <p className="text-xs text-muted-foreground">
+        {room <= 0 ? "This group is full (200 people)." : `Room for ${room} more (200 at most). Up to ${MAX_ADD_AT_ONCE} at a time.`}
+      </p>
+      <PeoplePicker selected={selected} onToggle={toggle} onAddAll={addAll} hide={existing} />
       <div className="flex justify-end">
-        <Button type="submit" disabled={selected.length === 0 || selected.length > 20 || pending}>
+        <Button type="submit" disabled={selected.length === 0 || pending || room <= 0}>
           Add {selected.length > 0 ? selected.length : ""}
         </Button>
       </div>

@@ -2,14 +2,28 @@
 
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { searchPeopleForChat } from "../actions";
 
 export type ChatPerson = { userId: string; name: string; position: string | null };
 
-/** Search by name or position and pick people. `selected` is controlled; `onToggle` adds or removes one. */
-export function PeoplePicker({ selected, onToggle, hide = [] }: { selected: ChatPerson[]; onToggle: (person: ChatPerson) => void; hide?: string[] }) {
+/**
+ * Search by name or position and pick people. `selected` is controlled; `onToggle` adds or removes one. With `onAddAll` the picker
+ * offers "Add everyone shown" (for a big group: search a team or position, add them all at once). `max` stops adding at that many.
+ */
+export function PeoplePicker({
+  selected,
+  onToggle,
+  onAddAll,
+  hide = [],
+}: {
+  selected: ChatPerson[];
+  onToggle: (person: ChatPerson) => void;
+  onAddAll?: (people: ChatPerson[]) => void;
+  hide?: string[];
+}) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<ChatPerson[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -32,14 +46,23 @@ export function PeoplePicker({ selected, onToggle, hide = [] }: { selected: Chat
 
   const chosen = new Set(selected.map((p) => p.userId));
   const shown = results.filter((p) => !hide.includes(p.userId));
+  const notYet = shown.filter((p) => !chosen.has(p.userId));
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor="chat-people-search" className="text-sm font-medium">
         Find people
       </label>
       <Input id="chat-people-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or position" autoComplete="off" />
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span aria-live="polite">{selected.length} chosen</span>
+        {onAddAll && notYet.length > 0 ? (
+          <Button type="button" variant="outline" size="xs" onClick={() => onAddAll(notYet)}>
+            Add everyone shown ({notYet.length})
+          </Button>
+        ) : null}
+      </div>
       {selected.length > 0 ? (
-        <ul className="flex flex-wrap gap-1.5" aria-label="Chosen people">
+        <ul className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto" aria-label="Chosen people">
           {selected.map((p) => (
             <li key={p.userId}>
               <button type="button" onClick={() => onToggle(p)} className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground hover:bg-muted" aria-label={`Remove ${p.name}`}>
