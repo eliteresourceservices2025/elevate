@@ -248,3 +248,37 @@ export const messageAttachments = chat
     ],
   )
   .enableRLS();
+
+/**
+ * The search index. A message's text is encrypted, so each word (and its first 3 to 10 letters) is stored only as a keyed hash
+ * (see search-index.ts): search can find a word without the database ever holding it.
+ */
+export const searchTokens = chat
+  .table(
+    "search_tokens",
+    {
+      messageId: uuid("message_id")
+        .notNull()
+        .references(() => messages.id),
+      conversationId: uuid("conversation_id")
+        .notNull()
+        .references(() => conversations.id),
+      token: text("token").notNull(),
+    },
+    (t) => [primaryKey({ columns: [t.messageId, t.token] }), index("search_tokens_lookup_idx").on(t.conversationId, t.token, t.messageId)],
+  )
+  .enableRLS();
+
+/** A person's own chat settings. No row means the defaults: appear online, daily email digest on. */
+export const userSettings = chat
+  .table("user_settings", {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id),
+    /** Do not show "online" to others. */
+    appearOffline: boolean("appear_offline").notNull().default(false),
+    /** One email a day when there are unread messages (a count and a link, never the messages). */
+    emailDigest: boolean("email_digest").notNull().default(true),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  })
+  .enableRLS();

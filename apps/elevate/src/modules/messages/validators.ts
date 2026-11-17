@@ -83,3 +83,8 @@ export const requestUploadSchema = z.object({
   durationS: z.number().int().min(0).max(100000).optional(),
 });
 export const finalizeUploadSchema = z.object({ attachmentId: id });
+
+export const searchMessagesSchema = z.object({ q: z.string().trim().max(100) });
+
+export const muteSchema = z.object({ conversationId: id, until: z.enum(["1h", "8h", "forever", "off"]) });
+export const chatSettingsSchema = z.object({ appearOffline: z.boolean(), emailDigest: z.boolean() });

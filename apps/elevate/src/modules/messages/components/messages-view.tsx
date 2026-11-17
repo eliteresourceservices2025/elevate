@@ -43,14 +43,14 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
   const listTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const router = useRouter();
-  const lastUnreadTotal = useRef(initialConversations.reduce((sum, c) => sum + c.unread, 0));
+  const lastUnreadTotal = useRef(initialConversations.reduce((sum, c) => sum + (c.mutedUntil ? 0 : c.unread), 0));
 
   const refreshList = useCallback(async () => {
     const result = await loadConversationList();
     if (!result.ok) return;
     setConversations(result.data);
     // The header and menu counts come from the server render; when the total changes here (new message, or a chat just read), refresh them too.
-    const total = result.data.reduce((sum, c) => sum + c.unread, 0);
+    const total = result.data.reduce((sum, c) => sum + (c.mutedUntil ? 0 : c.unread), 0);
     if (total !== lastUnreadTotal.current) {
       lastUnreadTotal.current = total;
       router.refresh();
@@ -217,6 +217,7 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
                 void loadThread(active.id, false);
                 refreshListSoon();
               }}
+              onMuted={() => void refreshList()}
               onToggleDetails={() => {
                 setOpenRoot(null);
                 setShowDetails((v) => !v);

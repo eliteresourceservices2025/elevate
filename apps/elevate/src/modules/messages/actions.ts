@@ -8,17 +8,20 @@ import * as queries from "./queries";
 import type { ChatMessage, ConversationSummary, ManagedGroup } from "./queries";
 import { syncChannels, type SyncResult } from "./channels";
 import * as service from "./service";
+import * as settings from "./settings";
 import * as uploads from "./uploads";
 import { writeAudit } from "@/modules/audit/write";
 import {
   addMembersSchema,
   createGroupSchema,
+  chatSettingsSchema,
   createPollSchema,
   deleteGroupSchema,
   deleteMessageSchema,
   editMessageSchema,
   finalizeUploadSchema,
   markReadSchema,
+  muteSchema,
   openDirectSchema,
   pinSchema,
   reactSchema,
@@ -165,6 +168,26 @@ export async function requestChatUpload(input: unknown): Promise<ActionResult<up
 export async function finalizeChatUpload(input: unknown): Promise<ActionResult<uploads.FinishedUpload>> {
   const actor = await requireUser();
   return run(actor, "messages.use", finalizeUploadSchema, input, (a, data) => uploads.finalizeUpload(a, data));
+}
+
+export async function searchChatMessages(input: unknown): Promise<ActionResult<queries.SearchHit[]>> {
+  await requireUser();
+  return runAction(async () => ({ ok: true, data: await queries.searchMessages(input) }));
+}
+
+export async function muteChatConversation(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return run(actor, "messages.use", muteSchema, input, async (a, data) => void (await settings.muteConversation(a, data)));
+}
+
+export async function getMyChatSettings(): Promise<ActionResult<settings.ChatSettings>> {
+  await requireUser();
+  return runAction(async () => ({ ok: true, data: await settings.getChatSettings() }));
+}
+
+export async function saveMyChatSettings(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return run(actor, "messages.use", chatSettingsSchema, input, async (a, data) => void (await settings.saveChatSettings(a, data)));
 }
 
 export async function loadChatMessages(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadMessages>>>> {

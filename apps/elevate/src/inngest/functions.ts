@@ -21,7 +21,7 @@ import { runPeopleRetention } from "@/modules/people/retention";
 import { runEsignReminders, runEsignSealSweep } from "@/modules/signing/jobs";
 import { runChecklistReminders, runChecklistSync, runSeparations } from "@/modules/onboarding/jobs";
 import { runImportPurge } from "@/modules/imports/jobs";
-import { runChatChannelSync } from "@/modules/messages/jobs";
+import { runChatChannelSync, runChatDigest } from "@/modules/messages/jobs";
 import { runSafevoiceNotify } from "@/modules/safevoice/jobs";
 import { runEarlyReviewScheduler, runReviewReminders } from "@/modules/reviews/jobs";
 import { runAnalyticsNightly } from "@/modules/analytics/build";
@@ -319,4 +319,10 @@ export const chatChannelSync = inngest.createFunction(
   async ({ step }) => step.run("sync", () => track("chat-channel-sync", () => runChatChannelSync())),
 );
 
-export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge, chatChannelSync];
+/** Daily at 8:00 AM Phoenix: one lowest-priority email to people with unread chat messages (a count and a link, never the messages). */
+export const chatDigest = inngest.createFunction(
+  { id: "chat-digest", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 0 8 * * *` } },
+  async ({ step }) => step.run("digest", () => track("chat-digest", () => runChatDigest(todayInZone()))),
+);
+
+export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge, chatChannelSync, chatDigest];

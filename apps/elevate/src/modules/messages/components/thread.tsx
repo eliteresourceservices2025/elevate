@@ -14,6 +14,7 @@ import type { ChatMessage, ConversationSummary, PinnedMessage } from "../queries
 import { MAX_BODY } from "../validators";
 import { Composer } from "./composer";
 import { ConversationAvatar } from "./conversation-list";
+import { MuteDialog } from "./chat-settings-dialogs";
 import { EmojiPicker } from "./emoji-picker";
 import { AttachmentList } from "./attachment-list";
 import { MessageBody } from "./message-body";
@@ -52,6 +53,7 @@ export function Thread({
   onChanged,
   onToggleDetails,
   onOpenThread,
+  onMuted,
 }: {
   conversation: ConversationSummary;
   messages: ChatMessage[];
@@ -68,6 +70,7 @@ export function Thread({
   onChanged: () => void;
   onToggleDetails: () => void;
   onOpenThread: (rootId: string) => void;
+  onMuted: () => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -100,6 +103,7 @@ export function Thread({
           <h2 className="truncate font-heading text-base font-semibold">{conversation.title}</h2>
           <p className="truncate text-xs text-muted-foreground">{conversation.kind === "dm" ? "Direct message" : conversation.kind === "group" ? `${conversation.memberCount} people` : `${conversation.kind === "company" ? "Company" : conversation.kind === "team" ? "Team" : "Department"} channel · ${conversation.memberCount} people`}</p>
         </div>
+        <MuteDialog conversationId={conversation.id} muted={!!conversation.mutedUntil} onDone={onMuted} />
         <Button type="button" variant="outline" size="sm" onClick={onToggleDetails} aria-label="Show people in this chat">
           <Users aria-hidden />
           <span className="hidden sm:inline">People</span>

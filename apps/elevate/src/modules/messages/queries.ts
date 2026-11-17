@@ -8,7 +8,8 @@ import { ActionFailure } from "@/lib/run-action";
 import { users } from "@/modules/core/schema";
 import { employees } from "@/modules/people/schema";
 import { conversationMembers, conversations } from "./schema";
-import { deleteGroupSchema, loadMessagesSchema, loadThreadSchema, searchPeopleSchema } from "./validators";
+import { searchHashes } from "./search-index";
+import { deleteGroupSchema, loadMessagesSchema, loadThreadSchema, searchMessagesSchema, searchPeopleSchema } from "./validators";
 import { bodyContext, revisionContext } from "./service";
 
 // Reads for chat. Each starts by asking who is calling, and every conversation read checks membership: someone who is not a member
@@ -32,6 +33,8 @@ export type ConversationSummary = {
   lastPreview: string | null;
   lastAt: string | null;
   unread: number;
+  /** Set while the person has muted this chat (it stops adding to their unread total and email). */
+  mutedUntil: string | null;
   /** A direct message shows the other person's photo. */
   photoUserId: string | null;
 };
@@ -91,7 +94,7 @@ const truncate = (text: string) => (text.length > PREVIEW_CHARS ? `${text.slice(
 export async function listMyConversations(): Promise<ConversationSummary[]> {
   const actor = await actorWithAccess();
   const mine = await db
-    .select({ id: conversations.id, kind: conversations.kind, title: conversations.title, posting: conversations.posting, createdAt: conversations.createdAt })
+    .select({ id: conversations.id, kind: conversations.kind, title: conversations.title, posting: conversations.posting, createdAt: conversations.createdAt, mutedUntil: conversationMembers.mutedUntil })
     .from(conversationMembers)
     .innerJoin(conversations, eq(conversations.id, conversationMembers.conversationId))
     .where(and(eq(conversationMembers.userId, actor.id), isNull(conversationMembers.leftAt), isNull(conversations.archivedAt)))
@@ -102,7 +105,7 @@ export async function listMyConversations(): Promise<ConversationSummary[]> {
 
   const stats = (await db.execute(sql`
     select m.conversation_id as id, max(m.seq)::int as last_seq,
-      (count(*) filter (where m.sender_user_id <> ${actor.id} and m.kind = 'text' and m.deleted_at is null and m.seq > cm.last_read_seq))::int as unread
+      (count(*) filter (where m.sender_user_id <> ${actor.id} and m.kind <> 'system' and m.deleted_at is null and m.seq > cm.last_read_seq))::int as unread
     from chat.messages m
     join chat.conversation_members cm on cm.conversation_id = m.conversation_id and cm.user_id = ${actor.id}
     where ${inIds("m.conversation_id")} and m.created_at >= cm.joined_at
@@ -155,6 +158,7 @@ export async function listMyConversations(): Promise<ConversationSummary[]> {
         lastPreview: preview,
         lastAt: lastAt.toISOString(),
         unread: s?.unread ?? 0,
+        mutedUntil: c.mutedUntil && c.mutedUntil.getTime() > Date.now() ? c.mutedUntil.toISOString() : null,
         photoUserId: c.kind === "dm" ? otherId : null,
       },
     };
@@ -398,6 +402,59 @@ export async function loadGroupPeople(input: unknown): Promise<{ userId: string;
   return rows.map((r) => ({ userId: r.userId, name: people.get(r.userId)?.name ?? "Someone" }));
 }
 
+export type SearchHit = { messageId: string; conversationId: string; conversationTitle: string; senderName: string; createdAt: string; body: string };
+
+/**
+ * Finds messages by their words, across the conversations the person is in right now: from the moment they joined each one, never
+ * removed messages, never a chat they were taken out of. Every word must match (word starts count). The index holds only keyed hashes;
+ * the text of a hit is decrypted here, after the membership join has already limited what can come back. Newest first, 30 at most.
+ */
+export async function searchMessages(input: unknown): Promise<SearchHit[]> {
+  const actor = await actorWithAccess();
+  const parsed = searchMessagesSchema.safeParse(input);
+  if (!parsed.success) throw new ActionFailure("Check the request and try again.");
+  const hashes = searchHashes(parsed.data.q);
+  if (hashes.length === 0) return [];
+  const rows = (await db.execute(sql`
+    select m.id, m.conversation_id, m.sender_user_id, m.created_at, m.body_enc, c.title, c.kind
+    from chat.messages m
+    join chat.conversation_members cm on cm.conversation_id = m.conversation_id and cm.user_id = ${actor.id} and cm.left_at is null
+    join chat.conversations c on c.id = m.conversation_id and c.archived_at is null
+    where m.deleted_at is null and m.created_at >= cm.joined_at
+      and m.id in (
+        select t.message_id from chat.search_tokens t
+        where t.conversation_id in (select conversation_id from chat.conversation_members where user_id = ${actor.id} and left_at is null)
+          and t.token in (${sql.join(hashes.map((h) => sql`${h}`), sql`, `)})
+        group by t.message_id having count(distinct t.token) = ${hashes.length})
+    order by m.created_at desc limit 30`)) as unknown as { id: string; conversation_id: string; sender_user_id: string; created_at: Date; body_enc: string; title: string | null; kind: string }[];
+  if (rows.length === 0) return [];
+  const revisions = (await db.execute(sql`
+    select distinct on (message_id) message_id, id, body_enc from chat.message_revisions
+    where message_id in (${sql.join(rows.map((r) => sql`${r.id}`), sql`, `)}) order by message_id, created_at desc`)) as unknown as { message_id: string; id: string; body_enc: string }[];
+  const dmIds = rows.filter((r) => r.kind === "dm").map((r) => r.conversation_id);
+  const others = dmIds.length
+    ? await db
+        .select({ conversationId: conversationMembers.conversationId, userId: conversationMembers.userId })
+        .from(conversationMembers)
+        .where(and(sql`${conversationMembers.conversationId} in (${sql.join([...new Set(dmIds)].map((id) => sql`${id}`), sql`, `)})`, ne(conversationMembers.userId, actor.id)))
+    : [];
+  const people = await peopleByUserId([...rows.map((r) => r.sender_user_id), ...others.map((o) => o.userId)]);
+  const crypto = fieldCrypto();
+  return rows.map((r) => {
+    const rev = revisions.find((x) => x.message_id === r.id);
+    const text = rev ? crypto.decrypt(rev.body_enc, revisionContext(r.id, rev.id)) : crypto.decrypt(r.body_enc, bodyContext(r.conversation_id, r.id));
+    const otherId = others.find((o) => o.conversationId === r.conversation_id)?.userId;
+    return {
+      messageId: r.id,
+      conversationId: r.conversation_id,
+      conversationTitle: r.kind === "dm" ? (otherId ? (people.get(otherId)?.name ?? "Someone") : "Someone") : (r.title ?? "Chat"),
+      senderName: people.get(r.sender_user_id)?.name ?? "Someone",
+      createdAt: new Date(r.created_at).toISOString(),
+      body: truncate(text.replace(/@\[([^\]\n]{1,80})\]\(user:[0-9a-fA-F-]{36}\)/g, "@$1")),
+    };
+  });
+}
+
 export async function countMyUnread(): Promise<number> {
   const actor = await actorWithAccess();
   const [row] = (await db.execute(sql`
@@ -405,7 +462,8 @@ export async function countMyUnread(): Promise<number> {
     from chat.messages m
     join chat.conversation_members cm on cm.conversation_id = m.conversation_id and cm.user_id = ${actor.id} and cm.left_at is null
     join chat.conversations c on c.id = m.conversation_id and c.archived_at is null
-    where m.sender_user_id <> ${actor.id} and m.kind = 'text' and m.deleted_at is null and m.seq > cm.last_read_seq and m.created_at >= cm.joined_at`)) as unknown as { n: number }[];
+    where m.sender_user_id <> ${actor.id} and m.kind <> 'system' and m.deleted_at is null and m.seq > cm.last_read_seq and m.created_at >= cm.joined_at
+      and (cm.muted_until is null or cm.muted_until < now())`)) as unknown as { n: number }[];
   return row?.n ?? 0;
 }
 

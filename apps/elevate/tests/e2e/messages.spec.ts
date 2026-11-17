@@ -343,3 +343,39 @@ test("a picture, a file and a voice note travel with messages; only members can 
   await pageA.getByRole("button", { name: "Send message" }).click();
   await expect(pageB.getByRole("log").locator("audio")).toBeVisible({ timeout: 12_000 });
 });
+
+test("search finds a word in my chats; muting a chat takes it out of the unread total", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Srch${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Srch${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  await pageB.goto("/messages");
+  const aName = `Ana Srch${stamp}a`;
+  await startDirect(pageA, `Srch${stamp}b`, `Bea Srch${stamp}b`);
+  await say(pageA, `Bea Srch${stamp}b`, "Quarterly zebracrossing plan");
+
+  // B mutes the chat from its header, then searches for a word from the message.
+  await pageB.getByRole("button", { name: new RegExp(aName) }).click();
+  await expect(pageB.getByRole("log").getByText("Quarterly zebracrossing plan")).toBeVisible({ timeout: 12_000 });
+  await pageB.getByRole("button", { name: "Mute", exact: true }).click();
+  const dialog = pageB.getByRole("dialog");
+  await dialog.getByLabel("For 8 hours").check();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(pageB.getByRole("button", { name: "Muted", exact: true })).toBeVisible();
+  await expect(pageB.getByLabel("Muted").first()).toBeVisible();
+
+  await pageB.getByLabel("Search messages").fill("zebracross");
+  await expect(pageB.getByRole("button", { name: /zebracrossing plan/ })).toBeVisible({ timeout: 10_000 });
+  await pageB.getByLabel("Search messages").fill("nomatchword");
+  await expect(pageB.getByText("No messages match")).toBeVisible();
+
+  // The settings dialog opens and saves.
+  await pageB.getByRole("button", { name: "Settings" }).click();
+  await pageB.getByRole("dialog").getByLabel("Appear offline").check();
+  await pageB.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await expect(pageB.getByRole("dialog")).toBeHidden();
+});

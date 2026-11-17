@@ -9,6 +9,7 @@ import { users } from "@/modules/core/schema";
 import { notify } from "@/modules/notifications/service";
 import { isAllowedEmoji } from "./emoji";
 import { extractMentions } from "./mentions";
+import { clearSearchIndex, indexMessage } from "./search-index";
 import { broadcastChatSignal, type ChatSignal } from "./realtime";
 import { conversationMembers, conversations, messageAttachments, messagePins, messageReactions, messageRevisions, messages, pollOptions, polls, pollVotes } from "./schema";
 import { MAX_BODY, MAX_GROUP, MAX_POLL_OPTIONS, MAX_TITLE, MIN_GROUP } from "./validators";
@@ -293,6 +294,7 @@ export async function sendMessage(actor: Actor, input: { conversationId: string;
   }
   const sent = await db.transaction(async (tx) => {
     const posted = await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body, kind, threadRootId: input.threadRootId ?? null });
+    await indexMessage(tx, posted.id, input.conversationId, body);
     if (attachmentIds.length > 0) await linkAttachments(tx, { messageId: posted.id, conversationId: input.conversationId, senderId: actor.id, attachmentIds });
     return posted;
   });
@@ -321,6 +323,7 @@ export async function editMessage(actor: Actor, input: { messageId: string; body
   const revisionId = randomUUID();
   await db.transaction(async (tx) => {
     await tx.insert(messageRevisions).values({ id: revisionId, messageId: msg.id, bodyEnc: fieldCrypto().encrypt(body, revisionContext(msg.id, revisionId)) });
+    await indexMessage(tx, msg.id, msg.conversationId, body);
     await tx.update(messages).set({ editedAt: new Date() }).where(eq(messages.id, msg.id));
   });
   await signal(await currentMemberIds(db, msg.conversationId), { type: "edit", conversationId: msg.conversationId, messageId: msg.id });
@@ -330,6 +333,7 @@ export async function deleteMessage(actor: Actor, messageId: string): Promise<vo
   const msg = await ownMessage(actor, messageId);
   await db.transaction(async (tx) => {
     await tx.update(messages).set({ deletedAt: new Date() }).where(eq(messages.id, msg.id));
+    await clearSearchIndex(tx, msg.id);
     await writeAudit({ actor, action: "chat.message.delete", targetType: "chat_message", targetId: msg.id, metadata: { conversationId: msg.conversationId } }, tx);
   });
   await signal(await currentMemberIds(db, msg.conversationId), { type: "delete", conversationId: msg.conversationId, messageId: msg.id });
@@ -391,6 +395,7 @@ export async function createPoll(
   if (member.posting === "admins" && !input.canManage) throw new ActionFailure("Only HR can post in this channel.");
   const sent = await db.transaction(async (tx) => {
     const posted = await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body: question, kind: "poll" });
+    await indexMessage(tx, posted.id, input.conversationId, question);
     await tx.insert(polls).values({ messageId: posted.id, multiple: input.multiple, anonymous: input.anonymous });
     await tx.insert(pollOptions).values(
       options.map((label, position) => {

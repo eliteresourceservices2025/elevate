@@ -1,11 +1,13 @@
 "use client";
 
-import { Hash, MessageSquare, Users } from "lucide-react";
+import { BellOff, Hash, MessageSquare, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { ChatSettingsDialog } from "./chat-settings-dialogs";
+import { MessageSearch } from "./message-search";
 import type { ConversationSummary } from "../queries";
 
 const initials = (name: string) =>
@@ -64,8 +66,13 @@ export function ConversationList({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between gap-2 border-b p-3">
         <h2 className="font-heading text-base font-semibold">Chats</h2>
-        {newButton}
+        <div className="flex items-center gap-1.5">
+          <ChatSettingsDialog />
+          {newButton}
+        </div>
       </div>
+      <MessageSearch onOpen={onOpen} timeZone={timeZone}>
+      <>
       <div className="flex gap-1 border-b px-3 py-2" role="group" aria-label="Show">
         {FILTERS.map((f) => (
           <button key={f.key} type="button" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)} className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", filter === f.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
@@ -96,13 +103,14 @@ export function ConversationList({
                   <ConversationAvatar conversation={c} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline gap-2">
-                      <span className={cn("truncate text-sm", c.unread > 0 ? "font-semibold" : "font-medium")}>{c.title}</span>
+                      <span className={cn("truncate text-sm", c.unread > 0 && !c.mutedUntil ? "font-semibold" : "font-medium")}>{c.title}</span>
+                      {c.mutedUntil ? <BellOff className="size-3.5 shrink-0 text-muted-foreground" aria-label="Muted" /> : null}
                       <span className="ml-auto shrink-0 text-xs text-muted-foreground">{shortTime(c.lastAt, timeZone)}</span>
                     </span>
                     <span className="flex items-center gap-2">
                       <span className={cn("truncate text-xs", c.unread > 0 ? "text-foreground" : "text-muted-foreground")}>{c.lastPreview ?? "No messages yet"}</span>
                       {c.unread > 0 ? (
-                        <span className="ml-auto shrink-0 rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground" aria-label={`${c.unread} unread`}>
+                        <span className={cn("ml-auto shrink-0 rounded-full px-1.5 text-xs font-semibold", c.mutedUntil ? "bg-muted text-muted-foreground" : "bg-primary text-primary-foreground")} aria-label={`${c.unread} unread`}>
                           {c.unread > 99 ? "99+" : c.unread}
                         </span>
                       ) : null}
@@ -114,6 +122,8 @@ export function ConversationList({
           })}
         </ul>
       )}
+      </>
+      </MessageSearch>
     </div>
   );
 }
