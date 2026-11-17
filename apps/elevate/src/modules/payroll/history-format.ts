@@ -181,6 +181,9 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       if (typeof detail.usdCents === "string" && /^\d+$/.test(detail.usdCents)) facts.push({ label: H.dollarsPaid, value: formatUsd(BigInt(detail.usdCents)) });
       if (detail.correction === true) facts.push({ label: H.correction, value: H.yes });
       break;
+    case "payment_skipped":
+      facts.push(...fact(H.reason, detail.reason));
+      break;
     case "list_exported":
       facts.push(...fact(H.rows, detail.rows));
       break;

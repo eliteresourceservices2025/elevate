@@ -46,7 +46,7 @@ const { createPayLine, updatePayLine, endPayLine, withdrawPayLine, tidyDoubledRa
 const { markRunAsTest, archivePayRun, restorePayRun, releaseStatements } = actions;
 const { updateRunPeople, removePersonFromRun, restorePersonToRun, applyJibbleTimesheet, confirmAllSuggestions } = actions;
 const { saveTimesheetUpload } = await import("@/modules/payroll/timesheet-import");
-const { refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, unapproveRun, approveRun, exportRemitlyList, markPaid } = actions;
+const { refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, unapproveRun, approveRun, exportRemitlyList, markPaid, skipPayment } = actions;
 const { setPayrollAccess } = await import("@/modules/settings/actions");
 const { getWorksheet } = await import("@/modules/payroll/queries");
 const { getPayrollHistory, getHistoryFilterOptions } = await import("@/modules/payroll/history-queries");
@@ -275,7 +275,9 @@ describe("the completeness test: one full cycle writes every kind of change", ()
     // 7. Payment: the list, each person marked paid (the last one makes the run paid), a payslip, and a view of the run.
     as(preparer);
     ok(await exportRemitlyList({ runId }), "export");
-    for (const emp of [empA, empB]) ok(await markPaid({ runId, employeeId: emp, reference: `RMT-HIST-${uniq("r")}`, paidOn: "2030-12-30" }), "mark paid");
+    // One person is skipped (could not be paid this time), the other is paid: both count as handled, so the run becomes paid.
+    ok(await skipPayment({ runId, employeeId: empB, reason: "Zqreason skipped" }), "skip");
+    ok(await markPaid({ runId, employeeId: empA, reference: `RMT-HIST-${uniq("r")}`, paidOn: "2030-12-30" }), "mark paid");
     // The Approver releases the statements, and only then can the person open theirs.
     as(approver);
     ok(await releaseStatements({ runId }), "release statements");

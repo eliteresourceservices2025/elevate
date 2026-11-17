@@ -11,7 +11,7 @@ export const DEFAULT_PAYMENT_SORT: PaymentSort = { key: "name", dir: "asc" };
 export type SortablePayment = {
   name: string;
   clients: string;
-  payment: { paidOn: string; usdCents: string | null } | null;
+  payment: { paidOn: string; usdCents: string | null; skipped?: boolean } | null;
 };
 
 const byText = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" });
@@ -24,13 +24,16 @@ export function sortPayments<T extends SortablePayment>(people: readonly T[], so
       case "client":
         return sign * byText(a.clients, b.clients);
       case "status": {
-        // Ascending is "Not paid first": the rows still to be paid.
-        const x = a.payment ? 1 : 0;
-        const y = b.payment ? 1 : 0;
+        // Ascending is "Not paid first": the rows still to be paid (a skipped person was not paid either).
+        const x = a.payment && !a.payment.skipped ? 1 : 0;
+        const y = b.payment && !b.payment.skipped ? 1 : 0;
         return sign * (x - y);
       }
       case "paid_on": {
-        if (!a.payment || !b.payment) return a.payment ? -1 : b.payment ? 1 : 0; // not paid yet: last, either way
+        const aPaid = a.payment && !a.payment.skipped;
+        const bPaid = b.payment && !b.payment.skipped;
+        if (!aPaid || !bPaid) return aPaid ? -1 : bPaid ? 1 : 0; // not paid yet (or skipped): last, either way
+        if (!a.payment || !b.payment) return 0;
         return sign * (a.payment.paidOn < b.payment.paidOn ? -1 : a.payment.paidOn > b.payment.paidOn ? 1 : 0);
       }
       case "usd": {

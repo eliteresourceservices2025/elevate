@@ -8,6 +8,7 @@ import { employees } from "@/modules/people/schema";
 import type { Tx } from "@/modules/people/service";
 import { logChange } from "./changes";
 import { PAYSLIP_LABELS, STATEMENT_LABELS as S } from "./constants";
+import { skippedPeople } from "./payments";
 import { readable } from "./payslip-queries";
 import { payRunLines, payRunReleases, payRuns } from "./schema";
 import { payrollToday } from "./service";
@@ -25,8 +26,9 @@ type Actor = { id: string; email: string };
  * simply skipped. Runs inside the transaction that releases the run.
  */
 async function notifyStatementsReady(tx: Tx, runId: string): Promise<void> {
+  const skipped = await skippedPeople(tx, runId); // nobody was paid to them: no statement, so no notice
   const people = await tx
-    .selectDistinct({ userId: employees.userId })
+    .selectDistinct({ userId: employees.userId, employeeId: employees.id })
     .from(payRunLines)
     .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
     .innerJoin(users, eq(users.id, employees.userId))
@@ -34,7 +36,7 @@ async function notifyStatementsReady(tx: Tx, runId: string): Promise<void> {
   await notify(
     tx,
     people.flatMap((p) =>
-      p.userId ? [{ userId: p.userId, kind: PAYSLIP_LABELS.noticeKind, title: PAYSLIP_LABELS.noticeTitle, body: PAYSLIP_LABELS.noticeBody, link: PAYSLIP_LABELS.noticeLink }] : [],
+      p.userId && !skipped.has(p.employeeId) ? [{ userId: p.userId, kind: PAYSLIP_LABELS.noticeKind, title: PAYSLIP_LABELS.noticeTitle, body: PAYSLIP_LABELS.noticeBody, link: PAYSLIP_LABELS.noticeLink }] : [],
     ),
   );
 }

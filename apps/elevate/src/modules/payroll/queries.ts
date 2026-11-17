@@ -5,7 +5,7 @@ import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/modules/audit/write";
-import { clients, employees } from "@/modules/people/schema";
+import { clients, employees, employeeSensitive } from "@/modules/people/schema";
 import type { SettingsSnapshot } from "./calculate";
 import { z } from "zod";
 import type { PaymentMethod, RunStatus } from "./constants";
@@ -20,9 +20,9 @@ import { cutoffChoices, draftCutoffs, type CutoffChoice } from "./rate-start";
 import { personName } from "./remitly";
 import { logChange } from "./changes";
 import { payLines, payRunLines, payRuns, paySettings } from "./schema";
-import { decryptReference, decryptUsdCents, latestPayments } from "./payments";
+import { decryptReference, decryptSkipReason, decryptUsdCents, latestPayments } from "./payments";
 import { formatFte } from "./fte";
-import { decryptLineAmounts, employeeIdForUser, payrollToday, snapshotOf } from "./service";
+import { decryptLineAmounts, decryptRunLine, employeeIdForUser, payrollToday, snapshotOf } from "./service";
 
 const today = payrollToday;
 const UNREADABLE = "Can't be read";
@@ -434,9 +434,15 @@ export type PaymentsView = {
     /** The client of each of the person's lines on this run ("Golden Years, Nourish Health"), or "No client". */
     clients: string;
     isOwn: boolean;
-    /** `reference` and `usd` are null unless the viewer holds `payroll.mark_paid`: others see who marked it and when, not the reference or the dollars. */
-    payment: { reference: string | null; paidOn: string; markedBy: string; markedAt: string; usd: string | null; usdCents: string | null } | null;
+    /** What the person is paid on this run (Total payable compensation, all their lines); null unless the viewer holds `payroll.mark_paid`, or when a line can't be read. */
+    pesos: string | null;
+    /** No bank name, account name and account number on file: they can't be paid from the Remitly list until HR adds them. Null unless the viewer holds `payroll.mark_paid`. */
+    noPayoutDetails: boolean | null;
+    /** `reference`, `usd` and `skipReason` are null unless the viewer holds `payroll.mark_paid`: others see who marked it and when. A skip has no reference, paid date or dollars. */
+    payment: { skipped: boolean; skipReason: string | null; reference: string | null; paidOn: string; markedBy: string; markedAt: string; usd: string | null; usdCents: string | null } | null;
   }[];
+  /** How many people are skipped (newest row is a skip). */
+  skippedCount: number;
   /** The dollars recorded as paid across the run ("$1,250.50"); null unless the viewer holds `payroll.mark_paid` and some were recorded. */
   usdTotal: string | null;
 };
@@ -453,6 +459,7 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
   const canMarkPaid = can(actor, "payroll.mark_paid");
 
   let decrypted = 0;
+  let figuresRead = 0;
   const view = await db.transaction(async (tx): Promise<PaymentsView | null> => {
     const [run] = await tx.select().from(payRuns).where(eq(payRuns.id, runId)).limit(1);
     if (!run) return null;
@@ -469,6 +476,25 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
       (paid.size === 0 ? [] : await tx.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, [...new Set([...paid.values()].map((p) => p.markedBy))]))).map((u) => [u.id, u.email]),
     );
 
+    // The figure each person is paid and whether their bank details are on file: only for people who record payments (they hold the list anyway).
+    const pesos = new Map<string, bigint>();
+    const unreadablePay = new Set<string>();
+    const withDetails = new Set<string>();
+    if (canMarkPaid) {
+      const payloads = await tx.select({ id: payRunLines.id, employeeId: payRunLines.employeeId, payloadEnc: payRunLines.payloadEnc }).from(payRunLines).where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false)));
+      for (const l of payloads) {
+        try {
+          pesos.set(l.employeeId, (pesos.get(l.employeeId) ?? 0n) + decryptRunLine(l.id, l.payloadEnc).result.net);
+        } catch (error) {
+          console.error("payroll run line unreadable:", { runLineId: l.id, error: error instanceof Error ? error.name : "UnknownError" });
+          unreadablePay.add(l.employeeId);
+        }
+      }
+      figuresRead = payloads.length;
+      const sens = await tx.select({ id: employeeSensitive.employeeId, masks: employeeSensitive.masks }).from(employeeSensitive).where(inArray(employeeSensitive.employeeId, [...new Set(payloads.map((l) => l.employeeId))]));
+      for (const s of sens) if (s.masks.bankName && s.masks.bankAccountName && s.masks.bankAccountNumber) withDetails.add(s.id);
+    }
+
     const byPerson = new Map<string, { name: string; clients: string[] }>();
     for (const l of lines) {
       const person = byPerson.get(l.employeeId) ?? { name: personName(l), clients: [] };
@@ -483,11 +509,20 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
       let payment: PaymentsView["people"][number]["payment"] = null;
       if (p) {
         let reference: string | null = null;
+        let skipReason: string | null = null;
         let usd: string | null = null;
         let usdCents: string | null = null;
-        if (canMarkPaid) {
+        if (canMarkPaid && p.skipped) {
           try {
-            reference = decryptReference(p.id, p.referenceEnc);
+            skipReason = p.skipReasonEnc ? decryptSkipReason(p.id, p.skipReasonEnc) : UNREADABLE;
+          } catch (error) {
+            console.error("payroll payment skip reason unreadable:", { paymentId: p.id, error: error instanceof Error ? error.name : "UnknownError" });
+            skipReason = UNREADABLE;
+          }
+          decrypted += 1;
+        } else if (canMarkPaid) {
+          try {
+            reference = p.referenceEnc ? decryptReference(p.id, p.referenceEnc) : UNREADABLE;
           } catch (error) {
             console.error("payroll payment reference unreadable:", { paymentId: p.id, error: error instanceof Error ? error.name : "UnknownError" });
             reference = UNREADABLE;
@@ -507,13 +542,22 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
             usd = UNREADABLE;
           }
         }
-        payment = { reference, paidOn: p.paidOn, markedBy: markers.get(p.markedBy) ?? "Unknown", markedAt: p.createdAt.toISOString(), usd, usdCents };
+        payment = { skipped: p.skipped, skipReason, reference, paidOn: p.paidOn, markedBy: markers.get(p.markedBy) ?? "Unknown", markedAt: p.createdAt.toISOString(), usd, usdCents };
       }
-      return { employeeId, name: person.name, clients: [...person.clients].sort((a, b) => a.localeCompare(b)).join(", "), isOwn: own !== null && own === employeeId, payment };
+      return {
+        employeeId,
+        name: person.name,
+        clients: [...person.clients].sort((a, b) => a.localeCompare(b)).join(", "),
+        isOwn: own !== null && own === employeeId,
+        pesos: canMarkPaid ? (unreadablePay.has(employeeId) ? null : formatPesos(pesos.get(employeeId) ?? 0n)) : null,
+        noPayoutDetails: canMarkPaid ? !withDetails.has(employeeId) : null,
+        payment,
+      };
     });
-    return { runId, status: run.status as RunStatus, isTest: run.isTest, canMarkPaid, canExport: can(actor, "payroll.export"), people, usdTotal: usdAny ? formatUsd(usdSum) : null };
+    return { skippedCount: people.filter((x) => x.payment?.skipped).length, runId, status: run.status as RunStatus, isTest: run.isTest, canMarkPaid, canExport: can(actor, "payroll.export"), people, usdTotal: usdAny ? formatUsd(usdSum) : null };
   });
   if (view && decrypted > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["payment references", "payment amounts in dollars"], count: decrypted } });
+  if (view && figuresRead > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["pay figures"], count: figuresRead } });
   return view;
 }
 
@@ -522,6 +566,20 @@ export async function payrollRunsAwaitingApproval(): Promise<number> {
   const actor = await requireUser();
   await authorize(actor, "payroll.approve");
   return countAwaiting(db, actor.id);
+}
+
+/**
+ * Real, approved runs still waiting to be paid, for the people who record payments (a count and the age in days of the oldest approval,
+ * for the dashboard: never an amount or a name). A run counts until everyone on it is paid or skipped.
+ */
+export async function payrollRunsAwaitingPayment(): Promise<{ count: number; oldestDays: number }> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.mark_paid");
+  const rows = await db
+    .select({ ageDays: sql<number>`coalesce((now()::date - (select max(a.created_at) from payroll.pay_approvals a where a.run_id = ${payRuns.id} and a.decision = 'approved')::date), 0)::int` })
+    .from(payRuns)
+    .where(and(eq(payRuns.status, "approved"), eq(payRuns.isTest, false), isNull(payRuns.archivedAt)));
+  return { count: rows.length, oldestDays: rows.reduce((max, r) => Math.max(max, Number(r.ageDays)), 0) };
 }
 
 export type SettingsVersion = SettingsSnapshot & { effectiveFrom: string };

@@ -15,6 +15,13 @@ const rows = [
 const names = (sort: Parameters<typeof sortPayments>[1]) => sortPayments(rows, sort).map((r) => r.name);
 
 describe("sortPayments", () => {
+  it("treats a skipped person like someone not paid: first for Not paid first, last for paid on and dollars", () => {
+    const withSkip = [...rows, person("Eli Estrada", "Alturos Lab", { paidOn: "2030-11-15", usdCents: null, skipped: true })];
+    const order = (sort: Parameters<typeof sortPayments>[1]) => sortPayments(withSkip, sort).map((r) => r.name);
+    expect(order({ key: "status", dir: "asc" })).toEqual(["Ana Abad", "Eli Estrada", "Ben Bautista", "Carla Cruz", "Dina Diaz"]);
+    expect(order({ key: "paid_on", dir: "desc" }).slice(-2)).toEqual(["Ana Abad", "Eli Estrada"]);
+  });
+
   it("starts with the person's name A to Z, and can reverse it", () => {
     expect(names(DEFAULT_PAYMENT_SORT)).toEqual(["Ana Abad", "Ben Bautista", "Carla Cruz", "Dina Diaz"]);
     expect(names({ key: "name", dir: "desc" })).toEqual(["Dina Diaz", "Carla Cruz", "Ben Bautista", "Ana Abad"]);

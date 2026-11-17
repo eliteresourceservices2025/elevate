@@ -20,13 +20,46 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useRun } from "@/modules/recruiting/components/use-run";
-import { exportRemitlyList, markPaid } from "../actions";
+import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
+import { exportRemitlyList, markPaid, skipPayment } from "../actions";
 import { PAYMENT_LABELS as P } from "../constants";
 import { DEFAULT_PAYMENT_SORT, nextSort, PAYMENT_SORT_CHOICES, sortPayments, type PaymentSort, type PaymentSortKey } from "../payment-sort";
 import type { PaymentsView } from "../queries";
 
 /** Cents as typed in the box ("351.66"), for a payment that is being corrected. */
 const typedUsd = (cents: string | null): string => (cents === null || BigInt(cents) < 0n ? "" : `${BigInt(cents) / 100n}.${(BigInt(cents) % 100n).toString().padStart(2, "0")}`);
+
+/** The date today in the company time zone, read when asked (a page left open overnight must not offer yesterday). */
+const freshToday = () => formatInZone(Date.now(), DEFAULT_TIMEZONE, "yyyy-MM-dd");
+
+/** Recording that a person could not be paid this time: the reason is required, and they count as handled. */
+function SkipForm({ runId, employeeId }: { runId: string; employeeId: string }) {
+  const { run, pending } = useRun();
+  const dialog = useFormDialog();
+  const [reason, setReason] = useState("");
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(
+          () => skipPayment({ runId, employeeId, reason }),
+          P.skipped,
+          () => dialog?.close(true),
+        );
+      }}
+    >
+      <div className="space-y-1">
+        <Label htmlFor={`skip-${employeeId}`}>{P.skipReason}</Label>
+        <Input id={`skip-${employeeId}`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required autoComplete="off" />
+        <p className="text-xs text-muted-foreground">{P.skipHint}</p>
+      </div>
+      <Button type="submit" disabled={pending || reason.trim() === ""}>
+        {P.skipSave}
+      </Button>
+    </form>
+  );
+}
 
 /** A column title that sorts the table: it names the direction for assistive tools, and shows it with an arrow. */
 function SortTitle({ label, sortKey, sort, onSort }: { label: string; sortKey: PaymentSortKey; sort: PaymentSort; onSort: (key: PaymentSortKey) => void }) {
@@ -50,6 +83,7 @@ function MarkPaidForm({
   currentUsd,
   usdUnreadable,
   today,
+  onSaved,
 }: {
   runId: string;
   employeeId: string;
@@ -58,7 +92,10 @@ function MarkPaidForm({
   currentUsd: string;
   /** The dollars saved with this payment can't be read: saving would replace them. */
   usdUnreadable: boolean;
+  /** The date to start from: the last one used in this sitting, else today. */
   today: string;
+  /** Called with the paid-on date once the payment is saved, so the next dialog starts from it. */
+  onSaved: (paidOn: string) => void;
 }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
@@ -73,7 +110,10 @@ function MarkPaidForm({
         run(
           () => markPaid({ runId, employeeId, reference, paidOn, amountUsd: usd }),
           P.marked,
-          () => dialog?.close(true),
+          () => {
+            onSaved(paidOn);
+            dialog?.close(true);
+          },
         );
       }}
     >
@@ -94,7 +134,7 @@ function MarkPaidForm({
           id={`paid-${employeeId}`}
           type="date"
           value={paidOn}
-          max={today}
+          max={freshToday()}
           onChange={(e) => setPaidOn(e.target.value)}
           required
         />
@@ -116,11 +156,22 @@ function MarkPaidForm({
   );
 }
 
-export function PaymentsPanel({ view, today }: { view: PaymentsView; today: string }) {
+export function PaymentsPanel({ view }: { view: PaymentsView }) {
   const { run, pending } = useRun();
-  const paid = view.people.filter((p) => p.payment !== null).length;
+  const paid = view.people.filter((p) => p.payment !== null && !p.payment.skipped).length;
   const [sort, setSort] = useState<PaymentSort>(DEFAULT_PAYMENT_SORT);
-  const people = useMemo(() => sortPayments(view.people, sort), [view.people, sort]);
+  const [find, setFind] = useState("");
+  const [onlyUnpaid, setOnlyUnpaid] = useState(false);
+  const [lastPaidOn, setLastPaidOn] = useState<string | null>(null);
+  const needle = find.trim().toLowerCase();
+  const people = useMemo(
+    () =>
+      sortPayments(view.people, sort).filter(
+        (p) => (!onlyUnpaid || p.payment === null || p.payment.skipped) && (needle === "" || p.name.toLowerCase().includes(needle) || p.clients.toLowerCase().includes(needle)),
+      ),
+    [view.people, sort, find, onlyUnpaid], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const missingDetails = view.people.filter((p) => p.noPayoutDetails === true && (p.payment === null || p.payment.skipped)).length;
   // The dollars column is for the people who can read what was recorded (the same people who read the references).
   const showUsd = view.canMarkPaid;
   const someUnreadable = showUsd && view.people.some((p) => p.payment?.usd === P.usdUnreadable);
@@ -151,7 +202,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
         <h2 className="text-lg font-semibold">{P.title}</h2>
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm text-muted-foreground">
-            {P.progress(paid, view.people.length)}
+            {P.progress(paid, view.people.length, view.skippedCount)}
             {view.usdTotal ? ` · ${P.usdTotal(view.usdTotal)}` : ""}
             {someUnreadable ? ` · ${P.usdSomeUnreadable}` : ""}
           </span>
@@ -169,6 +220,23 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
         </div>
       </div>
       <p className="text-sm text-muted-foreground">{P.hint}</p>
+      {missingDetails > 0 ? (
+        <Alert variant="warning" className="rounded-lg p-3 text-sm">
+          {P.noDetailsWarning(missingDetails)}
+        </Alert>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-56 flex-1 space-y-1">
+          <Label htmlFor="payment-find" className="sr-only">
+            {P.search}
+          </Label>
+          <Input id="payment-find" type="search" value={find} onChange={(e) => setFind(e.target.value)} placeholder={P.search} autoComplete="off" />
+        </div>
+        <label className="flex min-h-8 items-center gap-2 text-sm pointer-coarse:min-h-11">
+          <input type="checkbox" checked={onlyUnpaid} onChange={(e) => setOnlyUnpaid(e.target.checked)} className="size-4" />
+          {P.onlyUnpaid}
+        </label>
+      </div>
       {view.isTest ? (
         <Alert variant="warning" className="rounded-lg p-3 text-sm">
           {P.testBanner}
@@ -208,6 +276,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
             <TableHead aria-sort={ariaSort("status")}>
               <SortTitle label={P.status} sortKey="status" sort={sort} onSort={(k) => setSort(nextSort(sort, k))} />
             </TableHead>
+            {showUsd ? <TableHead>{P.pesos}</TableHead> : null}
             <TableHead>{P.reference}</TableHead>
             {showUsd ? (
               <TableHead aria-sort={ariaSort("usd")}>
@@ -220,6 +289,13 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
           </TableRow>
         </TableHeader>
         <TableBody>
+          {people.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="text-sm text-muted-foreground">
+                {P.noMatches}
+              </TableCell>
+            </TableRow>
+          ) : null}
           {people.map((p) => (
             <TableRow key={p.employeeId}>
               <TableCell label={P.person} className="font-medium">
@@ -227,14 +303,30 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
               </TableCell>
               <TableCell label={P.client}>{p.clients || P.none}</TableCell>
               <TableCell label={P.status}>
-                {p.payment ? (
+                {p.payment?.skipped ? (
+                  <Badge variant="warning">{P.skippedBadge}</Badge>
+                ) : p.payment ? (
                   <Badge variant="success">{`${P.paid} ${p.payment.paidOn}`}</Badge>
                 ) : (
                   <Badge variant="outline">{P.notPaid}</Badge>
                 )}
+                {p.noPayoutDetails && (!p.payment || p.payment.skipped) ? (
+                  <Badge variant="destructive" className="ml-1">
+                    {P.noDetails}
+                  </Badge>
+                ) : null}
               </TableCell>
+              {showUsd ? (
+                <TableCell label={P.pesos} className="tabular-nums">
+                  {p.pesos ?? P.none}
+                </TableCell>
+              ) : null}
               <TableCell label={P.reference} className="font-mono text-xs">
-                {p.payment
+                {p.payment?.skipped
+                  ? p.payment.skipReason
+                    ? <span className="font-sans text-muted-foreground">{P.skippedReason(p.payment.skipReason)}</span>
+                    : <span className="font-sans text-muted-foreground">{P.markedBy(p.payment.markedBy)}</span>
+                  : p.payment
                   ? (p.payment.reference ?? (
                       <span className="font-sans text-muted-foreground">
                         {P.markedBy(p.payment.markedBy)}
@@ -249,9 +341,10 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
               ) : null}
               <TableCell label={P.actions}>
                 {view.canMarkPaid && !p.isOwn ? (
+                  <div className="flex flex-wrap gap-2">
                   <FormDialog
-                    label={p.payment ? P.correct : P.markPaid}
-                    title={p.payment ? P.correctTitle(p.name) : P.markPaidTitle(p.name)}
+                    label={p.payment && !p.payment.skipped ? P.correct : P.markPaid}
+                    title={p.payment && !p.payment.skipped ? P.correctTitle(p.name) : P.markPaidTitle(p.name)}
                     variant="outline"
                   >
                     <MarkPaidForm
@@ -260,9 +353,16 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
                       current={p.payment?.reference ?? ""}
                       currentUsd={typedUsd(p.payment?.usdCents ?? null)}
                       usdUnreadable={p.payment?.usd === P.usdUnreadable}
-                      today={today}
+                      today={lastPaidOn ?? freshToday()}
+                      onSaved={setLastPaidOn}
                     />
                   </FormDialog>
+                  {!p.payment || p.payment.skipped ? (
+                    <FormDialog label={P.skip} title={P.skipTitle(p.name)} variant="secondary">
+                      <SkipForm runId={view.runId} employeeId={p.employeeId} />
+                    </FormDialog>
+                  ) : null}
+                  </div>
                 ) : p.isOwn && view.canMarkPaid ? (
                   <span className="text-xs text-muted-foreground">{P.ownLine}</span>
                 ) : null}

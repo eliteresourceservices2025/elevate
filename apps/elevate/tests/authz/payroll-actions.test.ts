@@ -55,7 +55,7 @@ const { updateRunPeople, removePersonFromRun, restorePersonToRun } = await impor
 const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, unapproveRun, approveRun } =
   await import("@/modules/payroll/actions");
 const { payrollRunsAwaitingApproval, getPayments } = await import("@/modules/payroll/queries");
-const { exportRemitlyList, markPaid } = await import("@/modules/payroll/actions");
+const { exportRemitlyList, markPaid, skipPayment } = await import("@/modules/payroll/actions");
 const { markRunAsTest, archivePayRun, archiveRuns, deleteRuns, restorePayRun, restoreRuns, releaseStatements } = await import("@/modules/payroll/actions");
 
 const LEVELS = [null, "viewer", "approver", "preparer"] as const;
@@ -123,6 +123,8 @@ const testRunCalls: Record<string, () => Promise<{ ok: boolean; error?: string }
   // Paying works for both levels too (owner decision 2026-11-12).
   exportRemitlyList: () => exportRemitlyList({ runId: RUN_ID }),
   markPaid: () => markPaid({ runId: RUN_ID, employeeId: OTHER, reference: "RMT-TEST-1", paidOn: "2030-11-20" }),
+  // Recording that someone could not be paid this time: the same two levels as paying.
+  skipPayment: () => skipPayment({ runId: RUN_ID, employeeId: OTHER, reason: "Has left the company" }),
 };
 
 describe.each(Object.keys(testRunCalls))("%s, every role at every payroll level", (name) => {
@@ -276,6 +278,11 @@ describe("run input is checked on the server", () => {
     for (const patch of [{ reference: "  " }, { reference: "x".repeat(101) }, { paidOn: "2030-02-31" }, { employeeId: "nope" }, { runId: "nope" }]) {
       expect(await markPaid({ ...pay, ...patch })).toEqual({ ok: false, error: BAD });
     }
+    // A skip needs a reason, a real run and a real person.
+    const skip = { runId: RUN_ID, employeeId: OTHER, reason: "Has left" };
+    expect(await skipPayment({ ...skip, reason: "   " })).toEqual({ ok: false, error: "Give a reason." });
+    expect(await skipPayment({ ...skip, reason: "x".repeat(501) })).toEqual({ ok: false, error: "Give a reason." });
+    for (const patch of [{ employeeId: "nope" }, { runId: "nope" }]) expect(await skipPayment({ ...skip, ...patch })).toEqual({ ok: false, error: BAD });
     expect(await exportRemitlyList({ runId: "nope" })).toEqual({ ok: false, error: BAD });
     expect(await exportRemitlyList({})).toEqual({ ok: false, error: BAD });
   });

@@ -50,7 +50,7 @@ A pay run covers one cutoff: the 1st to the 15th of a month, or the 16th to the 
 1. **Draft.** The Preparer makes the run. ELEVATE adds a line for every person with a pay line in force during the period. The Preparer adds anything that changes pay and checks the lines. A Preparer's own line must be checked by another Preparer.
 2. **In review.** The Preparer sends the run to the Approvers. Nobody can change it now.
 3. **Approved.** An Approver reads every line and approves. The run is now fixed for good. If it was wrong, it goes back to the Preparer instead.
-4. **Paid.** The Preparer downloads the Remitly list, pays each person in Remitly and records each payment. When the last person is recorded, the run becomes Paid and each person is told that their contractor payment statement is ready.
+4. **Paid.** The Preparer downloads the Remitly list, pays each person in Remitly and records each payment. When the last person is recorded (or skipped, see "Pay and record"), the run becomes Paid. People are told that their contractor payment statement is ready when the statements are released.
 
 A draft that was made for the wrong period, or that is out of date, can be **cancelled**. A cancelled run stays on record but can never be changed or paid.
 
@@ -69,7 +69,7 @@ Every contractor payment statement carries the name, title and signature of the 
 
 ![Settings, Payment statement signatory: the name, the title and the signature picture that print on every contractor payment statement.](help:how-payroll-works/03-statement-signatory.png)
 
-Until a run is paid, its statements (test or real, approved or not) follow what is saved in Settings: the signatory and the chosen preparer. When the run is paid, it keeps what was in force that day, so an earlier statement never changes when the Human Resources Director or the preparer changes. A run paid before anyone was set up still pays on time and stays unsigned. The statement fills in **Prepared by**, **Authorized by** (the Approver who approved it) and the **Date** it was approved by itself: nobody types them. If no **Prepared by** is chosen, it shows whoever sent the run for review. With no signatory set up, the person who approved the run shows under **Authorized by** instead of **Not signed**.
+Until a run is paid or its statements are released (whichever comes first), its statements (test or real, approved or not) follow what is saved in Settings: the signatory and the chosen preparer. After that, it keeps what was in force that day, so an earlier statement never changes when the Human Resources Director or the preparer changes. A run paid before anyone was set up still pays on time and stays unsigned. The statement fills in **Prepared by**, **Authorized by** (the Approver who approved it) and the **Date** it was approved by itself: nobody types them. If no **Prepared by** is chosen, it shows whoever sent the run for review. With no signatory set up, the person who approved the run shows under **Authorized by** instead of **Not signed**.
 
 # What is kept
 

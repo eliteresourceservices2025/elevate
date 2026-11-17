@@ -1,0 +1,4 @@
+ALTER TABLE "payroll"."pay_payments" ALTER COLUMN "reference_enc" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "payroll"."pay_payments" ADD COLUMN "skipped" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "payroll"."pay_payments" ADD COLUMN "skip_reason_enc" text;--> statement-breakpoint
+ALTER TABLE "payroll"."pay_payments" ADD CONSTRAINT "pay_payments_skip_chk" CHECK (("payroll"."pay_payments"."skipped" and "payroll"."pay_payments"."reference_enc" is null and "payroll"."pay_payments"."skip_reason_enc" is not null) or (not "payroll"."pay_payments"."skipped" and "payroll"."pay_payments"."reference_enc" is not null and "payroll"."pay_payments"."skip_reason_enc" is null));

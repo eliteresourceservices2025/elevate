@@ -162,9 +162,15 @@ The **Payment** table shows each person's **Client**, **Status**, **Remitly refe
 
 ![The Mark paid window: the Remitly reference and the date it was paid.](help:prepare-a-pay-run/11-mark-paid.png)
 
-When everyone is marked paid, the run becomes **Paid**. The contractors' statements are not sent by paying: a Preparer or an Approver releases them from **Statements** (see "Release the contractor payment statements"). Someone else records your own payment.
+When everyone is marked paid or skipped, the run becomes **Paid**. The contractors' statements are not sent by paying: a Preparer or an Approver releases them from **Statements** (see "Release the contractor payment statements"). Someone else records your own payment.
 
 ![Everyone on the run is paid.](help:prepare-a-pay-run/12-all-paid.png)
+
+# Paying over several days, or skipping someone
+
+You do not have to pay everyone in one sitting. The approval and the list do not expire, so you can start days after the run is approved and carry on over several days: the table keeps who is done, and the dashboard shows "waiting for payment" until the run is finished. Use **Find a person or client** and **Show only people still to pay** to keep the list short, and the **Pesos to pay** column shows what to pay each person. The date in the Mark paid window starts from the last one you used.
+
+People with no payout details on file are marked **No payout details**, with a warning above the table. If someone cannot be paid now (they have left, have no bank details, or their pay is being checked), click **Can't pay** on their row and write why. They count as handled, so the run can finish and the statements can be released, but they get no statement. If they are paid later, click **Mark paid** on their row and record the payment as usual.
 
 # Common mistakes
 
