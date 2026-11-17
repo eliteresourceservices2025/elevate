@@ -23,6 +23,7 @@ export const PAY_ITEM_TYPES = [
   "loan",
   "other_deduction",
   "client_hours",
+  "fte",
 ] as const;
 export type PayItemType = (typeof PAY_ITEM_TYPES)[number];
 
@@ -45,6 +46,7 @@ export const PAY_ITEM_LABELS: Record<PayItemType, string> = {
   loan: "Loan",
   other_deduction: "Other deduction",
   client_hours: "Client hours (reference only)",
+  fte: "FTE for this run",
 };
 
 export const PAYMENT_METHODS = ["remitly"] as const;
@@ -91,6 +93,8 @@ export const RATES_LABELS = {
   aliasShort: "Alias",
   hoursPerDay: "Hours per day",
   monthly: "Monthly rate (pesos)",
+  fte: "FTE",
+  perFte: "Amount per FTE (pesos)",
   paymentMethod: "Payment method",
   startsOn: "Starts on",
   starts: "Starts",
@@ -145,6 +149,7 @@ export const CHANGE_ACTIONS = [
   "run_submitted",
   "run_sent_back",
   "run_approved",
+  "run_unapproved",
   "run_paid",
   "payment_marked",
   "list_exported",
@@ -182,6 +187,7 @@ export const CHANGE_ACTION_LABELS: Record<ChangeAction, string> = {
   run_submitted: "Run sent for review",
   run_sent_back: "Run sent back",
   run_approved: "Run approved",
+  run_unapproved: "Run unapproved",
   run_paid: "Run fully paid",
   payment_marked: "Payment recorded",
   list_exported: "Remitly list downloaded",
@@ -263,7 +269,10 @@ export const HISTORY_LABELS = {
   confirmedCount: "Amounts confirmed",
   signatoryName: "Signatory name",
   signatoryTitle: "Signatory title",
+  dollarsPaid: "Dollars paid",
   signatoryPicture: "Signature picture",
+  signatoryPreparer: "Prepared by on statements",
+  signatoryAutoPreparer: "Whoever sent the run for review",
   onFile: "On file",
 } as const;
 
@@ -300,6 +309,11 @@ export const WORKSHEET_LABELS = {
   gross: "Gross",
   net: "Total payable compensation",
   clientHours: "Client hours",
+  fte: "FTE",
+  fteTotal: "Total FTE",
+  perFteLine: "Paid per FTE",
+  fteNotSet: "Not set",
+  fteForRun: "set for this run",
   confirmation: "Checked by",
   actions: "Actions",
   unconfirmed: "Not yet",
@@ -312,6 +326,8 @@ export const WORKSHEET_LABELS = {
   newRun: "New run",
   noClient: "No client",
   netChange: "Change in total payable from last run",
+  payThis: "Pay this",
+  grossNote: "Not the amount to pay",
   grossTotal: "Gross (pesos)",
   netTotal: "Total payable compensation (pesos)",
   corrects: "Corrects the run of",
@@ -324,14 +340,19 @@ export const CORRECTION_TYPES: readonly PayItemType[] = ["adjustment", "other_de
 /** Wording of paying an approved run: the Remitly list and recording each person's reference. ELEVATE sends no money. */
 export const PAYMENT_LABELS = {
   title: "Payment",
-  hint: "Download the list, pay each person in Remitly at the rate Remitly shows, then record the Remitly reference here. The list has each person's pesos and their bank details, so keep the file private and delete it once you have paid.",
+  hint: "Download the list, pay each person in Remitly at the rate Remitly shows, then record the Remitly reference here (and the dollars you paid, if you want them kept). Pay each person the Pesos on the list: it is their Total payable compensation, not their Gross. The list has each person's pesos and their bank details, so keep the file private and delete it once you have paid.",
   testBanner: "This is a test run. Nothing is sent: the list shows masked bank details and says TEST, and no statement is released to anyone.",
   missingDetails: (n: number) => `${n} ${n === 1 ? "person has" : "people have"} no payout details on file. Their bank cells are blank.`,
   download: "Download Remitly list",
   downloaded: (rows: number) => `Downloaded ${rows} ${rows === 1 ? "person" : "people"}.`,
   person: "Person",
   alias: "Alias",
+  client: "Client",
   status: "Status",
+  usd: "Paid (USD)",
+  usdTotal: (total: string) => `Dollars paid: ${total}`,
+  amountUsd: "Amount paid in dollars (optional)",
+  sortBy: "Sort by",
   paid: "Paid",
   notPaid: "Not paid yet",
   reference: "Remitly reference",
@@ -412,6 +433,8 @@ export const PAYSLIP_LABELS = {
   client: "Client",
   hiredOn: "Date of hire",
   monthlyRate: "Monthly rate",
+  perFteAmount: "Amount per FTE (per cutoff)",
+  totalFte: "Total FTE",
   dailyRate: "Daily rate",
   hourlyRate: "Hourly rate",
   hoursPerDay: "Hours per day",
@@ -467,6 +490,10 @@ export const SIGNATORY_LABELS = {
   current: "Signature now",
   none: "No signature picture yet. Statements will show the name and title with a line.",
   remove: "Remove the signature picture",
+  preparedBy: "Prepared by",
+  preparedByHint: "Printed under Prepared by on every contractor payment statement, so it does not depend on which preparer sent the run for review.",
+  preparedByAuto: "Whoever sent the run for review",
+  preparedByNone: "Nobody has the Preparer payroll level yet. Give it to someone under Settings, Payroll access.",
   save: "Save signatory",
   saved: "Signatory saved.",
   unreadable: "The saved signature can't be read. Choose the picture again.",
@@ -491,7 +518,14 @@ export const APPROVAL_LABELS = {
   approveHint:
     "Approving confirms every line of this run, on every page of the worksheet, as it was when this page loaded. If anything changes before you approve, you'll be asked to reload.",
   approveCount: (n: number) => `${n} ${n === 1 ? "line" : "lines"} in this run`,
-  approvedNotice: "This run is approved. It can no longer change; a mistake is corrected with an adjustment on a later run.",
+  approvedNotice: "This run is approved. It can't change while it is approved; a mistake is corrected with an adjustment on a later run.",
+  unapprove: "Unapprove",
+  unapproveTitle: "Take back the approval",
+  unapproveNote: "Why the approval is taken back",
+  unapproveHint:
+    "The run goes back to draft so a Preparer can change it and send it for review again, which needs a new approval. Kept in the change history and shown on the run. Never sent in a notice. Don't write client or patient details. Not possible once a payment is recorded or the statements are released.",
+  unapproved: "Approval taken back. The run is a draft again.",
+  unapprovedNotice: "This run was unapproved",
   correctionNone: "Not a correction",
   correctionHint: "Choose the approved run this corrects: an adjustment for an underpayment, an other deduction for an overpayment. A reason is needed.",
 } as const;
@@ -536,6 +570,8 @@ export const WARNING_CHECKS = [
   "no_client_hours",
   "duplicate_pay_line",
   "large_change",
+  "fte_not_set",
+  "per_fte_without_total",
 ] as const;
 export type CheckCode = (typeof BLOCKING_CHECKS)[number] | (typeof WARNING_CHECKS)[number];
 
@@ -555,6 +591,8 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   no_client_hours: "Has a client but no client payroll hours",
   duplicate_pay_line: "Another line for the same job (same alias, same client or none) is on this run, so this person is paid twice",
   large_change: "Total payable compensation changed a lot from the last run",
+  fte_not_set: "No FTE count on this line, so it counts as 0 toward the internal team's pay",
+  per_fte_without_total: "The run's total FTE is 0, so the lines paid per FTE (internal team) pay nothing",
 };
 
 /**
@@ -581,6 +619,14 @@ export const ISSUE_COPY: Record<CheckCode, { title: string; meaning: string }> =
       "This person has two lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each one pays a full cutoff. Often an old line was left when a new one was added. Take the extra one off this run (Actions, then Remove from this run), and end the old pay line on the Rates tab (tick Show ended lines to see it).",
   },
   large_change: { title: "Pay changed a lot", meaning: "Their total is much higher or lower than in the last run. Check it is right." },
+  fte_not_set: {
+    title: "FTE not set",
+    meaning: "This run has internal-team lines paid per FTE, and these lines have no FTE count (1, 0.5 or 0), so they count as 0. Set it on the Rates tab (Set FTE), or type FTE for this run under Actions, then Amounts.",
+  },
+  per_fte_without_total: {
+    title: "Total FTE is 0",
+    meaning: "The lines paid per FTE (internal team) are paid the run's total FTE times their amount, and the total is 0. Set the FTE counts on the Rates tab (Set FTE), then use Update people.",
+  },
 };
 
 // Plain names for the raw flags. The sheet shows pills with the real date instead ("Starts 6 Nov", see flags.ts); these are the fallback.

@@ -233,8 +233,8 @@ export async function setPayrollAccess(input: unknown): Promise<ActionResult> {
 }
 
 /**
- * A Super Admin sets who signs the payslips: the name, the title and (optionally) a signature picture. Each save is a new version; a run
- * keeps the version in force when it was paid. Not a pay figure, so it needs no payroll level.
+ * A Super Admin sets who signs the payslips (the name, the title and optionally a signature picture) and who is printed under "Prepared by"
+ * (one of the people with the Preparer payroll level). Each save is a new version; a run keeps the version in force when it was paid. Not a pay figure, so it needs no payroll level.
  */
 export async function savePayrollSignatory(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
@@ -243,10 +243,10 @@ export async function savePayrollSignatory(input: unknown): Promise<ActionResult
     await authorize(actor, "settings.set_payroll_signatory");
 
     const parsed = savePayrollSignatorySchema.safeParse(input);
-    if (!parsed.success) return fail("Check the name, the title and the picture, then try again.");
-    const { name, title, signature, removeSignature } = parsed.data;
+    if (!parsed.success) return fail("Check the name, the title, the picture and who prepares the statements, then try again.");
+    const { name, title, signature, removeSignature, preparedByUserId } = parsed.data;
 
-    await saveSignatory(actor, { name, title, signatureBase64: signature, removeSignature });
+    await saveSignatory(actor, { name, title, signatureBase64: signature, removeSignature, preparedByUserId });
     revalidatePath("/settings/payroll-signatory");
     return { ok: true, data: undefined } as const;
   });

@@ -14,7 +14,7 @@ import { runChecks } from "./checks";
 import type { ChangeAction } from "./constants";
 import { approvalRefusal, runHash } from "./rules";
 import { checkInputsOf, readRun, recomputeRun, type Executor, type RunData } from "./runs";
-import { payApprovals, payChangeLog, payRunLines, payRuns } from "./schema";
+import { payApprovals, payChangeLog, payPayments, payRunLines, payRunReleases, payRuns } from "./schema";
 import { employeeIdForUser, lockDraftRun } from "./service";
 
 // Review and approval. A run is sent for review by a Preparer, then approved (or sent back with a note) by an Approver who never
@@ -26,6 +26,9 @@ type Actor = { id: string; email: string };
 
 export const STALE_APPROVAL = "This payroll changed. Reload and review it again.";
 export const NOT_IN_REVIEW = "This run is not waiting for approval.";
+export const NOT_APPROVED = "Only an approved run can be unapproved.";
+export const UNAPPROVE_PAID = "Payments are already recorded on this run, so it can't be unapproved. Correct a mistake with an adjustment on a later run.";
+export const UNAPPROVE_RELEASED = "The statements of this run are already released to the people on it, so it can't be unapproved. Correct a mistake with an adjustment on a later run.";
 
 const hashContext = (id: string) => `pay_approval:${id}`;
 const noteContext = (id: string) => `pay_approval_note:${id}`;
@@ -34,7 +37,7 @@ const noteContext = (id: string) => `pay_approval_note:${id}`;
 export const decryptApprovalHash = (id: string, stored: string): string => fieldCrypto().decrypt(stored, hashContext(id));
 
 /** Deciding is not changing: a send-back or an approval does not stop that Approver from deciding the run again later. Marking a run as a test, archiving and restoring it change no figure, so they do not count either. */
-const NOT_A_CHANGE: readonly ChangeAction[] = ["run_viewed", "run_sent_back", "run_approved", "run_marked_test", "run_marked_real", "run_archived", "run_restored", "statements_released"];
+const NOT_A_CHANGE: readonly ChangeAction[] = ["run_viewed", "run_sent_back", "run_approved", "run_unapproved", "run_marked_test", "run_marked_real", "run_archived", "run_restored", "statements_released"];
 
 /**
  * The one definition of "prepared or changed this run", as SQL over a run id expression (a parameter, or a column of an outer query):
@@ -218,6 +221,56 @@ export async function sendBack(tx: Tx, actor: Actor, v: { runId: string; note: s
 }
 
 /**
+ * Why an approved run can't go back to draft, or null when it can: payments are already recorded on it, or its statements are released to
+ * the people on it. Callers must already hold `payroll.view`. Also checked by a database trigger (the last word).
+ */
+export async function unapproveRefusal(executor: Executor, runId: string): Promise<string | null> {
+  const [paid] = await executor.select({ id: payPayments.id }).from(payPayments).where(eq(payPayments.runId, runId)).limit(1);
+  if (paid) return UNAPPROVE_PAID;
+  const [released] = await executor.select({ runId: payRunReleases.runId }).from(payRunReleases).where(eq(payRunReleases.runId, runId)).limit(1);
+  return released ? UNAPPROVE_RELEASED : null;
+}
+
+/**
+ * An Approver takes back an approval: the approved run returns to draft with a note (kept encrypted), so a Preparer can change it and send
+ * it for review again, which needs a fresh approval against a fresh hash. Refused once any payment is recorded or the statements are
+ * released. The approval stays in the run's history; nothing is deleted.
+ */
+export async function unapprove(tx: Tx, actor: Actor, v: { runId: string; note: string }): Promise<void> {
+  const run = await lockRun(tx, v.runId);
+  if (run.status !== "approved") throw new ActionFailure(NOT_APPROVED);
+  await assertStillApprover(tx, actor.id);
+  const refusal = await unapproveRefusal(tx, v.runId);
+  if (refusal) throw new ActionFailure(refusal);
+
+  const data = (await readRun(tx, v.runId))!;
+  const hash = await hashOf(tx, data);
+  const id = randomUUID();
+  await tx.insert(payApprovals).values({
+    id,
+    runId: v.runId,
+    decision: "unapproved",
+    runHashEnc: fieldCrypto().encrypt(hash ?? "unreadable", hashContext(id)),
+    noteEnc: fieldCrypto().encrypt(v.note, noteContext(id)),
+    decidedBy: actor.id,
+  });
+  await tx.update(payRuns).set({ status: "draft", decidedBy: actor.id }).where(eq(payRuns.id, v.runId));
+  await writeAudit({ actor, action: "payroll.run.unapprove", targetType: "pay_run", targetId: v.runId, metadata: { lines: data.rows.length } }, tx);
+  await logChange(tx, actor, { action: "run_unapproved", runId: v.runId, detail: { note: v.note } });
+  if (data.run.isTest) return;
+  await notify(
+    tx,
+    (await holders(tx, "preparer", actor.id)).map((userId) => ({
+      userId,
+      kind: "payroll.unapproved",
+      title: "A pay run was unapproved",
+      body: "1 pay run was unapproved and is back in draft. Open it to read the note.",
+      link: `/payroll/${v.runId}`,
+    })),
+  );
+}
+
+/**
  * Approves a run in review. Refused, writing nothing, when the approver prepared or changed the run, when their own line is not
  * confirmed by another Preparer, when a check blocks, or when the run's hash differs from the one their page was given.
  * The run row is locked first, so of two approvals at once the second finds the run already approved.
@@ -253,12 +306,12 @@ export async function approve(tx: Tx, actor: Actor, v: { runId: string; expected
 }
 
 /** The note of the latest send-back while the run is back in draft; null otherwise. Callers must already hold `payroll.view`. */
-export async function latestSendBackNote(executor: Executor, run: { id: string; status: string }): Promise<string | null> {
+export async function latestSendBackNote(executor: Executor, run: { id: string; status: string }): Promise<{ note: string; kind: "sent_back" | "unapproved" } | null> {
   if (run.status !== "draft") return null;
   const [last] = await executor.select().from(payApprovals).where(eq(payApprovals.runId, run.id)).orderBy(desc(payApprovals.createdAt)).limit(1);
-  if (!last || last.decision !== "sent_back" || !last.noteEnc) return null;
+  if (!last || (last.decision !== "sent_back" && last.decision !== "unapproved") || !last.noteEnc) return null;
   try {
-    return fieldCrypto().decrypt(last.noteEnc, noteContext(last.id));
+    return { note: fieldCrypto().decrypt(last.noteEnc, noteContext(last.id)), kind: last.decision };
   } catch (error) {
     console.error("payroll send-back note unreadable:", { approvalId: last.id, error: error instanceof Error ? error.name : "UnknownError" });
     return null;

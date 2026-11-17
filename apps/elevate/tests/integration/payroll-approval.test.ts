@@ -15,7 +15,7 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, confirmRunLine, submitRun, sendBackRun, approveRun, markRunAsTest, archivePayRun, restorePayRun } = await import(
+const { createPayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, confirmRunLine, submitRun, sendBackRun, approveRun, unapproveRun, markRunAsTest, archivePayRun, restorePayRun } = await import(
   "@/modules/payroll/actions"
 );
 const { getWorksheet, payrollRunsAwaitingApproval } = await import("@/modules/payroll/queries");
@@ -335,7 +335,8 @@ describe("review, send back and approve", () => {
     await raises(sql`insert into payroll.pay_run_items (id, run_id, employee_id, run_line_id, type, state, value_enc, entered_by)
       values (${randomUUID()}, ${runId}, ${emp}, ${line.id}, 'adjustment', 'confirmed', 'x', ${preparer.id})`);
     await raises(sql`update payroll.pay_runs set settings_snapshot = '{}'::jsonb where id = ${runId}`);
-    await raises(sql`update payroll.pay_runs set status = 'draft' where id = ${runId}`);
+    // An approved run can only go forward (paid) or back to draft through unapprove (which writes its own decision and is refused after a payment).
+    await raises(sql`update payroll.pay_runs set status = 'in_review' where id = ${runId}`);
     expect(await approveRun({ runId, expectedHash: fresh })).toEqual({ ok: false, error: "This run is not waiting for approval." });
   });
 
@@ -443,6 +444,105 @@ describe("review, send back and approve", () => {
     expect(results.filter((r) => r.ok)).toHaveLength(1);
     expect(results.find((r) => !r.ok)).toEqual({ ok: false, error: "This run is not waiting for approval." });
     expect(await rows(sql`select 1 from payroll.pay_approvals where run_id = ${runId} and decision = 'approved'`)).toHaveLength(1);
+  });
+});
+
+describe("unapproving an approved run", () => {
+  /** An approved run for one person in period p, with the person. */
+  async function approvedRun(p: { periodStart: string; periodEnd: string }) {
+    const emp = await person();
+    await giveLine(emp, p);
+    const runId = await newRun(p);
+    as(preparer);
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+    const hash = await hashFor(runId, approver);
+    as(approver);
+    expect(await approveRun({ runId, expectedHash: hash! })).toMatchObject({ ok: true });
+    return { runId, emp };
+  }
+
+  it("takes the approval back with a note, lets a Preparer change the run, and needs a fresh approval", async () => {
+    const p = slot(19);
+    const { runId, emp } = await approvedRun(p);
+    expect(await status(runId)).toBe("approved");
+    const oldHashRow = (await rows<{ id: string; run_hash_enc: string }>(sql`select id, run_hash_enc from payroll.pay_approvals where run_id = ${runId} and decision = 'approved'`))[0];
+    const oldHash = decryptApprovalHash(oldHashRow.id, oldHashRow.run_hash_enc);
+
+    // Only an Approver; a Preparer is refused and nothing is written.
+    const before = await footprint(runId);
+    as(preparer);
+    expect(await unapproveRun({ runId, note: "Wrong rate" })).toEqual({ ok: false, error: NO_ACCESS });
+    expect(await footprint(runId)).toEqual(before);
+    // A note is needed.
+    as(approver);
+    expect(await unapproveRun({ runId, note: "  " })).toEqual({ ok: false, error: BAD });
+    expect(await footprint(runId)).toEqual(before);
+
+    expect(await unapproveRun({ runId, note: "A rate was wrong" })).toEqual({ ok: true, data: undefined });
+    expect(await status(runId)).toBe("draft");
+    // The approval stays in the history, and the note is encrypted and shown on the draft.
+    const decisions = await rows<{ decision: string; note_enc: string | null }>(sql`select decision, note_enc from payroll.pay_approvals where run_id = ${runId} order by created_at`);
+    expect(decisions.map((d) => d.decision)).toEqual(["approved", "unapproved"]);
+    expect(decisions[1].note_enc).not.toContain("rate was wrong");
+    as(preparer);
+    expect((await getWorksheet(runId))!.sentBackNote).toEqual({ note: "A rate was wrong", kind: "unapproved" });
+    expect(await logActions(runId)).toContain("run_unapproved");
+    const [audit] = await rows<{ j: unknown }>(sql`select to_jsonb(a) as j from ops.audit_log a where action = 'payroll.run.unapprove' and target_id = ${runId}`);
+    expect(JSON.stringify(audit.j)).not.toContain("rate was wrong");
+    // Preparers are told with a count and a link, never the note.
+    const notices = await rows<{ body: string; link: string }>(sql`select body, link from ops.notifications where kind = 'payroll.unapproved' and link = ${"/payroll/" + runId}`);
+    expect(notices.length).toBeGreaterThan(0);
+    expect(JSON.stringify(notices)).not.toContain("rate was wrong");
+
+    // A draft again: a Preparer can change it, send it for review, and the old approval hash is refused.
+    const [line] = await runLines(runId, emp);
+    expect(await savePayItem({ runId, employeeId: emp, runLineId: line.id, type: "adjustment", value: "100", label: "Correction" })).toMatchObject({ ok: true });
+    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+    as(approver);
+    expect(await approveRun({ runId, expectedHash: oldHash })).toEqual({ ok: false, error: STALE });
+    const fresh = await hashFor(runId, approver);
+    expect(fresh).not.toBe(oldHash);
+    expect(await approveRun({ runId, expectedHash: fresh! })).toMatchObject({ ok: true });
+    expect(await status(runId)).toBe("approved");
+  });
+
+  it("refuses a run that is not approved, once a payment is recorded, and once the statements are released", async () => {
+    // Not approved: a draft and a run in review.
+    const draftEmp = await person();
+    const draftP = slot(20);
+    await giveLine(draftEmp, draftP);
+    const draft = await newRun(draftP);
+    as(approver);
+    expect(await unapproveRun({ runId: draft, note: "x" })).toEqual({ ok: false, error: "Only an approved run can be unapproved." });
+    as(preparer);
+    expect(await submitRun({ runId: draft })).toMatchObject({ ok: true });
+    as(approver);
+    expect(await unapproveRun({ runId: draft, note: "x" })).toEqual({ ok: false, error: "Only an approved run can be unapproved." });
+
+    // Approved, with a payment recorded: refused, and the database says the same even if the app did not.
+    const paidRun = await approvedRun(slot(21));
+    await db.execute(
+      sql`insert into payroll.pay_payments (id, run_id, employee_id, reference_enc, paid_on, marked_by) values (${randomUUID()}, ${paidRun.runId}, ${paidRun.emp}, 'x', '2027-11-20', ${approver.id})`,
+    );
+    as(approver);
+    expect(await unapproveRun({ runId: paidRun.runId, note: "x" })).toEqual({
+      ok: false,
+      error: "Payments are already recorded on this run, so it can't be unapproved. Correct a mistake with an adjustment on a later run.",
+    });
+    await expect(db.execute(sql`update payroll.pay_runs set status = 'draft' where id = ${paidRun.runId}`)).rejects.toThrow();
+    expect(await status(paidRun.runId)).toBe("approved");
+    // The page offers no button and says why.
+    expect((await getWorksheet(paidRun.runId))!.unapproveRefusal).toMatch(/Payments are already recorded/);
+
+    // Approved and released.
+    const releasedRun = await approvedRun(slot(2));
+    await db.execute(sql`insert into payroll.pay_run_releases (run_id, released_by, people_count) values (${releasedRun.runId}, ${approver.id}, 1)`);
+    as(approver);
+    expect(await unapproveRun({ runId: releasedRun.runId, note: "x" })).toEqual({
+      ok: false,
+      error: "The statements of this run are already released to the people on it, so it can't be unapproved. Correct a mistake with an adjustment on a later run.",
+    });
+    await expect(db.execute(sql`update payroll.pay_runs set status = 'draft' where id = ${releasedRun.runId}`)).rejects.toThrow();
   });
 });
 

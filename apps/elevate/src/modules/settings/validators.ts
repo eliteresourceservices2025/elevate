@@ -23,6 +23,8 @@ export const savePayrollSignatorySchema = z.object({
     .regex(/^[A-Za-z0-9+/]+={0,2}$/)
     .nullable(),
   removeSignature: z.boolean(),
+  /** Who is printed under "Prepared by" on the statements (someone with the Preparer payroll level). Null: whoever sent the run for review. */
+  preparedByUserId: userId.nullable(),
 });
 
 export const resetAuthenticatorSchema = z.object({ userId });

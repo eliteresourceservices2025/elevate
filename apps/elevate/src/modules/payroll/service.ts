@@ -7,6 +7,7 @@ import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { employees } from "@/modules/people/schema";
 import { DEFAULT_OT_BP, HOLIDAY_BP, type ItemLine, type LineInput, type LineResult, type SettingsSnapshot } from "./calculate";
 import type { Tx } from "@/modules/people/service";
+import { FTE_MAX_HUNDREDTHS } from "./fte";
 import { payRuns, paySettings } from "./schema";
 
 // Helpers that take the acting user or a transaction as a parameter live here, not in actions.ts ("use server" files are public endpoints).
@@ -64,8 +65,13 @@ export type OtKey = keyof typeof DEFAULT_OT_BP;
 export const OT_KEYS = ["regular", "restDay", "restDayOver8"] as const satisfies readonly OtKey[];
 /** A person's own overtime percents in basis points (12500 = 125%). A key left out uses the company standard from Settings. */
 export type OtOverride = Partial<Record<OtKey, number>>;
-export type LineAmounts = { monthlyCentavos: bigint; otBp?: OtOverride };
-export type LineAmountsJson = { monthlyCentavos: string; otBp?: OtOverride };
+/**
+ * `fteHundredths` is the line's default FTE count in hundredths (100 = 1, 50 = 0.5, 0 = does not count); missing means "not set" (a rate
+ * made before FTE came back). `perFteCentavos` marks an internal-team rate paid per FTE: the cutoff pay is the run's total FTE times this
+ * amount, and `monthlyCentavos` is then 0. See fte.ts.
+ */
+export type LineAmounts = { monthlyCentavos: bigint; otBp?: OtOverride; fteHundredths?: number; perFteCentavos?: bigint };
+export type LineAmountsJson = { monthlyCentavos: string; otBp?: OtOverride; fteHundredths?: number; perFteCentavos?: string };
 
 /** The run's overtime percents with a person's own percents laid over them. */
 export function withOtOverride<T extends Partial<Record<string, number | null>>>(base: T, otBp: OtOverride | undefined): T {
@@ -74,6 +80,9 @@ export function withOtOverride<T extends Partial<Record<string, number | null>>>
 
 const lineContext = (id: string) => `pay_line:${id}`;
 
+/** An FTE count is a whole number of hundredths from 0 to FTE_MAX_HUNDREDTHS; anything else is "not set". */
+const cleanFte = (v: unknown): number | undefined => (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= FTE_MAX_HUNDREDTHS ? v : undefined);
+
 const cleanOt = (o: OtOverride | undefined): OtOverride | undefined => {
   const kept = OT_KEYS.filter((k) => typeof o?.[k] === "number").map((k) => [k, o![k]!] as const);
   return kept.length > 0 ? Object.fromEntries(kept) : undefined;
@@ -81,7 +90,12 @@ const cleanOt = (o: OtOverride | undefined): OtOverride | undefined => {
 
 export const amountsToJson = (a: LineAmounts): LineAmountsJson => {
   const otBp = cleanOt(a.otBp);
-  return otBp ? { monthlyCentavos: a.monthlyCentavos.toString(), otBp } : { monthlyCentavos: a.monthlyCentavos.toString() };
+  const out: LineAmountsJson = { monthlyCentavos: a.monthlyCentavos.toString() };
+  if (otBp) out.otBp = otBp;
+  const fte = cleanFte(a.fteHundredths);
+  if (fte !== undefined) out.fteHundredths = fte;
+  if (a.perFteCentavos !== undefined && a.perFteCentavos > 0n) out.perFteCentavos = a.perFteCentavos.toString();
+  return out;
 };
 
 export function encryptLineAmounts(lineId: string, a: LineAmounts): string {
@@ -102,12 +116,23 @@ export type RunLinePayload = {
   input: LineInput;
   clientHoursHundredths: bigint;
   result: LineResult;
+  /** A contractor line's FTE for this run in hundredths (the count typed for the run, else the rate's); absent when there is none. */
+  fteHundredths?: number;
+  /** The count was typed for this run, not taken from the rate. */
+  fteFromRun?: true;
+  /** An internal-team line paid per FTE: the run's total FTE (hundredths) its pay was worked out with. */
+  perFte?: { totalFteHundredths: number };
 };
 
 const runLineContext = (id: string) => `pay_run_line:${id}`;
 const runItemContext = (id: string) => `pay_run_item:${id}`;
 
 export const payloadText = (p: RunLinePayload): string => JSON.stringify(p, bigReplacer);
+/**
+ * The payload without a contractor's FTE count. A count only sets the internal team's pay (their own payloads change when it does), so a change
+ * of count alone must not clear a line's "checked by": setting FTE on every rate would otherwise ask for every line to be checked again.
+ */
+export const payloadTextWithoutFte = (p: RunLinePayload): string => payloadText({ ...p, fteHundredths: undefined, fteFromRun: undefined, rate: { ...p.rate, fteHundredths: undefined } });
 export const encryptRunLine = (id: string, p: RunLinePayload): string => fieldCrypto().encrypt(payloadText(p), runLineContext(id));
 export const decryptRunLine = (id: string, stored: string): RunLinePayload => upgradePayload(JSON.parse(fieldCrypto().decrypt(stored, runLineContext(id)), bigReviver));
 
@@ -175,6 +200,14 @@ export async function lockDraftRun(tx: Tx, runId: string): Promise<typeof payRun
 
 export function decryptLineAmounts(lineId: string, stored: string): LineAmounts {
   const j = JSON.parse(fieldCrypto().decrypt(stored, lineContext(lineId))) as LineAmountsJson;
+  const out: LineAmounts = { monthlyCentavos: BigInt(j.monthlyCentavos) };
   const otBp = cleanOt(j.otBp);
-  return otBp ? { monthlyCentavos: BigInt(j.monthlyCentavos), otBp } : { monthlyCentavos: BigInt(j.monthlyCentavos) };
+  if (otBp) out.otBp = otBp;
+  const fte = cleanFte(j.fteHundredths);
+  if (fte !== undefined) out.fteHundredths = fte;
+  if (typeof j.perFteCentavos === "string") {
+    const perFte = BigInt(j.perFteCentavos);
+    if (perFte > 0n) out.perFteCentavos = perFte;
+  }
+  return out;
 }

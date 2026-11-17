@@ -49,10 +49,10 @@ describe("setPayrollAccess, every role", () => {
 
 // Pay lines, rates and settings, as each of the six roles at each payroll level. Only a Preparer passes authorize();
 // a valid request from a Preparer reaches the (mocked, throwing) database, so it ends in the generic message.
-const { createPayLine, updatePayLine, endPayLine, tidyDoubledRates, listRemovedRates, restoreTidiedRates, removeStoppedRates, withdrawPayLine, savePaySettings } = await import("@/modules/payroll/actions");
+const { createPayLine, updatePayLine, setLineFtes, endPayLine, tidyDoubledRates, listRemovedRates, restoreTidiedRates, removeStoppedRates, withdrawPayLine, savePaySettings } = await import("@/modules/payroll/actions");
 const { getRates, getPaySettings, getRuns, getWorksheet } = await import("@/modules/payroll/queries");
 const { updateRunPeople, removePersonFromRun, restorePersonToRun } = await import("@/modules/payroll/actions");
-const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, approveRun } =
+const { createPayRun, cancelPayRun, savePayItem, dismissPayItem, confirmRunLine, refreshSuggestions, confirmSuggestion, assignSuggestion, submitRun, sendBackRun, unapproveRun, approveRun } =
   await import("@/modules/payroll/actions");
 const { payrollRunsAwaitingApproval, getPayments } = await import("@/modules/payroll/queries");
 const { exportRemitlyList, markPaid } = await import("@/modules/payroll/actions");
@@ -70,6 +70,7 @@ const calls: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
     createPayLine({ employeeId: OTHER, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2030-11-01", monthly: "25000" }),
   updatePayLine: () =>
     updatePayLine({ lineKey: LINE_KEY, hoursPerDay: 8, paymentMethod: "remitly", effectiveFrom: "2030-11-16", monthly: "26000", reason: "Raise" }),
+  setLineFtes: () => setLineFtes({ rows: [{ lineKey: LINE_KEY, fte: "0.5" }] }),
   endPayLine: () => endPayLine({ lineKey: LINE_KEY, endsOn: "2030-11-30", reason: "Contract ended" }),
   tidyDoubledRates: () => tidyDoubledRates(),
   listRemovedRates: () => listRemovedRates(),
@@ -165,6 +166,7 @@ const HASH = "a".repeat(64);
 const decisions: Record<string, () => Promise<{ ok: boolean; error?: string }>> = {
   approveRun: () => approveRun({ runId: RUN_ID, expectedHash: HASH }),
   sendBackRun: () => sendBackRun({ runId: RUN_ID, note: "Check the late minutes" }),
+  unapproveRun: () => unapproveRun({ runId: RUN_ID, note: "A rate was wrong" }),
 };
 
 describe.each(Object.entries(decisions))("%s, every role at every payroll level", (_name, decide) => {
@@ -187,6 +189,9 @@ describe("decisions are checked on the server", () => {
     asLevel("employee", "approver");
     expect(await sendBackRun({ runId: RUN_ID, note: "   " })).toEqual({ ok: false, error: BAD });
     expect(await sendBackRun({ runId: RUN_ID })).toEqual({ ok: false, error: BAD });
+    expect(await unapproveRun({ runId: RUN_ID, note: "   " })).toEqual({ ok: false, error: BAD });
+    expect(await unapproveRun({ runId: RUN_ID })).toEqual({ ok: false, error: BAD });
+    expect(await unapproveRun({ runId: "nope", note: "x" })).toEqual({ ok: false, error: BAD });
     for (const expectedHash of ["", "abc", "A".repeat(64), "g".repeat(64), undefined]) {
       expect(await approveRun({ runId: RUN_ID, expectedHash })).toEqual({ ok: false, error: BAD });
     }

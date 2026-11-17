@@ -13,8 +13,9 @@ import {
   type PayItemType,
   type PaymentMethod,
 } from "./constants";
+import { formatFte } from "./fte";
 import { formatItemValue } from "./items";
-import { formatPesos } from "./money";
+import { formatPesos, formatUsd } from "./money";
 
 // Turns a decrypted change detail into what the history page shows: old and new values side by side, plus single facts. Pure.
 // Detail is plain JSON written by `logChange`, so every field is read defensively: a missing or odd field is skipped, never a crash.
@@ -54,6 +55,9 @@ function lineFields(v: Json | null, names: NameLookup): Record<string, string | 
   const method = str(v.paymentMethod);
   return {
     [R.monthly]: centavos(v.monthlyCentavos),
+    // An internal-team rate paid per FTE has an amount per FTE (and a monthly of 0); a contractor has a default FTE count (or none yet).
+    [R.perFte]: v.perFteCentavos === undefined || v.perFteCentavos === null ? null : centavos(v.perFteCentavos),
+    [R.fte]: typeof v.fteHundredths === "number" ? formatFte(v.fteHundredths) : v.perFteCentavos === undefined || v.perFteCentavos === null ? H.notSet : null,
     [R.hoursPerDay]: str(v.hoursPerDay),
     [R.client]: client ? (names.client(client) ?? null) : H.none,
     [R.alias]: str(v.alias) ?? H.none,
@@ -163,6 +167,7 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       facts.push(...fact(H.lines, detail.lines), ...fact(H.warnings, detail.warnings));
       break;
     case "run_sent_back":
+    case "run_unapproved":
       facts.push(...fact(H.note, detail.note));
       break;
     case "run_approved":
@@ -173,6 +178,7 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       break;
     case "payment_marked":
       facts.push(...fact(H.paidOn, detail.paidOn));
+      if (typeof detail.usdCents === "string" && /^\d+$/.test(detail.usdCents)) facts.push({ label: H.dollarsPaid, value: formatUsd(BigInt(detail.usdCents)) });
       if (detail.correction === true) facts.push({ label: H.correction, value: H.yes });
       break;
     case "list_exported":
@@ -212,6 +218,8 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       if (str(old?.name) !== str(next?.name)) changes.push({ label: H.signatoryName, before: before("name"), after: str(next?.name) ?? H.notSet });
       if (str(old?.title) !== str(next?.title)) changes.push({ label: H.signatoryTitle, before: before("title"), after: str(next?.title) ?? H.notSet });
       if (detail.signatureChanged === true) changes.push({ label: H.signatoryPicture, before: picture(old), after: picture(next) });
+      // Older entries carry no preparer: nothing is shown for them.
+      if (next && "preparedBy" in next && str(old?.preparedBy) !== str(next.preparedBy)) changes.push({ label: H.signatoryPreparer, before: str(old?.preparedBy) ?? H.signatoryAutoPreparer, after: str(next.preparedBy) ?? H.signatoryAutoPreparer });
       break;
     }
     case "line_confirmed":

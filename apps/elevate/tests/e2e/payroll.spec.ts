@@ -57,6 +57,13 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     // The Super Admin chooses a Preparer and an Approver.
     await setLevel(adminPage, preparer.email, "Preparer");
     await setLevel(adminPage, approver.email, "Approver");
+    // ...and chooses who is printed under "Prepared by" on the statements (the signatory's name is filled in only when none is saved yet).
+    await adminPage.goto("/settings/payroll-signatory");
+    const signatoryName = adminPage.getByLabel("Name", { exact: true });
+    if ((await signatoryName.inputValue()) === "") await signatoryName.fill("E2E Director");
+    await adminPage.locator("#signatory-prepared-by").selectOption({ label: `Pia Preparer${stamp}` });
+    await adminPage.getByRole("button", { name: "Save signatory" }).click();
+    await expect(adminPage.getByText("Signatory saved.")).toBeVisible();
     // ...and still sees no Payroll menu item afterwards.
     await adminPage.goto("/dashboard");
     await expect(adminPage.locator('a[href="/payroll"]')).toHaveCount(0);
@@ -99,6 +106,46 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     const line = prepPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` });
     await expect(line).toBeVisible();
 
+    // Gross is not what is paid: the (i) beside Total payable compensation says so, and that column is marked "Pay this".
+    await prepPage.locator('[data-hint-for="Total payable compensation"]').first().click();
+    await expect(prepPage.getByText(/use this one for payment/)).toBeVisible();
+    await prepPage.screenshot({ path: "test-results/payroll-pay-this-hint.png" });
+    await prepPage.keyboard.press("Escape");
+    await expect(prepPage.getByRole("columnheader", { name: /Total payable compensation/ }).first()).toContainText("Pay this");
+    await prepPage.getByRole("heading", { name: "Totals" }).scrollIntoViewIfNeeded();
+    await prepPage.screenshot({ path: "test-results/payroll-totals.png" });
+
+    // The column headings stay in view while the table scrolls in its own box. A short window makes even one person's row overflow the box.
+    await prepPage.setViewportSize({ width: 1280, height: 300 });
+    const sheet = prepPage.getByRole("region", { name: /^Pay run sheet/ });
+    await sheet.scrollIntoViewIfNeeded();
+    // The heading cells stick, not their rows: measure a cell of each row.
+    const groupRow = sheet.locator("thead tr").first();
+    const columnRow = sheet.locator("thead tr").last();
+    const groupCell = groupRow.locator("th").first();
+    const columnCell = columnRow.locator("th").first();
+    const scrolledTo = await sheet.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+      return el.scrollTop;
+    });
+    expect(scrolledTo).toBeGreaterThan(0); // the box really scrolled
+    const boxTop = (await sheet.boundingBox())!.y;
+    expect(Math.abs((await groupCell.boundingBox())!.y - boxTop)).toBeLessThan(3); // the group row is at the top of the box
+    const groupHeight = (await groupCell.boundingBox())!.height;
+    expect(Math.abs((await columnCell.boundingBox())!.y - boxTop - groupHeight)).toBeLessThan(3); // and the column row right under it
+    await expect(columnRow.getByRole("columnheader", { name: /Total payable compensation/ })).toBeInViewport();
+    await expect(columnRow.getByRole("columnheader", { name: /^Person/ })).toBeInViewport();
+    await prepPage.screenshot({ path: "test-results/payroll-sticky-headings.png" });
+    // With "Show every column" off the group row is hidden and the column row sits at the very top.
+    await prepPage.getByLabel("Show every column").uncheck();
+    await sheet.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    expect(Math.abs((await columnCell.boundingBox())!.y - (await sheet.boundingBox())!.y)).toBeLessThan(3);
+    await prepPage.getByLabel("Show every column").check();
+    await prepPage.setViewportSize({ width: 1280, height: 720 });
+    await prepPage.screenshot({ path: "test-results/payroll-sticky-headings-tall.png" });
+
     // An overtime (OT) item, entered twice so the history has an old and a new value.
     for (const minutes of ["60", "120"]) {
       await line.getByRole("button", { name: /^Actions for/ }).click();
@@ -140,6 +187,20 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await approve.click();
     await expect(apprPage.getByText("Run approved.").first()).toBeVisible();
 
+    // The Approver can take the approval back while nothing is paid: the run is a draft again with the note, and is sent and approved again.
+    await apprPage.getByRole("button", { name: "Unapprove", exact: true }).click();
+    await apprPage.getByLabel("Why the approval is taken back").fill("E2E: look at a rate again");
+    await apprPage.getByRole("dialog").getByRole("button", { name: "Unapprove" }).click();
+    await expect(apprPage.getByText("Approval taken back. The run is a draft again.")).toBeVisible();
+    await prepPage.goto(`/payroll/${runId}`);
+    await expect(prepPage.getByText("This run was unapproved")).toBeVisible();
+    await expect(prepPage.getByText("E2E: look at a rate again")).toBeVisible();
+    await prepPage.getByRole("button", { name: "Send for review" }).click();
+    await expect(prepPage.getByText("Sent for review. The Approvers have been told.")).toBeVisible();
+    await apprPage.goto(`/payroll/${runId}`);
+    await apprPage.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(apprPage.getByText("Run approved.").first()).toBeVisible();
+
     // The Preparer downloads the Remitly list and marks the person paid.
     await prepPage.goto(`/payroll/${runId}`);
     const [download] = await Promise.all([prepPage.waitForEvent("download"), prepPage.getByRole("button", { name: "Download Remitly list" }).click()]);
@@ -160,8 +221,25 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await prepPage.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` }).last().getByRole("button", { name: "Mark paid" }).click();
     await waitForHydration(prepPage, `#ref-${worker.employeeId}`);
     await prepPage.locator(`#ref-${worker.employeeId}`).fill(`E2E-REF-${stamp}`);
+    await prepPage.locator(`#usd-${worker.employeeId}`).fill("351.66"); // optional: the dollars paid in Remitly
+    await prepPage.screenshot({ path: "test-results/payroll-mark-paid.png" });
     await prepPage.getByRole("dialog").getByRole("button", { name: "Mark paid" }).click();
     await expect(prepPage.getByText("Payment recorded.")).toBeVisible();
+    // The Payment table shows the client (not the alias), the dollars and their total, and its columns sort.
+    const payment = prepPage.getByRole("region", { name: "Payment" });
+    await expect(payment.getByRole("columnheader", { name: "Paid (USD)" })).toBeVisible();
+    await expect(payment.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toContainText("$351.66");
+    await expect(payment).toContainText("Dollars paid: $351.66");
+    await expect(payment.getByRole("columnheader", { name: "Alias" })).toHaveCount(0);
+    // Its headings stick to the top of the page's scroll area (from the xl width up).
+    const paymentHead = payment.getByRole("columnheader", { name: "Person" });
+    expect(await paymentHead.evaluate((el) => getComputedStyle(el).position)).toBe("sticky");
+    await payment.getByRole("button", { name: "Client" }).click();
+    await expect(payment.getByRole("columnheader", { name: /Client/ })).toHaveAttribute("aria-sort", "ascending");
+    await payment.getByRole("button", { name: "Client" }).click();
+    await expect(payment.getByRole("columnheader", { name: /Client/ })).toHaveAttribute("aria-sort", "descending");
+    await payment.scrollIntoViewIfNeeded();
+    await prepPage.screenshot({ path: "test-results/payroll-payment-table.png" });
     await expect(prepPage.getByText("Everyone on this run is paid.")).toBeVisible();
 
     // Paid is not released: the worker sees nothing yet. A Preparer can read the statements and may release them.

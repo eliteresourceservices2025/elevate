@@ -44,6 +44,40 @@ async function insertCopy(tx: Tx, actorId: string, latest: LineRow, change: Part
   return amounts;
 }
 
+/**
+ * Puts a default FTE count on a line's live versions: the version in force on `today` and every later one (a raise already scheduled). Each is
+ * a copy, written as the newest version at the SAME effective date, so the new count wins there without a new date and without a "new rate"
+ * flag. A rate paid per FTE (internal team) has no count and is left alone. Returns null when nothing changed (the count was already that).
+ */
+export async function setFteOnLine(tx: Tx, actorId: string, versions: LineRow[], fteHundredths: number, today: string): Promise<{ old: ReturnType<typeof detailOf>; new: ReturnType<typeof detailOf> } | null> {
+  const sorted = [...versions].sort(newestVersion);
+  const dates = [...new Set(sorted.map((v) => v.effectiveFrom))].sort();
+  const inForce = [...dates].reverse().find((d) => d <= today) ?? dates[0];
+  let first: { old: ReturnType<typeof detailOf>; new: ReturnType<typeof detailOf> } | null = null;
+  for (const date of dates.filter((d) => d >= inForce)) {
+    const source = sorted.find((v) => v.effectiveFrom === date)!;
+    const before = decryptLineAmounts(source.id, source.amountsEnc);
+    if (before.perFteCentavos !== undefined || before.fteHundredths === fteHundredths) continue;
+    const after: LineAmounts = { ...before, fteHundredths };
+    const id = randomUUID();
+    await tx.insert(payLines).values({
+      id,
+      lineKey: source.lineKey,
+      employeeId: source.employeeId,
+      clientId: source.clientId,
+      alias: source.alias,
+      hoursPerDay: source.hoursPerDay,
+      paymentMethod: source.paymentMethod,
+      endsOn: source.endsOn,
+      effectiveFrom: source.effectiveFrom,
+      amountsEnc: encryptLineAmounts(id, after),
+      createdBy: actorId,
+    });
+    first ??= { old: detailOf(source, before), new: detailOf(source, after) };
+  }
+  return first;
+}
+
 /** The new version that carries a line's last day: a copy of `latest` (the version in force on that day) with `endsOn` set. */
 export const insertEndVersion = (tx: Tx, actorId: string, latest: LineRow, endsOn: string) => insertCopy(tx, actorId, latest, { endsOn });
 

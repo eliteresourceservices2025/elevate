@@ -9,7 +9,8 @@ import { useState, type ReactNode } from "react";
 export function WorksheetColumns({ children }: { children: ReactNode }) {
   const [all, setAll] = useState(true);
   return (
-    <div className="group space-y-2" data-detail={all ? "on" : "off"}>
+    // --group-h is the height of the group row of the headings (it is hidden with the detail columns), so the column row sticks right under it.
+    <div className="group space-y-2 [--group-h:2.5rem] data-[detail=off]:[--group-h:0px]" data-detail={all ? "on" : "off"}>
       <label className="flex min-h-8 w-fit items-center gap-2 text-sm pointer-coarse:min-h-11">
         <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} className="size-4" />
         Show every column

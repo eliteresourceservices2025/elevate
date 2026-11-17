@@ -16,7 +16,7 @@ import { HOLIDAY_BP } from "./calculate";
 import { logChange } from "./changes";
 import { autoTidyRates, lineKeysOnRealRuns, removedRatesOf, restoreRemovedRates, type RemovedRateView } from "./doubled-service";
 import { isWithdrawn, lineLastDay, sameJob } from "./lines";
-import { detailOf, insertEndVersion, insertWithdrawnVersion, newestVersion, type LineRow } from "./line-writes";
+import { detailOf, insertEndVersion, insertWithdrawnVersion, newestVersion, setFteOnLine, type LineRow } from "./line-writes";
 import { parseMoney } from "./money";
 import { payLines, payRunLines, payRuns, paySettings } from "./schema";
 import { amountsToJson, decryptLineAmounts, encryptLineAmounts, payrollToday, settingsInForce, type LineAmounts } from "./service";
@@ -27,7 +27,7 @@ import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
 import { readJibbleTimesheet } from "./jibble/timesheet";
 import { MAX_XLSX_BYTES, XlsxError } from "./jibble/xlsx";
 import { applyTimesheet, confirmAllSuggestions as confirmAll, discardTimesheet, saveTimesheetUpload } from "./timesheet-import";
-import { approve, sendBack, submit } from "./approval";
+import { approve, sendBack, submit, unapprove } from "./approval";
 import { recordPayment, remitlyList } from "./payments";
 import {
   applyTimesheetSchema,
@@ -37,6 +37,7 @@ import {
   exportRemitlySchema,
   markPaidSchema,
   sendBackRunSchema,
+  unapproveRunSchema,
   submitRunSchema,
   assignSuggestionSchema,
   confirmSuggestionSchema,
@@ -63,6 +64,7 @@ import {
   savePayItemSchema,
   savePaySettingsSchema,
   updatePayLineSchema,
+  setLineFtesSchema,
 } from "./validators";
 
 // Every action: requireUser() first, then authorize() inside runAction, then Zod. Each change writes the payroll change log (amounts and
@@ -121,12 +123,25 @@ async function checkPersonAndClient(tx: Tx, employeeId: string, clientId: string
   return null;
 }
 
-const amountsOf = (v: { monthly: string; otRegular?: number | null; otRestDay?: number | null; otRestDayOver8?: number | null }): LineAmounts => {
+type AmountFields = {
+  basis?: "monthly" | "per_fte";
+  monthly?: string;
+  perFte?: string;
+  fte?: number | null;
+  otRegular?: number | null;
+  otRestDay?: number | null;
+  otRestDayOver8?: number | null;
+};
+
+/** The amounts a rate version keeps: the monthly rate and the default FTE count, or (internal team) the amount per FTE with a monthly of 0. */
+const amountsOf = (v: AmountFields): LineAmounts => {
   const otBp: Partial<Record<"regular" | "restDay" | "restDayOver8", number>> = {};
   if (v.otRegular != null) otBp.regular = v.otRegular;
   if (v.otRestDay != null) otBp.restDay = v.otRestDay;
   if (v.otRestDayOver8 != null) otBp.restDayOver8 = v.otRestDayOver8;
-  return { monthlyCentavos: parseMoney(v.monthly) ?? 0n, ...(Object.keys(otBp).length > 0 ? { otBp } : {}) };
+  const ot = Object.keys(otBp).length > 0 ? { otBp } : {};
+  if (v.basis === "per_fte") return { monthlyCentavos: 0n, perFteCentavos: parseMoney(v.perFte ?? "") ?? 0n, ...ot };
+  return { monthlyCentavos: parseMoney(v.monthly ?? "") ?? 0n, ...(v.fte != null ? { fteHundredths: v.fte } : {}), ...ot };
 };
 
 /**
@@ -299,6 +314,43 @@ export async function withdrawPayLine(input: unknown): Promise<ActionResult<{ li
       await writeAudit({ actor, action: "payroll.line.withdraw", targetType: "pay_line", targetId: lineKey, metadata: { employeeId: latest.employeeId } }, tx);
       await logChange(tx, actor, { action: "line_withdrawn", employeeId: latest.employeeId, lineKey, detail: { old: detailOf(latest, amounts), reason } });
       return { ok: true, data: { lineKey } } as const;
+    });
+
+    if (result.ok) refreshed();
+    return result;
+  });
+}
+
+/**
+ * Sets the default FTE count on many rates at once (the Set FTE table). Each change is a same-date correction of the live versions (see
+ * `setFteOnLine`), logged as a rate update with the reason "FTE set"; the audit log keeps only counts. Rates that were removed or have already
+ * ended, rates paid per FTE and counts that did not change are skipped. A draft run picks the new counts up with "Fill or update this run".
+ */
+export async function setLineFtes(input: unknown): Promise<ActionResult<{ changed: number; skipped: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = setLineFtesSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const rows = [...new Map(parsed.data.rows.map((r) => [r.lineKey, r])).values()];
+    const day = payrollToday();
+
+    const result = await db.transaction(async (tx) => {
+      let changed = 0;
+      for (const row of rows) {
+        await lock(tx, `pay_line:${row.lineKey}`);
+        const versions = await versionsOf(tx, row.lineKey);
+        const last = lineLastDay(versions);
+        if (versions.length === 0 || isWithdrawn(versions) || (last !== null && last < day)) continue;
+        const done = await setFteOnLine(tx, actor.id, versions, row.fte, day);
+        if (!done) continue;
+        changed += 1;
+        await logChange(tx, actor, { action: "line_updated", employeeId: versions[0].employeeId, lineKey: row.lineKey, detail: { old: done.old, new: done.new, reason: "FTE set" } });
+      }
+      await writeAudit({ actor, action: "payroll.line.set_fte", targetType: "pay_line", metadata: { requested: rows.length, changed } }, tx);
+      return { ok: true, data: { changed, skipped: rows.length - changed } } as const;
     });
 
     if (result.ok) refreshed();
@@ -708,6 +760,22 @@ export async function sendBackRun(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return fail(BAD_REQUEST);
 
     await db.transaction((tx) => sendBack(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** An Approver takes an approval back: the approved run returns to draft with a note, until a payment is recorded or its statements are released. */
+export async function unapproveRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.approve");
+
+    const parsed = unapproveRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => unapprove(tx, actor, parsed.data));
     refreshedRun(parsed.data.runId);
     return { ok: true, data: undefined } as const;
   });

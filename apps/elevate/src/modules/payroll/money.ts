@@ -27,6 +27,11 @@ export function parseMoney(input: string): bigint | null {
   return total > MAX_CENTAVOS ? null : total;
 }
 
+/** Dollars paid, in cents, as "$1,250.50". Only ever a record of what was paid in Remitly: ELEVATE converts nothing. */
+export function formatUsd(cents: bigint): string {
+  return `$${formatPesos(cents)}`;
+}
+
 /** Centavos as "1,250.50" (no currency symbol). */
 export function formatPesos(c: bigint): string {
   const negative = c < 0n;

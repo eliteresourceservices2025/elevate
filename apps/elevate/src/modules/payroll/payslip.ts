@@ -1,5 +1,6 @@
 import { EXTRA_KEYS, HOLIDAY_BP, type ExtraKey, type LineInput, type LineResult } from "./calculate";
 import { EXTRA_KEY_ITEM, PAYMENT_METHOD_LABELS, PAYSLIP_LABELS as L, PAY_ITEM_LABELS, type PaymentMethod } from "./constants";
+import { formatFte } from "./fte";
 import { formatPesos } from "./money";
 
 // The payslip as plain data, pure. The on-screen page and the PDF both draw from it, so they always say the same thing. It holds the person's
@@ -14,6 +15,11 @@ export type PayslipLine = {
   multipliersBp?: Partial<Record<ExtraKey, number | null>> | null;
   input: LineInput;
   result: LineResult;
+  /**
+   * Only an internal-team line paid per FTE (the ELITE Resource Services team) carries this; a contractor's line never does, so nothing about
+   * FTE is ever written on a contractor's statement. The run's total FTE (hundredths) and the person's amount per FTE for the cutoff.
+   */
+  perFte?: { totalFteHundredths: number; amountCentavos: bigint };
 };
 
 /** Who signed, as kept with the run when it was paid. The picture is base64 JPEG, or null when there is none. */
@@ -111,7 +117,9 @@ function lineView(line: PayslipLine, input: PayslipInput): PayslipLineView {
   const worked = i.partial
     ? `${[i.partial.dayHundredths > 0 ? dayText(i.partial.dayHundredths) : "", i.partial.minutes > 0 ? hoursAndMinutes(i.partial.minutes) : ""].filter(Boolean).join(" ")} worked`
     : "";
-  const compensation: PayslipRowView[] = [{ label: L.base, detail: worked, amount: money(r.base) }];
+  // An internal-team line shows how its pay was worked out ("28 FTE × 1,500.00"). A contractor's line has no FTE wording at all.
+  const fteText = line.perFte ? `${formatFte(line.perFte.totalFteHundredths)} FTE × ${money(line.perFte.amountCentavos)}` : "";
+  const compensation: PayslipRowView[] = [{ label: L.base, detail: [fteText, worked].filter(Boolean).join(", "), amount: money(r.base) }];
   for (const key of EXTRA_KEYS) {
     const bp = key === "holiday" ? HOLIDAY_BP : (line.multipliersBp?.[key] ?? input.multipliersBp?.[key] ?? null);
     compensation.push({
@@ -145,7 +153,12 @@ function lineView(line: PayslipLine, input: PayslipInput): PayslipLineView {
   ];
 
   const computation: PayslipRowView[] = [
-    { label: L.monthlyRate, detail: "", amount: money(i.monthlyCentavos) },
+    ...(line.perFte
+      ? [
+          { label: L.perFteAmount, detail: "", amount: money(line.perFte.amountCentavos) },
+          { label: L.totalFte, detail: "", amount: formatFte(line.perFte.totalFteHundredths) },
+        ]
+      : [{ label: L.monthlyRate, detail: "", amount: money(i.monthlyCentavos) }]),
     { label: L.dailyRate, detail: "", amount: money(r.daily) },
     { label: L.hourlyRate, detail: "", amount: money(r.hourly) },
     { label: L.hoursPerDay, detail: "", amount: String(i.hoursPerDay) },

@@ -174,7 +174,7 @@ export const payApprovals = payroll
         .references(() => users.id),
       createdAt: createdAt(),
     },
-    (t) => [index("pay_approvals_run_idx").on(t.runId, t.createdAt), check("pay_approvals_decision_chk", sql`${t.decision} in ('approved','sent_back')`)],
+    (t) => [index("pay_approvals_run_idx").on(t.runId, t.createdAt), check("pay_approvals_decision_chk", sql`${t.decision} in ('approved','sent_back','unapproved')`)],
   )
   .enableRLS();
 
@@ -191,6 +191,8 @@ export const payPayments = payroll
         .notNull()
         .references(() => employees.id),
       referenceEnc: text("reference_enc").notNull(),
+      /** The dollars paid in Remitly, in cents as text, encrypted (context pay_payment_usd:<id>). Optional: a record of what was paid, never a conversion. */
+      amountUsdEnc: text("amount_usd_enc"),
       paidOn: date("paid_on").notNull(),
       markedBy: uuid("marked_by")
         .notNull()
@@ -238,6 +240,8 @@ export const paySignatory = payroll
       name: text("name").notNull(),
       title: text("title").notNull(),
       signatureEnc: text("signature_enc"),
+      /** The preparer printed under "Prepared by" on the statements of runs that use this version. Null: the person who sent the run for review. */
+      preparedByUserId: uuid("prepared_by_user_id").references(() => users.id),
       createdBy: uuid("created_by").references(() => users.id),
       // clock_timestamp(), not now(): the newest version is picked by this, so it must follow the order the saves were made in.
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`clock_timestamp()`),

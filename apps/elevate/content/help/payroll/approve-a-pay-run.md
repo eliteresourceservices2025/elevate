@@ -25,7 +25,7 @@ ELEVATE refuses this on the server, with no way around it. If it refuses you, as
 
 1. Click **Payroll** under **Admin** in the left menu. On the **Runs** tab, open the run whose status is **In review**. The Dashboard also shows how many runs are waiting for you.
 2. Read the **checks** above the worksheet. A problem that blocks must be sent back. Warnings are for you to judge.
-3. Read the worksheet line by line. Check **Cutoff pay**, **Absences**, **Sick leave (SL)**, **Late and undertime**, the overtime (OT) and holiday pay, the allowances, **Gross**, the reimbursements, bonuses and adjustments, and **Total payable compensation** with its **Change in total payable from last run**. Use the **Totals** and **By client** to see whether the whole run makes sense.
+3. Read the worksheet line by line. Check **Cutoff pay**, **Absences**, **Sick leave (SL)**, **Late and undertime**, the overtime (OT) and holiday pay, the allowances, **Gross**, the reimbursements, bonuses and adjustments, and **Total payable compensation** with its **Change in total payable from last run**. Use the **Totals** (including **Total FTE**, which sets the internal team's pay) and **By client** to see whether the whole run makes sense.
 4. Opening the run is written to the audit log. Amounts are never sent in notices.
 
 ![A run in review as the Approver sees it: the status, the checks and the worksheet with every line.](help:approve-a-pay-run/01-in-review.png)
@@ -46,9 +46,19 @@ If anything changes while you are reading, ELEVATE asks you to reload and review
 
 If you close this window after typing, ELEVATE asks **Discard what you wrote?** so a long note is not lost by accident.
 
+# Take an approval back
+
+An Approver can take back an approval, until the first payment is recorded or the statements are released.
+
+1. Open the approved run and click **Unapprove** under the worksheet.
+2. Write **Why the approval is taken back** and click **Unapprove**. The run is a draft again and the Preparers are told.
+3. A Preparer changes the run and sends it for review again. It needs a new approval, because anything may have changed.
+
+The note is kept in the change history and shown on the run. The old approval stays in the history; nothing is deleted. Once a payment is recorded or the statements are released, the button is replaced by a note saying why it is no longer possible.
+
 # After approval
 
-An approved run can no longer change. If a mistake is found later, the Preparer fixes it with an adjustment on a later run.
+While it is approved, a run can't change. If a mistake is found after payment, or after the statements are released, the Preparer fixes it with an adjustment on a later run.
 
 # Read the history
 

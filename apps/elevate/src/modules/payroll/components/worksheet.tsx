@@ -1,10 +1,12 @@
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { FieldHint } from "@/components/field-hint";
 import { Fragment } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EXTRA_KEYS } from "../calculate";
 import { EXTRA_KEY_ITEM, HISTORY_LABELS, PAY_ITEM_LABELS, WORKSHEET_LABELS as L } from "../constants";
+import { PAYROLL_HINTS } from "../hints";
 import type { Worksheet, WorksheetFigures, WorksheetLine } from "../runs";
 import { LineHashScroller } from "./go-to-line";
 import { LineFlags } from "./line-flags";
@@ -20,6 +22,12 @@ import { WorksheetColumns } from "./worksheet-columns";
 const FROZEN = "md:sticky z-10 bg-card";
 const num = "text-right tabular-nums";
 const head = "whitespace-normal align-bottom";
+// The table scrolls in its own box (at most about a screen tall), so both rows of headings can stick to its top while the rows scroll under
+// them: the group row at the top and the column row right under it (its offset, --group-h, is set in worksheet-columns.tsx). The cells need an
+// opaque tint of their own. The Person and Client headings (and the Actions one) sit above the other headings at the corners.
+const STICKY_HEAD =
+  "md:[&_thead_th]:sticky md:[&_thead_th]:z-20 md:[&_thead_th]:bg-[color-mix(in_oklab,var(--primary)_10%,var(--card))] md:[&_thead_tr:first-child_th]:top-0 md:[&_thead_tr:last-child_th]:top-(--group-h)";
+const CORNER = "md:z-30!";
 // Cells that only show under "Show every column" (the frame in worksheet-columns.tsx sets data-detail on an ancestor).
 const D = "group-data-[detail=off]:hidden";
 
@@ -50,6 +58,7 @@ function figureRows(f: WorksheetFigures, hoursPerDay: number): [string, string][
     [L.loan, f.loan],
     [L.otherDeductions, f.otherDeductions],
     [L.clientHours, f.clientHours],
+    [L.fte, f.fte === null ? "" : f.fte],
   ];
 }
 
@@ -76,7 +85,7 @@ function PhoneCard({ line, runId, period, canActOnLines, correctableRuns, issues
           </span>
           <span className="flex shrink-0 items-start gap-1">
             <span className="text-right">
-              <span className="block text-xs text-muted-foreground">Net</span>
+              <span className="block text-xs font-medium">{L.payThis}</span>
               <span className="block text-base font-semibold tabular-nums">{line.unreadable || !f ? "-" : f.net}</span>
               {f?.netChange ? <span className="block text-xs text-muted-foreground tabular-nums">{f.netChange}</span> : null}
             </span>
@@ -163,11 +172,16 @@ export function Worksheet({
 
       <div className="hidden md:block">
         <WorksheetColumns>
-          <p className="text-xs text-muted-foreground">Drag the table sideways to move across it, or hold Shift and use the mouse wheel.</p>
-          <Table dragScroll scrollLabel="Pay run sheet. Drag sideways or use the arrow keys to scroll.">
+          <p className="text-xs text-muted-foreground">Drag the table sideways to move across it, or hold Shift and use the mouse wheel. Scroll down inside it and the headings stay in view.</p>
+          <Table
+            dragScroll
+            scrollLabel="Pay run sheet. Drag sideways or use the arrow keys to scroll."
+            containerClassName="md:max-h-[calc(100dvh-8rem)] md:overflow-y-auto md:scroll-pt-24"
+            className={STICKY_HEAD}
+          >
             <TableHeader>
               <TableRow className={`${D} hover:bg-transparent`}>
-                <TableHead colSpan={2} className={`${FROZEN} md:left-0 border-r`}>
+                <TableHead colSpan={2} className={`${FROZEN} ${CORNER} md:left-0 border-r`}>
                   {L.groups.person}
                 </TableHead>
                 <TableHead colSpan={3}>{L.groups.basis}</TableHead>
@@ -178,18 +192,18 @@ export function Worksheet({
                 <TableHead colSpan={3}>{L.groups.additions}</TableHead>
                 <TableHead colSpan={2}>{L.groups.loans}</TableHead>
                 <TableHead colSpan={2}>{L.groups.result}</TableHead>
-                <TableHead colSpan={1}>{L.groups.reference}</TableHead>
+                <TableHead colSpan={2}>{L.groups.reference}</TableHead>
                 <TableHead colSpan={2}>
                   <span className="sr-only">{L.actions}</span>
                 </TableHead>
               </TableRow>
               <TableRow>
-                <TableHead aria-sort={ariaSortOf(sortLinks, "name")} className={`${FROZEN} md:left-0 min-w-44`}>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "name")} className={`${FROZEN} ${CORNER} md:left-0 min-w-44`}>
                   <SortHead header="name" links={sortLinks}>
                     {L.person}
                   </SortHead>
                 </TableHead>
-                <TableHead aria-sort={ariaSortOf(sortLinks, "client")} className={`${FROZEN} md:left-44 min-w-36 border-r`}>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "client")} className={`${FROZEN} ${CORNER} md:left-44 min-w-36 border-r`}>
                   <SortHead header="client" links={sortLinks}>
                     {L.client}
                   </SortHead>
@@ -212,16 +226,26 @@ export function Worksheet({
                 <TableHead className={`${head} ${num} ${D}`}>{L.bereavement}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.pto}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.allowances}</TableHead>
-                <TableHead className={`${head} ${num}`}>{L.gross}</TableHead>
+                <TableHead className={`${head} ${num}`}>
+                  <span className="inline-flex items-center gap-1">
+                    {L.gross}
+                    <FieldHint label={L.gross}>{PAYROLL_HINTS.grossPay}</FieldHint>
+                  </span>
+                  <span className="block text-xs font-normal text-muted-foreground">{L.grossNote}</span>
+                </TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.reimbursements}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.bonuses}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.adjustments}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.loan}</TableHead>
                 <TableHead className={`${head} ${num} ${D}`}>{L.otherDeductions}</TableHead>
-                <TableHead aria-sort={ariaSortOf(sortLinks, "net")} className={`${head} ${num}`}>
-                  <SortHead header="net" links={sortLinks}>
-                    {L.net}
-                  </SortHead>
+                <TableHead aria-sort={ariaSortOf(sortLinks, "net")} className={`${head} ${num} bg-primary/10`}>
+                  <span className="inline-flex items-center gap-1">
+                    <SortHead header="net" links={sortLinks}>
+                      {L.net}
+                    </SortHead>
+                    <FieldHint label={L.net}>{PAYROLL_HINTS.totalPayable}</FieldHint>
+                  </span>
+                  <Badge className="mt-1">{L.payThis}</Badge>
                 </TableHead>
                 <TableHead aria-sort={ariaSortOf(sortLinks, "change")} className={`${head} ${num}`}>
                   <SortHead header="change" links={sortLinks}>
@@ -229,12 +253,13 @@ export function Worksheet({
                   </SortHead>
                 </TableHead>
                 <TableHead className={`${head} ${num}`}>{L.clientHours}</TableHead>
+                <TableHead className={`${head} ${num} ${D}`}>{L.fte}</TableHead>
                 <TableHead aria-sort={ariaSortOf(sortLinks, "checked")} className={head}>
                   <SortHead header="checked" links={sortLinks}>
                     {L.confirmation}
                   </SortHead>
                 </TableHead>
-                <TableHead className="md:sticky md:right-0 z-10 bg-card">
+                <TableHead className={`md:sticky md:right-0 z-10 bg-card ${CORNER}`}>
                   <span className="sr-only">{L.actions}</span>
                 </TableHead>
               </TableRow>
@@ -275,7 +300,7 @@ export function Worksheet({
                       {line.clientName ?? L.noClient}
                     </TableCell>
                     {line.unreadable ? (
-                      <TableCell label={L.net} colSpan={22} className="text-destructive">
+                      <TableCell label={L.net} colSpan={23} className="text-destructive">
                         {L.unreadable}
                       </TableCell>
                     ) : (
@@ -300,9 +325,23 @@ export function Worksheet({
                         {cell(f?.adjustments, L.adjustments, D)}
                         {cell(f?.loan, L.loan, D)}
                         {cell(f?.otherDeductions, L.otherDeductions, D)}
-                        {cell(f?.net, L.net, "font-semibold")}
+                        {cell(f?.net, L.net, "font-semibold bg-primary/5")}
                         {cell(f ? (f.netChange ?? "") : undefined, L.netChange, "text-muted-foreground")}
                         {cell(f?.clientHours, L.clientHours)}
+                        <TableCell label={L.fte} className={`${num} ${D}`}>
+                          {f === null || f === undefined
+                            ? ""
+                            : line.perFte
+                              ? <span className="text-muted-foreground">{L.perFteLine}</span>
+                              : f.fte === null
+                                ? <span className="text-muted-foreground">{L.fteNotSet}</span>
+                                : (
+                                    <>
+                                      {f.fte}
+                                      {f.fteFromRun ? <span className="block text-xs text-muted-foreground">{L.fteForRun}</span> : null}
+                                    </>
+                                  )}
+                        </TableCell>
                       </>
                     )}
                     <TableCell label={L.confirmation}>{line.confirmedByName ?? <span className="text-muted-foreground">{L.unconfirmed}</span>}</TableCell>

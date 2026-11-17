@@ -80,7 +80,7 @@ const itemInsert = (runId: string) => {
 };
 
 describe("append-only tables", () => {
-  it("pay_settings, pay_lines, pay_run_items, pay_approvals, pay_payments, pay_change_log, pay_signatory and pay_run_signatures reject update and delete", async () => {
+  it("pay_settings, pay_lines, pay_run_items, pay_approvals, pay_payments and pay_change_log reject update and delete", async () => {
     const runId = await newRun();
     await addRunLine(runId);
     await itemInsert(runId);
@@ -91,10 +91,6 @@ describe("append-only tables", () => {
     await db.execute(sql`insert into payroll.pay_payments (id, run_id, employee_id, reference_enc, paid_on, marked_by)
       values (${paymentId}, ${runId}, ${employeeId}, ${enc("ref", `pay_payment:${paymentId}`)}, '2030-02-01', ${actorId})`);
     await logChange(db as never, { id: actorId }, { action: "run_created", runId });
-    const signatoryId = randomUUID();
-    await db.execute(sql`insert into payroll.pay_signatory (id, name, title, signature_enc, created_by) values (${signatoryId}, ${"Test Signatory"}, ${"Director"}, null, ${actorId})`);
-    await db.execute(sql`insert into payroll.pay_run_signatures (run_id, signatory_id, signed_on) values (${runId}, ${signatoryId}, ${"2030-02-01"})`);
-
     const checks: [string, string][] = [
       ["pay_settings", "cutoff_divisor = 12"],
       ["pay_lines", "alias = 'x'"],
@@ -102,13 +98,36 @@ describe("append-only tables", () => {
       ["pay_approvals", "decision = 'approved'"],
       ["pay_payments", "paid_on = '2030-03-01'"],
       ["pay_change_log", "action = 'run_paid'"],
-      ["pay_signatory", "title = 'x'"],
-      ["pay_run_signatures", "signed_on = '2030-03-01'"],
     ];
     for (const [table, setClause] of checks) {
       await raises(db.execute(sql.raw(`update payroll.${table} set ${setClause} where true`)), /append-only/);
       await raises(db.execute(sql.raw(`delete from payroll.${table} where true`)), /append-only/);
     }
+  });
+
+  it("pay_signatory and pay_run_signatures reject update and delete (rolled back: payroll-payslips expects the signatory table empty)", async () => {
+    const runId = await newRun();
+    const rollback = new Error("rollback");
+    await db
+      .transaction(async (tx) => {
+        const signatoryId = randomUUID();
+        await tx.execute(sql`insert into payroll.pay_signatory (id, name, title, signature_enc, created_by) values (${signatoryId}, ${"Test Signatory"}, ${"Director"}, null, ${actorId})`);
+        await tx.execute(sql`insert into payroll.pay_run_signatures (run_id, signatory_id, signed_on) values (${runId}, ${signatoryId}, ${"2030-02-01"})`);
+        for (const [table, setClause] of [
+          ["pay_signatory", "title = 'x'"],
+          ["pay_run_signatures", "signed_on = '2030-03-01'"],
+        ]) {
+          for (const statement of [`update payroll.${table} set ${setClause} where true`, `delete from payroll.${table} where true`]) {
+            await tx.execute(sql`savepoint check_one`);
+            await raises(tx.execute(sql.raw(statement)), /append-only/);
+            await tx.execute(sql`rollback to savepoint check_one`);
+          }
+        }
+        throw rollback;
+      })
+      .catch((error) => {
+        if (error !== rollback) throw error;
+      });
   });
 
   it("seeds the settings row with divisor 11, warn 1000 and no multipliers", async () => {
@@ -164,11 +183,27 @@ describe("run status transitions", () => {
     ["draft", "approved"],
     ["draft", "paid"],
     ["in_review", "paid"],
-    ["approved", "draft"],
     ["approved", "in_review"],
   ])("refuses %s to %s", async (from, target) => {
     const runId = await newRun(from);
     await raises(to(runId, target), /transition/);
+  });
+
+  it("lets an approved run go back to draft (unapprove) only while nothing is paid or released", async () => {
+    const free = await newRun("approved");
+    await to(free, "draft");
+    await to(free, "in_review");
+    await to(free, "approved");
+
+    const paid = await newRun("approved");
+    const paymentId = randomUUID();
+    await db.execute(sql`insert into payroll.pay_payments (id, run_id, employee_id, reference_enc, paid_on, marked_by)
+      values (${paymentId}, ${paid}, ${employeeId}, ${enc("ref", `pay_payment:${paymentId}`)}, '2030-02-01', ${actorId})`);
+    await raises(to(paid, "draft"), /cannot be unapproved/);
+
+    const released = await newRun("approved");
+    await db.execute(sql`insert into payroll.pay_run_releases (run_id, released_by, people_count) values (${released}, ${actorId}, 1)`);
+    await raises(to(released, "draft"), /cannot be unapproved/);
   });
 
   it("a paid run cannot change", async () => {

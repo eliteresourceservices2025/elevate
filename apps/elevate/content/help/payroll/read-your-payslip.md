@@ -33,7 +33,7 @@ The bell shows the notice. It never shows an amount.
 The statement is one page, and the PDF looks the same as the page. Everything is in pesos. **Every row is always listed**, and a dash (-) means nothing for that item in this period, so you can see everything that could be paid or taken off.
 
 - **At the top:** the statement number, the pay period, your date of hire, the date you were paid and how (for example Remitly), and the client of the pay line.
-- **How your pay was worked out:** your monthly rate, the daily and hourly rate worked out from it, and the hours per day.
+- **How your pay was worked out:** your monthly rate, the daily and hourly rate worked out from it, and the hours per day. (For the internal team, paid by FTE, it shows the amount per FTE and the total FTE instead of a monthly rate.)
 - **Compensation (left column):** the base pay for the period, overtime (OT) for a regular day, a rest day and a rest day past 8 hours, holiday pay (always at 100%, with the hours), then your **allowances**, **reimbursements**, **bonuses** and **adjustments**, each line under its own name (for example Health allowance) and marked with its kind. It ends with **Total compensation**.
 - **Deductions (right column):** absent days, unpaid sick leave (SL), late and undertime, a loan and other deductions. It ends with **Total deductions**.
 - **Leave (days):** bereavement and PTO (both paid) and SL (unpaid), as a number of days.

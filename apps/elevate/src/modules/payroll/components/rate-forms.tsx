@@ -24,6 +24,11 @@ type Fields = {
   paymentMethod: PaymentMethod;
   effectiveFrom: string;
   monthly: string;
+  /** How the person is paid: a monthly rate, or (internal team) an amount per FTE per cutoff. */
+  basis: "monthly" | "per_fte";
+  perFte: string;
+  /** The default FTE count as typed ("1", "0.5", "0"); blank = not set. Not used for a per-FTE rate. */
+  fte: string;
   /** This person's own overtime percents as typed; blank = the company standard. */
   otRegular: string;
   otRestDay: string;
@@ -42,7 +47,10 @@ const toInput = (v: Fields) => ({
   hoursPerDay: Number(v.hoursPerDay),
   paymentMethod: v.paymentMethod,
   effectiveFrom: v.effectiveFrom,
-  monthly: v.monthly,
+  basis: v.basis,
+  monthly: v.basis === "monthly" ? v.monthly : "",
+  perFte: v.basis === "per_fte" ? v.perFte : "",
+  fte: v.basis === "monthly" ? v.fte : "",
   otRegular: v.otRegular,
   otRestDay: v.otRestDay,
   otRestDayOver8: v.otRestDayOver8,
@@ -54,7 +62,11 @@ const fieldsOf = (row: RateRow, effectiveFrom: string, monthly = row.monthly): F
   hoursPerDay: String(row.hoursPerDay),
   paymentMethod: row.paymentMethod,
   effectiveFrom,
-  monthly,
+  basis: row.basis,
+  // The typed amount is the monthly rate, or the amount per FTE for an internal-team rate.
+  monthly: row.basis === "monthly" ? monthly : "",
+  perFte: row.basis === "per_fte" ? monthly : "",
+  fte: row.fte ?? "",
   otRegular: row.otPercent.regular,
   otRestDay: row.otPercent.restDay,
   otRestDayOver8: row.otPercent.restDayOver8,
@@ -62,8 +74,31 @@ const fieldsOf = (row: RateRow, effectiveFrom: string, monthly = row.monthly): F
 
 const amount = (text: string) => Number.parseFloat(text.replace(/,/g, ""));
 
+/** A rate's amount in words: "31,415.92 a month", or for the internal team "1,500.00 per FTE per cutoff". */
+const rateText = (row: Pick<RateRow, "monthly" | "basis">) => (row.basis === "per_fte" ? `${row.monthly} per FTE per cutoff` : `${row.monthly} a month`);
+
+const FTE_CHOICES = ["1", "0.5", "0"] as const;
+
+/** The default FTE count of a contractor on a client: Not set, 1, 0.5 or 0 (a value saved earlier that is none of these stays choosable). */
+function FteSelect({ id, value, onChange }: { id: string; value: string; onChange: (next: string) => void }) {
+  return (
+    <div className="space-y-1">
+      <HintedLabel htmlFor={id} hint={PAYROLL_HINTS.lineFte}>FTE</HintedLabel>
+      <NativeSelect id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Not set</option>
+        {FTE_CHOICES.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+        {value !== "" && !(FTE_CHOICES as readonly string[]).includes(value) ? <option value={value}>{value}</option> : null}
+      </NativeSelect>
+    </div>
+  );
+}
+
 /** Hours, alias, payment method and the person's own overtime percents: the rarely changed details, shown on request. */
-function DetailFields({ value, onChange, idPrefix, withClient }: { value: Fields; onChange: (next: Fields) => void; idPrefix: string; withClient?: RateOptions["clients"] | null }) {
+function DetailFields({ value, onChange, idPrefix, withClient, showFte = true }: { value: Fields; onChange: (next: Fields) => void; idPrefix: string; withClient?: RateOptions["clients"] | null; showFte?: boolean }) {
   const set = <K extends keyof Fields>(key: K, v: Fields[K]) => onChange({ ...value, [key]: v });
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -80,6 +115,7 @@ function DetailFields({ value, onChange, idPrefix, withClient }: { value: Fields
           </NativeSelect>
         </div>
       ) : null}
+      {showFte && value.basis === "monthly" ? <FteSelect id={`${idPrefix}-fte`} value={value.fte} onChange={(v) => set("fte", v)} /> : null}
       <div className="space-y-1">
         <HintedLabel htmlFor={`${idPrefix}-alias`} hint={PAYROLL_HINTS.lineAlias}>Alias (optional)</HintedLabel>
         <Input id={`${idPrefix}-alias`} value={value.alias} onChange={(e) => set("alias", e.target.value)} maxLength={80} />
@@ -145,6 +181,9 @@ export function AddContractorForm({ options, cutoffs, rows }: { options: RateOpt
     paymentMethod: "remitly",
     effectiveFrom: cutoffs[0]?.start ?? "",
     monthly: "",
+    basis: "monthly",
+    perFte: "",
+    fte: "",
     otRegular: "",
     otRestDay: "",
     otRestDayOver8: "",
@@ -185,13 +224,30 @@ export function AddContractorForm({ options, cutoffs, rows }: { options: RateOpt
           </NativeSelect>
         </div>
         <div className="space-y-1">
-          <HintedLabel htmlFor="add-monthly" hint={PAYROLL_HINTS.lineMonthly}>Monthly rate (pesos)</HintedLabel>
-          <Input id="add-monthly" inputMode="decimal" value={fields.monthly} onChange={(e) => set("monthly", e.target.value)} placeholder="25,000.00" autoComplete="off" required />
+          <HintedLabel htmlFor="add-basis" hint={PAYROLL_HINTS.lineBasis}>How is this person paid?</HintedLabel>
+          <NativeSelect id="add-basis" value={fields.basis} onChange={(e) => set("basis", e.target.value as Fields["basis"])}>
+            <option value="monthly">Monthly rate</option>
+            <option value="per_fte">Per FTE (internal team)</option>
+          </NativeSelect>
         </div>
+        {fields.basis === "monthly" ? (
+          <>
+            <div className="space-y-1">
+              <HintedLabel htmlFor="add-monthly" hint={PAYROLL_HINTS.lineMonthly}>Monthly rate (pesos)</HintedLabel>
+              <Input id="add-monthly" inputMode="decimal" value={fields.monthly} onChange={(e) => set("monthly", e.target.value)} placeholder="25,000.00" autoComplete="off" required />
+            </div>
+            <FteSelect id="add-fte" value={fields.fte} onChange={(v) => set("fte", v)} />
+          </>
+        ) : (
+          <div className="space-y-1">
+            <HintedLabel htmlFor="add-per-fte" hint={PAYROLL_HINTS.linePerFte}>Amount per FTE per cutoff (pesos)</HintedLabel>
+            <Input id="add-per-fte" inputMode="decimal" value={fields.perFte} onChange={(e) => set("perFte", e.target.value)} placeholder="1,500.00" autoComplete="off" required />
+          </div>
+        )}
       </div>
       {twin ? (
         <Alert variant="info" role="status" className="rounded-lg p-3 text-sm">
-          {twin.name} already has a rate for {twin.clientName ?? "no client"} ({twin.monthly} a month). To change it, close this window and use <strong>Update rate</strong> on that row. A second client or role gets its own rate here.
+          {twin.name} already has a rate for {twin.clientName ?? "no client"} ({rateText(twin)}). To change it, close this window and use <strong>Update rate</strong> on that row. A second client or role gets its own rate here.
         </Alert>
       ) : null}
       <CutoffPicker
@@ -205,7 +261,7 @@ export function AddContractorForm({ options, cutoffs, rows }: { options: RateOpt
       <details className="text-sm">
         <summary className="cursor-pointer font-medium">More options (hours per day, alias, payment method, overtime)</summary>
         <div className="mt-3">
-          <DetailFields value={fields} onChange={setFields} idPrefix="add" />
+          <DetailFields value={fields} onChange={setFields} idPrefix="add" showFte={false} />
         </div>
       </details>
       <Button type="submit" disabled={pending || !!twin || !employeeId}>
@@ -248,11 +304,13 @@ export function UpdateRateForm({ row, cutoffs, draftCutoffs = [] }: { row: RateR
       }}
     >
       <p className="text-sm text-muted-foreground">
-        Current rate: <span className="font-medium text-foreground tabular-nums">{row.monthly}</span> a month, paid since {row.effectiveFrom}.
+        Current rate: <span className="font-medium text-foreground tabular-nums">{row.monthly}</span> {row.basis === "per_fte" ? "per FTE per cutoff" : "a month"}, paid since {row.effectiveFrom}.
         {row.upcomingFrom ? ` A change from ${row.upcomingFrom} is already scheduled.` : ""}
       </p>
       <div className="space-y-1">
-        <HintedLabel htmlFor={`upd-${row.lineKey}-monthly`} hint={PAYROLL_HINTS.lineMonthly}>New monthly rate (pesos)</HintedLabel>
+        <HintedLabel htmlFor={`upd-${row.lineKey}-monthly`} hint={row.basis === "per_fte" ? PAYROLL_HINTS.linePerFte : PAYROLL_HINTS.lineMonthly}>
+          {row.basis === "per_fte" ? "New amount per FTE per cutoff (pesos)" : "New monthly rate (pesos)"}
+        </HintedLabel>
         <Input id={`upd-${row.lineKey}-monthly`} inputMode="decimal" value={monthly} onChange={(e) => setMonthly(e.target.value)} placeholder={row.monthly} autoComplete="off" required />
         {sameRate ? <p className="text-xs text-muted-foreground">That is the current rate.</p> : null}
       </div>
@@ -317,7 +375,7 @@ export function EditDetailsForm({ row, options, cutoffs, draftCutoffs = [] }: { 
         onChange={(v) => setFields({ ...fields, effectiveFrom: v })}
         note={
           backdated
-            ? `From ${backdated.range} the monthly rate will be ${row.monthly}, as it is now. The ${backdated.range} run is still a draft. After saving, open it and choose Fill or update this run so it uses these details.`
+            ? `From ${backdated.range} the rate will be ${rateText(row)}, as it is now. The ${backdated.range} run is still a draft. After saving, open it and choose Fill or update this run so it uses these details.`
             : undefined
         }
       />
@@ -369,7 +427,7 @@ export function RemoveRateForm({ row }: { row: RateRow }) {
   return (
     <div className="space-y-4">
       <p className="text-sm">
-        This takes {row.name}&apos;s rate for {row.clientName ?? "no client"} ({row.monthly} a month) off the Rates tab and off every draft pay run. It has never been on a real pay run. The change history keeps a record of it.
+        This takes {row.name}&apos;s rate for {row.clientName ?? "no client"} ({rateText(row)}) off the Rates tab and off every draft pay run. It has never been on a real pay run. The change history keeps a record of it.
       </p>
       <p className="text-sm text-muted-foreground">If they were paid with this rate, use Stop paying instead.</p>
       <Button type="button" variant="destructive" disabled={pending} onClick={() => run(() => withdrawPayLine({ lineKey: row.lineKey, reason: "Added by mistake" }), "Rate removed.", () => dialog?.close(true))}>
@@ -398,7 +456,7 @@ export function AutoTidy({ tidyKey }: { tidyKey: string }) {
   return null;
 }
 
-const removedText = (r: RemovedRateView) => `${r.clientName ?? "No client"}${r.alias ? ` (${r.alias})` : ""}: ${r.monthly} a month, since ${r.since}`;
+const removedText = (r: RemovedRateView) => `${r.clientName ?? "No client"}${r.alias ? ` (${r.alias})` : ""}: ${r.monthly.endsWith("per FTE") ? r.monthly : `${r.monthly} a month`}, since ${r.since}`;
 
 /**
  * The doubled rates the tidy took away, grouped by contractor. Restore one contractor's, or all of them. A restored rate is left alone by the

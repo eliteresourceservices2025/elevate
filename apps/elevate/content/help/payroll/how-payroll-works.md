@@ -21,7 +21,9 @@ The worksheet and the contractor payment statement show these parts. On the stat
 - **Plus: allowances.** Each one has its own name, like Health allowance. This gives the **gross** pay.
 - **Plus: reimbursements, bonuses and adjustments.** Each is a separate section, and each line has its own name.
 - **Less: a loan and other deductions.**
-- **Total payable compensation.** What the person is paid.
+- **Total payable compensation.** What the person is paid. This is the amount to pay, and the one marked **Pay this** on the run and on the Remitly list. **Gross** is the step before it (the pay after absences and late time, plus overtime, holiday pay and allowances), so it is not the amount to pay.
+
+The internal team (the ELITE Resource Services team) is the exception for the first line: instead of half a monthly rate, their cutoff pay is the run's **Total FTE** times their **amount per FTE**. Everything after that works the same. FTE is a count of 1, 0.5 or 0 kept with each contractor's rate. It only sets the internal team's pay, and it is never shown on a contractor's statement.
 
 Bereavement and PTO days are **paid days**. They are written on the statement but take nothing off the pay. Sick leave (SL) days are unpaid and are taken off like an absence.
 
@@ -63,11 +65,11 @@ If you cannot see **Payroll**, you have not been chosen. Ask a Super Admin if yo
 
 # Who signs the statements
 
-Every contractor payment statement carries the name, title and signature of the Human Resources Director. A **Super Admin** sets them under **Settings**, then **Payment statement signatory**: the name, the title (it starts as Human Resources Director) and a picture of the signature. This does not give anyone access to pay.
+Every contractor payment statement carries the name, title and signature of the Human Resources Director. A **Super Admin** sets them under **Settings**, then **Payment statement signatory**: the name, the title (it starts as Human Resources Director), a picture of the signature, and **Prepared by**, the person printed under Prepared by on every statement. Choose one of the people who have the **Preparer** payroll level, so it does not depend on which preparer sent the run for review. This does not give anyone access to pay.
 
 ![Settings, Payment statement signatory: the name, the title and the signature picture that print on every contractor payment statement.](help:how-payroll-works/03-statement-signatory.png)
 
-A pay run keeps the signatory in force on the day it is paid, so an earlier statement never changes when the Human Resources Director changes. A run paid before anyone was set up still pays on time. Either way, the statement fills in **Prepared by** (who prepared the run), **Authorized by** (who approved it) and the **Date** it was approved by itself, from the run: nobody types them. With no signatory set up, the person who approved the run shows under **Authorized by** instead of **Not signed**.
+Until a run is paid, its statements (test or real, approved or not) follow what is saved in Settings: the signatory and the chosen preparer. When the run is paid, it keeps what was in force that day, so an earlier statement never changes when the Human Resources Director or the preparer changes. A run paid before anyone was set up still pays on time and stays unsigned. The statement fills in **Prepared by**, **Authorized by** (the Approver who approved it) and the **Date** it was approved by itself: nobody types them. If no **Prepared by** is chosen, it shows whoever sent the run for review. With no signatory set up, the person who approved the run shows under **Authorized by** instead of **Not signed**.
 
 # What is kept
 

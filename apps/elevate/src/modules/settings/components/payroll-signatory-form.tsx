@@ -7,9 +7,10 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SIGNATORY_LABELS as S } from "@/modules/payroll/constants";
 import { savePayrollSignatory } from "../actions";
-import type { PayrollSignatoryView } from "../queries";
+import type { PayrollSignatoryView, StatementPreparer } from "../queries";
 
 // A signature picture is made small in the browser (a JPEG on a white background, at most 600 x 200). The server checks the bytes again
 // and removes any metadata before keeping it, so nothing here is trusted.
@@ -47,13 +48,15 @@ async function toSignatureJpeg(file: File): Promise<Picked> {
   }
 }
 
-export function PayrollSignatoryForm({ current }: { current: PayrollSignatoryView | null }) {
+export function PayrollSignatoryForm({ current, preparers }: { current: PayrollSignatoryView | null; preparers: StatementPreparer[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState(current?.name ?? "");
   const [title, setTitle] = useState(current?.title ?? S.titleDefault);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [remove, setRemove] = useState(false);
+  // A preparer who lost the Preparer level (or left) stays selectable until someone else is chosen, so the page does not silently change it.
+  const [preparedBy, setPreparedBy] = useState(current?.preparedByUserId ?? "");
 
   const shown = picked?.previewUrl ?? (remove ? null : (current?.signatureDataUrl ?? null));
 
@@ -69,7 +72,7 @@ export function PayrollSignatoryForm({ current }: { current: PayrollSignatoryVie
 
   function save() {
     startTransition(async () => {
-      const result = await savePayrollSignatory({ name, title, signature: picked?.base64 ?? null, removeSignature: remove && !picked });
+      const result = await savePayrollSignatory({ name, title, signature: picked?.base64 ?? null, removeSignature: remove && !picked, preparedByUserId: preparedBy || null });
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -99,6 +102,20 @@ export function PayrollSignatoryForm({ current }: { current: PayrollSignatoryVie
       <div className="space-y-1">
         <Label htmlFor="signatory-title">{S.title}</Label>
         <Input id="signatory-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required autoComplete="off" />
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor="signatory-prepared-by">{S.preparedBy}</Label>
+        <NativeSelect id="signatory-prepared-by" value={preparedBy} onChange={(e) => setPreparedBy(e.target.value)}>
+          <option value="">{S.preparedByAuto}</option>
+          {preparedBy !== "" && !preparers.some((p) => p.userId === preparedBy) ? <option value={preparedBy}>Current preparer (no longer has the Preparer level)</option> : null}
+          {preparers.map((p) => (
+            <option key={p.userId} value={p.userId}>
+              {p.name}
+            </option>
+          ))}
+        </NativeSelect>
+        <p className="text-xs text-muted-foreground">{preparers.length === 0 ? S.preparedByNone : S.preparedByHint}</p>
       </div>
 
       <div className="space-y-2">

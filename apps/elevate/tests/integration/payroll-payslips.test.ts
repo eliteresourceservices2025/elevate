@@ -458,13 +458,25 @@ describe("the signatory on payslips", () => {
   beforeAll(async () => {
     superAdmin = await account(null, ["super_admin"]);
   });
-  const input = { name: "Carmen Dela Rosa", title: "Human Resources Director", signature: jpegBase64(), removeSignature: false };
+  const input = { name: "Carmen Dela Rosa", title: "Human Resources Director", signature: jpegBase64(), removeSignature: false, preparedByUserId: null };
+  /** The statement of one person on a run, as the payroll team's page and the PDF build it. */
+  const statementOf = async (runId: string, emp: string) => {
+    const [run] = await rows<{ periodStart: string; periodEnd: string; settingsSnapshot: unknown; isTest: boolean }>(
+      sql`select period_start::text as "periodStart", period_end::text as "periodEnd", settings_snapshot as "settingsSnapshot", is_test as "isTest" from payroll.pay_runs where id = ${runId}`,
+    );
+    return (await buildStatement(db, runId, emp, run))!;
+  };
+  /** What a preparer account is called on a statement: the name on their people record, else the account's email. */
+  const emailOf = async (userId: string) => (await rows<{ email: string }>(sql`select email from core.users where id = ${userId}`))[0].email;
+  // The run paid before anybody was set, to check later that setting someone never rewrites it.
+  let unsigned: { runId: string; emp: string } | null = null;
 
   it("says Not signed on the payslip of a run paid before anybody was set up", async () => {
     expect(await rows(sql`select 1 from payroll.pay_signatory`)).toHaveLength(0);
     const owner = await account();
     const emp = await person(owner.id);
     const runId = await paidRun(slot(18), [emp]);
+    unsigned = { runId, emp };
     expect(await rows(sql`select 1 from payroll.pay_run_signatures where run_id = ${runId}`)).toHaveLength(0);
     as(owner);
     const slip = await getMyPayslip(owner as never, runId);
@@ -526,10 +538,10 @@ describe("the signatory on payslips", () => {
 
     const run1 = await paidRun(slot(19), [e1]); // paid under Carmen, with her picture
     as(superAdmin);
-    expect(await savePayrollSignatory({ name: "Elena Marquez", title: "Director of People", signature: null, removeSignature: false })).toMatchObject({ ok: true });
+    expect(await savePayrollSignatory({ name: "Elena Marquez", title: "Director of People", signature: null, removeSignature: false, preparedByUserId: null })).toMatchObject({ ok: true });
     const run2 = await paidRun(slot(20), [e2]); // paid under Elena, who keeps the picture saved before
     as(superAdmin);
-    expect(await savePayrollSignatory({ name: "Elena Marquez", title: "Director of People", signature: null, removeSignature: true })).toMatchObject({ ok: true });
+    expect(await savePayrollSignatory({ name: "Elena Marquez", title: "Director of People", signature: null, removeSignature: true, preparedByUserId: null })).toMatchObject({ ok: true });
     const run3 = await paidRun(slot(21), [e3]); // paid under Elena with no picture
 
     const view = async (who: { id: string }, runId: string) => {
@@ -554,7 +566,7 @@ describe("the signatory on payslips", () => {
     expect(await rows(sql`select 1 from payroll.pay_run_signatures where run_id in (${run1}, ${run2}, ${run3})`)).toHaveLength(3);
   });
 
-  it("signs an approved TEST run with the saved signatory (not the Approver's name), while a real approved run still shows its Approver", async () => {
+  it("signs an approved run, test or real, with the saved signatory (not the Approver's name) until it is paid", async () => {
     const owner = await account();
     const emp = await person(owner.id);
     // One free period: a test run may repeat the period of a real run.
@@ -567,28 +579,76 @@ describe("the signatory on payslips", () => {
     as(approver);
     expect(await approveRun({ runId: practice, expectedHash: (await getWorksheet(practice))!.expectedHash! })).toMatchObject({ ok: true });
 
-    const statementOf = async (runId: string) => {
-      const [run] = await rows<{ periodStart: string; periodEnd: string; settingsSnapshot: unknown; isTest: boolean }>(
-        sql`select period_start::text as "periodStart", period_end::text as "periodEnd", settings_snapshot as "settingsSnapshot", is_test as "isTest" from payroll.pay_runs where id = ${runId}`,
-      );
-      return (await buildStatement(db, runId, emp, run))!;
+    // Both show the saved signatory (name, title and picture as they stand now), dated the approval day, whoever approved them.
+    const saved = (await currentSignatory(db))!;
+    for (const [runId, isTest] of [[real, false], [practice, true]] as const) {
+      const slip = await statementOf(runId, emp);
+      expect(slip.isTest).toBe(isTest);
+      expect(slip.signatory, isTest ? "test run" : "real run").toMatchObject({ name: saved.name, title: saved.title, signedOn: slip.approvedOn });
+      expect(slip.signatory?.signatureBase64).toBe(saved.signatureBase64);
+      expect(slip.authorizedBy).toBeTruthy();
+      expect(payslipView(slip).signature).toMatchObject({ name: saved.name, title: saved.title });
+      // Nothing was frozen for it: the saved signatory is read when the statement is made.
+      expect(await rows(sql`select 1 from payroll.pay_run_signatures where run_id = ${runId}`)).toHaveLength(0);
+    }
+  });
+
+  it("never rewrites a run that was paid before anybody was set", async () => {
+    expect(unsigned).not.toBeNull();
+    const slip = await statementOf(unsigned!.runId, unsigned!.emp);
+    expect(slip.signatory).toBeNull();
+    expect(payslipView(slip).signature).toBeNull();
+  });
+
+  it("refuses to print someone who does not have the Preparer level under Prepared by", async () => {
+    const before = await rows(sql`select 1 from payroll.pay_signatory`);
+    as(superAdmin);
+    const noLevel = await account(null);
+    for (const userId of [approver.id, noLevel.id, randomUUID()]) {
+      expect(await savePayrollSignatory({ ...input, signature: null, preparedByUserId: userId })).toEqual({ ok: false, error: "Choose someone who has the Preparer payroll level." });
+    }
+    expect(await savePayrollSignatory({ ...input, signature: null, preparedByUserId: "not-an-id" })).toMatchObject({ ok: false });
+    expect(await rows(sql`select 1 from payroll.pay_signatory`)).toHaveLength(before.length);
+  });
+
+  it("prints the preparer chosen in Settings, else whoever sent the run for review, and a paid run keeps the one it was paid under", async () => {
+    const owner = await account();
+    const emp = await person(owner.id);
+    const jamie = await account("preparer");
+    await person(jamie.id, "Alonzo"); // Liza Alonzo: the name on her people record
+    const save = async (preparedByUserId: string | null) => {
+      as(superAdmin);
+      expect(await savePayrollSignatory({ ...input, signature: null, preparedByUserId })).toEqual({ ok: true, data: undefined });
     };
 
-    // Nothing is frozen until a run is paid, so a real approved run has no signatory yet and falls back to the Approver who approved it.
-    const realSlip = await statementOf(real);
-    expect(realSlip.signatory).toBeNull();
-    expect(realSlip.authorizedBy).toBeTruthy();
-    expect(payslipView(realSlip).signature).toBeNull();
+    // Whoever sent it for review (the first Preparer account) until one is chosen. 2028-12-16 to 31: the one half month of 2028 after the
+    // pay settings start that the payments tests do not use.
+    await save(null);
+    const unpaid = await approvedRunFor({ periodStart: "2028-12-16", periodEnd: "2028-12-31" }, emp);
+    expect((await statementOf(unpaid, emp)).preparedBy).toBe(await emailOf(preparer.id));
 
-    // The test run shows the saved signatory (name, title and picture as they stand now), dated the approval day.
-    const saved = (await currentSignatory(db))!;
-    const testSlip = await statementOf(practice);
-    expect(testSlip.isTest).toBe(true);
-    expect(testSlip.signatory).toMatchObject({ name: saved.name, title: saved.title, signedOn: testSlip.approvedOn });
-    expect(testSlip.signatory?.signatureBase64).toBe(saved.signatureBase64);
-    expect(payslipView(testSlip).signature).toMatchObject({ name: saved.name, title: saved.title });
-    // Nothing was frozen for it: the saved signatory is read when the statement is made.
-    expect(await rows(sql`select 1 from payroll.pay_run_signatures where run_id = ${practice}`)).toHaveLength(0);
+    // The chosen preparer shows on the approved run at once, and on the PDF.
+    await save(jamie.id);
+    const slip = await statementOf(unpaid, emp);
+    expect(slip.preparedBy).toBe("Liza Alonzo");
+    expect(payslipView(slip).preparedBy).toBe("Liza Alonzo");
+
+    // A run that is not paid yet follows every new choice.
+    await save(preparer.id);
+    expect((await statementOf(unpaid, emp)).preparedBy).toBe(await emailOf(preparer.id));
+    await save(jamie.id);
+
+    // Paying it keeps the version in force (with Jamie), so a later choice never changes this statement.
+    await payAll(unpaid, [emp]);
+    expect(await rows(sql`select 1 from payroll.pay_run_signatures where run_id = ${unpaid}`)).toHaveLength(1);
+    await save(preparer.id);
+    expect((await statementOf(unpaid, emp)).preparedBy).toBe("Liza Alonzo");
+    await save(null);
+    expect((await statementOf(unpaid, emp)).preparedBy).toBe("Liza Alonzo");
+    // The history records the change by name, never in the audit log.
+    const [audit] = await rows<{ j: unknown }>(sql`select to_jsonb(a) as j from ops.audit_log a where action = 'payroll.signatory.update' order by id desc limit 1`);
+    expect(JSON.stringify(audit.j)).toContain("preparerChanged");
+    expect(JSON.stringify(audit.j)).not.toContain("Alonzo");
   });
 });
 
