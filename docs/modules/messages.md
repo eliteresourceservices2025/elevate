@@ -22,6 +22,7 @@ Only **HR Admins and Super Admins** create, rename, change the people of, and de
 - HR manages groups from the **Manage groups** page (`/messages/manage`: names, counts, people; never message text) and from the People panel of a group they are in. Everything is audited with ids and counts only (`chat.group.create|rename|delete`, `chat.members.add|remove`; an add lists the ids of who was added, a remove the id of who was removed).
 - **Managing is not reading.** An admin who is not in a group cannot read it and cannot add themself to it (that would be a way around the two-person access request, Phase 6). A group they create includes them as a member until they remove themself.
 - The server checks `messages.manage_group` on every action; the buttons are only hidden for convenience.
+- **Owner accepted (2026-11-17):** one HR Admin or Super Admin can add any other person to a group without a second approval; that person then reads new messages from that moment. The add is audited (ids of who was added), and everyone in the group sees a system line that people were added.
 
 ## Hard rules
 
