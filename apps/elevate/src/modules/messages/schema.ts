@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, check, index, type AnyPgColumn, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, index, smallint, type AnyPgColumn, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
 import { departments, teams } from "@/modules/org/schema";
 
@@ -162,5 +162,53 @@ export const messagePins = chat
       uniqueIndex("message_pins_open_idx").on(t.messageId).where(sql`${t.unpinnedAt} is null`),
       index("message_pins_conversation_idx").on(t.conversationId, t.pinnedAt),
     ],
+  )
+  .enableRLS();
+
+/** A poll is a message of kind 'poll' (its body is the question) plus these rows. Options and the question are encrypted. */
+export const polls = chat
+  .table("polls", {
+    messageId: uuid("message_id")
+      .primaryKey()
+      .references(() => messages.id),
+    /** People may pick several options. */
+    multiple: boolean("multiple").notNull().default(false),
+    /** Counts only: nobody sees who voted for what. */
+    anonymous: boolean("anonymous").notNull().default(false),
+  })
+  .enableRLS();
+
+export const pollOptions = chat
+  .table(
+    "poll_options",
+    {
+      id: uuid("id").primaryKey(),
+      messageId: uuid("message_id")
+        .notNull()
+        .references(() => polls.messageId),
+      position: smallint("position").notNull(),
+      /** Encrypted with context "chat_poll_option:<messageId>:<optionId>". */
+      labelEnc: text("label_enc").notNull(),
+    },
+    (t) => [uniqueIndex("poll_options_position_idx").on(t.messageId, t.position)],
+  )
+  .enableRLS();
+
+export const pollVotes = chat
+  .table(
+    "poll_votes",
+    {
+      messageId: uuid("message_id")
+        .notNull()
+        .references(() => polls.messageId),
+      optionId: uuid("option_id")
+        .notNull()
+        .references(() => pollOptions.id),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      votedAt: timestamp("voted_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [primaryKey({ columns: [t.optionId, t.userId] }), index("poll_votes_message_idx").on(t.messageId, t.userId)],
   )
   .enableRLS();

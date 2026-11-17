@@ -158,3 +158,89 @@ describe("extractMentions", () => {
     expect(extractMentions("no mentions here")).toEqual([]);
   });
 });
+
+describe("polls (Phase 2c)", () => {
+  const optionsOf = async (conv: string, viewer: Actor, messageId: string) => {
+    as(viewer);
+    const m = (await queries.loadMessages({ conversationId: conv })).messages.find((x) => x.id === messageId)!;
+    return m.poll!;
+  };
+
+  it("a poll stores its question and options encrypted, and shows the options with zero votes", async () => {
+    const a = await makeUser("a");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const conv = await group(a, [b, c]);
+    const question = `Lunch spot ${uniq("q")}`;
+    const poll = await service.createPoll(a, { conversationId: conv, question, options: ["Pizza place", "Noodle bar", "Salad"], multiple: false, anonymous: false });
+    const raw = await rows<{ body_enc: string }>(sql`select body_enc from chat.messages where id = ${poll.id}`);
+    expect(raw[0].body_enc).not.toContain(question);
+    const rawOptions = await rows<{ label_enc: string }>(sql`select label_enc from chat.poll_options where message_id = ${poll.id}`);
+    expect(rawOptions).toHaveLength(3);
+    expect(JSON.stringify(rawOptions)).not.toContain("Pizza");
+    const view = await optionsOf(conv, b, poll.id);
+    expect(view.options.map((o) => o.label)).toEqual(["Pizza place", "Noodle bar", "Salad"]);
+    expect(view.options.every((o) => o.count === 0 && !o.mine)).toBe(true);
+    const asMessage = (await queries.loadMessages({ conversationId: conv })).messages.find((x) => x.id === poll.id)!;
+    expect(asMessage).toMatchObject({ kind: "poll", body: question });
+  });
+
+  it("single choice: a new vote replaces the old one, the same vote again removes it", async () => {
+    const a = await makeUser("a");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const conv = await group(a, [b, c]);
+    const poll = await service.createPoll(a, { conversationId: conv, question: "Friday huddle time?", options: ["9 PM", "10 PM"], multiple: false, anonymous: false });
+    const [o1, o2] = (await optionsOf(conv, b, poll.id)).options;
+    await service.votePoll(b, { messageId: poll.id, optionId: o1.id });
+    await service.votePoll(c, { messageId: poll.id, optionId: o1.id });
+    await service.votePoll(b, { messageId: poll.id, optionId: o2.id });
+    let view = await optionsOf(conv, b, poll.id);
+    expect(view.options.map((o) => [o.count, o.mine])).toEqual([[1, false], [1, true]]);
+    await service.votePoll(b, { messageId: poll.id, optionId: o2.id });
+    view = await optionsOf(conv, b, poll.id);
+    expect(view.options.map((o) => o.count)).toEqual([1, 0]);
+  });
+
+  it("multiple choice toggles each option; names are shown unless the poll is anonymous", async () => {
+    const a = await makeUser("a", { first: "Ana", last: "Cruz" });
+    const b = await makeUser("b", { first: "Bea", last: "Santos" });
+    const c = await makeUser("c");
+    const conv = await group(a, [b, c]);
+    const open = await service.createPoll(a, { conversationId: conv, question: "Which days can you work?", options: ["Mon", "Tue", "Wed"], multiple: true, anonymous: false });
+    const secret = await service.createPoll(a, { conversationId: conv, question: "Rate the new schedule", options: ["Good", "Bad"], multiple: false, anonymous: true });
+    const [mon, tue] = (await optionsOf(conv, b, open.id)).options;
+    await service.votePoll(b, { messageId: open.id, optionId: mon.id });
+    await service.votePoll(b, { messageId: open.id, optionId: tue.id });
+    const view = await optionsOf(conv, a, open.id);
+    expect(view.options.map((o) => o.count)).toEqual([1, 1, 0]);
+    expect(view.options[0].voters).toEqual(["Bea Santos"]);
+    const [good] = (await optionsOf(conv, a, secret.id)).options;
+    await service.votePoll(b, { messageId: secret.id, optionId: good.id });
+    const hidden = await optionsOf(conv, a, secret.id);
+    expect(hidden.options[0].count).toBe(1);
+    expect(hidden.options[0].voters).toBeUndefined();
+    expect(JSON.stringify(hidden)).not.toContain("Bea");
+  });
+
+  it("refuses votes from strangers and removed members, an option of another poll, a vote on a non-poll, and bad polls", async () => {
+    const a = await makeUser("a");
+    const b = await makeUser("b");
+    const c = await makeUser("c");
+    const stranger = await makeUser("s");
+    const conv = await group(a, [b, c]);
+    const p1 = await service.createPoll(a, { conversationId: conv, question: "One?", options: ["Yes", "No"], multiple: false, anonymous: false });
+    const p2 = await service.createPoll(a, { conversationId: conv, question: "Two?", options: ["Yes", "No"], multiple: false, anonymous: false });
+    const [y1] = (await optionsOf(conv, b, p1.id)).options;
+    const [y2] = (await optionsOf(conv, b, p2.id)).options;
+    await expect(service.votePoll(stranger, { messageId: p1.id, optionId: y1.id })).rejects.toThrow("Message not found.");
+    await expect(service.votePoll(b, { messageId: p1.id, optionId: y2.id })).rejects.toThrow("That option isn't in this poll.");
+    const text = await service.sendMessage(a, { conversationId: conv, body: "not a poll" });
+    await expect(service.votePoll(b, { messageId: text.id, optionId: y1.id })).rejects.toThrow("That isn't a poll.");
+    await service.removeMember(a, { conversationId: conv, userId: c.id });
+    await expect(service.votePoll(c, { messageId: p1.id, optionId: y1.id })).rejects.toThrow("Message not found.");
+    await expect(service.createPoll(a, { conversationId: conv, question: "Only one?", options: ["Just one"], multiple: false, anonymous: false })).rejects.toThrow();
+    await expect(service.createPoll(a, { conversationId: conv, question: "Same?", options: ["Same", " same "], multiple: false, anonymous: false })).rejects.toThrow();
+    await expect(service.createPoll(stranger, { conversationId: conv, question: "Hi?", options: ["A", "B"], multiple: false, anonymous: false })).rejects.toThrow("Conversation not found.");
+  });
+});

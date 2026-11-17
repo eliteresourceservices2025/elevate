@@ -12,6 +12,7 @@ import { writeAudit } from "@/modules/audit/write";
 import {
   addMembersSchema,
   createGroupSchema,
+  createPollSchema,
   deleteGroupSchema,
   deleteMessageSchema,
   editMessageSchema,
@@ -22,6 +23,7 @@ import {
   removeMemberSchema,
   renameGroupSchema,
   sendMessageSchema,
+  votePollSchema,
 } from "./validators";
 
 // Every action: who is calling (requireUser), may they chat at all (authorize), is the input valid (Zod), and only then the domain
@@ -140,6 +142,16 @@ export async function syncChatChannels(): Promise<ActionResult<SyncResult & { sk
     await writeAudit({ actor, action: "chat.channels.sync", targetType: "chat_channels", metadata: { ...result } });
     return { ok: true, data: result };
   });
+}
+
+export async function createChatPoll(input: unknown): Promise<ActionResult<{ id: string; seq: number }>> {
+  const actor = await requireUser();
+  return run(actor, "messages.use", createPollSchema, input, (a, data) => service.createPoll(a, { ...data, canManage: can(a, "messages.manage_group") }));
+}
+
+export async function voteChatPoll(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return run(actor, "messages.use", votePollSchema, input, async (a, data) => void (await service.votePoll(a, data)));
 }
 
 export async function loadChatMessages(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadMessages>>>> {

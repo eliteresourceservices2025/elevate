@@ -53,7 +53,11 @@ export type ChatMessage = {
   lastReplyAt: string | null;
   reactions: { emoji: string; count: number; mine: boolean }[];
   pinned: boolean;
+  /** For a poll message: its options, counts and (unless anonymous) who voted. */
+  poll: PollView | null;
 };
+
+export type PollView = { multiple: boolean; anonymous: boolean; totalVoters: number; options: { id: string; label: string; count: number; mine: boolean; voters?: string[] }[] };
 
 type Person = { name: string; position: string | null };
 
@@ -199,11 +203,43 @@ async function buildMessages(actorId: string, conversationId: string, page: Mess
         select thread_root_id as id, count(*)::int as n, max(created_at) as last_at from chat.messages
         where deleted_at is null and thread_root_id in (${idList(roots)}) group by thread_root_id`)) as unknown as { id: string; n: number; last_at: Date }[])
     : [];
+  const pollMessages = live.filter((m) => m.kind === "poll");
+  const pollRows = pollMessages.length
+    ? ((await db.execute(sql`select message_id, multiple, anonymous from chat.polls where message_id in (${idList(pollMessages)})`)) as unknown as { message_id: string; multiple: boolean; anonymous: boolean }[])
+    : [];
+  const optionRows = pollMessages.length
+    ? ((await db.execute(sql`select id, message_id, position, label_enc from chat.poll_options where message_id in (${idList(pollMessages)}) order by message_id, position`)) as unknown as { id: string; message_id: string; position: number; label_enc: string }[])
+    : [];
+  const voteRows = pollMessages.length
+    ? ((await db.execute(sql`select message_id, option_id, user_id from chat.poll_votes where message_id in (${idList(pollMessages)})`)) as unknown as { message_id: string; option_id: string; user_id: string }[])
+    : [];
   const memberRows = await db.select({ userId: conversationMembers.userId }).from(conversationMembers).where(eq(conversationMembers.conversationId, conversationId));
-  const people = await peopleByUserId([...memberRows.map((r) => r.userId), ...page.map((m) => m.sender_user_id)]);
+  const people = await peopleByUserId([...memberRows.map((r) => r.userId), ...page.map((m) => m.sender_user_id), ...voteRows.map((v) => v.user_id)]);
   const nameOf = (id: string) => people.get(id)?.name ?? "Someone";
 
   const crypto = fieldCrypto();
+  const pollView = (messageId: string): PollView | null => {
+    const poll = pollRows.find((p) => p.message_id === messageId);
+    if (!poll) return null;
+    const votes = voteRows.filter((v) => v.message_id === messageId);
+    return {
+      multiple: poll.multiple,
+      anonymous: poll.anonymous,
+      totalVoters: new Set(votes.map((v) => v.user_id)).size,
+      options: optionRows
+        .filter((o) => o.message_id === messageId)
+        .map((o) => {
+          const forOption = votes.filter((v) => v.option_id === o.id);
+          return {
+            id: o.id,
+            label: crypto.decrypt(o.label_enc, `chat_poll_option:${messageId}:${o.id}`),
+            count: forOption.length,
+            mine: forOption.some((v) => v.user_id === actorId),
+            ...(poll.anonymous ? {} : { voters: forOption.slice(0, 30).map((v) => nameOf(v.user_id)) }),
+          };
+        }),
+    };
+  };
   const messages: ChatMessage[] = page.map((m) => {
     let body: string | null = null;
     if (!m.deleted_at) {
@@ -226,6 +262,7 @@ async function buildMessages(actorId: string, conversationId: string, page: Mess
       lastReplyAt: replies ? new Date(replies.last_at).toISOString() : null,
       reactions: m.deleted_at ? [] : reactionRows.filter((r) => r.message_id === m.id).map((r) => ({ emoji: r.emoji, count: r.n, mine: r.mine })),
       pinned: pinRows.some((r) => r.message_id === m.id),
+      poll: m.kind === "poll" && !m.deleted_at ? pollView(m.id) : null,
     };
   });
   return { messages, nameOf };

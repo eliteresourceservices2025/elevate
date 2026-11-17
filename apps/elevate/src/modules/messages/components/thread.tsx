@@ -16,6 +16,7 @@ import { Composer } from "./composer";
 import { ConversationAvatar } from "./conversation-list";
 import { EmojiPicker } from "./emoji-picker";
 import { MessageBody } from "./message-body";
+import { PollCard } from "./poll-card";
 
 export type ThreadMember = { userId: string; name: string; lastReadSeq: number };
 
@@ -211,7 +212,7 @@ export function MessageRow({
   }
 
   const react = (emoji: string) => run(() => toggleChatReaction({ messageId: m.id, emoji }));
-  const canInteract = m.kind === "text" && !m.deleted;
+  const canInteract = (m.kind === "text" || m.kind === "poll") && !m.deleted;
 
   return (
     <>
@@ -271,9 +272,11 @@ export function MessageRow({
                     </Button>
                     {mine ? (
                       <>
+                        {m.kind === "text" ? (
                         <Button type="button" variant="ghost" size="icon-sm" aria-label="Edit message" onClick={() => { setDraft(m.body ?? ""); setEditing(true); }}>
                           <Pencil aria-hidden />
                         </Button>
+                        ) : null}
                         <Button type="button" variant="ghost" size="icon-sm" aria-label="Remove message" onClick={remove} disabled={pending}>
                           <Trash2 aria-hidden />
                         </Button>
@@ -281,9 +284,13 @@ export function MessageRow({
                     ) : null}
                   </span>
                 ) : null}
-                <p className={cn("rounded-2xl px-3 py-1.5 text-sm break-words whitespace-pre-wrap", mine ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border bg-card")}>
-                  <MessageBody body={m.body ?? ""} myUserId={myUserId} />
-                </p>
+                {m.kind === "poll" && m.poll ? (
+                  <PollCard messageId={m.id} question={m.body ?? ""} poll={m.poll} onChanged={onChanged} />
+                ) : (
+                  <p className={cn("rounded-2xl px-3 py-1.5 text-sm break-words whitespace-pre-wrap", mine ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border bg-card")}>
+                    <MessageBody body={m.body ?? ""} myUserId={myUserId} />
+                  </p>
+                )}
               </div>
             )}
             {m.reactions.length > 0 ? (

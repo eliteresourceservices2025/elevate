@@ -9,6 +9,7 @@ import { sendChatMessage } from "../actions";
 import { mentionToken } from "../mentions";
 import { MAX_BODY } from "../validators";
 import { EmojiPicker } from "./emoji-picker";
+import { PollDialog } from "./poll-dialog";
 
 const COUNTER_FROM = 3500;
 
@@ -92,6 +93,7 @@ export function Composer({
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
         <EmojiPicker onPick={insert} label="Add an emoji to your message" />
+        {!threadRootId ? <PollDialog conversationId={conversationId} onCreated={onSent} /> : null}
         {members.length > 0 ? (
           <span className="relative inline-flex">
             <Button type="button" variant="ghost" size="icon-sm" aria-label="Mention someone" aria-expanded={mentioning} onClick={() => setMentioning((v) => !v)}>

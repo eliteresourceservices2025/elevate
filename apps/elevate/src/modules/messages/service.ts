@@ -10,8 +10,8 @@ import { notify } from "@/modules/notifications/service";
 import { isAllowedEmoji } from "./emoji";
 import { extractMentions } from "./mentions";
 import { broadcastChatSignal, type ChatSignal } from "./realtime";
-import { conversationMembers, conversations, messagePins, messageReactions, messageRevisions, messages } from "./schema";
-import { MAX_BODY, MAX_GROUP, MAX_TITLE, MIN_GROUP } from "./validators";
+import { conversationMembers, conversations, messagePins, messageReactions, messageRevisions, messages, pollOptions, polls, pollVotes } from "./schema";
+import { MAX_BODY, MAX_GROUP, MAX_POLL_OPTIONS, MAX_TITLE, MIN_GROUP } from "./validators";
 
 // Domain functions for chat. They take the acting user, so they live here (server-only), never in a "use server" file.
 // Every function checks membership first; "not a member" and "no such conversation" give the same answer so nothing leaks.
@@ -277,7 +277,7 @@ async function ownMessage(actor: Actor, messageId: string) {
     .from(messages)
     .where(eq(messages.id, messageId))
     .limit(1);
-  if (!msg || msg.senderUserId !== actor.id || msg.kind !== "text") throw new ActionFailure(MESSAGE_NOT_FOUND);
+  if (!msg || msg.senderUserId !== actor.id || (msg.kind !== "text" && msg.kind !== "poll")) throw new ActionFailure(MESSAGE_NOT_FOUND);
   await requireMember(db, actor.id, msg.conversationId);
   if (msg.deletedAt) throw new ActionFailure("This message was removed.");
   return msg;
@@ -286,6 +286,7 @@ async function ownMessage(actor: Actor, messageId: string) {
 export async function editMessage(actor: Actor, input: { messageId: string; body: string }): Promise<void> {
   const body = cleanBody(input.body);
   const msg = await ownMessage(actor, input.messageId);
+  if (msg.kind !== "text") throw new ActionFailure("A poll can't be edited. Remove it and post a new one.");
   const revisionId = randomUUID();
   await db.transaction(async (tx) => {
     await tx.insert(messageRevisions).values({ id: revisionId, messageId: msg.id, bodyEnc: fieldCrypto().encrypt(body, revisionContext(msg.id, revisionId)) });
@@ -342,4 +343,52 @@ export async function unpinMessage(actor: Actor, input: { messageId: string }): 
     .set({ unpinnedAt: sql`now()` })
     .where(and(eq(messagePins.messageId, msg.id), isNull(messagePins.unpinnedAt)));
   await signal(await currentMemberIds(db, msg.conversationId), { type: "pin", conversationId: msg.conversationId, messageId: msg.id });
+}
+
+const pollOptionContext = (messageId: string, optionId: string) => `chat_poll_option:${messageId}:${optionId}`;
+
+/** Posts a poll: a message whose text is the question, with 2 to 10 options (encrypted like any message text). */
+export async function createPoll(
+  actor: Actor,
+  input: { conversationId: string; question: string; options: string[]; multiple: boolean; anonymous: boolean; canManage?: boolean },
+): Promise<{ id: string; seq: number }> {
+  const question = cleanBody(input.question);
+  const options = input.options.map((o) => o.trim());
+  if (options.length < 2 || options.length > MAX_POLL_OPTIONS || options.some((o) => !o || o.length > 100) || question.length > 200) throw new ActionFailure("Check the poll and try again.");
+  if (new Set(options.map((o) => o.toLowerCase())).size !== options.length) throw new ActionFailure("Each option must be different.");
+  const member = await requireMember(db, actor.id, input.conversationId);
+  if (member.posting === "admins" && !input.canManage) throw new ActionFailure("Only HR can post in this channel.");
+  const sent = await db.transaction(async (tx) => {
+    const posted = await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body: question, kind: "poll" });
+    await tx.insert(polls).values({ messageId: posted.id, multiple: input.multiple, anonymous: input.anonymous });
+    await tx.insert(pollOptions).values(
+      options.map((label, position) => {
+        const optionId = randomUUID();
+        return { id: optionId, messageId: posted.id, position, labelEnc: fieldCrypto().encrypt(label, pollOptionContext(posted.id, optionId)) };
+      }),
+    );
+    return posted;
+  });
+  await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: sent.id });
+  return sent;
+}
+
+/** Votes for an option, or takes the vote back. In a single-choice poll a new vote replaces the old one. */
+export async function votePoll(actor: Actor, input: { messageId: string; optionId: string }): Promise<void> {
+  const msg = await requireVisibleMessage(db, actor.id, input.messageId);
+  if (msg.kind !== "poll") throw new ActionFailure("That isn't a poll.");
+  const [option] = await db.select({ id: pollOptions.id }).from(pollOptions).where(and(eq(pollOptions.id, input.optionId), eq(pollOptions.messageId, msg.id))).limit(1);
+  if (!option) throw new ActionFailure("That option isn't in this poll.");
+  const [poll] = await db.select({ multiple: polls.multiple }).from(polls).where(eq(polls.messageId, msg.id)).limit(1);
+  await db.transaction(async (tx) => {
+    const mine = await tx.select({ optionId: pollVotes.optionId }).from(pollVotes).where(and(eq(pollVotes.messageId, msg.id), eq(pollVotes.userId, actor.id)));
+    const already = mine.some((v) => v.optionId === option.id);
+    if (already) {
+      await tx.delete(pollVotes).where(and(eq(pollVotes.optionId, option.id), eq(pollVotes.userId, actor.id)));
+      return;
+    }
+    if (!poll?.multiple && mine.length > 0) await tx.delete(pollVotes).where(and(eq(pollVotes.messageId, msg.id), eq(pollVotes.userId, actor.id)));
+    await tx.insert(pollVotes).values({ messageId: msg.id, optionId: option.id, userId: actor.id });
+  });
+  await signal(await currentMemberIds(db, msg.conversationId), { type: "poll", conversationId: msg.conversationId, messageId: msg.id });
 }

@@ -258,3 +258,32 @@ test("team and company channels appear after HR updates them; only HR posts in t
   await pageA.getByRole("button", { name: new RegExp(teamName) }).click();
   await say(pageA, teamName, "Hello team");
 });
+
+test("a poll: create, vote, and everyone sees the counts", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Poll${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Poll${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  await pageB.goto("/messages");
+  const bName = `Bea Poll${stamp}b`;
+  await startDirect(pageA, `Poll${stamp}b`, bName);
+
+  await pageA.getByRole("button", { name: "Poll", exact: true }).click();
+  const dialog = pageA.getByRole("dialog");
+  await dialog.getByLabel("Question").fill("Friday huddle time?");
+  await dialog.getByLabel("Option 1").fill("9 PM");
+  await dialog.getByLabel("Option 2").fill("10 PM");
+  await dialog.getByRole("button", { name: "Post poll" }).click();
+  await expect(pageA.getByRole("group", { name: "Poll: Friday huddle time?" })).toBeVisible();
+
+  await pageB.getByRole("button", { name: new RegExp(`Ana Poll${stamp}a`) }).click();
+  const pollB = pageB.getByRole("group", { name: "Poll: Friday huddle time?" });
+  await expect(pollB).toBeVisible({ timeout: 12_000 });
+  await pollB.getByRole("button", { name: /10 PM/ }).click();
+  await expect(pageA.getByRole("group", { name: "Poll: Friday huddle time?" }).getByRole("button", { name: /10 PM/ })).toContainText("1", { timeout: 12_000 });
+  await expect(pageA.getByText("1 person voted")).toBeVisible();
+});

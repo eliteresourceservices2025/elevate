@@ -59,3 +59,13 @@ export const searchPeopleSchema = z.object({ q: z.string().trim().max(60) });
 export const loadThreadSchema = z.object({ conversationId: id, rootId: id });
 export const reactSchema = z.object({ messageId: id, emoji: z.string().min(1).max(16) });
 export const pinSchema = z.object({ messageId: id });
+
+export const MAX_POLL_OPTIONS = 10;
+export const createPollSchema = z.object({
+  conversationId: id,
+  question: z.string().trim().min(1, "Write the question.").max(200),
+  options: z.array(z.string().trim().min(1, "An option can't be empty.").max(100)).min(2, "A poll needs at least 2 options.").max(MAX_POLL_OPTIONS),
+  multiple: z.boolean().default(false),
+  anonymous: z.boolean().default(false),
+});
+export const votePollSchema = z.object({ messageId: id, optionId: id });
