@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Pencil, Trash2, Users } from "lucide-react";
+import { ArrowLeft, MessageSquareReply, Pencil, Pin, PinOff, Trash2, Users } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import { toast } from "@/components/feedback-dialog";
@@ -9,11 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatInZone } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import { deleteChatMessage, editChatMessage } from "../actions";
-import type { ChatMessage, ConversationSummary } from "../queries";
+import { deleteChatMessage, editChatMessage, pinChatMessage, toggleChatReaction, unpinChatMessage } from "../actions";
+import type { ChatMessage, ConversationSummary, PinnedMessage } from "../queries";
 import { MAX_BODY } from "../validators";
 import { Composer } from "./composer";
 import { ConversationAvatar } from "./conversation-list";
+import { EmojiPicker } from "./emoji-picker";
+import { MessageBody } from "./message-body";
 
 export type ThreadMember = { userId: string; name: string; lastReadSeq: number };
 
@@ -41,10 +43,13 @@ export function Thread({
   myUserId,
   timeZone,
   loadingEarlier,
+  pins,
+  restricted,
   onLoadEarlier,
   onBack,
   onChanged,
   onToggleDetails,
+  onOpenThread,
 }: {
   conversation: ConversationSummary;
   messages: ChatMessage[];
@@ -53,10 +58,14 @@ export function Thread({
   myUserId: string;
   timeZone: string;
   loadingEarlier: boolean;
+  pins: PinnedMessage[];
+  /** Only HR may post root messages here (the company channel). */
+  restricted: boolean;
   onLoadEarlier: () => void;
   onBack: () => void;
   onChanged: () => void;
   onToggleDetails: () => void;
+  onOpenThread: (rootId: string) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -76,6 +85,7 @@ export function Thread({
     return members.find((m) => m.userId !== myUserId)?.lastReadSeq ?? 0;
   }, [conversation.kind, members, myUserId]);
   const lastOwnSeq = useMemo(() => [...messages].reverse().find((m) => m.senderUserId === myUserId && !m.deleted && m.kind === "text")?.seq ?? null, [messages, myUserId]);
+  const mentionable = useMemo(() => members.filter((m) => m.userId !== myUserId), [members, myUserId]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -86,13 +96,28 @@ export function Thread({
         <ConversationAvatar conversation={conversation} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-heading text-base font-semibold">{conversation.title}</h2>
-          <p className="truncate text-xs text-muted-foreground">{conversation.kind === "group" ? `${conversation.memberCount} people` : "Direct message"}</p>
+          <p className="truncate text-xs text-muted-foreground">{conversation.kind === "dm" ? "Direct message" : `${conversation.memberCount} people`}</p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onToggleDetails} aria-label="Show people in this chat">
           <Users aria-hidden />
           <span className="hidden sm:inline">People</span>
         </Button>
       </div>
+
+      {pins.length > 0 ? (
+        <div className="flex items-start gap-2 border-b bg-muted/40 px-3 py-2 text-sm" role="region" aria-label="Pinned messages">
+          <Pin className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <ul className="min-w-0 flex-1">
+            {pins.slice(0, 3).map((p) => (
+              <li key={p.pinId} className="truncate">
+                <span className="font-semibold">{p.senderName}: </span>
+                {p.body}
+              </li>
+            ))}
+            {pins.length > 3 ? <li className="text-xs text-muted-foreground">and {pins.length - 3} more pinned</li> : null}
+          </ul>
+        </div>
+      ) : null}
 
       <div
         ref={scroller}
@@ -117,20 +142,43 @@ export function Thread({
               message={m}
               previous={messages[i - 1] ?? null}
               mine={m.senderUserId === myUserId}
+              myUserId={myUserId}
               timeZone={timeZone}
               status={m.seq === lastOwnSeq && otherRead !== null ? (otherRead >= m.seq ? "Seen" : "Sent") : null}
               onChanged={onChanged}
+              onOpenThread={onOpenThread}
             />
           ))}
         </div>
       </div>
 
-      <Composer conversationId={conversation.id} label={conversation.title} onSent={onChanged} />
+      <Composer conversationId={conversation.id} label={conversation.title} onSent={onChanged} members={mentionable} restricted={restricted} />
     </div>
   );
 }
 
-function MessageRow({ message: m, previous, mine, timeZone, status, onChanged }: { message: ChatMessage; previous: ChatMessage | null; mine: boolean; timeZone: string; status: string | null; onChanged: () => void }) {
+/** One message with its toolbar (react, reply in thread, pin; edit and remove for your own), reactions and reply count. */
+export function MessageRow({
+  message: m,
+  previous,
+  mine,
+  myUserId,
+  timeZone,
+  status,
+  inThread = false,
+  onChanged,
+  onOpenThread,
+}: {
+  message: ChatMessage;
+  previous: ChatMessage | null;
+  mine: boolean;
+  myUserId: string;
+  timeZone: string;
+  status: string | null;
+  inThread?: boolean;
+  onChanged: () => void;
+  onOpenThread?: (rootId: string) => void;
+}) {
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.body ?? "");
@@ -138,6 +186,14 @@ function MessageRow({ message: m, previous, mine, timeZone, status, onChanged }:
 
   const newDay = !previous || formatInZone(previous.createdAt, timeZone, "yyyy-MM-dd") !== formatInZone(m.createdAt, timeZone, "yyyy-MM-dd");
   const grouped = !newDay && previous && previous.kind === "text" && m.kind === "text" && previous.senderUserId === m.senderUserId && new Date(m.createdAt).getTime() - new Date(previous.createdAt).getTime() < GROUP_GAP_MS;
+
+  function run(action: () => Promise<{ ok: boolean; error?: string }>) {
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) return void toast.error(result.error ?? "Something went wrong.");
+      onChanged();
+    });
+  }
 
   function save() {
     startTransition(async () => {
@@ -151,12 +207,11 @@ function MessageRow({ message: m, previous, mine, timeZone, status, onChanged }:
   async function remove() {
     const ok = await confirm({ title: "Remove this message?", description: "It disappears for everyone in this chat.", confirmLabel: "Remove", destructive: true });
     if (!ok) return;
-    startTransition(async () => {
-      const result = await deleteChatMessage({ messageId: m.id });
-      if (!result.ok) return void toast.error(result.error);
-      onChanged();
-    });
+    run(() => deleteChatMessage({ messageId: m.id }));
   }
+
+  const react = (emoji: string) => run(() => toggleChatReaction({ messageId: m.id, emoji }));
+  const canInteract = m.kind === "text" && !m.deleted;
 
   return (
     <>
@@ -202,20 +257,61 @@ function MessageRow({ message: m, previous, mine, timeZone, status, onChanged }:
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-1">
-                {mine ? (
+              <div className={cn("flex items-center gap-1", mine ? "flex-row" : "flex-row-reverse")}>
+                {canInteract ? (
                   <span className="flex opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-                    <Button type="button" variant="ghost" size="icon-sm" aria-label="Edit message" onClick={() => { setDraft(m.body ?? ""); setEditing(true); }}>
-                      <Pencil aria-hidden />
+                    <EmojiPicker onPick={react} label="React to this message" />
+                    {!inThread && onOpenThread ? (
+                      <Button type="button" variant="ghost" size="icon-sm" aria-label="Reply in thread" onClick={() => onOpenThread(m.id)}>
+                        <MessageSquareReply aria-hidden />
+                      </Button>
+                    ) : null}
+                    <Button type="button" variant="ghost" size="icon-sm" aria-label={m.pinned ? "Unpin message" : "Pin message"} onClick={() => run(() => (m.pinned ? unpinChatMessage({ messageId: m.id }) : pinChatMessage({ messageId: m.id })))} disabled={pending}>
+                      {m.pinned ? <PinOff aria-hidden /> : <Pin aria-hidden />}
                     </Button>
-                    <Button type="button" variant="ghost" size="icon-sm" aria-label="Remove message" onClick={remove} disabled={pending}>
-                      <Trash2 aria-hidden />
-                    </Button>
+                    {mine ? (
+                      <>
+                        <Button type="button" variant="ghost" size="icon-sm" aria-label="Edit message" onClick={() => { setDraft(m.body ?? ""); setEditing(true); }}>
+                          <Pencil aria-hidden />
+                        </Button>
+                        <Button type="button" variant="ghost" size="icon-sm" aria-label="Remove message" onClick={remove} disabled={pending}>
+                          <Trash2 aria-hidden />
+                        </Button>
+                      </>
+                    ) : null}
                   </span>
                 ) : null}
-                <p className={cn("rounded-2xl px-3 py-1.5 text-sm break-words whitespace-pre-wrap", mine ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border bg-card")}>{m.body}</p>
+                <p className={cn("rounded-2xl px-3 py-1.5 text-sm break-words whitespace-pre-wrap", mine ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border bg-card")}>
+                  <MessageBody body={m.body ?? ""} myUserId={myUserId} />
+                </p>
               </div>
             )}
+            {m.reactions.length > 0 ? (
+              <div className="flex flex-wrap gap-1" aria-label="Reactions">
+                {m.reactions.map((r) => (
+                  <button
+                    key={r.emoji}
+                    type="button"
+                    onClick={() => react(r.emoji)}
+                    aria-pressed={r.mine}
+                    aria-label={`${r.emoji} ${r.count}, ${r.mine ? "remove your reaction" : "add your reaction"}`}
+                    className={cn("rounded-full border px-2 py-0.5 text-xs", r.mine ? "border-primary bg-secondary font-semibold" : "bg-card hover:bg-muted")}
+                  >
+                    {r.emoji} {r.count}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {!inThread && m.replyCount > 0 && onOpenThread ? (
+              <button type="button" onClick={() => onOpenThread(m.id)} className="text-xs font-semibold text-primary hover:underline">
+                {m.replyCount} {m.replyCount === 1 ? "reply" : "replies"}
+              </button>
+            ) : null}
+            {m.pinned && !m.deleted ? (
+              <span className="flex items-center gap-1 text-[0.7rem] text-muted-foreground">
+                <Pin className="size-3" aria-hidden /> Pinned
+              </span>
+            ) : null}
             {m.edited && !m.deleted ? <span className="text-[0.7rem] text-muted-foreground">edited</span> : null}
             {status ? <span className="text-[0.7rem] text-muted-foreground">{status}</span> : null}
           </div>

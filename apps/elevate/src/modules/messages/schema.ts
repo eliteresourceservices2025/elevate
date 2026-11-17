@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, check, index, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, index, type AnyPgColumn, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
 
 // Messages (chat). Text is encrypted with fieldCrypto (context "chat_message:<conversationId>:<messageId>"; edits use
@@ -78,8 +78,10 @@ export const messages = chat
         .notNull()
         .references(() => users.id),
       bodyEnc: text("body_enc").notNull(),
-      /** 'text' or 'system' (for example "A person left"). */
+      /** 'text', 'system' (for example "A person left"), and from Phase 2 'poll', 'image', 'file', 'voice' and 'gif'. */
       kind: text("kind").notNull().default("text"),
+      /** A reply in a thread points at the message that started it (a thread has one level: a reply is never a root). */
+      threadRootId: uuid("thread_root_id").references((): AnyPgColumn => messages.id),
       createdAt: createdAt(),
       editedAt: timestamp("edited_at", { withTimezone: true }),
       deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -88,7 +90,8 @@ export const messages = chat
       index("messages_conversation_seq_idx").on(t.conversationId, t.seq),
       index("messages_sender_created_idx").on(t.senderUserId, t.createdAt),
       uniqueIndex("messages_seq_idx").on(t.seq),
-      check("messages_kind_chk", sql`${t.kind} in ('text','system')`),
+      index("messages_thread_idx").on(t.threadRootId, t.seq),
+      check("messages_kind_chk", sql`${t.kind} in ('text','system','poll','image','file','voice','gif')`),
     ],
   )
   .enableRLS();
@@ -106,5 +109,48 @@ export const messageRevisions = chat
       createdAt: createdAt(),
     },
     (t) => [index("message_revisions_message_idx").on(t.messageId, t.createdAt)],
+  )
+  .enableRLS();
+
+/** A person's emoji reaction to a message. Toggling removes the row (reactions are not history, unlike messages). */
+export const messageReactions = chat
+  .table(
+    "message_reactions",
+    {
+      messageId: uuid("message_id")
+        .notNull()
+        .references(() => messages.id),
+      userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id),
+      emoji: text("emoji").notNull(),
+      createdAt: createdAt(),
+    },
+    (t) => [primaryKey({ columns: [t.messageId, t.userId, t.emoji] }), index("message_reactions_message_idx").on(t.messageId)],
+  )
+  .enableRLS();
+
+/** A pinned message. Unpinning stamps unpinned_at, so the history of pins stays. */
+export const messagePins = chat
+  .table(
+    "message_pins",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      conversationId: uuid("conversation_id")
+        .notNull()
+        .references(() => conversations.id),
+      messageId: uuid("message_id")
+        .notNull()
+        .references(() => messages.id),
+      pinnedBy: uuid("pinned_by")
+        .notNull()
+        .references(() => users.id),
+      pinnedAt: timestamp("pinned_at", { withTimezone: true }).notNull().defaultNow(),
+      unpinnedAt: timestamp("unpinned_at", { withTimezone: true }),
+    },
+    (t) => [
+      uniqueIndex("message_pins_open_idx").on(t.messageId).where(sql`${t.unpinnedAt} is null`),
+      index("message_pins_conversation_idx").on(t.conversationId, t.pinnedAt),
+    ],
   )
   .enableRLS();

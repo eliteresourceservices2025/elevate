@@ -6,13 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { toast } from "@/components/feedback-dialog";
 import { Button } from "@/components/ui/button";
-import { loadChatMessages, loadConversationList, markConversationRead } from "../actions";
-import type { ChatMessage, ConversationSummary } from "../queries";
+import { listChatPins, loadChatMessages, loadConversationList, markConversationRead } from "../actions";
+import type { ChatMessage, ConversationSummary, PinnedMessage } from "../queries";
 import type { ChatSignal } from "../realtime-types";
 import { ConversationList } from "./conversation-list";
 import { RenameGroupDialog, useDeleteGroup, useRemovePerson } from "./group-admin";
 import { AddPeopleDialog, NewConversationDialog } from "./new-conversation-dialog";
 import { Thread, type ThreadMember } from "./thread";
+import { ThreadPanel } from "./thread-panel";
 import { useChatLive } from "./use-chat-live";
 
 type ThreadData = { messages: ChatMessage[]; hasMore: boolean; members: ThreadMember[] };
@@ -34,6 +35,9 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
   const [showDetails, setShowDetails] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
+  const [pins, setPins] = useState<PinnedMessage[]>([]);
+  const [openRoot, setOpenRoot] = useState<string | null>(null);
+  const [panelVersion, setPanelVersion] = useState(0);
   const request = useRef(0);
   const activeRef = useRef(initialConversationId);
   const listTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,6 +62,15 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
     listTimer.current = setTimeout(() => void refreshList(), 250);
   }, [refreshList]);
 
+  const loadPins = useCallback(async (id: string) => {
+    try {
+      const result = await listChatPins({ conversationId: id });
+      if (result.ok && activeRef.current === id) setPins(result.data);
+    } catch {
+      // The pinned bar is a nicety: the chat itself keeps working.
+    }
+  }, []);
+
   const loadThread = useCallback(async (id: string, reset: boolean) => {
     const mine = ++request.current;
     let result: Awaited<ReturnType<typeof loadChatMessages>>;
@@ -75,7 +88,8 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
     }
     setThreadError(null);
     setThread((previous) => (reset ? result.data : mergeNewest(previous, result.data)));
-  }, []);
+    void loadPins(id);
+  }, [loadPins]);
 
   // Opening a chat with unread messages marks it read up to the newest message.
   useEffect(() => {
@@ -92,6 +106,7 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
       const active = activeRef.current;
       if (!active || signal.type === "read") return;
       if (signal.conversationId !== "" && signal.conversationId !== active) return;
+      setPanelVersion((v) => v + 1); // an open thread reloads too
       if (signal.type === "delete" && signal.messageId) {
         // A removed message disappears at once, even one far back in an open history (the newest-page merge would never touch it).
         const removed = signal.messageId;
@@ -99,7 +114,7 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
         return;
       }
       // An edit can be to a message anywhere in the history, so reload it from the newest page (the live list merge only fills in new messages).
-      void loadThread(active, signal.type === "edit");
+      void loadThread(active, signal.type === "edit" || signal.type === "reaction" || signal.type === "pin");
     },
     [refreshListSoon, loadThread],
   );
@@ -115,6 +130,8 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
   function open(id: string) {
     activeRef.current = id;
     setShowDetails(false);
+    setOpenRoot(null);
+    setPins([]);
     setActiveId(id);
     setThread(null);
     setThreadError(null);
@@ -126,6 +143,8 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
     activeRef.current = null;
     request.current += 1;
     setShowDetails(false);
+    setOpenRoot(null);
+    setPins([]);
     setActiveId(null);
     setThread(null);
     window.history.replaceState(null, "", "/messages");
@@ -171,7 +190,7 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
         <ConversationList conversations={conversations} activeId={activeId} onOpen={open} newButton={<NewConversationDialog onOpened={(id) => void opened(id)} canCreateGroup={canManage} />} timeZone={timeZone} />
       </div>
 
-      <div className={`min-w-0 flex-1 ${active ? (showDetails ? "hidden md:block" : "block") : "hidden md:block"}`}>
+      <div className={`min-w-0 flex-1 ${active ? (showDetails || openRoot ? "hidden md:block" : "block") : "hidden md:block"}`}>
         {active ? (
           threadError ? (
             <div className="p-4">
@@ -186,13 +205,22 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
               myUserId={userId}
               timeZone={timeZone}
               loadingEarlier={loadingEarlier}
+              pins={pins}
+              restricted={false}
+              onOpenThread={(rootId) => {
+                setShowDetails(false);
+                setOpenRoot(rootId);
+              }}
               onLoadEarlier={() => void loadEarlier()}
               onBack={close}
               onChanged={() => {
                 void loadThread(active.id, false);
                 refreshListSoon();
               }}
-              onToggleDetails={() => setShowDetails((v) => !v)}
+              onToggleDetails={() => {
+                setOpenRoot(null);
+                setShowDetails((v) => !v);
+              }}
             />
           ) : (
             <p className="p-6 text-sm text-muted-foreground" role="status">
@@ -206,7 +234,25 @@ export function MessagesView({ userId, timeZone, canManage, initialConversations
         )}
       </div>
 
-      {active && showDetails && thread ? (
+      {active && openRoot && thread ? (
+        <ThreadPanel
+          key={openRoot}
+          conversationId={active.id}
+          conversationTitle={active.title}
+          rootId={openRoot}
+          members={thread.members}
+          myUserId={userId}
+          timeZone={timeZone}
+          version={panelVersion}
+          onClose={() => setOpenRoot(null)}
+          onChanged={() => {
+            void loadThread(active.id, false);
+            refreshListSoon();
+          }}
+        />
+      ) : null}
+
+      {active && showDetails && !openRoot && thread ? (
         <aside aria-label="People in this chat" className="flex w-full shrink-0 flex-col gap-4 border-l p-4 md:w-64">
           <div className="flex items-center justify-between">
             <h3 className="font-heading text-base font-semibold">People</h3>

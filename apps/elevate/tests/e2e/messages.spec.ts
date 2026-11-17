@@ -178,3 +178,50 @@ test("only HR makes and manages groups: create, rename, remove a person, delete;
   await pageA.goto("/messages");
   await expect(pageA.getByText(renamed)).toHaveCount(0);
 });
+
+test("reactions, a thread, a pin and an @mention", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Rich${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Rich${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  await pageB.goto("/messages");
+  const bName = `Bea Rich${stamp}b`;
+  await startDirect(pageA, `Rich${stamp}b`, bName);
+
+  // Ana mentions Bea (the mention list inserts a token that shows as a chip).
+  await pageA.getByRole("button", { name: "Mention someone" }).click();
+  await pageA.getByRole("option", { name: bName }).click();
+  const box = pageA.getByLabel(`Message ${bName}`);
+  await box.press("End");
+  await box.pressSequentially("can you cover Friday?");
+  await box.press("Enter");
+  const message = pageA.getByRole("log").locator("p", { hasText: "can you cover Friday?" });
+  await expect(message.getByText(`@${bName}`)).toBeVisible();
+
+  // Bea sees it, reacts, and replies in a thread.
+  await pageB.getByRole("button", { name: new RegExp(`Ana Rich${stamp}a`) }).click();
+  const bMessage = pageB.getByRole("log").locator("p", { hasText: "can you cover Friday?" });
+  await expect(bMessage).toBeVisible({ timeout: 12_000 });
+  await bMessage.hover();
+  await pageB.getByRole("button", { name: "React to this message" }).first().click();
+  await pageB.getByRole("button", { name: "Emoji 👍" }).click();
+  await expect(pageA.getByRole("button", { name: /👍 1/ })).toBeVisible({ timeout: 12_000 });
+
+  await bMessage.hover();
+  await pageB.getByRole("button", { name: "Reply in thread" }).first().click();
+  await pageB.getByRole("textbox", { name: "Reply in thread" }).fill("Yes, I can cover it");
+  await pageB.getByRole("textbox", { name: "Reply in thread" }).press("Enter");
+  await expect(pageA.getByRole("button", { name: "1 reply" })).toBeVisible({ timeout: 12_000 });
+  await pageA.getByRole("button", { name: "1 reply" }).click();
+  await expect(pageA.getByRole("complementary", { name: "Thread" }).getByText("Yes, I can cover it")).toBeVisible();
+
+  // Ana pins the message; Bea sees the pinned bar.
+  await pageA.getByRole("button", { name: "Close thread" }).click();
+  await message.hover();
+  await pageA.getByRole("button", { name: "Pin message" }).first().click();
+  await expect(pageB.getByRole("region", { name: "Pinned messages" })).toContainText("can you cover Friday?", { timeout: 12_000 });
+});

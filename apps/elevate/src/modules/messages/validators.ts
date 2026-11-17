@@ -19,7 +19,7 @@ const body = z
   .min(1, "Write a message first.")
   .max(MAX_BODY, `Messages can be up to ${MAX_BODY} characters.`);
 
-export const sendMessageSchema = z.object({ conversationId: id, body });
+export const sendMessageSchema = z.object({ conversationId: id, body, threadRootId: id.optional() });
 export const editMessageSchema = z.object({ messageId: id, body });
 export const deleteMessageSchema = z.object({ messageId: id });
 export const openDirectSchema = z.object({ userId: id });
@@ -55,3 +55,7 @@ export const loadMessagesSchema = z.object({
 
 export const markReadSchema = z.object({ conversationId: id, seq: z.number().int().min(0) });
 export const searchPeopleSchema = z.object({ q: z.string().trim().max(60) });
+
+export const loadThreadSchema = z.object({ conversationId: id, rootId: id });
+export const reactSchema = z.object({ messageId: id, emoji: z.string().min(1).max(16) });
+export const pinSchema = z.object({ messageId: id });

@@ -1037,6 +1037,13 @@
       "when": 1794916059629,
       "tag": "0147_chat_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1794942732894,
+      "tag": "0148_chat_threads_reactions_pins",
+      "breakpoints": true
     }
   ]
 }

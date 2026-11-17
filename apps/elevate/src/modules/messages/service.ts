@@ -6,8 +6,11 @@ import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { users } from "@/modules/core/schema";
+import { notify } from "@/modules/notifications/service";
+import { isAllowedEmoji } from "./emoji";
+import { extractMentions } from "./mentions";
 import { broadcastChatSignal, type ChatSignal } from "./realtime";
-import { conversationMembers, conversations, messageRevisions, messages } from "./schema";
+import { conversationMembers, conversations, messagePins, messageReactions, messageRevisions, messages } from "./schema";
 import { MAX_BODY, MAX_GROUP, MAX_TITLE, MIN_GROUP } from "./validators";
 
 // Domain functions for chat. They take the acting user, so they live here (server-only), never in a "use server" file.
@@ -65,7 +68,7 @@ async function activeUserIds(executor: Db, ids: string[]): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-async function insertMessage(executor: Db, input: { conversationId: string; senderUserId: string; body: string; kind: "text" | "system" }) {
+async function insertMessage(executor: Db, input: { conversationId: string; senderUserId: string; body: string; kind: "text" | "system" | "poll" | "image" | "file" | "voice" | "gif"; threadRootId?: string | null }) {
   const id = randomUUID();
   const [row] = await executor
     .insert(messages)
@@ -75,6 +78,7 @@ async function insertMessage(executor: Db, input: { conversationId: string; send
       senderUserId: input.senderUserId,
       bodyEnc: fieldCrypto().encrypt(input.body, bodyContext(input.conversationId, id)),
       kind: input.kind,
+      threadRootId: input.threadRootId ?? null,
     })
     .returning({ seq: messages.seq });
   return { id, seq: row.seq };
@@ -213,9 +217,43 @@ export async function deleteGroup(actor: Actor, conversationId: string): Promise
   await signal(everyone, { type: "members", conversationId });
 }
 
-export async function sendMessage(actor: Actor, input: { conversationId: string; body: string }): Promise<{ id: string; seq: number }> {
+/** A message the person may see right now: a current member of a live conversation, from their join time on, and not removed. */
+async function requireVisibleMessage(executor: Db, userId: string, messageId: string) {
+  const [row] = await executor
+    .select({ id: messages.id, conversationId: messages.conversationId, threadRootId: messages.threadRootId, senderUserId: messages.senderUserId, kind: messages.kind })
+    .from(messages)
+    .innerJoin(conversationMembers, and(eq(conversationMembers.conversationId, messages.conversationId), eq(conversationMembers.userId, userId), isNull(conversationMembers.leftAt)))
+    .innerJoin(conversations, and(eq(conversations.id, messages.conversationId), isNull(conversations.archivedAt)))
+    .where(and(eq(messages.id, messageId), isNull(messages.deletedAt), sql`${messages.createdAt} >= ${conversationMembers.joinedAt}`))
+    .limit(1);
+  if (!row) throw new ActionFailure(MESSAGE_NOT_FOUND);
+  return row;
+}
+
+/** Tells the mentioned people (current members, not the sender) that they were mentioned: where, never what. */
+async function notifyMentions(actor: Actor, conversationId: string, body: string): Promise<void> {
+  const mentioned = extractMentions(body).filter((id) => id !== actor.id).slice(0, 20);
+  if (mentioned.length === 0) return;
+  const members = new Set(await currentMemberIds(db, conversationId));
+  const targets = mentioned.filter((id) => members.has(id));
+  if (targets.length === 0) return;
+  const [conv] = await db.select({ kind: conversations.kind, title: conversations.title }).from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+  const where = conv?.title ? conv.title : "a direct message";
+  await notify(db, targets.map((userId) => ({ userId, kind: "chat.mention", title: `You were mentioned in ${where}`, link: `/messages/${conversationId}` })));
+}
+
+export async function sendMessage(actor: Actor, input: { conversationId: string; body: string; threadRootId?: string | null }): Promise<{ id: string; seq: number }> {
   const body = cleanBody(input.body);
   await requireMember(db, actor.id, input.conversationId);
+  if (input.threadRootId) {
+    // A reply goes under a message of the same conversation that is itself not a reply (a thread has one level).
+    const [root] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.id, input.threadRootId), eq(messages.conversationId, input.conversationId), isNull(messages.threadRootId), isNull(messages.deletedAt)))
+      .limit(1);
+    if (!root) throw new ActionFailure(MESSAGE_NOT_FOUND);
+  }
 
   // Counted in Postgres (not Upstash) so chat never spends the free Redis allowance.
   const [recent] = await db
@@ -224,7 +262,8 @@ export async function sendMessage(actor: Actor, input: { conversationId: string;
     .where(and(eq(messages.senderUserId, actor.id), eq(messages.kind, "text"), sql`${messages.createdAt} > now() - make_interval(secs => ${RATE_WINDOW_SECONDS})`));
   if (recent.n >= RATE_LIMIT) throw new ActionFailure("You are sending messages too fast. Wait a few seconds.");
 
-  const sent = await insertMessage(db, { conversationId: input.conversationId, senderUserId: actor.id, body, kind: "text" });
+  const sent = await insertMessage(db, { conversationId: input.conversationId, senderUserId: actor.id, body, kind: "text", threadRootId: input.threadRootId ?? null });
+  await notifyMentions(actor, input.conversationId, body);
   await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: sent.id });
   return sent;
 }
@@ -272,3 +311,33 @@ export async function markRead(actor: Actor, input: { conversationId: string; se
 }
 
 export { bodyContext, revisionContext, requireMember, currentMemberIds };
+
+/** Adds the person's reaction, or removes it if they already made it. */
+export async function toggleReaction(actor: Actor, input: { messageId: string; emoji: string }): Promise<{ active: boolean }> {
+  if (!isAllowedEmoji(input.emoji)) throw new ActionFailure("That reaction isn't available.");
+  const msg = await requireVisibleMessage(db, actor.id, input.messageId);
+  const removed = await db
+    .delete(messageReactions)
+    .where(and(eq(messageReactions.messageId, msg.id), eq(messageReactions.userId, actor.id), eq(messageReactions.emoji, input.emoji)))
+    .returning({ emoji: messageReactions.emoji });
+  const active = removed.length === 0;
+  if (active) await db.insert(messageReactions).values({ messageId: msg.id, userId: actor.id, emoji: input.emoji }).onConflictDoNothing();
+  await signal(await currentMemberIds(db, msg.conversationId), { type: "reaction", conversationId: msg.conversationId, messageId: msg.id });
+  return { active };
+}
+
+/** Pins a message for everyone in the chat (pinning an already pinned message changes nothing). */
+export async function pinMessage(actor: Actor, input: { messageId: string }): Promise<void> {
+  const msg = await requireVisibleMessage(db, actor.id, input.messageId);
+  await db.insert(messagePins).values({ conversationId: msg.conversationId, messageId: msg.id, pinnedBy: actor.id }).onConflictDoNothing();
+  await signal(await currentMemberIds(db, msg.conversationId), { type: "pin", conversationId: msg.conversationId, messageId: msg.id });
+}
+
+export async function unpinMessage(actor: Actor, input: { messageId: string }): Promise<void> {
+  const msg = await requireVisibleMessage(db, actor.id, input.messageId);
+  await db
+    .update(messagePins)
+    .set({ unpinnedAt: sql`now()` })
+    .where(and(eq(messagePins.messageId, msg.id), isNull(messagePins.unpinnedAt)));
+  await signal(await currentMemberIds(db, msg.conversationId), { type: "pin", conversationId: msg.conversationId, messageId: msg.id });
+}

@@ -15,6 +15,8 @@ import {
   editMessageSchema,
   markReadSchema,
   openDirectSchema,
+  pinSchema,
+  reactSchema,
   removeMemberSchema,
   renameGroupSchema,
   sendMessageSchema,
@@ -100,6 +102,31 @@ export async function listGroupsToManage(): Promise<ActionResult<ManagedGroup[]>
 export async function loadGroupPeopleToManage(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadGroupPeople>>>> {
   await requireUser();
   return runAction(async () => ({ ok: true, data: await queries.loadGroupPeople(input) }));
+}
+
+export async function toggleChatReaction(input: unknown): Promise<ActionResult<{ active: boolean }>> {
+  const actor = await requireUser();
+  return run(actor, "messages.use", reactSchema, input, (a, data) => service.toggleReaction(a, data));
+}
+
+export async function pinChatMessage(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return run(actor, "messages.use", pinSchema, input, async (a, data) => void (await service.pinMessage(a, data)));
+}
+
+export async function unpinChatMessage(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return run(actor, "messages.use", pinSchema, input, async (a, data) => void (await service.unpinMessage(a, data)));
+}
+
+export async function loadChatThread(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadThread>>>> {
+  await requireUser();
+  return runAction(async () => ({ ok: true, data: await queries.loadThread(input) }));
+}
+
+export async function listChatPins(input: unknown): Promise<ActionResult<queries.PinnedMessage[]>> {
+  await requireUser();
+  return runAction(async () => ({ ok: true, data: await queries.listPins(input) }));
 }
 
 export async function loadChatMessages(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof queries.loadMessages>>>> {
