@@ -182,7 +182,11 @@ export async function recomputeRun(tx: Tx, runId: string, options: { employeeId?
     rated.flatMap((r) => (r.rate ? [{ runLineId: r.runLine.id, rate: r.rate }] : [])),
     fteItemsOf(items),
   );
-  const targets = scoped ? rated.filter((r) => r.runLine.employeeId === scoped || r.rate?.perFteCentavos !== undefined) : rated;
+  // With a rate that can't be read the total is only partial, so the lines paid per FTE are left as they are (rewriting them would pay the
+  // internal team too little); the unreadable line blocks the run anyway.
+  const totalIsPartial = rated.some((r) => r.rate === null);
+  const isPerFte = (r: (typeof rated)[number]) => r.rate?.perFteCentavos !== undefined;
+  const targets = (scoped ? rated.filter((r) => r.runLine.employeeId === scoped || isPerFte(r)) : rated).filter((r) => !(totalIsPartial && isPerFte(r)));
 
   for (const { runLine, version, rate: readOk } of targets) {
     const rate = readOk ?? readRate(version.id, version.amountsEnc); // throws the plain "can't be read" failure
@@ -554,7 +558,8 @@ export async function saveItem(
     enteredBy: actor.id,
     createdAt: sql`clock_timestamp()`,
   });
-  await recomputeRun(tx, v.runId, { employeeId: v.employeeId, clearConfirmationFor: [v.runLineId] });
+  // An FTE for this run does not change the contractor's own pay, so their "checked by" stays (the internal-team lines it moves lose theirs).
+  await recomputeRun(tx, v.runId, { employeeId: v.employeeId, clearConfirmationFor: v.type === "fte" ? [] : [v.runLineId] });
   await writeAudit(
     { actor, action: "payroll.item.save", targetType: "pay_run", targetId: v.runId, metadata: { employeeId: v.employeeId, type: v.type, ...(correctsRunId ? { correctsRunId } : {}) } },
     tx,
@@ -600,7 +605,7 @@ export async function dismissItem(tx: Tx, actor: Actor, v: { runId: string; item
     enteredBy: actor.id,
     createdAt: sql`clock_timestamp()`,
   });
-  await recomputeRun(tx, v.runId, { employeeId: item.employeeId, clearConfirmationFor: item.runLineId ? [item.runLineId] : [] });
+  await recomputeRun(tx, v.runId, { employeeId: item.employeeId, clearConfirmationFor: item.runLineId && item.type !== "fte" ? [item.runLineId] : [] });
   await writeAudit({ actor, action: "payroll.item.dismiss", targetType: "pay_run", targetId: v.runId, metadata: { employeeId: item.employeeId, type: item.type } }, tx);
   await logChange(tx, actor, {
     action: "item_dismissed",
@@ -1111,8 +1116,8 @@ export async function worksheetOf(executor: Executor, viewer: { id: string; canP
       for (const key of EXTRA_KEYS) extra[key] = formatPesos(x.extra[key]); // eslint-disable-line security/detect-object-injection
       const previousNet = data.previousNets.get(r.lineKey);
       figures = {
-        // A line paid per FTE shows how its pay was worked out ("28 × 1,500.00"), not a monthly rate it does not have.
-        monthly: payload.perFte ? `${formatFte(payload.perFte.totalFteHundredths)} × ${formatPesos(payload.rate.perFteCentavos ?? 0n)}` : formatPesos(payload.rate.monthlyCentavos),
+        // A line paid per FTE shows how its pay was worked out ("28 FTE × 1,500.00"), not a monthly rate it does not have.
+        monthly: payload.perFte ? `${formatFte(payload.perFte.totalFteHundredths)} FTE × ${formatPesos(payload.rate.perFteCentavos ?? 0n)}` : formatPesos(payload.rate.monthlyCentavos),
         cutoff: formatPesos(x.cutoff),
         base: formatPesos(x.base),
         absences: formatPesos(x.absences),

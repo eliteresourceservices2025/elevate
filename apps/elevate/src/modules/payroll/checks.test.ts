@@ -95,10 +95,10 @@ describe("runChecks", () => {
     expect(r.warnings).toEqual([{ code: "fte_not_set", employeeId: "e1", runLineId: "r1", name: "Maria Testcruz" }]);
   });
 
-  it("warns, without blocking, once for the run when lines are paid per FTE but the total FTE is 0", () => {
+  it("blocks, once for the run, when lines are paid per FTE but the total FTE is 0", () => {
     const r = runChecks(input([line()], { perFteWithoutTotal: true }));
-    expect(r.blocking).toEqual([]);
-    expect(r.warnings).toEqual([{ code: "per_fte_without_total", employeeId: null, runLineId: null, name: "This run" }]);
+    expect(r.warnings).toEqual([]);
+    expect(r.blocking).toEqual([{ code: "per_fte_without_total", employeeId: null, runLineId: null, name: "This run" }]);
   });
 
   it("notes a line that has a client but no client payroll hours, without blocking", () => {

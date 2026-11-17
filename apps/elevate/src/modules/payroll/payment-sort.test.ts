@@ -69,6 +69,10 @@ describe("the Mark paid window", () => {
     expect(markPaidSchema.safeParse({ ...base, amountUsd: "" }).success).toBe(true);
     expect(markPaidSchema.parse({ ...base, amountUsd: " 351.66 " }).amountUsd).toBe("351.66");
     expect(markPaidSchema.safeParse({ ...base, amountUsd: "1,250.50" }).success).toBe(true);
+    // A dollar sign and spaces typed with the amount read as typed.
+    expect(markPaidSchema.parse({ ...base, amountUsd: "$351.66" }).amountUsd).toBe("351.66");
+    expect(markPaidSchema.parse({ ...base, amountUsd: " $ 351.66 " }).amountUsd).toBe("351.66");
+    expect(markPaidSchema.safeParse({ ...base, amountUsd: "351 66" }).success).toBe(false);
     for (const bad of ["abc", "0", "0.00", "-5", "12.345", "99999999999"]) expect(markPaidSchema.safeParse({ ...base, amountUsd: bad }).success, bad).toBe(false);
   });
 });

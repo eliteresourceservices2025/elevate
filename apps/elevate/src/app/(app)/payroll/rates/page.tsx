@@ -35,7 +35,7 @@ export default async function PayrollRatesPage({ searchParams }: PageProps<"/pay
   const hrefWith = (s: SortValue) => hrefFor(s, showEnded);
   const loaded = await orNotFound(getRates({ includeEnded: showEnded })); // authorize("payroll.view") inside
   const rows = sortLines(
-    loaded.map((r) => ({ ...r, runLineId: r.lineKey, confirmedByName: null, sortKeys: { monthly: r.monthlyCentavos, net: null, change: null } })),
+    loaded.map((r) => ({ ...r, runLineId: r.lineKey, confirmedByName: null, sortKeys: { monthly: r.basis === "per_fte" ? null : r.monthlyCentavos, net: null, change: null } })),
     sort,
   );
   const sortLinks: SortLinks = {};

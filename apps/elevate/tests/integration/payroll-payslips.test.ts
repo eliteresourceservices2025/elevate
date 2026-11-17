@@ -605,10 +605,22 @@ describe("the signatory on payslips", () => {
     as(superAdmin);
     const noLevel = await account(null);
     for (const userId of [approver.id, noLevel.id, randomUUID()]) {
-      expect(await savePayrollSignatory({ ...input, signature: null, preparedByUserId: userId })).toEqual({ ok: false, error: "Choose someone who has the Preparer payroll level." });
+      expect(await savePayrollSignatory({ ...input, signature: null, preparedByUserId: userId })).toEqual({ ok: false, error: "That person doesn't have the Preparer payroll level (or has left). Choose someone else, or give them the level first." });
     }
     expect(await savePayrollSignatory({ ...input, signature: null, preparedByUserId: "not-an-id" })).toMatchObject({ ok: false });
     expect(await rows(sql`select 1 from payroll.pay_signatory`)).toHaveLength(before.length);
+  });
+
+  it("still lets the name, title or picture be fixed after the saved preparer has lost the Preparer level, but not a new choice of someone without it", async () => {
+    const was = await account("preparer");
+    as(superAdmin);
+    expect(await savePayrollSignatory({ ...input, signature: null, preparedByUserId: was.id })).toEqual({ ok: true, data: undefined });
+    await db.execute(sql`update core.users set payroll_access = null where id = ${was.id}`);
+    // Same preparer, a fixed title: saved. A different person without the level: refused.
+    expect(await savePayrollSignatory({ ...input, title: "Chief People Officer", signature: null, preparedByUserId: was.id })).toEqual({ ok: true, data: undefined });
+    const noLevel = await account(null);
+    expect(await savePayrollSignatory({ ...input, signature: null, preparedByUserId: noLevel.id })).toMatchObject({ ok: false });
+    expect(await savePayrollSignatory({ ...input, signature: null, preparedByUserId: null })).toEqual({ ok: true, data: undefined });
   });
 
   it("prints the preparer chosen in Settings, else whoever sent the run for review, and a paid run keeps the one it was paid under", async () => {

@@ -224,6 +224,12 @@ export async function sendBack(tx: Tx, actor: Actor, v: { runId: string; note: s
  * Why an approved run can't go back to draft, or null when it can: payments are already recorded on it, or its statements are released to
  * the people on it. Callers must already hold `payroll.view`. Also checked by a database trigger (the last word).
  */
+/** True when the Remitly list of the run was downloaded (someone may have started paying from it). */
+export async function listWasDownloaded(executor: Executor, runId: string): Promise<boolean> {
+  const [row] = await executor.select({ id: payChangeLog.id }).from(payChangeLog).where(and(eq(payChangeLog.runId, runId), eq(payChangeLog.action, "list_exported"))).limit(1);
+  return Boolean(row);
+}
+
 export async function unapproveRefusal(executor: Executor, runId: string): Promise<string | null> {
   const [paid] = await executor.select({ id: payPayments.id }).from(payPayments).where(eq(payPayments.runId, runId)).limit(1);
   if (paid) return UNAPPROVE_PAID;

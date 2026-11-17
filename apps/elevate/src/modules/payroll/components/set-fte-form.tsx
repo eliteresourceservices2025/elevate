@@ -11,7 +11,8 @@ import type { RateRow } from "../queries";
 
 // The Set FTE table: every live monthly rate with its default FTE count (1, 0.5, 0 or Not set), grouped by client, so the counts from the
 // payroll sheet can be typed in one sitting. The live total at the top is the total FTE the run will use if every line is on it, to compare
-// with the sheet. Saving sends only the rates that changed; each one is a same-date correction, so nothing gets a new date.
+// with the sheet. Saving sends only the rates that changed (choosing "Not set" clears a count); each one is a same-date correction, so nothing
+// gets a new date.
 
 const CHOICES = ["1", "0.5", "0"] as const;
 
@@ -30,7 +31,7 @@ export function SetFteForm({ rows }: { rows: RateRow[] }) {
 
   const total = live.reduce((sum, r) => sum + (parseFte(values[r.lineKey] ?? "") ?? 0), 0); // eslint-disable-line security/detect-object-injection
   const notSet = live.filter((r) => (values[r.lineKey] ?? "") === "").length; // eslint-disable-line security/detect-object-injection
-  const changed = live.filter((r) => (values[r.lineKey] ?? "") !== "" && (values[r.lineKey] ?? "") !== (r.fte ?? "")); // eslint-disable-line security/detect-object-injection
+  const changed = live.filter((r) => (values[r.lineKey] ?? "") !== (r.fte ?? "")); // eslint-disable-line security/detect-object-injection
   const shown = onlyEmpty ? live.filter((r) => (values[r.lineKey] ?? "") === "") : live; // eslint-disable-line security/detect-object-injection
 
   const groups = new Map<string, RateRow[]>();
@@ -44,7 +45,12 @@ export function SetFteForm({ rows }: { rows: RateRow[] }) {
         if (changed.length === 0) return;
         run(
           () => setLineFtes({ rows: changed.map((r) => ({ lineKey: r.lineKey, fte: values[r.lineKey] })) }), // eslint-disable-line security/detect-object-injection
-          `FTE saved for ${changed.length} ${changed.length === 1 ? "rate" : "rates"}.`,
+          (data) => {
+            // What the server really did: a rate can be skipped (it ended, was removed, or already had that count).
+            const done = data?.changed ?? changed.length;
+            const skipped = data?.skipped ?? 0;
+            return `FTE saved for ${done} ${done === 1 ? "rate" : "rates"}.${skipped > 0 ? ` ${skipped} ${skipped === 1 ? "was" : "were"} left as they were (ended, removed or already that count).` : ""}`;
+          },
           () => dialog?.close(true),
         );
       }}
@@ -79,7 +85,7 @@ export function SetFteForm({ rows }: { rows: RateRow[] }) {
                     onChange={(e) => setValues({ ...values, [r.lineKey]: e.target.value })}
                   >
                     <option value="">Not set</option>
-                    {CHOICES.map((c) => (
+                    {[...CHOICES, ...(r.fte && !(CHOICES as readonly string[]).includes(r.fte) ? [r.fte] : [])].map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>

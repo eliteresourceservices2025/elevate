@@ -45,20 +45,32 @@ async function insertCopy(tx: Tx, actorId: string, latest: LineRow, change: Part
 }
 
 /**
- * Puts a default FTE count on a line's live versions: the version in force on `today` and every later one (a raise already scheduled). Each is
- * a copy, written as the newest version at the SAME effective date, so the new count wins there without a new date and without a "new rate"
- * flag. A rate paid per FTE (internal team) has no count and is left alone. Returns null when nothing changed (the count was already that).
+ * Puts a default FTE count on a line's live versions: the version in force on `from` and every later one (a raise already scheduled), but
+ * none dated after the line's last day (`last`; those never apply). `from` is the earlier of today and the first day of the earliest draft
+ * run, so a draft built for an earlier cutoff picks the count up. Each is a copy, written as the newest version at the SAME effective date, so
+ * the new count wins there without a new date and without a "new rate" flag. `null` clears the count ("not set"). A rate paid per FTE
+ * (internal team) has no count and is left alone. Returns null when nothing changed (the count was already that).
  */
-export async function setFteOnLine(tx: Tx, actorId: string, versions: LineRow[], fteHundredths: number, today: string): Promise<{ old: ReturnType<typeof detailOf>; new: ReturnType<typeof detailOf> } | null> {
+export async function setFteOnLine(
+  tx: Tx,
+  actorId: string,
+  versions: LineRow[],
+  fteHundredths: number | null,
+  from: string,
+  last: string | null = null,
+): Promise<{ old: ReturnType<typeof detailOf>; new: ReturnType<typeof detailOf> } | null> {
   const sorted = [...versions].sort(newestVersion);
-  const dates = [...new Set(sorted.map((v) => v.effectiveFrom))].sort();
-  const inForce = [...dates].reverse().find((d) => d <= today) ?? dates[0];
+  const dates = [...new Set(sorted.map((v) => v.effectiveFrom))].sort().filter((d) => last === null || d <= last);
+  if (dates.length === 0) return null;
+  const inForce = [...dates].reverse().find((d) => d <= from) ?? dates[0];
   let first: { old: ReturnType<typeof detailOf>; new: ReturnType<typeof detailOf> } | null = null;
   for (const date of dates.filter((d) => d >= inForce)) {
     const source = sorted.find((v) => v.effectiveFrom === date)!;
     const before = decryptLineAmounts(source.id, source.amountsEnc);
-    if (before.perFteCentavos !== undefined || before.fteHundredths === fteHundredths) continue;
-    const after: LineAmounts = { ...before, fteHundredths };
+    if (before.perFteCentavos !== undefined || (before.fteHundredths ?? null) === fteHundredths) continue;
+    const { fteHundredths: _old, ...rest } = before;
+    void _old;
+    const after: LineAmounts = fteHundredths === null ? rest : { ...rest, fteHundredths };
     const id = randomUUID();
     await tx.insert(payLines).values({
       id,

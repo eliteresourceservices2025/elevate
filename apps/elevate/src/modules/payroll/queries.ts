@@ -11,7 +11,7 @@ import { z } from "zod";
 import type { PaymentMethod, RunStatus } from "./constants";
 import { applySupersede, isWithdrawn, lineLastDay, resolveLines } from "./lines";
 import { formatPesos, formatUsd } from "./money";
-import { countAwaiting, hashOf, latestSendBackNote, refusalFor, unapproveRefusal } from "./approval";
+import { countAwaiting, hashOf, latestSendBackNote, listWasDownloaded, refusalFor, unapproveRefusal } from "./approval";
 import { readRun, worksheetOf, type Worksheet } from "./runs";
 import type { BulkAction } from "@/lib/bulk";
 import { nextCutoff, nextStepOf, runActions, runWhy, stepOf, type RunsView, type ViewerRights } from "./runs-list";
@@ -376,6 +376,8 @@ export type WorksheetView = Worksheet & {
   approvalRefusal: string | null;
   /** An approved run an Approver could take back: why it can't be (payments recorded, statements released), or null when it can. */
   unapproveRefusal: string | null;
+  /** The Remitly list of an approved run was already downloaded (the Unapprove dialog warns about it). */
+  listDownloaded: boolean;
   /** The note of the latest send-back, while the run is back in draft. */
   sentBackNote: { note: string; kind: "sent_back" | "unapproved" } | null;
 };
@@ -406,6 +408,7 @@ export async function getWorksheet(runId: string): Promise<WorksheetView | null>
         expectedHash: deciding ? await hashOf(tx, data) : null,
         approvalRefusal: deciding ? await refusalFor(tx, data, actor.id) : null,
         unapproveRefusal: canApprove && data.run.status === "approved" ? await unapproveRefusal(tx, data.run.id) : null,
+        listDownloaded: canApprove && data.run.status === "approved" ? await listWasDownloaded(tx, data.run.id) : false,
         sentBackNote: await latestSendBackNote(tx, data.run),
       };
     },

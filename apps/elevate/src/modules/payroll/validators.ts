@@ -67,10 +67,19 @@ const ENDS_MSG = { message: "The end date can't be before the start date", path:
 export const createPayLineSchema = z.object({ employeeId: uuid, ...lineFields }).refine(endsAfterStart, ENDS_MSG).superRefine(amountsRule);
 export const updatePayLineSchema = z.object({ lineKey: uuid, ...lineFields, reason }).refine(endsAfterStart, ENDS_MSG).superRefine(amountsRule);
 
-/** Setting the FTE count on many rates at once (the Set FTE table). A blank count is not allowed here: it would only clear one. */
+/** Setting the FTE count on many rates at once (the Set FTE table). A blank count clears it ("Not set"). */
 export const setLineFtesSchema = z.object({
   rows: z
-    .array(z.object({ lineKey: uuid, fte: z.string().trim().refine((s) => parseFte(s) !== null, "Enter 1, 0.5 or 0").transform((s) => parseFte(s) as number) }))
+    .array(
+      z.object({
+        lineKey: uuid,
+        fte: z
+          .string()
+          .trim()
+          .refine((s) => s === "" || parseFte(s) !== null, "Enter 1, 0.5 or 0")
+          .transform((s) => (s === "" ? null : (parseFte(s) as number))),
+      }),
+    )
     .min(1)
     .max(300),
 });
@@ -190,6 +199,7 @@ export const exportRemitlySchema = z.object({ runId: uuid });
 const usdPaid = z
   .string()
   .trim()
+  .transform((s) => s.replace(/^\$\s*/, "")) // "$351.66" reads as typed; spaces inside a number stay and are refused ("351 66" is not 35166)
   .refine((s) => s === "" || (parseMoney(s) ?? 0n) > 0n, "Enter an amount like 351.66")
   .optional();
 export const markPaidSchema = z.object({ runId: uuid, employeeId: uuid, reference: z.string().trim().min(1).max(100), paidOn: isoDate, amountUsd: usdPaid });

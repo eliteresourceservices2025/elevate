@@ -15,7 +15,7 @@ vi.mock("server-only", () => ({}));
 
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
-const { createPayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, confirmRunLine, submitRun, sendBackRun, approveRun, unapproveRun, markRunAsTest, archivePayRun, restorePayRun } = await import(
+const { createPayLine, endPayLine, savePaySettings, createPayRun, cancelPayRun, savePayItem, confirmRunLine, submitRun, sendBackRun, approveRun, unapproveRun, exportRemitlyList, markRunAsTest, archivePayRun, restorePayRun } = await import(
   "@/modules/payroll/actions"
 );
 const { getWorksheet, payrollRunsAwaitingApproval } = await import("@/modules/payroll/queries");
@@ -467,6 +467,14 @@ describe("unapproving an approved run", () => {
     expect(await status(runId)).toBe("approved");
     const oldHashRow = (await rows<{ id: string; run_hash_enc: string }>(sql`select id, run_hash_enc from payroll.pay_approvals where run_id = ${runId} and decision = 'approved'`))[0];
     const oldHash = decryptApprovalHash(oldHashRow.id, oldHashRow.run_hash_enc);
+
+    // The Unapprove dialog warns once the Remitly list was downloaded (someone may have started paying from it).
+    as(approver);
+    expect((await getWorksheet(runId))!.listDownloaded).toBe(false);
+    as(preparer);
+    expect(await exportRemitlyList({ runId })).toMatchObject({ ok: true });
+    as(approver);
+    expect((await getWorksheet(runId))!.listDownloaded).toBe(true);
 
     // Only an Approver; a Preparer is refused and nothing is written.
     const before = await footprint(runId);

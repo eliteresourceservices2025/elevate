@@ -37,7 +37,7 @@ function SendBackForm({ runId }: { runId: string }) {
   );
 }
 
-function UnapproveForm({ runId }: { runId: string }) {
+function UnapproveForm({ runId, listDownloaded }: { runId: string; listDownloaded: boolean }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const [note, setNote] = useState("");
@@ -54,6 +54,7 @@ function UnapproveForm({ runId }: { runId: string }) {
         <Textarea id="unapprove-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} required />
         <p className="text-xs text-muted-foreground">{A.unapproveHint}</p>
       </div>
+      {listDownloaded ? <Alert variant="warning" className="rounded-lg p-3 text-sm">{A.unapproveListWarning}</Alert> : null}
       <Button type="submit" disabled={pending || note.trim() === ""}>
         {A.unapprove}
       </Button>
@@ -71,6 +72,7 @@ export function ApprovalBar({
   refusal,
   sentBackNote,
   unapproveRefusal,
+  listDownloaded = false,
   lineCount,
 }: {
   runId: string;
@@ -85,6 +87,8 @@ export function ApprovalBar({
   sentBackNote: { note: string; kind: "sent_back" | "unapproved" } | null;
   /** Why an approved run can't be unapproved (payments recorded, statements released); null when it can. */
   unapproveRefusal: string | null;
+  /** The Remitly list was already downloaded for this approved run. */
+  listDownloaded?: boolean;
 }) {
   const { run, pending } = useRun();
 
@@ -120,7 +124,7 @@ export function ApprovalBar({
             <p className="text-sm text-muted-foreground">{unapproveRefusal}</p>
           ) : (
             <FormDialog label={A.unapprove} title={A.unapproveTitle} variant="outline">
-              <UnapproveForm runId={runId} />
+              <UnapproveForm runId={runId} listDownloaded={listDownloaded} />
             </FormDialog>
           )
         ) : null}

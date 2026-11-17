@@ -784,7 +784,7 @@ describe("dollars paid and the client of each person", () => {
     as(preparer);
     const before = await footprint(runId);
     for (const amountUsd of ["abc", "0", "0.00", "-5", "1,2,3", "12.345", "99999999999"]) {
-      expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today(), amountUsd }), amountUsd).toEqual({ ok: false, error: BAD });
+      expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today(), amountUsd }), amountUsd).toEqual({ ok: false, error: "Enter an amount like 351.66" });
     }
     expect(await footprint(runId)).toEqual(before);
     // Not typing any dollars is still fine.

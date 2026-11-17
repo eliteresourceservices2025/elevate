@@ -14,7 +14,7 @@ vi.mock("server-only", () => ({}));
 const { db } = await import("@/lib/db");
 endPayrollLinesWhenDone(db);
 const { fieldCrypto } = await import("@/lib/crypto");
-const { createPayLine, updatePayLine, endPayLine, savePaySettings } = await import("@/modules/payroll/actions");
+const { createPayLine, updatePayLine, endPayLine, withdrawPayLine, savePaySettings } = await import("@/modules/payroll/actions");
 const { getRates, getRateOptions, getPaySettings } = await import("@/modules/payroll/queries");
 const { settingsInForce } = await import("@/modules/payroll/service");
 const { readChangeDetail } = await import("@/modules/payroll/changes");
@@ -259,6 +259,37 @@ describe("pay lines", () => {
     // Close the extra line so no later file sees it.
     await db.execute(sql`insert into payroll.pay_lines (id, line_key, employee_id, client_id, hours_per_day, payment_method, ends_on, effective_from, amounts_enc, created_by)
       select gen_random_uuid(), line_key, employee_id, client_id, hours_per_day, payment_method, effective_from, effective_from, amounts_enc, created_by from payroll.pay_lines where id = ${sameId}`);
+  });
+
+  it("does not count a removed rate, or the part of a stopped rate after its last day, as a twin of a new rate", async () => {
+    const preparer = await account();
+    const emp = await person();
+    current.user = preparer;
+    // A rate added by mistake and then removed no longer blocks the same job (Cong's case: it could not be seen or changed).
+    const first = (await createPayLine(base(emp, { effectiveFrom: "2098-10-16", monthly: "20,000" }))) as { ok: true; data: { lineKey: string } };
+    expect(await createPayLine(base(emp, { effectiveFrom: "2098-10-16", monthly: "21,000" }))).toMatchObject({ ok: false, error: expect.stringContaining("already has a pay line for the same job") });
+    expect(await withdrawPayLine({ lineKey: first.data.lineKey, reason: "Added by mistake" })).toMatchObject({ ok: true });
+    const second = (await createPayLine(base(emp, { effectiveFrom: "2098-10-16", monthly: "21,000" }))) as { ok: true; data: { lineKey: string } };
+    expect(second).toMatchObject({ ok: true });
+
+    // A stopped rate blocks only the dates it covers, and says when it stops and how to get around it.
+    expect(await endPayLine({ lineKey: second.data.lineKey, endsOn: "2098-11-13", reason: "Moved to the internal team" })).toMatchObject({ ok: true });
+    const overlap = await createPayLine(base(emp, { effectiveFrom: "2098-11-01", monthly: "22,000" }));
+    expect(overlap).toMatchObject({ ok: false, error: expect.stringContaining("It stops after 2098-11-13") });
+    expect((overlap as { error: string }).error).toContain("its own alias");
+    expect(await createPayLine(base(emp, { effectiveFrom: "2098-11-14", monthly: "22,000" }))).toMatchObject({ ok: true });
+    // The same dates are fine for another role: a rate paid per FTE with its own alias.
+    expect(await createPayLine(base(emp, { effectiveFrom: "2098-11-01", basis: "per_fte", monthly: "", perFte: "1,500", alias: "Internal team" }))).toMatchObject({ ok: true });
+  });
+
+  it("says what is wrong with an amount instead of a generic message", async () => {
+    current.user = await account();
+    const emp = await person();
+    expect(await createPayLine(base(emp, { monthly: "abc" }))).toEqual({ ok: false, error: "Enter an amount above zero" });
+    expect(await createPayLine(base(emp, { basis: "per_fte", monthly: "", perFte: "" }))).toEqual({ ok: false, error: "Enter an amount above zero" });
+    expect(await createPayLine(base(emp, { fte: "3" }))).toMatchObject({ ok: false, error: expect.stringContaining("Enter 1, 0.5 or 0") });
+    // Anything that is not about an amount stays generic.
+    expect(await createPayLine(base(emp, { hoursPerDay: 99 }))).toEqual({ ok: false, error: "Check the request and try again." });
   });
 
   it("ends a leaver's line before a raise already scheduled, and the later version stops applying", async () => {
