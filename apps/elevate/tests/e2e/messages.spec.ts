@@ -506,3 +506,38 @@ test("the unread badge in the header updates live on any page, and clears after 
   await expect(pageB.getByRole("log").getByText("Badge test two", { exact: true })).toBeVisible();
   await expect(pageB.getByRole("link", { name: /^Messages, \d+ unread$/ })).toHaveCount(0, { timeout: 15_000 });
 });
+
+// Needs a real KLIPY key in the environment of both the test run and the dev server; skipped otherwise.
+test("a GIF: search through our server, send, and the other person sees it through our own route", async ({ browser }) => {
+  test.skip(!process.env.KLIPY_API_KEY, "KLIPY_API_KEY is not set");
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Gif${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Gif${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  // The browser must never talk to KLIPY itself.
+  const direct: string[] = [];
+  pageA.on("request", (r) => void (/klipy\.(com|co)/.test(new URL(r.url()).host) && direct.push(r.url())));
+  pageB.on("request", (r) => void (/klipy\.(com|co)/.test(new URL(r.url()).host) && direct.push(r.url())));
+  await pageB.goto("/messages");
+  await startDirect(pageA, `Gif${stamp}b`, `Bea Gif${stamp}b`);
+  await pageA.getByRole("button", { name: "GIF", exact: true }).click();
+  const dialog = pageA.getByRole("dialog");
+  await dialog.getByLabel("Search GIFs").fill("happy");
+  const first = dialog.getByRole("button", { name: /^Send GIF:/ }).first();
+  await expect(first).toBeVisible({ timeout: 20_000 });
+  await expect(first.locator("img")).toHaveJSProperty("complete", true, { timeout: 20_000 });
+  expect(await first.locator("img").evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
+  await first.click();
+  const sent = pageA.getByRole("log").getByRole("img", { name: "A GIF" });
+  await expect(sent).toBeVisible({ timeout: 15_000 });
+  await expect.poll(() => sent.evaluate((el: HTMLImageElement) => el.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0);
+  await pageB.getByRole("button", { name: new RegExp(`Ana Gif${stamp}a`) }).click();
+  const seen = pageB.getByRole("log").getByRole("img", { name: "A GIF" });
+  await expect(seen).toBeVisible({ timeout: 15_000 });
+  await expect.poll(() => seen.evaluate((el: HTMLImageElement) => el.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0);
+  expect(direct).toEqual([]);
+});

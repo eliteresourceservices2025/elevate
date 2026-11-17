@@ -159,7 +159,7 @@ Start at `docs/RUNBOOK.md`. For a stuck or slow page: Vercel > Logs for the requ
 - [ ] **Supabase Realtime settings:** turn OFF "Allow public access" (Project settings > Realtime). Chat uses private channels only.
 - [ ] **The new privacy notice and Monitoring policy are published** (drafts in `docs/policies/`) before anyone uses chat with real data. Publishing is permanent and makes everyone accept at next sign-in.
 - [ ] **Sentry and logs:** nothing to change; chat never logs message text.
-- [ ] Optional, GIFs: add `KLIPY_API_KEY` in Vercel (server only). Without it the GIF button says GIFs are not set up. After adding it, search one GIF and check it shows (the response format has not been confirmed against the real service).
+- [ ] Optional, GIFs: add `KLIPY_API_KEY` in Vercel (server only). Without it the GIF button says GIFs are not set up. KLIPY's production key needs their approval first (a test key works for local checks only). Check their attribution rules, then search one GIF after adding the key. The response format was verified against a test key on 2026-11-17.
 - [ ] The messages retention (one year) is promised in the privacy notice but **no job enforces it yet**: tell counsel, and build it or adjust the wording before the first year ends.
 - [ ] Do NOT rotate `FIELD_ENCRYPTION_KEYS` until a search re-index exists (older messages stop matching in search).
 - [ ] Guests: HR invites at Messages > Client guests; the guest notice text is a draft for counsel (`apps/elevate/src/modules/messages/guests.ts`).
