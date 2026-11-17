@@ -21,6 +21,7 @@ import { runPeopleRetention } from "@/modules/people/retention";
 import { runEsignReminders, runEsignSealSweep } from "@/modules/signing/jobs";
 import { runChecklistReminders, runChecklistSync, runSeparations } from "@/modules/onboarding/jobs";
 import { runImportPurge } from "@/modules/imports/jobs";
+import { runChatChannelSync, runChatDigest } from "@/modules/messages/jobs";
 import { runSafevoiceNotify } from "@/modules/safevoice/jobs";
 import { runEarlyReviewScheduler, runReviewReminders } from "@/modules/reviews/jobs";
 import { runAnalyticsNightly } from "@/modules/analytics/build";
@@ -312,4 +313,16 @@ export const importPurge = inngest.createFunction(
   async ({ step }) => step.run("purge", () => track("import-purge", () => runImportPurge())),
 );
 
-export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge];
+/** Daily at 3:40 AM Phoenix: bring the automatic team, department and company chat channels in line with ELEVATE's organization. */
+export const chatChannelSync = inngest.createFunction(
+  { id: "chat-channel-sync", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 40 3 * * *` } },
+  async ({ step }) => step.run("sync", () => track("chat-channel-sync", () => runChatChannelSync())),
+);
+
+/** Daily at 8:00 AM Phoenix: one lowest-priority email to people with unread chat messages (a count and a link, never the messages). */
+export const chatDigest = inngest.createFunction(
+  { id: "chat-digest", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 0 8 * * *` } },
+  async ({ step }) => step.run("digest", () => track("chat-digest", () => runChatDigest(todayInZone()))),
+);
+
+export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge, chatChannelSync, chatDigest];

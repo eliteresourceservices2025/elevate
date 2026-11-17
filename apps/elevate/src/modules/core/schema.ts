@@ -24,6 +24,8 @@ export const users = core
       // Profile photo: a path in the private employee-docs bucket (avatars/<user id>/<random>.jpg), written only by the photo service.
       photoPath: text("photo_path"),
       photoUpdatedAt: timestamp("photo_updated_at", { withTimezone: true }),
+      // A client guest (Messages only, no roles ever; a database trigger refuses to give a guest a role). requireUser() turns guests away unless the caller opts in.
+      isGuest: boolean("is_guest").notNull().default(false),
     },
     (t) => [
       uniqueIndex("users_email_lower_idx").on(sql`lower(${t.email})`),
@@ -48,8 +50,11 @@ export const invitations = core
       // Employee is not listed: everyone gets it.
       roles: text("roles").array().notNull().default(sql`'{}'::text[]`),
       isSafevoiceHandler: boolean("is_safevoice_handler").notNull().default(false),
+      // Set for a client guest invitation: the client they belong to. A guest invitation never carries roles or the Safe Voice handler flag.
+      guestClientId: uuid("guest_client_id"),
     },
     (t) => [
+      check("invitations_guest_chk", sql`${t.guestClientId} is null or (${t.roles} = '{}' and not ${t.isSafevoiceHandler})`),
       uniqueIndex("invitations_email_lower_idx").on(sql`lower(${t.email})`),
       check("invitations_roles_chk", sql`${t.roles} <@ array['super_admin', 'hr_admin', 'team_lead', 'recruiter', 'executive']::text[]`),
     ],

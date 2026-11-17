@@ -19,3 +19,17 @@ Drafts: `privacy-notice.md` and `monitoring-policy.md` in this folder. Each is p
 - US healthcare clients: screenshots may capture patient data. Whether a business associate agreement or client notice is needed is for counsel and the client contracts. The draft only commits to confidentiality, limited access and prompt deletion.
 - Safe Voice has its own page; confirm it needs no mention here.
 - The optional location setting stays available in ELEVATE once a monitoring policy is published. The draft describes it as optional and rounded (about 1 km). If ERS does not want it at all, say so and the option can be switched off in the app.
+
+## Messages and calls (owner decisions 2026-11-17; for counsel before real use)
+- **HR access requests:** an HR Admin asks and a different Super Admin approves; read-only, the requested dates only, 72 hours, every page read logged. Confirm the rules and whether the people in the chat must be told, and when.
+- **Recording calls:** only people a Super Admin picks, with every participant's consent, never in calls with a client. Confirm the consent wording under the Data Privacy Act.
+- **Retention (proposed):** messages and files 1 year, call history 3 years, recordings 30 days. Nothing is deleted automatically until counsel approves.
+- **Deleted messages:** proposed to be kept (encrypted, hidden) until the retention period ends, disclosed in the privacy notice. Confirm.
+- **Client groups:** the owner decided clients (guests) may join groups for attendance matters under a written never-share-patient-details rule, with no vendor BAAs. Confirm the guest notice wording and whether that is enough for the client contracts.
+- **Guest accounts (built 2026-11-17):** a client's contact signs in with email and password or Google and a mandatory authenticator code, accepts a short guest notice (draft text in `apps/elevate/src/modules/messages/guests.ts`, `GUEST_NOTICE_BODY`), and sees only the client chats they were added to. Confirm the notice, whether guests need their own privacy notice (their email and messages are personal data), and how long a former client's guest messages are kept.
+- **Group management (owner decision 2026-11-17):** HR Admins and Super Admins can create, rename, add and remove people from, and delete any group chat. A deleted group is archived: nobody can read it, and its encrypted messages are kept until the retention period. A removed person loses access to the whole group at once. Confirm that keeping deleted groups' messages until retention, and HR's ability to remove people without telling the group's other members why, fit the privacy notice.
+
+## Policy drafts updated for Messages (2026-11-17)
+- `privacy-notice.md` now covers chats (what is held, who sees it, a one-year retention for messages and files, KLIPY for GIF search) and was trimmed elsewhere (wording only, meaning kept) to stay under ELEVATE's 10,000-character limit (about 9,990). Counsel: please read the trimmed wording again.
+- `monitoring-policy.md` has a new "Messages" section: ERS does not read chats; the only exception (a request by HR approved by a different Super Admin, read-only, 72 hours, logged) is **not built yet**; the policy says we will tell people before it is switched on.
+- The one-year message retention is stated but **no deletion job exists yet**. Do not publish the notice as final until a job exists or the wording changes.

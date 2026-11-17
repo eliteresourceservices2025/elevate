@@ -22,6 +22,8 @@ const BUCKETS: { name: string; types: string[]; maxBytes: number }[] = [
   // Announcement videos: MP4 and WebM only, 100 MB. A hosted project also has a project-wide file size cap (Settings > Storage)
   // that must be at least this large, or uploads above it fail.
   { name: "announcement-videos", types: VIDEO_MIME_TYPES, maxBytes: MAX_VIDEO_BYTES },
+  // Chat files, pictures and voice notes: the same documents as the vault plus voice notes (WebM, Ogg, MP4 audio), 10 MB.
+  { name: "chat-files", types: [...ALLOWED_MIME_TYPES, "audio/webm", "audio/ogg", "audio/mp4"], maxBytes: MAX_FILE_BYTES },
 ];
 
 console.log(`Project: ${new URL(url).host}`);

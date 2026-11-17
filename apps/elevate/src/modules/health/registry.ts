@@ -23,6 +23,8 @@ export const JOBS: Record<string, JobInfo> = {
   "email-sender": { label: "Email sender", everyMinutes: 30 },
   "candidate-email-sender": { label: "Applicant email sender", everyMinutes: 30 },
   "recruiting-retention": { label: "Applicant data retention", everyMinutes: DAILY },
+  "chat-channel-sync": { label: "Chat channels (teams, departments, company)", everyMinutes: DAILY },
+  "chat-digest": { label: "Chat unread email", everyMinutes: DAILY },
   "people-retention": { label: "People records retention", everyMinutes: DAILY },
   "esign-reminders": { label: "Signature reminders and expiry", everyMinutes: DAILY },
   "esign-seal-sweep": { label: "Sealing signed documents", everyMinutes: 30 },

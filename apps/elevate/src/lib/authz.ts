@@ -11,6 +11,7 @@ import { scheduleImportPermissions } from "@/modules/schedule-import/permissions
 import { incidentsPermissions } from "@/modules/incidents/permissions";
 import { healthPermissions } from "@/modules/health/permissions";
 import { jibblePermissions } from "@/modules/jibble/permissions";
+import { messagesPermissions } from "@/modules/messages/permissions";
 import { notificationsPermissions } from "@/modules/notifications/permissions";
 import { offersPermissions } from "@/modules/offers/permissions";
 import { onboardingPermissions } from "@/modules/onboarding/permissions";
@@ -39,6 +40,7 @@ export const PERMISSIONS = {
   ...documentsPermissions,
   ...announcementsPermissions,
   ...notificationsPermissions,
+  ...messagesPermissions,
   ...privacyPermissions,
   ...timeoffPermissions,
   ...attendancePermissions,
@@ -75,6 +77,8 @@ export type AuthzUser = {
   payrollAccess?: PayrollLevel | null;
   /** Named individually (privacy incident inbox); a role never grants it. */
   isPrivacyOfficer?: boolean;
+  /** A client guest: no roles, Messages only (see requireUser). */
+  isGuest?: boolean;
 };
 
 /**
@@ -119,6 +123,7 @@ function grantedScopes(user: AuthzUser, rule: PermissionRule): Scope[] {
     if (scope) scopes.push(scope);
   }
   if (user.isPrivacyOfficer && rule.alsoFlag?.privacy_officer) scopes.push(rule.alsoFlag.privacy_officer);
+  if (user.isGuest && rule.alsoFlag?.guest) scopes.push(rule.alsoFlag.guest);
   return scopes.sort((a, b) => rank(b) - rank(a));
 }
 

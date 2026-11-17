@@ -45,7 +45,8 @@ export type PermissionRule = {
   /** Flag holders get this scope; roles are ignored when set. */
   flagScope?: Scope;
   /** Per-person flags that grant a scope IN ADDITION to the roles (the Privacy Officer: HR and Super Admin keep their role access). */
-  alsoFlag?: { privacy_officer?: Scope };
+  /** `guest`: a client guest (no roles at all) gets this scope. Only Messages lists it; every other action stays closed to guests. */
+  alsoFlag?: { privacy_officer?: Scope; guest?: Scope };
 };
 
 export function definePermissions<T extends Record<string, PermissionRule>>(rules: T): T {
