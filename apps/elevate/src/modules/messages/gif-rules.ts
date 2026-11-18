@@ -2,11 +2,16 @@
 
 export type GifProvider = "klipy" | "giphy";
 export type GifResult = { id: string; title: string; url: string; previewUrl: string; width: number; height: number };
+/** What the picker receives: each address comes with a signature from our server, required to preview or send it. */
+export type SignedGif = GifResult & { sig: string; previewSig: string };
 
-/** Only these hosts (or their subdomains) are ever fetched: KLIPY's and GIPHY's own media hosts. */
-const HOST_SUFFIXES = ["klipy.com", "klipy.co", "giphy.com"];
+/**
+ * Only these exact media hosts are ever fetched (never a whole domain, which would include support and developer sites): KLIPY's media host
+ * and GIPHY's media hosts (media.giphy.com, media0 to media4, i.giphy.com).
+ */
+const ALLOWED_HOSTS: ReadonlySet<string> = new Set(["static.klipy.com", "media.giphy.com", "media0.giphy.com", "media1.giphy.com", "media2.giphy.com", "media3.giphy.com", "media4.giphy.com", "i.giphy.com"]);
 
-/** https only, an allowed GIF host, no credentials, no odd ports. The only URLs we will ever fetch. */
+/** https only, an allowed GIF media host, no credentials, no odd ports. The only URLs we will ever fetch. */
 export function isAllowedGifUrl(value: unknown): value is string {
   if (typeof value !== "string" || value.length > 600) return false;
   let u: URL;
@@ -16,7 +21,7 @@ export function isAllowedGifUrl(value: unknown): value is string {
     return false;
   }
   if (u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443")) return false;
-  return HOST_SUFFIXES.some((s) => u.hostname === s || u.hostname.endsWith(`.${s}`));
+  return ALLOWED_HOSTS.has(u.hostname);
 }
 
 /** The attribution line each provider requires next to its GIFs. */

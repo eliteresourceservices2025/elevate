@@ -39,6 +39,8 @@ export const POLICIES = {
   /** GIF search: a few per person, and one company-wide budget under GIPHY's free allowance of 100 calls an hour (cached answers cost nothing). */
   gifSearch: { requests: 30, window: "10 m" },
   gifSearchCompany: { requests: 90, window: "1 h" },
+  /** GIF previews in the picker (a search shows up to 24, and people scroll and search a lot). */
+  gifPreview: { requests: 600, window: "10 m" },
   /** The header search box (it asks as people type, so the allowance is generous). */
   search: { requests: 200, window: "10 m" },
 } satisfies Record<string, Policy>;

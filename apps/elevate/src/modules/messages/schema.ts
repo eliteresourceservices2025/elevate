@@ -26,7 +26,7 @@ export const conversations = chat
       /** The client a 'client' group belongs to. */
       clientId: uuid("client_id").references(() => clients.id),
       /** The picture of a group, channel or client group: an uploaded chat image (kept unlinked from any message). */
-      photoAttachmentId: uuid("photo_attachment_id"),
+      photoAttachmentId: uuid("photo_attachment_id").references((): AnyPgColumn => messageAttachments.id),
       /** 'admins': only HR Admins and Super Admins post root messages here (the company channel); replies and reactions stay open. */
       posting: text("posting").notNull().default("everyone"),
       /** A group's name (plain text, shown to its members). Null for a direct message. */

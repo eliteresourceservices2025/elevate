@@ -69,8 +69,27 @@ export async function fetchGif(url: string): Promise<{ bytes: Uint8Array; mime: 
   const mime = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (mime !== "image/gif" && mime !== "image/webp") return null;
   const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared > MAX_GIF_BYTES) return null;
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.length === 0 || bytes.length > MAX_GIF_BYTES) return null;
+  if (declared > MAX_GIF_BYTES || !response.body) return null;
+  // Read as it arrives and stop at the limit, so a missing or false Content-Length cannot make us hold a huge body.
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = response.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > MAX_GIF_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  if (total === 0) return null;
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.length;
+  }
   return { bytes, mime };
 }

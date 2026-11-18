@@ -9,7 +9,8 @@ import type { ChatMessage, ConversationSummary, ManagedGroup } from "./queries";
 import { syncChannels, type SyncResult } from "./channels";
 import * as guestService from "./guests";
 import { gifAttribution, gifsEnabled, searchGifs } from "./klipy";
-import type { GifResult } from "./gif-rules";
+import { signGifUrl } from "./gif-sign";
+import type { SignedGif } from "./gif-rules";
 import { assertGuestReady } from "./guests";
 import * as service from "./service";
 import * as settings from "./settings";
@@ -224,12 +225,13 @@ export async function acceptChatGuestNotice(): Promise<ActionResult<undefined>> 
 }
 
 /** Searches GIFs through our server. `enabled: false` means no KLIPY key is set up here, so the picker says so. */
-export async function searchChatGifs(input: unknown): Promise<ActionResult<{ enabled: boolean; attribution: string | null; gifs: GifResult[] }>> {
+export async function searchChatGifs(input: unknown): Promise<ActionResult<{ enabled: boolean; attribution: string | null; gifs: SignedGif[] }>> {
   const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", searchGifsSchema, input, async (a, data) => {
     if (!gifsEnabled()) return { enabled: false, attribution: null, gifs: [] };
     try {
-      return { enabled: true, attribution: gifAttribution(), gifs: await searchGifs(a.id, data.q) };
+      const found = await searchGifs(a.id, data.q);
+      return { enabled: true, attribution: gifAttribution(), gifs: found.map((g) => ({ ...g, sig: signGifUrl(g.url), previewSig: signGifUrl(g.previewUrl) })) };
     } catch (error) {
       if (error instanceof ActionFailure) throw error;
       throw new ActionFailure("GIF search isn't available right now.");

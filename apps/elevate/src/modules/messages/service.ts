@@ -9,6 +9,7 @@ import { users } from "@/modules/core/schema";
 import { notify } from "@/modules/notifications/service";
 import { isAllowedEmoji } from "./emoji";
 import { isAllowedGifUrl } from "./gif-rules";
+import { verifyGifSignature } from "./gif-sign";
 import { membersFit } from "./guests";
 import { extractMentions, mentionsEveryone } from "./mentions";
 import { clearSearchIndex, indexMessage } from "./search-index";
@@ -257,9 +258,9 @@ export async function renameGroup(actor: Actor, input: { conversationId: string;
   const title = input.title.trim();
   if (!title || title.length > MAX_TITLE) throw new ActionFailure("Check the name and try again.");
   const everyone = await db.transaction(async (tx) => {
-    await lockGroup(tx, input.conversationId);
+    const group = await lockGroup(tx, input.conversationId);
     await tx.update(conversations).set({ title }).where(eq(conversations.id, input.conversationId));
-    await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body: `The group was renamed to "${title}"`, kind: "system" });
+    await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body: `The ${group.kind === "channel" ? "channel" : "group"} was renamed to "${title}"`, kind: "system" });
     await writeAudit({ actor, action: "chat.group.rename", targetType: "chat_conversation", targetId: input.conversationId }, tx);
     return currentMemberIds(tx, input.conversationId);
   });
@@ -382,8 +383,9 @@ export async function sendMessage(actor: Actor, input: { conversationId: string;
 }
 
 /** Sends a GIF the person picked: only an https KLIPY address is accepted; the address is stored (encrypted) and shown through our own route. */
-export async function sendGif(actor: Actor, input: { conversationId: string; url: string; threadRootId?: string | null; canManage?: boolean }): Promise<{ id: string; seq: number }> {
-  if (!isAllowedGifUrl(input.url)) throw new ActionFailure("That GIF can't be sent.");
+export async function sendGif(actor: Actor, input: { conversationId: string; url: string; sig: string; threadRootId?: string | null; canManage?: boolean }): Promise<{ id: string; seq: number }> {
+  // Only an address our own search returned (it carries our signature) on an allowed media host can be posted.
+  if (!isAllowedGifUrl(input.url) || !verifyGifSignature(input.url, input.sig)) throw new ActionFailure("That GIF can't be sent.");
   const member = await requireMember(db, actor.id, input.conversationId);
   if (!input.threadRootId && member.posting === "admins" && !input.canManage) throw new ActionFailure("Only HR can post in this channel.");
   if (input.threadRootId) {

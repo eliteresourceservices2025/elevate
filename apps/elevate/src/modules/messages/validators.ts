@@ -97,7 +97,7 @@ export const createClientGroupSchema = z.object({
 });
 
 export const searchGifsSchema = z.object({ q: z.string().trim().min(1).max(60) });
-export const sendGifSchema = z.object({ conversationId: id, url: z.string().max(600), threadRootId: id.optional() });
+export const sendGifSchema = z.object({ conversationId: id, url: z.string().max(600), sig: z.string().length(32), threadRootId: id.optional() });
 
 export const createChannelSchema = z.object({
   title: z.string().trim().min(1, "Give the channel a name.").max(MAX_TITLE),

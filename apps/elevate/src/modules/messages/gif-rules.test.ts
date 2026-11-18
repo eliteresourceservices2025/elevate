@@ -4,7 +4,10 @@ import { chooseGifProvider, isAllowedGifUrl, parseGifResults } from "./gif-rules
 describe("isAllowedGifUrl", () => {
   it("accepts https KLIPY hosts and subdomains only", () => {
     expect(isAllowedGifUrl("https://static.klipy.com/a/b.gif")).toBe(true);
-    expect(isAllowedGifUrl("https://klipy.com/x.webp")).toBe(true);
+    // Exact media hosts only: not the bare domain, not other subdomains, not klipy.co.
+    expect(isAllowedGifUrl("https://klipy.com/x.webp")).toBe(false);
+    expect(isAllowedGifUrl("https://api.klipy.com/x.gif")).toBe(false);
+    expect(isAllowedGifUrl("https://klipy.co/x.gif")).toBe(false);
   });
   it("refuses everything else", () => {
     for (const bad of [
@@ -69,6 +72,9 @@ describe("GIPHY", () => {
     expect(isAllowedGifUrl("https://media0.giphy.com/media/x/200w.gif")).toBe(true);
     expect(isAllowedGifUrl("https://i.giphy.com/x.gif")).toBe(true);
     expect(isAllowedGifUrl("https://giphy.com.evil.example/x.gif")).toBe(false);
+    expect(isAllowedGifUrl("https://support.giphy.com/x.gif")).toBe(false);
+    expect(isAllowedGifUrl("https://media5.giphy.com/x.gif")).toBe(false);
+    expect(isAllowedGifUrl("https://giphy.com/x.gif")).toBe(false);
     expect(isAllowedGifUrl("https://notgiphy.com/x.gif")).toBe(false);
   });
 
