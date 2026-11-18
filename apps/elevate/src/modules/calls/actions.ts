@@ -6,8 +6,9 @@ import { requireUser } from "@/lib/auth";
 import { allowRequest } from "@/lib/rate-limit";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import * as service from "./service";
+import * as settings from "./settings";
 import { callsAvailable } from "./sfu-port";
-import { callIdSchema, closeTracksSchema, liveCallSchema, publishTracksSchema, renegotiateSchema, startCallSchema, subscribeTracksSchema } from "./validators";
+import { callIdSchema, callSettingsSchema, callUserSchema, closeTracksSchema, unsubscribeSchema, liveCallSchema, publishTracksSchema, renegotiateSchema, startCallSchema, subscribeTracksSchema } from "./validators";
 
 // Every action: who is calling (requireUser), may they use calls at all (authorize), is the input valid (Zod), and only then the domain
 // function in service.ts, which checks membership. A guest has no calls permission: they pass through Messages access (messages.use) and
@@ -75,6 +76,33 @@ export async function subscribeCallTracks(input: unknown): Promise<ActionResult<
 export async function answerCallOffer(input: unknown): Promise<ActionResult<undefined>> {
   const actor = await requireUser({ allowGuest: true });
   return run(actor, joinAction(actor), renegotiateSchema, input, "callMedia", async (data) => void (await service.renegotiate(actor, data)));
+}
+
+export async function muteCallParticipant(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser({ allowGuest: true });
+  return run(actor, joinAction(actor), callUserSchema, input, "callMedia", async (data) => void (await service.muteParticipant(actor, data)));
+}
+
+export async function removeCallParticipant(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser({ allowGuest: true });
+  return run(actor, joinAction(actor), callUserSchema, input, "callMedia", async (data) => void (await service.removeParticipant(actor, data)));
+}
+
+export async function unsubscribeCallTracks(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser({ allowGuest: true });
+  return run(actor, joinAction(actor), unsubscribeSchema, input, "callMedia", async (data) => void (await service.unsubscribeTracks(actor, data)));
+}
+
+/** Super Admin: the warning level and the all-hands switch. Works without Cloudflare set up. */
+export async function saveCallSettings(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "calls.settings");
+    const parsed = callSettingsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD);
+    await settings.saveCallSettings(actor, parsed.data);
+    return { ok: true, data: undefined };
+  });
 }
 
 /** Is a call live in this chat (for the "Join" banner and the call button)? */

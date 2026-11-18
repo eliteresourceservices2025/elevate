@@ -106,3 +106,75 @@ test("a call nobody joins ends as a missed call and the other person is told", a
   await pageB.getByRole("button", { name: new RegExp(`Ana Mis${stamp}a`) }).click();
   await expect(pageB.getByRole("log").getByText("Missed call")).toBeVisible({ timeout: 20_000 });
 });
+
+test("host controls: the People list, mute someone, remove someone", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Hst${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Hst${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  const nameB = `Bea Hst${stamp}b`;
+  await pageB.goto("/dashboard");
+  await startDirect(pageA, `Hst${stamp}b`, nameB);
+  await pageA.getByRole("button", { name: "Start a call" }).click();
+  await pageA.waitForURL(/\/messages\/call\//, { timeout: 30_000 });
+  const ring = pageB.getByRole("alertdialog", { name: "Incoming call" });
+  await expect(ring).toBeVisible({ timeout: 20_000 });
+  await ring.getByRole("button", { name: "Join" }).click();
+  await expect(pageB.getByRole("list", { name: "People in the call" }).getByTestId("call-tile")).toHaveCount(2, { timeout: 30_000 });
+  await expect(pageA.getByRole("list", { name: "People in the call" }).getByTestId("call-tile")).toHaveCount(2, { timeout: 30_000 });
+
+  // The host sees mute and remove next to Bea; Bea sees neither next to anyone.
+  await pageA.getByRole("button", { name: /^People \(2\)/ }).click();
+  await expect(pageA.getByRole("button", { name: `Mute ${nameB}` })).toBeVisible();
+  await expect(pageA.getByRole("button", { name: `Remove ${nameB} from the call` })).toBeVisible();
+  await pageB.getByRole("button", { name: /^People \(2\)/ }).click();
+  await expect(pageB.getByTestId("person-row")).toHaveCount(2);
+  await expect(pageB.getByRole("button", { name: /^Mute (?!microphone)/ })).toHaveCount(0);
+  await expect(pageB.getByRole("button", { name: /^Remove / })).toHaveCount(0);
+
+  // Mute: the server switches off Bea's microphone, and her own button follows.
+  await expect(pageB.getByRole("button", { name: "Mute microphone" })).toBeVisible();
+  await pageB.waitForTimeout(7_000); // a change made a moment ago is not mistaken for the host
+  await pageA.getByRole("button", { name: `Mute ${nameB}` }).click();
+  await expect(pageB.getByRole("button", { name: "Unmute microphone" })).toBeVisible({ timeout: 30_000 });
+
+  // Remove: Bea is taken out and sent back to the chat; Ana is alone again.
+  await pageA.getByRole("button", { name: `Remove ${nameB} from the call` }).click();
+  await pageA.getByRole("button", { name: `Remove ${nameB}?` }).click();
+  await pageB.waitForURL(/\/messages\/[0-9a-f-]{36}$/, { timeout: 40_000 });
+  await expect(pageA.getByText("1 person in this call")).toBeVisible({ timeout: 30_000 });
+});
+
+test("settings: a Super Admin sees the month's media estimate and saves the warning; an employee gets a 404", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const stamp = Date.now();
+  const admin = await createEmployeeAccount("Sue", `Set${stamp}a`, { roles: ["super_admin"] });
+  const employee = await createEmployeeAccount("Ed", `Set${stamp}e`);
+  const pageS = await (await browser.newContext()).newPage();
+  const pageE = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageS, admin);
+  await signInEnrollingMfa(pageE, employee);
+
+  await pageS.goto("/settings/calls");
+  await expect(pageS.getByRole("heading", { level: 1, name: "Calls" })).toBeVisible({ timeout: 45_000 });
+  await expect(pageS.getByRole("progressbar", { name: "Estimated media this month" })).toBeVisible();
+  await expect(pageS.getByText(/of 1,000 GB free/)).toBeVisible();
+  const level = pageS.getByLabel("Warn me at (GB a month)");
+  await level.fill("40");
+  await expect(level).toHaveAttribute("aria-invalid", "true");
+  await expect(pageS.getByRole("button", { name: "Save" })).toBeDisabled();
+  await level.fill("800");
+  await pageS.getByRole("button", { name: "Save" }).click();
+  await expect(pageS.getByText("Saved.")).toBeVisible({ timeout: 15_000 });
+  await pageS.reload();
+  await expect(pageS.getByLabel("Warn me at (GB a month)")).toHaveValue("800");
+  await pageS.getByLabel("Warn me at (GB a month)").fill("700");
+  await pageS.getByRole("button", { name: "Save" }).click();
+
+  const response = await pageE.goto("/settings/calls");
+  expect(response?.status()).toBe(404);
+});

@@ -12,6 +12,8 @@ export type MediaApi = {
   close(trackNames: string[]): Promise<void>;
   subscribe(trackNames: string[]): Promise<{ offerSdp: string; tracks: { mid: string; trackName: string }[] }>;
   answer(sdp: string): Promise<void>;
+  /** Stops pulling tracks (by their id on the receiving connection), so video that is off screen costs nothing. */
+  unsubscribe(mids: string[]): Promise<void>;
 };
 
 /** Someone's camera and microphone arrive as slot "main"; a shared screen arrives as its own slot "screen". null means it went away. */

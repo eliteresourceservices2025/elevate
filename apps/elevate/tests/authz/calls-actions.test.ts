@@ -43,6 +43,9 @@ const calls: { name: string; run: () => Result; guestMay: boolean }[] = [
   { name: "closeCallTracks", run: () => actions.closeCallTracks({ callId: ID, trackNames: [TRACK] }), guestMay: true },
   { name: "subscribeCallTracks", run: () => actions.subscribeCallTracks({ callId: ID, trackNames: [TRACK] }), guestMay: true },
   { name: "answerCallOffer", run: () => actions.answerCallOffer({ callId: ID, answer: { type: "answer", sdp: "v=0" } }), guestMay: true },
+  { name: "muteCallParticipant", run: () => actions.muteCallParticipant({ callId: ID, userId: ID }), guestMay: true },
+  { name: "removeCallParticipant", run: () => actions.removeCallParticipant({ callId: ID, userId: ID }), guestMay: true },
+  { name: "unsubscribeCallTracks", run: () => actions.unsubscribeCallTracks({ callId: ID, mids: ["1"] }), guestMay: true },
   { name: "getLiveCall", run: () => actions.getLiveCall({ conversationId: ID }), guestMay: true },
   { name: "getIncomingCall", run: () => actions.getIncomingCall({ callId: ID }), guestMay: true },
 ];
@@ -55,6 +58,8 @@ const badInput: { name: string; run: () => Result }[] = [
   { name: "closeCallTracks (path-like name)", run: () => actions.closeCallTracks({ callId: ID, trackNames: ["../x"] }) },
   { name: "subscribeCallTracks (empty)", run: () => actions.subscribeCallTracks({ callId: ID, trackNames: [] }) },
   { name: "answerCallOffer (offer instead)", run: () => actions.answerCallOffer({ callId: ID, answer: { type: "offer", sdp: "x" } }) },
+  { name: "muteCallParticipant (no user)", run: () => actions.muteCallParticipant({ callId: ID }) },
+  { name: "unsubscribeCallTracks (path-like mid)", run: () => actions.unsubscribeCallTracks({ callId: ID, mids: ["../x"] }) },
   { name: "getLiveCall", run: () => actions.getLiveCall({}) },
 ];
 
@@ -70,6 +75,23 @@ describe("call actions, every role", () => {
       });
     }
   }
+});
+
+describe("call settings", () => {
+  it("only a Super Admin may save them; bad input is refused first", async () => {
+    for (const role of ROLE_SLUGS) {
+      as(role);
+      const result = await actions.saveCallSettings({ monthlyGbWarning: 700, townhallEnabled: true });
+      if (role === "super_admin") expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
+      else expect(result).toEqual({ ok: false, error: NO_ACCESS });
+    }
+    as("super_admin");
+    for (const bad of [{}, { monthlyGbWarning: 10, townhallEnabled: true }, { monthlyGbWarning: 700.5, townhallEnabled: true }, { monthlyGbWarning: 700, townhallEnabled: "yes" }]) {
+      expect(await actions.saveCallSettings(bad)).toEqual({ ok: false, error: BAD });
+    }
+    asGuest();
+    expect(await actions.saveCallSettings({ monthlyGbWarning: 700, townhallEnabled: true })).toMatchObject({ ok: false });
+  });
 });
 
 describe("call actions, a client guest", () => {

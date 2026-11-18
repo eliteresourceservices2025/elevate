@@ -99,8 +99,8 @@ describe("joining", () => {
     await db.execute(sql`update chat.guests set notice_accepted_at = null where user_id = ${guest.id}`);
     await expect(calls.joinCall(guest, { callId })).rejects.toThrow("Accept the guest notice");
     await db.execute(sql`update chat.guests set notice_accepted_at = now() where user_id = ${guest.id}`);
-    await calls.leaveCall(staff, { callId }).catch(() => {});
-    await calls.endCall(staff, { callId }).catch(() => {});
+    await calls.joinCall(staff, { callId });
+    await calls.endCall(staff, { callId });
     await expect(calls.joinCall(guest, { callId })).rejects.toThrow("ended");
   });
 
@@ -234,7 +234,7 @@ describe("ending", () => {
     const { callId } = await calls.startCall(a, { conversationId: conv });
     await calls.joinCall(a, { callId });
     await calls.joinCall(b, { callId });
-    await expect(calls.endCall(b, { callId })).rejects.toThrow("Only the person who started");
+    await expect(calls.endCall(b, { callId })).rejects.toThrow("Only the host");
     await calls.endCall(a, { callId });
     expect(await live(conv)).toBe(0);
     expect(await rows(sql`select 1 from chat.call_participants where call_id = ${callId} and left_at is null`)).toHaveLength(0);

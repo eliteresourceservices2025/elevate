@@ -1,9 +1,9 @@
 "use client";
 
-import { Hand, Mic, MicOff, MonitorUp, PhoneOff, Video, VideoOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Hand, Mic, MicOff, MonitorUp, PhoneOff, Pin, Users, Video, VideoOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -100,10 +100,75 @@ export function CallControls({ compact = false }: { compact?: boolean }) {
   );
 }
 
+/** The people list: who is here, who is muted or has a hand up, who is speaking; and, for the host, mute and remove. */
+function PeoplePanel({ state }: { state: CallState }) {
+  const call = useCall();
+  const isHost = state.me.role === "host";
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const sorted = [...state.participants].sort((a, b) => Number(call.presence[b.userId]?.hand ?? false) - Number(call.presence[a.userId]?.hand ?? false));
+  return (
+    <section aria-label="People in this call" className="flex flex-col gap-2 rounded-xl border bg-card p-3">
+      <h2 className="font-heading text-base font-semibold">People ({state.participants.length})</h2>
+      <ul className="flex max-h-96 flex-col gap-1 overflow-y-auto text-sm">
+        {sorted.map((p) => {
+          const mine = p.userId === call.userId;
+          const muted = mine ? !call.micOn : (call.presence[p.userId]?.muted ?? false);
+          const hand = mine ? call.handUp : (call.presence[p.userId]?.hand ?? false);
+          return (
+            <li key={p.userId} className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-muted" data-testid="person-row" data-user={p.userId}>
+              <span className="min-w-0 flex-1 truncate">
+                {mine ? "You" : p.name}
+                {p.role === "host" ? <span className="ml-1.5 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground">Host</span> : null}
+                {call.activeSpeakerId === p.userId ? <span className="ml-1.5 text-xs text-success">Speaking</span> : null}
+              </span>
+              {hand ? <Hand className="size-4 text-warning" role="img" aria-label="Hand raised" /> : null}
+              {muted ? <MicOff className="size-4 text-muted-foreground" role="img" aria-label="Muted" /> : null}
+              {!mine ? (
+                <Button type="button" variant="ghost" size="xs" aria-pressed={call.pinnedUserId === p.userId} onClick={() => call.pin(call.pinnedUserId === p.userId ? null : p.userId)} aria-label={`${call.pinnedUserId === p.userId ? "Unpin" : "Pin"} ${p.name}`}>
+                  <Pin aria-hidden />
+                </Button>
+              ) : null}
+              {isHost && !mine ? (
+                confirming === p.userId ? (
+                  <span className="flex items-center gap-1">
+                    <Button type="button" variant="destructive" size="xs" onClick={() => void call.removeOther(p.userId).then(() => setConfirming(null))}>
+                      Remove {p.name}?
+                    </Button>
+                    <Button type="button" variant="ghost" size="xs" onClick={() => setConfirming(null)}>
+                      No
+                    </Button>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <Button type="button" variant="outline" size="xs" onClick={() => void call.muteOther(p.userId)} aria-label={`Mute ${p.name}`}>
+                      Mute
+                    </Button>
+                    <Button type="button" variant="outline" size="xs" onClick={() => setConfirming(p.userId)} aria-label={`Remove ${p.name} from the call`}>
+                      Remove
+                    </Button>
+                  </span>
+                )
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/** At most this many tiles beside your own: video for one page, then name circles (they cost nothing to show). The People list has everyone. */
+const MAX_OTHER_TILES = 11;
+
 function ActiveCall({ state }: { state: CallState }) {
   const call = useCall();
+  const [showPeople, setShowPeople] = useState(false);
   const me = state.participants.find((p) => p.userId === call.userId);
   const others = state.participants.filter((p) => p.userId !== call.userId);
+  const withVideo = call.visibleUserIds;
+  // Video tiles first (the page showing), then people without video, up to a sensible number.
+  const shown = [...others.filter((p) => withVideo.includes(p.userId)), ...others.filter((p) => !withVideo.includes(p.userId))].slice(0, MAX_OTHER_TILES);
+  const hidden = others.length - shown.length;
   const sharers = [
     ...(call.screenOn && call.localScreen ? [{ key: "me", name: "Your screen", stream: call.localScreen }] : []),
     ...others.flatMap((p) => (call.remote[p.userId]?.screen ? [{ key: p.userId, name: `${p.name}'s screen`, stream: call.remote[p.userId].screen }] : [])),
@@ -124,13 +189,39 @@ function ActiveCall({ state }: { state: CallState }) {
           ))}
         </ul>
       ) : null}
-      <ul aria-label="People in the call" className="grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-3">
-        {me ? <Tile seat={me} mine /> : null}
-        {others.map((p) => (
-          <Tile key={p.userId} seat={p} mine={false} />
-        ))}
-      </ul>
-      <CallControls />
+      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+        <div className="flex flex-col gap-3">
+          <ul aria-label="People in the call" className="grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-3">
+            {me ? <Tile seat={me} mine /> : null}
+            {shown.map((p) => (
+              <Tile key={p.userId} seat={p} mine={false} />
+            ))}
+          </ul>
+          {hidden > 0 || call.pages > 1 ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              {hidden > 0 ? <span>{hidden} more {hidden === 1 ? "person is" : "people are"} in the call (see People).</span> : null}
+              {call.pages > 1 ? (
+                <span className="ml-auto flex items-center gap-1" role="group" aria-label="Video pages">
+                  <Button type="button" variant="outline" size="icon-sm" disabled={call.page === 0} onClick={() => call.setPage(call.page - 1)} aria-label="Previous page of video">
+                    <ChevronLeft aria-hidden />
+                  </Button>
+                  <span aria-live="polite">
+                    Page {call.page + 1} of {call.pages}
+                  </span>
+                  <Button type="button" variant="outline" size="icon-sm" disabled={call.page >= call.pages - 1} onClick={() => call.setPage(call.page + 1)} aria-label="Next page of video">
+                    <ChevronRight aria-hidden />
+                  </Button>
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          <CallControls />
+          <Button type="button" variant="outline" className="self-center" aria-expanded={showPeople} onClick={() => setShowPeople((v) => !v)}>
+            <Users aria-hidden /> {showPeople ? "Hide people" : `People (${state.participants.length})`}
+          </Button>
+        </div>
+        {showPeople ? <PeoplePanel state={state} /> : null}
+      </div>
     </section>
   );
 }

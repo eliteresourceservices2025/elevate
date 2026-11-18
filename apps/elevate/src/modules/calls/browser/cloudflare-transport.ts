@@ -19,6 +19,8 @@ export class CloudflareTransport implements CallTransport {
   /** mid on the receiving connection -> who it belongs to. */
   private incoming = new Map<string, { userId: string; trackName: string; slot: RemoteSlot }>();
   private pulledNames = new Set<string>();
+  /** trackName -> its id on the receiving connection and the browser track, so it can be closed and removed when it leaves the page. */
+  private pulled = new Map<string, { mid: string; track: MediaStreamTrack | null; key: string }>();
   private streams = new Map<string, MediaStream>(); // key: `${userId}:${slot}`
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -40,6 +42,8 @@ export class CloudflareTransport implements CallTransport {
         this.streams.set(key, stream);
       }
       stream.addTrack(event.track);
+      const entry = this.pulled.get(owner.trackName);
+      if (entry) entry.track = event.track;
       this.onRemote(owner.userId, owner.slot, stream);
     };
   }
@@ -111,7 +115,10 @@ export class CloudflareTransport implements CallTransport {
         // Remember who each track belongs to BEFORE the offer is applied (the browser fires ontrack while applying it).
         for (const t of out.tracks) {
           const info = fresh.find((f) => f.trackName === t.trackName);
-          if (info) this.incoming.set(t.mid, { userId: info.userId, trackName: t.trackName, slot: info.kind === "screen" ? "screen" : "main" });
+          if (info) {
+            this.incoming.set(t.mid, { userId: info.userId, trackName: t.trackName, slot: info.kind === "screen" ? "screen" : "main" });
+            this.pulled.set(t.trackName, { mid: t.mid, track: null, key: `${info.userId}:${info.kind === "screen" ? "screen" : "main"}` });
+          }
           this.pulledNames.add(t.trackName);
         }
         await pull.setRemoteDescription({ type: "offer", sdp: out.offerSdp });
@@ -119,7 +126,20 @@ export class CloudflareTransport implements CallTransport {
         await pull.setLocalDescription(answer);
         await api.answer(answer.sdp ?? "");
       }
-      // Anyone no longer wanted disappears from view (their tracks stop arriving when they leave or stop sending).
+      // Tracks no longer wanted (video that scrolled off the page, someone who left) are closed at Cloudflare: nothing is sent for them any more.
+      const wantedNames = new Set(wanted.map((t) => t.trackName));
+      const dropped = [...this.pulled].filter(([name]) => !wantedNames.has(name));
+      if (dropped.length > 0) {
+        for (const [name, entry] of dropped) {
+          const stream = this.streams.get(entry.key);
+          if (stream && entry.track) stream.removeTrack(entry.track);
+          this.pulled.delete(name);
+          this.pulledNames.delete(name);
+          this.incoming.delete(entry.mid);
+        }
+        await api.unsubscribe(dropped.map(([, entry]) => entry.mid)).catch(() => {});
+      }
+      // A person with nothing left on screen disappears from view.
       const wantedKeys = new Set(wanted.map((t) => `${t.userId}:${t.kind === "screen" ? "screen" : "main"}`));
       for (const [key, stream] of [...this.streams]) {
         if (!wantedKeys.has(key)) {

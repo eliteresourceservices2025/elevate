@@ -6,7 +6,7 @@ import type { CallTransport, IceServer, MediaApi, RemoteSlot, RemoteUpdate } fro
 // It still makes every server call a real connection would (publish, close, subscribe, answer), so the server rules are exercised; only
 // the media itself is replaced by small animated canvases. It records what happened on window.__callsFake for tests.
 
-type Debug = { sent: Record<string, number>; pulled: string[]; micEnabled: boolean };
+type Debug = { sent: Record<string, number>; pulled: string[]; unsubscribed: string[]; micEnabled: boolean };
 
 function canvasStream(label: string, hue: number): MediaStream {
   const canvas = document.createElement("canvas");
@@ -42,7 +42,7 @@ export class FakeTransport implements CallTransport {
   private screens = new Map<string, MediaStream>();
   private pulledNames = new Set<string>();
   private mid = 0;
-  private debug: Debug = { sent: {}, pulled: [], micEnabled: true };
+  private debug: Debug = { sent: {}, pulled: [], unsubscribed: [], micEnabled: true };
 
   async start(input: { iceServers: IceServer[]; api: MediaApi; onRemote: RemoteUpdate; onLocalEnded: (kind: TrackKind) => void }): Promise<void> {
     this.api = input.api;
@@ -79,6 +79,13 @@ export class FakeTransport implements CallTransport {
 
   async syncRemote(wanted: PublishedInfo[]): Promise<void> {
     if (!this.api) return;
+    const wantedNames = new Set(wanted.map((t) => t.trackName));
+    const dropped = [...this.pulledNames].filter((name) => !wantedNames.has(name));
+    if (dropped.length > 0) {
+      for (const name of dropped) this.pulledNames.delete(name);
+      await this.api.unsubscribe(dropped.map((_, i) => String(i))).catch(() => {});
+      this.debug.unsubscribed.push(...dropped);
+    }
     const fresh = wanted.filter((t) => !this.pulledNames.has(t.trackName));
     if (fresh.length > 0) {
       const out = await this.api.subscribe(fresh.map((t) => t.trackName));

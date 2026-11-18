@@ -7,6 +7,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { assertGuestReady } from "@/modules/messages/guests";
 import { peopleByUserId } from "@/modules/messages/queries";
 import { broadcastChatSignal } from "@/modules/messages/realtime";
+import { users } from "@/modules/core/schema";
 import { conversationMembers, conversations } from "@/modules/messages/schema";
 import { currentMemberIds, postSystemLine, requireMember } from "@/modules/messages/service";
 import { notify } from "@/modules/notifications/service";
@@ -47,7 +48,10 @@ async function sweep(tx: Tx, callId: string): Promise<Ended | null> {
     .set({ leftAt: sql`now()` })
     .where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt), sql`${callParticipants.lastSeenAt} < now() - make_interval(secs => ${SEAT_SILENT_SECONDS})`));
   const [open] = await tx.select({ n: sql<number>`count(*)::int` }).from(callParticipants).where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt)));
-  if (open.n > 0) return null;
+  if (open.n > 0) {
+    await handOverHost(tx, callId);
+    return null;
+  }
   // A call just started that nobody has taken a seat in yet (the starter's browser is still joining) is not abandoned.
   const [fresh] = await tx
     .select({ n: sql<number>`count(*)::int` })
@@ -55,6 +59,20 @@ async function sweep(tx: Tx, callId: string): Promise<Ended | null> {
     .where(and(eq(calls.id, callId), sql`${calls.startedAt} > now() - make_interval(secs => ${START_GRACE_SECONDS})`, sql`not exists (select 1 from chat.call_participants p where p.call_id = ${callId})`));
   if (fresh.n > 0) return null;
   return finish(tx, callId, "empty");
+}
+
+/** If the host is gone but others are still here, the person who has been here longest becomes host (so someone can always end the call or remove a person). */
+async function handOverHost(tx: Tx, callId: string): Promise<void> {
+  const seats = await tx
+    .select({ id: callParticipants.id, role: callParticipants.role, isGuest: users.isGuest })
+    .from(callParticipants)
+    .innerJoin(users, eq(users.id, callParticipants.userId))
+    .where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt)))
+    .orderBy(asc(callParticipants.joinedAt));
+  if (seats.some((s) => s.role === "host")) return;
+  // Only staff can be host: a client guest never controls a call (mute, remove, end). With only guests left there is no host.
+  const next = seats.find((s) => !s.isGuest);
+  if (next) await tx.update(callParticipants).set({ role: "host" }).where(eq(callParticipants.id, next.id));
 }
 
 type Ended = { callId: string; conversationId: string; startedBy: string; missed: boolean; minutes: number; people: number };
@@ -263,10 +281,53 @@ export async function leaveCall(actor: Actor, input: { callId: string }): Promis
 
 /** Ends the call for everyone. Only the host (the person who started it). */
 export async function endCall(actor: Actor, input: { callId: string }): Promise<void> {
-  const row = await requireLiveCall(actor, input.callId);
-  if (row.call.startedBy !== actor.id) throw new ActionFailure("Only the person who started the call can end it for everyone.");
+  const { seat } = await requireSeat(actor, input.callId);
+  if (seat.role !== "host") throw new ActionFailure("Only the host can end the call for everyone.");
   const ended = await db.transaction((tx) => finish(tx, input.callId, "ended"));
   if (ended) await announceEnd({ ...ended, missed: false });
+}
+
+/** The other person's open seat in this call, for a host's action on them (never on yourself). */
+async function targetSeat(actor: Actor, callId: string, userId: string) {
+  const mine = await requireSeat(actor, callId);
+  if (mine.seat.role !== "host") throw new ActionFailure("Only the host can do that.");
+  if (userId === actor.id) throw new ActionFailure("Use the buttons for yourself.");
+  const seat = await openSeat(db, callId, userId);
+  if (!seat) throw new ActionFailure("That person isn't in the call.");
+  return seat;
+}
+
+/** Host: switches off someone's microphone. The server closes their audio at Cloudflare, so it doesn't depend on their browser obeying. They can unmute themselves. */
+export async function muteParticipant(actor: Actor, input: { callId: string; userId: string }): Promise<void> {
+  const seat = await targetSeat(actor, input.callId, input.userId);
+  const audio = await db.select().from(callTracks).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, input.userId), eq(callTracks.kind, "audio"), isNull(callTracks.endedAt)));
+  if (audio.length > 0) {
+    await db.update(callTracks).set({ endedAt: sql`now()` }).where(inArray(callTracks.id, audio.map((t) => t.id)));
+    const mids = audio.map((t) => t.mid).filter((m): m is string => Boolean(m));
+    if (seat.cfSessionId && mids.length > 0) await getSfu().closeTracks(seat.cfSessionId, mids).catch(() => {});
+  }
+  await writeAudit({ actor, action: "call.mute", targetType: "call", targetId: input.callId, metadata: { userId: input.userId } });
+  await broadcastCallEvent({ type: "tracks", callId: input.callId });
+}
+
+/** Host: takes someone out of the call. Their media is closed at Cloudflare and they can't pull anything; they can rejoin only if a host lets the call stand (they are still a member of the chat). */
+export async function removeParticipant(actor: Actor, input: { callId: string; userId: string }): Promise<void> {
+  const seat = await targetSeat(actor, input.callId, input.userId);
+  const theirs = await db.select().from(callTracks).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, input.userId), isNull(callTracks.endedAt)));
+  await db.transaction(async (tx) => {
+    await tx.update(callParticipants).set({ leftAt: sql`now()` }).where(eq(callParticipants.id, seat.id));
+    await tx.update(callTracks).set({ endedAt: sql`now()` }).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, input.userId), isNull(callTracks.endedAt)));
+    await writeAudit({ actor, action: "call.remove", targetType: "call", targetId: input.callId, metadata: { userId: input.userId } }, tx);
+  });
+  const mids = theirs.map((t) => t.mid).filter((m): m is string => Boolean(m));
+  if (seat.cfSessionId && mids.length > 0) await getSfu().closeTracks(seat.cfSessionId, mids).catch(() => {});
+  await Promise.all([broadcastCallEvent({ type: "roster", callId: input.callId }), broadcastCallEvent({ type: "tracks", callId: input.callId })]);
+}
+
+/** Closes tracks THIS person pulled (video that scrolled off the page) at Cloudflare, so we stop paying for pictures nobody is looking at. Their own session only. */
+export async function unsubscribeTracks(actor: Actor, input: { callId: string; mids: string[] }): Promise<void> {
+  const { sessionId } = await requireSeat(actor, input.callId);
+  await getSfu().closeTracks(sessionId, input.mids).catch(() => {});
 }
 
 /** Ends calls whose chat was deleted, and any call nobody is left in. Used by the cleanup job. Returns how many were ended. */

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bell, Compass, FileText, FileUp, History, LifeBuoy, ListChecks, Mail, PenLine, ShieldCheck, Wallet } from "lucide-react";
+import { Bell, Compass, FileText, FileUp, History, LifeBuoy, ListChecks, Mail, PenLine, Phone, ShieldCheck, Wallet } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -51,6 +51,13 @@ const SECTIONS = [
     icon: PenLine,
     title: "Payment statement signatory",
     description: "The name, title and signature of the Human Resources Director on every contractor payment statement.",
+  },
+  {
+    href: "/settings/calls",
+    action: "calls.settings",
+    icon: Phone,
+    title: "Calls",
+    description: "See how much call media you use against the free allowance and set the warning level.",
   },
   {
     href: "/settings/invitations",

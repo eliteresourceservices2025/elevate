@@ -3,6 +3,9 @@
 import {
   answerCallOffer,
   closeCallTracks,
+  muteCallParticipant,
+  removeCallParticipant,
+  unsubscribeCallTracks,
   getIncomingCall,
   getLiveCall,
   joinCall,
@@ -40,6 +43,9 @@ export const callApi = {
   close: (callId: string, trackNames: string[]) => unwrap(closeCallTracks({ callId, trackNames })),
   subscribe: (callId: string, trackNames: string[]) => unwrap(subscribeCallTracks({ callId, trackNames })),
   answer: (callId: string, sdp: string) => unwrap(answerCallOffer({ callId, answer: { type: "answer", sdp } })),
+  mute: (callId: string, userId: string) => unwrap(muteCallParticipant({ callId, userId })),
+  remove: (callId: string, userId: string) => unwrap(removeCallParticipant({ callId, userId })),
+  unsubscribe: (callId: string, mids: string[]) => unwrap(unsubscribeCallTracks({ callId, mids })),
   live: (conversationId: string) => unwrap(getLiveCall({ conversationId })),
   incoming: (callId: string) => unwrap(getIncomingCall({ callId })),
 };
