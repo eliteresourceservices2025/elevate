@@ -245,7 +245,7 @@ describe("ending", () => {
     const conv = await group(a, [await makeUser("b"), await makeUser("c")]);
     const { callId } = await calls.startCall(a, { conversationId: conv });
     await calls.joinCall(a, { callId });
-    await messages.deleteGroup(a, conv).catch(() => {});
+    // (Deleting a group through the app ends its call at once; here the chat is archived behind the app's back, which only the cleanup job catches.)
     await db.execute(sql`update chat.conversations set archived_at = now() where id = ${conv}`);
     expect(await calls.endAbandonedCalls()).toBeGreaterThanOrEqual(1);
     expect(await live(conv)).toBe(0);

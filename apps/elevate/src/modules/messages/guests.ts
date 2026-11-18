@@ -115,6 +115,7 @@ export async function archiveGuest(actor: Actor, userId: string): Promise<void> 
       .from(conversationMembers)
       .where(and(eq(conversationMembers.conversationId, conversationId), isNull(conversationMembers.leftAt)));
     await broadcastChatSignal([userId, ...members.map((m) => m.userId)], { type: "members", conversationId });
+    await import("@/modules/calls/service").then((m) => m.syncCallWithChat(conversationId)).catch(() => {});
   }
 }
 

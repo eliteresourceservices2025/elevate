@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chooseSubscriptions, mayPublish, type PublishedTrack } from "./track-selection";
 import { estimateCallGb, overWarning } from "./usage";
-import { isSafeSessionId, isSafeTrackName, newTrackName } from "./sfu-rules";
+import { isSafeSessionId, isSafeTrackName, mediaKindForMid, newTrackName } from "./sfu-rules";
 
 const sid = (n: number) => n.toString(16).padStart(32, "0");
 const user = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, "0")}`;
@@ -74,6 +74,22 @@ describe("usage estimate", () => {
   it("warns at or above the level", () => {
     expect(overWarning(699, 700)).toBe(false);
     expect(overWarning(700, 700)).toBe(true);
+  });
+});
+
+describe("mediaKindForMid", () => {
+  const sdp = ["v=0", "o=- 1 2 IN IP4 127.0.0.1", "s=-", "m=audio 9 UDP/TLS/RTP/SAVPF 111", "a=mid:0", "a=sendonly", "m=video 9 UDP/TLS/RTP/SAVPF 96", "a=mid:1", "a=sendonly", "m=video 9 UDP/TLS/RTP/SAVPF 96", "a=mid:12", ""].join("\r\n");
+  it("says what each section really carries, so a microphone can't be labelled video", () => {
+    expect(mediaKindForMid(sdp, "0")).toBe("audio");
+    expect(mediaKindForMid(sdp, "1")).toBe("video");
+    expect(mediaKindForMid(sdp, "12")).toBe("video");
+  });
+  it("does not mix up ids that start the same, and gives null for an unknown id or junk", () => {
+    expect(mediaKindForMid(sdp, "2")).toBeNull();
+    expect(mediaKindForMid(sdp, "")).toBeNull();
+    expect(mediaKindForMid("", "0")).toBeNull();
+    expect(mediaKindForMid("not an sdp", "0")).toBeNull();
+    expect(mediaKindForMid(sdp, "0 ; drop")).toBeNull();
   });
 });
 

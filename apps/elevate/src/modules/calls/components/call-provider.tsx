@@ -181,8 +181,13 @@ export function CallProvider({ userId, children }: { userId: string; children: R
       // Anything wanted that has not arrived yet (a pull that failed because the other person's video had not started) is asked for again.
       const again = chooseSubscriptions({ tracks: beat.state.tracks, selfUserId: userId, mode: beat.state.call.mode, page: view.current.page, pinnedUserId: view.current.pinned, activeSpeakerId: view.current.speaker });
       void transport.current?.syncRemote(again.pull).catch(() => {});
-    } catch {
-      // Offline for a moment: the next beat tries again. After 90 seconds the server lets the seat go.
+    } catch (e) {
+      // "Call not found" is the server saying I am not in this chat any more: leave the call. Anything else is a hiccup (offline for a moment):
+      // the next beat tries again, and after 90 seconds the server lets the seat go.
+      if (e instanceof Error && e.message === "Call not found.") {
+        toast.message("You are no longer in this call.");
+        reset();
+      }
     } finally {
       refreshing.current = false;
       if (again.current) {

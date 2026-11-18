@@ -1,7 +1,7 @@
 "use server";
 
 import type { z } from "zod";
-import { authorize } from "@/lib/authz";
+import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { allowRequest } from "@/lib/rate-limit";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
@@ -35,7 +35,7 @@ const joinAction = (actor: Actor) => (actor.isGuest ? "messages.use" : "calls.jo
 
 export async function startCall(input: unknown): Promise<ActionResult<{ callId: string; created: boolean }>> {
   const actor = await requireUser();
-  return run(actor, "calls.start", startCallSchema, input, "callRing", (data) => service.startCall(actor, data));
+  return run(actor, "calls.start", startCallSchema, input, "callRing", (data) => service.startCall(actor, { ...data, canManage: can(actor, "messages.manage_group") }));
 }
 
 export async function joinCall(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof service.joinCall>>>> {

@@ -1135,6 +1135,13 @@
       "when": 1795041437732,
       "tag": "0161_calls_pull_session",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1795043574585,
+      "tag": "0162_calls_removal_and_pulled",
+      "breakpoints": true
     }
   ]
 }

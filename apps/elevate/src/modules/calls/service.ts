@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
@@ -13,8 +13,8 @@ import { currentMemberIds, postSystemLine, requireMember } from "@/modules/messa
 import { notify } from "@/modules/notifications/service";
 import { broadcastCallEvent } from "./realtime";
 import { callParticipants, calls, callTracks, callUsage } from "./schema";
-import { getSfu } from "./sfu-port";
-import { isSafeSessionId, newTrackName } from "./sfu-rules";
+import { fakeCallsEnabled, getSfu } from "./sfu-port";
+import { isSafeSessionId, mediaKindForMid, newTrackName } from "./sfu-rules";
 import { mayPublish, MAX_MEETING_PARTICIPANTS, type CallMode, type ParticipantRole, type TrackKind } from "./track-selection";
 import { estimateCallGb } from "./usage";
 
@@ -42,11 +42,23 @@ export type CallState = { call: CallInfo; me: { userId: string; role: Participan
 export type LiveCall = { callId: string; mode: CallMode; startedAt: string; startedByName: string; participantCount: number; iAmIn: boolean; conversationId: string };
 
 /** Seats that have been silent too long are treated as left, and a call with nobody left in it ends. Returns the summary if it ended just now. */
-async function sweep(tx: Tx, callId: string): Promise<Ended | null> {
-  await tx
-    .update(callParticipants)
-    .set({ leftAt: sql`now()` })
-    .where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt), sql`${callParticipants.lastSeenAt} < now() - make_interval(secs => ${SEAT_SILENT_SECONDS})`));
+async function sweepSeatsOnly(tx: Tx, callId: string, cuts: SeatCut[]): Promise<void> {
+  // A seat is over when its browser went silent, or when the person is no longer a member of the chat (removed from it, or it was closed).
+  const dead = await tx
+    .select({ id: callParticipants.id })
+    .from(callParticipants)
+    .where(
+      and(
+        eq(callParticipants.callId, callId),
+        isNull(callParticipants.leftAt),
+        sql`(${callParticipants.lastSeenAt} < now() - make_interval(secs => ${SEAT_SILENT_SECONDS}) or not exists (select 1 from chat.conversation_members m join chat.calls ca on ca.conversation_id = m.conversation_id where ca.id = ${callId} and m.user_id = ${callParticipants.userId} and m.left_at is null))`,
+      ),
+    );
+  cuts.push(...(await endSeats(tx, callId, dead.map((d) => d.id))));
+}
+
+async function sweep(tx: Tx, callId: string, cuts: SeatCut[]): Promise<Ended | null> {
+  await sweepSeatsOnly(tx, callId, cuts);
   const [open] = await tx.select({ n: sql<number>`count(*)::int` }).from(callParticipants).where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt)));
   if (open.n > 0) {
     await handOverHost(tx, callId);
@@ -58,7 +70,7 @@ async function sweep(tx: Tx, callId: string): Promise<Ended | null> {
     .from(calls)
     .where(and(eq(calls.id, callId), sql`${calls.startedAt} > now() - make_interval(secs => ${START_GRACE_SECONDS})`, sql`not exists (select 1 from chat.call_participants p where p.call_id = ${callId})`));
   if (fresh.n > 0) return null;
-  return finish(tx, callId, "empty");
+  return finish(tx, callId, "empty", cuts);
 }
 
 /** If the host is gone but others are still here, the person who has been here longest becomes host (so someone can always end the call or remove a person). */
@@ -75,12 +87,48 @@ async function handOverHost(tx: Tx, callId: string): Promise<void> {
   if (next) await tx.update(callParticipants).set({ role: "host" }).where(eq(callParticipants.id, next.id));
 }
 
+type SeatCut = { pushSession: string | null; pullSession: string | null; pushMids: string[]; pullMids: string[] };
+
+/** Ends these seats and their published tracks, and returns what must also be closed at Cloudflare (what they sent and what they pulled). */
+async function endSeats(tx: Tx, callId: string, seatIds: string[]): Promise<SeatCut[]> {
+  if (seatIds.length === 0) return [];
+  const seats = await tx.select().from(callParticipants).where(and(eq(callParticipants.callId, callId), inArray(callParticipants.id, seatIds), isNull(callParticipants.leftAt)));
+  const cuts: SeatCut[] = [];
+  for (const seat of seats) {
+    const mine = await tx.select({ mid: callTracks.mid }).from(callTracks).where(and(eq(callTracks.callId, callId), eq(callTracks.userId, seat.userId), isNull(callTracks.endedAt)));
+    cuts.push({ pushSession: seat.cfSessionId, pullSession: seat.cfPullSessionId ?? null, pushMids: mine.map((t) => t.mid).filter((m): m is string => Boolean(m)), pullMids: seat.pulledMids });
+  }
+  if (seats.length > 0) {
+    await tx.update(callParticipants).set({ leftAt: sql`now()` }).where(inArray(callParticipants.id, seats.map((s) => s.id)));
+    await tx.update(callTracks).set({ endedAt: sql`now()` }).where(and(eq(callTracks.callId, callId), inArray(callTracks.userId, seats.map((s) => s.userId)), isNull(callTracks.endedAt)));
+  }
+  return cuts;
+}
+
+/** After the commit: close everything those people were sending and receiving at Cloudflare, so a modified browser can't keep listening. Best effort. */
+async function closeAtCloudflare(cuts: SeatCut[]): Promise<void> {
+  if (cuts.length === 0) return;
+  let sfu: ReturnType<typeof getSfu>;
+  try {
+    sfu = getSfu();
+  } catch {
+    return;
+  }
+  const close = async (session: string | null, mids: string[]) => {
+    if (!session || !isSafeSessionId(session)) return;
+    for (let i = 0; i < mids.length; i += 64) await sfu.closeTracks(session, mids.slice(i, i + 64)).catch(() => {});
+  };
+  await Promise.all(cuts.flatMap((c) => [close(c.pushSession, c.pushMids), close(c.pullSession, c.pullMids)]));
+}
+
 type Ended = { callId: string; conversationId: string; startedBy: string; missed: boolean; minutes: number; people: number };
 
 /** Ends a call that is still live: closes seats and tracks, records a usage estimate, and says what kind of ending it was. Idempotent. */
-async function finish(tx: Tx, callId: string, reason: "ended" | "empty" | "conversation_closed"): Promise<Ended | null> {
+async function finish(tx: Tx, callId: string, reason: "ended" | "empty" | "conversation_closed", cuts: SeatCut[]): Promise<Ended | null> {
   const [call] = await tx.select().from(calls).where(and(eq(calls.id, callId), isNull(calls.endedAt))).for("update").limit(1);
   if (!call) return null;
+  const open = await tx.select({ id: callParticipants.id }).from(callParticipants).where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt)));
+  cuts.push(...(await endSeats(tx, callId, open.map((s) => s.id))));
   await tx.update(callParticipants).set({ leftAt: sql`now()` }).where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt)));
   await tx.update(callTracks).set({ endedAt: sql`now()` }).where(and(eq(callTracks.callId, callId), isNull(callTracks.endedAt)));
   const [stats] = await tx
@@ -149,9 +197,11 @@ async function openSeat(executor: Db, callId: string, userId: string) {
 }
 
 /** Starts a call in a chat the person belongs to, or returns the one already live there. Rings everyone in small chats. */
-export async function startCall(actor: Actor, input: { conversationId: string }): Promise<{ callId: string; created: boolean }> {
+export async function startCall(actor: Actor, input: { conversationId: string; canManage?: boolean }): Promise<{ callId: string; created: boolean }> {
   if (actor.isGuest) throw new ActionFailure("You can't start a call.");
-  await requireMember(db, actor.id, input.conversationId);
+  const member = await requireMember(db, actor.id, input.conversationId);
+  // A channel only HR posts in (the company channel) is not a place anyone can ring everyone from.
+  if (member.posting === "admins" && !input.canManage) throw new ActionFailure("Only HR can start a call in this channel.");
   const members = await currentMemberIds(db, input.conversationId);
   const existing = await liveCallIdFor(input.conversationId);
   if (existing) return { callId: existing, created: false };
@@ -178,7 +228,9 @@ async function liveCallIdFor(conversationId: string): Promise<string | null> {
   const [row] = await db.select({ id: calls.id }).from(calls).where(and(eq(calls.conversationId, conversationId), isNull(calls.endedAt))).limit(1);
   if (!row) return null;
   // A call whose seats all went silent is over: tidy it now instead of letting a dead call block a new one.
-  const ended = await db.transaction((tx) => sweep(tx, row.id));
+  const cuts: SeatCut[] = [];
+  const ended = await db.transaction((tx) => sweep(tx, row.id, cuts));
+  await closeAtCloudflare(cuts);
   if (ended) {
     await announceEnd(ended);
     return null;
@@ -212,7 +264,8 @@ async function stateFor(callId: string, selfId: string): Promise<CallState> {
     me: { userId: selfId, role: seat.role as ParticipantRole, sessionId: seat.cfSessionId },
     participants: seats.map((s) => ({ userId: s.userId, name: names.get(s.userId)?.name ?? "Someone", role: s.role as ParticipantRole, joinedAt: s.joinedAt.toISOString() })),
     // Only tracks of people still in the call.
-    tracks: published.filter((t) => roleByUser.has(t.userId)).map((t) => ({ userId: t.userId, role: roleByUser.get(t.userId) as ParticipantRole, cfSessionId: t.cfSessionId, trackName: t.trackName, kind: t.kind as TrackKind })),
+    // (The Cloudflare session ids stay on the server: the browser only needs track names, and the server resolves them.)
+    tracks: published.filter((t) => roleByUser.has(t.userId)).map((t) => ({ userId: t.userId, role: roleByUser.get(t.userId) as ParticipantRole, cfSessionId: "", trackName: t.trackName, kind: t.kind as TrackKind })),
   };
 }
 
@@ -225,37 +278,46 @@ export async function joinCall(actor: Actor, input: { callId: string }): Promise
   const [{ sessionId }, { sessionId: pullSessionId }] = await Promise.all([sfu.createSession(), sfu.createSession()]);
   if (!isSafeSessionId(sessionId) || !isSafeSessionId(pullSessionId)) throw new ActionFailure("Calls aren't working right now. Try again in a moment.");
 
+  const cuts: SeatCut[] = [];
   await db.transaction(async (tx) => {
     const [live] = await tx.select().from(calls).where(and(eq(calls.id, input.callId), isNull(calls.endedAt))).for("update").limit(1);
     if (!live) throw new ActionFailure("This call has ended.");
+    // A host removed this person: they stay out of this call.
+    const [removed] = await tx.select({ id: callParticipants.id }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), eq(callParticipants.userId, actor.id), isNotNull(callParticipants.removedBy))).limit(1);
+    if (removed) throw new ActionFailure("You were removed from this call.");
+    // Joining again (a refresh, a second tab) replaces the old seat, and what it was sending and receiving is closed at Cloudflare.
     const old = await openSeat(tx, input.callId, actor.id);
-    if (old) {
-      await tx.update(callParticipants).set({ leftAt: sql`now()` }).where(eq(callParticipants.id, old.id));
-      await tx.update(callTracks).set({ endedAt: sql`now()` }).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, actor.id), isNull(callTracks.endedAt)));
-    }
-    await tx.update(callParticipants).set({ leftAt: sql`now()` }).where(and(eq(callParticipants.callId, input.callId), isNull(callParticipants.leftAt), sql`${callParticipants.lastSeenAt} < now() - make_interval(secs => ${SEAT_SILENT_SECONDS})`));
+    if (old) cuts.push(...(await endSeats(tx, input.callId, [old.id])));
+    // Seats that went silent, or whose person left the chat, are over.
+    await sweepSeatsOnly(tx, input.callId, cuts);
     const [others] = await tx.select({ n: sql<number>`count(*)::int` }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), isNull(callParticipants.leftAt)));
     if (others.n >= MAX_MEETING_PARTICIPANTS) throw new ActionFailure(`This call is full (${MAX_MEETING_PARTICIPANTS} people).`);
-    const role: ParticipantRole = live.startedBy === actor.id ? "host" : "attendee";
+    // Host is ONE held role: the starter gets it back on returning only if nobody else holds it now (never two hosts).
+    const [hostNow] = await tx.select({ n: sql<number>`count(*)::int` }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), isNull(callParticipants.leftAt), eq(callParticipants.role, "host")));
+    const role: ParticipantRole = live.startedBy === actor.id && hostNow.n === 0 ? "host" : "attendee";
     await tx.insert(callParticipants).values({ callId: input.callId, userId: actor.id, role, cfSessionId: sessionId, cfPullSessionId: pullSessionId });
     await tx.update(calls).set({ maxParticipants: sql`greatest(${calls.maxParticipants}, ${others.n + 1})` }).where(eq(calls.id, input.callId));
   });
+  await closeAtCloudflare(cuts);
   await broadcastCallEvent({ type: "roster", callId: input.callId });
   return { ...(await stateFor(input.callId, actor.id)), iceServers: await sfu.iceServers() };
 }
 
 /** The browser reports in every 30 seconds and gets the current roster and tracks back. Tells a removed or finished seat so it can close. */
 export async function heartbeat(actor: Actor, input: { callId: string }): Promise<{ status: "ok"; state: CallState } | { status: "ended" } | { status: "removed" }> {
+  await assertGuestReady({ id: actor.id, isGuest: actor.isGuest });
   const row = await loadCall(input.callId);
   if (!row) throw new ActionFailure(NOT_FOUND);
   await requireMember(db, actor.id, row.call.conversationId).catch(() => {
     throw new ActionFailure(NOT_FOUND);
   });
   if (row.call.endedAt) return { status: "ended" };
+  const cuts: SeatCut[] = [];
   const ended = await db.transaction(async (tx) => {
     await tx.update(callParticipants).set({ lastSeenAt: sql`now()` }).where(and(eq(callParticipants.callId, input.callId), eq(callParticipants.userId, actor.id), isNull(callParticipants.leftAt)));
-    return sweep(tx, input.callId);
+    return sweep(tx, input.callId, cuts);
   });
+  await closeAtCloudflare(cuts);
   if (ended) {
     await announceEnd(ended);
     return { status: "ended" };
@@ -271,11 +333,13 @@ export async function leaveCall(actor: Actor, input: { callId: string }): Promis
   await requireMember(db, actor.id, row.call.conversationId).catch(() => {
     throw new ActionFailure(NOT_FOUND);
   });
+  const cuts: SeatCut[] = [];
   const ended = await db.transaction(async (tx) => {
-    await tx.update(callParticipants).set({ leftAt: sql`now()` }).where(and(eq(callParticipants.callId, input.callId), eq(callParticipants.userId, actor.id), isNull(callParticipants.leftAt)));
-    await tx.update(callTracks).set({ endedAt: sql`now()` }).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, actor.id), isNull(callTracks.endedAt)));
-    return sweep(tx, input.callId);
+    const mine = await tx.select({ id: callParticipants.id }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), eq(callParticipants.userId, actor.id), isNull(callParticipants.leftAt)));
+    cuts.push(...(await endSeats(tx, input.callId, mine.map((s) => s.id))));
+    return sweep(tx, input.callId, cuts);
   });
+  await closeAtCloudflare(cuts);
   if (ended) await announceEnd(ended);
   else await Promise.all([broadcastCallEvent({ type: "roster", callId: input.callId }), broadcastCallEvent({ type: "tracks", callId: input.callId })]);
 }
@@ -284,7 +348,9 @@ export async function leaveCall(actor: Actor, input: { callId: string }): Promis
 export async function endCall(actor: Actor, input: { callId: string }): Promise<void> {
   const { seat } = await requireSeat(actor, input.callId);
   if (seat.role !== "host") throw new ActionFailure("Only the host can end the call for everyone.");
-  const ended = await db.transaction((tx) => finish(tx, input.callId, "ended"));
+  const cuts: SeatCut[] = [];
+  const ended = await db.transaction((tx) => finish(tx, input.callId, "ended", cuts));
+  await closeAtCloudflare(cuts);
   if (ended) await announceEnd({ ...ended, missed: false });
 }
 
@@ -311,24 +377,59 @@ export async function muteParticipant(actor: Actor, input: { callId: string; use
   await broadcastCallEvent({ type: "tracks", callId: input.callId });
 }
 
-/** Host: takes someone out of the call. Their media is closed at Cloudflare and they can't pull anything; they can rejoin only if a host lets the call stand (they are still a member of the chat). */
+/** Host: takes someone out of the call for good (until it ends). Their media, sent and received, is closed at Cloudflare, and they cannot rejoin. They are still a member of the chat. */
 export async function removeParticipant(actor: Actor, input: { callId: string; userId: string }): Promise<void> {
   const seat = await targetSeat(actor, input.callId, input.userId);
-  const theirs = await db.select().from(callTracks).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, input.userId), isNull(callTracks.endedAt)));
+  const cuts: SeatCut[] = [];
   await db.transaction(async (tx) => {
-    await tx.update(callParticipants).set({ leftAt: sql`now()` }).where(eq(callParticipants.id, seat.id));
-    await tx.update(callTracks).set({ endedAt: sql`now()` }).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, input.userId), isNull(callTracks.endedAt)));
+    cuts.push(...(await endSeats(tx, input.callId, [seat.id])));
+    // Marked, so they can't walk straight back in; and what they were sending AND receiving is closed at Cloudflare below.
+    await tx.update(callParticipants).set({ removedBy: actor.id }).where(eq(callParticipants.id, seat.id));
+    await handOverHost(tx, input.callId);
     await writeAudit({ actor, action: "call.remove", targetType: "call", targetId: input.callId, metadata: { userId: input.userId } }, tx);
   });
-  const mids = theirs.map((t) => t.mid).filter((m): m is string => Boolean(m));
-  if (seat.cfSessionId && mids.length > 0) await getSfu().closeTracks(seat.cfSessionId, mids).catch(() => {});
+  await closeAtCloudflare(cuts);
   await Promise.all([broadcastCallEvent({ type: "roster", callId: input.callId }), broadcastCallEvent({ type: "tracks", callId: input.callId })]);
 }
 
 /** Closes tracks THIS person pulled (video that scrolled off the page) at Cloudflare, so we stop paying for pictures nobody is looking at. Their own session only. */
 export async function unsubscribeTracks(actor: Actor, input: { callId: string; mids: string[] }): Promise<void> {
-  const { pullSessionId } = await requireSeat(actor, input.callId);
+  const { seat, pullSessionId } = await requireSeat(actor, input.callId);
   await getSfu().closeTracks(pullSessionId, input.mids).catch(() => {});
+  const gone = sql`array[${sql.join(input.mids.map((m) => sql`${m}`), sql`, `)}]::text[]`;
+  await db.update(callParticipants).set({ pulledMids: sql`array(select x from unnest(${callParticipants.pulledMids}) as x where x <> all(${gone}))` }).where(eq(callParticipants.id, seat.id));
+}
+
+/**
+ * Called by Messages when people leave a chat (removed, a guest's access ended) so a live call there follows at once: seats of people no
+ * longer in the chat end, what they sent and received is closed at Cloudflare, and a call left empty ends. Never throws.
+ */
+export async function syncCallWithChat(conversationId: string): Promise<void> {
+  try {
+    const [call] = await db.select({ id: calls.id }).from(calls).where(and(eq(calls.conversationId, conversationId), isNull(calls.endedAt))).limit(1);
+    if (!call) return;
+    const cuts: SeatCut[] = [];
+    const ended = await db.transaction((tx) => sweep(tx, call.id, cuts));
+    await closeAtCloudflare(cuts);
+    if (ended) await announceEnd(ended);
+    else await Promise.all([broadcastCallEvent({ type: "roster", callId: call.id }), broadcastCallEvent({ type: "tracks", callId: call.id })]);
+  } catch {
+    // The 30-second heartbeats of the others will tidy it up.
+  }
+}
+
+/** Called by Messages when a chat is deleted: its live call ends and all media is closed. Never throws. */
+export async function endCallForConversation(conversationId: string): Promise<void> {
+  try {
+    const [call] = await db.select({ id: calls.id }).from(calls).where(and(eq(calls.conversationId, conversationId), isNull(calls.endedAt))).limit(1);
+    if (!call) return;
+    const cuts: SeatCut[] = [];
+    const ended = await db.transaction((tx) => finish(tx, call.id, "conversation_closed", cuts));
+    await closeAtCloudflare(cuts);
+    if (ended) await announceEnd(ended);
+  } catch {
+    // The cleanup job ends it.
+  }
 }
 
 /** Ends calls whose chat was deleted, and any call nobody is left in. Used by the cleanup job. Returns how many were ended. */
@@ -340,7 +441,9 @@ export async function endAbandonedCalls(): Promise<number> {
     .where(isNull(calls.endedAt));
   let count = 0;
   for (const call of live) {
-    const ended = await db.transaction((tx) => (call.archivedAt ? finish(tx, call.id, "conversation_closed") : sweep(tx, call.id)));
+    const cuts: SeatCut[] = [];
+    const ended = await db.transaction((tx) => (call.archivedAt ? finish(tx, call.id, "conversation_closed", cuts) : sweep(tx, call.id, cuts)));
+    await closeAtCloudflare(cuts);
     if (ended) {
       await announceEnd(ended);
       count++;
@@ -361,15 +464,25 @@ async function requireSeat(actor: Actor, callId: string) {
 export async function publishTracks(actor: Actor, input: { callId: string; offer: { type: "offer"; sdp: string }; tracks: { mid: string; kind: TrackKind }[] }) {
   const { row, seat, sessionId } = await requireSeat(actor, input.callId);
   if (!mayPublish(row.call.mode as CallMode, seat.role as ParticipantRole)) throw new ActionFailure("You're watching this call. A host can make you a speaker.");
-  const [mine] = await db.select({ n: sql<number>`count(*)::int` }).from(callTracks).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, actor.id), isNull(callTracks.endedAt)));
-  if (mine.n + input.tracks.length > MAX_LOCAL_TRACKS) throw new ActionFailure("Too many tracks. Turn one off first.");
+  // The kind a browser CLAIMS for a track must be what the offer really contains (a microphone can't be labelled "video" to dodge a host's mute).
+  for (const t of fakeCallsEnabled() ? [] : input.tracks) {
+    const real = mediaKindForMid(input.offer.sdp, t.mid);
+    if (!real || (t.kind === "audio") !== (real === "audio")) throw new ActionFailure("Couldn't start sharing. Try again.");
+  }
   const named = input.tracks.map((t) => ({ mid: t.mid, kind: t.kind, trackName: newTrackName(t.kind, randomUUID()) }));
-  const answer = await getSfu().pushTracks(sessionId, input.offer, named.map((t) => ({ mid: t.mid, trackName: t.trackName })));
-  const failed = answer.tracks.find((t) => t.errorCode);
-  if (failed || !answer.sessionDescription) throw new ActionFailure("Couldn't start sharing. Try again.");
-  await db.insert(callTracks).values(named.map((t) => ({ callId: input.callId, userId: actor.id, cfSessionId: sessionId, trackName: t.trackName, mid: t.mid, kind: t.kind })));
+  // One publish at a time per person, so the limit on tracks can't be beaten by sending several requests at once.
+  const published = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${seat.id}))`);
+    const [mine] = await tx.select({ n: sql<number>`count(*)::int` }).from(callTracks).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, actor.id), isNull(callTracks.endedAt)));
+    if (mine.n + input.tracks.length > MAX_LOCAL_TRACKS) throw new ActionFailure("Too many tracks. Turn one off first.");
+    const answer = await getSfu().pushTracks(sessionId, input.offer, named.map((t) => ({ mid: t.mid, trackName: t.trackName })));
+    const failed = answer.tracks.find((t) => t.errorCode);
+    if (failed || !answer.sessionDescription) throw new ActionFailure("Couldn't start sharing. Try again.");
+    await tx.insert(callTracks).values(named.map((t) => ({ callId: input.callId, userId: actor.id, cfSessionId: sessionId, trackName: t.trackName, mid: t.mid, kind: t.kind })));
+    return answer.sessionDescription;
+  });
   await broadcastCallEvent({ type: "tracks", callId: input.callId });
-  return { answer: answer.sessionDescription, tracks: named.map((t) => ({ mid: t.mid, kind: t.kind, trackName: t.trackName })) };
+  return { answer: published, tracks: named.map((t) => ({ mid: t.mid, kind: t.kind, trackName: t.trackName })) };
 }
 
 /** Stops the person's own tracks (camera off, screen share stopped). */
@@ -388,7 +501,7 @@ export async function closeTracks(actor: Actor, input: { callId: string; trackNa
 
 /** Subscribe: the server checks each wanted track (live, in this call, from someone still here, allowed in this mode) before Cloudflare is asked. */
 export async function subscribeTracks(actor: Actor, input: { callId: string; trackNames: string[] }) {
-  const { row, pullSessionId } = await requireSeat(actor, input.callId);
+  const { row, seat, pullSessionId } = await requireSeat(actor, input.callId);
   const wanted = [...new Set(input.trackNames)];
   const found = await db
     .select({ track: callTracks, role: callParticipants.role })
@@ -399,14 +512,17 @@ export async function subscribeTracks(actor: Actor, input: { callId: string; tra
   if (allowed.length === 0) throw new ActionFailure("Nothing to watch yet.");
   const result = await getSfu().pullTracks(pullSessionId, allowed.map((f) => ({ sessionId: f.track.cfSessionId, trackName: f.track.trackName })));
   // Cloudflare's per-track answers (codes only: no media, no ids of people) so a failed pull can be understood.
-  const failures = result.tracks.filter((t) => t.errorCode).map((t) => `${t.errorCode}${t.errorDescription ? `: ${t.errorDescription.slice(0, 80)}` : ""}`);
+  const failures = result.tracks.filter((t) => t.errorCode).map((t) => String(t.errorCode).slice(0, 60));
   if (failures.length > 0 || !result.sessionDescription) console.error("calls: pull problem", { asked: allowed.length, answered: result.tracks.length, hasOffer: Boolean(result.sessionDescription), failures: failures.slice(0, 5) });
   if (!result.sessionDescription) throw new ActionFailure("Couldn't load the video. Try again.");
-  return {
-    offer: result.sessionDescription,
-    requiresImmediateRenegotiation: result.requiresImmediateRenegotiation,
-    tracks: result.tracks.filter((t) => t.mid && t.trackName && !t.errorCode).map((t) => ({ mid: t.mid as string, trackName: t.trackName as string })),
-  };
+  const pulled = result.tracks.filter((t) => t.mid && t.trackName && !t.errorCode).map((t) => ({ mid: t.mid as string, trackName: t.trackName as string }));
+  // Remembered, so everything this person pulled can be closed at Cloudflare if they leave, are removed, or leave the chat.
+  const mids = pulled.map((t) => t.mid).filter((m) => /^[A-Za-z0-9_-]{1,32}$/.test(m));
+  if (mids.length > 0) {
+    const add = sql`array[${sql.join(mids.map((m) => sql`${m}`), sql`, `)}]::text[]`;
+    await db.update(callParticipants).set({ pulledMids: sql`(select coalesce(array_agg(distinct x), '{}'::text[]) from unnest(${callParticipants.pulledMids} || ${add}) as x)` }).where(eq(callParticipants.id, seat.id));
+  }
+  return { offer: result.sessionDescription, requiresImmediateRenegotiation: result.requiresImmediateRenegotiation, tracks: pulled };
 }
 
 /** The person's answer to the offer from a subscribe. */

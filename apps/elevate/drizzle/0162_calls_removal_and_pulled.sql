@@ -1,0 +1,3 @@
+ALTER TABLE "chat"."call_participants" ADD COLUMN "pulled_mids" text[] DEFAULT '{}'::text[] NOT NULL;--> statement-breakpoint
+ALTER TABLE "chat"."call_participants" ADD COLUMN "removed_by" uuid;--> statement-breakpoint
+ALTER TABLE "chat"."call_participants" ADD CONSTRAINT "call_participants_removed_by_users_id_fk" FOREIGN KEY ("removed_by") REFERENCES "core"."users"("id") ON DELETE no action ON UPDATE no action;

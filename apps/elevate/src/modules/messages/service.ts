@@ -251,6 +251,8 @@ export async function removeMember(actor: Actor, input: { conversationId: string
     return members;
   });
   await signal(everyone, { type: "members", conversationId: input.conversationId });
+  // A person taken out of a chat is taken out of its live call too (their media is closed, not just hidden).
+  await import("@/modules/calls/service").then((m) => m.syncCallWithChat(input.conversationId)).catch(() => {});
 }
 
 /** Renames a group. The new name is shown to its members as a system message (encrypted like any message); the audit row has ids only. */
@@ -280,6 +282,7 @@ export async function deleteGroup(actor: Actor, conversationId: string): Promise
     return members;
   });
   await signal(everyone, { type: "members", conversationId });
+  await import("@/modules/calls/service").then((m) => m.endCallForConversation(conversationId)).catch(() => {});
 }
 
 /** A message the person may see right now: a current member of a live conversation, from their join time on, and not removed. */

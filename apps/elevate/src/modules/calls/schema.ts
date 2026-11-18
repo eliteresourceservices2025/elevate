@@ -52,6 +52,10 @@ export const callParticipants = chat
       cfSessionId: text("cf_session_id"),
       /** A second Cloudflare session for RECEIVING (a session is one connection, so sending and receiving each get their own). Null on older rows. */
       cfPullSessionId: text("cf_pull_session_id"),
+      /** What this person pulled into their receiving session (Cloudflare track ids), so the server can close all of it when they leave, are removed or leave the chat. */
+      pulledMids: text("pulled_mids").array().notNull().default(sql`'{}'::text[]`),
+      /** Set when a host removed this person: they cannot rejoin this call. */
+      removedBy: uuid("removed_by").references(() => users.id),
       joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
       /** The browser reports in every 30 seconds; a seat silent for 90 seconds is treated as left (a closed laptop, a lost connection). */
       lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
