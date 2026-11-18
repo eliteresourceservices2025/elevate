@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { EMOJI_CATEGORIES, readRecentEmoji, rememberEmoji, searchEmoji } from "../emoji";
+import { EMOJI_CATEGORIES, QUICK_EMOJI, readRecentEmoji, rememberEmoji, searchEmoji } from "../emoji";
 
 const PICKER_WIDTH = 320;
 const PICKER_HEIGHT = 352;
@@ -20,6 +20,10 @@ export function EmojiPicker({ onPick, label = "Add emoji", size = "icon-sm" }: {
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
   const [category, setCategory] = useState<string>("recent");
+  // Until the person has used some emoji, the first tab is a short list of popular ones.
+  const hasRecent = recent.length > 0;
+  const firstList = hasRecent ? recent : QUICK_EMOJI;
+  const firstLabel = hasRecent ? "Recently used" : "Popular";
   const root = useRef<HTMLSpanElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const open = style !== null;
@@ -30,7 +34,7 @@ export function EmojiPicker({ onPick, label = "Add emoji", size = "icon-sm" }: {
     if (!rect) return;
     const used = readRecentEmoji();
     setRecent(used);
-    setCategory(used.length > 0 ? "recent" : EMOJI_CATEGORIES[0].id);
+    setCategory("recent");
     setQuery("");
     const left = Math.max(8, Math.min(rect.left, window.innerWidth - PICKER_WIDTH - 8));
     const room = rect.top > PICKER_HEIGHT + 16;
@@ -58,9 +62,9 @@ export function EmojiPicker({ onPick, label = "Add emoji", size = "icon-sm" }: {
   const searching = query.trim().length > 0;
   const shown = useMemo(() => {
     if (searching) return searchEmoji(query);
-    if (category === "recent") return recent;
+    if (category === "recent") return firstList;
     return EMOJI_CATEGORIES.find((c) => c.id === category)?.emojis ?? [];
-  }, [searching, query, category, recent]);
+  }, [searching, query, category, firstList]);
 
   function pick(emoji: string) {
     setRecent(rememberEmoji(emoji));
@@ -84,13 +88,13 @@ export function EmojiPicker({ onPick, label = "Add emoji", size = "icon-sm" }: {
           </div>
           {!searching ? (
             <div className="flex gap-0.5 overflow-x-auto" role="tablist" aria-label="Emoji categories">
-              {recent.length > 0 ? <CategoryTab id="recent" icon="🕘" label="Recently used" active={category === "recent"} onSelect={setCategory} /> : null}
+              <CategoryTab id="recent" icon={hasRecent ? "🕘" : "⭐"} label={firstLabel} active={category === "recent"} onSelect={setCategory} />
               {EMOJI_CATEGORIES.map((c) => (
                 <CategoryTab key={c.id} id={c.id} icon={c.icon} label={c.label} active={category === c.id} onSelect={setCategory} />
               ))}
             </div>
           ) : null}
-          <p className="px-1 text-xs font-medium text-muted-foreground">{searching ? `Results for "${query.trim()}"` : category === "recent" ? "Recently used" : (EMOJI_CATEGORIES.find((c) => c.id === category)?.label ?? "")}</p>
+          <p className="px-1 text-xs font-medium text-muted-foreground">{searching ? `Results for "${query.trim()}"` : category === "recent" ? firstLabel : (EMOJI_CATEGORIES.find((c) => c.id === category)?.label ?? "")}</p>
           <div className="grid max-h-[220px] min-h-[220px] grid-cols-8 content-start gap-0.5 overflow-y-auto" role="group" aria-label="Emoji">
             {shown.map((e, i) => (
               <button

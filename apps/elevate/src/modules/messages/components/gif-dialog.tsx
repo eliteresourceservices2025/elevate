@@ -22,6 +22,7 @@ function GifPicker({ conversationId, threadRootId, onSent }: { conversationId: s
   const [q, setQ] = useState("");
   const [gifs, setGifs] = useState<GifResult[] | null>(null);
   const [enabled, setEnabled] = useState(true);
+  const [attribution, setAttribution] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -37,6 +38,7 @@ function GifPicker({ conversationId, threadRootId, onSent }: { conversationId: s
       }
       setError(null);
       setEnabled(result.data.enabled);
+      setAttribution(result.data.attribution);
       setGifs(result.data.gifs);
     }, 350);
     return () => {
@@ -73,6 +75,8 @@ function GifPicker({ conversationId, threadRootId, onSent }: { conversationId: s
           </li>
         ))}
       </ul>
+      {/* The GIF service requires its credit next to its GIFs. */}
+      {attribution ? <p className="text-right text-xs font-medium text-muted-foreground">{attribution}</p> : null}
     </div>
   );
 }

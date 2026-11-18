@@ -104,8 +104,9 @@ export function Thread({
   const lastOwnSeq = useMemo(() => [...messages].reverse().find((m) => m.senderUserId === myUserId && !m.deleted && m.kind === "text")?.seq ?? null, [messages, myUserId]);
   const mentionable = useMemo(() => members.filter((m) => m.userId !== myUserId), [members, myUserId]);
   // The message the person is replying to with a quote (shown above the box until sent or cleared).
-  const [quoting, setQuoting] = useState<{ id: string; senderName: string; snippet: string } | null>(null);
-  useEffect(() => setQuoting(null), [conversation.id]);
+  const [quotingRaw, setQuoting] = useState<{ conversationId: string; id: string; senderName: string; snippet: string } | null>(null);
+  // A quote belongs to the chat it was made in: opening another chat shows no quote.
+  const quoting = quotingRaw && quotingRaw.conversationId === conversation.id ? quotingRaw : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -173,7 +174,7 @@ export function Thread({
               status={m.seq === lastOwnSeq && otherRead !== null ? (otherRead >= m.seq ? "Seen" : "Sent") : null}
               onChanged={onChanged}
               onOpenThread={onOpenThread}
-              onQuote={(msg) => setQuoting({ id: msg.id, senderName: msg.senderName, snippet: quoteSnippet(msg) })}
+              onQuote={(msg) => setQuoting({ conversationId: conversation.id, id: msg.id, senderName: msg.senderName, snippet: quoteSnippet(msg) })}
             />
           ))}
         </div>

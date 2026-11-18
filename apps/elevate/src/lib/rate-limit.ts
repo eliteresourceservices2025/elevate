@@ -36,6 +36,9 @@ export const POLICIES = {
   incident: { requests: 10, window: "1 h" },
   /** Opening ELEVATE Learn (the sign-in handoff), per person. */
   learnLaunch: { requests: 20, window: "10 m" },
+  /** GIF search: a few per person, and one company-wide budget under GIPHY's free allowance of 100 calls an hour (cached answers cost nothing). */
+  gifSearch: { requests: 30, window: "10 m" },
+  gifSearchCompany: { requests: 90, window: "1 h" },
   /** The header search box (it asks as people type, so the allowance is generous). */
   search: { requests: 200, window: "10 m" },
 } satisfies Record<string, Policy>;

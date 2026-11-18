@@ -148,6 +148,9 @@ export const KEYWORDS: Record<string, string> = {
   "🧠": "brain smart",
 };
 
+/** What the picker offers first until the person has used some emoji of their own. */
+export const QUICK_EMOJI: string[] = s("👍 ❤️ 😂 🎉 🙏 👀 ✅ 🔥 😊 😍 👏 🙌 💪 😭 🤔 ✨");
+
 // Reactions people already made with the first picker stay valid.
 const LEGACY = s("👍 👎 👏 🙏 🙌 💪 👌 🤝 ✅ ❌ ❤️ 💜 🧡 💛 💚 💙 😀 😃 😄 😁 😆 😅 😂 🤣 🙂 😊 😇 😉 😍 🥰 😘 😋 😎 🤩 🥳 😏 😌 😴 🤔 🤨 😐 😶 🙄 😬 😮 😲 😳 🥺 😢 😭 😤 😠 😡 🤯 😱 😰 😓 🤗 🤭 🤫 🫡 🫶 👀 💯 🎉 🎊 🔥 ✨ ⭐ 🌟 💡 📌 📍 📎 📝 📅 ⏰ ⌛ ☕ 🍕 🍰 🎂 🎁 🏆 🥇 🚀 🌈 ☀️ 🌙 🌴 🌸 🍀 🐶 🐱 🦄 🐝 👋 🤞 ✌️ 🤟 👊 ✍️ 🙈 🙉 🙊 💬 📣 🔔 🔒 🔑 🛠️ 💻 📞 📧 📊 📈 ✔️ ❓ ❗ 💤 🎯 🧠 🫠 😵 🤲 🫂 🌍");
 
