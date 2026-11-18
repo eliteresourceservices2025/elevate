@@ -152,6 +152,14 @@ You proved the API clock-in works with `pnpm jibble:probe`. For the real link al
 
 Start at `docs/RUNBOOK.md`. For a stuck or slow page: Vercel > Logs for the request (look for `dashboard panel failed` lines), Supabase > Reports, and the SQL in `docs/DEPLOY.md` ("If something goes wrong").
 
+## Calls go-live (after the chat checklist below)
+
+- [ ] **Migrations 0159 to 0161 applied** (call tables, heartbeat, the second Cloudflare session). Apply before the new code runs.
+- [ ] **Cloudflare:** in Vercel (Production) set `CLOUDFLARE_REALTIME_APP_ID` and `CLOUDFLARE_REALTIME_APP_SECRET` (the Serverless SFU application, NOT RealtimeKit) and `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_TOKEN` (a TURN key). Use keys made for production and rotate any key that was ever pasted in a chat. Never set `CALLS_FAKE` or `NEXT_PUBLIC_CALLS_FAKE` in production (they are ignored there, but keep them out).
+- [ ] Check **Settings > Calls** shows no "Calls are off" notice, then make a test call between two real computers (one on a phone hotspot to exercise the relay).
+- [ ] Rehearse with 10 to 25 people on their own computers before announcing; watch Cloudflare's dashboard (Realtime) against the estimate on Settings > Calls.
+- [ ] Publish the updated Monitoring policy (calls, screen share warning) before use; recording stays OFF until its own release.
+
 ## Messages (chat) go-live
 
 - [ ] **Migrations 0146 to 0156 applied** (the chat tables, guards, channels, polls, files, search, settings, guests and the notification sound), *before* the new code runs: `pnpm db:migrate` with the session pooler string, as in DEPLOY Part 1 step 5. Check: `select count(*) from drizzle.__drizzle_migrations;` is 11 higher than before. Migration 0147 also creates the two Realtime policies (it skips them quietly on a plain Postgres, so confirm in Supabase > Database > Policies, schema `realtime`, table `messages`, that `chat_receive` and `chat_send` exist).

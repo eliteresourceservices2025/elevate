@@ -221,8 +221,9 @@ export async function joinCall(actor: Actor, input: { callId: string }): Promise
   const row = await requireLiveCall(actor, input.callId);
   if (actor.isGuest && row.kind !== "client") throw new ActionFailure(NOT_FOUND);
   const sfu = getSfu();
-  const { sessionId } = await sfu.createSession();
-  if (!isSafeSessionId(sessionId)) throw new ActionFailure("Calls aren't working right now. Try again in a moment.");
+  // A Cloudflare session is ONE connection, so each person gets two: one to send their own media, one to receive other people's.
+  const [{ sessionId }, { sessionId: pullSessionId }] = await Promise.all([sfu.createSession(), sfu.createSession()]);
+  if (!isSafeSessionId(sessionId) || !isSafeSessionId(pullSessionId)) throw new ActionFailure("Calls aren't working right now. Try again in a moment.");
 
   await db.transaction(async (tx) => {
     const [live] = await tx.select().from(calls).where(and(eq(calls.id, input.callId), isNull(calls.endedAt))).for("update").limit(1);
@@ -236,7 +237,7 @@ export async function joinCall(actor: Actor, input: { callId: string }): Promise
     const [others] = await tx.select({ n: sql<number>`count(*)::int` }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), isNull(callParticipants.leftAt)));
     if (others.n >= MAX_MEETING_PARTICIPANTS) throw new ActionFailure(`This call is full (${MAX_MEETING_PARTICIPANTS} people).`);
     const role: ParticipantRole = live.startedBy === actor.id ? "host" : "attendee";
-    await tx.insert(callParticipants).values({ callId: input.callId, userId: actor.id, role, cfSessionId: sessionId });
+    await tx.insert(callParticipants).values({ callId: input.callId, userId: actor.id, role, cfSessionId: sessionId, cfPullSessionId: pullSessionId });
     await tx.update(calls).set({ maxParticipants: sql`greatest(${calls.maxParticipants}, ${others.n + 1})` }).where(eq(calls.id, input.callId));
   });
   await broadcastCallEvent({ type: "roster", callId: input.callId });
@@ -326,8 +327,8 @@ export async function removeParticipant(actor: Actor, input: { callId: string; u
 
 /** Closes tracks THIS person pulled (video that scrolled off the page) at Cloudflare, so we stop paying for pictures nobody is looking at. Their own session only. */
 export async function unsubscribeTracks(actor: Actor, input: { callId: string; mids: string[] }): Promise<void> {
-  const { sessionId } = await requireSeat(actor, input.callId);
-  await getSfu().closeTracks(sessionId, input.mids).catch(() => {});
+  const { pullSessionId } = await requireSeat(actor, input.callId);
+  await getSfu().closeTracks(pullSessionId, input.mids).catch(() => {});
 }
 
 /** Ends calls whose chat was deleted, and any call nobody is left in. Used by the cleanup job. Returns how many were ended. */
@@ -352,7 +353,8 @@ async function requireSeat(actor: Actor, callId: string) {
   const row = await requireLiveCall(actor, callId);
   const seat = await openSeat(db, callId, actor.id);
   if (!seat?.cfSessionId) throw new ActionFailure("Join the call first.");
-  return { row, seat, sessionId: seat.cfSessionId };
+  // sessionId sends this person's media; pullSessionId receives other people's (older seats had one session for both).
+  return { row, seat, sessionId: seat.cfSessionId, pullSessionId: seat.cfPullSessionId ?? seat.cfSessionId };
 }
 
 /** Publish: forwards the person's own offer for their microphone, camera or screen. We name the tracks; the mode decides who may publish. */
@@ -386,7 +388,7 @@ export async function closeTracks(actor: Actor, input: { callId: string; trackNa
 
 /** Subscribe: the server checks each wanted track (live, in this call, from someone still here, allowed in this mode) before Cloudflare is asked. */
 export async function subscribeTracks(actor: Actor, input: { callId: string; trackNames: string[] }) {
-  const { row, sessionId } = await requireSeat(actor, input.callId);
+  const { row, pullSessionId } = await requireSeat(actor, input.callId);
   const wanted = [...new Set(input.trackNames)];
   const found = await db
     .select({ track: callTracks, role: callParticipants.role })
@@ -395,7 +397,10 @@ export async function subscribeTracks(actor: Actor, input: { callId: string; tra
     .where(and(eq(callTracks.callId, input.callId), inArray(callTracks.trackName, wanted), isNull(callTracks.endedAt)));
   const allowed = found.filter((f) => f.track.userId !== actor.id && mayPublish(row.call.mode as CallMode, f.role as ParticipantRole));
   if (allowed.length === 0) throw new ActionFailure("Nothing to watch yet.");
-  const result = await getSfu().pullTracks(sessionId, allowed.map((f) => ({ sessionId: f.track.cfSessionId, trackName: f.track.trackName })));
+  const result = await getSfu().pullTracks(pullSessionId, allowed.map((f) => ({ sessionId: f.track.cfSessionId, trackName: f.track.trackName })));
+  // Cloudflare's per-track answers (codes only: no media, no ids of people) so a failed pull can be understood.
+  const failures = result.tracks.filter((t) => t.errorCode).map((t) => `${t.errorCode}${t.errorDescription ? `: ${t.errorDescription.slice(0, 80)}` : ""}`);
+  if (failures.length > 0 || !result.sessionDescription) console.error("calls: pull problem", { asked: allowed.length, answered: result.tracks.length, hasOffer: Boolean(result.sessionDescription), failures: failures.slice(0, 5) });
   if (!result.sessionDescription) throw new ActionFailure("Couldn't load the video. Try again.");
   return {
     offer: result.sessionDescription,
@@ -406,8 +411,8 @@ export async function subscribeTracks(actor: Actor, input: { callId: string; tra
 
 /** The person's answer to the offer from a subscribe. */
 export async function renegotiate(actor: Actor, input: { callId: string; answer: { type: "answer"; sdp: string } }): Promise<void> {
-  const { sessionId } = await requireSeat(actor, input.callId);
-  await getSfu().renegotiate(sessionId, input.answer);
+  const { pullSessionId } = await requireSeat(actor, input.callId);
+  await getSfu().renegotiate(pullSessionId, input.answer);
 }
 
 /** A ring the person has not answered yet: a live call in a chat of theirs they are not in, for the ring pop-up. */

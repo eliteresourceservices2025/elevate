@@ -50,6 +50,8 @@ export const callParticipants = chat
       role: text("role").notNull().default("attendee"),
       /** Their Cloudflare session id while connected; never shown to other people. */
       cfSessionId: text("cf_session_id"),
+      /** A second Cloudflare session for RECEIVING (a session is one connection, so sending and receiving each get their own). Null on older rows. */
+      cfPullSessionId: text("cf_pull_session_id"),
       joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
       /** The browser reports in every 30 seconds; a seat silent for 90 seconds is treated as left (a closed laptop, a lost connection). */
       lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),

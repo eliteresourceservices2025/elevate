@@ -106,6 +106,7 @@ export function CallProvider({ userId, children }: { userId: string; children: R
   const stopRing = useRef<(() => void) | null>(null);
   /** When I last started or stopped sending something (a heartbeat that predates it must not be mistaken for the host muting me). */
   const lastLocalChange = useRef(0);
+  const view = useRef({ page: 0, pinned: null as string | null, speaker: null as string | null });
 
   useEffect(() => {
     live.current.callId = callId;
@@ -114,6 +115,7 @@ export function CallProvider({ userId, children }: { userId: string; children: R
     live.current.micOn = micOn;
     live.current.handUp = handUp;
     live.current.remote = remote;
+    view.current = { page, pinned: pinnedUserId, speaker: activeSpeakerId };
   });
 
   const reset = useCallback(() => {
@@ -176,6 +178,9 @@ export function CallProvider({ userId, children }: { userId: string; children: R
         return;
       }
       await applyState(beat.state);
+      // Anything wanted that has not arrived yet (a pull that failed because the other person's video had not started) is asked for again.
+      const again = chooseSubscriptions({ tracks: beat.state.tracks, selfUserId: userId, mode: beat.state.call.mode, page: view.current.page, pinnedUserId: view.current.pinned, activeSpeakerId: view.current.speaker });
+      void transport.current?.syncRemote(again.pull).catch(() => {});
     } catch {
       // Offline for a moment: the next beat tries again. After 90 seconds the server lets the seat go.
     } finally {
@@ -185,7 +190,7 @@ export function CallProvider({ userId, children }: { userId: string; children: R
         void refreshRef.current();
       }
     }
-  }, [applyState, reset]);
+  }, [applyState, reset, userId]);
   useEffect(() => {
     refreshRef.current = refresh;
   });
@@ -199,8 +204,20 @@ export function CallProvider({ userId, children }: { userId: string; children: R
   const pullKey = selection ? selection.pull.map((t) => t.trackName).sort().join(",") : "";
   useEffect(() => {
     if (phase !== "active" || !selection) return;
-    // A failed pull is retried on the next heartbeat or event; steps on the connection run one at a time inside the transport.
-    void transport.current?.syncRemote(selection.pull).catch(() => {});
+    // Steps on the connection run one at a time inside the transport. A pull can fail because the other person's video has not started
+    // flowing yet (Cloudflare says so after a few seconds), so it is tried again a few times, a little later each time.
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = (n: number) => {
+      transport.current?.syncRemote(selection.pull).catch(() => {
+        if (!cancelled && n < 20) timer = setTimeout(() => attempt(n + 1), Math.min(1500 * (n + 1), 6000));
+      });
+    };
+    attempt(0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the set of wanted tracks changes, not on every state refresh
   }, [pullKey, phase]);
 

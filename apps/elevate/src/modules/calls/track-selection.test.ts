@@ -78,9 +78,10 @@ describe("usage estimate", () => {
 });
 
 describe("sfu id rules", () => {
-  it("accepts only 32-hex session ids and plain track names, so nothing odd reaches a URL", () => {
+  it("accepts only 32- or 64-hex session ids and plain track names, so nothing odd reaches a URL", () => {
     expect(isSafeSessionId(sid(255))).toBe(true);
-    for (const bad of ["", "../x", sid(1) + "a", "g".repeat(32), null, 5]) expect(isSafeSessionId(bad)).toBe(false);
+    expect(isSafeSessionId("ab".repeat(32))).toBe(true); // Cloudflare's real ids are 64 characters
+    for (const bad of ["", "../x", sid(1) + "a", "a".repeat(63), "a".repeat(65), "g".repeat(32), null, 5]) expect(isSafeSessionId(bad)).toBe(false);
     expect(isSafeTrackName("audio-abc_1")).toBe(true);
     for (const bad of ["", "a/b", "a b", "a?b", "x".repeat(65), "../a", undefined]) expect(isSafeTrackName(bad)).toBe(false);
     expect(newTrackName("video", "Ab-12!x")).toBe("video-Ab12x");
