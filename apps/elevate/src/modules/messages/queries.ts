@@ -83,7 +83,7 @@ async function actorWithAccess() {
 }
 
 /** Display names: the preferred name (or legal first name) and last name from the people record, else the email's first part. */
-async function peopleByUserId(ids: string[]): Promise<Map<string, Person>> {
+export async function peopleByUserId(ids: string[]): Promise<Map<string, Person>> {
   const unique = [...new Set(ids)];
   const map = new Map<string, Person>();
   if (unique.length === 0) return map;

@@ -51,6 +51,8 @@ export const callParticipants = chat
       /** Their Cloudflare session id while connected; never shown to other people. */
       cfSessionId: text("cf_session_id"),
       joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+      /** The browser reports in every 30 seconds; a seat silent for 90 seconds is treated as left (a closed laptop, a lost connection). */
+      lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
       leftAt: timestamp("left_at", { withTimezone: true }),
     },
     (t) => [
@@ -75,6 +77,8 @@ export const callTracks = chat
         .references(() => users.id),
       cfSessionId: text("cf_session_id").notNull(),
       trackName: text("track_name").notNull(),
+      /** Cloudflare's id for the track in the publisher's session (needed to close it). */
+      mid: text("mid"),
       /** 'audio', 'video' (camera) or 'screen'. */
       kind: text("kind").notNull(),
       startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),

@@ -465,6 +465,15 @@ export async function markRead(actor: Actor, input: { conversationId: string; se
 
 export { bodyContext, revisionContext, currentMemberIds };
 
+/**
+ * A line the system writes into a chat ("Call started", "Call ended, 12 min", "Missed call"), shown to current members like any message.
+ * Never counts as unread (system lines don't), never carries anything but plain words the caller chose.
+ */
+export async function postSystemLine(input: { conversationId: string; senderUserId: string; body: string }): Promise<void> {
+  const posted = await insertMessage(db, { conversationId: input.conversationId, senderUserId: input.senderUserId, body: input.body, kind: "system" });
+  await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: posted.id });
+}
+
 /** Adds the person's reaction, or removes it if they already made it. */
 export async function toggleReaction(actor: Actor, input: { messageId: string; emoji: string }): Promise<{ active: boolean }> {
   if (!isAllowedEmoji(input.emoji)) throw new ActionFailure("That reaction isn't available.");

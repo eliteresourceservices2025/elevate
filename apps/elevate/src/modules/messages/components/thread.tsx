@@ -17,6 +17,7 @@ import { ConversationAvatar } from "./conversation-list";
 import { MuteDialog } from "./chat-settings-dialogs";
 import { EmojiPicker } from "./emoji-picker";
 import { AttachmentList } from "./attachment-list";
+import { ChatCallBar } from "@/modules/calls/components/chat-call-bar";
 import { MessageBody } from "./message-body";
 import { PollCard } from "./poll-card";
 
@@ -53,6 +54,7 @@ export function Thread({
   hasMore,
   members,
   myUserId,
+  canStartCall = true,
   onlineCount = 0,
   timeZone,
   loadingEarlier,
@@ -70,6 +72,8 @@ export function Thread({
   hasMore: boolean;
   members: ThreadMember[];
   myUserId: string;
+  /** Guests can join a call but never start one. */
+  canStartCall?: boolean;
   /** How many other people are looking at this chat right now. */
   onlineCount?: number;
   timeZone: string;
@@ -125,6 +129,7 @@ export function Thread({
           <span className="hidden sm:inline">People</span>
         </Button>
       </div>
+      <ChatCallBar conversationId={conversation.id} userId={myUserId} canStart={canStartCall} />
       {conversation.kind === "client" ? (
         <p role="note" className="border-b bg-warning-surface px-3 py-1.5 text-xs font-medium text-foreground">
           Attendance matters only. Never share patient details.
