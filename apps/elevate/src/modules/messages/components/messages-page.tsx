@@ -22,8 +22,8 @@ export async function MessagesPage({ conversationId = null }: { conversationId?:
   let initialThread = null;
   if (conversationId) {
     try {
-      const { messages, hasMore, members } = await orNotFound(loadMessages({ conversationId }));
-      initialThread = { messages, hasMore, members };
+      const { messages, hasMore, latestSeq, members } = await orNotFound(loadMessages({ conversationId }));
+      initialThread = { messages, hasMore, latestSeq, members };
     } catch (error) {
       if (error instanceof ActionFailure) notFound();
       throw error;

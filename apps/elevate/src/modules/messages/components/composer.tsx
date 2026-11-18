@@ -1,12 +1,13 @@
 "use client";
 
 import { AtSign, Mic, Paperclip, SendHorizontal, Square, X } from "lucide-react";
-import { useRef, useState, useTransition, type ChangeEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type ChangeEvent, type KeyboardEvent } from "react";
 import { toast } from "@/components/feedback-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBytes } from "@/modules/documents/files";
 import { sendChatMessage } from "../actions";
+import { applyMention, findMentionQuery, suggestMentions, type MentionOption } from "../mention-suggest";
 import { mentionToken } from "../mentions";
 import { MAX_ATTACHMENTS, MAX_VOICE_SECONDS } from "../media";
 import type { FinishedUpload } from "../uploads";
@@ -32,6 +33,8 @@ export function Composer({
   threadRootId,
   restricted = false,
   idSuffix = "",
+  quote = null,
+  onClearQuote,
 }: {
   conversationId: string;
   label: string;
@@ -40,9 +43,16 @@ export function Composer({
   threadRootId?: string;
   restricted?: boolean;
   idSuffix?: string;
+  /** The message being quoted in this reply, shown above the box. */
+  quote?: { id: string; senderName: string; snippet: string } | null;
+  onClearQuote?: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const [mentioning, setMentioning] = useState(false);
+  const [caret, setCaret] = useState(0);
+  const [highlight, setHighlight] = useState(0);
+  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  const pendingCaret = useRef<number | null>(null);
   const [attachments, setAttachments] = useState<FinishedUpload[]>([]);
   const [uploading, setUploading] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState<number | null>(null);
@@ -52,6 +62,11 @@ export function Composer({
   const recorder = useRef<MediaRecorder | null>(null);
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
   const tooLong = draft.length > MAX_BODY;
+  // Typing "@" opens the list of people you can mention, right away; it narrows as you type.
+  const mentionQuery = findMentionQuery(draft, caret);
+  const options: MentionOption[] = mentionQuery && members.length > 0 && dismissedAt !== mentionQuery.start ? suggestMentions(members, mentionQuery.query) : [];
+  const suggesting = options.length > 0;
+  const active = Math.min(highlight, Math.max(0, options.length - 1));
   const canSend = (draft.trim().length > 0 || attachments.length > 0) && !tooLong && !pending && !uploading && recordingSeconds === null;
 
   function send() {
@@ -59,16 +74,51 @@ export function Composer({
     const body = draft;
     const attachmentIds = attachments.map((a) => a.id);
     startTransition(async () => {
-      const result = await sendChatMessage({ conversationId, body, threadRootId, attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined });
+      const result = await sendChatMessage({ conversationId, body, threadRootId, quotedMessageId: quote?.id, attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined });
       if (!result.ok) return void toast.error(result.error);
       setDraft("");
       setAttachments([]);
+      onClearQuote?.();
       onSent();
       field.current?.focus();
     });
   }
 
+  useEffect(() => {
+    if (pendingCaret.current === null) return;
+    field.current?.setSelectionRange(pendingCaret.current, pendingCaret.current);
+    pendingCaret.current = null;
+  });
+
+  function choose(option: MentionOption) {
+    if (!mentionQuery) return;
+    const insert = option.kind === "everyone" ? "@everyone" : mentionToken(option.name, option.userId);
+    const next = applyMention(draft, mentionQuery, insert);
+    setDraft(next.text);
+    setCaret(next.caret);
+    setHighlight(0);
+    pendingCaret.current = next.caret;
+    field.current?.focus();
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (suggesting && !event.nativeEvent.isComposing) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        setHighlight((active + (event.key === "ArrowDown" ? 1 : options.length - 1)) % options.length);
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        choose(options[active]);
+        return;
+      }
+      if (event.key === "Escape" && mentionQuery) {
+        event.preventDefault();
+        setDismissedAt(mentionQuery.start);
+        return;
+      }
+    }
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       send();
@@ -144,6 +194,17 @@ export function Composer({
 
   return (
     <div className="border-t p-3">
+      {quote ? (
+        <div className="mb-2 flex items-start gap-2 rounded-lg border-l-4 border-primary/60 bg-muted px-2.5 py-1.5 text-xs" role="group" aria-label="Quoting">
+          <div className="min-w-0 flex-1">
+            <span className="block font-semibold">Replying to {quote.senderName}</span>
+            <span className="line-clamp-2 break-words text-muted-foreground">{quote.snippet}</span>
+          </div>
+          <button type="button" onClick={onClearQuote} aria-label="Cancel quote" className="rounded-full p-0.5 hover:bg-background">
+            <X className="size-3.5" aria-hidden />
+          </button>
+        </div>
+      ) : null}
       {attachments.length > 0 || uploading ? (
         <div className="mb-2 flex flex-col gap-1">
           <ul className="flex flex-wrap gap-1.5" aria-label="Attachments">
@@ -169,7 +230,24 @@ export function Composer({
           </Button>
         </div>
       ) : null}
-      <div className="flex items-end gap-2">
+      <div className="relative flex items-end gap-2">
+        {suggesting ? (
+          <ul role="listbox" aria-label="People you can mention" className="absolute bottom-full left-0 z-30 mb-1 max-h-56 w-64 overflow-y-auto rounded-xl border bg-popover p-1 shadow-lg">
+            {options.map((option, i) => (
+              <li key={option.kind === "everyone" ? "everyone" : option.userId} role="option" aria-selected={i === active}>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => choose(option)}
+                  className={`w-full truncate rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-muted ${i === active ? "bg-muted" : ""} ${option.kind === "everyone" ? "font-semibold" : ""}`}
+                >
+                  {option.kind === "everyone" ? "@everyone (notify all)" : option.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <label htmlFor={`chat-composer${idSuffix}`} className="sr-only">
           {threadRootId ? "Reply in thread" : `Message ${label}`}
         </label>
@@ -177,8 +255,14 @@ export function Composer({
           id={`chat-composer${idSuffix}`}
           ref={field}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setCaret(e.target.selectionStart);
+            setHighlight(0);
+          }}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
           onKeyDown={onKeyDown}
+          aria-autocomplete="list"
           rows={2}
           placeholder={threadRootId ? "Reply in thread" : `Message ${label}`}
           aria-invalid={tooLong}

@@ -19,7 +19,7 @@ export default async function Page() {
     <PageContainer width="wide">
       <PageHeader
         title="Manage groups"
-        description="Create, rename and delete group chats, and choose who is in them."
+        description="Create, rename and delete group chats and channels, and choose who is in them."
         breadcrumbs={[{ label: "Messages", href: "/messages" }, { label: "Manage groups" }]}
       />
       <ManageGroups groups={groups} timeZone={DEFAULT_TIMEZONE} clients={clients} guests={guests} />

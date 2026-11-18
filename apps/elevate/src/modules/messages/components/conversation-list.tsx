@@ -27,10 +27,11 @@ export function shortTime(iso: string | null, zone: string, now = new Date()): s
   return ageDays < 6 ? formatInZone(iso, zone, "EEE") : formatInZone(iso, zone, "MMM d");
 }
 
-export function ConversationAvatar({ conversation, size = "default" }: { conversation: Pick<ConversationSummary, "kind" | "title" | "photoUserId">; size?: "default" | "lg" | "sm" }) {
+export function ConversationAvatar({ conversation, size = "default" }: { conversation: Pick<ConversationSummary, "id" | "kind" | "title" | "photoUserId" | "photoAttachmentId">; size?: "default" | "lg" | "sm" }) {
   return (
     <Avatar size={size}>
       {conversation.photoUserId ? <AvatarImage src={`/api/profile-photo/${conversation.photoUserId}`} alt="" /> : null}
+      {conversation.photoAttachmentId ? <AvatarImage src={`/api/messages/conversation-photo/${conversation.id}?v=${conversation.photoAttachmentId}`} alt="" /> : null}
       <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
         {conversation.kind === "group" || conversation.kind === "client" ? <Users className="size-4" aria-hidden /> : conversation.kind === "dm" ? initials(conversation.title) : <Hash className="size-4" aria-hidden />}
       </AvatarFallback>
@@ -45,7 +46,7 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "chats", label: "Chats" },
   { key: "channels", label: "Channels" },
 ];
-const isChannel = (c: ConversationSummary) => c.kind === "team" || c.kind === "department" || c.kind === "company";
+const isChannel = (c: ConversationSummary) => c.kind === "team" || c.kind === "department" || c.kind === "company" || c.kind === "channel";
 
 export function ConversationList({
   conversations,

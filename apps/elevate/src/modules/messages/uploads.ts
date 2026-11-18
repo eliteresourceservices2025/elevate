@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { and, count, eq, gt, sql } from "drizzle-orm";
+import { and, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { fieldCrypto } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { allowRequest } from "@/lib/rate-limit";
@@ -8,7 +8,7 @@ import { ActionFailure } from "@/lib/run-action";
 import { ALLOWED_TYPES_TEXT, MAX_FILE_BYTES, kindFromMime, mimeOf, sanitizeFileName, sniffFileKind, type FileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { AUDIO_TYPES, MAX_VOICE_BYTES, MAX_VOICE_SECONDS, UPLOAD_WINDOW_MINUTES, audioKindFromMime, sniffAudioKind, stripImageMetadata, type ImageKind } from "./media";
-import { messageAttachments } from "./schema";
+import { conversations, messageAttachments } from "./schema";
 import { requireMember, requireVisibleMessage, type Actor } from "./service";
 
 // Files, pictures and voice notes. Three steps, like documents: ask (the server picks the path and returns a one-time upload token),
@@ -25,11 +25,26 @@ const nameContext = (id: string) => `chat_attachment_name:${id}`;
 export type UploadTicket = { id: string; bucket: string; path: string; token: string; contentType: string };
 export type FinishedUpload = { id: string; kind: "image" | "file" | "voice"; name: string; mime: string; size: number; durationS: number | null };
 
+/**
+ * Who may upload into a conversation: a current member, or (for a group's picture) someone who manages groups without being in the group.
+ * The action has already checked messages.manage_group for "manager"; this only checks the conversation is a live group, channel or client group.
+ */
+async function requireUploadAccess(actor: Actor, conversationId: string, access: "member" | "manager"): Promise<void> {
+  if (access === "member") return void (await requireMember(db, actor.id, conversationId));
+  const [row] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.id, conversationId), inArray(conversations.kind, ["group", "client", "channel"]), isNull(conversations.archivedAt)))
+    .limit(1);
+  if (!row) throw new ActionFailure("Group not found.");
+}
+
 export async function requestUpload(
   actor: Actor,
   input: { conversationId: string; fileName: string; size: number; mime: string; kind: "image" | "file" | "voice"; durationS?: number },
+  access: "member" | "manager" = "member",
 ): Promise<UploadTicket> {
-  await requireMember(db, actor.id, input.conversationId);
+  await requireUploadAccess(actor, input.conversationId, access);
   if (!(await allowRequest("upload", actor.id))) throw new ActionFailure("Too many uploads. Wait a few minutes and try again.");
 
   let name: string;
@@ -73,7 +88,7 @@ export async function requestUpload(
   return { id, bucket: BUCKETS.chat, path, token, contentType };
 }
 
-export async function finalizeUpload(actor: Actor, input: { attachmentId: string }): Promise<FinishedUpload> {
+export async function finalizeUpload(actor: Actor, input: { attachmentId: string }, access: "member" | "manager" = "member"): Promise<FinishedUpload> {
   const [row] = await db
     .select()
     .from(messageAttachments)
@@ -87,7 +102,7 @@ export async function finalizeUpload(actor: Actor, input: { attachmentId: string
     )
     .limit(1);
   if (!row) throw new ActionFailure("Upload not found.");
-  await requireMember(db, actor.id, row.conversationId);
+  await requireUploadAccess(actor, row.conversationId, access);
   const storage = getDocumentStorage();
 
   const reject = async (message: string): Promise<never> => {
@@ -129,6 +144,22 @@ export async function finalizeUpload(actor: Actor, input: { attachmentId: string
     .set({ status: "active", mime, size: finalBytes.length, sha256, nameEnc: fieldCrypto().encrypt(name, nameContext(row.id)) })
     .where(eq(messageAttachments.id, row.id));
   return { id: row.id, kind: row.kind as FinishedUpload["kind"], name, mime, size: finalBytes.length, durationS: row.durationS };
+}
+
+/** The picture of a group: for its members, or for the people who manage groups. Everyone else gets "File not found." */
+export async function loadConversationPhoto(actor: Actor, conversationId: string, canManage: boolean): Promise<{ bytes: Uint8Array; mime: string }> {
+  const [conv] = await db.select({ photo: conversations.photoAttachmentId }).from(conversations).where(and(eq(conversations.id, conversationId), isNull(conversations.archivedAt))).limit(1);
+  if (!conv?.photo) throw new ActionFailure(FILE_NOT_FOUND);
+  if (!canManage) {
+    await requireMember(db, actor.id, conversationId).catch(() => {
+      throw new ActionFailure(FILE_NOT_FOUND);
+    });
+  }
+  const [row] = await db.select().from(messageAttachments).where(and(eq(messageAttachments.id, conv.photo), eq(messageAttachments.status, "active"), eq(messageAttachments.conversationId, conversationId))).limit(1);
+  if (!row) throw new ActionFailure(FILE_NOT_FOUND);
+  const bytes = await getDocumentStorage().read(row.bucket as typeof BUCKETS.chat, row.path);
+  if (!bytes) throw new ActionFailure(FILE_NOT_FOUND);
+  return { bytes, mime: row.mime };
 }
 
 /**

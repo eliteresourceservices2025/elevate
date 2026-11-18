@@ -18,13 +18,15 @@ export const conversations = chat
     "conversations",
     {
       id: uuid("id").primaryKey().defaultRandom(),
-      /** 'dm' (two people), 'group' (made by HR), 'team', 'department' or 'company' (automatic channels kept in sync with ELEVATE's teams), or 'client' (a group with a client's guests, attendance matters only). */
+      /** 'dm' (two people), 'group' (made by HR), 'team', 'department' or 'company' (automatic channels kept in sync with ELEVATE's teams), 'channel' (a channel HR makes and manages by hand), or 'client' (a group with a client's guests, attendance matters only). */
       kind: text("kind").notNull(),
       /** The team or department a channel belongs to (one channel each). */
       teamId: uuid("team_id").references(() => teams.id),
       departmentId: uuid("department_id").references(() => departments.id),
       /** The client a 'client' group belongs to. */
       clientId: uuid("client_id").references(() => clients.id),
+      /** The picture of a group, channel or client group: an uploaded chat image (kept unlinked from any message). */
+      photoAttachmentId: uuid("photo_attachment_id"),
       /** 'admins': only HR Admins and Super Admins post root messages here (the company channel); replies and reactions stay open. */
       posting: text("posting").notNull().default("everyone"),
       /** A group's name (plain text, shown to its members). Null for a direct message. */
@@ -42,7 +44,7 @@ export const conversations = chat
       uniqueIndex("conversations_team_idx").on(t.teamId).where(sql`${t.teamId} is not null`),
       uniqueIndex("conversations_department_idx").on(t.departmentId).where(sql`${t.departmentId} is not null`),
       uniqueIndex("conversations_company_idx").on(t.kind).where(sql`${t.kind} = 'company'`),
-      check("conversations_kind_chk", sql`${t.kind} in ('dm','group','team','department','company','client')`),
+      check("conversations_kind_chk", sql`${t.kind} in ('dm','group','team','department','company','client','channel')`),
       check("conversations_client_chk", sql`(${t.kind} = 'client') = (${t.clientId} is not null)`),
       check("conversations_posting_chk", sql`${t.posting} in ('everyone','admins')`),
       check("conversations_dm_key_chk", sql`(${t.kind} = 'dm') = (${t.dmKey} is not null)`),
@@ -96,6 +98,8 @@ export const messages = chat
       kind: text("kind").notNull().default("text"),
       /** A reply in a thread points at the message that started it (a thread has one level: a reply is never a root). */
       threadRootId: uuid("thread_root_id").references((): AnyPgColumn => messages.id),
+      /** A quote reply points at the message it quotes (same conversation). Never changes once set. */
+      quotedMessageId: uuid("quoted_message_id").references((): AnyPgColumn => messages.id),
       createdAt: createdAt(),
       editedAt: timestamp("edited_at", { withTimezone: true }),
       deletedAt: timestamp("deleted_at", { withTimezone: true }),

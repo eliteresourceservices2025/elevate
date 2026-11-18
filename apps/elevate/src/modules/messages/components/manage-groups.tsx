@@ -9,12 +9,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatInZone } from "@/lib/time";
-import { loadGroupPeopleToManage, syncChatChannels } from "../actions";
+import { loadGroupPeopleToManage, setChannelPostingRule, syncChatChannels } from "../actions";
 import type { GuestRow } from "../guests";
 import type { ManagedGroup } from "../queries";
+import { ConversationAvatar } from "./conversation-list";
+import { GroupPhotoControl } from "./group-photo-control";
 import { AddGuestControl, ClientGroupDialog } from "./guest-admin";
 import { RenameGroupDialog, useDeleteGroup, useRemovePerson } from "./group-admin";
-import { AddPeopleDialog, NewGroupDialog } from "./new-conversation-dialog";
+import { AddPeopleDialog, NewChannelDialog, NewGroupDialog } from "./new-conversation-dialog";
 
 type Person = { userId: string; name: string };
 
@@ -92,6 +94,12 @@ export function ManageGroups({ groups, timeZone, clients, guests }: { groups: Ma
             }}
           />
         ) : null}
+        <NewChannelDialog
+          onOpened={(id) => {
+            router.refresh();
+            void select(id);
+          }}
+        />
         <NewGroupDialog
           onOpened={(id) => {
             router.refresh();
@@ -122,6 +130,7 @@ export function ManageGroups({ groups, timeZone, clients, guests }: { groups: Ma
               <TableRow key={g.id} data-state={g.id === selectedId ? "selected" : undefined}>
                 <TableCell className="font-medium">
                   {g.title}
+                  {g.kind === "channel" ? <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground">Channel{g.posting === "admins" ? " · only HR posts" : ""}</span> : null}
                   {g.kind === "client" ? <span className="ml-2 rounded bg-info-surface px-1.5 py-0.5 text-xs font-medium">Client: {g.clientName}</span> : null}
                   {g.amMember ? <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground">You&apos;re in it</span> : null}
                 </TableCell>
@@ -142,7 +151,9 @@ export function ManageGroups({ groups, timeZone, clients, guests }: { groups: Ma
       {selected ? (
         <section aria-label={`Manage ${selected.title}`} className="flex flex-col gap-4 rounded-xl border bg-card p-4">
           <div className="flex flex-wrap items-center gap-2">
+            <ConversationAvatar conversation={{ id: selected.id, kind: selected.kind, title: selected.title, photoUserId: null, photoAttachmentId: selected.photoAttachmentId }} size="lg" />
             <h2 className="mr-auto font-heading text-lg font-semibold">{selected.title}</h2>
+            <GroupPhotoControl conversationId={selected.id} hasPhoto={selected.photoAttachmentId !== null} onChanged={() => router.refresh()} />
             <RenameGroupDialog
               conversationId={selected.id}
               current={selected.title}
@@ -160,6 +171,25 @@ export function ManageGroups({ groups, timeZone, clients, guests }: { groups: Ma
                 void reloadPeople(selected.id);
               }}
             />
+            {selected.kind === "channel" ? (
+              <span className="flex items-center gap-1.5 text-sm">
+                <label htmlFor="channel-posting" className="text-muted-foreground">Who can post</label>
+                <select
+                  id="channel-posting"
+                  value={selected.posting}
+                  className="h-(--control-h-sm) rounded-lg border border-input bg-background px-2 text-sm"
+                  onChange={async (e) => {
+                    const result = await setChannelPostingRule({ conversationId: selected.id, posting: e.target.value });
+                    if (!result.ok) return void toast.error(result.error);
+                    toast.success("Saved.");
+                    router.refresh();
+                  }}
+                >
+                  <option value="everyone">Everyone in it</option>
+                  <option value="admins">Only HR</option>
+                </select>
+              </span>
+            ) : null}
             {selected.kind === "client" ? (
               <AddGuestControl
                 conversationId={selected.id}

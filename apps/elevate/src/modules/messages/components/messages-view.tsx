@@ -10,6 +10,7 @@ import { listChatPins, loadChatMessages, loadConversationList, markConversationR
 import type { ChatMessage, ConversationSummary, PinnedMessage } from "../queries";
 import type { ChatSignal } from "../realtime-types";
 import { ConversationList } from "./conversation-list";
+import { GroupPhotoControl } from "./group-photo-control";
 import { RenameGroupDialog, useDeleteGroup, useRemovePerson } from "./group-admin";
 import { AddPeopleDialog, NewConversationDialog } from "./new-conversation-dialog";
 import { Thread, type ThreadMember } from "./thread";
@@ -17,14 +18,14 @@ import { ThreadPanel } from "./thread-panel";
 import { useChatLive } from "./use-chat-live";
 import { usePresence } from "./use-presence";
 
-type ThreadData = { messages: ChatMessage[]; hasMore: boolean; members: ThreadMember[] };
+type ThreadData = { messages: ChatMessage[]; hasMore: boolean; latestSeq?: number; members: ThreadMember[] };
 
 /** Newest page from the server, keeping any older messages the person already scrolled back to. */
 function mergeNewest(previous: ThreadData | null, next: ThreadData): ThreadData {
   if (!previous || next.messages.length === 0) return next;
   const firstNew = next.messages[0].seq;
   const older = previous.messages.filter((m) => m.seq < firstNew);
-  return { messages: [...older, ...next.messages], hasMore: older.length > 0 ? previous.hasMore : next.hasMore, members: next.members };
+  return { messages: [...older, ...next.messages], hasMore: older.length > 0 ? previous.hasMore : next.hasMore, latestSeq: next.latestSeq, members: next.members };
 }
 
 export type { ThreadData };
@@ -91,7 +92,8 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, app
     if (!activeId || !thread || thread.messages.length === 0) return;
     const summary = conversations.find((c) => c.id === activeId);
     if (!summary || summary.unread === 0) return;
-    const newest = thread.messages[thread.messages.length - 1].seq;
+    // Up to the newest message of any kind, so replies inside threads count as read too (they used to keep the badge lit).
+    const newest = Math.max(thread.latestSeq ?? 0, thread.messages[thread.messages.length - 1].seq);
     void markConversationRead({ conversationId: activeId, seq: newest }).then(() => refreshListSoon());
   }, [activeId, thread, conversations, refreshListSoon]);
 
@@ -160,7 +162,7 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, app
       const result = await loadChatMessages({ conversationId: id, beforeSeq: thread.messages[0].seq });
       if (activeRef.current !== id) return; // the person opened another chat meanwhile: these belong to the old one
       if (!result.ok) return void toast.error(result.error);
-      setThread((previous) => (previous ? { messages: [...result.data.messages, ...previous.messages], hasMore: result.data.hasMore, members: previous.members } : previous));
+      setThread((previous) => (previous ? { messages: [...result.data.messages, ...previous.messages], hasMore: result.data.hasMore, latestSeq: previous.latestSeq, members: previous.members } : previous));
     } catch {
       toast.error("Could not reach ELEVATE. Check your connection and try again.");
     } finally {
@@ -268,7 +270,7 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, app
                   {m.name}
                   {m.userId === userId ? <span className="text-muted-foreground"> (you)</span> : null}
                 </span>
-                {canManage && (active.kind === "group" || active.kind === "client") ? (
+                {canManage && (active.kind === "group" || active.kind === "client" || active.kind === "channel") ? (
                   <Button type="button" variant="ghost" size="xs" onClick={() => void removePerson(active.id, m)} aria-label={`Remove ${m.name}`}>
                     Remove
                   </Button>
@@ -276,8 +278,9 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, app
               </li>
             ))}
           </ul>
-          {canManage && (active.kind === "group" || active.kind === "client") ? (
+          {canManage && (active.kind === "group" || active.kind === "client" || active.kind === "channel") ? (
             <div className="mt-auto flex flex-col gap-2">
+              <GroupPhotoControl conversationId={active.id} hasPhoto={active.photoAttachmentId !== null} onChanged={() => void refreshList()} />
               <RenameGroupDialog conversationId={active.id} current={active.title} onDone={() => { void loadThread(active.id, false); void refreshList(); }} />
               <AddPeopleDialog conversationId={active.id} existing={thread.members.map((m) => m.userId)} onAdded={() => { void loadThread(active.id, false); void refreshList(); }} />
               <Button type="button" variant="outline" size="sm" onClick={() => void deleteGroup(active.id, active.title)}>

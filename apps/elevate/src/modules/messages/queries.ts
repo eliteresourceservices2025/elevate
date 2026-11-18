@@ -25,7 +25,7 @@ const PEOPLE_LIMIT_MANAGER = 200;
 
 export type ConversationSummary = {
   id: string;
-  kind: "dm" | "group" | "team" | "department" | "company" | "client";
+  kind: "dm" | "group" | "team" | "department" | "company" | "client" | "channel";
   title: string;
   /** "admins": only HR posts root messages here (the company channel). */
   posting: "everyone" | "admins";
@@ -38,10 +38,16 @@ export type ConversationSummary = {
   mutedUntil: string | null;
   /** A direct message shows the other person's photo. */
   photoUserId: string | null;
+  /** The picture of a group, channel or client group (the id also changes the address, so a new picture shows at once). */
+  photoAttachmentId: string | null;
 };
+
+/** The message a reply quotes. `earlier` = from before the viewer joined (never shown), `removed` = it was deleted. */
+export type ChatQuote = { id: string; senderName: string; snippet: string; state: "ok" | "removed" | "earlier" };
 
 export type ChatMessage = {
   id: string;
+  quote: ChatQuote | null;
   seq: number;
   senderUserId: string;
   senderName: string;
@@ -55,7 +61,8 @@ export type ChatMessage = {
   threadRootId: string | null;
   replyCount: number;
   lastReplyAt: string | null;
-  reactions: { emoji: string; count: number; mine: boolean }[];
+  /** `names` are the first people who reacted (the viewer shows as "You"), for the hover list; `count` is everyone. */
+  reactions: { emoji: string; count: number; mine: boolean; names: string[] }[];
   pinned: boolean;
   /** For a poll message: its options, counts and (unless anonymous) who voted. */
   poll: PollView | null;
@@ -97,7 +104,7 @@ const truncate = (text: string) => (text.length > PREVIEW_CHARS ? `${text.slice(
 export async function listMyConversations(): Promise<ConversationSummary[]> {
   const actor = await actorWithAccess();
   const mine = await db
-    .select({ id: conversations.id, kind: conversations.kind, title: conversations.title, posting: conversations.posting, createdAt: conversations.createdAt, mutedUntil: conversationMembers.mutedUntil })
+    .select({ id: conversations.id, kind: conversations.kind, title: conversations.title, posting: conversations.posting, createdAt: conversations.createdAt, photoAttachmentId: conversations.photoAttachmentId, mutedUntil: conversationMembers.mutedUntil })
     .from(conversationMembers)
     .innerJoin(conversations, eq(conversations.id, conversationMembers.conversationId))
     .where(and(eq(conversationMembers.userId, actor.id), isNull(conversationMembers.leftAt), isNull(conversations.archivedAt)))
@@ -117,11 +124,11 @@ export async function listMyConversations(): Promise<ConversationSummary[]> {
     select conversation_id as id, count(*)::int as n from chat.conversation_members
     where left_at is null and ${inIds("conversation_id")} group by conversation_id`)) as unknown as { id: string; n: number }[];
   const latest = (await db.execute(sql`
-    select distinct on (m.conversation_id) m.id, m.conversation_id, m.body_enc, m.created_at
+    select distinct on (m.conversation_id) m.id, m.conversation_id, m.body_enc, m.kind, m.created_at
     from chat.messages m
     join chat.conversation_members cm on cm.conversation_id = m.conversation_id and cm.user_id = ${actor.id}
     where m.deleted_at is null and m.created_at >= cm.joined_at and ${inIds("m.conversation_id")}
-    order by m.conversation_id, m.seq desc`)) as unknown as { id: string; conversation_id: string; body_enc: string; created_at: Date }[];
+    order by m.conversation_id, m.seq desc`)) as unknown as { id: string; conversation_id: string; body_enc: string; kind: ChatMessage["kind"]; created_at: Date }[];
   const revisions = latest.length
     ? ((await db.execute(sql`
         select distinct on (message_id) message_id, id, body_enc from chat.message_revisions
@@ -145,7 +152,9 @@ export async function listMyConversations(): Promise<ConversationSummary[]> {
     let preview: string | null = null;
     if (msg) {
       const rev = revisions.find((r) => r.message_id === msg.id);
-      preview = truncate(rev ? crypto.decrypt(rev.body_enc, revisionContext(msg.id, rev.id)) : crypto.decrypt(msg.body_enc, bodyContext(c.id, msg.id)));
+      const text = (rev ? crypto.decrypt(rev.body_enc, revisionContext(msg.id, rev.id)) : crypto.decrypt(msg.body_enc, bodyContext(c.id, msg.id))).replace(/@\[([^\]\n]{1,80})\]\(user:[0-9a-fA-F-]{36}\)/g, "@$1");
+      // A GIF is stored as its web address and a picture may have no words: show what it is, not the address.
+      preview = msg.kind === "gif" ? "GIF" : msg.kind === "poll" ? truncate(`Poll: ${text}`) : truncate(text || { image: "Photo", file: "File", voice: "Voice note" }[msg.kind as "image" | "file" | "voice"] || "");
     }
     const otherId = otherOf.get(c.id) ?? null;
     const lastAt = msg ? new Date(msg.created_at) : c.createdAt;
@@ -163,14 +172,15 @@ export async function listMyConversations(): Promise<ConversationSummary[]> {
         unread: s?.unread ?? 0,
         mutedUntil: c.mutedUntil && c.mutedUntil.getTime() > Date.now() ? c.mutedUntil.toISOString() : null,
         photoUserId: c.kind === "dm" ? otherId : null,
+        photoAttachmentId: c.photoAttachmentId,
       },
     };
   });
   return rows.sort((a, b) => b.sortAt - a.sortAt).map((r) => r.summary);
 }
 
-type MessageRow = { id: string; seq: number; sender_user_id: string; body_enc: string; kind: ChatMessage["kind"]; created_at: Date; edited_at: Date | null; deleted_at: Date | null; thread_root_id: string | null };
-const MESSAGE_COLUMNS = sql`id, seq::int as seq, sender_user_id, body_enc, kind, created_at, edited_at, deleted_at, thread_root_id`;
+type MessageRow = { id: string; seq: number; sender_user_id: string; body_enc: string; kind: ChatMessage["kind"]; created_at: Date; edited_at: Date | null; deleted_at: Date | null; thread_root_id: string | null; quoted_message_id: string | null };
+const MESSAGE_COLUMNS = sql`id, seq::int as seq, sender_user_id, body_enc, kind, created_at, edited_at, deleted_at, thread_root_id, quoted_message_id`;
 
 /** Succeeds when the person may read the conversation right now (current member, live conversation), or throws the not-found failure. */
 async function requireReader(actorId: string, conversationId: string): Promise<void> {
@@ -199,9 +209,9 @@ async function buildMessages(actorId: string, conversationId: string, page: Mess
     : [];
   const reactionRows = live.length
     ? ((await db.execute(sql`
-        select message_id, emoji, count(*)::int as n, bool_or(user_id = ${actorId}) as mine
+        select message_id, emoji, count(*)::int as n, bool_or(user_id = ${actorId}) as mine, (array_agg(user_id order by created_at))[1:20] as users
         from chat.message_reactions where message_id in (${idList(live)})
-        group by message_id, emoji order by min(created_at)`)) as unknown as { message_id: string; emoji: string; n: number; mine: boolean }[])
+        group by message_id, emoji order by min(created_at)`)) as unknown as { message_id: string; emoji: string; n: number; mine: boolean; users: string[] }[])
     : [];
   const pinRows = live.length
     ? ((await db.execute(sql`select message_id from chat.message_pins where unpinned_at is null and message_id in (${idList(live)})`)) as unknown as { message_id: string }[])
@@ -227,8 +237,18 @@ async function buildMessages(actorId: string, conversationId: string, page: Mess
   const voteRows = pollMessages.length
     ? ((await db.execute(sql`select message_id, option_id, user_id from chat.poll_votes where message_id in (${idList(pollMessages)})`)) as unknown as { message_id: string; option_id: string; user_id: string }[])
     : [];
+  // The messages this page quotes (same conversation, and only from the moment the viewer joined), with their latest edit.
+  const quotedIds = [...new Set(page.map((m) => m.quoted_message_id).filter((id): id is string => !!id))];
+  const quotedRows = quotedIds.length
+    ? ((await db.execute(sql`
+        select m.id, m.sender_user_id, m.body_enc, m.kind, m.deleted_at,
+          (select r.id from chat.message_revisions r where r.message_id = m.id order by r.created_at desc limit 1) as rev_id,
+          (select r.body_enc from chat.message_revisions r where r.message_id = m.id order by r.created_at desc limit 1) as rev_body
+        from chat.messages m
+        where m.conversation_id = ${conversationId} and m.id in (${sql.join(quotedIds.map((id) => sql`${id}`), sql`, `)}) ${windowFor(conversationId, actorId)}`)) as unknown as { id: string; sender_user_id: string; body_enc: string; kind: ChatMessage["kind"]; deleted_at: Date | null; rev_id: string | null; rev_body: string | null }[])
+    : [];
   const memberRows = await db.select({ userId: conversationMembers.userId }).from(conversationMembers).where(eq(conversationMembers.conversationId, conversationId));
-  const people = await peopleByUserId([...memberRows.map((r) => r.userId), ...page.map((m) => m.sender_user_id), ...voteRows.map((v) => v.user_id)]);
+  const people = await peopleByUserId([...memberRows.map((r) => r.userId), ...quotedRows.map((q) => q.sender_user_id), ...page.map((m) => m.sender_user_id), ...voteRows.map((v) => v.user_id), ...reactionRows.flatMap((r) => r.users)]);
   const nameOf = (id: string) => people.get(id)?.name ?? "Someone";
 
   const crypto = fieldCrypto();
@@ -254,6 +274,18 @@ async function buildMessages(actorId: string, conversationId: string, page: Mess
         }),
     };
   };
+  const KIND_LABEL: Partial<Record<ChatMessage["kind"], string>> = { image: "Photo", file: "File", voice: "Voice note", gif: "GIF" };
+  const quoteOf = (id: string | null): ChatQuote | null => {
+    if (!id) return null;
+    const q = quotedRows.find((r) => r.id === id);
+    if (!q) return { id, senderName: "", snippet: "", state: "earlier" };
+    const senderName = nameOf(q.sender_user_id);
+    if (q.deleted_at) return { id, senderName, snippet: "", state: "removed" };
+    const text = q.rev_id && q.rev_body ? crypto.decrypt(q.rev_body, revisionContext(q.id, q.rev_id)) : crypto.decrypt(q.body_enc, bodyContext(conversationId, q.id));
+    const plain = text.replace(/@\[([^\]\n]{1,80})\]\(user:[0-9a-fA-F-]{36}\)/g, "@$1");
+    const snippet = q.kind === "gif" || q.kind === "image" || q.kind === "file" || q.kind === "voice" ? (KIND_LABEL[q.kind] ?? "") + (q.kind !== "gif" && plain ? `: ${truncate(plain)}` : "") : q.kind === "poll" ? `Poll: ${truncate(plain)}` : truncate(plain);
+    return { id, senderName, snippet, state: "ok" };
+  };
   const messages: ChatMessage[] = page.map((m) => {
     let body: string | null = null;
     if (!m.deleted_at) {
@@ -263,6 +295,7 @@ async function buildMessages(actorId: string, conversationId: string, page: Mess
     const replies = replyRows.find((r) => r.id === m.id);
     return {
       id: m.id,
+      quote: quoteOf(m.quoted_message_id),
       seq: m.seq,
       senderUserId: m.sender_user_id,
       senderName: nameOf(m.sender_user_id),
@@ -274,7 +307,7 @@ async function buildMessages(actorId: string, conversationId: string, page: Mess
       threadRootId: m.thread_root_id,
       replyCount: replies?.n ?? 0,
       lastReplyAt: replies ? new Date(replies.last_at).toISOString() : null,
-      reactions: m.deleted_at ? [] : reactionRows.filter((r) => r.message_id === m.id).map((r) => ({ emoji: r.emoji, count: r.n, mine: r.mine })),
+      reactions: m.deleted_at ? [] : reactionRows.filter((r) => r.message_id === m.id).map((r) => ({ emoji: r.emoji, count: r.n, mine: r.mine, names: r.users.map((u) => (u === actorId ? "You" : nameOf(u))) })),
       pinned: pinRows.some((r) => r.message_id === m.id),
       poll: m.kind === "poll" && !m.deleted_at ? pollView(m.id) : null,
       attachments: m.deleted_at
@@ -287,7 +320,7 @@ async function buildMessages(actorId: string, conversationId: string, page: Mess
   return { messages, nameOf };
 }
 
-export async function loadMessages(input: unknown): Promise<{ messages: ChatMessage[]; hasMore: boolean; members: { userId: string; name: string; lastReadSeq: number }[] }> {
+export async function loadMessages(input: unknown): Promise<{ messages: ChatMessage[]; hasMore: boolean; latestSeq: number; members: { userId: string; name: string; lastReadSeq: number }[] }> {
   const actor = await actorWithAccess();
   const parsed = loadMessagesSchema.safeParse(input);
   if (!parsed.success) throw new ActionFailure("Check the request and try again.");
@@ -311,7 +344,9 @@ export async function loadMessages(input: unknown): Promise<{ messages: ChatMess
     .from(conversationMembers)
     .where(and(eq(conversationMembers.conversationId, conversationId), isNull(conversationMembers.leftAt)))
     .orderBy(asc(conversationMembers.joinedAt));
-  return { messages, hasMore, members: memberRows.map((r) => ({ userId: r.userId, name: nameOf(r.userId), lastReadSeq: r.lastReadSeq })) };
+  // The newest message the person can see, replies included (the list above holds top-level messages only). Reading a chat marks it read up to here.
+  const [latest] = (await db.execute(sql`select coalesce(max(seq), 0)::int as n from chat.messages where conversation_id = ${conversationId} ${windowFor(conversationId, actor.id)}`)) as unknown as { n: number }[];
+  return { messages, hasMore, latestSeq: latest?.n ?? 0, members: memberRows.map((r) => ({ userId: r.userId, name: nameOf(r.userId), lastReadSeq: r.lastReadSeq })) };
 }
 
 /** One thread: the message that started it and its replies, oldest first. */
@@ -356,7 +391,7 @@ export async function listPins(input: unknown): Promise<PinnedMessage[]> {
   });
 }
 
-export type ManagedGroup = { id: string; title: string; kind: "group" | "client"; clientId: string | null; clientName: string | null; memberCount: number; createdAt: string; createdByName: string; amMember: boolean };
+export type ManagedGroup = { id: string; title: string; kind: "group" | "client" | "channel"; posting: "everyone" | "admins"; photoAttachmentId: string | null; clientId: string | null; clientName: string | null; memberCount: number; createdAt: string; createdByName: string; amMember: boolean };
 
 /**
  * Every live group, for the people who manage groups (HR Admin, Super Admin): name, size, who made it and whether they are in it.
@@ -366,18 +401,20 @@ export async function listManagedGroups(): Promise<ManagedGroup[]> {
   const actor = await requireUser();
   await authorize(actor, "messages.manage_group");
   const rows = (await db.execute(sql`
-    select c.id, c.title, c.kind, c.client_id, c.created_by, c.created_at, (select name from core.clients cl where cl.id = c.client_id) as client_name,
+    select c.id, c.title, c.kind, c.posting, c.photo_attachment_id, c.client_id, c.created_by, c.created_at, (select name from core.clients cl where cl.id = c.client_id) as client_name,
       (select count(*)::int from chat.conversation_members m where m.conversation_id = c.id and m.left_at is null) as member_count,
       exists (select 1 from chat.conversation_members m where m.conversation_id = c.id and m.user_id = ${actor.id} and m.left_at is null) as am_member
     from chat.conversations c
-    where c.kind in ('group','client') and c.archived_at is null
+    where c.kind in ('group','client','channel') and c.archived_at is null
     order by c.created_at desc
-    limit 500`)) as unknown as { id: string; title: string | null; kind: "group" | "client"; client_id: string | null; client_name: string | null; created_by: string; created_at: Date; member_count: number; am_member: boolean }[];
+    limit 500`)) as unknown as { id: string; title: string | null; kind: "group" | "client" | "channel"; posting: "everyone" | "admins"; photo_attachment_id: string | null; client_id: string | null; client_name: string | null; created_by: string; created_at: Date; member_count: number; am_member: boolean }[];
   const people = await peopleByUserId(rows.map((r) => r.created_by));
   return rows.map((r) => ({
     id: r.id,
     title: r.title ?? "Group",
     kind: r.kind,
+    posting: r.posting,
+    photoAttachmentId: r.photo_attachment_id,
     clientId: r.client_id,
     clientName: r.client_name,
     memberCount: r.member_count,
@@ -396,7 +433,7 @@ export async function loadGroupPeople(input: unknown): Promise<{ userId: string;
   const [group] = await db
     .select({ id: conversations.id })
     .from(conversations)
-    .where(and(eq(conversations.id, parsed.data.conversationId), inArray(conversations.kind, ["group", "client"]), isNull(conversations.archivedAt)))
+    .where(and(eq(conversations.id, parsed.data.conversationId), inArray(conversations.kind, ["group", "client", "channel"]), isNull(conversations.archivedAt)))
     .limit(1);
   if (!group) throw new ActionFailure("Group not found.");
   const rows = await db

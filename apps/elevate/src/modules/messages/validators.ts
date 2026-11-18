@@ -23,7 +23,7 @@ const body = z
 // A message with attachments may have no text (a picture or a voice note on its own).
 const caption = z.string().trim().max(MAX_BODY, `Messages can be up to ${MAX_BODY} characters.`);
 export const sendMessageSchema = z
-  .object({ conversationId: id, body: caption, threadRootId: id.optional(), attachmentIds: z.array(id).max(5).optional() })
+  .object({ conversationId: id, body: caption, threadRootId: id.optional(), quotedMessageId: id.optional(), attachmentIds: z.array(id).max(5).optional() })
   .refine((m) => m.body.length > 0 || (m.attachmentIds?.length ?? 0) > 0, { message: "Write a message first.", path: ["body"] });
 export const editMessageSchema = z.object({ messageId: id, body });
 export const deleteMessageSchema = z.object({ messageId: id });
@@ -98,6 +98,16 @@ export const createClientGroupSchema = z.object({
 
 export const searchGifsSchema = z.object({ q: z.string().trim().min(1).max(60) });
 export const sendGifSchema = z.object({ conversationId: id, url: z.string().max(600), threadRootId: id.optional() });
+
+export const createChannelSchema = z.object({
+  title: z.string().trim().min(1, "Give the channel a name.").max(MAX_TITLE),
+  memberUserIds: z.array(id).min(1, "Add at least one other person.").max(MAX_GROUP - 1, `A channel can have up to ${MAX_GROUP} people.`).refine((ids) => new Set(ids).size === ids.length, "Each person can be added once."),
+  postingAdminsOnly: z.boolean(),
+});
+export const setChannelPostingSchema = z.object({ conversationId: id, posting: z.enum(["everyone", "admins"]) });
+
+export const requestPhotoUploadSchema = z.object({ conversationId: id, fileName: z.string().min(1).max(200), size: z.number().int().min(1), mime: z.string().min(1).max(100) });
+export const setPhotoSchema = z.object({ conversationId: id, attachmentId: id.nullable() });
 
 export const muteSchema = z.object({ conversationId: id, until: z.enum(["1h", "8h", "forever", "off"]) });
 export const chatSettingsSchema = z.object({ appearOffline: z.boolean(), emailDigest: z.boolean(), sound: z.enum(CHAT_SOUNDS) });

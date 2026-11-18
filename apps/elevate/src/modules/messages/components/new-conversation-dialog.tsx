@@ -1,13 +1,13 @@
 "use client";
 
-import { SquarePen, Users } from "lucide-react";
+import { Hash, SquarePen, Users } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "@/components/feedback-dialog";
 import { FormDialog, useFormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { addGroupMembers, createGroupConversation, openDirectMessage } from "../actions";
+import { addGroupMembers, createChannelConversation, createGroupConversation, openDirectMessage } from "../actions";
 import { MAX_ADD_AT_ONCE, MAX_GROUP, MAX_TITLE, MIN_GROUP } from "../validators";
 import { PeoplePicker, type ChatPerson } from "./people-picker";
 
@@ -36,11 +36,21 @@ export function NewGroupDialog({ onOpened }: { onOpened: (conversationId: string
   );
 }
 
-function NewConversationForm({ onOpened, canCreateGroup, groupOnly = false }: { onOpened: (conversationId: string) => void; canCreateGroup: boolean; groupOnly?: boolean }) {
+/** "New channel" button on the manage page (HR Admin and Super Admin): a named channel with chosen people, optionally only HR posts. */
+export function NewChannelDialog({ onOpened }: { onOpened: (conversationId: string) => void }) {
+  return (
+    <FormDialog label="New channel" title="New channel" description="A named channel for announcements or a topic. You choose who is in it. Up to 200 people." size="md" variant="outline" icon={<Hash aria-hidden />}>
+      <NewConversationForm onOpened={onOpened} canCreateGroup groupOnly channel />
+    </FormDialog>
+  );
+}
+
+function NewConversationForm({ onOpened, canCreateGroup, groupOnly = false, channel = false }: { onOpened: (conversationId: string) => void; canCreateGroup: boolean; groupOnly?: boolean; channel?: boolean }) {
   const dialog = useFormDialog();
   const [mode, setMode] = useState<"dm" | "group">(groupOnly ? "group" : "dm");
   const [selected, setSelected] = useState<ChatPerson[]>([]);
   const [title, setTitle] = useState("");
+  const [onlyHrPosts, setOnlyHrPosts] = useState(false);
   const [pending, startTransition] = useTransition();
   const limit = MAX_GROUP - 1; // the creator makes it 200 in total
 
@@ -65,14 +75,16 @@ function NewConversationForm({ onOpened, canCreateGroup, groupOnly = false }: { 
     setSelected((current) => (next === "dm" ? current.slice(0, 1) : current));
   }
 
-  const ready = mode === "dm" ? selected.length === 1 : selected.length >= MIN_GROUP - 1 && title.trim().length > 0;
+  const ready = mode === "dm" ? selected.length === 1 : selected.length >= (channel ? 1 : MIN_GROUP - 1) && title.trim().length > 0;
 
   function submit() {
     startTransition(async () => {
       const result =
         mode === "dm"
           ? await openDirectMessage({ userId: selected[0].userId })
-          : await createGroupConversation({ title, memberUserIds: selected.map((p) => p.userId) });
+          : channel
+            ? await createChannelConversation({ title, memberUserIds: selected.map((p) => p.userId), postingAdminsOnly: onlyHrPosts })
+            : await createGroupConversation({ title, memberUserIds: selected.map((p) => p.userId) });
       if (!result.ok) return void toast.error(result.error);
       await dialog?.close(true);
       onOpened(result.data.conversationId);
@@ -99,18 +111,23 @@ function NewConversationForm({ onOpened, canCreateGroup, groupOnly = false }: { 
       {mode === "group" ? (
         <div className="flex flex-col gap-1.5">
           <label htmlFor="chat-group-title" className="text-sm font-medium">
-            Group name
+            {channel ? "Channel name" : "Group name"}
           </label>
-          <Input id="chat-group-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={MAX_TITLE} placeholder="For example, Cutoff check crew" />
+          <Input id="chat-group-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={MAX_TITLE} placeholder={channel ? "For example, Announcements" : "For example, Cutoff check crew"} />
+          {channel ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4" checked={onlyHrPosts} onChange={(e) => setOnlyHrPosts(e.target.checked)} /> Only HR can post (everyone can still reply and react)
+            </label>
+          ) : null}
           <p className="text-xs text-muted-foreground">
-            Pick at least {MIN_GROUP - 1} other people, up to {limit}. {selected.length >= limit ? "That is the most a group can hold." : ""}
+            Pick at least {channel ? 1 : MIN_GROUP - 1} other {channel ? "person" : "people"}, up to {limit}. {selected.length >= limit ? "That is the most a group can hold." : ""}
           </p>
         </div>
       ) : null}
       <PeoplePicker selected={selected} onToggle={toggle} onAddAll={mode === "group" ? addAll : undefined} />
       <div className="flex justify-end">
         <Button type="submit" disabled={!ready || pending}>
-          {mode === "dm" ? "Open chat" : "Create group"}
+          {mode === "dm" ? "Open chat" : channel ? "Create channel" : "Create group"}
         </Button>
       </div>
     </form>
