@@ -14,6 +14,8 @@ export const users = core
       isSafevoiceHandler: boolean("is_safevoice_handler").notNull().default(false),
       // The Privacy Officer reads and handles privacy incident reports together with HR; named individually by Super Admin or HR.
       isPrivacyOfficer: boolean("is_privacy_officer").notNull().default(false),
+      // May record calls (with everyone's consent, never with clients): picked individually by a Super Admin; a role never grants it. Never true for a guest.
+      canRecordCalls: boolean("can_record_calls").notNull().default(false),
       // Payroll access is chosen individually by a Super Admin (preparer, approver or viewer); no role grants it. Read fresh on every request.
       payrollAccess: text("payroll_access"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

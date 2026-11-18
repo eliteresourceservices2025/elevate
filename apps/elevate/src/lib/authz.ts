@@ -12,6 +12,7 @@ import { incidentsPermissions } from "@/modules/incidents/permissions";
 import { healthPermissions } from "@/modules/health/permissions";
 import { jibblePermissions } from "@/modules/jibble/permissions";
 import { messagesPermissions } from "@/modules/messages/permissions";
+import { callsPermissions } from "@/modules/calls/permissions";
 import { notificationsPermissions } from "@/modules/notifications/permissions";
 import { offersPermissions } from "@/modules/offers/permissions";
 import { onboardingPermissions } from "@/modules/onboarding/permissions";
@@ -41,6 +42,7 @@ export const PERMISSIONS = {
   ...announcementsPermissions,
   ...notificationsPermissions,
   ...messagesPermissions,
+  ...callsPermissions,
   ...privacyPermissions,
   ...timeoffPermissions,
   ...attendancePermissions,
@@ -77,6 +79,8 @@ export type AuthzUser = {
   payrollAccess?: PayrollLevel | null;
   /** Named individually (privacy incident inbox); a role never grants it. */
   isPrivacyOfficer?: boolean;
+  /** Picked by a Super Admin to record calls (never a guest); a role never grants it. */
+  canRecordCalls?: boolean;
   /** A client guest: no roles, Messages only (see requireUser). */
   isGuest?: boolean;
 };
@@ -114,6 +118,11 @@ function grantedScopes(user: AuthzUser, rule: PermissionRule): Scope[] {
 
   if (rule.requiresFlag === "safevoice_handler") {
     if (user.isSafevoiceHandler && rule.flagScope) scopes.push(rule.flagScope);
+    return scopes;
+  }
+
+  if (rule.requiresFlag === "call_recorder") {
+    if (user.canRecordCalls && rule.flagScope) scopes.push(rule.flagScope);
     return scopes;
   }
 

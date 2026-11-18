@@ -1114,6 +1114,13 @@
       "when": 1794985842917,
       "tag": "0158_chat_photo_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "7",
+      "when": 1794991606301,
+      "tag": "0159_calls_foundation",
+      "breakpoints": true
     }
   ]
 }
