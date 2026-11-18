@@ -8,8 +8,9 @@ import { broadcastChatSignal } from "./realtime";
 import { conversationMembers, conversations } from "./schema";
 
 // Automatic channels: one per team, one per department and one for the whole company, kept in step with ELEVATE's organization.
-// Nobody creates, renames or deletes them and nobody edits who is in them (the group functions only touch kind = 'group'): the
-// organization decides. Run by a daily job, after a reporting change for the person concerned, and on demand by HR.
+// The organization decides their names and people. HR Admin and Super Admin may still rename one, change who is in it, set who posts, give
+// it a picture or remove it; renaming or changing the people marks it hr_managed, and the sync then leaves that channel's name and people
+// alone (it never un-removes a channel either). Run by a daily job, after a reporting change for the person concerned, and on demand by HR.
 
 type Tx = Pick<typeof db, "select" | "insert" | "update" | "execute">;
 
@@ -53,11 +54,11 @@ async function systemCreator(tx: Tx): Promise<string | null> {
   return row?.id ?? null;
 }
 
-type Existing = { id: string; kind: string; teamId: string | null; departmentId: string | null; title: string | null; archivedAt: Date | null };
+type Existing = { id: string; kind: string; teamId: string | null; departmentId: string | null; title: string | null; archivedAt: Date | null; hrManaged: boolean };
 
 async function existingChannels(tx: Tx): Promise<Existing[]> {
   return tx
-    .select({ id: conversations.id, kind: conversations.kind, teamId: conversations.teamId, departmentId: conversations.departmentId, title: conversations.title, archivedAt: conversations.archivedAt })
+    .select({ id: conversations.id, kind: conversations.kind, teamId: conversations.teamId, departmentId: conversations.departmentId, title: conversations.title, archivedAt: conversations.archivedAt, hrManaged: conversations.hrManaged })
     .from(conversations)
     .where(inArray(conversations.kind, ["team", "department", "company"]));
 }
@@ -96,7 +97,7 @@ async function ensureChannel(tx: Tx, d: Desired, existing: Existing | undefined,
       result.archived += 1;
       return null;
     }
-    if (!d.archived && existing.title !== d.title) await tx.update(conversations).set({ title: d.title }).where(eq(conversations.id, existing.id));
+    if (!d.archived && !existing.hrManaged && existing.title !== d.title) await tx.update(conversations).set({ title: d.title }).where(eq(conversations.id, existing.id));
     return existing.archivedAt ? null : existing.id;
   }
   if (d.archived || !creator) return null; // nothing to create, or nobody yet to record as the creator
@@ -122,7 +123,8 @@ export async function syncChannels(): Promise<SyncResult & { skipped?: string }>
     for (const d of desired) {
       const found = existing.get(d.key);
       const id = await ensureChannel(tx, d, found, creator, result);
-      if (id) await syncMembers(tx, id, d.members, result, touched);
+      // A channel HR changed by hand keeps the people HR chose.
+      if (id && !found?.hrManaged) await syncMembers(tx, id, d.members, result, touched);
     }
     return undefined;
   });
@@ -151,14 +153,15 @@ export async function syncEmployeeChannels(userId: string): Promise<void> {
     const byKey = new Map(channels.map((c) => [keyOf(c), c]));
     // Create what the person needs and put them in it.
     for (const d of desired) {
-      const id = await ensureChannel(tx, d, byKey.get(d.key), creator, result);
-      if (!id) continue;
+      const found = byKey.get(d.key);
+      const id = await ensureChannel(tx, d, found, creator, result);
+      if (!id || found?.hrManaged) continue;
       const [already] = await tx.select({ userId: conversationMembers.userId }).from(conversationMembers).where(and(eq(conversationMembers.conversationId, id), eq(conversationMembers.userId, userId), isNull(conversationMembers.leftAt)));
       if (!already) await syncMembers(tx, id, new Set([...(await currentIds(tx, id)), userId]), result, touched);
     }
     // Take them out of channels they no longer belong to.
     for (const c of channels) {
-      if (c.archivedAt || wantedKeys.has(keyOf(c))) continue;
+      if (c.archivedAt || c.hrManaged || wantedKeys.has(keyOf(c))) continue;
       const have = await currentIds(tx, c.id);
       if (have.has(userId)) await syncMembers(tx, c.id, new Set([...have].filter((u) => u !== userId)), result, touched);
     }
