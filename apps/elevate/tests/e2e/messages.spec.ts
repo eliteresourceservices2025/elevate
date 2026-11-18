@@ -723,3 +723,56 @@ test("HR makes a channel, sets who can post, gives it a picture, and a member se
   const status = await pageE.evaluate(async (src) => (await fetch(src)).status, (await photo.getAttribute("src")) ?? "");
   expect(status).toBe(200);
 });
+
+test("HR can rename and remove an automatic team channel; members see the new name and the channel goes away", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const stamp = Date.now();
+  const hr = await createHrAccount();
+  const a = await createEmployeeAccount("Ana", `Auto${stamp}a`);
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  const teamName = `Auto team ${stamp}`;
+  try {
+    const [dept] = await sql<{ id: string }[]>`insert into core.departments (name) values (${`Auto dept ${stamp}`}) returning id`;
+    const [team] = await sql<{ id: string }[]>`insert into core.teams (department_id, name) values (${dept.id}, ${teamName}) returning id`;
+    await sql`update core.employees set team_id = ${team.id} where id = ${a.employeeId}`;
+  } finally {
+    await sql.end();
+  }
+  const pageH = await (await browser.newContext()).newPage();
+  const pageA = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageH, hr);
+  await signInEnrollingMfa(pageA, a);
+
+  await pageH.goto("/messages/manage");
+  await (await hydrated(pageH.getByRole("button", { name: "Update channels now" }))).click();
+  await expect(pageH.getByText(/Channels updated/)).toBeVisible({ timeout: 45_000 });
+  await pageH.reload();
+
+  // It is listed as an automatic channel, with the note about what changing it does.
+  const row = pageH.getByRole("row").filter({ hasText: teamName });
+  await expect(row).toContainText("Team channel · automatic");
+  await row.getByRole("button", { name: "Manage" }).click();
+  await expect(pageH.getByText(/follows the organization: its name and people update by themselves/)).toBeVisible();
+
+  // Rename it.
+  const newName = `Renamed by HR ${stamp}`;
+  await pageH.getByRole("button", { name: "Rename", exact: true }).click();
+  const dialog = pageH.getByRole("dialog");
+  await dialog.getByRole("textbox").fill(newName);
+  await dialog.getByRole("button", { name: "Save name" }).click();
+  await expect(pageH.getByRole("row").filter({ hasText: newName })).toContainText("managed by HR", { timeout: 20_000 });
+
+  // The member sees the new name.
+  await pageA.goto("/messages");
+  await expect(pageA.getByRole("button", { name: new RegExp(newName) })).toBeVisible({ timeout: 30_000 });
+
+  // Remove it: it disappears for the member and stays gone after the sync runs again.
+  await pageH.getByRole("button", { name: "Delete group" }).click();
+  await pageH.getByRole("alertdialog").getByRole("button", { name: "Delete group" }).click();
+  await expect(pageH.getByRole("row").filter({ hasText: newName })).toHaveCount(0, { timeout: 20_000 });
+  await (await hydrated(pageH.getByRole("button", { name: "Update channels now" }))).click();
+  await expect(pageH.getByText(/Channels updated/).first()).toBeVisible({ timeout: 45_000 });
+  await pageA.reload();
+  await expect(pageA.getByRole("button", { name: new RegExp(newName) })).toHaveCount(0);
+  await expect(pageA.getByRole("button", { name: new RegExp(teamName) })).toHaveCount(0);
+});

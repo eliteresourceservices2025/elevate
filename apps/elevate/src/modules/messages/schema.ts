@@ -27,6 +27,8 @@ export const conversations = chat
       clientId: uuid("client_id").references(() => clients.id),
       /** The picture of a group, channel or client group: an uploaded chat image (kept unlinked from any message). */
       photoAttachmentId: uuid("photo_attachment_id").references((): AnyPgColumn => messageAttachments.id),
+      /** HR changed an automatic (team, department or company) channel by hand: the daily sync then leaves its name and people alone. */
+      hrManaged: boolean("hr_managed").notNull().default(false),
       /** 'admins': only HR Admins and Super Admins post root messages here (the company channel); replies and reactions stay open. */
       posting: text("posting").notNull().default("everyone"),
       /** A group's name (plain text, shown to its members). Null for a direct message. */

@@ -122,8 +122,8 @@ describe("syncChannels", () => {
   });
 });
 
-describe("channels are system-managed", () => {
-  it("nobody can rename, delete or change the people of a channel through the group functions", async () => {
+describe("channels follow the organization until HR takes them over", () => {
+  it("HR (the group functions are for HR only, checked by the action) can rename, change the people of and remove one; nobody else is even offered the functions", async () => {
     const admin = await makeAdmin();
     const dept = await makeDepartment("Care");
     const t1 = await makeTeam(dept, "Care team");
@@ -131,10 +131,13 @@ describe("channels are system-managed", () => {
     const other = await makeEmployee("o", null);
     await channels.syncChannels();
     const ch = await channelOf("team_id", t1);
-    await expect(service.renameGroup(admin, { conversationId: ch.id, title: "Mine now" })).rejects.toThrow("Group not found.");
-    await expect(service.deleteGroup(admin, ch.id)).rejects.toThrow("Group not found.");
-    await expect(service.addMembers(admin, ch.id, [other.id])).rejects.toThrow("Group not found.");
-    await expect(service.removeMember(admin, { conversationId: ch.id, userId: member.id })).rejects.toThrow("Group not found.");
+    await service.renameGroup(admin, { conversationId: ch.id, title: "Mine now" });
+    await service.addMembers(admin, ch.id, [other.id]);
+    await service.removeMember(admin, { conversationId: ch.id, userId: member.id });
+    expect(await memberIds(ch.id)).toContain(other.id);
+    expect(await memberIds(ch.id)).not.toContain(member.id);
+    await service.deleteGroup(admin, ch.id);
+    await expect(service.renameGroup(admin, { conversationId: ch.id, title: "Again" })).rejects.toThrow("Group not found.");
   });
 
   it("only HR may post a root message in the company channel; replies and reactions stay open to everyone", async () => {
@@ -151,5 +154,71 @@ describe("channels are system-managed", () => {
     const row = list.find((c) => c.id === company.id)!;
     expect(row).toMatchObject({ kind: "company", posting: "admins" });
     expect(row.title).toBe("Everyone at ERS");
+  });
+});
+
+describe("HR managing the automatic channels", () => {
+  it("a rename and a people change stick through later syncs, and the channel stops following the organization for those two things", async () => {
+    const hr = await makeAdmin();
+    const dept = await makeDepartment("Billing");
+    const team = await makeTeam(dept, "Cutoff");
+    const a = await makeEmployee("a", team);
+    const b = await makeEmployee("b", team);
+    await channels.syncChannels();
+    const channel = await channelOf("team_id", team);
+    const before = await rows<{ title: string; hr_managed: boolean }>(sql`select title, hr_managed from chat.conversations where id = ${channel.id}`);
+    expect(before[0].hr_managed).toBe(false);
+
+    await service.renameGroup(hr, { conversationId: channel.id, title: "Cutoff crew (renamed by HR)" });
+    // The organization renames the team: an automatic channel would follow, a managed one does not.
+    await db.execute(sql`update core.teams set name = ${`Renamed team ${uniq("n")}`} where id = ${team}`);
+    await channels.syncChannels();
+    const after = await rows<{ title: string; hr_managed: boolean }>(sql`select title, hr_managed from chat.conversations where id = ${channel.id}`);
+    expect(after[0]).toEqual({ title: "Cutoff crew (renamed by HR)", hr_managed: true });
+
+    // HR takes one person out: the next sync (and a team-change sync for that person) does not put them back or move others.
+    await service.removeMember(hr, { conversationId: channel.id, userId: b.id });
+    const c = await makeEmployee("c", team);
+    await channels.syncChannels();
+    await channels.syncEmployeeChannels(c.id);
+    const people = await memberIds(channel.id);
+    expect(people).toContain(a.id);
+    expect(people).not.toContain(b.id);
+    expect(people).not.toContain(c.id); // new team members are no longer added automatically; HR adds them
+    await service.addMembers(hr, channel.id, [c.id]);
+    expect(await memberIds(channel.id)).toContain(c.id);
+  });
+
+  it("a picture or who-can-post change does not take the channel over, and removing one is permanent", async () => {
+    const hr = await makeAdmin();
+    const dept = await makeDepartment("Ops");
+    const team = await makeTeam(dept, "Nights");
+    const a = await makeEmployee("a", team);
+    await channels.syncChannels();
+    const channel = await channelOf("team_id", team);
+    await service.setChannelPosting(hr, { conversationId: channel.id, posting: "admins" });
+    const state = await rows<{ posting: string; hr_managed: boolean }>(sql`select posting, hr_managed from chat.conversations where id = ${channel.id}`);
+    expect(state[0]).toEqual({ posting: "admins", hr_managed: false });
+
+    await service.deleteGroup(hr, channel.id);
+    await channels.syncChannels();
+    await channels.syncEmployeeChannels(a.id);
+    const gone = await rows<{ archived_at: string | null }>(sql`select archived_at from chat.conversations where team_id = ${team}`);
+    expect(gone).toHaveLength(1); // not recreated
+    expect(gone[0].archived_at).not.toBeNull(); // not brought back
+    as(a);
+    expect((await queries.listMyConversations()).some((c) => c.id === channel.id)).toBe(false);
+  });
+
+  it("HR sees the automatic channels in the list of groups to manage, and the company channel's posting rule can be changed", async () => {
+    const hr = await makeAdmin();
+    await channels.syncChannels();
+    const company = await companyChannel();
+    as(hr);
+    const managed = await queries.listManagedGroups();
+    expect(managed.some((g) => g.id === company.id && g.kind === "company")).toBe(true);
+    await service.setChannelPosting(hr, { conversationId: company.id, posting: "everyone" });
+    expect((await companyChannel()).posting).toBe("everyone");
+    await service.setChannelPosting(hr, { conversationId: company.id, posting: "admins" }); // put it back for other tests
   });
 });
