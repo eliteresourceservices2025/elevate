@@ -1,10 +1,10 @@
 "use client";
 
-import { ArrowLeft, MessageSquareReply, Pencil, Pin, PinOff, Trash2, Users } from "lucide-react";
+import { ArrowLeft, MessageSquareReply, Pencil, Pin, PinOff, Quote, Trash2, Users } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import { toast } from "@/components/feedback-dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatInZone } from "@/lib/time";
@@ -23,6 +23,15 @@ import { PollCard } from "./poll-card";
 export type ThreadMember = { userId: string; name: string; lastReadSeq: number };
 
 const GROUP_GAP_MS = 5 * 60_000;
+const QUOTE_LABELS: Partial<Record<ChatMessage["kind"], string>> = { image: "Photo", file: "File", voice: "Voice note", gif: "GIF", poll: "Poll" };
+/** The short text shown when quoting a message: its words (mentions as plain @names), or what kind of message it is. */
+function quoteSnippet(m: ChatMessage): string {
+  const text = (m.body ?? "").replace(/@\[([^\]\n]{1,80})\]\(user:[0-9a-fA-F-]{36}\)/g, "@$1").trim();
+  const label = QUOTE_LABELS[m.kind];
+  const joined = label && m.kind !== "gif" && text ? `${label}: ${text}` : (label ?? text);
+  return joined.length > 140 ? `${joined.slice(0, 139)}…` : joined;
+}
+
 const initials = (name: string) =>
   name
     .split(/\s+/)
@@ -94,6 +103,10 @@ export function Thread({
   }, [conversation.kind, members, myUserId]);
   const lastOwnSeq = useMemo(() => [...messages].reverse().find((m) => m.senderUserId === myUserId && !m.deleted && m.kind === "text")?.seq ?? null, [messages, myUserId]);
   const mentionable = useMemo(() => members.filter((m) => m.userId !== myUserId), [members, myUserId]);
+  // The message the person is replying to with a quote (shown above the box until sent or cleared).
+  const [quotingRaw, setQuoting] = useState<{ conversationId: string; id: string; senderName: string; snippet: string } | null>(null);
+  // A quote belongs to the chat it was made in: opening another chat shows no quote.
+  const quoting = quotingRaw && quotingRaw.conversationId === conversation.id ? quotingRaw : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -104,7 +117,7 @@ export function Thread({
         <ConversationAvatar conversation={conversation} />
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-heading text-base font-semibold">{conversation.title}</h2>
-          <p className="truncate text-xs text-muted-foreground">{onlineCount > 0 ? <span className="mr-1.5 inline-block size-2 rounded-full bg-success align-middle" aria-hidden /> : null}{onlineCount > 0 ? `${onlineCount} online · ` : ""}{conversation.kind === "dm" ? "Direct message" : conversation.kind === "group" ? `${conversation.memberCount} people` : conversation.kind === "client" ? `Client group · ${conversation.memberCount} people` : `${conversation.kind === "company" ? "Company" : conversation.kind === "team" ? "Team" : "Department"} channel · ${conversation.memberCount} people`}</p>
+          <p className="truncate text-xs text-muted-foreground">{onlineCount > 0 ? <span className="mr-1.5 inline-block size-2 rounded-full bg-success align-middle" aria-hidden /> : null}{onlineCount > 0 ? `${onlineCount} online · ` : ""}{conversation.kind === "dm" ? "Direct message" : conversation.kind === "group" ? `${conversation.memberCount} people` : conversation.kind === "client" ? `Client group · ${conversation.memberCount} people` : conversation.kind === "channel" ? `Channel · ${conversation.memberCount} people${conversation.posting === "admins" ? " · only HR posts" : ""}` : `${conversation.kind === "company" ? "Company" : conversation.kind === "team" ? "Team" : "Department"} channel · ${conversation.memberCount} people`}</p>
         </div>
         <MuteDialog conversationId={conversation.id} muted={!!conversation.mutedUntil} onDone={onMuted} />
         <Button type="button" variant="outline" size="sm" onClick={onToggleDetails} aria-label="Show people in this chat">
@@ -161,12 +174,13 @@ export function Thread({
               status={m.seq === lastOwnSeq && otherRead !== null ? (otherRead >= m.seq ? "Seen" : "Sent") : null}
               onChanged={onChanged}
               onOpenThread={onOpenThread}
+              onQuote={(msg) => setQuoting({ conversationId: conversation.id, id: msg.id, senderName: msg.senderName, snippet: quoteSnippet(msg) })}
             />
           ))}
         </div>
       </div>
 
-      <Composer conversationId={conversation.id} label={conversation.title} onSent={onChanged} members={mentionable} restricted={restricted} />
+      <Composer conversationId={conversation.id} label={conversation.title} onSent={onChanged} members={mentionable} restricted={restricted} quote={quoting} onClearQuote={() => setQuoting(null)} />
     </div>
   );
 }
@@ -182,6 +196,7 @@ export function MessageRow({
   inThread = false,
   onChanged,
   onOpenThread,
+  onQuote,
 }: {
   message: ChatMessage;
   previous: ChatMessage | null;
@@ -192,6 +207,7 @@ export function MessageRow({
   inThread?: boolean;
   onChanged: () => void;
   onOpenThread?: (rootId: string) => void;
+  onQuote?: (message: ChatMessage) => void;
 }) {
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
@@ -241,8 +257,9 @@ export function MessageRow({
       ) : (
         <div className={cn("group flex gap-2", grouped ? "mt-0.5" : "mt-3", mine ? "flex-row-reverse" : "flex-row")}>
           <div className="w-8 shrink-0">
-            {!grouped && !mine ? (
+            {!grouped ? (
               <Avatar size="sm">
+                <AvatarImage src={`/api/profile-photo/${m.senderUserId}`} alt="" />
                 <AvatarFallback className="bg-secondary text-[0.65rem] font-semibold text-secondary-foreground">{initials(m.senderName)}</AvatarFallback>
               </Avatar>
             ) : null}
@@ -280,6 +297,11 @@ export function MessageRow({
                         <MessageSquareReply aria-hidden />
                       </Button>
                     ) : null}
+                    {!inThread && onQuote ? (
+                      <Button type="button" variant="ghost" size="icon-sm" aria-label="Quote message" onClick={() => onQuote(m)}>
+                        <Quote aria-hidden />
+                      </Button>
+                    ) : null}
                     <Button type="button" variant="ghost" size="icon-sm" aria-label={m.pinned ? "Unpin message" : "Pin message"} onClick={() => run(() => (m.pinned ? unpinChatMessage({ messageId: m.id }) : pinChatMessage({ messageId: m.id })))} disabled={pending}>
                       {m.pinned ? <PinOff aria-hidden /> : <Pin aria-hidden />}
                     </Button>
@@ -304,6 +326,18 @@ export function MessageRow({
                   <PollCard messageId={m.id} question={m.body ?? ""} poll={m.poll} onChanged={onChanged} />
                 ) : (
                   <div className={cn("flex flex-col gap-1.5", mine ? "items-end" : "items-start")}>
+                    {m.quote ? (
+                      <div className="max-w-full rounded-lg border-l-4 border-primary/60 bg-muted px-2.5 py-1 text-xs" aria-label="Quoted message">
+                        {m.quote.state === "ok" ? (
+                          <>
+                            <span className="block font-semibold">{m.quote.senderName}</span>
+                            <span className="line-clamp-2 break-words text-muted-foreground">{m.quote.snippet}</span>
+                          </>
+                        ) : (
+                          <span className="italic text-muted-foreground">{m.quote.state === "removed" ? "The quoted message was removed" : "A message from before you joined"}</span>
+                        )}
+                      </div>
+                    ) : null}
                     <AttachmentList attachments={m.attachments} />
                     {m.body ? (
                       <p className={cn("rounded-2xl px-3 py-1.5 text-sm break-words whitespace-pre-wrap", mine ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border bg-card")}>
@@ -317,16 +351,22 @@ export function MessageRow({
             {m.reactions.length > 0 ? (
               <div className="flex flex-wrap gap-1" aria-label="Reactions">
                 {m.reactions.map((r) => (
-                  <button
-                    key={r.emoji}
-                    type="button"
-                    onClick={() => react(r.emoji)}
-                    aria-pressed={r.mine}
-                    aria-label={`${r.emoji} ${r.count}, ${r.mine ? "remove your reaction" : "add your reaction"}`}
-                    className={cn("rounded-full border px-2 py-0.5 text-xs", r.mine ? "border-primary bg-secondary font-semibold" : "bg-card hover:bg-muted")}
-                  >
-                    {r.emoji} {r.count}
-                  </button>
+                  <span key={r.emoji} className="group/react relative inline-flex">
+                    <button
+                      type="button"
+                      onClick={() => react(r.emoji)}
+                      aria-pressed={r.mine}
+                      aria-label={`${r.emoji} ${r.count}, ${r.mine ? "remove your reaction" : "add your reaction"}`}
+                      className={cn("rounded-full border px-2 py-0.5 text-xs", r.mine ? "border-primary bg-secondary font-semibold" : "bg-card hover:bg-muted")}
+                    >
+                      {r.emoji} {r.count}
+                    </button>
+                    {/* Who reacted: shown on hover or keyboard focus. */}
+                    <span role="tooltip" className="pointer-events-none absolute bottom-full left-0 z-30 mb-1 hidden w-max max-w-56 rounded-lg border bg-popover px-2.5 py-1.5 text-xs shadow-lg group-focus-within/react:block group-hover/react:block">
+                      <span className="block font-semibold">{r.emoji} {r.count === 1 ? "1 person" : `${r.count} people`}</span>
+                      <span className="block text-muted-foreground">{r.names.slice(0, 12).join(", ")}{r.count > Math.min(r.names.length, 12) ? ` and ${r.count - Math.min(r.names.length, 12)} more` : ""}</span>
+                    </span>
+                  </span>
                 ))}
               </div>
             ) : null}

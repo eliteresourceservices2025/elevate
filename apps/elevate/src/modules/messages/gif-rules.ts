@@ -1,10 +1,17 @@
 // Pure rules for GIFs, shared by the server code and its tests (no network, no secrets).
 
+export type GifProvider = "klipy" | "giphy";
 export type GifResult = { id: string; title: string; url: string; previewUrl: string; width: number; height: number };
+/** What the picker receives: each address comes with a signature from our server, required to preview or send it. */
+export type SignedGif = GifResult & { sig: string; previewSig: string };
 
-const HOST_SUFFIXES = ["klipy.com", "klipy.co"];
+/**
+ * Only these exact media hosts are ever fetched (never a whole domain, which would include support and developer sites): KLIPY's media host
+ * and GIPHY's media hosts (media.giphy.com, media0 to media4, i.giphy.com).
+ */
+const ALLOWED_HOSTS: ReadonlySet<string> = new Set(["static.klipy.com", "media.giphy.com", "media0.giphy.com", "media1.giphy.com", "media2.giphy.com", "media3.giphy.com", "media4.giphy.com", "i.giphy.com"]);
 
-/** https only, a KLIPY host (the host itself or a subdomain), no credentials, no odd ports. The only URLs we will ever fetch. */
+/** https only, an allowed GIF media host, no credentials, no odd ports. The only URLs we will ever fetch. */
 export function isAllowedGifUrl(value: unknown): value is string {
   if (typeof value !== "string" || value.length > 600) return false;
   let u: URL;
@@ -14,7 +21,19 @@ export function isAllowedGifUrl(value: unknown): value is string {
     return false;
   }
   if (u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443")) return false;
-  return HOST_SUFFIXES.some((s) => u.hostname === s || u.hostname.endsWith(`.${s}`));
+  return ALLOWED_HOSTS.has(u.hostname);
+}
+
+/** The attribution line each provider requires next to its GIFs. */
+export const GIF_ATTRIBUTION: Record<GifProvider, string> = { klipy: "Powered by KLIPY", giphy: "Powered by GIPHY" };
+
+/** Which provider to use: GIF_PROVIDER when it names one that has a key, otherwise the first one with a key (KLIPY first). */
+export function chooseGifProvider(env: { GIF_PROVIDER?: string; KLIPY_API_KEY?: string; GIPHY_API_KEY?: string }): GifProvider | null {
+  const has = (p: GifProvider) => Boolean(p === "klipy" ? env.KLIPY_API_KEY : env.GIPHY_API_KEY);
+  const wanted = env.GIF_PROVIDER?.trim().toLowerCase();
+  if ((wanted === "klipy" || wanted === "giphy") && has(wanted)) return wanted;
+  if (wanted === "off") return null;
+  return has("klipy") ? "klipy" : has("giphy") ? "giphy" : null;
 }
 
 type Found = { path: string; url: string; width: number; height: number };
@@ -33,14 +52,8 @@ function collect(node: unknown, path: string, out: Found[], depth = 0): void {
 const isImage = (f: Found) => /\.(gif|webp)(\?|$)/i.test(f.url) || /gif|webp/i.test(f.path);
 const score = (f: Found, wanted: RegExp) => (wanted.test(f.path) ? 2 : 0) + (/gif/i.test(f.path) || /\.gif(\?|$)/i.test(f.url) ? 1 : 0);
 
-/**
- * Turns KLIPY's search answer into a short list of GIFs we can show: a medium-size file to send and a small one to preview.
- * Tolerant of the exact nesting (results under data.data, data or results; media under files/file/media_formats); anything that is
- * not an allowed https KLIPY image is dropped, so a surprise in the answer shows nothing rather than something unsafe.
- */
-export function parseGifResults(payload: unknown): GifResult[] {
-  const root = payload as { data?: unknown; results?: unknown } | null;
-  const list = (Array.isArray(root?.data) ? root?.data : Array.isArray((root?.data as { data?: unknown } | undefined)?.data) ? (root?.data as { data: unknown[] }).data : Array.isArray(root?.results) ? root?.results : []) as unknown[];
+/** KLIPY: results under data.data (or data, or results), media under file/files with sizes hd, md, sm and xs, each in several formats. */
+function parseKlipy(list: unknown[]): GifResult[] {
   const out: GifResult[] = [];
   for (const raw of list.slice(0, 50)) {
     if (raw === null || typeof raw !== "object") continue;
@@ -56,4 +69,43 @@ export function parseGifResults(payload: unknown): GifResult[] {
     out.push({ id, title: String(item.title ?? item.slug ?? "GIF").slice(0, 120), url: best.url, previewUrl: small.url, width: best.width, height: best.height });
   }
   return out;
+}
+
+/** GIPHY: data[] items with images.fixed_width (the one we send, about 200 px wide) and images.fixed_width_small (the preview). */
+function parseGiphy(list: unknown[]): GifResult[] {
+  const out: GifResult[] = [];
+  const pick = (images: Record<string, unknown>, names: string[]) => {
+    for (const name of names) {
+      const entry = images[name];
+      if (entry && typeof entry === "object") {
+        const url = (entry as { url?: unknown }).url;
+        if (isAllowedGifUrl(url)) return { url, width: Number((entry as { width?: unknown }).width) || 0, height: Number((entry as { height?: unknown }).height) || 0 };
+      }
+    }
+    return null;
+  };
+  for (const raw of list.slice(0, 50)) {
+    if (raw === null || typeof raw !== "object") continue;
+    const item = raw as { id?: unknown; title?: unknown; images?: unknown };
+    const id = String(item.id ?? "");
+    if (!id || item.images === null || typeof item.images !== "object") continue;
+    const images = item.images as Record<string, unknown>;
+    const send = pick(images, ["fixed_width", "downsized", "fixed_height", "original"]);
+    const preview = pick(images, ["fixed_width_small", "fixed_height_small", "fixed_width"]);
+    if (!send || !preview) continue;
+    out.push({ id, title: String(item.title ?? "GIF").trim().slice(0, 120) || "GIF", url: send.url, previewUrl: preview.url, width: send.width, height: send.height });
+  }
+  return out;
+}
+
+/**
+ * Turns a provider's search answer into a short list of GIFs we can show: one to send and a small one to preview. Tolerant of the exact
+ * nesting; anything that is not an allowed https image from a known GIF host is dropped, so a surprise in the answer shows nothing
+ * rather than something unsafe. GIPHY answers have `images`; KLIPY answers have `file`.
+ */
+export function parseGifResults(payload: unknown): GifResult[] {
+  const root = payload as { data?: unknown; results?: unknown } | null;
+  const list = (Array.isArray(root?.data) ? root?.data : Array.isArray((root?.data as { data?: unknown } | undefined)?.data) ? (root?.data as { data: unknown[] }).data : Array.isArray(root?.results) ? root?.results : []) as unknown[];
+  const first = list.find((x) => x !== null && typeof x === "object") as Record<string, unknown> | undefined;
+  return first && "images" in first ? parseGiphy(list) : parseKlipy(list);
 }

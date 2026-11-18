@@ -43,10 +43,17 @@ describe("reactions", () => {
     await service.toggleReaction(c, { messageId: m.id, emoji: "🎉" });
     as(b);
     const seenByB = (await queries.loadMessages({ conversationId: conv })).messages.find((x) => x.id === m.id)!;
-    expect(seenByB.reactions).toEqual(expect.arrayContaining([{ emoji: "👍", count: 2, mine: true }, { emoji: "🎉", count: 1, mine: false }]));
+    expect(seenByB.reactions).toEqual(expect.arrayContaining([expect.objectContaining({ emoji: "👍", count: 2, mine: true }), expect.objectContaining({ emoji: "🎉", count: 1, mine: false })]));
+    // The hover list: who reacted, in the order they did, with the viewer shown as "You".
+    const thumbs = seenByB.reactions.find((r) => r.emoji === "👍")!;
+    expect(thumbs.names).toHaveLength(2);
+    expect(thumbs.names[0]).toBe("You");
+    expect(thumbs.names[1]).not.toBe("You");
+    expect(seenByB.reactions.find((r) => r.emoji === "🎉")!.names).toHaveLength(1);
     expect(await service.toggleReaction(b, { messageId: m.id, emoji: "👍" })).toEqual({ active: false });
     const after = (await queries.loadMessages({ conversationId: conv })).messages.find((x) => x.id === m.id)!;
-    expect(after.reactions.find((r) => r.emoji === "👍")).toEqual({ emoji: "👍", count: 1, mine: false });
+    expect(after.reactions.find((r) => r.emoji === "👍")).toMatchObject({ emoji: "👍", count: 1, mine: false });
+    expect(after.reactions.find((r) => r.emoji === "👍")!.names).not.toContain("You");
   });
 
   it("refuses an emoji outside the set, a stranger, a removed member, and a message from before a person joined", async () => {

@@ -9,6 +9,7 @@ import { users } from "@/modules/core/schema";
 import { notify } from "@/modules/notifications/service";
 import { isAllowedEmoji } from "./emoji";
 import { isAllowedGifUrl } from "./gif-rules";
+import { verifyGifSignature } from "./gif-sign";
 import { membersFit } from "./guests";
 import { extractMentions, mentionsEveryone } from "./mentions";
 import { clearSearchIndex, indexMessage } from "./search-index";
@@ -71,7 +72,7 @@ async function activeUserIds(executor: Db, ids: string[]): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-async function insertMessage(executor: Db, input: { conversationId: string; senderUserId: string; body: string; kind: "text" | "system" | "poll" | "image" | "file" | "voice" | "gif"; threadRootId?: string | null }) {
+async function insertMessage(executor: Db, input: { conversationId: string; senderUserId: string; body: string; kind: "text" | "system" | "poll" | "image" | "file" | "voice" | "gif"; threadRootId?: string | null; quotedMessageId?: string | null }) {
   const id = randomUUID();
   const [row] = await executor
     .insert(messages)
@@ -82,6 +83,7 @@ async function insertMessage(executor: Db, input: { conversationId: string; send
       bodyEnc: fieldCrypto().encrypt(input.body, bodyContext(input.conversationId, id)),
       kind: input.kind,
       threadRootId: input.threadRootId ?? null,
+      quotedMessageId: input.quotedMessageId ?? null,
     })
     .returning({ seq: messages.seq });
   return { id, seq: row.seq };
@@ -134,6 +136,62 @@ export async function createGroup(actor: Actor, input: { title: string; memberUs
 }
 
 /**
+ * Creates a channel by hand (HR Admin and Super Admin only; checked by the action): a named chat listed with the channels. Unlike the automatic
+ * team, department and company channels it is not kept in sync with the organization: the people are chosen, and it can be set so only HR posts.
+ */
+export async function createChannel(actor: Actor, input: { title: string; memberUserIds: string[]; postingAdminsOnly: boolean }): Promise<{ conversationId: string }> {
+  const title = input.title.trim();
+  const others = [...new Set(input.memberUserIds)].filter((id) => id !== actor.id);
+  if (!title || title.length > MAX_TITLE || others.length < 1 || others.length + 1 > MAX_GROUP) throw new ActionFailure("Check the channel and try again.");
+  if ((await activeUserIds(db, others)).length !== others.length) throw new ActionFailure("Some of those people can't be added.");
+  const conversationId = randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.insert(conversations).values({ id: conversationId, kind: "channel", title, posting: input.postingAdminsOnly ? "admins" : "everyone", createdBy: actor.id });
+    await tx.insert(conversationMembers).values([
+      { conversationId, userId: actor.id, role: "owner" },
+      ...others.map((userId) => ({ conversationId, userId, role: "member" })),
+    ]);
+    await writeAudit({ actor, action: "chat.channel.create", targetType: "chat_conversation", targetId: conversationId, metadata: { memberCount: others.length + 1, postingAdminsOnly: input.postingAdminsOnly } }, tx);
+  });
+  await signal([actor.id, ...others], { type: "members", conversationId });
+  return { conversationId };
+}
+
+/**
+ * Sets (or, with attachmentId null, removes) the picture of a group, channel or client group. The picture is a chat image the same person uploaded
+ * for this conversation and has not used in a message. The action has already checked messages.manage_group.
+ */
+export async function setConversationPhoto(actor: Actor, input: { conversationId: string; attachmentId: string | null }): Promise<void> {
+  const everyone = await db.transaction(async (tx) => {
+    await lockGroup(tx, input.conversationId);
+    if (input.attachmentId) {
+      const [att] = await tx
+        .select({ id: messageAttachments.id })
+        .from(messageAttachments)
+        .where(and(eq(messageAttachments.id, input.attachmentId), eq(messageAttachments.conversationId, input.conversationId), eq(messageAttachments.uploaderUserId, actor.id), eq(messageAttachments.kind, "image"), eq(messageAttachments.status, "active"), isNull(messageAttachments.messageId)))
+        .limit(1);
+      if (!att) throw new ActionFailure("That picture cannot be used. Upload it again.");
+    }
+    await tx.update(conversations).set({ photoAttachmentId: input.attachmentId }).where(eq(conversations.id, input.conversationId));
+    await writeAudit({ actor, action: input.attachmentId ? "chat.group.photo_set" : "chat.group.photo_removed", targetType: "chat_conversation", targetId: input.conversationId }, tx);
+    return currentMemberIds(tx, input.conversationId);
+  });
+  await signal(everyone, { type: "members", conversationId: input.conversationId });
+}
+
+/** Who may start a conversation in a channel HR made: everyone in it, or only HR (replies and reactions stay open). */
+export async function setChannelPosting(actor: Actor, input: { conversationId: string; posting: "everyone" | "admins" }): Promise<void> {
+  const everyone = await db.transaction(async (tx) => {
+    const group = await lockGroup(tx, input.conversationId);
+    if (group.kind !== "channel") throw new ActionFailure("Only a channel you made can be changed this way.");
+    await tx.update(conversations).set({ posting: input.posting }).where(eq(conversations.id, input.conversationId));
+    await writeAudit({ actor, action: "chat.channel.posting", targetType: "chat_conversation", targetId: input.conversationId, metadata: { posting: input.posting } }, tx);
+    return currentMemberIds(tx, input.conversationId);
+  });
+  await signal(everyone, { type: "members", conversationId: input.conversationId });
+}
+
+/**
  * Locks a live (not deleted) group for the rest of the transaction, so two changes at the same moment (two adds past the 200 cap, two
  * removals emptying it, a removal racing a re-add) take turns instead of both reading the old state. For the people who manage groups:
  * they need not be a member, and managing never lets them read the group. The action has already checked `messages.manage_group`.
@@ -142,7 +200,7 @@ async function lockGroup(tx: Pick<typeof db, "select">, conversationId: string):
   const [row] = await tx
     .select({ id: conversations.id, kind: conversations.kind, clientId: conversations.clientId })
     .from(conversations)
-    .where(and(eq(conversations.id, conversationId), inArray(conversations.kind, ["group", "client"]), isNull(conversations.archivedAt)))
+    .where(and(eq(conversations.id, conversationId), inArray(conversations.kind, ["group", "client", "channel"]), isNull(conversations.archivedAt)))
     .for("update")
     .limit(1);
   if (!row) throw new ActionFailure("Group not found.");
@@ -200,9 +258,9 @@ export async function renameGroup(actor: Actor, input: { conversationId: string;
   const title = input.title.trim();
   if (!title || title.length > MAX_TITLE) throw new ActionFailure("Check the name and try again.");
   const everyone = await db.transaction(async (tx) => {
-    await lockGroup(tx, input.conversationId);
+    const group = await lockGroup(tx, input.conversationId);
     await tx.update(conversations).set({ title }).where(eq(conversations.id, input.conversationId));
-    await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body: `The group was renamed to "${title}"`, kind: "system" });
+    await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body: `The ${group.kind === "channel" ? "channel" : "group"} was renamed to "${title}"`, kind: "system" });
     await writeAudit({ actor, action: "chat.group.rename", targetType: "chat_conversation", targetId: input.conversationId }, tx);
     return currentMemberIds(tx, input.conversationId);
   });
@@ -277,7 +335,7 @@ async function linkAttachments(tx: Pick<typeof db, "update">, input: { messageId
   if (linked.length !== input.attachmentIds.length) throw new ActionFailure("One of those attachments can't be sent. Upload it again.");
 }
 
-export async function sendMessage(actor: Actor, input: { conversationId: string; body: string; threadRootId?: string | null; canManage?: boolean; attachmentIds?: string[] }): Promise<{ id: string; seq: number }> {
+export async function sendMessage(actor: Actor, input: { conversationId: string; body: string; threadRootId?: string | null; quotedMessageId?: string | null; canManage?: boolean; attachmentIds?: string[] }): Promise<{ id: string; seq: number }> {
   const attachmentIds = [...new Set(input.attachmentIds ?? [])];
   if (attachmentIds.length > 5) throw new ActionFailure("A message can have up to 5 attachments.");
   // A message with attachments may have no text (a picture or a voice note on its own).
@@ -295,6 +353,12 @@ export async function sendMessage(actor: Actor, input: { conversationId: string;
     if (!root) throw new ActionFailure(MESSAGE_NOT_FOUND);
   }
 
+  // A quote reply points at a message of this same conversation that the sender can see (never a system line).
+  if (input.quotedMessageId) {
+    const quoted = await requireVisibleMessage(db, actor.id, input.quotedMessageId);
+    if (quoted.conversationId !== input.conversationId || quoted.kind === "system") throw new ActionFailure(MESSAGE_NOT_FOUND);
+  }
+
   // Counted in Postgres (not Upstash) so chat never spends the free Redis allowance.
   const [recent] = await db
     .select({ n: sql<number>`count(*)::int` })
@@ -308,7 +372,7 @@ export async function sendMessage(actor: Actor, input: { conversationId: string;
     kind = kinds.length > 0 && kinds.every((k) => k.kind === "image") ? "image" : kinds.length > 0 && kinds.every((k) => k.kind === "voice") ? "voice" : "file";
   }
   const sent = await db.transaction(async (tx) => {
-    const posted = await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body, kind, threadRootId: input.threadRootId ?? null });
+    const posted = await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body, kind, threadRootId: input.threadRootId ?? null, quotedMessageId: input.quotedMessageId ?? null });
     await indexMessage(tx, posted.id, input.conversationId, body);
     if (attachmentIds.length > 0) await linkAttachments(tx, { messageId: posted.id, conversationId: input.conversationId, senderId: actor.id, attachmentIds });
     return posted;
@@ -319,8 +383,9 @@ export async function sendMessage(actor: Actor, input: { conversationId: string;
 }
 
 /** Sends a GIF the person picked: only an https KLIPY address is accepted; the address is stored (encrypted) and shown through our own route. */
-export async function sendGif(actor: Actor, input: { conversationId: string; url: string; threadRootId?: string | null; canManage?: boolean }): Promise<{ id: string; seq: number }> {
-  if (!isAllowedGifUrl(input.url)) throw new ActionFailure("That GIF can't be sent.");
+export async function sendGif(actor: Actor, input: { conversationId: string; url: string; sig: string; threadRootId?: string | null; canManage?: boolean }): Promise<{ id: string; seq: number }> {
+  // Only an address our own search returned (it carries our signature) on an allowed media host can be posted.
+  if (!isAllowedGifUrl(input.url) || !verifyGifSignature(input.url, input.sig)) throw new ActionFailure("That GIF can't be sent.");
   const member = await requireMember(db, actor.id, input.conversationId);
   if (!input.threadRootId && member.posting === "admins" && !input.canManage) throw new ActionFailure("Only HR can post in this channel.");
   if (input.threadRootId) {
@@ -392,7 +457,8 @@ export async function markRead(actor: Actor, input: { conversationId: string; se
   await requireMember(db, actor.id, input.conversationId);
   await db
     .update(conversationMembers)
-    .set({ lastReadSeq: sql`greatest(${conversationMembers.lastReadSeq}, ${input.seq})` })
+    // Never beyond the newest message that exists, so a made-up number can't hide messages that have not arrived yet.
+    .set({ lastReadSeq: sql`greatest(${conversationMembers.lastReadSeq}, least(${input.seq}, coalesce((select max(m.seq) from chat.messages m where m.conversation_id = ${input.conversationId}), 0)))` })
     .where(and(eq(conversationMembers.conversationId, input.conversationId), eq(conversationMembers.userId, actor.id)));
   await signal([actor.id], { type: "read", conversationId: input.conversationId });
 }

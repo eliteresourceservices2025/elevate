@@ -1,0 +1,1 @@
+ALTER TABLE "chat"."conversations" ADD CONSTRAINT "conversations_photo_attachment_id_message_attachments_id_fk" FOREIGN KEY ("photo_attachment_id") REFERENCES "chat"."message_attachments"("id") ON DELETE no action ON UPDATE no action;

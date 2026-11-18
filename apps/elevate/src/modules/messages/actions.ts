@@ -8,8 +8,9 @@ import * as queries from "./queries";
 import type { ChatMessage, ConversationSummary, ManagedGroup } from "./queries";
 import { syncChannels, type SyncResult } from "./channels";
 import * as guestService from "./guests";
-import { gifsEnabled, searchGifs } from "./klipy";
-import type { GifResult } from "./gif-rules";
+import { gifAttribution, gifsEnabled, searchGifs } from "./klipy";
+import { signGifUrl } from "./gif-sign";
+import type { SignedGif } from "./gif-rules";
 import { assertGuestReady } from "./guests";
 import * as service from "./service";
 import * as settings from "./settings";
@@ -18,7 +19,11 @@ import { writeAudit } from "@/modules/audit/write";
 import { sendInvitationEmail } from "@/modules/settings/invitation-email";
 import {
   addMembersSchema,
+  createChannelSchema,
+  requestPhotoUploadSchema,
+  setPhotoSchema,
   createGroupSchema,
+  setChannelPostingSchema,
   chatSettingsSchema,
   createPollSchema,
   deleteGroupSchema,
@@ -74,6 +79,17 @@ export async function openDirectMessage(input: unknown): Promise<ActionResult<{ 
 export async function createGroupConversation(input: unknown): Promise<ActionResult<{ conversationId: string }>> {
   const actor = await requireUser();
   return run(actor, "messages.create_group", createGroupSchema, input, (a, data) => service.createGroup(a, data));
+}
+
+/** HR / Super Admin: a channel made by hand (named, chosen people, optionally only HR posts). */
+export async function createChannelConversation(input: unknown): Promise<ActionResult<{ conversationId: string }>> {
+  const actor = await requireUser();
+  return run(actor, "messages.create_group", createChannelSchema, input, (a, data) => service.createChannel(a, data));
+}
+
+export async function setChannelPostingRule(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return run(actor, "messages.manage_group", setChannelPostingSchema, input, async (a, data) => void (await service.setChannelPosting(a, data)));
 }
 
 export async function sendChatMessage(input: unknown): Promise<ActionResult<{ id: string; seq: number }>> {
@@ -209,13 +225,15 @@ export async function acceptChatGuestNotice(): Promise<ActionResult<undefined>> 
 }
 
 /** Searches GIFs through our server. `enabled: false` means no KLIPY key is set up here, so the picker says so. */
-export async function searchChatGifs(input: unknown): Promise<ActionResult<{ enabled: boolean; gifs: GifResult[] }>> {
+export async function searchChatGifs(input: unknown): Promise<ActionResult<{ enabled: boolean; attribution: string | null; gifs: SignedGif[] }>> {
   const actor = await requireUser({ allowGuest: true });
-  return run(actor, "messages.use", searchGifsSchema, input, async (_a, data) => {
-    if (!gifsEnabled()) return { enabled: false, gifs: [] };
+  return run(actor, "messages.use", searchGifsSchema, input, async (a, data) => {
+    if (!gifsEnabled()) return { enabled: false, attribution: null, gifs: [] };
     try {
-      return { enabled: true, gifs: await searchGifs(data.q) };
-    } catch {
+      const found = await searchGifs(a.id, data.q);
+      return { enabled: true, attribution: gifAttribution(), gifs: found.map((g) => ({ ...g, sig: signGifUrl(g.url), previewSig: signGifUrl(g.previewUrl) })) };
+    } catch (error) {
+      if (error instanceof ActionFailure) throw error;
       throw new ActionFailure("GIF search isn't available right now.");
     }
   });
@@ -239,6 +257,22 @@ export async function voteChatPoll(input: unknown): Promise<ActionResult<undefin
 export async function requestChatUpload(input: unknown): Promise<ActionResult<uploads.UploadTicket>> {
   const actor = await requireUser({ allowGuest: true });
   return run(actor, "messages.use", requestUploadSchema, input, (a, data) => uploads.requestUpload(a, data));
+}
+
+/** HR / Super Admin: upload a picture for a group, channel or client group (they need not be in it). */
+export async function requestChatPhotoUpload(input: unknown): Promise<ActionResult<uploads.UploadTicket>> {
+  const actor = await requireUser();
+  return run(actor, "messages.manage_group", requestPhotoUploadSchema, input, (a, data) => uploads.requestUpload(a, { ...data, kind: "image" }, "manager"));
+}
+
+export async function finalizeChatPhotoUpload(input: unknown): Promise<ActionResult<uploads.FinishedUpload>> {
+  const actor = await requireUser();
+  return run(actor, "messages.manage_group", finalizeUploadSchema, input, (a, data) => uploads.finalizeUpload(a, data, "manager"));
+}
+
+export async function setChatConversationPhoto(input: unknown): Promise<ActionResult<undefined>> {
+  const actor = await requireUser();
+  return run(actor, "messages.manage_group", setPhotoSchema, input, async (a, data) => void (await service.setConversationPhoto(a, data)));
 }
 
 export async function finalizeChatUpload(input: unknown): Promise<ActionResult<uploads.FinishedUpload>> {

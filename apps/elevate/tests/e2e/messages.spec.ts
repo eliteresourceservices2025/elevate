@@ -507,9 +507,9 @@ test("the unread badge in the header updates live on any page, and clears after 
   await expect(pageB.getByRole("link", { name: /^Messages, \d+ unread$/ })).toHaveCount(0, { timeout: 15_000 });
 });
 
-// Needs a real KLIPY key in the environment of both the test run and the dev server; skipped otherwise.
+// Needs a real KLIPY or GIPHY key in the environment of both the test run and the dev server (GIF_PROVIDER picks one); skipped otherwise.
 test("a GIF: search through our server, send, and the other person sees it through our own route", async ({ browser }) => {
-  test.skip(!process.env.KLIPY_API_KEY, "KLIPY_API_KEY is not set");
+  test.skip(!process.env.KLIPY_API_KEY && !process.env.GIPHY_API_KEY, "No GIF service key is set");
   test.setTimeout(240_000);
   const stamp = Date.now();
   const a = await createEmployeeAccount("Ana", `Gif${stamp}a`);
@@ -520,8 +520,8 @@ test("a GIF: search through our server, send, and the other person sees it throu
   await signInEnrollingMfa(pageB, b);
   // The browser must never talk to KLIPY itself.
   const direct: string[] = [];
-  pageA.on("request", (r) => void (/klipy\.(com|co)/.test(new URL(r.url()).host) && direct.push(r.url())));
-  pageB.on("request", (r) => void (/klipy\.(com|co)/.test(new URL(r.url()).host) && direct.push(r.url())));
+  pageA.on("request", (r) => void (/(klipy|giphy)\.(com|co)/.test(new URL(r.url()).host) && direct.push(r.url())));
+  pageB.on("request", (r) => void (/(klipy|giphy)\.(com|co)/.test(new URL(r.url()).host) && direct.push(r.url())));
   await pageB.goto("/messages");
   await startDirect(pageA, `Gif${stamp}b`, `Bea Gif${stamp}b`);
   await pageA.getByRole("button", { name: "GIF", exact: true }).click();
@@ -529,6 +529,8 @@ test("a GIF: search through our server, send, and the other person sees it throu
   await dialog.getByLabel("Search GIFs").fill("happy");
   const first = dialog.getByRole("button", { name: /^Send GIF:/ }).first();
   await expect(first).toBeVisible({ timeout: 20_000 });
+  // The service requires its credit next to its GIFs.
+  await expect(dialog.getByText(/^Powered by (KLIPY|GIPHY)$/)).toBeVisible();
   await expect(first.locator("img")).toHaveJSProperty("complete", true, { timeout: 20_000 });
   expect(await first.locator("img").evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
   await first.click();
@@ -617,4 +619,107 @@ test("a new message plays the chosen sound when you are elsewhere, and nothing w
   await expect(pageB.getByRole("link", { name: /Messages, \d+ unread/ }).first()).toBeVisible({ timeout: 20_000 });
   await pageB.waitForTimeout(1500);
   expect(await tones()).toBe(after);
+});
+
+test("typing @ suggests people; the emoji picker finds the sweet potato and remembers it; hover shows who reacted; quote reply", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Imp${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Imp${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  const bName = `Bea Imp${stamp}b`;
+  await startDirect(pageA, `Imp${stamp}b`, bName);
+  const box = pageA.getByLabel(`Message ${bName}`);
+
+  // Typing @ opens the list at once; typing narrows it; Enter picks.
+  await box.click();
+  await box.pressSequentially("@");
+  const list = pageA.getByRole("listbox", { name: "People you can mention" });
+  await expect(list).toBeVisible();
+  await expect(list.getByRole("option", { name: new RegExp(bName) })).toBeVisible();
+  await box.pressSequentially("Be");
+  await expect(list.getByRole("option")).toHaveCount(1);
+  await box.press("Enter");
+  await expect(list).toBeHidden();
+  await expect(box).toHaveValue(/^@\[Bea .*\]\(user:[0-9a-f-]{36}\) $/);
+  await box.fill("");
+
+  // The emoji picker: search finds the sweet potato by its Filipino name; it is remembered under Recently used.
+  await pageA.getByRole("button", { name: "Add an emoji to your message" }).click();
+  await pageA.getByLabel("Search emoji").fill("kamote");
+  await pageA.getByRole("button", { name: "Emoji 🍠" }).click();
+  await expect(box).toHaveValue("🍠");
+  await pageA.getByRole("button", { name: "Add an emoji to your message" }).click();
+  await expect(pageA.getByRole("tab", { name: "Recently used" })).toHaveAttribute("aria-selected", "true");
+  await expect(pageA.getByRole("group", { name: "Emoji" }).getByRole("button", { name: "Emoji 🍠" })).toBeVisible();
+  await pageA.keyboard.press("Escape");
+  await box.fill("Merienda time 🍠");
+  await box.press("Enter");
+  await expect(pageA.getByRole("log").getByText("Merienda time 🍠", { exact: true })).toBeVisible();
+
+  // Bea reacts; Ana hovers the reaction and sees who reacted.
+  await pageB.goto("/messages");
+  await pageB.getByRole("button", { name: new RegExp(`Ana Imp${stamp}a`) }).click();
+  const row = pageB.getByRole("log").getByText("Merienda time 🍠", { exact: true });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.hover();
+  await pageB.getByRole("button", { name: "React to this message" }).first().click();
+  await pageB.getByRole("button", { name: "Emoji 👍" }).click();
+  const chip = pageA.getByRole("log").getByRole("button", { name: /^👍 1/ });
+  await expect(chip).toBeVisible({ timeout: 15_000 });
+  await chip.hover();
+  await expect(pageA.getByRole("tooltip")).toContainText(`Bea Imp${stamp}b`);
+
+  // Quote reply: Bea quotes Ana's message; Ana sees the quote.
+  await pageB.getByRole("log").getByText("Merienda time 🍠", { exact: true }).hover();
+  await pageB.getByRole("button", { name: "Quote message" }).first().click();
+  await expect(pageB.getByRole("group", { name: "Quoting" })).toContainText("Merienda time");
+  const boxB = pageB.getByLabel(`Message Ana Imp${stamp}a`);
+  await boxB.fill("Yes please");
+  await boxB.press("Enter");
+  await expect(pageB.getByRole("group", { name: "Quoting" })).toHaveCount(0);
+  const quoted = pageA.getByLabel("Quoted message");
+  await expect(quoted).toContainText("Merienda time", { timeout: 15_000 });
+  await expect(quoted).toContainText(`Ana Imp${stamp}a`);
+});
+
+test("HR makes a channel, sets who can post, gives it a picture, and a member sees both", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const stamp = Date.now();
+  const hr = await createHrAccount();
+  const emp = await createEmployeeAccount("Eli", `Chn${stamp}e`);
+  const pageHr = await (await browser.newContext()).newPage();
+  const pageE = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageHr, hr);
+  await signInEnrollingMfa(pageE, emp);
+  await pageE.goto("/messages");
+  const channelName = `Announcements ${stamp}`;
+
+  await pageHr.goto("/messages/manage");
+  await (await hydrated(pageHr.getByRole("button", { name: "New channel" }))).click();
+  const dialog = pageHr.getByRole("dialog");
+  await dialog.getByLabel("Channel name").fill(channelName);
+  await dialog.getByLabel(/Only HR can post/).check();
+  await dialog.getByLabel("Find people").fill(`Chn${stamp}e`);
+  await dialog.getByRole("button", { name: new RegExp(`Eli Chn${stamp}e`) }).click();
+  await dialog.getByRole("button", { name: "Create channel" }).click();
+  await expect(pageHr.getByRole("cell", { name: new RegExp(channelName) })).toContainText("only HR posts", { timeout: 20_000 });
+
+  // A picture (HR is not in the channel).
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  await pageHr.getByTestId("group-photo-input").setInputFiles({ name: "team.png", mimeType: "image/png", buffer: png });
+  await expect(pageHr.getByRole("button", { name: "Change picture" })).toBeVisible({ timeout: 30_000 });
+  await expect(pageHr.locator('img[src*="/api/messages/conversation-photo/"]').first()).toBeAttached();
+
+  // The member finds it under Channels, cannot start a conversation in it, and can see the picture.
+  await pageE.reload();
+  await pageE.getByRole("button", { name: new RegExp(channelName) }).click();
+  await expect(pageE.getByText("Only HR can post in this channel.")).toBeVisible({ timeout: 15_000 });
+  const photo = pageE.locator('img[src*="/api/messages/conversation-photo/"]').first();
+  await expect(photo).toBeAttached();
+  const status = await pageE.evaluate(async (src) => (await fetch(src)).status, (await photo.getAttribute("src")) ?? "");
+  expect(status).toBe(200);
 });
