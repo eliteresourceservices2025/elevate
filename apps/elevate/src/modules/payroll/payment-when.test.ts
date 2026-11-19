@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { hhmm, quickDates, timeLabel, whenLabel } from "./payment-when";
+import { hhmm, inOtherZone, isPaymentZone, quickDates, timeLabel, whenLabel, zoneOf } from "./payment-when";
 
 describe("whenLabel", () => {
-  it("names the day, and the time in Manila when there is one", () => {
+  it("names the day, and the time with its zone when there is one (Arizona unless told otherwise)", () => {
     expect(whenLabel("2026-11-24", null)).toBe("Tue, Nov 24");
-    expect(whenLabel("2026-11-24", "09:30")).toBe("Tue, Nov 24 · 9:30 AM PHT");
-    expect(whenLabel("2026-11-24", "09:30:00")).toBe("Tue, Nov 24 · 9:30 AM PHT");
+    expect(whenLabel("2026-11-24", "09:30")).toBe("Tue, Nov 24 · 9:30 AM MST");
+    expect(whenLabel("2026-11-24", "09:30:00", "Asia/Manila")).toBe("Tue, Nov 24 · 9:30 AM PHT");
   });
 });
 
@@ -23,6 +23,31 @@ describe("hhmm", () => {
     expect(hhmm("09:30:00")).toBe("09:30");
     expect(hhmm(null)).toBeNull();
     expect(hhmm("")).toBeNull();
+  });
+});
+
+describe("zones", () => {
+  it("knows its two zones and falls back to Arizona", () => {
+    expect(isPaymentZone("Asia/Manila")).toBe(true);
+    expect(isPaymentZone("America/Phoenix")).toBe(true);
+    expect(isPaymentZone("Europe/Paris")).toBe(false);
+    expect(zoneOf(null)).toBe("America/Phoenix");
+    expect(zoneOf("Asia/Manila")).toBe("Asia/Manila");
+    expect(zoneOf("Mars/Olympus")).toBe("America/Phoenix");
+  });
+});
+
+describe("inOtherZone", () => {
+  it("shows the same moment on the other clock, across midnight (Arizona is 15 hours behind Manila, with no daylight saving)", () => {
+    expect(inOtherZone("2026-11-25", "09:00", "Asia/Manila")).toBe("Tue, Nov 24 · 6:00 PM MST");
+    expect(inOtherZone("2026-11-24", "17:00", "America/Phoenix")).toBe("Wed, Nov 25 · 8:00 AM PHT");
+    expect(inOtherZone("2026-07-04", "00:00", "America/Phoenix")).toBe("Sat, Jul 4 · 3:00 PM PHT");
+  });
+  it("shows nothing without a readable time", () => {
+    expect(inOtherZone("2026-11-24", null, "Asia/Manila")).toBeNull();
+    expect(inOtherZone("2026-11-24", "", "Asia/Manila")).toBeNull();
+    expect(inOtherZone("nope", "09:00", "Asia/Manila")).toBeNull();
+    expect(inOtherZone("2026-11-24", "25:00", "Asia/Manila")).toBeNull();
   });
 });
 

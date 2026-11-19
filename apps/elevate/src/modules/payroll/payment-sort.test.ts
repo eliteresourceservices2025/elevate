@@ -68,6 +68,8 @@ describe("the Mark paid window", () => {
     expect(markPaidSchema.safeParse({ ...base, sentTime: "09:30", expectedOn: "2030-11-13", expectedTime: "17:00" }).success).toBe(true);
     expect(markPaidSchema.safeParse({ ...base, sentTime: "", expectedOn: "", expectedTime: "" }).success).toBe(true); // all blank is fine
     expect(markPaidSchema.safeParse({ ...base, expectedOn: "2030-11-12" }).success).toBe(true); // the same day is fine
+    for (const zone of ["", "America/Phoenix", "Asia/Manila"]) expect(markPaidSchema.safeParse({ ...base, expectedOn: "2030-11-13", expectedZone: zone }).success, zone).toBe(true);
+    expect(markPaidSchema.safeParse({ ...base, expectedOn: "2030-11-13", expectedZone: "Europe/Paris" }).success).toBe(false);
     for (const bad of [{ sentTime: "9:30" }, { sentTime: "24:00" }, { sentTime: "09:60" }, { expectedOn: "2030-02-31" }, { expectedTime: "09:30" }, { expectedOn: "2030-11-11" }]) {
       expect(markPaidSchema.safeParse({ ...base, ...bad }).success, JSON.stringify(bad)).toBe(false);
     }

@@ -226,6 +226,10 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await prepPage.locator(`#sent-time-${worker.employeeId}`).fill("09:30");
     await prepPage.getByRole("dialog").getByRole("button", { name: "Next Tuesday" }).last().click();
     await prepPage.locator(`#expected-time-${worker.employeeId}`).fill("17:45");
+    // Arizona time unless changed; picking Manila shows the same moment on the Arizona clock.
+    await expect(prepPage.getByRole("dialog").getByLabel("Time zone of the expected time")).toHaveValue("America/Phoenix");
+    await prepPage.getByRole("dialog").getByLabel("Time zone of the expected time").selectOption("Asia/Manila");
+    await expect(prepPage.getByRole("dialog")).toContainText(/That is .* MST/);
     await prepPage.screenshot({ path: "test-results/payroll-mark-paid.png" });
     await prepPage.getByRole("dialog").getByRole("button", { name: "Mark paid" }).click();
     await expect(prepPage.getByText("Payment recorded.")).toBeVisible();
@@ -234,7 +238,7 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await expect(payment.getByRole("columnheader", { name: "Paid (USD)" })).toBeVisible();
     await expect(payment.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toContainText("$351.66");
     await expect(payment).toContainText("Dollars paid: $351.66");
-    await expect(payment.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toContainText(/Paid .*9:30 AM PHT/);
+    await expect(payment.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toContainText(/Paid .*9:30 AM MST/);
     await expect(payment.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toContainText(/Expected Tue, .*5:45 PM PHT/);
     await expect(payment.getByRole("columnheader", { name: "Alias" })).toHaveCount(0);
     // Its headings stick to the top of the page's scroll area (from the xl width up).

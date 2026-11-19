@@ -26,7 +26,7 @@ import { RunTotals } from "@/modules/payroll/components/run-totals";
 import { Worksheet } from "@/modules/payroll/components/worksheet";
 import { PaymentsPanel } from "@/modules/payroll/components/payments-panel";
 import { getPayments, getWorksheet } from "@/modules/payroll/queries";
-import { manilaNow } from "@/modules/payroll/service";
+import { payrollNow } from "@/modules/payroll/service";
 
 export const metadata: Metadata = { title: "Payroll run" };
 
@@ -173,7 +173,7 @@ export default async function PayrollRunPage({ params, searchParams }: PageProps
         listDownloaded={sheet.listDownloaded}
         lineCount={sheet.lines.length}
       />
-      {payments ? <PaymentsPanel view={payments} now={manilaNow()} /> : null}
+      {payments ? <PaymentsPanel view={payments} now={payrollNow()} /> : null}
     </PageContainer>
   );
 }

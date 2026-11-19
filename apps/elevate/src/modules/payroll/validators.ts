@@ -4,6 +4,7 @@ import { isItemized, PAY_ITEM_TYPES, PAYMENT_METHODS } from "./constants";
 import { parseFte } from "./fte";
 import { cleanItemLabel, ITEM_UNIT_HINTS, itemUnit, MAX_ITEM_LABEL, parseItemValue } from "./items";
 import { parseMoney } from "./money";
+import { PAYMENT_ZONES } from "./payment-when";
 
 // One schema per form, reused by the server action. Amounts arrive as typed strings and go through parseMoney: never negative,
 // never a float. Whole-number fields are checked here because the calculator has no input guards of its own.
@@ -202,7 +203,7 @@ const usdPaid = z
   .transform((s) => s.replace(/^\$\s*/, "")) // "$351.66" reads as typed; spaces inside a number stay and are refused ("351 66" is not 35166)
   .refine((s) => s === "" || (parseMoney(s) ?? 0n) > 0n, "Enter an amount like 351.66")
   .optional();
-/** A time typed as HH:MM (24-hour, Manila); blank is none. */
+/** A time typed as HH:MM (24-hour); blank is none. */
 const clockTime = z.union([z.literal(""), z.string().regex(/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/, "Enter a time like 09:30")]).optional();
 const optionalDay = z.union([z.literal(""), isoDate]).optional();
 export const markPaidSchema = z
@@ -214,6 +215,8 @@ export const markPaidSchema = z
     sentTime: clockTime,
     expectedOn: optionalDay,
     expectedTime: clockTime,
+    /** The zone the expected date and time are in; blank or missing means Arizona time. */
+    expectedZone: z.union([z.literal(""), z.enum(PAYMENT_ZONES)]).optional(),
     amountUsd: usdPaid,
   })
   .refine((v) => !v.expectedTime || Boolean(v.expectedOn), { message: "Add the expected date as well as the time", path: ["expectedOn"] })

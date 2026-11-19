@@ -13,6 +13,7 @@ import { readRun, type Executor } from "./runs";
 import { parseMoney } from "./money";
 import { buildRemitlyRows, personName, REMITLY_HEADER, REMITLY_TEST_NOTE, type PayoutDetails } from "./remitly";
 import { payPayments, payRunLines, payRuns } from "./schema";
+import { zoneOf } from "./payment-when";
 import { payrollToday } from "./service";
 import { freezeRunSignatory } from "./signatory";
 
@@ -157,7 +158,7 @@ export async function remitlyList(
 export async function recordPayment(
   tx: Tx,
   actor: Actor,
-  v: { runId: string; employeeId: string; reference: string; paidOn: string; sentTime?: string | null; expectedOn?: string | null; expectedTime?: string | null; amountUsd?: string | null },
+  v: { runId: string; employeeId: string; reference: string; paidOn: string; sentTime?: string | null; expectedOn?: string | null; expectedTime?: string | null; expectedZone?: string | null; amountUsd?: string | null },
 ): Promise<{ runPaid: boolean }> {
   const [run] = await tx.select().from(payRuns).where(eq(payRuns.id, v.runId)).for("update");
   if (!run) throw new ActionFailure("That pay run was not found.");
@@ -195,6 +196,7 @@ export async function recordPayment(
     sentTime: v.sentTime || null,
     expectedOn: v.expectedOn || null,
     expectedTime: v.expectedOn ? v.expectedTime || null : null,
+    expectedZone: v.expectedOn ? zoneOf(v.expectedZone) : null,
     markedBy: actor.id,
     // The statement clock, not the transaction start: of two writers the later lock holder must also have the later time.
     createdAt: sql`clock_timestamp()` as unknown as Date,
@@ -213,7 +215,7 @@ export async function recordPayment(
     action: "payment_marked",
     runId: v.runId,
     employeeId: v.employeeId,
-    detail: { paidOn: v.paidOn, ...(v.sentTime ? { sentTime: v.sentTime } : {}), ...(v.expectedOn ? { expectedOn: v.expectedOn, ...(v.expectedTime ? { expectedTime: v.expectedTime } : {}) } : {}), correction, ...(usdCents !== null ? { usdCents: usdCents.toString() } : {}) },
+    detail: { paidOn: v.paidOn, ...(v.sentTime ? { sentTime: v.sentTime } : {}), ...(v.expectedOn ? { expectedOn: v.expectedOn, ...(v.expectedTime ? { expectedTime: v.expectedTime } : {}), expectedZone: zoneOf(v.expectedZone) } : {}), correction, ...(usdCents !== null ? { usdCents: usdCents.toString() } : {}) },
   });
 
   let runPaid = false;

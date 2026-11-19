@@ -3,7 +3,7 @@ import { desc, eq, lte } from "drizzle-orm";
 import { fieldCrypto } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
-import { DEFAULT_TIMEZONE, formatInZone, SECONDARY_TIMEZONE } from "@/lib/time";
+import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { employees } from "@/modules/people/schema";
 import { DEFAULT_OT_BP, HOLIDAY_BP, type ItemLine, type LineInput, type LineResult, type SettingsSnapshot } from "./calculate";
 import type { Tx } from "@/modules/people/service";
@@ -15,8 +15,8 @@ import { payRuns, paySettings } from "./schema";
 /** Today as YYYY-MM-DD in the company time zone (a pay date never depends on the viewer's zone). */
 export const payrollToday = (): string => formatInZone(Date.now(), DEFAULT_TIMEZONE, "yyyy-MM-dd");
 
-/** The date and time now in Manila, where a payment reaches the contractor: the starting point of the payment form's dates. */
-export const manilaNow = (): { date: string; time: string } => ({ date: formatInZone(Date.now(), SECONDARY_TIMEZONE, "yyyy-MM-dd"), time: formatInZone(Date.now(), SECONDARY_TIMEZONE, "HH:mm") });
+/** The date and time now in the company zone (Arizona), where a payment is sent: the starting point of the payment form's dates. */
+export const payrollNow = (): { date: string; time: string } => ({ date: formatInZone(Date.now(), DEFAULT_TIMEZONE, "yyyy-MM-dd"), time: formatInZone(Date.now(), DEFAULT_TIMEZONE, "HH:mm") });
 
 type Executor = Pick<typeof db, "select">;
 

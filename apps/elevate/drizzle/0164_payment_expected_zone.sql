@@ -1,0 +1,1 @@
+ALTER TABLE "payroll"."pay_payments" ADD COLUMN "expected_zone" text;

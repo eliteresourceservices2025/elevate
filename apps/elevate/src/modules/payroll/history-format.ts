@@ -181,6 +181,7 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       facts.push(...fact(H.sentTime, detail.sentTime));
       facts.push(...fact(H.expectedOn, detail.expectedOn));
       facts.push(...fact(H.expectedTime, detail.expectedTime));
+      facts.push(...fact(H.expectedZone, detail.expectedZone));
       if (typeof detail.usdCents === "string" && /^\d+$/.test(detail.usdCents)) facts.push({ label: H.dollarsPaid, value: formatUsd(BigInt(detail.usdCents)) });
       if (detail.correction === true) facts.push({ label: H.correction, value: H.yes });
       break;

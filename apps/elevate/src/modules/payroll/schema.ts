@@ -194,11 +194,13 @@ export const payPayments = payroll
       /** The dollars paid in Remitly, in cents as text, encrypted (context pay_payment_usd:<id>). Optional: a record of what was paid, never a conversion. */
       amountUsdEnc: text("amount_usd_enc"),
       paidOn: date("paid_on").notNull(),
-      /** The time it was sent (Manila wall clock, as typed); null for a payment recorded before times were kept. */
+      /** The time it was sent (Arizona wall clock, as typed); null when none was given. */
       sentTime: time("sent_time"),
-      /** When it should reach the contractor (Manila wall clock, as typed). Both optional; a time needs a date. Internal only: statements never show it. */
+      /** When it should reach the contractor (wall clock of `expectedZone`, as typed). Both optional; a time needs a date. Internal only: statements never show it. */
       expectedOn: date("expected_on"),
       expectedTime: time("expected_time"),
+      /** The zone the expected date and time were typed in: America/Phoenix or Asia/Manila. Set whenever there is an expected date. */
+      expectedZone: text("expected_zone"),
       markedBy: uuid("marked_by")
         .notNull()
         .references(() => users.id),
