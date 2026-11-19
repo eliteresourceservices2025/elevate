@@ -50,6 +50,18 @@ export function CallSettingsPanel({ view, timeZone }: { view: CallSettingsView; 
           <div className={view.overWarning ? "h-full bg-warning" : "h-full bg-primary"} style={{ width: `${percent}%` }} />
         </div>
         <p className="text-xs text-muted-foreground">This is our own estimate (minutes in calls times a typical bitrate). The real figure is in Cloudflare&apos;s dashboard under Realtime.</p>
+        <div className="mt-2 flex flex-col gap-1 border-t pt-3" data-testid="cloudflare-usage">
+          <h3 className="text-sm font-medium">From Cloudflare</h3>
+          {view.cloudflare.state === "ok" ? (
+            <p className="text-sm">
+              Relay (TURN) traffic so far this month: <strong>{view.cloudflare.egressGb.toLocaleString()} GB</strong> sent to people, {view.cloudflare.ingressGb.toLocaleString()} GB received. This is Cloudflare&apos;s own count. It does not include the main video traffic (SFU), which Cloudflare does not report here, so use the estimate above for that part.
+            </p>
+          ) : view.cloudflare.state === "error" ? (
+            <p className="text-sm text-muted-foreground">Could not read Cloudflare&apos;s figure: {view.cloudflare.reason}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Not connected. To see Cloudflare&apos;s own relay count here, set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ANALYTICS_TOKEN (a token with the Account Analytics permission) on the server.</p>
+          )}
+        </div>
       </section>
 
       <form
