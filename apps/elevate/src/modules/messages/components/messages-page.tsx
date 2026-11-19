@@ -43,6 +43,9 @@ export async function MessagesPage({ conversationId = null }: { conversationId?:
               <Link href="/messages/manage" className={buttonVariants({ variant: "outline" })}>
                 Manage groups
               </Link>
+              <Link href="/messages/access" className={buttonVariants({ variant: "outline" })}>
+                Chat access
+              </Link>
             </div>
           ) : undefined
         }

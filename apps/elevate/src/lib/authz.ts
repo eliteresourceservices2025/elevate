@@ -13,6 +13,7 @@ import { healthPermissions } from "@/modules/health/permissions";
 import { jibblePermissions } from "@/modules/jibble/permissions";
 import { messagesPermissions } from "@/modules/messages/permissions";
 import { callsPermissions } from "@/modules/calls/permissions";
+import { chatAccessPermissions } from "@/modules/chat-access/permissions";
 import { notificationsPermissions } from "@/modules/notifications/permissions";
 import { offersPermissions } from "@/modules/offers/permissions";
 import { onboardingPermissions } from "@/modules/onboarding/permissions";
@@ -43,6 +44,7 @@ export const PERMISSIONS = {
   ...notificationsPermissions,
   ...messagesPermissions,
   ...callsPermissions,
+  ...chatAccessPermissions,
   ...privacyPermissions,
   ...timeoffPermissions,
   ...attendancePermissions,

@@ -163,6 +163,12 @@ Start at `docs/RUNBOOK.md`. For a stuck or slow page: Vercel > Logs for the requ
 - [ ] **Recording stays OFF** (Settings > Calls > Allow recording) until: the Monitoring policy v3 (recording, who may record, consent, 30 days, never with clients) and the privacy notice (call logs, recordings; it is near its 10,000-character limit) are published, counsel has agreed the consent wording, and a Super Admin has picked the recorders. Then try it once with two real people: the other person must be asked, a No must leave them out, the recording must appear at Messages > Call recordings for both, and the file must be gone after the expiry (set `expires_at` back in a test database to check the job).
 - [ ] Rehearse an all-hands with the real company (or half of it): watch Cloudflare's dashboard (Realtime) against Settings > Calls, the speed of raised hands and reactions with 100+ people, and how many people see the speaker's picture within a few seconds.
 
+## HR access to chats and recordings (Phase 6)
+
+- [ ] **Migration 0162 applied** (the access request table and its guards) before the new code runs. The daily job `chat-access-notices` appears in Settings > System health after its first night.
+- [ ] At least **two** Super Admins exist (one asks or approves, a different one decides); with only one, requests wait for a second.
+- [ ] Counsel has confirmed the wording and the rule that the people in a chat are told after access that was used (`docs/policies/COUNSEL-NOTES.md`), and the Monitoring policy and privacy notice mention HR access to chats and recordings with two-person approval. Try it once on test chats: ask, approve as someone else, read, and see the line in the chat after the 72 hours.
+
 ## Messages (chat) go-live
 
 - [ ] **Migrations 0146 to 0156 applied** (the chat tables, guards, channels, polls, files, search, settings, guests and the notification sound), *before* the new code runs: `pnpm db:migrate` with the session pooler string, as in DEPLOY Part 1 step 5. Check: `select count(*) from drizzle.__drizzle_migrations;` is 11 higher than before. Migration 0147 also creates the two Realtime policies (it skips them quietly on a plain Postgres, so confirm in Supabase > Database > Policies, schema `realtime`, table `messages`, that `chat_receive` and `chat_send` exist).
