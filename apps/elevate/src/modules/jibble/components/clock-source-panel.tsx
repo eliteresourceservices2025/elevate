@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ClientPager, usePaged } from "@/components/client-pager";
+import { useConfirm } from "@/components/confirm-dialog";
 import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { Alert } from "@/components/ui/alert";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateOnly } from "@/lib/time";
-import { importJibbleHours, removeClientMap, saveClientMap, setClockSource } from "../clock-source-actions";
+import { importJibbleHours, removeClientMap, saveClientMap, setClockSource, setJibbleClockForMany } from "../clock-source-actions";
 import type { ClockSourceOverview } from "../clock-source-queries";
 
 const KIND_TEXT = { project: "Project", activity: "Activity" } as const;
@@ -118,6 +119,96 @@ function UnmappedRow({ item, clients }: { item: ClockSourceOverview["unmapped"][
   );
 }
 
+/**
+ * Contractors who have not used the ELEVATE clock for 14 days and are clocked out: the likely "Jibble alone" people. HR ticks who moves to
+ * the Jibble clock (all ticked by default) and confirms; their last 14 days are then imported, and the 30-minute job keeps them current.
+ */
+function JibbleAloneCard({ people }: { people: ClockSourceOverview["jibbleAlone"] }) {
+  const confirm = useConfirm();
+  const { act, pending } = useAct();
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(people.map((p) => p.employeeId)));
+  const [outcome, setOutcome] = useState<{ switched: number; already: number; skipped: { name: string; reason: string }[] } | null>(null);
+  const paged = usePaged(people, "alone");
+  if (people.length === 0 && !outcome) return null;
+  const allPicked = people.length > 0 && people.every((p) => picked.has(p.employeeId));
+  const toggle = (id: string) =>
+    setPicked((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const move = async () => {
+    const proceed = await confirm({
+      title: `Move ${picked.size} ${picked.size === 1 ? "person" : "people"} to the Jibble clock?`,
+      description: "Their ELEVATE clock is switched off and each person is told. Their last 14 days are read from Jibble now (it can take a minute), and every 30 minutes after that. You can switch anyone back.",
+      confirmLabel: "Move to the Jibble clock",
+      cancelLabel: "Cancel",
+    });
+    if (!proceed) return;
+    let result: typeof outcome = null;
+    act(
+      async () => {
+        const r = await setJibbleClockForMany({ employeeIds: [...picked] });
+        if (r.ok) result = r.data;
+        return r;
+      },
+      "Moved to the Jibble clock. Their hours are being imported.",
+      () => setOutcome(result),
+    );
+  };
+  return (
+    <div className="space-y-3 rounded-2xl border border-primary/30 bg-primary/5 p-5 shadow-sm">
+      <div>
+        <h3 className="text-sm font-semibold">People who seem to use Jibble alone ({people.length})</h3>
+        <p className="text-xs text-muted-foreground">
+          Matched to a Jibble account, not clocked in, and no ELEVATE clock use in the last 14 days. Move them to the Jibble clock and their hours fill in from Jibble.
+        </p>
+      </div>
+      {outcome ? (
+        <Alert variant={outcome.skipped.length > 0 ? "warning" : "success"}>
+          Moved {outcome.switched} {outcome.switched === 1 ? "person" : "people"}
+          {outcome.already > 0 ? `, ${outcome.already} were already on the Jibble clock` : ""}.
+          {outcome.skipped.length > 0 ? (
+            <ul className="mt-1 list-disc pl-5">
+              {outcome.skipped.map((k) => (
+                <li key={k.name}>
+                  {k.name}: {k.reason}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Alert>
+      ) : null}
+      {people.length > 0 ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Button type="button" size="sm" variant="outline" onClick={() => setPicked(allPicked ? new Set() : new Set(people.map((p) => p.employeeId)))}>
+              {allPicked ? "Untick all" : "Tick all"}
+            </Button>
+            <Button type="button" size="sm" disabled={pending || picked.size === 0} onClick={() => void move()}>
+              Move {picked.size} to the Jibble clock
+            </Button>
+          </div>
+          <ul className="divide-y rounded-lg border bg-card">
+            {paged.rows.map((p) => (
+              <li key={p.employeeId} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+                <label className="flex flex-1 items-center gap-3">
+                  <input type="checkbox" className="size-4 accent-primary" checked={picked.has(p.employeeId)} onChange={() => toggle(p.employeeId)} aria-label={`Move ${p.name} to the Jibble clock`} />
+                  <span className="font-medium">{p.name}</span>
+                  <span className="text-xs text-muted-foreground">{p.team ?? "No team"}</span>
+                </label>
+                <span className="text-xs text-muted-foreground">{p.lastElevate ? `Last ELEVATE clock: ${formatDateOnly(p.lastElevate.slice(0, 10))}` : "Never used the ELEVATE clock"}</span>
+              </li>
+            ))}
+          </ul>
+          <ClientPager info={paged.info} onPage={paged.setPage} onSize={paged.setPageSize} label="people" />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 /** HR: who clocks in Jibble, and which Jibble projects and activities mean which client. */
 export function ClockSourcePanel({ overview }: { overview: ClockSourceOverview }) {
   const { act, pending } = useAct();
@@ -139,6 +230,8 @@ export function ClockSourcePanel({ overview }: { overview: ClockSourceOverview }
       <Alert variant="info">
         {jibbleCount} of {overview.people.length} matched {overview.people.length === 1 ? "person" : "people"} use the Jibble clock. Change someone only when they are clocked out. If an entry is edited or deleted in Jibble, ELEVATE follows it; their hours there are always the source.
       </Alert>
+
+      <JibbleAloneCard people={overview.jibbleAlone} />
 
       <div className="space-y-2">
         <TextField id="cs-find" label="Find a person" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Start typing a name" />
