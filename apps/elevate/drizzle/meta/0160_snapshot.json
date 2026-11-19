@@ -1,6 +1,6 @@
 {
-  "id": "ec02ebc1-476e-4132-b7a0-58c89a7a8e1d",
-  "prevId": "5a4f2805-b7d5-49f1-bc6f-119d2f246b0c",
+  "id": "a866d6b6-565c-4f51-a996-0373655a17cb",
+  "prevId": "add25045-691d-440b-ba1c-a4b3413eadb5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5017,6 +5017,25 @@
           "primaryKey": false,
           "notNull": false
         },
+        "cf_pull_session_id": {
+          "name": "cf_pull_session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pulled_mids": {
+          "name": "pulled_mids",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "removed_by": {
+          "name": "removed_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "joined_at": {
           "name": "joined_at",
           "type": "timestamp with time zone",
@@ -5099,6 +5118,20 @@
           "schemaTo": "core",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "call_participants_removed_by_users_id_fk": {
+          "name": "call_participants_removed_by_users_id_fk",
+          "tableFrom": "call_participants",
+          "tableTo": "users",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "removed_by"
           ],
           "columnsTo": [
             "id"
@@ -12962,6 +12995,13 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "hr_managed": {
+          "name": "hr_managed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "posting": {
           "name": "posting",

@@ -1,1 +1,0 @@
-ALTER TABLE "chat"."call_participants" ADD COLUMN "cf_pull_session_id" text;

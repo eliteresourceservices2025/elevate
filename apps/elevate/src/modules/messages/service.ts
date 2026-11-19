@@ -183,7 +183,7 @@ export async function setConversationPhoto(actor: Actor, input: { conversationId
 export async function setChannelPosting(actor: Actor, input: { conversationId: string; posting: "everyone" | "admins" }): Promise<void> {
   const everyone = await db.transaction(async (tx) => {
     const group = await lockGroup(tx, input.conversationId);
-    if (group.kind !== "channel") throw new ActionFailure("Only a channel you made can be changed this way.");
+    if (!(group.kind === "channel" || AUTOMATIC_KINDS.includes(group.kind))) throw new ActionFailure("Only a channel can be changed this way.");
     await tx.update(conversations).set({ posting: input.posting }).where(eq(conversations.id, input.conversationId));
     await writeAudit({ actor, action: "chat.channel.posting", targetType: "chat_conversation", targetId: input.conversationId, metadata: { posting: input.posting } }, tx);
     return currentMemberIds(tx, input.conversationId);
@@ -196,11 +196,21 @@ export async function setChannelPosting(actor: Actor, input: { conversationId: s
  * removals emptying it, a removal racing a re-add) take turns instead of both reading the old state. For the people who manage groups:
  * they need not be a member, and managing never lets them read the group. The action has already checked `messages.manage_group`.
  */
+const AUTOMATIC_KINDS = ["team", "department", "company"];
+
+/**
+ * An automatic channel (team, department or company) that HR renames or changes the people of stops following the organization for those two
+ * things: the sync then leaves its name and people alone. Anything else (a picture, who posts, removing it) does not need that.
+ */
+async function markManaged(tx: Pick<typeof db, "update">, conversationId: string, kind: string): Promise<void> {
+  if (AUTOMATIC_KINDS.includes(kind)) await tx.update(conversations).set({ hrManaged: true }).where(eq(conversations.id, conversationId));
+}
+
 async function lockGroup(tx: Pick<typeof db, "select">, conversationId: string): Promise<{ kind: string; clientId: string | null }> {
   const [row] = await tx
     .select({ id: conversations.id, kind: conversations.kind, clientId: conversations.clientId })
     .from(conversations)
-    .where(and(eq(conversations.id, conversationId), inArray(conversations.kind, ["group", "client", "channel"]), isNull(conversations.archivedAt)))
+    .where(and(eq(conversations.id, conversationId), inArray(conversations.kind, ["group", "client", "channel", "team", "department", "company"]), isNull(conversations.archivedAt)))
     .for("update")
     .limit(1);
   if (!row) throw new ActionFailure("Group not found.");
@@ -212,6 +222,7 @@ export async function addMembers(actor: Actor, conversationId: string, userIds: 
 
   const everyone = await db.transaction(async (tx) => {
     const group = await lockGroup(tx, conversationId);
+    await markManaged(tx, conversationId, group.kind);
     // A plain group takes staff only; a client group takes staff and guests of exactly that client.
     const fits = group.kind === "client" && group.clientId ? await membersFit(tx, group.clientId, wanted) : (await activeUserIds(tx, wanted)).length === wanted.length;
     if (!fits) throw new ActionFailure("Some of those people can't be added.");
@@ -238,7 +249,8 @@ export async function addMembers(actor: Actor, conversationId: string, userIds: 
 /** Takes one person out of a group. They lose all access at once (list, history, sending); they can be added back as a fresh start. */
 export async function removeMember(actor: Actor, input: { conversationId: string; userId: string }): Promise<void> {
   const everyone = await db.transaction(async (tx) => {
-    await lockGroup(tx, input.conversationId);
+    const group = await lockGroup(tx, input.conversationId);
+    await markManaged(tx, input.conversationId, group.kind);
     const members = await currentMemberIds(tx, input.conversationId);
     if (!members.includes(input.userId)) throw new ActionFailure("That person isn't in this group.");
     if (members.length <= 1) throw new ActionFailure("A group needs at least one person. Delete it instead.");
@@ -261,6 +273,7 @@ export async function renameGroup(actor: Actor, input: { conversationId: string;
   if (!title || title.length > MAX_TITLE) throw new ActionFailure("Check the name and try again.");
   const everyone = await db.transaction(async (tx) => {
     const group = await lockGroup(tx, input.conversationId);
+    await markManaged(tx, input.conversationId, group.kind);
     await tx.update(conversations).set({ title }).where(eq(conversations.id, input.conversationId));
     await insertMessage(tx, { conversationId: input.conversationId, senderUserId: actor.id, body: `The ${group.kind === "channel" ? "channel" : "group"} was renamed to "${title}"`, kind: "system" });
     await writeAudit({ actor, action: "chat.group.rename", targetType: "chat_conversation", targetId: input.conversationId }, tx);

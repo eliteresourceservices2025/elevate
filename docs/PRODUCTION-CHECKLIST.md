@@ -154,7 +154,7 @@ Start at `docs/RUNBOOK.md`. For a stuck or slow page: Vercel > Logs for the requ
 
 ## Calls go-live (after the chat checklist below)
 
-- [ ] **Migrations 0159 to 0162 applied** (call tables, heartbeat, the second Cloudflare session, and what each person pulled and who was removed). Apply before the new code runs.
+- [ ] **Migration 0160 applied** (call tables, heartbeat, the second Cloudflare session, what each person pulled and who was removed; it comes after 0159, the HR-managed channels). Apply before the new code runs.
 - [ ] **Cloudflare:** in Vercel (Production) set `CLOUDFLARE_REALTIME_APP_ID` and `CLOUDFLARE_REALTIME_APP_SECRET` (the Serverless SFU application, NOT RealtimeKit) and `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_TOKEN` (a TURN key). Use keys made for production and rotate any key that was ever pasted in a chat. Never set `CALLS_FAKE` or `NEXT_PUBLIC_CALLS_FAKE` in production (they are ignored there, but keep them out).
 - [ ] Check **Settings > Calls** shows no "Calls are off" notice, then make a test call between two real computers (one on a phone hotspot to exercise the relay).
 - [ ] Rehearse with 10 to 25 people on their own computers before announcing; watch Cloudflare's dashboard (Realtime) against the estimate on Settings > Calls.
@@ -167,7 +167,7 @@ Start at `docs/RUNBOOK.md`. For a stuck or slow page: Vercel > Logs for the requ
 - [ ] **Supabase Realtime settings:** turn OFF "Allow public access" (Project settings > Realtime). Chat uses private channels only.
 - [ ] **The new privacy notice and Monitoring policy are published** (drafts in `docs/policies/`) before anyone uses chat with real data. Publishing is permanent and makes everyone accept at next sign-in.
 - [ ] **Sentry and logs:** nothing to change; chat never logs message text.
-- [ ] **Migrations 0157 and 0158** (quote replies, hand-made channels, group pictures, the picture link) are applied the same way: they are additive and must run before the new code. After them, `select count(*) from drizzle.__drizzle_migrations;` is two higher again.
+- [ ] **Migrations 0157, 0158 and 0159** (quote replies, hand-made channels, group pictures, the picture link, HR-managed automatic channels) are applied the same way: they are additive and must run before the new code. After them, `select count(*) from drizzle.__drizzle_migrations;` is three higher again.
 - [ ] GIFs now have two services. To use GIPHY (works now, 100 calls an hour for the whole company): set `GIPHY_API_KEY` in Vercel and `GIF_PROVIDER=giphy`. To use KLIPY once approved: set `KLIPY_API_KEY` and `GIF_PROVIDER=klipy`. Leave both unset to keep GIFs off.
 - [ ] Optional, GIFs: add `KLIPY_API_KEY` in Vercel (server only). Without it the GIF button says GIFs are not set up. KLIPY's production key needs their approval first (a test key works for local checks only). Check their attribution rules, then search one GIF after adding the key. The response format was verified against a test key on 2026-11-17.
 - [ ] The messages retention (one year) is promised in the privacy notice but **no job enforces it yet**: tell counsel, and build it or adjust the wording before the first year ends.

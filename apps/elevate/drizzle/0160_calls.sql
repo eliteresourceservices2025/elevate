@@ -4,7 +4,11 @@ CREATE TABLE "chat"."call_participants" (
 	"user_id" uuid NOT NULL,
 	"role" text DEFAULT 'attendee' NOT NULL,
 	"cf_session_id" text,
+	"cf_pull_session_id" text,
+	"pulled_mids" text[] DEFAULT '{}'::text[] NOT NULL,
+	"removed_by" uuid,
 	"joined_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"last_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"left_at" timestamp with time zone,
 	CONSTRAINT "call_participants_role_chk" CHECK ("chat"."call_participants"."role" in ('host','speaker','attendee'))
 );
@@ -26,6 +30,7 @@ CREATE TABLE "chat"."call_tracks" (
 	"user_id" uuid NOT NULL,
 	"cf_session_id" text NOT NULL,
 	"track_name" text NOT NULL,
+	"mid" text,
 	"kind" text NOT NULL,
 	"started_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"ended_at" timestamp with time zone,
@@ -57,6 +62,7 @@ ALTER TABLE "chat"."calls" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "core"."users" ADD COLUMN "can_record_calls" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "chat"."call_participants" ADD CONSTRAINT "call_participants_call_id_calls_id_fk" FOREIGN KEY ("call_id") REFERENCES "chat"."calls"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "chat"."call_participants" ADD CONSTRAINT "call_participants_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "core"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "chat"."call_participants" ADD CONSTRAINT "call_participants_removed_by_users_id_fk" FOREIGN KEY ("removed_by") REFERENCES "core"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "chat"."call_tracks" ADD CONSTRAINT "call_tracks_call_id_calls_id_fk" FOREIGN KEY ("call_id") REFERENCES "chat"."calls"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "chat"."call_tracks" ADD CONSTRAINT "call_tracks_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "core"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "chat"."call_usage" ADD CONSTRAINT "call_usage_call_id_calls_id_fk" FOREIGN KEY ("call_id") REFERENCES "chat"."calls"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

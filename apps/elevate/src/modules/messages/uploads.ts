@@ -34,7 +34,7 @@ async function requireUploadAccess(actor: Actor, conversationId: string, access:
   const [row] = await db
     .select({ id: conversations.id })
     .from(conversations)
-    .where(and(eq(conversations.id, conversationId), inArray(conversations.kind, ["group", "client", "channel"]), isNull(conversations.archivedAt)))
+    .where(and(eq(conversations.id, conversationId), inArray(conversations.kind, ["group", "client", "channel", "team", "department", "company"]), isNull(conversations.archivedAt)))
     .limit(1);
   if (!row) throw new ActionFailure("Group not found.");
 }

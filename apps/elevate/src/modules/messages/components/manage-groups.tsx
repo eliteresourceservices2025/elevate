@@ -80,7 +80,7 @@ export function ManageGroups({ groups, timeZone, clients, guests }: { groups: Ma
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">{groups.length} {groups.length === 1 ? "group" : "groups"}. Groups hold up to 200 people. Team, department and company channels are automatic and follow the organization.</p>
+        <p className="text-sm text-muted-foreground">{groups.length} {groups.length === 1 ? "group" : "groups"}. Groups hold up to 200 people. Team, department and company channels follow the organization until you change their name or people.</p>
         <Button type="button" variant="outline" onClick={() => void syncChannels()} disabled={syncing}>
           {syncing ? "Updating…" : "Update channels now"}
         </Button>
@@ -130,6 +130,7 @@ export function ManageGroups({ groups, timeZone, clients, guests }: { groups: Ma
               <TableRow key={g.id} data-state={g.id === selectedId ? "selected" : undefined}>
                 <TableCell className="font-medium">
                   {g.title}
+                  {g.kind === "team" || g.kind === "department" || g.kind === "company" ? <span className="ml-2 rounded bg-info-surface px-1.5 py-0.5 text-xs font-medium">{g.kind === "company" ? "Company" : g.kind === "team" ? "Team" : "Department"} channel · {g.hrManaged ? "managed by HR" : "automatic"}</span> : null}
                   {g.kind === "channel" ? <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground">Channel{g.posting === "admins" ? " · only HR posts" : ""}</span> : null}
                   {g.kind === "client" ? <span className="ml-2 rounded bg-info-surface px-1.5 py-0.5 text-xs font-medium">Client: {g.clientName}</span> : null}
                   {g.amMember ? <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium text-secondary-foreground">You&apos;re in it</span> : null}
@@ -171,7 +172,7 @@ export function ManageGroups({ groups, timeZone, clients, guests }: { groups: Ma
                 void reloadPeople(selected.id);
               }}
             />
-            {selected.kind === "channel" ? (
+            {selected.kind === "channel" || selected.kind === "team" || selected.kind === "department" || selected.kind === "company" ? (
               <span className="flex items-center gap-1.5 text-sm">
                 <label htmlFor="channel-posting" className="text-muted-foreground">Who can post</label>
                 <select
@@ -205,6 +206,15 @@ export function ManageGroups({ groups, timeZone, clients, guests }: { groups: Ma
               Delete group
             </Button>
           </div>
+          {selected.kind === "team" || selected.kind === "department" || selected.kind === "company" ? (
+            <Alert variant="info">
+              <AlertDescription>
+                {selected.hrManaged
+                  ? "You manage this channel by hand now: its name and people no longer follow the organization."
+                  : "This channel follows the organization: its name and people update by themselves. If you rename it or change who is in it, ELEVATE stops updating those two things for this channel. Removing it hides it for everyone and it is not brought back."}
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {people ? (
             <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3" aria-label={`People in ${selected.title}`}>
               {people.map((p) => (

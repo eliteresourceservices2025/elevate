@@ -271,7 +271,7 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, app
                   {m.name}
                   {m.userId === userId ? <span className="text-muted-foreground"> (you)</span> : null}
                 </span>
-                {canManage && (active.kind === "group" || active.kind === "client" || active.kind === "channel") ? (
+                {canManage && (active.kind !== "dm") ? (
                   <Button type="button" variant="ghost" size="xs" onClick={() => void removePerson(active.id, m)} aria-label={`Remove ${m.name}`}>
                     Remove
                   </Button>
@@ -279,7 +279,7 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, app
               </li>
             ))}
           </ul>
-          {canManage && (active.kind === "group" || active.kind === "client" || active.kind === "channel") ? (
+          {canManage && (active.kind !== "dm") ? (
             <div className="mt-auto flex flex-col gap-2">
               <GroupPhotoControl conversationId={active.id} hasPhoto={active.photoAttachmentId !== null} onChanged={() => void refreshList()} />
               <RenameGroupDialog conversationId={active.id} current={active.title} onDone={() => { void loadThread(active.id, false); void refreshList(); }} />
