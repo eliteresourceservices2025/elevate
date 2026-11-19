@@ -13,3 +13,4 @@ export const clockSourceSchema = z.object({ employeeId: z.uuid(), source: z.enum
 export const importHoursSchema = z.object({ employeeId: z.uuid(), days: z.coerce.number().int().min(1, "Choose 1 to 14 days").max(14, "Choose 1 to 14 days") });
 export const clientMapSchema = z.object({ kind: z.enum(["project", "activity"]), jibbleId: z.string().trim().min(1, "Enter the Jibble id").max(120, "That is too long"), clientId: z.uuid() });
 export const removeClientMapSchema = z.object({ id: z.uuid() });
+export const bulkJibbleClockSchema = z.object({ employeeIds: z.array(z.uuid()).min(1, "Choose at least one person").max(200, "Choose 200 people at most") });
