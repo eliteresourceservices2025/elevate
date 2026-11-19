@@ -16,6 +16,7 @@ import { AddPeopleDialog, NewConversationDialog } from "./new-conversation-dialo
 import { Thread, type ThreadMember } from "./thread";
 import { ThreadPanel } from "./thread-panel";
 import { useChatLive } from "./use-chat-live";
+import { countOnline } from "../online-count";
 import { usePresence } from "./use-presence";
 
 type ThreadData = { messages: ChatMessage[]; hasMore: boolean; latestSeq?: number; members: ThreadMember[] };
@@ -203,7 +204,7 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, app
               members={thread.members}
               myUserId={userId}
               canStartCall={!isGuest}
-              onlineCount={[...online].filter((id) => id !== userId).length}
+              onlineCount={countOnline(thread.members, online)}
               timeZone={timeZone}
               loadingEarlier={loadingEarlier}
               pins={pins}
