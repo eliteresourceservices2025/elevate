@@ -49,17 +49,17 @@ describe("call settings view", () => {
     expect(after.participantMinutesThisMonth - before.participantMinutesThisMonth).toBe(300);
     expect(after.freeGb).toBe(1000);
     expect(after.recent.length).toBeGreaterThan(0);
-    await settings.saveCallSettings(await makeUser(), { monthlyGbWarning: 50, townhallEnabled: true });
+    await settings.saveCallSettings(await makeUser(), { monthlyGbWarning: 50, townhallEnabled: true, recordingEnabled: false });
     expect((await settings.getCallSettingsView()).overWarning).toBe(after.monthGb >= 50);
   });
 
   it("saving changes the warning and the all-hands switch and writes an audit row with the before and after", async () => {
     const actor = await makeUser();
-    await settings.saveCallSettings(actor, { monthlyGbWarning: 650, townhallEnabled: false });
+    await settings.saveCallSettings(actor, { monthlyGbWarning: 650, townhallEnabled: false, recordingEnabled: false });
     const [row] = await rows<{ monthly_gb_warning: number; townhall_enabled: boolean }>(sql`select monthly_gb_warning, townhall_enabled from chat.call_settings where id = 1`);
     expect(row).toEqual({ monthly_gb_warning: 650, townhall_enabled: false });
     const audit = await rows(sql`select 1 from ops.audit_log where action = 'call.settings' and actor_user_id = ${actor.id}`);
     expect(audit).toHaveLength(1);
-    await settings.saveCallSettings(actor, { monthlyGbWarning: 700, townhallEnabled: true });
+    await settings.saveCallSettings(actor, { monthlyGbWarning: 700, townhallEnabled: true, recordingEnabled: false });
   });
 });

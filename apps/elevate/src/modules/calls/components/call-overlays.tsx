@@ -3,10 +3,12 @@
 import { Phone, PhoneCall } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { audioRunning } from "@/modules/messages/components/play-sound";
 import { useCall } from "./call-provider";
-import { CallControls } from "./call-screen";
+import { CallControls, RecordingNotice } from "./call-parts";
+import { Elapsed } from "./call-room";
 
 /** Plays everyone's voice, always mounted while a call is active, so the sound keeps going in the mini window and on every page. */
 function CallAudio() {
@@ -23,6 +25,12 @@ function CallAudio() {
 
 function AudioSink({ stream }: { stream: MediaStream }) {
   const ref = useRef<HTMLAudioElement>(null);
+  const speaker = useCall().chosen.speaker;
+  useEffect(() => {
+    // Chrome and Edge can send the sound to a chosen output; elsewhere the system's output is used.
+    const el = ref.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
+    void el?.setSinkId?.(speaker ?? "").catch(() => {});
+  }, [speaker]);
   useEffect(() => {
     const el = ref.current;
     if (el && el.srcObject !== stream) el.srcObject = stream;
@@ -41,13 +49,14 @@ function MiniCall() {
         <PhoneCall className="size-4 text-success" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{call.state.call.title}</p>
-          <p className="text-xs text-muted-foreground">{call.state.participants.length} in call</p>
+          <p className="text-xs text-muted-foreground"><Elapsed startedAt={call.state.call.startedAt} /> · {call.state.participants.length} in call{call.state.recording ? " · Recording" : ""}</p>
         </div>
         <Link href={`/messages/call/${call.state.call.id}`} className="text-sm font-medium text-primary hover:underline">
           Return
         </Link>
       </div>
-      <CallControls compact />
+      <RecordingNotice />
+      <CallControls />
     </section>
   );
 }
@@ -56,6 +65,15 @@ function MiniCall() {
 function IncomingCall() {
   const call = useCall();
   const router = useRouter();
+  const [soundOn, setSoundOn] = useState(true);
+  const ringing = Boolean(call.incoming);
+  useEffect(() => {
+    if (!ringing) return;
+    const check = () => setSoundOn(audioRunning());
+    check();
+    const timer = setInterval(check, 800);
+    return () => clearInterval(timer);
+  }, [ringing]);
   if (!call.incoming || call.phase === "active" || call.phase === "joining") return null;
   const { incoming } = call;
   return (
@@ -69,6 +87,7 @@ function IncomingCall() {
           <p className="truncate text-xs text-muted-foreground">{incoming.startedByName} is calling</p>
         </div>
       </div>
+      {soundOn ? null : <p className="text-xs text-muted-foreground">Your browser keeps this page silent until you click on it once. Click anywhere to hear the ring.</p>}
       <div className="flex gap-2">
         <Button
           type="button"

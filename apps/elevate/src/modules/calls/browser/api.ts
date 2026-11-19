@@ -15,6 +15,13 @@ import {
   startCall,
   endCallForEveryone,
   subscribeCallTracks,
+  setCallSpeaker,
+  getRingingCalls,
+  startCallRecording,
+  stopCallRecording,
+  answerCallRecording,
+  requestRecordingUpload,
+  finishRecordingUpload,
 } from "../actions";
 
 // The browser's view of the server actions: each one returns its data or throws an Error with the plain message to show. Kept in one place
@@ -34,7 +41,7 @@ async function unwrap<T>(promise: Promise<Result<T>>): Promise<T> {
 }
 
 export const callApi = {
-  start: (conversationId: string) => unwrap(startCall({ conversationId })),
+  start: (conversationId: string, mode: "meeting" | "townhall" = "meeting") => unwrap(startCall({ conversationId, mode })),
   join: (callId: string) => unwrap(joinCall({ callId })),
   heartbeat: (callId: string) => unwrap(sendCallHeartbeat({ callId })),
   leave: (callId: string) => unwrap(leaveCall({ callId })),
@@ -45,9 +52,16 @@ export const callApi = {
   answer: (callId: string, sdp: string) => unwrap(answerCallOffer({ callId, answer: { type: "answer", sdp } })),
   mute: (callId: string, userId: string) => unwrap(muteCallParticipant({ callId, userId })),
   remove: (callId: string, userId: string) => unwrap(removeCallParticipant({ callId, userId })),
+  setSpeaker: (callId: string, userId: string, speaker: boolean) => unwrap(setCallSpeaker({ callId, userId, speaker })),
+  startRecording: (callId: string) => unwrap(startCallRecording({ callId })),
+  stopRecording: (callId: string) => unwrap(stopCallRecording({ callId })),
+  answerRecording: (callId: string, answer: "allow" | "decline") => unwrap(answerCallRecording({ callId, answer })),
+  requestPart: (recordingId: string, seq: number) => unwrap(requestRecordingUpload({ recordingId, seq })),
+  finishPart: (recordingId: string, seq: number) => unwrap(finishRecordingUpload({ recordingId, seq })),
   unsubscribe: (callId: string, mids: string[]) => unwrap(unsubscribeCallTracks({ callId, mids })),
   live: (conversationId: string) => unwrap(getLiveCall({ conversationId })),
   incoming: (callId: string) => unwrap(getIncomingCall({ callId })),
+  ringing: () => unwrap(getRingingCalls()),
 };
 
 export type CallApi = typeof callApi;

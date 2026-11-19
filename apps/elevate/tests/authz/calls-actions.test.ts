@@ -46,6 +46,9 @@ const calls: { name: string; run: () => Result; guestMay: boolean }[] = [
   { name: "muteCallParticipant", run: () => actions.muteCallParticipant({ callId: ID, userId: ID }), guestMay: true },
   { name: "removeCallParticipant", run: () => actions.removeCallParticipant({ callId: ID, userId: ID }), guestMay: true },
   { name: "unsubscribeCallTracks", run: () => actions.unsubscribeCallTracks({ callId: ID, mids: ["1"] }), guestMay: true },
+  { name: "setCallSpeaker", run: () => actions.setCallSpeaker({ callId: ID, userId: ID, speaker: true }), guestMay: true },
+  { name: "stopCallRecording", run: () => actions.stopCallRecording({ callId: ID }), guestMay: true },
+  { name: "answerCallRecording", run: () => actions.answerCallRecording({ callId: ID, answer: "allow" }), guestMay: true },
   { name: "getLiveCall", run: () => actions.getLiveCall({ conversationId: ID }), guestMay: true },
   { name: "getIncomingCall", run: () => actions.getIncomingCall({ callId: ID }), guestMay: true },
 ];
@@ -60,6 +63,9 @@ const badInput: { name: string; run: () => Result }[] = [
   { name: "answerCallOffer (offer instead)", run: () => actions.answerCallOffer({ callId: ID, answer: { type: "offer", sdp: "x" } }) },
   { name: "muteCallParticipant (no user)", run: () => actions.muteCallParticipant({ callId: ID }) },
   { name: "unsubscribeCallTracks (path-like mid)", run: () => actions.unsubscribeCallTracks({ callId: ID, mids: ["../x"] }) },
+  { name: "setCallSpeaker (speaker not a boolean)", run: () => actions.setCallSpeaker({ callId: ID, userId: ID, speaker: "yes" }) },
+  { name: "answerCallRecording (not yes or no)", run: () => actions.answerCallRecording({ callId: ID, answer: "maybe" }) },
+  { name: "startCall (unknown mode)", run: () => actions.startCall({ conversationId: ID, mode: "party" }) },
   { name: "getLiveCall", run: () => actions.getLiveCall({}) },
 ];
 
@@ -81,16 +87,70 @@ describe("call settings", () => {
   it("only a Super Admin may save them; bad input is refused first", async () => {
     for (const role of ROLE_SLUGS) {
       as(role);
-      const result = await actions.saveCallSettings({ monthlyGbWarning: 700, townhallEnabled: true });
+      const result = await actions.saveCallSettings({ monthlyGbWarning: 700, townhallEnabled: true, recordingEnabled: false });
       if (role === "super_admin") expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
       else expect(result).toEqual({ ok: false, error: NO_ACCESS });
     }
     as("super_admin");
-    for (const bad of [{}, { monthlyGbWarning: 10, townhallEnabled: true }, { monthlyGbWarning: 700.5, townhallEnabled: true }, { monthlyGbWarning: 700, townhallEnabled: "yes" }]) {
+    for (const bad of [{}, { monthlyGbWarning: 10, townhallEnabled: true, recordingEnabled: false }, { monthlyGbWarning: 700.5, townhallEnabled: true, recordingEnabled: false }, { monthlyGbWarning: 700, townhallEnabled: "yes", recordingEnabled: false }]) {
       expect(await actions.saveCallSettings(bad)).toEqual({ ok: false, error: BAD });
     }
     asGuest();
-    expect(await actions.saveCallSettings({ monthlyGbWarning: 700, townhallEnabled: true })).toMatchObject({ ok: false });
+    expect(await actions.saveCallSettings({ monthlyGbWarning: 700, townhallEnabled: true, recordingEnabled: false })).toMatchObject({ ok: false });
+  });
+});
+
+describe("all-hands, recording and who may record", () => {
+  it("only leadership and HR start an all-hands; everyone else is refused before anything is created", async () => {
+    for (const role of ROLE_SLUGS) {
+      as(role);
+      const result = await actions.startCall({ conversationId: ID, mode: "townhall" });
+      if (["super_admin", "hr_admin", "executive"].includes(role)) expect(result.ok === false && result.error).not.toBe("You can't start an all-hands.");
+      else expect(result).toEqual({ ok: false, error: "You can't start an all-hands." });
+    }
+    asGuest();
+    expect(await actions.startCall({ conversationId: ID, mode: "townhall" })).toMatchObject({ ok: false });
+  });
+
+  it("recording needs the Super Admin's pick: no role has it, only the flag does, and a guest never", async () => {
+    const recordActions = [
+      () => actions.startCallRecording({ callId: ID }),
+      () => actions.requestRecordingUpload({ recordingId: ID, seq: 0 }),
+      () => actions.finishRecordingUpload({ recordingId: ID, seq: 0 }),
+    ];
+    for (const role of ROLE_SLUGS) {
+      for (const run of recordActions) {
+        as(role);
+        expect(await run()).toEqual({ ok: false, error: NO_ACCESS });
+        (current.value as { canRecordCalls?: boolean }).canRecordCalls = true;
+        const after = await run();
+        expect(after.ok === false && after.error).not.toBe(NO_ACCESS);
+      }
+    }
+    asGuest();
+    for (const run of recordActions) expect(await run()).toEqual({ ok: false, error: NO_ACCESS });
+  });
+
+  it("bad recording input is refused before the database", async () => {
+    as("employee");
+    (current.value as { canRecordCalls?: boolean }).canRecordCalls = true;
+    expect(await actions.requestRecordingUpload({ recordingId: ID, seq: -1 })).toEqual({ ok: false, error: BAD });
+    expect(await actions.requestRecordingUpload({ recordingId: "x", seq: 0 })).toEqual({ ok: false, error: BAD });
+    expect(await actions.finishRecordingUpload({ recordingId: ID, seq: 1.5 })).toEqual({ ok: false, error: BAD });
+  });
+
+  it("only a Super Admin picks who may record", async () => {
+    for (const role of ROLE_SLUGS) {
+      as(role);
+      const result = await actions.setCallRecorder({ userId: ID, enabled: true });
+      if (role === "super_admin") expect(result.ok === false && result.error).not.toBe(NO_ACCESS);
+      else expect(result).toEqual({ ok: false, error: NO_ACCESS });
+    }
+    as("super_admin");
+    expect(await actions.setCallRecorder({ userId: "x", enabled: true })).toEqual({ ok: false, error: BAD });
+    expect(await actions.setCallRecorder({ userId: ID, enabled: "yes" })).toEqual({ ok: false, error: BAD });
+    asGuest();
+    expect(await actions.setCallRecorder({ userId: ID, enabled: true })).toMatchObject({ ok: false });
   });
 });
 

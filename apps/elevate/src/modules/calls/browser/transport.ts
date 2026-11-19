@@ -23,8 +23,10 @@ export type RemoteUpdate = (userId: string, slot: RemoteSlot, stream: MediaStrea
 export interface CallTransport {
   /** Opens the connections. Safe to call once. */
   start(input: { iceServers: IceServer[]; api: MediaApi; onRemote: RemoteUpdate; onLocalEnded: (kind: TrackKind) => void }): Promise<void>;
-  /** Starts sending a track of this kind (the transport gets the media itself); returns the stream to show as the person's own preview. */
-  startSending(kind: TrackKind): Promise<MediaStream>;
+  /** Starts sending a track of this kind (the transport gets the media itself); returns the stream to show as the person's own preview. `deviceId` picks a microphone or camera (null or missing: the default; a device that is gone falls back to the default). */
+  startSending(kind: TrackKind, options?: { deviceId?: string | null }): Promise<MediaStream>;
+  /** Changes the microphone or camera that is being sent, without a new connection. Returns the new stream (null when nothing of that kind is being sent: the next start uses the choice). */
+  switchDevice(kind: "audio" | "video", deviceId: string | null): Promise<MediaStream | null>;
   /** Stops sending this kind. */
   stopSending(kind: TrackKind): Promise<void>;
   /** Mutes or unmutes the microphone without stopping it (the track stays published). */

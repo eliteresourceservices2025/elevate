@@ -25,6 +25,7 @@ export const JOBS: Record<string, JobInfo> = {
   "recruiting-retention": { label: "Applicant data retention", everyMinutes: DAILY },
   "chat-channel-sync": { label: "Chat channels (teams, departments, company)", everyMinutes: DAILY },
   "chat-digest": { label: "Chat unread email", everyMinutes: DAILY },
+  "calls-daily": { label: "Calls (end empty calls, delete old recordings)", everyMinutes: DAILY },
   "people-retention": { label: "People records retention", everyMinutes: DAILY },
   "esign-reminders": { label: "Signature reminders and expiry", everyMinutes: DAILY },
   "esign-seal-sweep": { label: "Sealing signed documents", everyMinutes: 30 },

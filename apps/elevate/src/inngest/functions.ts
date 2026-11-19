@@ -21,6 +21,7 @@ import { runPeopleRetention } from "@/modules/people/retention";
 import { runEsignReminders, runEsignSealSweep } from "@/modules/signing/jobs";
 import { runChecklistReminders, runChecklistSync, runSeparations } from "@/modules/onboarding/jobs";
 import { runImportPurge } from "@/modules/imports/jobs";
+import { runCallsDaily } from "@/modules/calls/jobs";
 import { runChatChannelSync, runChatDigest } from "@/modules/messages/jobs";
 import { runSafevoiceNotify } from "@/modules/safevoice/jobs";
 import { runEarlyReviewScheduler, runReviewReminders } from "@/modules/reviews/jobs";
@@ -325,4 +326,10 @@ export const chatDigest = inngest.createFunction(
   async ({ step }) => step.run("digest", () => track("chat-digest", () => runChatDigest(todayInZone()))),
 );
 
-export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge, chatChannelSync, chatDigest];
+/** Daily at 3:50 AM Phoenix: end calls nobody is in, and delete call recordings older than 30 days. */
+export const callsDaily = inngest.createFunction(
+  { id: "calls-daily", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 50 3 * * *` } },
+  async ({ step }) => step.run("daily", () => track("calls-daily", () => runCallsDaily())),
+);
+
+export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge, chatChannelSync, chatDigest, callsDaily];
