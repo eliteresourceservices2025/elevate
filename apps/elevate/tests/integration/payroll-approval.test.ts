@@ -384,7 +384,7 @@ describe("review, send back and approve", () => {
     expect(await rows(sql`select 1 from payroll.pay_approvals where run_id = ${runId}`)).toHaveLength(0);
   });
 
-  it("an Approver with a line on the run needs another Preparer's confirmation of it", async () => {
+  it("an Approver with a line on the run can approve it, checked or not (2026-11-19)", async () => {
     const p = slot(9);
     const self = await account("approver");
     const ownEmp = await person(self.id);
@@ -394,21 +394,8 @@ describe("review, send back and approve", () => {
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
     const hash = (await hashFor(runId, self))!;
     as(self);
-    expect((await getWorksheet(runId))!.approvalRefusal).toMatch(/your own line/i);
-    const r = await approveRun({ runId, expectedHash: hash });
-    expect(!r.ok && r.error).toMatch(/your own line/i);
-
-    // Sent back, confirmed by a Preparer, sent again: now the Approver may decide.
-    expect(await sendBackRun({ runId, note: "Please confirm my line" })).toMatchObject({ ok: true });
-    const [line] = await runLines(runId, ownEmp);
-    as(checker);
-    expect(await confirmRunLine({ runLineId: line.id })).toMatchObject({ ok: true });
-    as(preparer);
-    expect(await submitRun({ runId })).toMatchObject({ ok: true });
-    const fresh = (await hashFor(runId, self))!;
-    as(self);
     expect((await getWorksheet(runId))!.approvalRefusal).toBeNull();
-    expect(await approveRun({ runId, expectedHash: fresh })).toMatchObject({ ok: true });
+    expect(await approveRun({ runId, expectedHash: hash })).toMatchObject({ ok: true });
   });
 
   it("a person added after the run was sent is a note for the Approver, not a block", async () => {

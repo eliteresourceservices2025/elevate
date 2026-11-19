@@ -71,7 +71,7 @@ export function runChecks(input: ChecksInput): { blocking: RunCheck[]; warnings:
       if (l.net !== null && l.previousNet !== null && movedMoreThan(l.previousNet, l.net, input.changeWarnBp)) add(l, "large_change");
     }
 
-    if (input.submitter.employeeId !== null && l.employeeId === input.submitter.employeeId && (l.confirmedBy === null || l.confirmedBy === input.submitter.userId)) {
+    if (input.submitter.employeeId !== null && l.employeeId === input.submitter.employeeId && l.confirmedBy === null) {
       add(l, "own_line_unconfirmed");
     }
     if (l.unapprovedDays > 0) add(l, "unapproved_days", String(l.unapprovedDays));

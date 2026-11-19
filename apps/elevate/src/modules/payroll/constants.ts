@@ -534,7 +534,7 @@ export const APPROVAL_LABELS = {
 } as const;
 
 /** The "own line" check as an Approver or Viewer sees it: it is about the person who sent the run, not about them. */
-export const OWN_LINE_OF_SUBMITTER = "The line of the person who sent this run needs a confirmation from another Preparer";
+export const OWN_LINE_OF_SUBMITTER = "The line of the person who sent this run has not been checked yet";
 
 /** Wording of the suggestions from approved hours. */
 export const SUGGESTION_LABELS = {
@@ -583,7 +583,7 @@ export const CHECK_LABELS: Record<CheckCode, string> = {
   negative_net: "Total payable compensation is below zero",
   partial_exceeds_cutoff: "The days or hours worked pay more than a full cutoff. Check the amount entered.",
   unassigned_suggestion: "Suggested amounts are not assigned to a pay line",
-  own_line_unconfirmed: "Your own line needs a confirmation from another Preparer",
+  own_line_unconfirmed: "Your own line has not been checked yet",
   unreadable_line: "This line can't be read",
   lines_out_of_date: "The pay lines changed after this run was created. Use Update people to bring the run up to date.",
   unapproved_days: "Some days in the period are not approved",
@@ -608,7 +608,7 @@ export const ISSUE_COPY: Record<CheckCode, { title: string; meaning: string }> =
   negative_net: { title: "Pay is below zero", meaning: "Deductions are bigger than the pay. Open the person's amounts and check what was entered." },
   partial_exceeds_cutoff: { title: "More than a full cutoff of pay", meaning: "The days or hours entered pay more than a whole cutoff. Check the amount." },
   unassigned_suggestion: { title: "Suggestions with no pay line", meaning: "Amounts from a file or from approved hours that no pay line was chosen for. Assign them below the checklist." },
-  own_line_unconfirmed: { title: "Your own line needs another Preparer", meaning: "Nobody checks their own pay. Another Preparer has to mark your line as checked." },
+  own_line_unconfirmed: { title: "Your own line is not checked yet", meaning: "Your own pay is on this run. Mark your line as checked, or ask another Preparer to. The run can still go." },
   lines_out_of_date: { title: "The pay lines changed", meaning: "People or rates changed after this run was made. Update people to bring the run up to date." },
   unapproved_days: { title: "Some days are not approved", meaning: "A lead hasn't approved their hours yet. The run can still go; ask the lead to approve them in Hours review." },
   no_payout_details: { title: "No payout details", meaning: "They can't be paid until HR adds how to pay them. Ask HR to add it on their profile." },

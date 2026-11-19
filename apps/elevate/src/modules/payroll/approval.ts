@@ -15,7 +15,7 @@ import type { ChangeAction } from "./constants";
 import { approvalRefusal, runHash } from "./rules";
 import { checkInputsOf, readRun, recomputeRun, type Executor, type RunData } from "./runs";
 import { payApprovals, payChangeLog, payPayments, payRunLines, payRunReleases, payRuns } from "./schema";
-import { employeeIdForUser, lockDraftRun } from "./service";
+import { lockDraftRun } from "./service";
 
 // Review and approval. A run is sent for review by a Preparer, then approved (or sent back with a note) by an Approver who never
 // prepared or changed it. The approval names a hash of every decrypted figure, so a run that changed since the page loaded is refused.
@@ -117,16 +117,11 @@ export async function computeRunHash(executor: Executor, runId: string): Promise
   return data ? hashOf(executor, data) : null;
 }
 
-/** Why `approverId` may not approve this run (separation of duties, their own line, blocking checks), or null when they may. */
+/** Why `approverId` may not approve this run (separation of duties, blocking checks), or null when they may. */
 export async function refusalFor(executor: Executor, data: RunData, approverId: string): Promise<string | null> {
-  const ownEmployeeId = await employeeIdForUser(executor, approverId);
-  const ownLines = ownEmployeeId === null ? [] : data.rows.filter((r) => r.runLine.employeeId === ownEmployeeId).map((r) => ({ confirmedBy: r.runLine.confirmedBy }));
   const checks = runChecks(await checkInputsOf(executor, data, data.run.submittedBy));
-  // The submitter's own line on a real run must be checked by someone else too (a test run is exempt).
-  const submitterId = data.run.isTest ? null : data.run.submittedBy;
-  const submitterEmployeeId = submitterId ? await employeeIdForUser(executor, submitterId) : null;
-  const submitterLines = submitterEmployeeId === null ? [] : data.rows.filter((r) => r.runLine.employeeId === submitterEmployeeId).map((r) => ({ confirmedBy: r.runLine.confirmedBy }));
-  return approvalRefusal({ approverId, touchedBy: await touchedBy(executor, data.run.id), ownLines, blockingChecks: checks.blocking.length, submitterId, submitterLines });
+  // An own line no longer needs another person's check (owner decision 2026-11-19): only the separation between who prepared and who approves stays.
+  return approvalRefusal({ approverId, touchedBy: await touchedBy(executor, data.run.id), blockingChecks: checks.blocking.length });
 }
 
 /**

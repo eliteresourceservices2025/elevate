@@ -2,6 +2,13 @@
 
 Design: `docs/superpowers/specs/2026-11-04-payroll-design.md`. Plan: `docs/superpowers/plans/`. Real names and pay figures never enter the repo, tests or a development database. Code: `apps/elevate/src/modules/payroll/`. Every label comes from `constants.ts`.
 
+## Own pay loosened (2026-11-19; owner decision; overrides every older note below about own lines, own payments and the own-line approval block)
+
+- Only the payroll level limits who does what; being on the run yourself limits nothing except the one separation that stays: **whoever prepared, changed or checked a run, or wrote a rate it pays, can't approve it** (`touchedBy`).
+- `markPaid`: any Preparer or Approver, any day, any date (no "not in the future" and no "not before the period starts"), on their own line too. `assertNotOwnEmployee` is gone.
+- `confirmRunLine`: a person may check their own line. `approvalRefusal` no longer refuses for an unchecked or self-checked own line or submitter line (`ownLines`, `submitterLines` are gone). The note `own_line_unconfirmed` stays, but only while nobody has checked the line; anyone checking it, the owner included, clears it.
+- Still refused: marking a payment for a person who isn't on the run (the screen only offers people on it), and a run that isn't approved or paid.
+
 ## FTE: a count on each rate, and internal-team pay = total FTE x amount (2026-11-16; owner request; overrides the "No FTE" note below)
 
 The boss wants the FTE count back because it sets the internal team's (ELITE Resource Services team) compensation. Source: the manual payroll sheet (a count of 1, 0.5 or 0 per contractor-on-client line; total 28 for Nov 1 to 15; real names and figures are never in the repo).

@@ -29,15 +29,9 @@ export function LineActions({ runId, line, correctableRuns }: { runId: string; l
           <DropdownMenuItem disabled={line.unreadable} onClick={() => setAmountsOpen(true)}>
             <PencilLine aria-hidden /> Amounts
           </DropdownMenuItem>
-          {line.isOwn ? (
-            <DropdownMenuItem disabled>
-              <CheckCheck aria-hidden /> Your own line: another Preparer checks it
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem disabled={line.unreadable || line.confirmedByMe} onClick={() => run(() => confirmRunLine({ runLineId: line.runLineId }), "Line checked.")}>
-              <CheckCheck aria-hidden /> {line.confirmedByName ? "Check again" : "Mark as checked"}
-            </DropdownMenuItem>
-          )}
+          <DropdownMenuItem disabled={line.unreadable || line.confirmedByMe} onClick={() => run(() => confirmRunLine({ runLineId: line.runLineId }), "Line checked.")}>
+            <CheckCheck aria-hidden /> {line.confirmedByName ? "Check again" : "Mark as checked"}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={() => setRemoveOpen(true)}>
             <UserMinus aria-hidden /> Remove from this run

@@ -48,7 +48,7 @@ If the person already has a rate for the same client, the window tells you to us
 
 **If you added a rate by mistake,** click **More**, then **Remove (added by mistake)**. It is offered only while the rate has never been on a real pay run (a practice run does not count). If the person was paid with it, use **Stop paying** instead.
 
-If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, and **another Preparer must check your line**. You can record your own payment yourself.
+If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, and you can mark your own line as checked (or ask another Preparer to). You can record your own payment yourself.
 
 On a laptop, the table of people scrolls inside its own box. Scroll down in it and the column headings, with the **Person** and **Client** columns, stay in view, so you always see which number is which. When you reach the last person, the page scrolls on. The **Payment** table at the bottom keeps its headings in view the same way.
 
@@ -138,7 +138,7 @@ An approved run never changes. Open **Actions** on the person's line in a later 
 
 # Send it for review
 
-Read the notes first (an unassigned suggestion, pay below zero, days or hours worked that pay more than a full cutoff, your own line not checked, pay lines that changed after the run was made, days not approved yet). Only a line that cannot be read stops the run; everything else you can send as it is.
+Read the notes first (an unassigned suggestion, pay below zero, days or hours worked that pay more than a full cutoff, your own line not checked yet, pay lines that changed after the run was made, days not approved yet). Only a line that cannot be read stops the run; everything else you can send as it is.
 
 Click **Send for review** at the bottom of the run. The Approvers are told that a run is waiting. You cannot change the run while it is in review. If it comes back, read the note and fix what it asks.
 

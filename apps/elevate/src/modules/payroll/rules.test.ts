@@ -6,7 +6,7 @@ const APPROVER = "11111111-1111-4111-8111-111111111111";
 const PREPARER = "22222222-2222-4222-8222-222222222222";
 const OTHER = "33333333-3333-4333-8333-333333333333";
 
-const clean = { approverId: APPROVER, touchedBy: [PREPARER, OTHER], ownLines: [], blockingChecks: 0 };
+const clean = { approverId: APPROVER, touchedBy: [PREPARER, OTHER], blockingChecks: 0 };
 
 describe("approvalRefusal", () => {
   it("lets someone who never touched the run approve a clean run", () => {
@@ -15,22 +15,6 @@ describe("approvalRefusal", () => {
 
   it("refuses anyone who prepared or changed the run, whatever their level is now", () => {
     expect(approvalRefusal({ ...clean, touchedBy: [PREPARER, APPROVER] })).toMatch(/prepared or changed this run/);
-  });
-
-  it("refuses when the approver's own line is unconfirmed or was confirmed by the approver", () => {
-    expect(approvalRefusal({ ...clean, ownLines: [{ confirmedBy: null }] })).toMatch(/your own line/i);
-    expect(approvalRefusal({ ...clean, ownLines: [{ confirmedBy: OTHER }, { confirmedBy: APPROVER }] })).toMatch(/your own line/i);
-  });
-
-  it("allows an own line that another Preparer confirmed", () => {
-    expect(approvalRefusal({ ...clean, ownLines: [{ confirmedBy: OTHER }] })).toBeNull();
-  });
-
-  it("refuses when the line of the person who sent the run is unchecked or was checked by themself", () => {
-    expect(approvalRefusal({ ...clean, submitterId: PREPARER, submitterLines: [{ confirmedBy: null }] })).toMatch(/sent this run for review has not been checked/);
-    expect(approvalRefusal({ ...clean, submitterId: PREPARER, submitterLines: [{ confirmedBy: PREPARER }] })).toMatch(/sent this run for review has not been checked/);
-    expect(approvalRefusal({ ...clean, submitterId: PREPARER, submitterLines: [{ confirmedBy: OTHER }] })).toBeNull();
-    expect(approvalRefusal({ ...clean, submitterId: null, submitterLines: [{ confirmedBy: null }] })).toBeNull(); // a test run passes null
   });
 
   it("refuses while blocking checks remain", () => {
