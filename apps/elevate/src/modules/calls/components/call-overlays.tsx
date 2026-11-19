@@ -25,6 +25,12 @@ function CallAudio() {
 
 function AudioSink({ stream }: { stream: MediaStream }) {
   const ref = useRef<HTMLAudioElement>(null);
+  const speaker = useCall().chosen.speaker;
+  useEffect(() => {
+    // Chrome and Edge can send the sound to a chosen output; elsewhere the system's output is used.
+    const el = ref.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
+    void el?.setSinkId?.(speaker ?? "").catch(() => {});
+  }, [speaker]);
   useEffect(() => {
     const el = ref.current;
     if (el && el.srcObject !== stream) el.srcObject = stream;

@@ -8,6 +8,7 @@ import { useChatLive } from "@/modules/messages/components/use-chat-live";
 import type { ChatSignal } from "@/modules/messages/realtime-types";
 import { callApi } from "../browser/api";
 import { connectCallChannel, type CallChannelClient, type CallPresence, type Reaction } from "../browser/call-channel";
+import { NO_CHOICE, NO_DEVICES, loadChosen, saveChosen, splitDevices, stillThere, type Chosen, type DeviceKind, type DeviceLists } from "../browser/devices";
 import { CallRecorder } from "../browser/recorder";
 import { pickRecordedVideo } from "../recording-rules";
 import { createTransport, type CallTransport, type MediaApi, type RemoteSlot } from "../browser/transport";
@@ -64,6 +65,11 @@ type Value = {
   /** Host controls (the server checks they are the host). */
   muteOther: (userId: string) => Promise<void>;
   removeOther: (userId: string) => Promise<void>;
+  /** Microphones, cameras and speakers this computer has, what I chose (null = the browser's default), and how to change it (also while in a call). */
+  devices: DeviceLists;
+  chosen: Chosen;
+  chooseDevice: (kind: DeviceKind, id: string | null) => Promise<void>;
+  refreshDevices: () => Promise<void>;
   /** What I want when I join (set in the lobby). */
   prefs: { mic: boolean; camera: boolean };
   setPrefs: (next: { mic: boolean; camera: boolean }) => void;
@@ -117,6 +123,9 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
   const [activeSpeakerId, setSpeaker] = useState<string | null>(null);
 
   const [reactions, setReactions] = useState<ReactionItem[]>([]);
+  const [devices, setDevices] = useState<DeviceLists>(NO_DEVICES);
+  const [chosen, setChosen] = useState<Chosen>(NO_CHOICE);
+  const chosenRef = useRef<Chosen>(NO_CHOICE);
   const myPresence = useRef<CallPresence>({ muted: true, hand: false });
   const seenReaction = useRef(new Map<string, number>());
   const reactionKey = useRef(0);
@@ -364,6 +373,59 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
     }
   }, []);
 
+  // ---- microphone, camera and speakers --------------------------------------------------------------------------------------------
+  const refreshDevices = useCallback(async () => {
+    try {
+      const list = splitDevices(await navigator.mediaDevices.enumerateDevices());
+      setDevices(list);
+      // A chosen device that has been unplugged goes back to the default (the call itself keeps working).
+      const still: Chosen = { mic: stillThere(chosenRef.current.mic, list.mics), cam: stillThere(chosenRef.current.cam, list.cams), speaker: stillThere(chosenRef.current.speaker, list.speakers) };
+      if (still.mic !== chosenRef.current.mic || still.cam !== chosenRef.current.cam || still.speaker !== chosenRef.current.speaker) {
+        chosenRef.current = still;
+        setChosen(still);
+      }
+    } catch {
+      // No device list in this browser: the default devices are used.
+    }
+  }, []);
+
+  useEffect(() => {
+    // The saved choice is read after mount (never during the server render), then the current list, and again whenever one is plugged in or out.
+    const first = setTimeout(() => {
+      const saved = loadChosen();
+      chosenRef.current = saved;
+      setChosen(saved);
+      void refreshDevices();
+    }, 0);
+    const media = typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
+    media?.addEventListener?.("devicechange", refreshDevices);
+    return () => {
+      clearTimeout(first);
+      media?.removeEventListener?.("devicechange", refreshDevices);
+    };
+  }, [refreshDevices]);
+
+  /** Chooses a device. In a call the microphone or camera changes at once, without a new connection; the speaker applies to everyone's sound. */
+  const chooseDevice = useCallback(async (kind: DeviceKind, id: string | null) => {
+    const next: Chosen = { ...chosenRef.current, [kind]: id };
+    chosenRef.current = next;
+    setChosen(next);
+    saveChosen(next);
+    const t = transport.current;
+    if (!t || kind === "speaker") return;
+    try {
+      if (kind === "mic") {
+        const stream = await t.switchDevice("audio", id);
+        if (stream) micStream.current = stream;
+      } else {
+        const stream = await t.switchDevice("video", id);
+        if (stream) setLocalCamera(stream);
+      }
+    } catch {
+      toast.error("Couldn't switch to that device. Your last one is still in use.");
+    }
+  }, []);
+
   // ---- lobby, join, leave ------------------------------------------------------------------------------------------------------
   /** Media and the heartbeat stop at once; the page only moves on after the server has recorded the leave, so the chat it returns to already shows "Call ended". */
   const stopQuietly = useCallback(() => {
@@ -463,7 +525,7 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
       if (prefs.mic && publisher) {
         try {
           lastLocalChange.current = Date.now();
-          micStream.current = await t.startSending("audio");
+          micStream.current = await t.startSending("audio", { deviceId: chosenRef.current.mic });
           lastLocalChange.current = Date.now();
           setMicOn(true);
         } catch {
@@ -473,7 +535,7 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
       }
       if (prefs.camera && publisher) {
         try {
-          setLocalCamera(await t.startSending("video"));
+          setLocalCamera(await t.startSending("video", { deviceId: chosenRef.current.cam }));
           setCameraOn(true);
         } catch {
           toast.error("Couldn't use your camera. Check the browser's permission.");
@@ -514,7 +576,7 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
     try {
       if (!t.isSending("audio")) {
         lastLocalChange.current = Date.now();
-        micStream.current = await t.startSending("audio");
+        micStream.current = await t.startSending("audio", { deviceId: chosenRef.current.mic });
         lastLocalChange.current = Date.now();
         setMicOn(true);
         announce({ muted: false });
@@ -538,7 +600,7 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
         setCameraOn(false);
         setLocalCamera(null);
       } else {
-        setLocalCamera(await t.startSending("video"));
+        setLocalCamera(await t.startSending("video", { deviceId: chosenRef.current.cam }));
         setCameraOn(true);
       }
     } catch (e) {
@@ -785,11 +847,11 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
   const value = useMemo<Value>(
     () => ({
       phase, callId, state, error, incoming, micOn, cameraOn, screenOn, localCamera, localScreen, remote, presence, handUp, prefs, setPrefs,
-      abilities, canPublish: state ? mayPublish(state.call.mode, state.me.role) : true, reactions, sendReaction, makeSpeaker, startRecording, stopRecording, answerRecording,
+      devices, chosen, chooseDevice, refreshDevices, abilities, canPublish: state ? mayPublish(state.call.mode, state.me.role) : true, reactions, sendReaction, makeSpeaker, startRecording, stopRecording, answerRecording,
       page: shownPage, pages: selection?.pages ?? 1, visibleUserIds: selection?.visibleUserIds ?? [], pinnedUserId, activeSpeakerId, setPage, pin, muteOther, removeOther,
       open, start, join, leave: leaveNow, endForEveryone, toggleMic, toggleCamera, toggleScreen, toggleHand, answerIncoming, dismissIncoming: clearIncoming, userId,
     }),
-    [phase, callId, state, error, incoming, micOn, cameraOn, screenOn, localCamera, localScreen, remote, presence, handUp, prefs, abilities, reactions, sendReaction, makeSpeaker, startRecording, stopRecording, answerRecording, shownPage, selection, pinnedUserId, activeSpeakerId, setPage, pin, muteOther, removeOther, open, start, join, leaveNow, endForEveryone, toggleMic, toggleCamera, toggleScreen, toggleHand, answerIncoming, clearIncoming, userId],
+    [phase, callId, state, error, incoming, micOn, cameraOn, screenOn, localCamera, localScreen, remote, presence, handUp, prefs, devices, chosen, chooseDevice, refreshDevices, abilities, reactions, sendReaction, makeSpeaker, startRecording, stopRecording, answerRecording, shownPage, selection, pinnedUserId, activeSpeakerId, setPage, pin, muteOther, removeOther, open, start, join, leaveNow, endForEveryone, toggleMic, toggleCamera, toggleScreen, toggleHand, answerIncoming, clearIncoming, userId],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

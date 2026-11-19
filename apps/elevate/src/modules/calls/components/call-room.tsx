@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { REACTIONS } from "../browser/call-channel";
 import type { CallState } from "../service";
 import { CallChat } from "./call-chat";
+import { DevicesDialog } from "./call-devices";
 import { PeoplePanel, ReactionFeed, RecordingNotice, Surface, Tile } from "./call-parts";
 import { useCall } from "./call-provider";
 
@@ -95,6 +96,7 @@ function ControlBar({ panel, setPanel, unread, people }: { panel: Panel; setPane
   const call = useCall();
   const confirm = useConfirm();
   const [more, setMore] = useState(false);
+  const [devicesOpen, setDevicesOpen] = useState(false);
   const isHost = call.state?.me.role === "host";
   const recording = call.state?.recording ?? null;
   const iRecord = recording?.recorderUserId === call.userId;
@@ -133,21 +135,33 @@ function ControlBar({ panel, setPanel, unread, people }: { panel: Panel; setPane
           <PhoneOff aria-hidden />
           Leave
         </Button>
-        {isHost ? (
-          <span className="relative">
+        <span className="relative">
             <Button type="button" variant="ghost" size="icon" aria-label="More call options" aria-haspopup="menu" aria-expanded={more} onClick={() => setMore((v) => !v)} onKeyDown={(e) => e.key === "Escape" && setMore(false)}>
               <MoreHorizontal aria-hidden />
             </Button>
             {more ? (
               <div role="menu" aria-label="More call options" className="absolute right-0 bottom-full z-10 mb-2 w-48 rounded-xl border bg-popover p-1 shadow-md">
-                <button type="button" role="menuitem" className="w-full rounded-lg px-3 py-2 text-left text-sm text-destructive hover:bg-destructive-surface" onClick={() => void endForEveryone()}>
-                  End for everyone
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                  onClick={() => {
+                    setMore(false);
+                    setDevicesOpen(true);
+                  }}
+                >
+                  Devices
                 </button>
+                {isHost ? (
+                  <button type="button" role="menuitem" className="w-full rounded-lg px-3 py-2 text-left text-sm text-destructive hover:bg-destructive-surface" onClick={() => void endForEveryone()}>
+                    End for everyone
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </span>
-        ) : null}
       </div>
+      <DevicesDialog open={devicesOpen} onOpenChange={setDevicesOpen} />
     </div>
   );
 }

@@ -248,3 +248,55 @@ test("real media through Cloudflare: a group call where everyone sees and hears 
   for (const p of pages) await p.getByRole("button", { name: "Leave call" }).first().click().catch(() => {});
   for (const b of browsers.slice(1)) await b.close().catch(() => {});
 });
+
+test("real media through Cloudflare: switching the microphone mid-call keeps the sound flowing", async ({ browser }) => {
+  test.setTimeout(420_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Rdv${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Rdv${stamp}b`);
+  const browserB = await chromium.launch({ channel: "chrome", args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--disable-gpu", "--autoplay-policy=no-user-gesture-required"] });
+  const contextA = await browser.newContext({ permissions: ["microphone", "camera"] });
+  const contextB = await browserB.newContext({ permissions: ["microphone", "camera"] });
+  for (const context of [contextA, contextB]) await instrument(context);
+  const pageA = await contextA.newPage();
+  const pageB = await contextB.newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  await pageB.goto("/dashboard");
+  await startDirect(pageA, `Rdv${stamp}b`, `Bea Rdv${stamp}b`);
+  await pageA.getByRole("button", { name: "Start a call" }).click();
+  await pageA.waitForURL(/\/messages\/call\//, { timeout: 30_000 });
+  await expect(pageA.getByText("Waiting for others to join.")).toBeVisible({ timeout: 45_000 });
+  await pageB.getByRole("alertdialog", { name: "Incoming call" }).getByRole("button", { name: "Join" }).click();
+  await expect(pageB.getByRole("list", { name: "People in the call" }).getByTestId("call-tile")).toHaveCount(2, { timeout: 45_000 });
+
+  // Before: Bea hears Ana's microphone.
+  await expect.poll(() => otherVoiceLevel(pageB, 3), { timeout: 90_000, intervals: [1_000] }).toBeGreaterThan(0.005);
+
+  // Ana changes her microphone to another one (Chrome's fake devices come in several), without leaving the call.
+  await pageA.getByRole("button", { name: "More call options" }).click();
+  await pageA.getByRole("menuitem", { name: "Devices" }).click();
+  const mic = pageA.getByRole("dialog", { name: "Devices" }).getByLabel("Microphone", { exact: true });
+  const options = await mic.locator("option").evaluateAll((els) => els.map((e) => (e as HTMLOptionElement).value).filter(Boolean));
+  expect(options.length).toBeGreaterThan(1);
+  const senderTrackBefore = await pageA.evaluate(() => {
+    const pcs = (window as unknown as { __pcs?: RTCPeerConnection[] }).__pcs ?? [];
+    return pcs.flatMap((pc) => pc.getSenders()).find((s) => s.track?.kind === "audio")?.track?.label ?? "";
+  });
+  await mic.selectOption(options[1]);
+  await pageA.keyboard.press("Escape");
+
+  // After: the sender has a different microphone, nothing renegotiated, and Bea still hears Ana.
+  await expect
+    .poll(async () => pageA.evaluate(() => {
+      const pcs = (window as unknown as { __pcs?: RTCPeerConnection[] }).__pcs ?? [];
+      return pcs.flatMap((pc) => pc.getSenders()).find((s) => s.track?.kind === "audio")?.track?.label ?? "";
+    }), { timeout: 20_000 })
+    .not.toBe(senderTrackBefore);
+  await expect(pageA.getByRole("button", { name: "Mute microphone" })).toBeVisible();
+  await expect.poll(() => otherVoiceLevel(pageB, 4), { timeout: 60_000, intervals: [1_000] }).toBeGreaterThan(0.005);
+
+  await pageB.getByRole("button", { name: "Leave call" }).first().click();
+  await pageA.getByRole("button", { name: "Leave call" }).first().click();
+  await browserB.close();
+});

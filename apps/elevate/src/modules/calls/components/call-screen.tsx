@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { useCall } from "./call-provider";
+import { DeviceCheck, DeviceSelects } from "./call-devices";
 import { ActiveCall } from "./call-room";
 
 // The call page: a lobby (choose microphone and camera, then Join), then the call itself (call-room.tsx). The call lives in
@@ -65,6 +66,8 @@ export function CallScreen({ callId, autoJoin }: { callId: string; autoJoin: boo
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" className="size-4" checked={call.prefs.camera} onChange={(e) => call.setPrefs({ ...call.prefs, camera: e.target.checked })} /> Join with my camera on
       </label>
+      <DeviceSelects idPrefix="lobby" />
+      <DeviceCheck />
       {call.error ? (
         <p role="alert" className="text-sm text-destructive">
           {call.error}

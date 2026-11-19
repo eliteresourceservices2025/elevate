@@ -359,3 +359,52 @@ test("chat and reactions inside a call: the same conversation, live, with an unr
   await expect(pageB.getByRole("log").getByText("Can we start with slide 4?")).toBeVisible({ timeout: 30_000 });
   await expect(pageB.getByRole("log").getByText("Second thought")).toBeVisible();
 });
+
+test("devices: test and choose them in the lobby, change them during the call, and the choice is remembered", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Dev${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Dev${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  await startDirect(pageA, `Dev${stamp}b`, `Bea Dev${stamp}b`);
+  await pageA.getByRole("button", { name: "Start a call" }).click();
+  await pageA.waitForURL(/\/messages\/call\/[0-9a-f-]{36}/, { timeout: 30_000 });
+  const callUrl = new URL(pageA.url()).pathname;
+
+  // Bea opens the call page without joining: the lobby has the three lists and a test.
+  await pageB.goto(callUrl);
+  const lobby = pageB.getByRole("region", { name: "Join the call" });
+  await expect(lobby.getByLabel("Microphone", { exact: true })).toBeVisible({ timeout: 45_000 });
+  await expect(lobby.getByLabel("Camera", { exact: true })).toBeVisible();
+  await (await hydrated(lobby.getByRole("button", { name: "Test my microphone and camera" }))).click();
+  await expect(lobby.getByRole("meter", { name: "Microphone level" })).toBeVisible({ timeout: 20_000 });
+  await expect(lobby.getByLabel("Your camera")).toBeVisible();
+  // Once the browser has allowed the devices the lists are filled in; she picks the second microphone (Chrome's fake devices have several).
+  const mic = lobby.getByLabel("Microphone", { exact: true });
+  await expect.poll(async () => await mic.locator("option").count(), { timeout: 20_000 }).toBeGreaterThan(1);
+  const chosenId = await mic.locator("option").nth(1).getAttribute("value");
+  await mic.selectOption(chosenId!);
+  await expect(mic).toHaveValue(chosenId!);
+  expect(await pageB.evaluate(() => window.localStorage.getItem("elevate.call.devices"))).toContain(chosenId!);
+
+  // The choice is still there after a reload.
+  await pageB.reload();
+  await expect(pageB.getByRole("region", { name: "Join the call" }).getByLabel("Microphone", { exact: true })).toHaveValue(chosenId!, { timeout: 30_000 });
+
+  // In the call, Devices opens a dialog; changing the microphone switches it without leaving.
+  await pageB.getByRole("button", { name: "Join call" }).click();
+  await expect(pageB.getByRole("list", { name: "People in the call" })).toBeVisible({ timeout: 30_000 });
+  await expect(pageB.getByRole("button", { name: "Mute microphone" })).toBeVisible({ timeout: 20_000 });
+  await pageB.getByRole("button", { name: "More call options" }).click();
+  await pageB.getByRole("menuitem", { name: "Devices" }).click();
+  const dialog = pageB.getByRole("dialog", { name: "Devices" });
+  await expect(dialog.getByLabel("Microphone", { exact: true })).toHaveValue(chosenId!);
+  await dialog.getByLabel("Microphone", { exact: true }).selectOption("");
+  await expect.poll(() => pageB.evaluate(() => (window as unknown as { __callsFake: { switched?: string[] } }).__callsFake.switched ?? [])).toContain("audio:default");
+  expect(await pageB.evaluate(() => window.localStorage.getItem("elevate.call.devices"))).not.toContain(chosenId!);
+  await pageB.keyboard.press("Escape");
+  await expect(pageB.getByRole("button", { name: "Mute microphone" })).toBeVisible();
+});

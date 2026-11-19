@@ -6,7 +6,7 @@ import type { CallTransport, IceServer, MediaApi, RemoteSlot, RemoteUpdate } fro
 // It still makes every server call a real connection would (publish, close, subscribe, answer), so the server rules are exercised; only
 // the media itself is replaced by small animated canvases. It records what happened on window.__callsFake for tests.
 
-type Debug = { sent: Record<string, number>; pulled: string[]; unsubscribed: string[]; micEnabled: boolean };
+type Debug = { sent: Record<string, number>; pulled: string[]; unsubscribed: string[]; micEnabled: boolean; switched?: string[] };
 
 function canvasStream(label: string, hue: number): MediaStream {
   const canvas = document.createElement("canvas");
@@ -54,7 +54,15 @@ export class FakeTransport implements CallTransport {
     return this.sending.has(kind);
   }
 
-  async startSending(kind: TrackKind): Promise<MediaStream> {
+  async switchDevice(kind: "audio" | "video", deviceId: string | null): Promise<MediaStream | null> {
+    const entry = this.sending.get(kind);
+    if (!entry) return null;
+    this.debug.switched = [...(this.debug.switched ?? []), `${kind}:${deviceId ?? "default"}`];
+    return entry.stream;
+  }
+
+  async startSending(kind: TrackKind, options?: { deviceId?: string | null }): Promise<MediaStream> {
+    void options;
     if (!this.api) throw new Error("Call not started.");
     const existing = this.sending.get(kind);
     if (existing) return existing.stream;

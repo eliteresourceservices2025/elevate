@@ -59,19 +59,50 @@ export class CloudflareTransport implements CallTransport {
     return this.sending.has(kind);
   }
 
-  async startSending(kind: TrackKind): Promise<MediaStream> {
+  /** Gets the microphone, camera or screen. A chosen device that is gone (unplugged since last time) falls back to the default. */
+  private async capture(kind: TrackKind, deviceId: string | null): Promise<MediaStream> {
+    if (kind === "screen") return navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: false });
+    const ask = (id: string | null) => {
+      const device = id ? { deviceId: { exact: id } } : {};
+      return kind === "audio"
+        ? navigator.mediaDevices.getUserMedia({ audio: { ...device, echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+        : navigator.mediaDevices.getUserMedia({ video: { ...device, ...CAMERA } });
+    };
+    try {
+      return await ask(deviceId);
+    } catch (error) {
+      const name = error instanceof DOMException ? error.name : "";
+      if (deviceId && (name === "OverconstrainedError" || name === "NotFoundError")) return ask(null);
+      throw error;
+    }
+  }
+
+  async switchDevice(kind: "audio" | "video", deviceId: string | null): Promise<MediaStream | null> {
+    return this.serial(async () => {
+      const entry = this.sending.get(kind);
+      if (!entry) return null;
+      const stream = await this.capture(kind, deviceId);
+      const track = kind === "audio" ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
+      if (!track) throw new Error("No device found.");
+      // A muted microphone stays muted on the new device.
+      if (kind === "audio") track.enabled = this.micTrack?.enabled ?? true;
+      // The same sender gets the new track: no new offer, and the others keep receiving without a break.
+      await entry.transceiver.sender.replaceTrack(track);
+      entry.stream.getTracks().forEach((t) => t.stop());
+      entry.stream = stream;
+      if (kind === "audio") this.micTrack = track;
+      return stream;
+    });
+  }
+
+  async startSending(kind: TrackKind, options?: { deviceId?: string | null }): Promise<MediaStream> {
     return this.serial(async () => {
       const push = this.push;
       const api = this.api;
       if (!push || !api) throw new Error("Call not started.");
       const existing = this.sending.get(kind);
       if (existing) return existing.stream;
-      const stream =
-        kind === "audio"
-          ? await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-          : kind === "video"
-            ? await navigator.mediaDevices.getUserMedia({ video: CAMERA })
-            : await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: false });
+      const stream = await this.capture(kind, options?.deviceId ?? null);
       const track = kind === "audio" ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
       if (!track) throw new Error("No device found.");
       if (kind === "audio") this.micTrack = track;
