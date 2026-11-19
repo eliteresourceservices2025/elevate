@@ -58,6 +58,10 @@ const EXPECTED: Record<string, string> = {
   "calls.record": "- - - - - -", // recorder flag only (a Super Admin picks the people)
   "calls.manage_recorders": "A - - - - -",
   "calls.settings": "A - - - - -",
+  "chataccess.request": "A A - - - -", // HR Admin (or a Super Admin) asks for a chat or recording they are not part of
+  "chataccess.decide": "A - - - - -", // a DIFFERENT Super Admin decides
+  "chataccess.list": "A O - - - -",
+  "chataccess.read": "O O - - - -", // only the person who asked reads what was granted
   "privacy.view_my_data": "O O O O O O",
   "privacy.export_my_data": "O O O O O O",
   "privacy.request_data_rights": "O O O O O O",

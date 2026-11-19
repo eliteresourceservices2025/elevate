@@ -1135,6 +1135,13 @@
       "when": 1795048529185,
       "tag": "0161_call_recordings",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1795105665041,
+      "tag": "0162_chat_access_requests",
+      "breakpoints": true
     }
   ]
 }
