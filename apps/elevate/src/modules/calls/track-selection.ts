@@ -11,6 +11,14 @@ export type PublishedTrack = { userId: string; role: ParticipantRole; cfSessionI
 export const DEFAULT_TILES = 9;
 export const MAX_MEETING_PARTICIPANTS = 25;
 export const MAX_TOWNHALL_SPEAKERS = 8;
+/** An all-hands is for the whole company (about 125 people) with room to grow; only the speakers send anything. */
+export const MAX_TOWNHALL_PARTICIPANTS = 150;
+
+/** How many people may be in a call at once. */
+export const maxParticipants = (mode: CallMode) => (mode === "townhall" ? MAX_TOWNHALL_PARTICIPANTS : MAX_MEETING_PARTICIPANTS);
+
+/** An all-hands needs a place the whole company or a team shares: never a direct message, and never a client group (a client may not be in it). */
+export const TOWNHALL_KINDS = ["company", "department", "team", "channel", "group"] as const;
 
 type Input = {
   tracks: PublishedTrack[];

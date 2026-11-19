@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatInZone } from "@/lib/time";
-import { saveCallSettings } from "../actions";
+import { saveCallSettings, setCallRecorder } from "../actions";
 import type { CallSettingsView } from "../settings";
 
 /** Super Admin: this month's estimated media against Cloudflare's free 1,000 GB, the warning level, and the all-hands switch. */
@@ -15,6 +15,8 @@ export function CallSettingsPanel({ view, timeZone }: { view: CallSettingsView; 
   const router = useRouter();
   const [warning, setWarning] = useState(String(view.warningGb));
   const [townhall, setTownhall] = useState(view.townhallEnabled);
+  const [recordingOn, setRecordingOn] = useState(view.recordingEnabled);
+  const [pick, setPick] = useState("");
   const [pending, startTransition] = useTransition();
   const percent = Math.min(100, Math.round((view.monthGb / view.freeGb) * 100));
   const level = Number(warning);
@@ -57,7 +59,7 @@ export function CallSettingsPanel({ view, timeZone }: { view: CallSettingsView; 
           e.preventDefault();
           if (!valid) return;
           startTransition(async () => {
-            const result = await saveCallSettings({ monthlyGbWarning: level, townhallEnabled: townhall });
+            const result = await saveCallSettings({ monthlyGbWarning: level, townhallEnabled: townhall, recordingEnabled: recordingOn });
             if (!result.ok) return void toast.error(result.error);
             toast.success("Saved.");
             router.refresh();
@@ -76,14 +78,16 @@ export function CallSettingsPanel({ view, timeZone }: { view: CallSettingsView; 
           <input type="checkbox" className="mt-0.5 size-4" checked={townhall} onChange={(e) => setTownhall(e.target.checked)} />
           <span>
             <span className="block font-medium">Allow all-hands calls</span>
-            <span className="block text-muted-foreground">Big calls where a few people speak and everyone else watches. Coming in a later release.</span>
+            <span className="block text-muted-foreground">Big calls (up to 150 people) where up to 8 people speak and everyone else watches. Leadership and HR start them in the company, team, department and group chats.</span>
           </span>
         </label>
-        <label className="flex items-start gap-2 text-sm opacity-70">
-          <input type="checkbox" className="mt-0.5 size-4" checked={view.recordingEnabled} disabled readOnly />
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5 size-4" checked={recordingOn} onChange={(e) => setRecordingOn(e.target.checked)} />
           <span>
             <span className="block font-medium">Allow recording</span>
-            <span className="block text-muted-foreground">Off until the recording feature and the updated Monitoring policy are published.</span>
+            <span className="block text-muted-foreground">
+              Only people you pick below can record, everyone in the call says yes first, and calls with clients are never recorded. Recordings are deleted after 30 days. Turn this on only after the updated Monitoring policy and privacy notice are published.
+            </span>
           </span>
         </label>
         <div>
@@ -92,6 +96,69 @@ export function CallSettingsPanel({ view, timeZone }: { view: CallSettingsView; 
           </Button>
         </div>
       </form>
+
+      <section aria-label="People who can record" className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+        <h2 className="font-heading text-lg font-semibold">People who can record</h2>
+        <p className="text-sm text-muted-foreground">No role can record on its own: you choose the people. Everyone in a call still has to agree before they are recorded.</p>
+        {view.recorders.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nobody yet.</p>
+        ) : (
+          <ul className="divide-y rounded-lg border text-sm">
+            {view.recorders.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 px-3 py-2">
+                <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={pending}
+                  onClick={() =>
+                    startTransition(async () => {
+                      const result = await setCallRecorder({ userId: p.id, enabled: false });
+                      if (!result.ok) return void toast.error(result.error);
+                      toast.success(`${p.name} can no longer record.`);
+                      router.refresh();
+                    })
+                  }
+                  aria-label={`Stop ${p.name} from recording`}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex min-w-60 flex-col gap-1.5">
+            <label htmlFor="recorder-pick" className="text-sm font-medium">
+              Add a person
+            </label>
+            <select id="recorder-pick" className="h-(--control-h) rounded-lg border bg-background px-2 text-sm" value={pick} onChange={(e) => setPick(e.target.value)}>
+              <option value="">Choose…</option>
+              {view.candidates.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button
+            type="button"
+            disabled={!pick || pending}
+            onClick={() =>
+              startTransition(async () => {
+                const result = await setCallRecorder({ userId: pick, enabled: true });
+                if (!result.ok) return void toast.error(result.error);
+                toast.success("They can record calls now.");
+                setPick("");
+                router.refresh();
+              })
+            }
+          >
+            Add
+          </Button>
+        </div>
+      </section>
 
       <section aria-label="Recent calls" className="flex flex-col gap-2">
         <h2 className="font-heading text-lg font-semibold">Recent calls</h2>

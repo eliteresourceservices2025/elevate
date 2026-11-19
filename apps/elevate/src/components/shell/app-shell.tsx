@@ -9,7 +9,7 @@ import { UnsavedChangesProvider } from "@/components/unsaved-changes";
 import { PopupQueue, type PopupItem } from "@/modules/announcements/components/popup-queue";
 import { playChatSound, unlockAudio } from "@/modules/messages/components/play-sound";
 import { CallOverlays } from "@/modules/calls/components/call-overlays";
-import { CallProvider } from "@/modules/calls/components/call-provider";
+import { CallProvider, type Abilities } from "@/modules/calls/components/call-provider";
 import { useLiveChatCount } from "@/modules/messages/components/use-live-chat-count";
 import type { ChatSound } from "@/modules/messages/sound-options";
 import { AppHeader } from "./app-header";
@@ -23,7 +23,7 @@ type HeaderProps = Omit<ComponentProps<typeof AppHeader>, "collapsed" | "onToggl
  * The frame of every signed-in page: the menu and the header stay put and only the content scrolls.
  * The menu can be narrowed to icons; the choice is a plain cookie so the server renders the right width at once.
  */
-export function AppShell({ initialCollapsed, chatSound = "chime", tourAutoStart = false, popups = [], banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; chatSound?: ChatSound; tourAutoStart?: boolean; popups?: PopupItem[]; banner: ReactNode; children: ReactNode }) {
+export function AppShell({ initialCollapsed, callAbilities, chatSound = "chime", tourAutoStart = false, popups = [], banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; callAbilities?: Abilities; chatSound?: ChatSound; tourAutoStart?: boolean; popups?: PopupItem[]; banner: ReactNode; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const pathname = usePathname();
   // The chat count in the header and the menu stays current on every page (a shared live connection), not only on the Messages page.
@@ -57,7 +57,7 @@ export function AppShell({ initialCollapsed, chatSound = "chime", tourAutoStart 
   // cannot scroll at all, so only the content area below ever moves.
   // The call provider wraps everything so a call survives moving between pages (its sound, mini window and ring are CallOverlays).
   return (
-    <CallProvider userId={header.userId ?? ""}>
+    <CallProvider userId={header.userId ?? ""} abilities={callAbilities}>
     <div data-app-shell className="relative flex h-dvh overflow-clip print:block print:h-auto print:overflow-visible">
       {/* Skip link: first stop for keyboard users. Fixed, not absolute, so focusing it can never scroll the shell. */}
       <a

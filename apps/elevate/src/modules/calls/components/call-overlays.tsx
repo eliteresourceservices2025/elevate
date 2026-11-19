@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useCall } from "./call-provider";
-import { CallControls } from "./call-screen";
+import { CallControls, RecordingNotice } from "./call-screen";
 
 /** Plays everyone's voice, always mounted while a call is active, so the sound keeps going in the mini window and on every page. */
 function CallAudio() {
@@ -47,6 +47,7 @@ function MiniCall() {
           Return
         </Link>
       </div>
+      <RecordingNotice />
       <CallControls compact />
     </section>
   );

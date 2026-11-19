@@ -12,10 +12,12 @@ import { conversationMembers, conversations } from "@/modules/messages/schema";
 import { currentMemberIds, postSystemLine, requireMember } from "@/modules/messages/service";
 import { notify } from "@/modules/notifications/service";
 import { broadcastCallEvent } from "./realtime";
-import { callParticipants, calls, callTracks, callUsage } from "./schema";
+import { endActiveRecording, recordingInfoFor } from "./recording-state";
+import type { RecordingInfo } from "./recording-rules";
+import { callParticipants, calls, callSettings, callTracks, callUsage } from "./schema";
 import { fakeCallsEnabled, getSfu } from "./sfu-port";
 import { isSafeSessionId, mediaKindForMid, newTrackName } from "./sfu-rules";
-import { mayPublish, MAX_MEETING_PARTICIPANTS, type CallMode, type ParticipantRole, type TrackKind } from "./track-selection";
+import { mayPublish, maxParticipants, MAX_TOWNHALL_SPEAKERS, TOWNHALL_KINDS, type CallMode, type ParticipantRole, type TrackKind } from "./track-selection";
 import { estimateCallGb } from "./usage";
 
 // The life of a call: start, join, leave, end, the 30-second heartbeat, and the media steps (publish, subscribe, renegotiate). Domain
@@ -34,11 +36,13 @@ const START_GRACE_SECONDS = 60;
 /** Ringing everyone is only for small chats: in a big channel people see a "call in progress" banner instead. */
 export const RING_MAX_MEMBERS = 25;
 const MAX_LOCAL_TRACKS = 4;
+/** From this many people in an all-hands, audience members joining and leaving are not announced to everyone (the 30-second heartbeat catches up). */
+const QUIET_AUDIENCE_FROM = 30;
 
 export type CallInfo = { id: string; conversationId: string; mode: CallMode; startedAt: string; startedBy: string; title: string; conversationKind: string };
 export type Seat = { userId: string; name: string; role: ParticipantRole; joinedAt: string };
 export type PublishedInfo = { userId: string; role: ParticipantRole; cfSessionId: string; trackName: string; kind: TrackKind };
-export type CallState = { call: CallInfo; me: { userId: string; role: ParticipantRole; sessionId: string }; participants: Seat[]; tracks: PublishedInfo[] };
+export type CallState = { call: CallInfo; me: { userId: string; role: ParticipantRole; sessionId: string }; participants: Seat[]; tracks: PublishedInfo[]; recording: RecordingInfo | null };
 export type LiveCall = { callId: string; mode: CallMode; startedAt: string; startedByName: string; participantCount: number; iAmIn: boolean; conversationId: string };
 
 /** Seats that have been silent too long are treated as left, and a call with nobody left in it ends. Returns the summary if it ended just now. */
@@ -82,8 +86,12 @@ async function handOverHost(tx: Tx, callId: string): Promise<void> {
     .where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt)))
     .orderBy(asc(callParticipants.joinedAt));
   if (seats.some((s) => s.role === "host")) return;
+  // In an all-hands only a speaker can take over (a random person in the audience must never end the call or remove speakers); with no
+  // speaker left there is no host, and the call ends when the last person goes.
+  const [call] = await tx.select({ mode: calls.mode }).from(calls).where(eq(calls.id, callId)).limit(1);
+  const heirs = call?.mode === "townhall" ? seats.filter((s) => s.role === "speaker") : seats;
   // Only staff can be host: a client guest never controls a call (mute, remove, end). With only guests left there is no host.
-  const next = seats.find((s) => !s.isGuest);
+  const next = heirs.find((s) => !s.isGuest);
   if (next) await tx.update(callParticipants).set({ role: "host" }).where(eq(callParticipants.id, next.id));
 }
 
@@ -99,6 +107,8 @@ async function endSeats(tx: Tx, callId: string, seatIds: string[]): Promise<Seat
     cuts.push({ pushSession: seat.cfSessionId, pullSession: seat.cfPullSessionId ?? null, pushMids: mine.map((t) => t.mid).filter((m): m is string => Boolean(m)), pullMids: seat.pulledMids });
   }
   if (seats.length > 0) {
+    // Whoever was recording stops recording the moment they go (the recording is kept; nobody else carries on).
+    await endActiveRecording(tx, callId, "recorder_left", seats.map((s) => s.userId));
     await tx.update(callParticipants).set({ leftAt: sql`now()` }).where(inArray(callParticipants.id, seats.map((s) => s.id)));
     await tx.update(callTracks).set({ endedAt: sql`now()` }).where(and(eq(callTracks.callId, callId), inArray(callTracks.userId, seats.map((s) => s.userId)), isNull(callTracks.endedAt)));
   }
@@ -128,6 +138,7 @@ async function finish(tx: Tx, callId: string, reason: "ended" | "empty" | "conve
   const [call] = await tx.select().from(calls).where(and(eq(calls.id, callId), isNull(calls.endedAt))).for("update").limit(1);
   if (!call) return null;
   const open = await tx.select({ id: callParticipants.id }).from(callParticipants).where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt)));
+  await endActiveRecording(tx, callId, "call_ended");
   cuts.push(...(await endSeats(tx, callId, open.map((s) => s.id))));
   await tx.update(callParticipants).set({ leftAt: sql`now()` }).where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt)));
   await tx.update(callTracks).set({ endedAt: sql`now()` }).where(and(eq(callTracks.callId, callId), isNull(callTracks.endedAt)));
@@ -197,20 +208,27 @@ async function openSeat(executor: Db, callId: string, userId: string) {
 }
 
 /** Starts a call in a chat the person belongs to, or returns the one already live there. Rings everyone in small chats. */
-export async function startCall(actor: Actor, input: { conversationId: string; canManage?: boolean }): Promise<{ callId: string; created: boolean }> {
+export async function startCall(actor: Actor, input: { conversationId: string; canManage?: boolean; mode?: CallMode }): Promise<{ callId: string; created: boolean }> {
   if (actor.isGuest) throw new ActionFailure("You can't start a call.");
+  const mode: CallMode = input.mode ?? "meeting";
   const member = await requireMember(db, actor.id, input.conversationId);
+  if (mode === "townhall") await assertTownhallAllowed(input.conversationId);
   // A channel only HR posts in (the company channel) is not a place anyone can ring everyone from.
   if (member.posting === "admins" && !input.canManage) throw new ActionFailure("Only HR can start a call in this channel.");
   const members = await currentMemberIds(db, input.conversationId);
   const existing = await liveCallIdFor(input.conversationId);
-  if (existing) return { callId: existing, created: false };
+  if (existing) {
+    // Asking for an all-hands must not quietly drop someone into an ordinary call (25 people, everyone speaking).
+    const [live] = await db.select({ mode: calls.mode }).from(calls).where(eq(calls.id, existing)).limit(1);
+    if (mode === "townhall" && live?.mode !== "townhall") throw new ActionFailure("A call is already going on in this chat. End it first.");
+    return { callId: existing, created: false };
+  }
 
   const callId = randomUUID();
   try {
     await db.transaction(async (tx) => {
-      await tx.insert(calls).values({ id: callId, conversationId: input.conversationId, startedBy: actor.id, mode: "meeting" });
-      await writeAudit({ actor, action: "call.start", targetType: "call", targetId: callId, metadata: { conversationId: input.conversationId, mode: "meeting", members: members.length } }, tx);
+      await tx.insert(calls).values({ id: callId, conversationId: input.conversationId, startedBy: actor.id, mode });
+      await writeAudit({ actor, action: "call.start", targetType: "call", targetId: callId, metadata: { conversationId: input.conversationId, mode, members: members.length } }, tx);
     });
   } catch (error) {
     // Two people pressed "call" together: the one live call wins.
@@ -218,7 +236,7 @@ export async function startCall(actor: Actor, input: { conversationId: string; c
     if (winner) return { callId: winner, created: false };
     throw error;
   }
-  await postSystemLine({ conversationId: input.conversationId, senderUserId: actor.id, body: "Call started" }).catch(() => {});
+  await postSystemLine({ conversationId: input.conversationId, senderUserId: actor.id, body: mode === "townhall" ? "All-hands started" : "Call started" }).catch(() => {});
   if (members.length <= RING_MAX_MEMBERS) await broadcastChatSignal(members.filter((id) => id !== actor.id), { type: "call", conversationId: input.conversationId, callId });
   else await broadcastChatSignal(members, { type: "call", conversationId: input.conversationId, callId });
   return { callId, created: true };
@@ -259,7 +277,9 @@ async function stateFor(callId: string, selfId: string): Promise<CallState> {
   const published = await db.select().from(callTracks).where(and(eq(callTracks.callId, callId), isNull(callTracks.endedAt)));
   const names = await peopleByUserId(seats.map((s) => s.userId));
   const roleByUser = new Map(seats.map((s) => [s.userId, s.role as ParticipantRole]));
+  const recording = await recordingInfoFor(callId, selfId);
   return {
+    recording,
     call: { id: callId, conversationId: row.call.conversationId, mode: row.call.mode as CallMode, startedAt: row.call.startedAt.toISOString(), startedBy: row.call.startedBy, title: await titleFor(row.call.conversationId, row.kind, row.title, selfId), conversationKind: row.kind },
     me: { userId: selfId, role: seat.role as ParticipantRole, sessionId: seat.cfSessionId },
     participants: seats.map((s) => ({ userId: s.userId, name: names.get(s.userId)?.name ?? "Someone", role: s.role as ParticipantRole, joinedAt: s.joinedAt.toISOString() })),
@@ -279,6 +299,7 @@ export async function joinCall(actor: Actor, input: { callId: string }): Promise
   if (!isSafeSessionId(sessionId) || !isSafeSessionId(pullSessionId)) throw new ActionFailure("Calls aren't working right now. Try again in a moment.");
 
   const cuts: SeatCut[] = [];
+  let quietJoin = false;
   await db.transaction(async (tx) => {
     const [live] = await tx.select().from(calls).where(and(eq(calls.id, input.callId), isNull(calls.endedAt))).for("update").limit(1);
     if (!live) throw new ActionFailure("This call has ended.");
@@ -286,20 +307,25 @@ export async function joinCall(actor: Actor, input: { callId: string }): Promise
     const [removed] = await tx.select({ id: callParticipants.id }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), eq(callParticipants.userId, actor.id), isNotNull(callParticipants.removedBy))).limit(1);
     if (removed) throw new ActionFailure("You were removed from this call.");
     // Joining again (a refresh, a second tab) replaces the old seat, and what it was sending and receiving is closed at Cloudflare.
+    if (actor.isGuest) await endActiveRecording(tx, input.callId, "guest_joined");
     const old = await openSeat(tx, input.callId, actor.id);
     if (old) cuts.push(...(await endSeats(tx, input.callId, [old.id])));
     // Seats that went silent, or whose person left the chat, are over.
     await sweepSeatsOnly(tx, input.callId, cuts);
     const [others] = await tx.select({ n: sql<number>`count(*)::int` }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), isNull(callParticipants.leftAt)));
-    if (others.n >= MAX_MEETING_PARTICIPANTS) throw new ActionFailure(`This call is full (${MAX_MEETING_PARTICIPANTS} people).`);
+    const cap = maxParticipants(live.mode as CallMode);
+    if (others.n >= cap) throw new ActionFailure(`This call is full (${cap} people).`);
     // Host is ONE held role: the starter gets it back on returning only if nobody else holds it now (never two hosts).
     const [hostNow] = await tx.select({ n: sql<number>`count(*)::int` }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), isNull(callParticipants.leftAt), eq(callParticipants.role, "host")));
     const role: ParticipantRole = live.startedBy === actor.id && hostNow.n === 0 ? "host" : "attendee";
+    // In a big all-hands an audience member joining changes little for the others: no signal (125 people joining would make every browser
+    // reload the whole state 125 times). The next 30-second heartbeat brings the list up to date. In a small one everyone sees it at once.
+    quietJoin = live.mode === "townhall" && role === "attendee" && others.n >= QUIET_AUDIENCE_FROM;
     await tx.insert(callParticipants).values({ callId: input.callId, userId: actor.id, role, cfSessionId: sessionId, cfPullSessionId: pullSessionId });
     await tx.update(calls).set({ maxParticipants: sql`greatest(${calls.maxParticipants}, ${others.n + 1})` }).where(eq(calls.id, input.callId));
   });
   await closeAtCloudflare(cuts);
-  await broadcastCallEvent({ type: "roster", callId: input.callId });
+  if (!quietJoin) await broadcastCallEvent({ type: "roster", callId: input.callId });
   return { ...(await stateFor(input.callId, actor.id)), iceServers: await sfu.iceServers() };
 }
 
@@ -334,14 +360,17 @@ export async function leaveCall(actor: Actor, input: { callId: string }): Promis
     throw new ActionFailure(NOT_FOUND);
   });
   const cuts: SeatCut[] = [];
+  let quietLeave = false;
   const ended = await db.transaction(async (tx) => {
-    const mine = await tx.select({ id: callParticipants.id }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), eq(callParticipants.userId, actor.id), isNull(callParticipants.leftAt)));
+    const mine = await tx.select({ id: callParticipants.id, role: callParticipants.role }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), eq(callParticipants.userId, actor.id), isNull(callParticipants.leftAt)));
+    const [here] = await tx.select({ n: sql<number>`count(*)::int` }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), isNull(callParticipants.leftAt)));
+    quietLeave = row.call.mode === "townhall" && here.n >= QUIET_AUDIENCE_FROM && mine.every((s) => s.role === "attendee");
     cuts.push(...(await endSeats(tx, input.callId, mine.map((s) => s.id))));
     return sweep(tx, input.callId, cuts);
   });
   await closeAtCloudflare(cuts);
   if (ended) await announceEnd(ended);
-  else await Promise.all([broadcastCallEvent({ type: "roster", callId: input.callId }), broadcastCallEvent({ type: "tracks", callId: input.callId })]);
+  else if (!quietLeave) await Promise.all([broadcastCallEvent({ type: "roster", callId: input.callId }), broadcastCallEvent({ type: "tracks", callId: input.callId })]);
 }
 
 /** Ends the call for everyone. Only the host (the person who started it). */
@@ -352,6 +381,46 @@ export async function endCall(actor: Actor, input: { callId: string }): Promise<
   const ended = await db.transaction((tx) => finish(tx, input.callId, "ended", cuts));
   await closeAtCloudflare(cuts);
   if (ended) await announceEnd({ ...ended, missed: false });
+}
+
+/** An all-hands is switched on by a Super Admin, and happens in a place the whole company or a team shares (never a DM, never a client group). */
+async function assertTownhallAllowed(conversationId: string): Promise<void> {
+  const [settings] = await db.select({ on: callSettings.townhallEnabled }).from(callSettings).where(eq(callSettings.id, 1)).limit(1);
+  if (settings && !settings.on) throw new ActionFailure("All-hands calls are switched off.");
+  const [conv] = await db.select({ kind: conversations.kind }).from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+  if (!conv || !(TOWNHALL_KINDS as readonly string[]).includes(conv.kind)) throw new ActionFailure("An all-hands can't be held in this chat.");
+}
+
+/**
+ * Host, in an all-hands: makes someone a speaker (their camera, microphone and screen reach everyone) or puts them back in the audience.
+ * At most 8 speakers including the host; a client guest never speaks. Putting someone back closes what they were sending at Cloudflare.
+ */
+export async function setSpeaker(actor: Actor, input: { callId: string; userId: string; speaker: boolean }): Promise<void> {
+  const target = await targetSeat(actor, input.callId, input.userId);
+  const [call] = await db.select({ mode: calls.mode }).from(calls).where(eq(calls.id, input.callId)).limit(1);
+  if (call?.mode !== "townhall") throw new ActionFailure("Speakers only exist in an all-hands.");
+  if (target.role === "host") throw new ActionFailure("The host is already speaking.");
+  const [person] = await db.select({ isGuest: users.isGuest }).from(users).where(eq(users.id, input.userId)).limit(1);
+  if (input.speaker && person?.isGuest) throw new ActionFailure("A guest can't be made a speaker.");
+  const cuts: SeatCut[] = [];
+  await db.transaction(async (tx) => {
+    await tx.select({ id: calls.id }).from(calls).where(eq(calls.id, input.callId)).for("update");
+    const seat = await openSeat(tx, input.callId, input.userId);
+    if (!seat) throw new ActionFailure("That person isn't in the call.");
+    if (input.speaker) {
+      const [now] = await tx.select({ n: sql<number>`count(*)::int` }).from(callParticipants).where(and(eq(callParticipants.callId, input.callId), isNull(callParticipants.leftAt), inArray(callParticipants.role, ["host", "speaker"])));
+      if (seat.role !== "speaker" && now.n >= MAX_TOWNHALL_SPEAKERS) throw new ActionFailure(`An all-hands can have ${MAX_TOWNHALL_SPEAKERS} speakers at most.`);
+      await tx.update(callParticipants).set({ role: "speaker" }).where(eq(callParticipants.id, seat.id));
+    } else {
+      await tx.update(callParticipants).set({ role: "attendee" }).where(eq(callParticipants.id, seat.id));
+      const mine = await tx.select({ mid: callTracks.mid }).from(callTracks).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, input.userId), isNull(callTracks.endedAt)));
+      await tx.update(callTracks).set({ endedAt: sql`now()` }).where(and(eq(callTracks.callId, input.callId), eq(callTracks.userId, input.userId), isNull(callTracks.endedAt)));
+      cuts.push({ pushSession: seat.cfSessionId, pullSession: null, pushMids: mine.map((t) => t.mid).filter((m): m is string => Boolean(m)), pullMids: [] });
+    }
+    await writeAudit({ actor, action: "call.speaker", targetType: "call", targetId: input.callId, metadata: { userId: input.userId, speaker: input.speaker } }, tx);
+  });
+  await closeAtCloudflare(cuts);
+  await Promise.all([broadcastCallEvent({ type: "roster", callId: input.callId }), broadcastCallEvent({ type: "tracks", callId: input.callId })]);
 }
 
 /** The other person's open seat in this call, for a host's action on them (never on yourself). */
@@ -452,7 +521,7 @@ export async function endAbandonedCalls(): Promise<number> {
   return count;
 }
 
-async function requireSeat(actor: Actor, callId: string) {
+export async function requireSeat(actor: Actor, callId: string) {
   const row = await requireLiveCall(actor, callId);
   const seat = await openSeat(db, callId, actor.id);
   if (!seat?.cfSessionId) throw new ActionFailure("Join the call first.");

@@ -3,7 +3,11 @@
 // participant can't fake those. Presence is only a hint for the little mute and hand icons; the server stays the authority on who is
 // in the call and what they may pull.
 
-export type CallPresence = { muted: boolean; hand: boolean };
+/** Small reactions people can send in an all-hands. A fixed list: nothing typed travels here. */
+export const REACTIONS = ["👍", "👏", "❤️", "😂", "🎉"] as const;
+export type Reaction = (typeof REACTIONS)[number];
+
+export type CallPresence = { muted: boolean; hand: boolean; /** the latest reaction and when it was sent (a hint only) */ reaction?: { emoji: Reaction; at: number } };
 export type CallEventMessage = { type: "tracks" | "roster" | "ended"; callId: string };
 
 type CallChannel = {
@@ -23,18 +27,22 @@ export type CallChannelClient = {
 
 const isPresence = (value: unknown): value is CallPresence => typeof value === "object" && value !== null && typeof (value as CallPresence).muted === "boolean" && typeof (value as CallPresence).hand === "boolean";
 
+const isReaction = (value: unknown): value is { emoji: Reaction; at: number } =>
+  typeof value === "object" && value !== null && (REACTIONS as readonly unknown[]).includes((value as { emoji: unknown }).emoji) && typeof (value as { at: unknown }).at === "number";
+
 /** Joins the call channel. Returns `update` (publish my own mute / hand) and `stop`. Never throws: without it, icons just don't show. */
 export function connectCallChannel(
   client: CallChannelClient,
   callId: string,
   userId: string,
-  initial: CallPresence,
+  initial: CallPresence | null,
   on: { presence: (byUser: Record<string, CallPresence>) => void; event: (event: CallEventMessage) => void },
 ): { update: (next: CallPresence) => void; stop: () => void } {
   let stopped = false;
   let channel: CallChannel | null = null;
   let subscribed = false;
-  let latest = initial;
+  // null = say nothing until I have something to say (an all-hands audience of 125 doesn't announce itself).
+  let latest: CallPresence | null = initial;
   void (async () => {
     try {
       const { data } = await client.auth.getSession();
@@ -48,7 +56,7 @@ export function connectCallChannel(
           const byUser: Record<string, CallPresence> = {};
           for (const [key, entries] of Object.entries(joined.presenceState())) {
             const last = [...entries].reverse().find(isPresence);
-            if (last) byUser[key] = { muted: last.muted, hand: last.hand };
+            if (last) byUser[key] = { muted: last.muted, hand: last.hand, ...(isReaction(last.reaction) ? { reaction: last.reaction } : {}) };
           }
           on.presence(byUser);
         })
@@ -59,7 +67,7 @@ export function connectCallChannel(
         .subscribe((status) => {
           if (status === "SUBSCRIBED" && !stopped) {
             subscribed = true;
-            void joined.track(latest);
+            if (latest) void joined.track(latest);
           }
         });
     } catch {

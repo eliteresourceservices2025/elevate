@@ -1,9 +1,11 @@
 import "server-only";
-import { desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { writeAudit } from "@/modules/audit/write";
+import { users } from "@/modules/core/schema";
+import { peopleByUserId } from "@/modules/messages/queries";
 import { callSettings, calls, callUsage } from "./schema";
 import { callsAvailable, fakeCallsEnabled } from "./sfu-port";
 import { overWarning } from "./usage";
@@ -23,6 +25,9 @@ export type CallSettingsView = {
   participantMinutesThisMonth: number;
   townhallEnabled: boolean;
   recordingEnabled: boolean;
+  /** People a Super Admin picked to record calls, and everyone else who could be picked. */
+  recorders: { id: string; name: string }[];
+  candidates: { id: string; name: string }[];
   recent: { id: string; startedAt: string; minutes: number; people: number; estimatedGb: number; endReason: string | null }[];
 };
 
@@ -48,6 +53,10 @@ export async function getCallSettingsView(): Promise<CallSettingsView> {
     .leftJoin(callUsage, eq(callUsage.callId, calls.id))
     .orderBy(desc(calls.startedAt))
     .limit(10);
+  const staff = await db.select({ id: users.id, can: users.canRecordCalls }).from(users).where(and(eq(users.isGuest, false), isNull(users.archivedAt))).limit(400);
+  const names = await peopleByUserId(staff.map((u) => u.id));
+  const named = staff.map((u) => ({ id: u.id, name: names.get(u.id)?.name ?? "", can: u.can })).filter((u) => u.name);
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
   const monthGb = Number(month.gb);
   const warningGb = settings?.monthlyGbWarning ?? 700;
   return {
@@ -61,6 +70,8 @@ export async function getCallSettingsView(): Promise<CallSettingsView> {
     participantMinutesThisMonth: month.minutes,
     townhallEnabled: settings?.townhallEnabled ?? true,
     recordingEnabled: settings?.recordingEnabled ?? false,
+    recorders: named.filter((u) => u.can).sort(byName).map(({ id, name }) => ({ id, name })),
+    candidates: named.filter((u) => !u.can).sort(byName).map(({ id, name }) => ({ id, name })),
     recent: recent.map((r) => ({
       id: r.id,
       startedAt: r.startedAt.toISOString(),
@@ -72,22 +83,22 @@ export async function getCallSettingsView(): Promise<CallSettingsView> {
   };
 }
 
-/** Saves the warning level and the all-hands switch. The action has already checked `calls.settings`. */
-export async function saveCallSettings(actor: { id: string; email: string }, input: { monthlyGbWarning: number; townhallEnabled: boolean }): Promise<void> {
+/** Saves the warning level and the all-hands and recording switches. The action has already checked `calls.settings`. */
+export async function saveCallSettings(actor: { id: string; email: string }, input: { monthlyGbWarning: number; townhallEnabled: boolean; recordingEnabled: boolean }): Promise<void> {
   await db.transaction(async (tx) => {
     const [before] = await tx.select().from(callSettings).where(eq(callSettings.id, 1)).for("update").limit(1);
     await tx
       .insert(callSettings)
-      .values({ id: 1, monthlyGbWarning: input.monthlyGbWarning, townhallEnabled: input.townhallEnabled })
-      .onConflictDoUpdate({ target: callSettings.id, set: { monthlyGbWarning: input.monthlyGbWarning, townhallEnabled: input.townhallEnabled, updatedAt: new Date() } });
+      .values({ id: 1, monthlyGbWarning: input.monthlyGbWarning, townhallEnabled: input.townhallEnabled, recordingEnabled: input.recordingEnabled })
+      .onConflictDoUpdate({ target: callSettings.id, set: { monthlyGbWarning: input.monthlyGbWarning, townhallEnabled: input.townhallEnabled, recordingEnabled: input.recordingEnabled, updatedAt: new Date() } });
     await writeAudit(
       {
         actor,
         action: "call.settings",
         targetType: "call_settings",
         targetId: "1",
-        before: before ? { monthlyGbWarning: before.monthlyGbWarning, townhallEnabled: before.townhallEnabled } : undefined,
-        after: { monthlyGbWarning: input.monthlyGbWarning, townhallEnabled: input.townhallEnabled },
+        before: before ? { monthlyGbWarning: before.monthlyGbWarning, townhallEnabled: before.townhallEnabled, recordingEnabled: before.recordingEnabled } : undefined,
+        after: { monthlyGbWarning: input.monthlyGbWarning, townhallEnabled: input.townhallEnabled, recordingEnabled: input.recordingEnabled },
       },
       tx,
     );

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createEmployeeAccount, hydrated, signInEnrollingMfa } from "./helpers";
+import postgres from "postgres";
+import { createEmployeeAccount, createHrAccount, hydrated, signInEnrollingMfa } from "./helpers";
 
 // Calls on the fake media layer (dev server started with CALLS_FAKE=1 and NEXT_PUBLIC_CALLS_FAKE=1): ringing, joining, the roster, camera,
 // mute, screen share, the mini window, and how a call ends. The real server rules run; only the pictures are placeholders.
@@ -177,4 +178,124 @@ test("settings: a Super Admin sees the month's media estimate and saves the warn
 
   const response = await pageE.goto("/settings/calls");
   expect(response?.status()).toBe(404);
+});
+
+// ---- all-hands (5a) and recording (5b) ---------------------------------------------------------------------------------------------
+// HR starts an all-hands in a group; the audience can only watch (a hand and reactions, no microphone or camera); HR makes one person a
+// speaker; then HR records: the person is asked, says yes, and the recording is uploaded, kept, and watchable by people who were there.
+// The pictures are placeholders (fake media layer); the rules, the upload to storage and the playback route are real.
+// Needs the call-recordings bucket (pnpm storage:setup) and migration 0161.
+
+test("an all-hands: the audience watches, a speaker is chosen, then a recording with consent that can be watched", async ({ browser }) => {
+  test.setTimeout(420_000);
+  const stamp = Date.now();
+  const hr = await createHrAccount();
+  const a = await createEmployeeAccount("Ana", `All${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `All${stamp}b`);
+  const c = await createEmployeeAccount("Cy", `All${stamp}c`);
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    // HR may record (a Super Admin's pick) and recording is switched on, for this test only.
+    await sql`update core.users set can_record_calls = true where lower(email) = ${hr.email.toLowerCase()}`;
+    await sql`insert into chat.call_settings (id, recording_enabled) values (1, true) on conflict (id) do update set recording_enabled = true`;
+
+    const pageH = await (await browser.newContext()).newPage();
+    const pageA = await (await browser.newContext()).newPage();
+    const pageB = await (await browser.newContext()).newPage();
+    const pageC = await (await browser.newContext()).newPage();
+    await signInEnrollingMfa(pageH, hr);
+    for (const [page, account] of [[pageA, a], [pageB, b], [pageC, c]] as const) await signInEnrollingMfa(page, account);
+    for (const page of [pageA, pageB, pageC]) await page.goto("/messages");
+
+    // HR makes the group and starts an all-hands in it.
+    const title = `Town ${stamp}`;
+    await pageH.goto("/messages");
+    await (await hydrated(pageH.getByRole("button", { name: "New message" }))).click();
+    const dialog = pageH.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Group" }).click();
+    await dialog.getByLabel("Group name").fill(title);
+    await dialog.getByLabel("Find people").fill(`All${stamp}`);
+    await dialog.getByRole("button", { name: "Add everyone shown (3)" }).click();
+    await dialog.getByRole("button", { name: "Create group" }).click();
+    await expect(pageH.getByRole("heading", { level: 2, name: title })).toBeVisible({ timeout: 45_000 });
+    const startAllHands = pageH.getByRole("button", { name: "Start an all-hands" });
+    await expect(startAllHands).toBeVisible({ timeout: 45_000 });
+    await startAllHands.click();
+    await pageH.waitForURL(/\/messages\/call\/[0-9a-f-]{36}/, { timeout: 30_000 });
+    await expect(pageH.getByText("All-hands: 0 watching, 1 on stage.")).toBeVisible({ timeout: 30_000 });
+
+    // Ana is rung, joins, and is in the audience: no microphone, camera or screen buttons, but a hand and reactions.
+    const ring = pageA.getByRole("alertdialog", { name: "Incoming call" });
+    await expect(ring).toBeVisible({ timeout: 20_000 });
+    await ring.getByRole("button", { name: "Join" }).click();
+    await pageA.waitForURL(/\/messages\/call\//, { timeout: 30_000 });
+    await expect(pageA.getByText("All-hands: 1 watching, 1 on stage.")).toBeVisible({ timeout: 30_000 });
+    await expect(pageA.getByRole("button", { name: /microphone/ })).toHaveCount(0);
+    await expect(pageA.getByRole("button", { name: "Share your screen" })).toHaveCount(0);
+    await expect(pageA.getByRole("button", { name: "Raise your hand" })).toBeVisible();
+
+    // She raises a hand and reacts; HR sees both.
+    await pageA.getByRole("button", { name: "Raise your hand" }).click();
+    await pageA.getByRole("button", { name: "Send a reaction" }).click();
+    await pageA.getByRole("button", { name: "Send 👍" }).click();
+    await pageH.getByRole("button", { name: /^People/ }).click();
+    await expect(pageH.getByTestId("person-row").filter({ hasText: "Ana" }).getByRole("img", { name: "Hand raised" })).toBeVisible({ timeout: 25_000 });
+    await expect(pageH.getByRole("list", { name: "Reactions" })).toContainText("reacted with 👍", { timeout: 25_000 });
+
+    // HR makes her a speaker: her microphone button appears. Then back to the audience: it goes away.
+    await pageH.getByRole("button", { name: /^Make Ana .* a speaker$/ }).click();
+    await expect(pageA.getByText("You're a speaker now.")).toBeVisible({ timeout: 25_000 });
+    await expect(pageA.getByRole("button", { name: "Unmute microphone" })).toBeVisible({ timeout: 25_000 });
+    await pageH.getByRole("button", { name: /^Put Ana .* back in the audience$/ }).click();
+    await expect(pageA.getByRole("button", { name: /microphone/ })).toHaveCount(0, { timeout: 25_000 });
+
+    // Recording: HR starts it. Ana is asked; until she says yes she is not in it. She can change her mind at any time.
+    await pageH.bringToFront();
+    await pageH.getByRole("button", { name: "Start recording" }).click();
+    const noticeH = pageH.getByTestId("recording-notice");
+    await expect(noticeH).toContainText("You are recording this call.", { timeout: 25_000 });
+    await expect(noticeH).toContainText("1 so far");
+    const noticeA = pageA.getByTestId("recording-notice");
+    await expect(noticeA).toContainText("is recording this call", { timeout: 25_000 });
+    await expect(noticeA).toContainText("Are you OK with being recorded?");
+    await noticeA.getByRole("button", { name: "Yes, record me" }).click();
+    await expect(noticeH).toContainText("2 so far", { timeout: 25_000 });
+    await noticeA.getByRole("button", { name: "Stop recording me" }).click();
+    await expect(noticeH).toContainText("1 so far", { timeout: 25_000 });
+    await noticeA.getByRole("button", { name: "I'm OK with it now" }).click();
+    await expect(noticeH).toContainText("2 so far", { timeout: 25_000 });
+
+    // Let it record a little, then stop: the last piece is uploaded and checked, and kept for 30 days.
+    await pageH.waitForTimeout(6_000);
+    await pageH.getByRole("button", { name: "Stop recording" }).click();
+    await expect(pageH.getByTestId("recording-notice")).toHaveCount(0, { timeout: 40_000 });
+    await expect
+      .poll(
+        async () => {
+          const rows = await sql`select count(*)::int as n, coalesce(sum(p.size_bytes), 0)::int as bytes from chat.call_recording_parts p join chat.call_recordings r on r.id = p.recording_id join chat.calls c on c.id = r.call_id join chat.conversations v on v.id = c.conversation_id where v.title = ${title} and p.status = 'ready'`;
+          return rows[0].n > 0 && rows[0].bytes > 0;
+        },
+        { timeout: 60_000, message: "the recording was uploaded and checked" },
+      )
+      .toBe(true);
+    const [rec] = await sql`select r.id, r.end_reason, r.expires_at from chat.call_recordings r join chat.calls c on c.id = r.call_id join chat.conversations v on v.id = c.conversation_id where v.title = ${title}`;
+    expect(rec.end_reason).toBe("stopped");
+    expect(rec.expires_at).not.toBeNull();
+
+    // End the call; Ana (she was in it) can watch the recording; Bea (she never joined) cannot.
+    await pageH.getByRole("button", { name: "End for everyone" }).click();
+    await pageA.goto("/messages/recordings");
+    await expect(pageA.getByTestId("recording-row")).toContainText(title, { timeout: 30_000 });
+    const played = await pageA.request.get(`/api/calls/recordings/${rec.id}`);
+    expect(played.status()).toBe(200);
+    expect(played.headers()["content-type"]).toBe("video/webm");
+    expect((await played.body()).length).toBeGreaterThan(0);
+    const denied = await pageB.request.get(`/api/calls/recordings/${rec.id}`);
+    expect(denied.status()).toBe(404);
+    await pageB.goto("/messages/recordings");
+    await expect(pageB.getByText("No recordings")).toBeVisible({ timeout: 30_000 });
+  } finally {
+    await sql`update chat.call_settings set recording_enabled = false where id = 1`;
+    await sql.end();
+  }
 });

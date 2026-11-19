@@ -4,6 +4,7 @@ import { Markdown } from "@/components/markdown";
 import { AppShell } from "@/components/shell/app-shell";
 import { SIDEBAR_COOKIE } from "@/components/shell/sidebar-cookie";
 
+import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { GuestLayout } from "@/modules/messages/components/guest-layout";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
@@ -83,6 +84,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <AppShell
       initialCollapsed={initialCollapsed}
+      callAbilities={{ record: can(user, "calls.record", { ownerUserId: user.id }), townhall: can(user, "calls.start_townhall") }}
       chatSound={chatSettings.sound}
       tourAutoStart={tourAutoStart && !popupRead.failed}
       popups={popups}
