@@ -467,9 +467,9 @@ test("presence: an online dot shows who has the chat open, and Appear offline hi
   await say(pageA, `Bea Pres${stamp}b`, "Hi Bea");
   await pageB.goto("/messages");
   await pageB.getByRole("button", { name: new RegExp(`Ana Pres${stamp}a`) }).click();
-  // Both have the chat open: each sees the other online.
-  await expect(pageA.getByRole("heading", { level: 2, name: `Bea Pres${stamp}b` }).locator("xpath=following-sibling::p")).toContainText("1 online", { timeout: 20_000 });
-  await expect(pageB.getByRole("heading", { level: 2, name: `Ana Pres${stamp}a` }).locator("xpath=following-sibling::p")).toContainText("1 online", { timeout: 20_000 });
+  // Both have the chat open: the count is everyone online, you included, so it matches the dots in People.
+  await expect(pageA.getByRole("heading", { level: 2, name: `Bea Pres${stamp}b` }).locator("xpath=following-sibling::p")).toContainText("2 online", { timeout: 20_000 });
+  await expect(pageB.getByRole("heading", { level: 2, name: `Ana Pres${stamp}a` }).locator("xpath=following-sibling::p")).toContainText("2 online", { timeout: 20_000 });
   // Bea appears offline and reloads: Ana no longer sees her.
   await pageB.getByRole("button", { name: "Settings" }).click();
   await pageB.getByRole("dialog").getByLabel("Appear offline").check();
@@ -477,8 +477,8 @@ test("presence: an online dot shows who has the chat open, and Appear offline hi
   await expect(pageB.getByRole("dialog")).toBeHidden();
   await pageB.reload();
   await pageB.getByRole("button", { name: new RegExp(`Ana Pres${stamp}a`) }).click();
-  await expect(pageA.getByRole("heading", { level: 2, name: `Bea Pres${stamp}b` }).locator("xpath=following-sibling::p")).not.toContainText("online", { timeout: 20_000 });
-  // She still sees Ana (watching does not announce).
+  await expect(pageA.getByRole("heading", { level: 2, name: `Bea Pres${stamp}b` }).locator("xpath=following-sibling::p")).toContainText("1 online", { timeout: 20_000 }); // only Ana is announcing now
+  // She still sees Ana (watching does not announce), and is not counted herself.
   await expect(pageB.getByRole("heading", { level: 2, name: `Ana Pres${stamp}a` }).locator("xpath=following-sibling::p")).toContainText("1 online", { timeout: 20_000 });
 });
 
