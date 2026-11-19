@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { audioRunning } from "@/modules/messages/components/play-sound";
 import { useCall } from "./call-provider";
-import { CallControls, RecordingNotice } from "./call-screen";
+import { CallControls, RecordingNotice } from "./call-parts";
+import { useElapsed } from "./call-room";
 
 /** Plays everyone's voice, always mounted while a call is active, so the sound keeps going in the mini window and on every page. */
 function CallAudio() {
@@ -35,6 +36,7 @@ function AudioSink({ stream }: { stream: MediaStream }) {
 function MiniCall() {
   const call = useCall();
   const pathname = usePathname();
+  const elapsed = useElapsed(call.state?.call.startedAt ?? new Date().toISOString());
   if (call.phase !== "active" || !call.state || pathname.startsWith(`/messages/call/${call.state.call.id}`)) return null;
   return (
     <section aria-label="Call in progress" className="fixed right-4 bottom-4 z-50 flex w-72 flex-col gap-2 rounded-xl border bg-card p-3 shadow-lg print:hidden">
@@ -42,14 +44,14 @@ function MiniCall() {
         <PhoneCall className="size-4 text-success" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{call.state.call.title}</p>
-          <p className="text-xs text-muted-foreground">{call.state.participants.length} in call</p>
+          <p className="text-xs text-muted-foreground">{elapsed} · {call.state.participants.length} in call{call.state.recording ? " · Recording" : ""}</p>
         </div>
         <Link href={`/messages/call/${call.state.call.id}`} className="text-sm font-medium text-primary hover:underline">
           Return
         </Link>
       </div>
       <RecordingNotice />
-      <CallControls compact />
+      <CallControls />
     </section>
   );
 }

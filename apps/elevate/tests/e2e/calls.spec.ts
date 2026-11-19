@@ -284,12 +284,14 @@ test("an all-hands: the audience watches, a speaker is chosen, then a recording 
 
     // End the call; Ana (she was in it) can watch the recording; Bea (she never joined) cannot.
     // Ending for everyone asks first: "Keep the call going" changes nothing, the confirmation ends it.
-    await pageH.getByRole("button", { name: "End for everyone" }).click();
+    await pageH.getByRole("button", { name: "More call options" }).click();
+    await pageH.getByRole("menuitem", { name: "End for everyone" }).click();
     const sure = pageH.getByRole("alertdialog");
     await expect(sure).toContainText("End the call for everyone?");
     await sure.getByRole("button", { name: "Keep the call going" }).click();
-    await expect(pageH.getByRole("button", { name: "End for everyone" })).toBeVisible();
-    await pageH.getByRole("button", { name: "End for everyone" }).click();
+    await expect(pageH.getByRole("button", { name: "More call options" })).toBeVisible();
+    await pageH.getByRole("button", { name: "More call options" }).click();
+    await pageH.getByRole("menuitem", { name: "End for everyone" }).click();
     await pageH.getByRole("alertdialog").getByRole("button", { name: "End for everyone" }).click();
     await expect(pageH.getByRole("heading", { level: 2, name: title })).toBeVisible({ timeout: 30_000 });
     await pageA.goto("/messages/recordings");
@@ -306,4 +308,54 @@ test("an all-hands: the audience watches, a speaker is chosen, then a recording 
     await sql`update chat.call_settings set recording_enabled = false where id = 1`;
     await sql.end();
   }
+});
+
+test("chat and reactions inside a call: the same conversation, live, with an unread count when the chat is closed", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const stamp = Date.now();
+  const a = await createEmployeeAccount("Ana", `Cht${stamp}a`);
+  const b = await createEmployeeAccount("Bea", `Cht${stamp}b`);
+  const pageA = await (await browser.newContext()).newPage();
+  const pageB = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(pageA, a);
+  await signInEnrollingMfa(pageB, b);
+  const nameB = `Bea Cht${stamp}b`;
+  await pageB.goto("/dashboard");
+  await startDirect(pageA, `Cht${stamp}b`, nameB);
+  await pageA.getByRole("button", { name: "Start a call" }).click();
+  await pageA.waitForURL(/\/messages\/call\/[0-9a-f-]{36}/, { timeout: 30_000 });
+  const ring = pageB.getByRole("alertdialog", { name: "Incoming call" });
+  await expect(ring).toBeVisible({ timeout: 30_000 });
+  await ring.getByRole("button", { name: "Join" }).click();
+  await pageB.waitForURL(/\/messages\/call\//, { timeout: 30_000 });
+  await expect(pageB.getByRole("list", { name: "People in the call" }).getByTestId("call-tile")).toHaveCount(2, { timeout: 30_000 });
+
+  // The chat is open beside the picture on a wide screen. Ana writes; Bea sees it at once.
+  const chatA = pageA.getByTestId("call-chat");
+  await expect(chatA).toBeVisible();
+  await chatA.getByLabel("Message the call").fill("Can we start with slide 4?");
+  await chatA.getByRole("button", { name: "Send message" }).click();
+  await expect(pageB.getByTestId("call-chat").getByText("Can we start with slide 4?")).toBeVisible({ timeout: 25_000 });
+
+  // Bea closes the chat; Ana writes again; Bea's Chat button shows one new message, and opening it clears the count.
+  await pageB.getByRole("toolbar", { name: "Call controls" }).getByRole("button", { name: "Chat", exact: true }).click();
+  await expect(pageB.getByTestId("call-chat")).toBeHidden();
+  await chatA.getByLabel("Message the call").fill("Second thought");
+  await chatA.getByRole("button", { name: "Send message" }).click();
+  await expect(pageB.getByRole("button", { name: "Chat (1 new)" })).toBeVisible({ timeout: 25_000 });
+  await pageB.getByRole("button", { name: "Chat (1 new)" }).click();
+  await expect(pageB.getByTestId("call-chat").getByText("Second thought")).toBeVisible();
+  await expect(pageB.getByRole("toolbar", { name: "Call controls" }).getByRole("button", { name: "Chat", exact: true })).toBeVisible();
+
+  // Reactions work in an ordinary call: Bea reacts, Ana sees who and what.
+  await pageB.getByRole("button", { name: "Send a reaction" }).click();
+  await pageB.getByRole("button", { name: "Send 👍" }).click();
+  await expect(pageA.getByRole("list", { name: "Reactions" })).toContainText("reacted with 👍", { timeout: 25_000 });
+
+  // Leaving: the chat is the same conversation, so both messages are there afterwards.
+  await pageA.getByRole("button", { name: "Leave call" }).click();
+  await pageB.getByRole("button", { name: "Leave call" }).click();
+  await pageB.waitForURL(/\/messages\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+  await expect(pageB.getByRole("log").getByText("Can we start with slide 4?")).toBeVisible({ timeout: 30_000 });
+  await expect(pageB.getByRole("log").getByText("Second thought")).toBeVisible();
 });
