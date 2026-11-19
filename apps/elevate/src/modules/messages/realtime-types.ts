@@ -2,7 +2,9 @@
 // (a test scans this file for one). Shared by the server broadcast and the browser listener, so it has no server-only import.
 
 export type ChatSignal = {
-  type: "message" | "edit" | "delete" | "read" | "members" | "reaction" | "pin" | "poll";
+  type: "message" | "edit" | "delete" | "read" | "members" | "reaction" | "pin" | "poll" | "call";
   conversationId: string;
   messageId?: string;
+  /** For type "call": which call (a call started, or ended). Ids only, like everything here. */
+  callId?: string;
 };

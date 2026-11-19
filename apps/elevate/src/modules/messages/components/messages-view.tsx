@@ -101,7 +101,7 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, app
     (signal: ChatSignal) => {
       refreshListSoon();
       const active = activeRef.current;
-      if (!active || signal.type === "read") return;
+      if (!active || signal.type === "read" || signal.type === "call") return;
       if (signal.conversationId !== "" && signal.conversationId !== active) return;
       setPanelVersion((v) => v + 1); // an open thread reloads too
       if (signal.type === "delete" && signal.messageId) {
@@ -202,6 +202,7 @@ export function MessagesView({ userId, timeZone, canManage, isGuest = false, app
               hasMore={thread.hasMore}
               members={thread.members}
               myUserId={userId}
+              canStartCall={!isGuest}
               onlineCount={[...online].filter((id) => id !== userId).length}
               timeZone={timeZone}
               loadingEarlier={loadingEarlier}

@@ -1,0 +1,553 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { toast } from "@/components/feedback-dialog";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { startRingtone, unlockAudio } from "@/modules/messages/components/play-sound";
+import { useChatLive } from "@/modules/messages/components/use-chat-live";
+import type { ChatSignal } from "@/modules/messages/realtime-types";
+import { callApi } from "../browser/api";
+import { connectCallChannel, type CallChannelClient, type CallPresence } from "../browser/call-channel";
+import { createTransport, type CallTransport, type MediaApi, type RemoteSlot } from "../browser/transport";
+import type { CallState } from "../service";
+import { nextSpeaker, type SpeakerState } from "../active-speaker";
+import { chooseSubscriptions } from "../track-selection";
+
+// Holds a call together while people move around ELEVATE: the lobby, joining, the media connection, who is here, the 30-second heartbeat,
+// and the ring for an incoming call. It lives in the app frame (staff) and the guest frame, never in a page, so the call survives
+// navigation. The server is the authority (who is in, what may be pulled); this keeps the browser in step with it.
+
+export type Phase = "idle" | "lobby" | "joining" | "active";
+export type Incoming = { callId: string; conversationId: string; title: string; startedByName: string };
+export type RemoteMedia = { main: MediaStream | null; screen: MediaStream | null };
+
+type Value = {
+  phase: Phase;
+  callId: string | null;
+  state: CallState | null;
+  error: string | null;
+  incoming: Incoming | null;
+  micOn: boolean;
+  cameraOn: boolean;
+  screenOn: boolean;
+  /** My own camera / screen previews. */
+  localCamera: MediaStream | null;
+  localScreen: MediaStream | null;
+  remote: Record<string, RemoteMedia>;
+  presence: Record<string, CallPresence>;
+  handUp: boolean;
+  /** Paging through video tiles (about 9 on a page): the page showing, how many pages, whose video is on screen, who is pinned, who is speaking. */
+  page: number;
+  pages: number;
+  visibleUserIds: string[];
+  pinnedUserId: string | null;
+  activeSpeakerId: string | null;
+  setPage: (page: number) => void;
+  pin: (userId: string | null) => void;
+  /** Host controls (the server checks they are the host). */
+  muteOther: (userId: string) => Promise<void>;
+  removeOther: (userId: string) => Promise<void>;
+  /** What I want when I join (set in the lobby). */
+  prefs: { mic: boolean; camera: boolean };
+  setPrefs: (next: { mic: boolean; camera: boolean }) => void;
+  open: (callId: string) => void;
+  start: (conversationId: string) => Promise<string | null>;
+  join: () => Promise<void>;
+  leave: () => Promise<void>;
+  endForEveryone: () => Promise<void>;
+  toggleMic: () => Promise<void>;
+  toggleCamera: () => Promise<void>;
+  toggleScreen: () => Promise<void>;
+  toggleHand: () => void;
+  answerIncoming: () => string | null;
+  dismissIncoming: () => void;
+  /** The one call people are in right now, if any (for the mini window and the call button). */
+  userId: string;
+};
+
+const Ctx = createContext<Value | null>(null);
+
+export function useCall(): Value {
+  const value = useContext(Ctx);
+  if (!value) throw new Error("useCall needs a CallProvider");
+  return value;
+}
+
+const HEARTBEAT_MS = 30_000;
+/** A call nobody answered ends on its own after this long, as a missed call. */
+const UNANSWERED_MS = 45_000;
+
+export function CallProvider({ userId, children }: { userId: string; children: ReactNode }) {
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [callId, setCallId] = useState<string | null>(null);
+  const [state, setState] = useState<CallState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [incoming, setIncoming] = useState<Incoming | null>(null);
+  const [prefs, setPrefs] = useState({ mic: true, camera: false });
+  const [micOn, setMicOn] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [screenOn, setScreenOn] = useState(false);
+  const [localCamera, setLocalCamera] = useState<MediaStream | null>(null);
+  const [localScreen, setLocalScreen] = useState<MediaStream | null>(null);
+  const [remote, setRemote] = useState<Record<string, RemoteMedia>>({});
+  const [presence, setPresence] = useState<Record<string, CallPresence>>({});
+  const [handUp, setHandUp] = useState(false);
+  const [page, setPageState] = useState(0);
+  const [pinnedUserId, setPinned] = useState<string | null>(null);
+  const [activeSpeakerId, setSpeaker] = useState<string | null>(null);
+
+  const transport = useRef<CallTransport | null>(null);
+  const channel = useRef<{ update: (p: CallPresence) => void; stop: () => void } | null>(null);
+  const timers = useRef<{ heartbeat?: ReturnType<typeof setInterval>; unanswered?: ReturnType<typeof setTimeout> }>({});
+  const live = useRef({ callId: null as string | null, phase: "idle" as Phase, state: null as CallState | null, micOn: false, handUp: false, othersEverJoined: false, remote: {} as Record<string, RemoteMedia> });
+  const refreshing = useRef(false);
+  const again = useRef(false);
+  const refreshRef = useRef<() => Promise<void>>(async () => {});
+  const stopRing = useRef<(() => void) | null>(null);
+  /** When I last started or stopped sending something (a heartbeat that predates it must not be mistaken for the host muting me). */
+  const lastLocalChange = useRef(0);
+  const view = useRef({ page: 0, pinned: null as string | null, speaker: null as string | null });
+
+  useEffect(() => {
+    live.current.callId = callId;
+    live.current.phase = phase;
+    live.current.state = state;
+    live.current.micOn = micOn;
+    live.current.handUp = handUp;
+    live.current.remote = remote;
+    view.current = { page, pinned: pinnedUserId, speaker: activeSpeakerId };
+  });
+
+  const reset = useCallback(() => {
+    clearInterval(timers.current.heartbeat);
+    clearTimeout(timers.current.unanswered);
+    timers.current = {};
+    transport.current?.stop();
+    transport.current = null;
+    channel.current?.stop();
+    channel.current = null;
+    live.current.othersEverJoined = false;
+    setState(null);
+    setMicOn(false);
+    setCameraOn(false);
+    setScreenOn(false);
+    setLocalCamera(null);
+    setLocalScreen(null);
+    setRemote({});
+    setPresence({});
+    setHandUp(false);
+    setPageState(0);
+    setPinned(null);
+    setSpeaker(null);
+    setError(null);
+    setCallId(null);
+    setPhase("idle");
+  }, []);
+
+  // ---- keeping the media in step with the roster -------------------------------------------------------------------------------
+  const applyState = useCallback(
+    async (next: CallState) => {
+      setState(next);
+      if (next.participants.some((p) => p.userId !== userId)) live.current.othersEverJoined = true;
+      // The host switched my microphone off at the server: stop sending it here too, and say so. (Pulling is decided in the effect below.)
+      const t = transport.current;
+      if (t && t.isSending("audio") && Date.now() - lastLocalChange.current > 6000 && !next.tracks.some((x) => x.userId === userId && x.kind === "audio")) {
+        await t.stopSending("audio").catch(() => {});
+        setMicOn(false);
+        channel.current?.update({ muted: true, hand: live.current.handUp });
+        toast.message("The host switched off your microphone. Press the microphone button to unmute.");
+      }
+    },
+    [userId],
+  );
+
+  const refresh = useCallback(async () => {
+    const id = live.current.callId;
+    if (!id || live.current.phase !== "active") return;
+    // A change that arrives while a refresh is running gets one more refresh right after it (not dropped until the next heartbeat).
+    if (refreshing.current) {
+      again.current = true;
+      return;
+    }
+    refreshing.current = true;
+    try {
+      const beat = await callApi.heartbeat(id);
+      if (beat.status === "ended" || beat.status === "removed") {
+        toast.message(beat.status === "ended" ? "The call ended." : "You were removed from the call.");
+        reset();
+        return;
+      }
+      await applyState(beat.state);
+      // Anything wanted that has not arrived yet (a pull that failed because the other person's video had not started) is asked for again.
+      const again = chooseSubscriptions({ tracks: beat.state.tracks, selfUserId: userId, mode: beat.state.call.mode, page: view.current.page, pinnedUserId: view.current.pinned, activeSpeakerId: view.current.speaker });
+      void transport.current?.syncRemote(again.pull).catch(() => {});
+    } catch (e) {
+      // "Call not found" is the server saying I am not in this chat any more: leave the call. Anything else is a hiccup (offline for a moment):
+      // the next beat tries again, and after 90 seconds the server lets the seat go.
+      if (e instanceof Error && e.message === "Call not found.") {
+        toast.message("You are no longer in this call.");
+        reset();
+      }
+    } finally {
+      refreshing.current = false;
+      if (again.current) {
+        again.current = false;
+        void refreshRef.current();
+      }
+    }
+  }, [applyState, reset, userId]);
+  useEffect(() => {
+    refreshRef.current = refresh;
+  });
+
+  // ---- what to pull: everyone's audio, video for one page of tiles ---------------------------------------------------------------
+  const selection = useMemo(
+    () => (state ? chooseSubscriptions({ tracks: state.tracks, selfUserId: userId, mode: state.call.mode, page, pinnedUserId, activeSpeakerId }) : null),
+    [state, userId, page, pinnedUserId, activeSpeakerId],
+  );
+  const shownPage = selection ? Math.min(page, selection.pages - 1) : 0;
+  const pullKey = selection ? selection.pull.map((t) => t.trackName).sort().join(",") : "";
+  useEffect(() => {
+    if (phase !== "active" || !selection) return;
+    // Steps on the connection run one at a time inside the transport. A pull can fail because the other person's video has not started
+    // flowing yet (Cloudflare says so after a few seconds), so it is tried again a few times, a little later each time.
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = (n: number) => {
+      transport.current?.syncRemote(selection.pull).catch(() => {
+        if (!cancelled && n < 20) timer = setTimeout(() => attempt(n + 1), Math.min(1500 * (n + 1), 6000));
+      });
+    };
+    attempt(0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the set of wanted tracks changes, not on every state refresh
+  }, [pullKey, phase]);
+
+  // Who is speaking (from how loud each person is), so their video is pulled first in a big meeting. Real audio only.
+  useEffect(() => {
+    if (phase !== "active") return;
+    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return;
+    const ctx = new Ctor();
+    const analysers = new Map<string, { analyser: AnalyserNode; source: MediaStreamAudioSourceNode; stream: MediaStream }>();
+    let speaker: SpeakerState = { id: null, quiet: 0 };
+    const buffer = new Uint8Array(512);
+    const timer = setInterval(() => {
+      const current = live.current.remote;
+      for (const [uid, entry] of analysers) {
+        if (current[uid]?.main !== entry.stream) {
+          entry.source.disconnect();
+          analysers.delete(uid);
+        }
+      }
+      const levels: Record<string, number> = {};
+      for (const [uid, media] of Object.entries(current)) {
+        const stream = media.main;
+        if (!stream || stream.getAudioTracks().length === 0) continue;
+        let entry = analysers.get(uid);
+        if (!entry) {
+          const source = ctx.createMediaStreamSource(stream);
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 512;
+          source.connect(analyser);
+          entry = { analyser, source, stream };
+          analysers.set(uid, entry);
+        }
+        entry.analyser.getByteTimeDomainData(buffer);
+        let sum = 0;
+        for (const v of buffer) sum += ((v - 128) / 128) ** 2;
+        levels[uid] = Math.sqrt(sum / buffer.length);
+      }
+      const next = nextSpeaker(levels, speaker);
+      if (next.id !== speaker.id) setSpeaker(next.id);
+      speaker = next;
+    }, 400);
+    return () => {
+      clearInterval(timer);
+      void ctx.close().catch(() => {});
+    };
+  }, [phase]);
+
+  const setPage = useCallback((next: number) => setPageState(Math.max(0, next)), []);
+  const pin = useCallback((uid: string | null) => {
+    setPinned(uid);
+    setPageState(0);
+  }, []);
+
+  const muteOther = useCallback(async (uid: string) => {
+    const id = live.current.callId;
+    if (!id) return;
+    try {
+      await callApi.mute(id, uid);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't do that.");
+    }
+  }, []);
+  const removeOther = useCallback(async (uid: string) => {
+    const id = live.current.callId;
+    if (!id) return;
+    try {
+      await callApi.remove(id, uid);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't do that.");
+    }
+  }, []);
+
+  // ---- lobby, join, leave ------------------------------------------------------------------------------------------------------
+  /** Media and the heartbeat stop at once; the page only moves on after the server has recorded the leave, so the chat it returns to already shows "Call ended". */
+  const stopQuietly = useCallback(() => {
+    clearInterval(timers.current.heartbeat);
+    clearTimeout(timers.current.unanswered);
+    transport.current?.stop();
+    transport.current = null;
+  }, []);
+
+  const leaveNow = useCallback(async () => {
+    const id = live.current.callId;
+    stopQuietly();
+    if (id) await callApi.leave(id).catch(() => {});
+    reset();
+  }, [reset, stopQuietly]);
+
+  const open = useCallback((id: string) => {
+    if (live.current.callId === id && live.current.phase !== "idle") return;
+    if (live.current.phase === "active" || live.current.phase === "joining") return; // already in another call
+    // The refs are set right now (not after the next render) because the page may ask to join in the very same moment.
+    live.current.callId = id;
+    live.current.phase = "lobby";
+    setCallId(id);
+    setPhase("lobby");
+    setError(null);
+  }, []);
+
+  const mediaApiFor = useCallback(
+    (id: string): MediaApi => ({
+      publish: async (offerSdp, tracks) => {
+        const out = await callApi.publish(id, offerSdp, tracks);
+        return { answerSdp: out.answer.sdp, tracks: out.tracks };
+      },
+      close: async (names) => void (await callApi.close(id, names)),
+      subscribe: async (names) => {
+        const out = await callApi.subscribe(id, names);
+        return { offerSdp: out.offer.sdp, tracks: out.tracks };
+      },
+      answer: async (sdp) => void (await callApi.answer(id, sdp)),
+      unsubscribe: async (mids) => void (await callApi.unsubscribe(id, mids)),
+    }),
+    [],
+  );
+
+  const join = useCallback(async () => {
+    const id = live.current.callId;
+    if (!id || live.current.phase !== "lobby") return;
+    live.current.phase = "joining";
+    setPhase("joining");
+    setError(null);
+    unlockAudio();
+    try {
+      const joined = await callApi.join(id);
+      const t = await createTransport();
+      transport.current = t;
+      await t.start({
+        iceServers: joined.iceServers,
+        api: mediaApiFor(id),
+        onRemote: (uid: string, slot: RemoteSlot, stream) => setRemote((r) => ({ ...r, [uid]: { main: r[uid]?.main ?? null, screen: r[uid]?.screen ?? null, [slot]: stream } })),
+        onLocalEnded: (kind) => {
+          if (kind === "screen") {
+            setScreenOn(false);
+            setLocalScreen(null);
+          }
+        },
+      });
+      const client = createSupabaseBrowserClient() as unknown as CallChannelClient;
+      channel.current = connectCallChannel(client, id, userId, { muted: !prefs.mic, hand: false }, { presence: setPresence, event: () => void refresh() });
+      setState(joined);
+      if (joined.participants.some((p) => p.userId !== userId)) live.current.othersEverJoined = true;
+      setPhase("active");
+      live.current.phase = "active";
+      timers.current.heartbeat = setInterval(() => void refresh(), HEARTBEAT_MS);
+      // Nobody answered: end it as a missed call instead of waiting forever.
+      timers.current.unanswered = setTimeout(() => {
+        if (live.current.phase === "active" && !live.current.othersEverJoined && live.current.state?.me.role === "host") {
+          toast.message("Nobody joined. The call ended.");
+          void leaveNow();
+        }
+      }, UNANSWERED_MS);
+      // Devices last, so a missing microphone doesn't stop you joining.
+      if (prefs.mic) {
+        try {
+          lastLocalChange.current = Date.now();
+          await t.startSending("audio");
+          lastLocalChange.current = Date.now();
+          setMicOn(true);
+        } catch {
+          toast.error("Couldn't use your microphone. Check the browser's permission, then press the microphone button.");
+          channel.current?.update({ muted: true, hand: false });
+        }
+      }
+      if (prefs.camera) {
+        try {
+          setLocalCamera(await t.startSending("video"));
+          setCameraOn(true);
+        } catch {
+          toast.error("Couldn't use your camera. Check the browser's permission.");
+        }
+      }
+      await applyState(joined);
+    } catch (e) {
+      transport.current?.stop();
+      transport.current = null;
+      setError(e instanceof Error ? e.message : "Couldn't join the call.");
+      live.current.phase = "lobby";
+      setPhase("lobby");
+    }
+  }, [applyState, leaveNow, mediaApiFor, prefs.camera, prefs.mic, refresh, userId]);
+
+  const endForEveryone = useCallback(async () => {
+    const id = live.current.callId;
+    stopQuietly();
+    if (id) await callApi.end(id).catch((e: Error) => toast.error(e.message));
+    reset();
+  }, [reset, stopQuietly]);
+
+  const start = useCallback(async (conversationId: string) => {
+    unlockAudio();
+    try {
+      return (await callApi.start(conversationId)).callId;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't start the call.");
+      return null;
+    }
+  }, []);
+
+  // ---- microphone, camera, screen, hand ----------------------------------------------------------------------------------------
+  const toggleMic = useCallback(async () => {
+    const t = transport.current;
+    if (!t) return;
+    try {
+      if (!t.isSending("audio")) {
+        lastLocalChange.current = Date.now();
+        await t.startSending("audio");
+        lastLocalChange.current = Date.now();
+        setMicOn(true);
+        channel.current?.update({ muted: false, hand: live.current.handUp });
+        return;
+      }
+      const next = !live.current.micOn;
+      t.setMicEnabled(next);
+      setMicOn(next);
+      channel.current?.update({ muted: !next, hand: live.current.handUp });
+    } catch {
+      toast.error("Couldn't use your microphone. Check the browser's permission.");
+    }
+  }, []);
+
+  const toggleCamera = useCallback(async () => {
+    const t = transport.current;
+    if (!t) return;
+    try {
+      if (t.isSending("video")) {
+        await t.stopSending("video");
+        setCameraOn(false);
+        setLocalCamera(null);
+      } else {
+        setLocalCamera(await t.startSending("video"));
+        setCameraOn(true);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error && e.message !== "No device found." ? e.message : "Couldn't use your camera. Check the browser's permission.");
+    }
+  }, []);
+
+  const toggleScreen = useCallback(async () => {
+    const t = transport.current;
+    if (!t) return;
+    try {
+      if (t.isSending("screen")) {
+        await t.stopSending("screen");
+        setScreenOn(false);
+        setLocalScreen(null);
+      } else {
+        setLocalScreen(await t.startSending("screen"));
+        setScreenOn(true);
+      }
+    } catch {
+      // The person closed the picker: nothing to say.
+    }
+  }, []);
+
+  const toggleHand = useCallback(() => {
+    const next = !live.current.handUp;
+    setHandUp(next);
+    channel.current?.update({ muted: !live.current.micOn, hand: next });
+  }, []);
+
+  // ---- incoming calls ----------------------------------------------------------------------------------------------------------
+  const clearIncoming = useCallback(() => {
+    stopRing.current?.();
+    stopRing.current = null;
+    setIncoming(null);
+  }, []);
+
+  const onSignal = useCallback(
+    async (signal: ChatSignal) => {
+      if (signal.type !== "call" || !signal.callId) return;
+      const id = signal.callId;
+      try {
+        const info = await callApi.incoming(id);
+        if (!info || live.current.callId === id) {
+          setIncoming((current) => {
+            if (current?.callId === id) {
+              stopRing.current?.();
+              stopRing.current = null;
+              return null;
+            }
+            return current;
+          });
+          return;
+        }
+        if (live.current.phase === "active" || live.current.phase === "joining") return; // busy in another call: the banner in the chat still shows
+        setIncoming((current) => {
+          if (current?.callId === id) return current;
+          stopRing.current?.();
+          stopRing.current = startRingtone(30);
+          return { callId: id, conversationId: info.conversationId, title: info.title, startedByName: info.startedByName };
+        });
+      } catch {
+        // Not for me (or gone): nothing rings.
+      }
+    },
+    [],
+  );
+  useChatLive(userId, onSignal);
+
+  // A ring stops by itself after 30 seconds.
+  useEffect(() => {
+    if (!incoming) return;
+    const timer = setTimeout(clearIncoming, 30_000);
+    return () => clearTimeout(timer);
+  }, [incoming, clearIncoming]);
+
+  // Leaving the page for good (closing the tab) is covered by the server: a seat silent for 90 seconds is treated as left.
+  useEffect(() => () => void transport.current?.stop(), []);
+
+  const answerIncoming = useCallback(() => {
+    const id = incoming?.callId ?? null;
+    clearIncoming();
+    return id;
+  }, [incoming, clearIncoming]);
+
+  const value = useMemo<Value>(
+    () => ({
+      phase, callId, state, error, incoming, micOn, cameraOn, screenOn, localCamera, localScreen, remote, presence, handUp, prefs, setPrefs,
+      page: shownPage, pages: selection?.pages ?? 1, visibleUserIds: selection?.visibleUserIds ?? [], pinnedUserId, activeSpeakerId, setPage, pin, muteOther, removeOther,
+      open, start, join, leave: leaveNow, endForEveryone, toggleMic, toggleCamera, toggleScreen, toggleHand, answerIncoming, dismissIncoming: clearIncoming, userId,
+    }),
+    [phase, callId, state, error, incoming, micOn, cameraOn, screenOn, localCamera, localScreen, remote, presence, handUp, prefs, shownPage, selection, pinnedUserId, activeSpeakerId, setPage, pin, muteOther, removeOther, open, start, join, leaveNow, endForEveryone, toggleMic, toggleCamera, toggleScreen, toggleHand, answerIncoming, clearIncoming, userId],
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}

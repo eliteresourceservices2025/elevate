@@ -52,6 +52,12 @@ const EXPECTED: Record<string, string> = {
   "messages.create_group": "A A - - - -",
   "messages.manage_group": "A A - - - -",
   "messages.invite_guests": "A A - - - -",
+  "calls.start": "O O O O O O",
+  "calls.join": "O O O O O O",
+  "calls.start_townhall": "A A - - A -",
+  "calls.record": "- - - - - -", // recorder flag only (a Super Admin picks the people)
+  "calls.manage_recorders": "A - - - - -",
+  "calls.settings": "A - - - - -",
   "privacy.view_my_data": "O O O O O O",
   "privacy.export_my_data": "O O O O O O",
   "privacy.request_data_rights": "O O O O O O",

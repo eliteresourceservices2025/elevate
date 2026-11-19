@@ -34,7 +34,7 @@ const loadSignedInUser = cache(async (): Promise<AuthUser> => {
     redirect("/login");
   }
 
-  return { id, email, roles: user.roles, isGuest: user.isGuest, isSafevoiceHandler: user.isSafevoiceHandler, payrollAccess: user.payrollAccess, isPrivacyOfficer: user.isPrivacyOfficer };
+  return { id, email, roles: user.roles, isGuest: user.isGuest, isSafevoiceHandler: user.isSafevoiceHandler, payrollAccess: user.payrollAccess, isPrivacyOfficer: user.isPrivacyOfficer, canRecordCalls: user.canRecordCalls };
 });
 
 export async function requireUser(options: RequireUserOptions = {}): Promise<AuthUser> {

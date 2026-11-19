@@ -76,3 +76,38 @@ export function playChatSound(sound: ChatSound, force = false): void {
     osc.stop(t0 + note.at + note.length + 0.05);
   }
 }
+
+/**
+ * A ringtone for an incoming call: two notes every two seconds until stopped (or `maxSeconds`, 30 by default). Returns the stop function.
+ * Like every sound here it is silent until the person has clicked or typed on the page (a browser rule), so the ring pop-up always
+ * shows too. Not limited to once every 1.5 s like message sounds.
+ */
+export function startRingtone(maxSeconds = 30): () => void {
+  const ctx = audio();
+  let stopped = false;
+  const ring = () => {
+    if (stopped || !ctx || ctx.state !== "running") return;
+    const t0 = ctx.currentTime;
+    for (const [freq, at] of [[784, 0], [988, 0.28]] as const) {
+      const osc = ctx.createOscillator();
+      const amp = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t0 + at);
+      amp.gain.setValueAtTime(0.0001, t0 + at);
+      amp.gain.exponentialRampToValueAtTime(0.2, t0 + at + 0.02);
+      amp.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.45);
+      osc.connect(amp).connect(ctx.destination);
+      osc.start(t0 + at);
+      osc.stop(t0 + at + 0.5);
+    }
+  };
+  ring();
+  const timer = setInterval(ring, 2000);
+  const limit = setTimeout(() => stop(), maxSeconds * 1000);
+  function stop() {
+    stopped = true;
+    clearInterval(timer);
+    clearTimeout(limit);
+  }
+  return stop;
+}

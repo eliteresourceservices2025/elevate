@@ -39,7 +39,7 @@ export type PermissionRule = {
   /** Scope each role gets. A missing role gets nothing. */
   roles: Partial<Record<RoleSlug, Scope>>;
   /** Extra per-person flag required on top of (or instead of) roles. */
-  requiresFlag?: "safevoice_handler";
+  requiresFlag?: "safevoice_handler" | "call_recorder";
   /** Payroll: only people holding one of these levels (core.users.payroll_access) get the action; roles are ignored. */
   payrollLevels?: readonly PayrollLevel[];
   /** Flag holders get this scope; roles are ignored when set. */

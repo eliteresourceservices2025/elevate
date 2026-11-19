@@ -263,6 +263,8 @@ export async function removeMember(actor: Actor, input: { conversationId: string
     return members;
   });
   await signal(everyone, { type: "members", conversationId: input.conversationId });
+  // A person taken out of a chat is taken out of its live call too (their media is closed, not just hidden).
+  await import("@/modules/calls/service").then((m) => m.syncCallWithChat(input.conversationId)).catch(() => {});
 }
 
 /** Renames a group. The new name is shown to its members as a system message (encrypted like any message); the audit row has ids only. */
@@ -293,6 +295,7 @@ export async function deleteGroup(actor: Actor, conversationId: string): Promise
     return members;
   });
   await signal(everyone, { type: "members", conversationId });
+  await import("@/modules/calls/service").then((m) => m.endCallForConversation(conversationId)).catch(() => {});
 }
 
 /** A message the person may see right now: a current member of a live conversation, from their join time on, and not removed. */
@@ -477,6 +480,15 @@ export async function markRead(actor: Actor, input: { conversationId: string; se
 }
 
 export { bodyContext, revisionContext, currentMemberIds };
+
+/**
+ * A line the system writes into a chat ("Call started", "Call ended, 12 min", "Missed call"), shown to current members like any message.
+ * Never counts as unread (system lines don't), never carries anything but plain words the caller chose.
+ */
+export async function postSystemLine(input: { conversationId: string; senderUserId: string; body: string }): Promise<void> {
+  const posted = await insertMessage(db, { conversationId: input.conversationId, senderUserId: input.senderUserId, body: input.body, kind: "system" });
+  await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: posted.id });
+}
 
 /** Adds the person's reaction, or removes it if they already made it. */
 export async function toggleReaction(actor: Actor, input: { messageId: string; emoji: string }): Promise<{ active: boolean }> {

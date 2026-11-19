@@ -8,6 +8,8 @@ import { OperationResultProvider } from "@/components/operation-result";
 import { UnsavedChangesProvider } from "@/components/unsaved-changes";
 import { PopupQueue, type PopupItem } from "@/modules/announcements/components/popup-queue";
 import { playChatSound, unlockAudio } from "@/modules/messages/components/play-sound";
+import { CallOverlays } from "@/modules/calls/components/call-overlays";
+import { CallProvider } from "@/modules/calls/components/call-provider";
 import { useLiveChatCount } from "@/modules/messages/components/use-live-chat-count";
 import type { ChatSound } from "@/modules/messages/sound-options";
 import { AppHeader } from "./app-header";
@@ -49,11 +51,13 @@ export function AppShell({ initialCollapsed, chatSound = "chime", tourAutoStart 
     }
   }
 
+  // "relative" makes the frame the containing block for the screen-reader-only text (absolutely positioned), so it cannot stretch the page.
+  // "overflow-clip", not "overflow-hidden": a hidden box can still be scrolled by the browser itself (focusing a field, scrolling a
+  // link into view, a route change), which pushed the header and the top of the menu out of sight until a refresh. A clipped box
+  // cannot scroll at all, so only the content area below ever moves.
+  // The call provider wraps everything so a call survives moving between pages (its sound, mini window and ring are CallOverlays).
   return (
-    // "relative" makes this the containing block for the screen-reader-only text (absolutely positioned), so it cannot stretch the page.
-    // "overflow-clip", not "overflow-hidden": a hidden box can still be scrolled by the browser itself (focusing a field, scrolling a
-    // link into view, a route change), which pushed the header and the top of the menu out of sight until a refresh. A clipped box
-    // cannot scroll at all, so only the content area below ever moves.
+    <CallProvider userId={header.userId ?? ""}>
     <div data-app-shell className="relative flex h-dvh overflow-clip print:block print:h-auto print:overflow-visible">
       {/* Skip link: first stop for keyboard users. Fixed, not absolute, so focusing it can never scroll the shell. */}
       <a
@@ -91,6 +95,8 @@ export function AppShell({ initialCollapsed, chatSound = "chime", tourAutoStart 
         <QuickTour autoStart={tourAutoStart && popupsDone} />
       </Suspense>
       {popups.length > 0 ? <PopupQueue items={popups} onDone={onPopupsDone} /> : null}
+      <CallOverlays />
     </div>
+    </CallProvider>
   );
 }

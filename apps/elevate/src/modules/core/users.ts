@@ -15,6 +15,7 @@ export type CoreUser = {
   isSafevoiceHandler: boolean;
   payrollAccess: PayrollLevel | null;
   isPrivacyOfficer: boolean;
+  canRecordCalls: boolean;
   /** A client guest: Messages only, no roles (never the Employee role either). */
   isGuest: boolean;
   roles: RoleSlug[];
@@ -66,7 +67,7 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
         await writeAudit({ actor: null, action: "guest.account_created", targetType: "user", targetId: input.id, after: { clientId: accepted.guestClientId }, metadata: { invitedBy: accepted.invitedBy } }, tx);
       }
       const [guestRow] = await tx.select().from(users).where(eq(users.id, input.id)).limit(1);
-      return { id: guestRow.id, email: guestRow.email, archivedAt: guestRow.archivedAt, isSafevoiceHandler: false, payrollAccess: null, isPrivacyOfficer: false, isGuest: true, roles: [] };
+      return { id: guestRow.id, email: guestRow.email, archivedAt: guestRow.archivedAt, isSafevoiceHandler: false, payrollAccess: null, isPrivacyOfficer: false, canRecordCalls: false, isGuest: true, roles: [] };
     }
 
     await tx
@@ -135,6 +136,7 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
       isSafevoiceHandler: row.isSafevoiceHandler,
       payrollAccess: asPayrollLevel(row.payrollAccess),
       isPrivacyOfficer: row.isPrivacyOfficer,
+      canRecordCalls: row.canRecordCalls,
       isGuest: row.isGuest,
       roles: roleRows.map((r) => r.slug).filter(isRoleSlug),
     };
@@ -156,6 +158,7 @@ async function loadCoreUser(id: string): Promise<CoreUser | null> {
     isSafevoiceHandler: row.isSafevoiceHandler,
     payrollAccess: asPayrollLevel(row.payrollAccess),
     isPrivacyOfficer: row.isPrivacyOfficer,
+      canRecordCalls: row.canRecordCalls,
     isGuest: row.isGuest,
     roles: roleRows.map((r) => r.slug).filter(isRoleSlug),
   };

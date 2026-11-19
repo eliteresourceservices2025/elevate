@@ -4,6 +4,7 @@ import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/modules/auth/actions";
 import { GUEST_NOTICE_BODY, GUEST_NOTICE_TITLE, guestStatus } from "../guests";
+import { GuestCallFrame } from "@/modules/calls/components/guest-call-frame";
 import { GuestNoticeGate } from "./guest-notice-gate";
 
 /**
@@ -21,6 +22,7 @@ export async function GuestLayout({ userId, email, children }: { userId: string;
     );
   }
   return (
+    <GuestCallFrame userId={userId}>
     <div className="flex min-h-screen flex-col bg-background">
       <header className="flex items-center gap-3 border-b px-4 py-2.5">
         <span className="font-heading text-base font-bold text-primary">ELEVATE</span>
@@ -36,5 +38,6 @@ export async function GuestLayout({ userId, email, children }: { userId: string;
         {children}
       </main>
     </div>
+    </GuestCallFrame>
   );
 }

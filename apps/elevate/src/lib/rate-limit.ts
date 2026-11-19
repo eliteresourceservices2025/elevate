@@ -41,6 +41,10 @@ export const POLICIES = {
   gifSearchCompany: { requests: 90, window: "1 h" },
   /** GIF previews in the picker (a search shows up to 24, and people scroll and search a lot). */
   gifPreview: { requests: 600, window: "10 m" },
+  /** Starting a call rings everyone in the chat, so a few per person; joining and each media step are more frequent. */
+  callRing: { requests: 20, window: "10 m" },
+  callJoin: { requests: 60, window: "10 m" },
+  callMedia: { requests: 600, window: "10 m" },
   /** The header search box (it asks as people type, so the allowance is generous). */
   search: { requests: 200, window: "10 m" },
 } satisfies Record<string, Policy>;
