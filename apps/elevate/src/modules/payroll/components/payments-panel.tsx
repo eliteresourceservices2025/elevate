@@ -23,7 +23,23 @@ import { useRun } from "@/modules/recruiting/components/use-run";
 import { exportRemitlyList, markPaid } from "../actions";
 import { PAYMENT_LABELS as P } from "../constants";
 import { DEFAULT_PAYMENT_SORT, nextSort, PAYMENT_SORT_CHOICES, sortPayments, type PaymentSort, type PaymentSortKey } from "../payment-sort";
+import { DEFAULT_PAYMENT_ZONE, inOtherZone, isPaymentZone, quickDates, whenLabel, ZONE_CHOICES, ZONE_LABELS, type PaymentZone } from "../payment-when";
 import type { PaymentsView } from "../queries";
+
+type Now = { date: string; time: string };
+
+/** Today, tomorrow and next Tuesday beside a date box: one tap instead of the calendar. */
+function QuickDates({ from, onPick }: { from: string; onPick: (value: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {quickDates(from).map((q) => (
+        <Button key={q.label} type="button" size="sm" variant="outline" onClick={() => onPick(q.value)}>
+          {q.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
 
 /** Cents as typed in the box ("351.66"), for a payment that is being corrected. */
 const typedUsd = (cents: string | null): string => (cents === null || BigInt(cents) < 0n ? "" : `${BigInt(cents) / 100n}.${(BigInt(cents) % 100n).toString().padStart(2, "0")}`);
@@ -49,7 +65,9 @@ function MarkPaidForm({
   current,
   currentUsd,
   usdUnreadable,
-  today,
+  currentSent,
+  currentExpected,
+  now,
 }: {
   runId: string;
   employeeId: string;
@@ -58,12 +76,21 @@ function MarkPaidForm({
   currentUsd: string;
   /** The dollars saved with this payment can't be read: saving would replace them. */
   usdUnreadable: boolean;
-  today: string;
+  /** The dates of the payment being corrected, or null for a new one (the form then starts at the time now in Manila). */
+  currentSent: { date: string; time: string | null } | null;
+  currentExpected: { date: string; time: string | null; zone: PaymentZone | null } | null;
+  now: Now;
 }) {
   const { run, pending } = useRun();
   const dialog = useFormDialog();
   const [reference, setReference] = useState(current);
-  const [paidOn, setPaidOn] = useState(today);
+  const [paidOn, setPaidOn] = useState(currentSent?.date ?? now.date);
+  const [sentTime, setSentTime] = useState(currentSent ? (currentSent.time ?? "") : now.time);
+  const [expectedOn, setExpectedOn] = useState(currentExpected?.date ?? "");
+  const [expectedTime, setExpectedTime] = useState(currentExpected?.time ?? "");
+  const [expectedZone, setExpectedZone] = useState<PaymentZone>(currentExpected?.zone ?? DEFAULT_PAYMENT_ZONE);
+  // The same moment on the other zone's clock, shown while a time is typed so nobody has to work it out.
+  const elsewhere = expectedOn && expectedTime ? inOtherZone(expectedOn, expectedTime, expectedZone) : null;
   const [usd, setUsd] = useState(currentUsd);
   return (
     <form
@@ -71,7 +98,7 @@ function MarkPaidForm({
       onSubmit={(e) => {
         e.preventDefault();
         run(
-          () => markPaid({ runId, employeeId, reference, paidOn, amountUsd: usd }),
+          () => markPaid({ runId, employeeId, reference, paidOn, sentTime, expectedOn, expectedTime, expectedZone, amountUsd: usd }),
           P.marked,
           () => dialog?.close(true),
         );
@@ -90,13 +117,41 @@ function MarkPaidForm({
       </div>
       <div className="space-y-1">
         <HintedLabel htmlFor={`paid-${employeeId}`} hint={PAYROLL_HINTS.paymentPaidOn}>{P.paidOn}</HintedLabel>
-        <Input
-          id={`paid-${employeeId}`}
-          type="date"
-          value={paidOn}
-          onChange={(e) => setPaidOn(e.target.value)}
-          required
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Input id={`paid-${employeeId}`} type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} required className="w-auto" />
+          <Input id={`sent-time-${employeeId}`} type="time" aria-label={P.sentTime} title={PAYROLL_HINTS.paymentSentTime} value={sentTime} onChange={(e) => setSentTime(e.target.value)} className="w-auto" />
+          <span className="text-xs text-muted-foreground">{ZONE_LABELS[DEFAULT_PAYMENT_ZONE]}</span>
+        </div>
+        <QuickDates from={now.date} onPick={setPaidOn} />
+      </div>
+      <div className="space-y-1">
+        <HintedLabel htmlFor={`expected-${employeeId}`} hint={PAYROLL_HINTS.paymentExpected}>{P.expectedOn}</HintedLabel>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input id={`expected-${employeeId}`} type="date" value={expectedOn} min={paidOn} onChange={(e) => setExpectedOn(e.target.value)} className="w-auto" />
+          <Input id={`expected-time-${employeeId}`} type="time" aria-label={P.expectedTime} value={expectedTime} onChange={(e) => setExpectedTime(e.target.value)} disabled={!expectedOn} className="w-auto" />
+          <NativeSelect
+            aria-label={P.expectedZone}
+            value={expectedZone}
+            onChange={(e) => {
+              if (isPaymentZone(e.target.value)) setExpectedZone(e.target.value);
+            }}
+            disabled={!expectedOn}
+            className="w-auto"
+          >
+            {ZONE_CHOICES.map((z) => (
+              <option key={z.value} value={z.value}>
+                {z.label}
+              </option>
+            ))}
+          </NativeSelect>
+          {expectedOn ? (
+            <Button type="button" size="sm" variant="ghost" onClick={() => { setExpectedOn(""); setExpectedTime(""); }}>
+              Clear
+            </Button>
+          ) : null}
+        </div>
+        {elsewhere ? <p className="text-xs text-muted-foreground">{`That is ${elsewhere}`}</p> : null}
+        <QuickDates from={paidOn || now.date} onPick={setExpectedOn} />
       </div>
       <div className="space-y-1">
         <HintedLabel htmlFor={`usd-${employeeId}`} hint={PAYROLL_HINTS.paymentUsd}>{P.amountUsd}</HintedLabel>
@@ -115,7 +170,7 @@ function MarkPaidForm({
   );
 }
 
-export function PaymentsPanel({ view, today }: { view: PaymentsView; today: string }) {
+export function PaymentsPanel({ view, now }: { view: PaymentsView; now: Now }) {
   const { run, pending } = useRun();
   const paid = view.people.filter((p) => p.payment !== null).length;
   const [sort, setSort] = useState<PaymentSort>(DEFAULT_PAYMENT_SORT);
@@ -227,7 +282,10 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
               <TableCell label={P.client}>{p.clients || P.none}</TableCell>
               <TableCell label={P.status}>
                 {p.payment ? (
-                  <Badge variant="success">{`${P.paid} ${p.payment.paidOn}`}</Badge>
+                  <div className="space-y-1">
+                    <Badge variant="success">{`${P.paid} ${whenLabel(p.payment.paidOn, p.payment.sentTime)}`}</Badge>
+                    {p.payment.expectedOn ? <p className="text-xs text-muted-foreground">{P.expected(whenLabel(p.payment.expectedOn, p.payment.expectedTime, p.payment.expectedZone ?? DEFAULT_PAYMENT_ZONE))}</p> : null}
+                  </div>
                 ) : (
                   <Badge variant="outline">{P.notPaid}</Badge>
                 )}
@@ -259,7 +317,9 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
                       current={p.payment?.reference ?? ""}
                       currentUsd={typedUsd(p.payment?.usdCents ?? null)}
                       usdUnreadable={p.payment?.usd === P.usdUnreadable}
-                      today={today}
+                      currentSent={p.payment ? { date: p.payment.paidOn, time: p.payment.sentTime } : null}
+                      currentExpected={p.payment?.expectedOn ? { date: p.payment.expectedOn, time: p.payment.expectedTime, zone: p.payment.expectedZone } : null}
+                      now={now}
                     />
                   </FormDialog>
                 ) : null}

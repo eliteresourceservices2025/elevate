@@ -64,6 +64,17 @@ describe("nextSort", () => {
 describe("the Mark paid window", () => {
   const base = { runId: "11111111-1111-4111-8111-111111111111", employeeId: "22222222-2222-4222-8222-222222222222", reference: "RMT-1", paidOn: "2030-11-12" };
 
+  it("takes a sent time and an optional expected date and time", () => {
+    expect(markPaidSchema.safeParse({ ...base, sentTime: "09:30", expectedOn: "2030-11-13", expectedTime: "17:00" }).success).toBe(true);
+    expect(markPaidSchema.safeParse({ ...base, sentTime: "", expectedOn: "", expectedTime: "" }).success).toBe(true); // all blank is fine
+    expect(markPaidSchema.safeParse({ ...base, expectedOn: "2030-11-12" }).success).toBe(true); // the same day is fine
+    for (const zone of ["", "America/Phoenix", "Asia/Manila"]) expect(markPaidSchema.safeParse({ ...base, expectedOn: "2030-11-13", expectedZone: zone }).success, zone).toBe(true);
+    expect(markPaidSchema.safeParse({ ...base, expectedOn: "2030-11-13", expectedZone: "Europe/Paris" }).success).toBe(false);
+    for (const bad of [{ sentTime: "9:30" }, { sentTime: "24:00" }, { sentTime: "09:60" }, { expectedOn: "2030-02-31" }, { expectedTime: "09:30" }, { expectedOn: "2030-11-11" }]) {
+      expect(markPaidSchema.safeParse({ ...base, ...bad }).success, JSON.stringify(bad)).toBe(false);
+    }
+  });
+
   it("takes the dollars as an optional amount above zero", () => {
     expect(markPaidSchema.safeParse(base).success).toBe(true);
     expect(markPaidSchema.safeParse({ ...base, amountUsd: "" }).success).toBe(true);
