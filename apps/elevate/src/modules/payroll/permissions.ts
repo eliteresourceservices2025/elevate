@@ -8,7 +8,7 @@ export const payrollPermissions = definePermissions({
   "payroll.view_history": { roles: {}, payrollLevels: ["preparer", "approver", "viewer"] },
   "payroll.prepare": { roles: {}, payrollLevels: ["preparer"] },
   "payroll.manage_rates": { roles: {}, payrollLevels: ["preparer"] },
-  // Paying (the Remitly list and marking payments): both working levels (owner decision 2026-11-12). Nobody marks their own payment.
+  // Paying (the Remitly list and marking payments): both working levels (owner decision 2026-11-12). Anyone at either level may mark any payment, their own line included (owner decision 2026-11-19).
   "payroll.mark_paid": { roles: {}, payrollLevels: ["preparer", "approver"] },
   "payroll.export": { roles: {}, payrollLevels: ["preparer", "approver"] },
   "payroll.approve": { roles: {}, payrollLevels: ["approver"] },

@@ -93,7 +93,7 @@ The new run shows notes above the worksheet, then one row for each person. Nothi
 ![The Amounts window for an allowance: give it a name, like Health allowance, and an amount.](help:prepare-a-pay-run/08-named-allowance.png)
 
 - For someone paid for part of the cutoff, enter the days or hours they worked. These can never pay more than a full cutoff; if they do, check what you typed (for example "15" instead of "1.5").
-- Open **Actions** on a line and choose **Mark as checked** when you have read it. It records that a Preparer looked at it. Any change to a line asks for a new check. If you are paid through payroll yourself, **another Preparer** must check **your own** line, and you cannot send the run until they do. Changing your line clears that check.
+- Open **Actions** on a line and choose **Mark as checked** when you have read it. It records that a Preparer looked at it. Any change to a line asks for a new check. If you are paid through payroll yourself, you can check your own line too (or ask another Preparer). Changing your line clears that check.
 
 # The checklist and the flags on a row
 

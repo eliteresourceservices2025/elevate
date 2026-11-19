@@ -40,7 +40,7 @@ function SortTitle({ label, sortKey, sort, onSort }: { label: string; sortKey: P
   );
 }
 
-// Paying an approved run: the Remitly list, and one reference per person. The server decides everything (approval, own pay, the date);
+// Paying an approved run: the Remitly list, and one reference per person. The server decides everything (approval, who is on the run);
 // this panel only offers what makes sense.
 
 function MarkPaidForm({

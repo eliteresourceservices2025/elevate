@@ -34,7 +34,6 @@ const noteContext = (id: string) => `pay_approval_note:${id}`;
 /** The approval hash as stored (encrypted, bound to its row). Callers must already hold `payroll.view`. */
 export const decryptApprovalHash = (id: string, stored: string): string => fieldCrypto().decrypt(stored, hashContext(id));
 
-/** Deciding is not changing: a send-back or an approval does not stop that Approver from deciding the run again later. Marking a run as a test, archiving and restoring it change no figure, so they do not count either. */
 /**
  * The hash an approval is given against, from data read by `readRun`; null when anything on the run can't be read (such a run can't be
  * approved). It covers every line's decrypted figures, inputs, items and confirmation, the settings snapshot, the full

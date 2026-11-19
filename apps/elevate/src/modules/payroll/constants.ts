@@ -183,7 +183,7 @@ export const CHANGE_ACTION_LABELS: Record<ChangeAction, string> = {
   item_dismissed: "Amount removed from a line",
   suggestions_refreshed: "Suggestions updated from approved hours",
   suggestion_confirmed: "Suggested amount confirmed",
-  line_confirmed: "Line checked by another Preparer",
+  line_confirmed: "Line checked",
   run_submitted: "Run sent for review",
   run_sent_back: "Run sent back",
   run_approved: "Run approved",
