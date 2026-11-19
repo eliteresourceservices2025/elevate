@@ -7,6 +7,7 @@ import { writeAudit } from "@/modules/audit/write";
 import { users } from "@/modules/core/schema";
 import { peopleByUserId } from "@/modules/messages/queries";
 import { callSettings, calls, callUsage } from "./schema";
+import { fetchTurnUsage, type CloudflareUsage } from "./cloudflare-usage";
 import { callsAvailable, fakeCallsEnabled } from "./sfu-port";
 import { overWarning } from "./usage";
 
@@ -26,6 +27,8 @@ export type CallSettingsView = {
   townhallEnabled: boolean;
   recordingEnabled: boolean;
   /** People a Super Admin picked to record calls, and everyone else who could be picked. */
+  /** Cloudflare's own month-to-date TURN traffic (the relay part only; Cloudflare publishes no SFU figure). */
+  cloudflare: CloudflareUsage;
   recorders: { id: string; name: string }[];
   candidates: { id: string; name: string }[];
   recent: { id: string; startedAt: string; minutes: number; people: number; estimatedGb: number; endReason: string | null }[];
@@ -57,6 +60,7 @@ export async function getCallSettingsView(): Promise<CallSettingsView> {
   const names = await peopleByUserId(staff.map((u) => u.id));
   const named = staff.map((u) => ({ id: u.id, name: names.get(u.id)?.name ?? "", can: u.can })).filter((u) => u.name);
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+  const cloudflare = await fetchTurnUsage();
   const monthGb = Number(month.gb);
   const warningGb = settings?.monthlyGbWarning ?? 700;
   return {
@@ -68,6 +72,7 @@ export async function getCallSettingsView(): Promise<CallSettingsView> {
     overWarning: overWarning(monthGb, warningGb),
     callsThisMonth: month.n,
     participantMinutesThisMonth: month.minutes,
+    cloudflare,
     townhallEnabled: settings?.townhallEnabled ?? true,
     recordingEnabled: settings?.recordingEnabled ?? false,
     recorders: named.filter((u) => u.can).sort(byName).map(({ id, name }) => ({ id, name })),

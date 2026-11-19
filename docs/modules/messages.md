@@ -10,6 +10,7 @@ One company-controlled place for internal chat (direct messages, private groups,
 
 - Free and open-source tools first; new monthly cost expected $0 (ceiling about $20).
 - Calls: Cloudflare Realtime SFU and TURN (free up to 1,000 GB a month), no server to run; fallback self-hosted LiveKit behind `calls/transport.ts`.
+- **Cloudflare usage on Settings > Calls:** besides our own estimate, the page shows Cloudflare's real month-to-date **TURN** traffic (`calls/cloudflare-usage.ts`, GraphQL node `callsTurnUsageAdaptiveGroups`). It needs `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_ANALYTICS_TOKEN` (a token with only the Account Analytics read permission); without them the page says "Not connected". Cloudflare documents no SFU usage figure, so the SFU part stays an estimate until one is confirmed in the GraphQL schema explorer.
 - Clients (outsiders) join as guests in client groups for attendance matters, under a written "never share patient details in ELEVATE" rule, with no vendor BAAs.
 - HR reads a chat only through a logged request an HR Admin makes and a different Super Admin approves (read-only, requested dates only, 72 hours).
 - Recording only by people a Super Admin picks, with consent from everyone in the call, never in calls that include a client.
