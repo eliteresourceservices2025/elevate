@@ -140,6 +140,9 @@ export class CloudflareTransport implements CallTransport {
         await api.unsubscribe(dropped.map(([, entry]) => entry.mid)).catch(() => {});
       }
       // A person with nothing left on screen disappears from view.
+      // Cloudflare answers only for tracks that are already flowing; a shared screen or camera that has just started may not be yet. Say so,
+      // so the caller tries again in a moment (the ones that worked are already in place).
+      const notYet = fresh.some((t) => !this.pulledNames.has(t.trackName));
       const wantedKeys = new Set(wanted.map((t) => `${t.userId}:${t.kind === "screen" ? "screen" : "main"}`));
       for (const [key, stream] of [...this.streams]) {
         if (!wantedKeys.has(key)) {
@@ -149,6 +152,7 @@ export class CloudflareTransport implements CallTransport {
           this.onRemote(userId, slot as RemoteSlot, null);
         }
       }
+      if (notYet) throw new Error("Some video is not ready yet.");
     });
   }
 

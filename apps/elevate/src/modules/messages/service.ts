@@ -394,7 +394,7 @@ export async function sendMessage(actor: Actor, input: { conversationId: string;
     return posted;
   });
   await notifyMentions(actor, input.conversationId, body);
-  await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: sent.id });
+  await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: sent.id, senderUserId: actor.id });
   return sent;
 }
 
@@ -545,7 +545,7 @@ export async function createPoll(
     );
     return posted;
   });
-  await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: sent.id });
+  await signal(await currentMemberIds(db, input.conversationId), { type: "message", conversationId: input.conversationId, messageId: sent.id, senderUserId: actor.id });
   return sent;
 }
 

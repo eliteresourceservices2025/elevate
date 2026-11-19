@@ -283,7 +283,15 @@ test("an all-hands: the audience watches, a speaker is chosen, then a recording 
     expect(rec.expires_at).not.toBeNull();
 
     // End the call; Ana (she was in it) can watch the recording; Bea (she never joined) cannot.
+    // Ending for everyone asks first: "Keep the call going" changes nothing, the confirmation ends it.
     await pageH.getByRole("button", { name: "End for everyone" }).click();
+    const sure = pageH.getByRole("alertdialog");
+    await expect(sure).toContainText("End the call for everyone?");
+    await sure.getByRole("button", { name: "Keep the call going" }).click();
+    await expect(pageH.getByRole("button", { name: "End for everyone" })).toBeVisible();
+    await pageH.getByRole("button", { name: "End for everyone" }).click();
+    await pageH.getByRole("alertdialog").getByRole("button", { name: "End for everyone" }).click();
+    await expect(pageH.getByRole("heading", { level: 2, name: title })).toBeVisible({ timeout: 30_000 });
     await pageA.goto("/messages/recordings");
     await expect(pageA.getByTestId("recording-row")).toContainText(title, { timeout: 30_000 });
     const played = await pageA.request.get(`/api/calls/recordings/${rec.id}`);

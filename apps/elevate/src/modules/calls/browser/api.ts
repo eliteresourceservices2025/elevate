@@ -16,6 +16,7 @@ import {
   endCallForEveryone,
   subscribeCallTracks,
   setCallSpeaker,
+  getRingingCalls,
   startCallRecording,
   stopCallRecording,
   answerCallRecording,
@@ -60,6 +61,7 @@ export const callApi = {
   unsubscribe: (callId: string, mids: string[]) => unwrap(unsubscribeCallTracks({ callId, mids })),
   live: (conversationId: string) => unwrap(getLiveCall({ conversationId })),
   incoming: (callId: string) => unwrap(getIncomingCall({ callId })),
+  ringing: () => unwrap(getRingingCalls()),
 };
 
 export type CallApi = typeof callApi;

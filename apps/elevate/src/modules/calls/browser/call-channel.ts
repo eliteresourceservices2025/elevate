@@ -36,7 +36,7 @@ export function connectCallChannel(
   callId: string,
   userId: string,
   initial: CallPresence | null,
-  on: { presence: (byUser: Record<string, CallPresence>) => void; event: (event: CallEventMessage) => void },
+  on: { presence: (byUser: Record<string, CallPresence>) => void; event: (event: CallEventMessage) => void; ready?: () => void },
 ): { update: (next: CallPresence) => void; stop: () => void } {
   let stopped = false;
   let channel: CallChannel | null = null;
@@ -68,6 +68,8 @@ export function connectCallChannel(
           if (status === "SUBSCRIBED" && !stopped) {
             subscribed = true;
             if (latest) void joined.track(latest);
+            // Signals sent while this was still connecting are gone: ask for the current state once now.
+            on.ready?.();
           }
         });
     } catch {

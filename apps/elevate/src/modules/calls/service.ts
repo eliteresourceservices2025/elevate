@@ -159,6 +159,11 @@ async function finish(tx: Tx, callId: string, reason: "ended" | "empty" | "conve
 
 /** After an ending commits: a line in the chat, a notice for a missed call, and a signal so rings and banners clear everywhere. */
 async function announceEnd(ended: Ended): Promise<void> {
+  // Nobody ever took a seat (the starter never got in): the call was never announced, so there is nothing to say about it.
+  if (ended.people === 0) {
+    await broadcastCallEvent({ type: "ended", callId: ended.callId });
+    return;
+  }
   const members = await currentMemberIds(db, ended.conversationId);
   await postSystemLine({ conversationId: ended.conversationId, senderUserId: ended.startedBy, body: ended.missed ? "Missed call" : `Call ended after ${ended.minutes} min` }).catch(() => {});
   if (ended.missed) {
@@ -236,10 +241,22 @@ export async function startCall(actor: Actor, input: { conversationId: string; c
     if (winner) return { callId: winner, created: false };
     throw error;
   }
-  await postSystemLine({ conversationId: input.conversationId, senderUserId: actor.id, body: mode === "townhall" ? "All-hands started" : "Call started" }).catch(() => {});
-  if (members.length <= RING_MAX_MEMBERS) await broadcastChatSignal(members.filter((id) => id !== actor.id), { type: "call", conversationId: input.conversationId, callId });
-  else await broadcastChatSignal(members, { type: "call", conversationId: input.conversationId, callId });
+  // No ring and no "Call started" line yet: the others hear about it when the starter has really joined (see announceStart), so nobody is
+  // told about a call whose starter is still allowing the microphone or never gets in.
   return { callId, created: true };
+}
+
+/** The ring and the "Call started" line: sent once, when the person who started the call takes their seat. Never throws. */
+async function announceStart(conversationId: string, callId: string, starterId: string, mode: CallMode): Promise<void> {
+  try {
+    const members = await currentMemberIds(db, conversationId);
+    await postSystemLine({ conversationId, senderUserId: starterId, body: mode === "townhall" ? "All-hands started" : "Call started" }).catch(() => {});
+    // Small chats ring everyone else; in a big one everyone (the starter too) just sees the banner.
+    const to = members.length <= RING_MAX_MEMBERS ? members.filter((id) => id !== starterId) : members;
+    await broadcastChatSignal(to, { type: "call", conversationId, callId });
+  } catch {
+    // The chat bar's own refresh shows the call anyway.
+  }
 }
 
 async function liveCallIdFor(conversationId: string): Promise<string | null> {
@@ -264,6 +281,8 @@ export async function getLiveCall(actor: Actor, input: { conversationId: string 
   if (!callId) return null;
   const [call] = await db.select().from(calls).where(eq(calls.id, callId)).limit(1);
   const seats = await db.select({ userId: callParticipants.userId }).from(callParticipants).where(and(eq(callParticipants.callId, callId), isNull(callParticipants.leftAt)));
+  // Nobody is in it yet (the starter is still joining): only the starter sees it, so no one else is offered a call that has not begun.
+  if (seats.length === 0 && call.startedBy !== actor.id) return null;
   const names = await peopleByUserId([call.startedBy]);
   return { callId, conversationId: input.conversationId, mode: call.mode as CallMode, startedAt: call.startedAt.toISOString(), startedByName: names.get(call.startedBy)?.name ?? "Someone", participantCount: seats.length, iAmIn: seats.some((s) => s.userId === actor.id) };
 }
@@ -300,6 +319,7 @@ export async function joinCall(actor: Actor, input: { callId: string }): Promise
 
   const cuts: SeatCut[] = [];
   let quietJoin = false;
+  let firstSeatOfStarter = false;
   await db.transaction(async (tx) => {
     const [live] = await tx.select().from(calls).where(and(eq(calls.id, input.callId), isNull(calls.endedAt))).for("update").limit(1);
     if (!live) throw new ActionFailure("This call has ended.");
@@ -321,10 +341,13 @@ export async function joinCall(actor: Actor, input: { callId: string }): Promise
     // In a big all-hands an audience member joining changes little for the others: no signal (125 people joining would make every browser
     // reload the whole state 125 times). The next 30-second heartbeat brings the list up to date. In a small one everyone sees it at once.
     quietJoin = live.mode === "townhall" && role === "attendee" && others.n >= QUIET_AUDIENCE_FROM;
+    const [before] = await tx.select({ n: sql<number>`count(*)::int` }).from(callParticipants).where(eq(callParticipants.callId, input.callId));
+    firstSeatOfStarter = live.startedBy === actor.id && before.n === 0;
     await tx.insert(callParticipants).values({ callId: input.callId, userId: actor.id, role, cfSessionId: sessionId, cfPullSessionId: pullSessionId });
     await tx.update(calls).set({ maxParticipants: sql`greatest(${calls.maxParticipants}, ${others.n + 1})` }).where(eq(calls.id, input.callId));
   });
   await closeAtCloudflare(cuts);
+  if (firstSeatOfStarter) await announceStart(row.call.conversationId, input.callId, actor.id, row.call.mode as CallMode);
   if (!quietJoin) await broadcastCallEvent({ type: "roster", callId: input.callId });
   return { ...(await stateFor(input.callId, actor.id)), iceServers: await sfu.iceServers() };
 }
@@ -598,6 +621,22 @@ export async function subscribeTracks(actor: Actor, input: { callId: string; tra
 export async function renegotiate(actor: Actor, input: { callId: string; answer: { type: "answer"; sdp: string } }): Promise<void> {
   const { pullSessionId } = await requireSeat(actor, input.callId);
   await getSfu().renegotiate(pullSessionId, input.answer);
+}
+
+/** Calls ringing for this person right now (started in the last 45 seconds in a chat of theirs, not joined): what a browser asks for when it connects, in case it missed the signal. */
+export async function ringingCalls(actor: Actor): Promise<(LiveCall & { title: string })[]> {
+  const rows = await db
+    .select({ id: calls.id })
+    .from(calls)
+    .innerJoin(conversationMembers, and(eq(conversationMembers.conversationId, calls.conversationId), eq(conversationMembers.userId, actor.id), isNull(conversationMembers.leftAt)))
+    .where(and(isNull(calls.endedAt), sql`${calls.startedAt} > now() - interval '45 seconds'`))
+    .limit(3);
+  const out: (LiveCall & { title: string })[] = [];
+  for (const r of rows) {
+    const info = await incomingCall(actor, { callId: r.id }).catch(() => null);
+    if (info) out.push(info);
+  }
+  return out;
 }
 
 /** A ring the person has not answered yet: a live call in a chat of theirs they are not in, for the ring pop-up. */

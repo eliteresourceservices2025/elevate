@@ -50,6 +50,11 @@ export function unlockAudio(): void {
   window.addEventListener("keydown", start);
 }
 
+/** True once the browser lets this page make sound (after the person's first click or key press). */
+export function audioRunning(): boolean {
+  return context?.state === "running";
+}
+
 /** Plays a sound once. Does nothing for "off", when audio is not allowed yet, or if one just played (a burst of messages is one sound). */
 export function playChatSound(sound: ChatSound, force = false): void {
   if (sound === "off") return;

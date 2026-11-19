@@ -10,6 +10,7 @@ import { PopupQueue, type PopupItem } from "@/modules/announcements/components/p
 import { playChatSound, unlockAudio } from "@/modules/messages/components/play-sound";
 import { CallOverlays } from "@/modules/calls/components/call-overlays";
 import { CallProvider, type Abilities } from "@/modules/calls/components/call-provider";
+import { useChatLive } from "@/modules/messages/components/use-chat-live";
 import { useLiveChatCount } from "@/modules/messages/components/use-live-chat-count";
 import type { ChatSound } from "@/modules/messages/sound-options";
 import { AppHeader } from "./app-header";
@@ -30,8 +31,12 @@ export function AppShell({ initialCollapsed, callAbilities, chatSound = "chime",
   const liveChat = useLiveChatCount(header.userId ?? "", header.workCounts?.["/messages"] ?? 0, () => {
     // A new message plays the person's chosen sound, unless they are looking at Messages right now.
     if (chatSound === "off") return;
-    if (document.hasFocus() && pathname.startsWith("/messages")) return;
     playChatSound(chatSound);
+  });
+  // A message from someone else in the chat that is open right now never raises the unread count (it is read at once), so it sounds here.
+  useChatLive(header.userId ?? "", (signal) => {
+    if (chatSound === "off" || signal.type !== "message" || !signal.senderUserId || signal.senderUserId === header.userId) return;
+    if (pathname === `/messages/${signal.conversationId}`) playChatSound(chatSound);
   });
   useEffect(() => {
     if (chatSound !== "off") unlockAudio();

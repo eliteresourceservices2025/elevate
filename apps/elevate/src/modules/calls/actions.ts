@@ -1,6 +1,6 @@
 "use server";
 
-import type { z } from "zod";
+import { z } from "zod";
 import { authorize, can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { allowRequest } from "@/lib/rate-limit";
@@ -156,6 +156,12 @@ export async function saveCallSettings(input: unknown): Promise<ActionResult<und
 export async function getLiveCall(input: unknown): Promise<ActionResult<Awaited<ReturnType<typeof service.getLiveCall>>>> {
   const actor = await requireUser({ allowGuest: true });
   return run(actor, joinAction(actor), liveCallSchema, input, "callMedia", (data) => service.getLiveCall(actor, data));
+}
+
+/** Calls ringing for me right now (asked for when the browser connects, in case it missed the signal). */
+export async function getRingingCalls(): Promise<ActionResult<Awaited<ReturnType<typeof service.ringingCalls>>>> {
+  const actor = await requireUser({ allowGuest: true });
+  return run(actor, joinAction(actor), z.object({}), {}, "callMedia", () => service.ringingCalls(actor));
 }
 
 /** The pop-up for a ring: who is calling and where; null when the call is over, already joined, or the chat is muted. */

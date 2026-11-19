@@ -443,12 +443,15 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
       // In an all-hands the audience stays quiet on the channel until someone raises a hand or reacts (125 people announcing themselves is noise).
       const publisher = mayPublish(joined.call.mode, joined.me.role);
       myPresence.current = { muted: !(publisher && prefs.mic), hand: false };
-      channel.current = connectCallChannel(client, id, userId, joined.call.mode === "townhall" && !publisher ? null : myPresence.current, { presence: onPresence, event: () => void refresh() });
+      channel.current = connectCallChannel(client, id, userId, joined.call.mode === "townhall" && !publisher ? null : myPresence.current, { presence: onPresence, event: () => void refresh(), ready: () => void refresh() });
       setState(joined);
       if (joined.participants.some((p) => p.userId !== userId)) live.current.othersEverJoined = true;
       setPhase("active");
       live.current.phase = "active";
       timers.current.heartbeat = setInterval(() => void refresh(), HEARTBEAT_MS);
+      // Anything that happened while the live channel was still connecting is fetched a few seconds in (instead of at the next heartbeat).
+      setTimeout(() => void refresh(), 3000);
+      setTimeout(() => void refresh(), 8000);
       // Nobody answered: end it as a missed call instead of waiting forever.
       timers.current.unanswered = setTimeout(() => {
         if (live.current.phase === "active" && !live.current.othersEverJoined && live.current.state?.me.role === "host") {
@@ -684,6 +687,17 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
     setIncoming(null);
   }, []);
 
+  /** Shows the ring pop-up and plays the ringtone (once per call). */
+  const showRing = useCallback((id: string, info: { conversationId: string; title: string; startedByName: string }) => {
+    if (live.current.phase === "active" || live.current.phase === "joining" || live.current.callId === id) return; // busy, or already in it
+    setIncoming((current) => {
+      if (current?.callId === id) return current;
+      stopRing.current?.();
+      stopRing.current = startRingtone(30);
+      return { callId: id, conversationId: info.conversationId, title: info.title, startedByName: info.startedByName };
+    });
+  }, []);
+
   const onSignal = useCallback(
     async (signal: ChatSignal) => {
       if (signal.type !== "call" || !signal.callId) return;
@@ -701,20 +715,56 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
           });
           return;
         }
-        if (live.current.phase === "active" || live.current.phase === "joining") return; // busy in another call: the banner in the chat still shows
-        setIncoming((current) => {
-          if (current?.callId === id) return current;
-          stopRing.current?.();
-          stopRing.current = startRingtone(30);
-          return { callId: id, conversationId: info.conversationId, title: info.title, startedByName: info.startedByName };
-        });
+        showRing(id, info); // (busy in another call: nothing rings, the banner in the chat still shows)
       } catch {
         // Not for me (or gone): nothing rings.
       }
     },
-    [],
+    [showRing],
   );
-  useChatLive(userId, onSignal);
+  const { live: chatLive } = useChatLive(userId, onSignal);
+
+  // A ring that came while this browser was still connecting (or asleep in a background tab) is gone from the live channel, so ask the
+  // server what is ringing as soon as the connection is up and whenever the person comes back to the tab.
+  useEffect(() => {
+    if (!chatLive) return;
+    let cancelled = false;
+    const check = async () => {
+      if (live.current.phase === "active" || live.current.phase === "joining") return;
+      try {
+        const list = await callApi.ringing();
+        if (!cancelled && list[0]) showRing(list[0].callId, list[0]);
+      } catch {
+        // Nothing is ringing, or the server could not be reached: the next signal or visit tries again.
+      }
+    };
+    void check();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [chatLive, showRing]);
+
+  // While it rings, the tab's title flashes, so a call is noticed even in a background tab (a sound needs the person to have clicked once).
+  useEffect(() => {
+    if (!incoming) return;
+    const original = document.title;
+    let on = false;
+    const timer = setInterval(() => {
+      on = !on;
+      document.title = on ? `Incoming call from ${incoming.startedByName}` : original;
+    }, 900);
+    return () => {
+      clearInterval(timer);
+      document.title = original;
+    };
+  }, [incoming]);
 
   // A ring stops by itself after 30 seconds.
   useEffect(() => {

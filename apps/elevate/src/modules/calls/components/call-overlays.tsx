@@ -3,8 +3,9 @@
 import { Phone, PhoneCall } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { audioRunning } from "@/modules/messages/components/play-sound";
 import { useCall } from "./call-provider";
 import { CallControls, RecordingNotice } from "./call-screen";
 
@@ -57,6 +58,15 @@ function MiniCall() {
 function IncomingCall() {
   const call = useCall();
   const router = useRouter();
+  const [soundOn, setSoundOn] = useState(true);
+  const ringing = Boolean(call.incoming);
+  useEffect(() => {
+    if (!ringing) return;
+    const check = () => setSoundOn(audioRunning());
+    check();
+    const timer = setInterval(check, 800);
+    return () => clearInterval(timer);
+  }, [ringing]);
   if (!call.incoming || call.phase === "active" || call.phase === "joining") return null;
   const { incoming } = call;
   return (
@@ -70,6 +80,7 @@ function IncomingCall() {
           <p className="truncate text-xs text-muted-foreground">{incoming.startedByName} is calling</p>
         </div>
       </div>
+      {soundOn ? null : <p className="text-xs text-muted-foreground">Your browser keeps this page silent until you click on it once. Click anywhere to hear the ring.</p>}
       <div className="flex gap-2">
         <Button
           type="button"

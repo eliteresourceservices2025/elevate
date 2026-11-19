@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { REACTIONS } from "../browser/call-channel";
@@ -155,6 +156,7 @@ export function RecordingNotice() {
 export function CallControls({ compact = false }: { compact?: boolean }) {
   const call = useCall();
   const isHost = call.state?.me.role === "host";
+  const confirm = useConfirm();
   const recording = call.state?.recording ?? null;
   const iRecord = recording?.recorderUserId === call.userId;
   const [reacting, setReacting] = useState(false);
@@ -198,7 +200,7 @@ export function CallControls({ compact = false }: { compact?: boolean }) {
             <Hand aria-hidden />
             {call.handUp ? "Lower hand" : "Raise hand"}
           </Button>
-          {call.state?.call.mode === "townhall" ? <ReactionButtons /> : null}
+          <ReactionButtons />
           {call.abilities.record && !recording ? (
             <Button type="button" variant="outline" onClick={() => void call.startRecording()} aria-label="Start recording">
               <Circle className="fill-destructive text-destructive" aria-hidden />
@@ -218,7 +220,21 @@ export function CallControls({ compact = false }: { compact?: boolean }) {
         {compact ? null : "Leave"}
       </Button>
       {isHost && !compact ? (
-        <Button type="button" variant="outline" onClick={() => void call.endForEveryone()}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={async () => {
+            const others = (call.state?.participants.length ?? 1) - 1;
+            const sure = await confirm({
+              title: "End the call for everyone?",
+              description: others > 0 ? `${others} ${others === 1 ? "person" : "people"} will be disconnected right now. This can't be undone. To go without ending it for them, use Leave instead.` : "The call will end. This can't be undone.",
+              confirmLabel: "End for everyone",
+              cancelLabel: "Keep the call going",
+              destructive: true,
+            });
+            if (sure) void call.endForEveryone();
+          }}
+        >
           End for everyone
         </Button>
       ) : null}
