@@ -41,7 +41,7 @@ Everyone else sees only **My payment statements**, which holds their own contrac
 
 # One person prepares, a different person approves
 
-This is the most important rule. The person who prepared a run, changed it, checked a line on it, or wrote one of the pay rates it uses can **never** approve it. ELEVATE refuses on the server, so there is no way around it. Your own pay line can be checked by you or by another Preparer. This is why a company needs at least two Preparers and two Approvers.
+Preparers make and send the run; **Approvers** approve it, send it back or take the approval back. Since 2026-11-19 ELEVATE no longer stops an Approver who also prepared or checked a run, or who is paid on it. The payroll level is the only limit, and everything is still recorded in the change history.
 
 # The life of a pay run
 

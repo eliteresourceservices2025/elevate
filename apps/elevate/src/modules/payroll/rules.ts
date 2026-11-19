@@ -27,15 +27,11 @@ export function runHash(lines: { id: string; payload: unknown }[]): string {
 }
 
 export type ApprovalInput = {
-  approverId: string;
-  /** Everyone who prepared or changed the run (creator, submitter, item enterers, line confirmers, other actors in its change log) and the authors of the pay-line versions it pays, whatever their level is now. */
-  touchedBy: string[];
   blockingChecks: number;
 };
 
-/** Why this person may not approve this run, or null when they may. There is no bypass. */
+/** Why a run can't be approved, or null when it can. Only a blocking check stops it (owner decision 2026-11-19: no "prepared or changed" rule). */
 export function approvalRefusal(input: ApprovalInput): string | null {
-  if (input.touchedBy.includes(input.approverId)) return "You prepared or changed this run, or wrote a rate it pays, so someone else must approve it.";
   if (input.blockingChecks > 0) return "This run has problems that must be fixed before it can be approved. Send it back to the Preparer.";
   return null;
 }

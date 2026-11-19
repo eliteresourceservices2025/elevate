@@ -2,27 +2,15 @@ import { describe, expect, it } from "vitest";
 import { approvalRefusal, runHash } from "./rules";
 
 // Invented ids and figures only.
-const APPROVER = "11111111-1111-4111-8111-111111111111";
-const PREPARER = "22222222-2222-4222-8222-222222222222";
-const OTHER = "33333333-3333-4333-8333-333333333333";
-
-const clean = { approverId: APPROVER, touchedBy: [PREPARER, OTHER], blockingChecks: 0 };
+const clean = { blockingChecks: 0 };
 
 describe("approvalRefusal", () => {
-  it("lets someone who never touched the run approve a clean run", () => {
+  it("lets anyone approve a clean run, whoever prepared or changed it", () => {
     expect(approvalRefusal(clean)).toBeNull();
-  });
-
-  it("refuses anyone who prepared or changed the run, whatever their level is now", () => {
-    expect(approvalRefusal({ ...clean, touchedBy: [PREPARER, APPROVER] })).toMatch(/prepared or changed this run/);
   });
 
   it("refuses while blocking checks remain", () => {
     expect(approvalRefusal({ ...clean, blockingChecks: 1 })).toMatch(/must be fixed/);
-  });
-
-  it("names the separation-of-duties reason before the checks", () => {
-    expect(approvalRefusal({ ...clean, touchedBy: [APPROVER], blockingChecks: 3 })).toMatch(/prepared or changed/);
   });
 });
 

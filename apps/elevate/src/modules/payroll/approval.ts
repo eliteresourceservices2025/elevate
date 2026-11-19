@@ -1,6 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { ForbiddenError } from "@/lib/authz";
 import { fieldCrypto } from "@/lib/crypto";
 import { ActionFailure } from "@/lib/run-action";
@@ -11,14 +11,12 @@ import { notify } from "@/modules/notifications/service";
 import type { Tx } from "@/modules/people/service";
 import { logChange } from "./changes";
 import { runChecks } from "./checks";
-import type { ChangeAction } from "./constants";
 import { approvalRefusal, runHash } from "./rules";
 import { checkInputsOf, readRun, recomputeRun, type Executor, type RunData } from "./runs";
 import { payApprovals, payChangeLog, payPayments, payRunLines, payRunReleases, payRuns } from "./schema";
 import { lockDraftRun } from "./service";
 
-// Review and approval. A run is sent for review by a Preparer, then approved (or sent back with a note) by an Approver who never
-// prepared or changed it. The approval names a hash of every decrypted figure, so a run that changed since the page loaded is refused.
+// Review and approval. A run is sent for review by a Preparer, then approved (or sent back with a note) by an Approver. The approval names a hash of every decrypted figure, so a run that changed since the page loaded is refused.
 // Every function takes the acting user or a transaction, so it is called only from actions that already ran requireUser() and authorize().
 // Notices carry a count and a link, never an amount, a name or the note.
 
@@ -37,38 +35,6 @@ const noteContext = (id: string) => `pay_approval_note:${id}`;
 export const decryptApprovalHash = (id: string, stored: string): string => fieldCrypto().decrypt(stored, hashContext(id));
 
 /** Deciding is not changing: a send-back or an approval does not stop that Approver from deciding the run again later. Marking a run as a test, archiving and restoring it change no figure, so they do not count either. */
-const NOT_A_CHANGE: readonly ChangeAction[] = ["run_viewed", "run_sent_back", "run_approved", "run_unapproved", "run_marked_test", "run_marked_real", "run_archived", "run_restored", "statements_released"];
-
-/**
- * The one definition of "prepared or changed this run", as SQL over a run id expression (a parameter, or a column of an outer query):
- * the run's creator and submitter, every actor in its change history except views and decisions, everyone who entered an amount on it
- * or confirmed a line, and the author of every pay-line version (the rate) it pays together with the author of every other version of the
- * same line with the same start date: ending a line copies the amounts into a new version with the same start, so the person who typed
- * the rate is named as well as the person who ended it. The payroll level is never consulted. `touchedBy` and `countAwaiting` both use it.
- */
-function touchersOf(run: SQL): SQL {
-  const decisions = sql.join(
-    NOT_A_CHANGE.map((a) => sql`${a}`),
-    sql`, `,
-  );
-  return sql`
-    select r.created_by as id from payroll.pay_runs r where r.id = ${run}
-    union select r.submitted_by from payroll.pay_runs r where r.id = ${run}
-    union select c.actor_id from payroll.pay_change_log c where c.run_id = ${run} and c.action not in (${decisions})
-    union select i.entered_by from payroll.pay_run_items i where i.run_id = ${run}
-    union select l.confirmed_by from payroll.pay_run_lines l where l.run_id = ${run}
-    union select w.created_by from payroll.pay_run_lines l
-      join payroll.pay_lines v on v.id = l.line_id
-      join payroll.pay_lines w on w.line_key = v.line_key and w.effective_from = v.effective_from
-      where l.run_id = ${run}`;
-}
-
-/** Everyone who prepared or changed the run (see `touchersOf`), whatever their payroll level is now. */
-export async function touchedBy(executor: Executor, runId: string): Promise<string[]> {
-  const rows = (await executor.execute(sql`select distinct t.id from (${touchersOf(sql`${runId}::uuid`)}) t where t.id is not null`)) as unknown as { id: string }[];
-  return rows.map((r) => r.id);
-}
-
 /**
  * The hash an approval is given against, from data read by `readRun`; null when anything on the run can't be read (such a run can't be
  * approved). It covers every line's decrypted figures, inputs, items and confirmation, the settings snapshot, the full
@@ -117,11 +83,11 @@ export async function computeRunHash(executor: Executor, runId: string): Promise
   return data ? hashOf(executor, data) : null;
 }
 
-/** Why `approverId` may not approve this run (separation of duties, blocking checks), or null when they may. */
-export async function refusalFor(executor: Executor, data: RunData, approverId: string): Promise<string | null> {
+/** Why this run can't be approved (a blocking check), or null when it can. */
+export async function refusalFor(executor: Executor, data: RunData): Promise<string | null> {
   const checks = runChecks(await checkInputsOf(executor, data, data.run.submittedBy));
-  // An own line no longer needs another person's check (owner decision 2026-11-19): only the separation between who prepared and who approves stays.
-  return approvalRefusal({ approverId, touchedBy: await touchedBy(executor, data.run.id), blockingChecks: checks.blocking.length });
+  // Own lines and who prepared the run limit nothing any more (owner decision 2026-11-19): only a blocking check stops an approval.
+  return approvalRefusal({ blockingChecks: checks.blocking.length });
 }
 
 /**
@@ -272,8 +238,7 @@ export async function unapprove(tx: Tx, actor: Actor, v: { runId: string; note: 
 }
 
 /**
- * Approves a run in review. Refused, writing nothing, when the approver prepared or changed the run, when their own line is not
- * confirmed by another Preparer, when a check blocks, or when the run's hash differs from the one their page was given.
+ * Approves a run in review. Refused, writing nothing, when a check blocks or when the run's hash differs from the one their page was given.
  * The run row is locked first, so of two approvals at once the second finds the run already approved.
  */
 export async function approve(tx: Tx, actor: Actor, v: { runId: string; expectedHash: string }): Promise<void> {
@@ -282,7 +247,7 @@ export async function approve(tx: Tx, actor: Actor, v: { runId: string; expected
   await assertStillApprover(tx, actor.id);
 
   const data = (await readRun(tx, v.runId))!;
-  const refusal = await refusalFor(tx, data, actor.id);
+  const refusal = await refusalFor(tx, data);
   if (refusal) throw new ActionFailure(refusal);
   const hash = await hashOf(tx, data);
   if (hash === null) throw new ActionFailure("Something on this run can't be read, so it can't be approved. Tell the system owner.");
@@ -319,16 +284,12 @@ export async function latestSendBackNote(executor: Executor, run: { id: string; 
   }
 }
 
-/**
- * Runs in review that this Approver did not prepare or change (the same definition as `touchedBy`). No figures. `onlyRunIds` narrows
- * the count to those runs (used to check the two agree).
- */
-export async function countAwaiting(executor: Executor, approverId: string, onlyRunIds?: string[]): Promise<number> {
+/** Runs in review waiting for an Approver. No figures. `onlyRunIds` narrows the count to those runs. */
+export async function countAwaiting(executor: Executor, onlyRunIds?: string[]): Promise<number> {
   if (onlyRunIds && onlyRunIds.length === 0) return 0;
   const narrow = onlyRunIds ? sql`and p.id in (${sql.join(onlyRunIds.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``;
   const [row] = (await executor.execute(sql`
     select count(*)::int as n from payroll.pay_runs p
-    where p.status = 'in_review' and p.archived_at is null ${narrow}
-      and not exists (select 1 from (${touchersOf(sql`p.id`)}) t where t.id = ${approverId}::uuid)`)) as unknown as { n: number }[];
+    where p.status = 'in_review' and p.archived_at is null ${narrow}`)) as unknown as { n: number }[];
   return row?.n ?? 0;
 }

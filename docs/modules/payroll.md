@@ -4,7 +4,7 @@ Design: `docs/superpowers/specs/2026-11-04-payroll-design.md`. Plan: `docs/super
 
 ## Own pay loosened (2026-11-19; owner decision; overrides every older note below about own lines, own payments and the own-line approval block)
 
-- Only the payroll level limits who does what; being on the run yourself limits nothing except the one separation that stays: **whoever prepared, changed or checked a run, or wrote a rate it pays, can't approve it** (`touchedBy`).
+- Only the payroll level limits who does what; being on the run yourself limits nothing, and **who prepared, changed or checked a run no longer stops them approving it**: `touchedBy`/`touchersOf` are gone, `approvalRefusal({ blockingChecks })` only refuses for a blocking check, and `countAwaiting` counts every real-or-test run in review for every Approver. The approval hash still voids a stale page.
 - `markPaid`: any Preparer or Approver, any day, any date (no "not in the future" and no "not before the period starts"), on their own line too. `assertNotOwnEmployee` is gone.
 - `confirmRunLine`: a person may check their own line. `approvalRefusal` no longer refuses for an unchecked or self-checked own line or submitter line (`ownLines`, `submitterLines` are gone). The note `own_line_unconfirmed` stays, but only while nobody has checked the line; anyone checking it, the owner included, clears it.
 - Still refused: marking a payment for a person who isn't on the run (the screen only offers people on it), and a run that isn't approved or paid.
