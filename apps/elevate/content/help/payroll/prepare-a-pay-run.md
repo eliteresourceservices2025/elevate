@@ -48,7 +48,7 @@ If the person already has a rate for the same client, the window tells you to us
 
 **If you added a rate by mistake,** click **More**, then **Remove (added by mistake)**. It is offered only while the rate has never been on a real pay run (a practice run does not count). If the person was paid with it, use **Stop paying** instead.
 
-If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, **another Preparer must check your line**, and a different person records your payment.
+If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, and **another Preparer must check your line**. You can record your own payment yourself.
 
 On a laptop, the table of people scrolls inside its own box. Scroll down in it and the column headings, with the **Person** and **Client** columns, stay in view, so you always see which number is which. When you reach the last person, the page scrolls on. The **Payment** table at the bottom keeps its headings in view the same way.
 
@@ -162,7 +162,7 @@ The **Payment** table shows each person's **Client**, **Status**, **Remitly refe
 
 ![The Mark paid window: the Remitly reference and the date it was paid.](help:prepare-a-pay-run/11-mark-paid.png)
 
-When everyone is marked paid, the run becomes **Paid**. The contractors' statements are not sent by paying: a Preparer or an Approver releases them from **Statements** (see "Release the contractor payment statements"). Someone else records your own payment.
+When everyone is marked paid, the run becomes **Paid**. The contractors' statements are not sent by paying: a Preparer or an Approver releases them from **Statements** (see "Release the contractor payment statements"). You can record your own payment too.
 
 ![Everyone on the run is paid.](help:prepare-a-pay-run/12-all-paid.png)
 

@@ -13,7 +13,7 @@ import { readRun, type Executor } from "./runs";
 import { parseMoney } from "./money";
 import { buildRemitlyRows, personName, REMITLY_HEADER, REMITLY_TEST_NOTE, type PayoutDetails } from "./remitly";
 import { payPayments, payRunLines, payRuns } from "./schema";
-import { assertNotOwnEmployee, payrollToday } from "./service";
+import { payrollToday } from "./service";
 import { freezeRunSignatory } from "./signatory";
 
 // Paying: the Remitly list and the record of who was paid. ELEVATE sends no money; a Preparer pays in Remitly and records the reference.
@@ -170,11 +170,8 @@ export async function recordPayment(
       .where(and(eq(payRunLines.runId, v.runId), eq(payRunLines.excluded, false)))
   ).map((r) => r.id);
   if (!people.includes(v.employeeId)) throw new ActionFailure("That person is not on this run.");
-  await assertNotOwnEmployee(actor, v.employeeId, tx);
-  if (v.paidOn > payrollToday())
-    throw new ActionFailure("The payment date can't be in the future.");
-  if (v.paidOn < run.periodStart)
-    throw new ActionFailure("The payment date can't be before the pay period starts.");
+  // Only the payroll level (Preparer or Approver, checked by the action) limits who records a payment: no own-pay rule and no date
+  // limits (owner decision 2026-11-19), so it can be recorded any day, for any date, on a person's own line too.
 
   // Optional: the dollars paid in Remitly. Typed like an amount (351.66) and kept in cents; blank means none was recorded.
   const usdCents = v.amountUsd && v.amountUsd.trim() !== "" ? parseMoney(v.amountUsd) : null;

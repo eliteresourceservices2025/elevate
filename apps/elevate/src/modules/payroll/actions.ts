@@ -838,7 +838,7 @@ export async function exportRemitlyList(input: unknown): Promise<ActionResult<{ 
   });
 }
 
-/** Records that a person on an approved run was paid (their Remitly reference and date). Marking again corrects it. Never your own pay. */
+/** Records that a person on an approved run was paid (their Remitly reference and date). Marking again corrects it. Any day, any date, own line included. */
 export async function markPaid(input: unknown): Promise<ActionResult<{ runPaid: boolean }>> {
   const actor = await requireUser();
 

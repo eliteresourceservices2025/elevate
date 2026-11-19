@@ -94,7 +94,6 @@ function MarkPaidForm({
           id={`paid-${employeeId}`}
           type="date"
           value={paidOn}
-          max={today}
           onChange={(e) => setPaidOn(e.target.value)}
           required
         />
@@ -248,7 +247,7 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
                 </TableCell>
               ) : null}
               <TableCell label={P.actions}>
-                {view.canMarkPaid && !p.isOwn ? (
+                {view.canMarkPaid ? (
                   <FormDialog
                     label={p.payment ? P.correct : P.markPaid}
                     title={p.payment ? P.correctTitle(p.name) : P.markPaidTitle(p.name)}
@@ -263,8 +262,6 @@ export function PaymentsPanel({ view, today }: { view: PaymentsView; today: stri
                       today={today}
                     />
                   </FormDialog>
-                ) : p.isOwn && view.canMarkPaid ? (
-                  <span className="text-xs text-muted-foreground">{P.ownLine}</span>
                 ) : null}
               </TableCell>
             </TableRow>
