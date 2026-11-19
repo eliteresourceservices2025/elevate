@@ -131,6 +131,12 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
   const reactionKey = useRef(0);
   const lastReactionAt = useRef(0);
   const micStream = useRef<MediaStream | null>(null);
+  // Bumped whenever my microphone stream is replaced, so the recording follows it (a ref change alone does not re-run anything).
+  const [micVersion, setMicVersion] = useState(0);
+  const setMic = useCallback((stream: MediaStream | null) => {
+    micStream.current = stream;
+    setMicVersion((v) => v + 1);
+  }, []);
   const recorder = useRef<CallRecorder | null>(null);
   const transport = useRef<CallTransport | null>(null);
   const channel = useRef<{ update: (p: CallPresence) => void; stop: () => void } | null>(null);
@@ -216,7 +222,7 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
         if (isSpeaker && !wasSpeaker) toast.message("You're a speaker now. Turn on your microphone and camera when you're ready.");
         if (!isSpeaker && wasSpeaker) {
           for (const kind of ["audio", "video", "screen"] as const) if (transport.current?.isSending(kind)) await transport.current.stopSending(kind).catch(() => {});
-          micStream.current = null;
+          setMic(null);
           setMicOn(false);
           setCameraOn(false);
           setLocalCamera(null);
@@ -416,7 +422,7 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
     try {
       if (kind === "mic") {
         const stream = await t.switchDevice("audio", id);
-        if (stream) micStream.current = stream;
+        if (stream) setMic(stream);
       } else {
         const stream = await t.switchDevice("video", id);
         if (stream) setLocalCamera(stream);
@@ -525,7 +531,7 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
       if (prefs.mic && publisher) {
         try {
           lastLocalChange.current = Date.now();
-          micStream.current = await t.startSending("audio", { deviceId: chosenRef.current.mic });
+          setMic(await t.startSending("audio", { deviceId: chosenRef.current.mic }));
           lastLocalChange.current = Date.now();
           setMicOn(true);
         } catch {
@@ -576,7 +582,7 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
     try {
       if (!t.isSending("audio")) {
         lastLocalChange.current = Date.now();
-        micStream.current = await t.startSending("audio", { deviceId: chosenRef.current.mic });
+        setMic(await t.startSending("audio", { deviceId: chosenRef.current.mic }));
         lastLocalChange.current = Date.now();
         setMicOn(true);
         announce({ muted: false });
@@ -740,7 +746,7 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
     const pick = pickRecordedVideo({ allowed, pinnedUserId, activeSpeakerId, hasVideo, hasScreen });
     const picture = !pick ? null : pick.userId === userId ? (pick.slot === "screen" ? localScreen : localCamera) : (remote[pick.userId]?.[pick.slot] ?? null);
     r.update({ audio, picture, caption: pick ? (state.participants.find((p) => p.userId === pick.userId)?.name ?? "") : "" });
-  }, [state, remote, pinnedUserId, activeSpeakerId, localCamera, localScreen, userId]);
+  }, [state, remote, pinnedUserId, activeSpeakerId, localCamera, localScreen, userId, micVersion]);
 
   // ---- incoming calls ----------------------------------------------------------------------------------------------------------
   const clearIncoming = useCallback(() => {
@@ -791,8 +797,12 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
   useEffect(() => {
     if (!chatLive) return;
     let cancelled = false;
+    let lastCheck = 0;
     const check = async () => {
       if (live.current.phase === "active" || live.current.phase === "joining") return;
+      // A tab coming back fires both "visible" and "focus": one question to the server is enough.
+      if (Date.now() - lastCheck < 2000) return;
+      lastCheck = Date.now();
       try {
         const list = await callApi.ringing();
         if (!cancelled && list[0]) showRing(list[0].callId, list[0]);
@@ -816,15 +826,18 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
   // While it rings, the tab's title flashes, so a call is noticed even in a background tab (a sound needs the person to have clicked once).
   useEffect(() => {
     if (!incoming) return;
-    const original = document.title;
+    const flash = `Incoming call from ${incoming.startedByName}`;
+    // The title the page really has (it can change while this rings, for example on a page change): remembered each time it is not ours.
+    let base = document.title;
     let on = false;
     const timer = setInterval(() => {
+      if (document.title !== flash) base = document.title;
       on = !on;
-      document.title = on ? `Incoming call from ${incoming.startedByName}` : original;
+      document.title = on ? flash : base;
     }, 900);
     return () => {
       clearInterval(timer);
-      document.title = original;
+      if (document.title === flash) document.title = base;
     };
   }, [incoming]);
 

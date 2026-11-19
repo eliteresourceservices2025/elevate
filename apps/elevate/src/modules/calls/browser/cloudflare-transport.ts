@@ -83,11 +83,20 @@ export class CloudflareTransport implements CallTransport {
       if (!entry) return null;
       const stream = await this.capture(kind, deviceId);
       const track = kind === "audio" ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
-      if (!track) throw new Error("No device found.");
+      if (!track) {
+        stream.getTracks().forEach((t) => t.stop());
+        throw new Error("No device found.");
+      }
       // A muted microphone stays muted on the new device.
       if (kind === "audio") track.enabled = this.micTrack?.enabled ?? true;
-      // The same sender gets the new track: no new offer, and the others keep receiving without a break.
-      await entry.transceiver.sender.replaceTrack(track);
+      try {
+        // The same sender gets the new track: no new offer, and the others keep receiving without a break.
+        await entry.transceiver.sender.replaceTrack(track);
+      } catch (error) {
+        // The new device must not stay switched on with nobody using it.
+        stream.getTracks().forEach((t) => t.stop());
+        throw error;
+      }
       entry.stream.getTracks().forEach((t) => t.stop());
       entry.stream = stream;
       if (kind === "audio") this.micTrack = track;

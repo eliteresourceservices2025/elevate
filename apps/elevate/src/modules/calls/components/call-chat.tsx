@@ -34,20 +34,29 @@ export function CallChat({ conversationId, userId, open, onNew }: { conversation
   const end = useRef<HTMLDivElement>(null);
   const openRef = useRef(open);
   const request = useRef(0);
+  const latestSeq = useRef(0);
+  const needFull = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     openRef.current = open;
   });
 
-  const load = useCallback(async () => {
+  /**
+   * `full` loads the last messages again (needed when one was edited, removed or reacted to); otherwise only what came after the newest
+   * one is fetched, so a busy chat in a big call does not make everyone reload 60 messages for every new one.
+   */
+  const load = useCallback(async (full = true) => {
     const mine = ++request.current;
     try {
-      const result = await loadChatMessages({ conversationId });
+      const after = latestSeq.current;
+      const result = await loadChatMessages(full || after === 0 ? { conversationId } : { conversationId, afterSeq: after });
       if (mine !== request.current) return;
       if (!result.ok) return void setError(result.error);
       setError(null);
-      setMessages(result.data.messages.slice(-MAX_SHOWN));
-      // Looking at it: it counts as read (so the chat list does not show these as unread afterwards).
-      if (openRef.current && result.data.latestSeq > 0) void markConversationRead({ conversationId, seq: result.data.latestSeq }).catch(() => {});
+      latestSeq.current = Math.max(latestSeq.current, result.data.latestSeq);
+      setMessages((previous) => (full || after === 0 ? result.data.messages : [...previous, ...result.data.messages.filter((m) => !previous.some((p) => p.id === m.id))]).slice(-MAX_SHOWN));
+      // Looking at it (the tab is in front and the panel is open): it counts as read, so the chat list does not show these as unread.
+      if (openRef.current && document.visibilityState === "visible" && document.hasFocus() && latestSeq.current > 0) void markConversationRead({ conversationId, seq: latestSeq.current }).catch(() => {});
     } catch {
       if (mine === request.current) setError("Couldn't load the chat. It will try again.");
     }
@@ -64,10 +73,25 @@ export function CallChat({ conversationId, userId, open, onNew }: { conversation
       (signal: ChatSignal) => {
         if (signal.conversationId !== conversationId || signal.type === "call" || signal.type === "read") return;
         if (signal.type === "message" && signal.senderUserId && signal.senderUserId !== userId && !openRef.current) onNew();
-        void load();
+        // Several signals in a moment become one load (the strongest kind wins: an edit or removal needs the full list).
+        if (signal.type !== "message") needFull.current = true;
+        if (timer.current) return;
+        timer.current = setTimeout(() => {
+          timer.current = null;
+          const full = needFull.current;
+          needFull.current = false;
+          void load(full);
+        }, 700);
       },
       [conversationId, userId, load, onNew],
     ),
+  );
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
   );
 
   // Opening the panel marks what is there as read; the newest message is kept in view.
@@ -89,7 +113,7 @@ export function CallChat({ conversationId, userId, open, onNew }: { conversation
       if (!result.ok) return void setError(result.error);
       setDraft("");
       setError(null);
-      await load();
+      await load(false);
     } catch {
       setError("Couldn't send. Check your connection and try again.");
     } finally {

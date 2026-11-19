@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Circle, Hand, MessageCircle, Mic, MicOff, MonitorUp, MoreHorizontal, PhoneOff, Smile, Square, Users, Video, VideoOff } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,8 +15,17 @@ import { useCall } from "./call-provider";
 // The call itself (the page's main part): a bar with the call's name, time and who is here; the picture (a shared screen with a strip of
 // people, or a gallery); the chat and the people list beside it; and one control bar. Layout follows the approved design (2026-11-19).
 
-/** "12:41" or "1:02:03": how long the call has been going, ticking every second. */
-export function useElapsed(startedAt: string): string {
+/** "12:41" or "1:02:03": how long the call has been going. A component of its own, so the tick re-renders only this text, not the whole call room. */
+export function Elapsed({ startedAt, className }: { startedAt: string; className?: string }) {
+  const text = useElapsed(startedAt);
+  return (
+    <span className={className} aria-label={`Call time ${text}`}>
+      {text}
+    </span>
+  );
+}
+
+function useElapsed(startedAt: string): string {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -58,12 +67,34 @@ function BarButton({ icon, label, name, pressed, tone, badge, onClick, expanded 
   );
 }
 
+/** Closes a popup on a click outside it or on Escape, from anywhere (not only while its button has focus). */
+function useDismiss(open: boolean, onClose: () => void) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("pointerdown", down);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", down);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open, onClose]);
+  return ref;
+}
+
 /** The five fixed reactions, in a small tray above the bar. Each is a tiny hint on the call channel; nothing typed. */
 function ReactionTray() {
   const call = useCall();
   const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
   return (
-    <span className="relative">
+    <span className="relative" ref={ref}>
       <BarButton icon={<Smile />} label="React" name="Send a reaction" expanded={open} pressed={open} onClick={() => setOpen((v) => !v)} />
       {open ? (
         <span role="group" aria-label="Reactions" className="absolute bottom-full left-1/2 z-10 mb-2 flex -translate-x-1/2 gap-1 rounded-full border bg-popover p-1.5 shadow-md">
@@ -97,6 +128,7 @@ function ControlBar({ panel, setPanel, unread, people }: { panel: Panel; setPane
   const confirm = useConfirm();
   const [more, setMore] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
+  const moreRef = useDismiss(more, () => setMore(false));
   const isHost = call.state?.me.role === "host";
   const recording = call.state?.recording ?? null;
   const iRecord = recording?.recorderUserId === call.userId;
@@ -135,12 +167,24 @@ function ControlBar({ panel, setPanel, unread, people }: { panel: Panel; setPane
           <PhoneOff aria-hidden />
           Leave
         </Button>
-        <span className="relative">
-            <Button type="button" variant="ghost" size="icon" aria-label="More call options" aria-haspopup="menu" aria-expanded={more} onClick={() => setMore((v) => !v)} onKeyDown={(e) => e.key === "Escape" && setMore(false)}>
+        <span className="relative" ref={moreRef}>
+            <Button type="button" variant="ghost" size="icon" aria-label="More call options" aria-haspopup="menu" aria-expanded={more} onClick={() => setMore((v) => !v)}>
               <MoreHorizontal aria-hidden />
             </Button>
             {more ? (
-              <div role="menu" aria-label="More call options" className="absolute right-0 bottom-full z-10 mb-2 w-48 rounded-xl border bg-popover p-1 shadow-md">
+              <div
+                role="menu"
+                aria-label="More call options"
+                className="absolute right-0 bottom-full z-10 mb-2 w-48 rounded-xl border bg-popover p-1 shadow-md"
+                onKeyDown={(e) => {
+                  // Arrow keys move between the items (the menu's own rule).
+                  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+                  const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+                  const at = items.indexOf(document.activeElement as HTMLElement);
+                  items[(at + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+                  e.preventDefault();
+                }}
+              >
                 <button
                   type="button"
                   role="menuitem"
@@ -171,7 +215,6 @@ const MAX_OTHER_TILES = 11;
 
 export function ActiveCall({ state }: { state: CallState }) {
   const call = useCall();
-  const elapsed = useElapsed(state.call.startedAt);
   // On a wide screen the chat is open from the start (the design); on a narrow one the picture gets the whole width. (This part only
   // renders after joining, in the browser, so reading the window here is safe.)
   const [panel, setPanelState] = useState<Panel>(() => (typeof window !== "undefined" && window.innerWidth >= 1024 ? "chat" : null));
@@ -200,9 +243,7 @@ export function ActiveCall({ state }: { state: CallState }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5">
         <Video className="size-4 text-primary" aria-hidden />
         <h2 className="font-heading text-sm font-semibold">{state.call.title}</h2>
-        <span className="text-sm text-muted-foreground tabular-nums" aria-label={`Call time ${elapsed}`}>
-          {elapsed}
-        </span>
+        <Elapsed startedAt={state.call.startedAt} className="text-sm text-muted-foreground tabular-nums" />
         <p className="text-sm text-muted-foreground" role="status">
           {townhall ? `All-hands: ${watching} watching, ${state.participants.length - watching} on stage.` : `${state.participants.length} ${state.participants.length === 1 ? "person" : "people"} in this call${others.length === 0 ? ". Waiting for others to join." : "."}`}
         </p>

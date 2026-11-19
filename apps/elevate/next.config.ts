@@ -15,7 +15,11 @@ const nextConfig: NextConfig = {
     "/api/help/**": ["./content/help/**/*"],
   },
   async headers() {
-    return [{ source: "/careers/:path*", headers: [{ key: "Content-Security-Policy", value: `frame-ancestors 'self' ${embedOrigins.join(" ")}`.trim() }] }];
+    return [
+      // Camera, microphone, screen sharing and location are for ELEVATE's own pages only (calls, the clock): a frame from another site can't ask for them.
+      { source: "/:path*", headers: [{ key: "Permissions-Policy", value: "camera=(self), microphone=(self), display-capture=(self), geolocation=(self)" }] },
+      { source: "/careers/:path*", headers: [{ key: "Content-Security-Policy", value: `frame-ancestors 'self' ${embedOrigins.join(" ")}`.trim() }] },
+    ];
   },
 };
 
