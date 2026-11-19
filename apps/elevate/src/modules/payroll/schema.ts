@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, index, integer, jsonb, pgSchema, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, jsonb, pgSchema, smallint, text, time, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/modules/core/schema";
 import { clients, employees } from "@/modules/people/schema";
 
@@ -194,6 +194,11 @@ export const payPayments = payroll
       /** The dollars paid in Remitly, in cents as text, encrypted (context pay_payment_usd:<id>). Optional: a record of what was paid, never a conversion. */
       amountUsdEnc: text("amount_usd_enc"),
       paidOn: date("paid_on").notNull(),
+      /** The time it was sent (Manila wall clock, as typed); null for a payment recorded before times were kept. */
+      sentTime: time("sent_time"),
+      /** When it should reach the contractor (Manila wall clock, as typed). Both optional; a time needs a date. Internal only: statements never show it. */
+      expectedOn: date("expected_on"),
+      expectedTime: time("expected_time"),
       markedBy: uuid("marked_by")
         .notNull()
         .references(() => users.id),

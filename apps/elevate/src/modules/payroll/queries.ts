@@ -10,6 +10,7 @@ import type { SettingsSnapshot } from "./calculate";
 import { z } from "zod";
 import type { PaymentMethod, RunStatus } from "./constants";
 import { applySupersede, isWithdrawn, lineLastDay, resolveLines } from "./lines";
+import { hhmm } from "./payment-when";
 import { formatPesos, formatUsd } from "./money";
 import { countAwaiting, hashOf, latestSendBackNote, listWasDownloaded, refusalFor, unapproveRefusal } from "./approval";
 import { readRun, worksheetOf, type Worksheet } from "./runs";
@@ -435,7 +436,7 @@ export type PaymentsView = {
     clients: string;
     isOwn: boolean;
     /** `reference` and `usd` are null unless the viewer holds `payroll.mark_paid`: others see who marked it and when, not the reference or the dollars. */
-    payment: { reference: string | null; paidOn: string; markedBy: string; markedAt: string; usd: string | null; usdCents: string | null } | null;
+    payment: { reference: string | null; paidOn: string; sentTime: string | null; expectedOn: string | null; expectedTime: string | null; markedBy: string; markedAt: string; usd: string | null; usdCents: string | null } | null;
   }[];
   /** The dollars recorded as paid across the run ("$1,250.50"); null unless the viewer holds `payroll.mark_paid` and some were recorded. */
   usdTotal: string | null;
@@ -507,7 +508,7 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
             usd = UNREADABLE;
           }
         }
-        payment = { reference, paidOn: p.paidOn, markedBy: markers.get(p.markedBy) ?? "Unknown", markedAt: p.createdAt.toISOString(), usd, usdCents };
+        payment = { reference, paidOn: p.paidOn, sentTime: hhmm(p.sentTime), expectedOn: p.expectedOn, expectedTime: hhmm(p.expectedTime), markedBy: markers.get(p.markedBy) ?? "Unknown", markedAt: p.createdAt.toISOString(), usd, usdCents };
       }
       return { employeeId, name: person.name, clients: [...person.clients].sort((a, b) => a.localeCompare(b)).join(", "), isOwn: own !== null && own === employeeId, payment };
     });

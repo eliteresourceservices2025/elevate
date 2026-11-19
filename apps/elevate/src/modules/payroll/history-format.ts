@@ -178,6 +178,9 @@ export function describeChange(action: ChangeAction, detail: Json, names: NameLo
       break;
     case "payment_marked":
       facts.push(...fact(H.paidOn, detail.paidOn));
+      facts.push(...fact(H.sentTime, detail.sentTime));
+      facts.push(...fact(H.expectedOn, detail.expectedOn));
+      facts.push(...fact(H.expectedTime, detail.expectedTime));
       if (typeof detail.usdCents === "string" && /^\d+$/.test(detail.usdCents)) facts.push({ label: H.dollarsPaid, value: formatUsd(BigInt(detail.usdCents)) });
       if (detail.correction === true) facts.push({ label: H.correction, value: H.yes });
       break;

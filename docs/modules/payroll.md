@@ -2,6 +2,11 @@
 
 Design: `docs/superpowers/specs/2026-11-04-payroll-design.md`. Plan: `docs/superpowers/plans/`. Real names and pay figures never enter the repo, tests or a development database. Code: `apps/elevate/src/modules/payroll/`. Every label comes from `constants.ts`.
 
+## Payment dates and times (2026-11-24; owner request)
+
+- `pay_payments` has `sent_time`, `expected_on`, `expected_time` (migration 0163, all nullable) next to `paid_on` (now "Sent on"). Times are the Manila wall clock as typed and shown with PHT; nothing is converted. A time with no expected date is refused, and the expected date can't be before the sent date. Both are optional on every payment, and a correction (a new row) replaces them, so leaving them empty clears them.
+- `payment-when.ts` (pure, tested): `whenLabel`, `timeLabel`, `quickDates` (Today, Tomorrow, the coming Tuesday). `manilaNow()` in `service.ts` starts the form at the Manila date and time. The Payment table shows "Paid <sent>" and "Expected <date, time>"; the change history carries the same fields (no amounts). **Statements and payslips show the sent date only, never the expected one.**
+
 ## Own pay loosened (2026-11-19; owner decision; overrides every older note below about own lines, own payments and the own-line approval block)
 
 - Only the payroll level limits who does what; being on the run yourself limits nothing, and **who prepared, changed or checked a run no longer stops them approving it**: `touchedBy`/`touchersOf` are gone, `approvalRefusal({ blockingChecks })` only refuses for a blocking check, and `countAwaiting` counts every real-or-test run in review for every Approver. The approval hash still voids a stale page.

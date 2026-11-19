@@ -448,6 +448,26 @@ describe("markPaid", () => {
     expect(await paymentRows(runId)).toHaveLength(2); // the second is a correction row
   });
 
+  it("keeps the sent time and the expected date and time as typed, and a correction can change or clear them", async () => {
+    const p = { periodStart: "2053-05-01", periodEnd: "2053-05-15" };
+    const emp = await person();
+    const other = await person();
+    await giveLine(emp, p);
+    await giveLine(other, p); // a second person, so the run is not paid after one payment
+    const runId = await approvedRun(p);
+    as(preparer);
+    expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2053-05-16", sentTime: "09:30", expectedOn: "2053-05-17", expectedTime: "17:45" })).toMatchObject({ ok: true });
+    const [first] = await rows<Row>(sql`select paid_on::text, sent_time::text, expected_on::text, expected_time::text from payroll.pay_payments where run_id = ${runId} and employee_id = ${emp}`);
+    expect(first).toMatchObject({ paid_on: "2053-05-16", sent_time: "09:30:00", expected_on: "2053-05-17", expected_time: "17:45:00" });
+    // A correction without them clears them; a time with no date, or an arrival before the send, is refused.
+    expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2053-05-16" })).toMatchObject({ ok: true });
+    const latest = await rows<Row>(sql`select sent_time, expected_on, expected_time from payroll.pay_payments where run_id = ${runId} and employee_id = ${emp} order by created_at desc limit 1`);
+    expect(latest[0]).toEqual({ sent_time: null, expected_on: null, expected_time: null });
+    expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2053-05-16", expectedTime: "09:00" })).toEqual({ ok: false, error: BAD });
+    expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2053-05-16", expectedOn: "2053-05-15" })).toEqual({ ok: false, error: BAD });
+    expect(await paymentRows(runId)).toHaveLength(2);
+  });
+
   it("a Preparer can mark their own payment, and so can another Preparer", async () => {
     const p = slot(9);
     const owner = await account("preparer");

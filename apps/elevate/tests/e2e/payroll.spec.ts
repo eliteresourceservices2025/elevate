@@ -222,6 +222,10 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await waitForHydration(prepPage, `#ref-${worker.employeeId}`);
     await prepPage.locator(`#ref-${worker.employeeId}`).fill(`E2E-REF-${stamp}`);
     await prepPage.locator(`#usd-${worker.employeeId}`).fill("351.66"); // optional: the dollars paid in Remitly
+    // The sent time (Manila) and the optional expected arrival: a quick pick sets the day, a time can be added.
+    await prepPage.locator(`#sent-time-${worker.employeeId}`).fill("09:30");
+    await prepPage.getByRole("dialog").getByRole("button", { name: "Next Tuesday" }).last().click();
+    await prepPage.locator(`#expected-time-${worker.employeeId}`).fill("17:45");
     await prepPage.screenshot({ path: "test-results/payroll-mark-paid.png" });
     await prepPage.getByRole("dialog").getByRole("button", { name: "Mark paid" }).click();
     await expect(prepPage.getByText("Payment recorded.")).toBeVisible();
@@ -230,6 +234,8 @@ test("payroll: levels, rate, run, review, approval, payment, contractor payment 
     await expect(payment.getByRole("columnheader", { name: "Paid (USD)" })).toBeVisible();
     await expect(payment.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toContainText("$351.66");
     await expect(payment).toContainText("Dollars paid: $351.66");
+    await expect(payment.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toContainText(/Paid .*9:30 AM PHT/);
+    await expect(payment.getByRole("row").filter({ hasText: `Wanda Worker${stamp}` })).toContainText(/Expected Tue, .*5:45 PM PHT/);
     await expect(payment.getByRole("columnheader", { name: "Alias" })).toHaveCount(0);
     // Its headings stick to the top of the page's scroll area (from the xl width up).
     const paymentHead = payment.getByRole("columnheader", { name: "Person" });

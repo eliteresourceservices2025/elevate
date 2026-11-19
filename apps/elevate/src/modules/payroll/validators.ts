@@ -202,7 +202,22 @@ const usdPaid = z
   .transform((s) => s.replace(/^\$\s*/, "")) // "$351.66" reads as typed; spaces inside a number stay and are refused ("351 66" is not 35166)
   .refine((s) => s === "" || (parseMoney(s) ?? 0n) > 0n, "Enter an amount like 351.66")
   .optional();
-export const markPaidSchema = z.object({ runId: uuid, employeeId: uuid, reference: z.string().trim().min(1).max(100), paidOn: isoDate, amountUsd: usdPaid });
+/** A time typed as HH:MM (24-hour, Manila); blank is none. */
+const clockTime = z.union([z.literal(""), z.string().regex(/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/, "Enter a time like 09:30")]).optional();
+const optionalDay = z.union([z.literal(""), isoDate]).optional();
+export const markPaidSchema = z
+  .object({
+    runId: uuid,
+    employeeId: uuid,
+    reference: z.string().trim().min(1).max(100),
+    paidOn: isoDate,
+    sentTime: clockTime,
+    expectedOn: optionalDay,
+    expectedTime: clockTime,
+    amountUsd: usdPaid,
+  })
+  .refine((v) => !v.expectedTime || Boolean(v.expectedOn), { message: "Add the expected date as well as the time", path: ["expectedOn"] })
+  .refine((v) => !v.expectedOn || v.expectedOn >= v.paidOn, { message: "It can't be expected to arrive before it was sent", path: ["expectedOn"] });
 
 export type PayLineInput = z.input<typeof createPayLineSchema>;
 export type UpdatePayLineInput = z.input<typeof updatePayLineSchema>;
