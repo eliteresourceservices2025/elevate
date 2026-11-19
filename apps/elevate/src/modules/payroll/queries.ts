@@ -406,7 +406,7 @@ export async function getWorksheet(runId: string): Promise<WorksheetView | null>
         canPrepare,
         canApprove,
         expectedHash: deciding ? await hashOf(tx, data) : null,
-        approvalRefusal: deciding ? await refusalFor(tx, data, actor.id) : null,
+        approvalRefusal: deciding ? await refusalFor(tx, data) : null,
         unapproveRefusal: canApprove && data.run.status === "approved" ? await unapproveRefusal(tx, data.run.id) : null,
         listDownloaded: canApprove && data.run.status === "approved" ? await listWasDownloaded(tx, data.run.id) : false,
         sentBackNote: await latestSendBackNote(tx, data.run),
@@ -517,11 +517,11 @@ export async function getPayments(runId: string): Promise<PaymentsView | null> {
   return view;
 }
 
-/** How many runs in review this Approver could decide (none they prepared or changed). A count only, for the dashboard. */
+/** How many runs in review are waiting for an Approver. A count only, for the dashboard. */
 export async function payrollRunsAwaitingApproval(): Promise<number> {
   const actor = await requireUser();
   await authorize(actor, "payroll.approve");
-  return countAwaiting(db, actor.id);
+  return countAwaiting(db);
 }
 
 export type SettingsVersion = SettingsSnapshot & { effectiveFrom: string };

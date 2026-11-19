@@ -53,7 +53,7 @@ function PersonCard({ person, mine, href }: { person: ReadinessPerson; mine: boo
 function IssueRow({ group, runId, focus, canFix, mine, keepQuery }: { group: IssueGroup; runId: string; focus: string | undefined; canFix: boolean; mine: boolean; keepQuery: string }) {
   const copy = ISSUE_COPY[group.code];
   const ownOfSender = group.code === "own_line_unconfirmed" && !mine;
-  const title = ownOfSender ? "The sender's own line needs another Preparer" : copy.title;
+  const title = ownOfSender ? "The sender's own line is not checked yet" : copy.title;
   const meaning = ownOfSender ? OWN_LINE_OF_SUBMITTER : copy.meaning;
   const showWho = group.runLineIds.length > 0;
   const focused = focus === group.code;

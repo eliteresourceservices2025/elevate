@@ -61,12 +61,12 @@ describe("runChecks", () => {
     expect(r.warnings).toEqual([expect.objectContaining({ code: "unassigned_suggestion", employeeId: "e9", name: "Jose Dummy" })]);
   });
 
-  it("notes, without blocking, a submitter's own line that has no confirmation from someone else", () => {
+  it("notes, without blocking, a submitter's own line that nobody has checked yet", () => {
     const own = (confirmedBy: string | null) => line({ employeeId: EMP_ME, runLineId: "mine", confirmedBy });
     expect(runChecks(input([own(null)])).blocking).toEqual([]);
     expect(codes(runChecks(input([own(null)])).warnings)).toEqual(["own_line_unconfirmed"]);
-    // Confirmed by the submitter themselves does not count.
-    expect(codes(runChecks(input([own(ME)])).warnings)).toEqual(["own_line_unconfirmed"]);
+    // Checked by anyone, the submitter included, clears the note.
+    expect(runChecks(input([own(ME)])).warnings).toEqual([]);
     expect(runChecks(input([own(OTHER)])).warnings).toEqual([]);
   });
 

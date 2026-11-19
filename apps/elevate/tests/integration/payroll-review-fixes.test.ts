@@ -72,30 +72,21 @@ beforeAll(async () => {
 });
 
 describe("the submitter's own line on a real run", () => {
-  it("is refused at approval until another Preparer has checked it, and a test run is exempt and silent", async () => {
+  it("is not blocked at approval whether or not anyone checked it (2026-11-19), and a test run stays silent", async () => {
     const p = slot(0);
     const mine = await account("preparer");
     const ownEmp = await person(mine.id);
     await giveLine(ownEmp, p);
     const runId = await newRun(p, mine);
     as(mine);
+    // The sender may check their own line.
+    expect(await confirmRunLine({ runLineId: await runLineOf(runId, ownEmp) })).toMatchObject({ ok: true });
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
     expect(await notices(runId)).toBeGreaterThan(0); // a real run tells the approvers
-
-    // A different Approver is still refused: the line of the person who sent the run has no check from anyone else.
-    expect(await approveAs(runId, approver)).toMatchObject({ ok: false, error: expect.stringMatching(/sent this run for review has not been checked/) });
-    expect((await rows<{ status: string }>(sql`select status from payroll.pay_runs where id = ${runId}`))[0].status).toBe("in_review");
-
-    // Send it back, have a colleague check the line, send it again: now it can be approved.
-    as(approver);
-    expect(await sendBackRun({ runId, note: "Please get your line checked" })).toMatchObject({ ok: true });
-    as(checker);
-    expect(await confirmRunLine({ runLineId: await runLineOf(runId, ownEmp) })).toMatchObject({ ok: true });
-    as(mine);
-    expect(await submitRun({ runId })).toMatchObject({ ok: true });
+    // A different Approver approves it: nobody else had to check the sender's line.
     expect(await approveAs(runId, approver)).toMatchObject({ ok: true });
 
-    // A test run for the same period: no check is needed and nobody is sent notices.
+    // A test run for the same period: nobody is sent notices.
     const testRun = await newRun(p, mine, true);
     as(mine);
     expect(await submitRun({ runId: testRun })).toMatchObject({ ok: true });

@@ -24,7 +24,6 @@ import type { BulkResult } from "@/lib/bulk";
 import { runActions } from "./runs-list";
 import { payLines, payPayments, payRunItems, payRunLines, payRunReleases, payRuns } from "./schema";
 import {
-  assertNotOwnEmployee,
   decryptItemValue,
   decryptLineAmounts,
   decryptRunLine,
@@ -615,14 +614,13 @@ export async function dismissItem(tx: Tx, actor: Actor, v: { runId: string; item
   });
 }
 
-/** Records that someone other than the line's owner checked the line. A later change to the line clears it. */
+/** Records that someone checked the line (a person may check their own line too). A later change to the line clears it. */
 export async function confirmLine(tx: Tx, actor: Actor, runLineId: string): Promise<void> {
   const [found] = await tx.select({ runId: payRunLines.runId }).from(payRunLines).where(eq(payRunLines.id, runLineId)).limit(1);
   if (!found) throw new ActionFailure("That line was not found.");
   await lockDraftRun(tx, found.runId);
   const [line] = await tx.select().from(payRunLines).where(eq(payRunLines.id, runLineId)).limit(1);
   if (!line || line.excluded) throw new ActionFailure("That line was not found.");
-  await assertNotOwnEmployee(actor, line.employeeId, tx);
   try {
     decryptRunLine(line.id, line.payloadEnc);
   } catch (error) {

@@ -300,17 +300,15 @@ describe("items", () => {
 });
 
 describe("separation of duties and the draft lock", () => {
-  it("a Preparer can save an item on and dismiss one from their own line, but can't check their own line; another Preparer does", async () => {
+  it("a Preparer can save an item on and dismiss one from their own line, and check it (2026-11-19); a later change by anyone clears the check", async () => {
     const mine = await account();
     const ownEmp = await person(mine.id);
     await giveLine(preparer, ownEmp);
     const runId = await newRun(mine, period(9));
     const [line] = await runLines(runId, ownEmp);
-    const own = { ok: false, error: "You can't do this for your own pay. Another Preparer does it." };
 
     current.user = mine;
     expect(await item(runId, ownEmp, line.id, "adjustment", "100")).toMatchObject({ ok: true });
-    expect(await confirmRunLine({ runLineId: line.id })).toEqual(own);
     const [it] = await rows<{ id: string }>(sql`select id from payroll.pay_run_items where run_id = ${runId} and employee_id = ${ownEmp}`);
     expect(await dismissPayItem({ runId, itemId: it.id })).toMatchObject({ ok: true });
     // The change history says who changed their own line.
@@ -320,17 +318,15 @@ describe("separation of duties and the draft lock", () => {
     current.user = preparer;
     expect(await item(runId, ownEmp, line.id, "adjustment", "100")).toMatchObject({ ok: true });
 
-    // The worksheet notes (it no longer blocks sending) that someone else must confirm the submitter's own line.
+    // The worksheet notes (it never blocks sending) that the submitter's own line is not checked yet.
     current.user = mine;
     let sheet = (await getWorksheet(runId))!;
     expect(notesFor(sheet.checks.warnings, ownEmp)).toEqual(["own_line_unconfirmed"]);
     expect(forPerson(sheet.checks.blocking, ownEmp)).toEqual([]);
-    current.user = preparer;
-    expect(await confirmRunLine({ runLineId: line.id })).toMatchObject({ ok: true });
-    current.user = mine;
+    expect(await confirmRunLine({ runLineId: line.id })).toMatchObject({ ok: true }); // they may check their own line
     sheet = (await getWorksheet(runId))!;
     expect(notesFor(sheet.checks.warnings, ownEmp)).toEqual([]);
-    expect(sheet.lines.find((l) => l.employeeId === ownEmp)).toMatchObject({ isOwn: true, confirmedByMe: false });
+    expect(sheet.lines.find((l) => l.employeeId === ownEmp)).toMatchObject({ isOwn: true, confirmedByMe: true });
     // A later change by the other Preparer clears the confirmation again.
     current.user = preparer;
     await item(runId, ownEmp, line.id, "adjustment", "200");
@@ -1102,7 +1098,7 @@ describe("a draft run's people", () => {
 });
 
 describe("checks that are only notes", () => {
-  it("lets a run with a negative total, an unassigned suggestion and an unchecked own line be sent, and the Approver still can't approve their own unchecked line", async () => {
+  it("lets a run with a negative total, an unassigned suggestion and an unchecked own line be sent, and the Approver may approve it with their own line unchecked", async () => {
     const p = c33(7);
     const boss = await account("approver");
     const bossEmp = await person(boss.id);
@@ -1131,14 +1127,13 @@ describe("checks that are only notes", () => {
     expect(await submitRun({ runId })).toMatchObject({ ok: true });
     expect((await rows<{ status: string }>(sql`select status from payroll.pay_runs where id = ${runId}`))[0].status).toBe("in_review");
 
-    // The Approver's own line was never checked by a Preparer: they can't decide the run, whatever the notes say.
+    // The Approver's own line was never checked: it is a note, not a block (2026-11-19), so they can decide the run.
     current.user = boss;
     const review = (await getWorksheet(runId))!;
     expect(review.checks.blocking).toEqual([]);
-    expect(review.approvalRefusal).toMatch(/your own line/i);
-    const refused = await approveRun({ runId, expectedHash: review.expectedHash! });
-    expect(!refused.ok && refused.error).toMatch(/your own line/i);
-    expect((await rows<{ status: string }>(sql`select status from payroll.pay_runs where id = ${runId}`))[0].status).toBe("in_review");
+    expect(review.approvalRefusal).toBeNull();
+    expect(await approveRun({ runId, expectedHash: review.expectedHash! })).toMatchObject({ ok: true });
+    expect((await rows<{ status: string }>(sql`select status from payroll.pay_runs where id = ${runId}`))[0].status).toBe("approved");
   });
 });
 

@@ -48,7 +48,7 @@ If the person already has a rate for the same client, the window tells you to us
 
 **If you added a rate by mistake,** click **More**, then **Remove (added by mistake)**. It is offered only while the rate has never been on a real pay run (a practice run does not count). If the person was paid with it, use **Stop paying** instead.
 
-If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, **another Preparer must check your line**, and a different person records your payment.
+If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, and you can mark your own line as checked (or ask another Preparer to). You can record your own payment yourself.
 
 On a laptop, the table of people scrolls inside its own box. Scroll down in it and the column headings, with the **Person** and **Client** columns, stay in view, so you always see which number is which. When you reach the last person, the page scrolls on. The **Payment** table at the bottom keeps its headings in view the same way.
 
@@ -93,7 +93,7 @@ The new run shows notes above the worksheet, then one row for each person. Nothi
 ![The Amounts window for an allowance: give it a name, like Health allowance, and an amount.](help:prepare-a-pay-run/08-named-allowance.png)
 
 - For someone paid for part of the cutoff, enter the days or hours they worked. These can never pay more than a full cutoff; if they do, check what you typed (for example "15" instead of "1.5").
-- Open **Actions** on a line and choose **Mark as checked** when you have read it. It records that a Preparer looked at it. Any change to a line asks for a new check. If you are paid through payroll yourself, **another Preparer** must check **your own** line, and you cannot send the run until they do. Changing your line clears that check.
+- Open **Actions** on a line and choose **Mark as checked** when you have read it. It records that a Preparer looked at it. Any change to a line asks for a new check. If you are paid through payroll yourself, you can check your own line too (or ask another Preparer). Changing your line clears that check.
 
 # The checklist and the flags on a row
 
@@ -138,7 +138,7 @@ An approved run never changes. Open **Actions** on the person's line in a later 
 
 # Send it for review
 
-Read the notes first (an unassigned suggestion, pay below zero, days or hours worked that pay more than a full cutoff, your own line not checked, pay lines that changed after the run was made, days not approved yet). Only a line that cannot be read stops the run; everything else you can send as it is.
+Read the notes first (an unassigned suggestion, pay below zero, days or hours worked that pay more than a full cutoff, your own line not checked yet, pay lines that changed after the run was made, days not approved yet). Only a line that cannot be read stops the run; everything else you can send as it is.
 
 Click **Send for review** at the bottom of the run. The Approvers are told that a run is waiting. You cannot change the run while it is in review. If it comes back, read the note and fix what it asks.
 
@@ -162,7 +162,7 @@ The **Payment** table shows each person's **Client**, **Status**, **Remitly refe
 
 ![The Mark paid window: the Remitly reference and the date it was paid.](help:prepare-a-pay-run/11-mark-paid.png)
 
-When everyone is marked paid, the run becomes **Paid**. The contractors' statements are not sent by paying: a Preparer or an Approver releases them from **Statements** (see "Release the contractor payment statements"). Someone else records your own payment.
+When everyone is marked paid, the run becomes **Paid**. The contractors' statements are not sent by paying: a Preparer or an Approver releases them from **Statements** (see "Release the contractor payment statements"). You can record your own payment too.
 
 ![Everyone on the run is paid.](help:prepare-a-pay-run/12-all-paid.png)
 
@@ -172,7 +172,7 @@ When everyone is marked paid, the run becomes **Paid**. The contractors' stateme
 - **Sending a run for review with warnings you have not read.** Read each one.
 - **A person's statement shows "Line: 1" and "Line: 2" with the same pay.** They have two pay lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each pays a full cutoff, so they would be paid twice. The Rates tab only lists lines still in force today, so an old line that already ended is hidden: tick **Show stopped rates** to see it. The run warns **Paid twice for the same job**. ELEVATE now treats the newer line as the one that pays: the older line stops the day before the newer one starts, so a new run (or **Fill or update this run** on a draft) includes only one of them. ELEVATE now takes the doubled rate away for you. A doubled rate is the same person and the same client with two rates whose dates overlap. The newest rate stays; the older one is removed automatically when a Preparer opens the **Rates** tab, and again when a pay run is made or filled (**Fill or update this run**). It never removes a rate that was already paid on a real run: that one keeps the **Paid twice** note, and you stop it by hand (**More**, then **Stop paying**). The same person with a different client is never touched, and neither is a person's second role that has no client and its own alias. Nothing is deleted: the change history keeps it. To get a removed rate back, click **Removed rates**, then **Restore** next to the contractor (or **Restore all**). A restored rate is left alone from then on, so use this for a real second role on the same client. To pay someone for two roles, give each rate its own alias. You can no longer add two overlapping rates for the same job: use **Update rate**.
 - **Choosing the wrong period.** Cancel and create the run again; do not try to edit it.
-- **Expecting to approve your own run.** The person who prepared or changed a run, checked a line on it, or wrote a rate it pays, can never approve it.
+- **Approving a run you never read.** Anyone with the Approver level may approve, so read the totals and the checks first.
 - **Looking for a dollar rate or dollar allowance.** There are none. Type every amount in pesos.
 
 # Try it yourself

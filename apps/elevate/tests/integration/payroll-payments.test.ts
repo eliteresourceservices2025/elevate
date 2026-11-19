@@ -372,7 +372,7 @@ describe("payout details in the list", () => {
     expect(await bankAudits(runId)).toHaveLength(0);
   });
 
-  it("an Approver can mark a payment too, but still not their own", async () => {
+  it("an Approver can mark a payment too, their own line included", async () => {
     const p = slot(22);
     const other2 = await account("approver");
     const ownEmp = await person(other2.id);
@@ -381,7 +381,7 @@ describe("payout details in the list", () => {
     await giveLine(colleague, p);
     const runId = await approvedRun(p); // approved by the shared Approver, so other2 is free to pay
     as(other2);
-    expect(await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() })).toMatchObject({ ok: false, error: expect.stringMatching(/own/i) });
+    expect(await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() })).toMatchObject({ ok: true });
     expect(await markPaid({ runId, employeeId: colleague, reference: REF, paidOn: today() })).toMatchObject({ ok: true });
     // The Approver who marked it can read the reference (they hold mark_paid), a viewer cannot.
     expect((await getPayments(runId))!.people.find((x) => x.employeeId === colleague)!.payment!.reference).toBe(REF);
@@ -442,36 +442,26 @@ describe("markPaid", () => {
         await markPaid({ runId, employeeId: emp, reference: REF, paidOn: today(), ...bad }),
       ).toEqual({ ok: false, error: BAD });
     }
-    const future = await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2999-01-01" });
-    expect(future).toEqual({ ok: false, error: "The payment date can't be in the future." });
-    const early = await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2028-04-30" }); // the period starts 2028-05-01
-    expect(early).toEqual({
-      ok: false,
-      error: "The payment date can't be before the pay period starts.",
-    });
-    expect(
-      await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2028-05-01" }),
-    ).toMatchObject({ ok: true }); // the first day is fine
-    expect(await paymentRows(runId)).toHaveLength(1);
+    // No date limits (2026-11-19): a date before the period starts or in the future is recorded as typed.
+    expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2999-01-01" })).toMatchObject({ ok: true });
+    expect(await markPaid({ runId, employeeId: emp, reference: REF, paidOn: "2028-04-30" })).toMatchObject({ ok: true });
+    expect(await paymentRows(runId)).toHaveLength(2); // the second is a correction row
   });
 
-  it("a Preparer can't mark their own payment; another Preparer can", async () => {
+  it("a Preparer can mark their own payment, and so can another Preparer", async () => {
     const p = slot(9);
     const owner = await account("preparer");
     const ownEmp = await person(owner.id);
     await giveLine(ownEmp, p);
     const runId = await approvedRun(p);
     as(owner);
-    expect(await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() })).toEqual({
-      ok: false,
-      error: "You can't do this for your own pay. Another Preparer does it.",
-    });
-    expect(await paymentRows(runId)).toHaveLength(0);
+    expect(await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() })).toMatchObject({ ok: true });
+    expect(await paymentRows(runId)).toHaveLength(1);
     as(other);
     expect(
       await markPaid({ runId, employeeId: ownEmp, reference: REF, paidOn: today() }),
-    ).toMatchObject({ ok: true });
-    expect(await paymentRows(runId)).toHaveLength(1);
+    ).toMatchObject({ ok: true }); // a correction by someone else
+    expect(await paymentRows(runId)).toHaveLength(2);
   });
 
   it("encrypts the reference and keeps it out of the audit entry, the change log's clear columns and notices", async () => {

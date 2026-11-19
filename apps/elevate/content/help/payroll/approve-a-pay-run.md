@@ -13,13 +13,7 @@ Your job is to be a second pair of eyes. You see every line, the change from the
 
 # Who can approve
 
-You cannot approve a run if you:
-
-- created it, sent it for review, entered or checked anything on it, or changed anything on it;
-- wrote one of the pay rates it uses;
-- have a line on the run that no other Preparer has checked.
-
-ELEVATE refuses this on the server, with no way around it. If it refuses you, ask another Approver.
+Anyone with the **Approver** payroll level can approve a run, including your own line and a run you prepared. ELEVATE only refuses while a problem that blocks the run is still open (a line that can't be read), or when the run changed after you opened it (reload and look again).
 
 # Steps
 

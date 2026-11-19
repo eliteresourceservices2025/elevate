@@ -804,7 +804,7 @@ export async function unapproveRun(input: unknown): Promise<ActionResult> {
 }
 
 /**
- * Approves a run in review, against the hash the page was given. Refused for anyone who prepared or changed the run, and when the run
+ * Approves a run in review, against the hash the page was given. Refused when a check blocks, and when the run
  * changed since the page loaded ("This payroll changed. Reload and review it again.").
  */
 export async function approveRun(input: unknown): Promise<ActionResult> {
@@ -838,7 +838,7 @@ export async function exportRemitlyList(input: unknown): Promise<ActionResult<{ 
   });
 }
 
-/** Records that a person on an approved run was paid (their Remitly reference and date). Marking again corrects it. Never your own pay. */
+/** Records that a person on an approved run was paid (their Remitly reference and date). Marking again corrects it. Any day, any date, own line included. */
 export async function markPaid(input: unknown): Promise<ActionResult<{ runPaid: boolean }>> {
   const actor = await requireUser();
 
