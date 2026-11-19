@@ -254,8 +254,10 @@ export function ActiveCall({ state }: { state: CallState }) {
         ) : null}
       </div>
 
-      <div className={cn("grid min-h-[26rem]", panel !== null && "lg:grid-cols-[minmax(0,1fr)_20rem]")}>
-        <div className="relative flex min-w-0 flex-col gap-3 p-3">
+      {/* On a wide screen the room has a fixed height (the rest of the window, between 26 and 48 rem), so a long chat scrolls inside its own panel
+          and the control bar below always stays in view. The videos scroll inside their own column when there are many. */}
+      <div className={cn("grid min-h-[26rem] lg:h-[clamp(26rem,calc(100dvh-15rem),48rem)]", panel !== null && "lg:grid-cols-[minmax(0,1fr)_20rem]")}>
+        <div className="relative flex min-w-0 flex-col gap-3 p-3 lg:min-h-0 lg:overflow-y-auto">
           <RecordingNotice />
           {sharers.length > 0 ? (
             <ul aria-label="Shared screens" className="grid gap-3">
@@ -302,7 +304,7 @@ export function ActiveCall({ state }: { state: CallState }) {
           </div>
         </div>
 
-        <aside aria-label="Chat and people" className={cn("flex min-h-0 flex-col border-t lg:border-t-0 lg:border-l", panel === null && "hidden lg:hidden")}>
+        <aside aria-label="Chat and people" className={cn("flex min-h-0 flex-col overflow-clip border-t lg:border-t-0 lg:border-l", panel === null && "hidden lg:hidden")}>
           <div className="flex border-b" role="group" aria-label="Side panel">
             <button type="button" aria-pressed={panel === "chat"} onClick={() => setPanel("chat")} className={cn("flex-1 border-b-2 py-2.5 text-sm font-medium", panel === "chat" ? "border-primary text-foreground" : "border-transparent text-muted-foreground")}>
               Chat{unread > 0 ? <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] text-primary-foreground">{unread}</span> : null}
@@ -311,7 +313,7 @@ export function ActiveCall({ state }: { state: CallState }) {
               Participants {state.participants.length}
             </button>
           </div>
-          <div className="flex max-h-[32rem] min-h-72 flex-1 flex-col lg:max-h-none">
+          <div className="flex max-h-[32rem] min-h-72 flex-1 flex-col lg:max-h-none lg:min-h-0">
             {/* The chat stays mounted while the panel shows People or is closed, so new messages still count and nothing is missed. */}
             <CallChat conversationId={state.call.conversationId} userId={call.userId} open={panel === "chat"} onNew={() => setUnread((n) => n + 1)} />
             {panel === "people" ? (

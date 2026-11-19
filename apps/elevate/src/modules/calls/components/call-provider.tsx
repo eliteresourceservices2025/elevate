@@ -137,8 +137,7 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
     micStream.current = stream;
     setMicVersion((v) => v + 1);
   }, []);
-  const recorder = useRef<CallRecorder | null>(null);
-  const transport = useRef<CallTransport | null>(null);
+  const recorder = useRef<CallRecorder | null>(null);  const transport = useRef<CallTransport | null>(null);
   const channel = useRef<{ update: (p: CallPresence) => void; stop: () => void } | null>(null);
   const timers = useRef<{ heartbeat?: ReturnType<typeof setInterval>; unanswered?: ReturnType<typeof setTimeout> }>({});
   const live = useRef({ callId: null as string | null, phase: "idle" as Phase, state: null as CallState | null, micOn: false, handUp: false, othersEverJoined: false, remote: {} as Record<string, RemoteMedia> });
@@ -453,6 +452,8 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
     // If I am recording, the last piece goes up first (the server keeps the recording open for it), but never for long.
     await flushRecorder();
     stopQuietly();
+    // Must finish before the page changes (the browser drops a request that is still running when the page moves on). The server answers as soon
+    // as the seat is closed; closing the media at Cloudflare and the "call ended" line happen after its reply.
     if (id) await callApi.leave(id).catch(() => {});
     reset();
   }, [flushRecorder, reset, stopQuietly]);
