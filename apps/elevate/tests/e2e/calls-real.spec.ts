@@ -293,7 +293,7 @@ test("real media through Cloudflare: switching the microphone mid-call keeps the
       return pcs.flatMap((pc) => pc.getSenders()).find((s) => s.track?.kind === "audio")?.track?.label ?? "";
     }), { timeout: 20_000 })
     .not.toBe(senderTrackBefore);
-  await expect(pageA.getByRole("button", { name: "Mute microphone" })).toBeVisible();
+  await expect(pageA.getByRole("button", { name: "Mute microphone", exact: true })).toBeVisible();
   await expect.poll(() => otherVoiceLevel(pageB, 4), { timeout: 60_000, intervals: [1_000] }).toBeGreaterThan(0.005);
 
   await pageB.getByRole("button", { name: "Leave call" }).first().click();

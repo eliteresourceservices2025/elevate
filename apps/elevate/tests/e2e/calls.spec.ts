@@ -52,7 +52,7 @@ test("a call: ring, join, camera, mute, screen share, the mini window, leave", a
   expect(await pageA.evaluate(() => (window as unknown as { __callsFake: { pulled: string[] } }).__callsFake.pulled.length)).toBeGreaterThan(0);
 
   // Bea mutes: the little muted icon shows on her tile for Ana (presence).
-  await pageB.getByRole("button", { name: "Mute microphone" }).click();
+  await pageB.getByRole("button", { name: "Mute microphone", exact: true }).click();
   await expect(pageA.locator(`[data-testid="call-tile"]:has-text("${nameB}") [aria-label="Muted"]`)).toBeVisible({ timeout: 20_000 });
   await pageB.getByRole("button", { name: "Unmute microphone" }).click();
 
@@ -138,7 +138,7 @@ test("host controls: the People list, mute someone, remove someone", async ({ br
   await expect(pageB.getByRole("button", { name: /^Remove / })).toHaveCount(0);
 
   // Mute: the server switches off Bea's microphone, and her own button follows.
-  await expect(pageB.getByRole("button", { name: "Mute microphone" })).toBeVisible();
+  await expect(pageB.getByRole("button", { name: "Mute microphone", exact: true })).toBeVisible();
   await pageB.waitForTimeout(7_000); // a change made a moment ago is not mistaken for the host
   await pageA.getByRole("button", { name: `Mute ${nameB}` }).click();
   await expect(pageB.getByRole("button", { name: "Unmute microphone" })).toBeVisible({ timeout: 30_000 });
@@ -397,7 +397,7 @@ test("devices: test and choose them in the lobby, change them during the call, a
   // In the call, Devices opens a dialog; changing the microphone switches it without leaving.
   await pageB.getByRole("button", { name: "Join call" }).click();
   await expect(pageB.getByRole("list", { name: "People in the call" })).toBeVisible({ timeout: 30_000 });
-  await expect(pageB.getByRole("button", { name: "Mute microphone" })).toBeVisible({ timeout: 20_000 });
+  await expect(pageB.getByRole("button", { name: "Mute microphone", exact: true })).toBeVisible({ timeout: 20_000 });
   await pageB.getByRole("button", { name: "More call options" }).click();
   await pageB.getByRole("menuitem", { name: "Devices" }).click();
   const dialog = pageB.getByRole("dialog", { name: "Devices" });
@@ -406,5 +406,5 @@ test("devices: test and choose them in the lobby, change them during the call, a
   await expect.poll(() => pageB.evaluate(() => (window as unknown as { __callsFake: { switched?: string[] } }).__callsFake.switched ?? [])).toContain("audio:default");
   expect(await pageB.evaluate(() => window.localStorage.getItem("elevate.call.devices"))).not.toContain(chosenId!);
   await pageB.keyboard.press("Escape");
-  await expect(pageB.getByRole("button", { name: "Mute microphone" })).toBeVisible();
+  await expect(pageB.getByRole("button", { name: "Mute microphone", exact: true })).toBeVisible();
 });
