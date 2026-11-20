@@ -115,3 +115,23 @@ export function isTrackerOffline(lastSegmentEndMs: number | null, nowMs: number,
 export function shotWindow(atMs: number): number {
   return Math.floor(atMs / SHOT_WINDOW_MS);
 }
+
+type SessionLike = { startAt: number; endAt: number | null; breaks: readonly { startAt: number; endAt: number | null }[] };
+
+/**
+ * The stretches of time a person was working: each clocked-in session minus its breaks. An open session runs up to `nowMs`; a break
+ * that is still open ends the working time at its start. The tracker records only inside these stretches.
+ */
+export function workingIntervals(sessions: readonly SessionLike[], nowMs: number): Interval[] {
+  const out: Interval[] = [];
+  for (const s of sessions) {
+    const end = s.endAt ?? nowMs;
+    let cursor = s.startAt;
+    for (const b of [...s.breaks].sort((a, c) => a.startAt - c.startAt)) {
+      if (b.startAt > cursor) out.push({ start: cursor, end: Math.min(b.startAt, end) });
+      cursor = Math.max(cursor, b.endAt ?? end);
+    }
+    if (end > cursor) out.push({ start: cursor, end });
+  }
+  return out.filter((i) => i.end > i.start);
+}

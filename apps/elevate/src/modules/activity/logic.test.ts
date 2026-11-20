@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeMinutes, activePercent, categorize, clipToIntervals, dropOverlaps, isTrackerOffline, sanitizeApp, shotWindow, validateSegment, type RawSegment } from "./logic";
+import { activeMinutes, activePercent, categorize, clipToIntervals, dropOverlaps, isTrackerOffline, sanitizeApp, shotWindow, validateSegment, workingIntervals, type RawSegment } from "./logic";
 
 const MIN = 60_000;
 const T0 = Date.UTC(2026, 10, 19, 10, 0, 0);
@@ -105,5 +105,27 @@ describe("shotWindow", () => {
   it("is the same for two times in one 10 minute window", () => {
     expect(shotWindow(T0 + 1000)).toBe(shotWindow(T0 + 9 * MIN));
     expect(shotWindow(T0 + 10 * MIN)).toBe(shotWindow(T0) + 1);
+  });
+});
+
+describe("workingIntervals", () => {
+  const session = (startMin: number, endMin: number | null, breaks: { s: number; e: number | null }[] = []) => ({
+    startAt: T0 + startMin * MIN,
+    endAt: endMin === null ? null : T0 + endMin * MIN,
+    breaks: breaks.map((b) => ({ startAt: T0 + b.s * MIN, endAt: b.e === null ? null : T0 + b.e * MIN, plannedMinutes: null })),
+  });
+  const rel = (list: { start: number; end: number }[]) => list.map((i) => [(i.start - T0) / MIN, (i.end - T0) / MIN]);
+
+  it("cuts breaks out of a closed session", () => {
+    expect(rel(workingIntervals([session(0, 60, [{ s: 20, e: 30 }])], T0 + 90 * MIN))).toEqual([[0, 20], [30, 60]]);
+  });
+  it("runs an open session up to now", () => {
+    expect(rel(workingIntervals([session(0, null)], T0 + 45 * MIN))).toEqual([[0, 45]]);
+  });
+  it("stops at the start of a break that is still open", () => {
+    expect(rel(workingIntervals([session(0, null, [{ s: 30, e: null }])], T0 + 45 * MIN))).toEqual([[0, 30]]);
+  });
+  it("returns nothing when there is no session", () => {
+    expect(workingIntervals([], T0)).toEqual([]);
   });
 });
