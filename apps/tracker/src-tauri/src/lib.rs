@@ -1,4 +1,6 @@
+pub mod capture;
 pub mod core;
+pub mod platform;
 
 use tauri::Manager;
 
