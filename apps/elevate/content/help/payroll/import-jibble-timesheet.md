@@ -2,7 +2,7 @@
 title: Import a Jibble timesheet
 summary: For Preparers. Fill a draft pay run from the Jibble timesheet export: client payroll hours, overtime, holiday pay and PTO, then confirm or edit each amount.
 category: payroll
-audience: all
+audience: payroll
 order: 5
 updated: 2026-11-12
 ---

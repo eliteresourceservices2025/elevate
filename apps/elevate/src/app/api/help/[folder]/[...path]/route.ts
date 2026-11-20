@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ fold
     if (error instanceof ForbiddenError) return new Response("Not found", { status: 404 });
     throw error;
   }
-  if (!mayOpenHelpFile(viewer.roles, folder, relative)) return new Response("Not found", { status: 404 });
+  if (!mayOpenHelpFile(viewer, folder, relative)) return new Response("Not found", { status: 404 });
   const size = helpFileSize(folder, relative);
   if (size === null) return new Response("Not found", { status: 404 });
 

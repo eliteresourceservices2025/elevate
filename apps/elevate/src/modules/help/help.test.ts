@@ -23,7 +23,7 @@ Body here.`;
 describe("article header", () => {
   it("reads a good header", () => {
     const { meta, body } = parseArticleSource(GOOD);
-    expect(meta.audience).toEqual(["hr_admin", "team_lead"]);
+    expect(meta.audience).toEqual({ roles: ["hr_admin", "team_lead"], payroll: false });
     expect(meta.order).toBe(2);
     expect(meta.video).toBe("invite-a-person");
     expect(body).toBe("Body here.");
@@ -41,14 +41,28 @@ describe("article header", () => {
 
 describe("who sees an article", () => {
   it("shows an all article to every role", () => {
-    for (const role of ROLE_SLUGS) expect(canSeeHelpArticle([role, "employee"], "all")).toBe(true);
+    for (const role of ROLE_SLUGS) expect(canSeeHelpArticle({ roles: [role, "employee"] }, "all")).toBe(true);
   });
   it("hides an HR article from an employee, executive and a plain employee with no other role", () => {
-    const audience = ["super_admin", "hr_admin", "team_lead", "recruiter"] as const;
-    expect(canSeeHelpArticle(["employee"], audience)).toBe(false);
-    expect(canSeeHelpArticle(["employee", "executive"], audience)).toBe(false);
-    expect(canSeeHelpArticle(["employee", "recruiter"], audience)).toBe(true);
-    expect(canSeeHelpArticle(["employee", "hr_admin"], audience)).toBe(true);
+    const audience = { roles: ["super_admin", "hr_admin", "team_lead", "recruiter"], payroll: false } as const;
+    expect(canSeeHelpArticle({ roles: ["employee"] }, audience)).toBe(false);
+    expect(canSeeHelpArticle({ roles: ["employee", "executive"] }, audience)).toBe(false);
+    expect(canSeeHelpArticle({ roles: ["employee", "recruiter"] }, audience)).toBe(true);
+    expect(canSeeHelpArticle({ roles: ["employee", "hr_admin"] }, audience)).toBe(true);
+    // A payroll level opens nothing on an article that does not name payroll.
+    expect(canSeeHelpArticle({ roles: ["employee"], payrollAccess: "approver" }, audience)).toBe(false);
+  });
+  it("shows a payroll article to anyone with a payroll level, and to the listed roles too", () => {
+    const audience = { roles: ["hr_admin"], payroll: true } as const;
+    expect(canSeeHelpArticle({ roles: ["employee"] }, audience)).toBe(false);
+    expect(canSeeHelpArticle({ roles: ["employee"], payrollAccess: null }, audience)).toBe(false);
+    for (const level of ["preparer", "approver", "viewer"] as const) expect(canSeeHelpArticle({ roles: ["employee"], payrollAccess: level }, audience)).toBe(true);
+    expect(canSeeHelpArticle({ roles: ["employee", "hr_admin"] }, audience)).toBe(true);
+  });
+  it("reads the word payroll in a header, alone or beside roles, and still refuses an unknown word", () => {
+    expect(parseArticleSource(GOOD.replace("hr_admin, team_lead", "payroll")).meta.audience).toEqual({ roles: [], payroll: true });
+    expect(parseArticleSource(GOOD.replace("hr_admin, team_lead", "hr_admin, payroll")).meta.audience).toEqual({ roles: ["hr_admin"], payroll: true });
+    expect(() => parseArticleSource(GOOD.replace("hr_admin, team_lead", "payrol"))).toThrow();
   });
 });
 

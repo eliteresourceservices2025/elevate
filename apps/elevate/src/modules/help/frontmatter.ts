@@ -6,7 +6,7 @@ import { HELP_CATEGORY_SLUGS } from "./categories";
 //   title: Invite a new person
 //   summary: One sentence that says what you will be able to do.
 //   category: people
-//   audience: hr_admin, team_lead      (or: all)
+//   audience: hr_admin, team_lead      (or: all; or add "payroll" for people who hold a payroll level)
 //   order: 2
 //   video: invite-a-person             (optional: a file name in content/help/videos, without .mp4)
 //   updated: 2026-10-21
@@ -16,7 +16,14 @@ const audienceSchema = z
   .string()
   .transform((value) => value.split(",").map((part) => part.trim()).filter(Boolean))
   .pipe(
-    z.union([z.tuple([z.literal("all")]).transform(() => "all" as const), z.array(z.enum(ROLE_SLUGS)).min(1)]),
+    z.union([
+      z.tuple([z.literal("all")]).transform(() => "all" as const),
+      // Roles, and/or the word "payroll" (anyone holding a payroll level). At least one.
+      z
+        .array(z.union([z.enum(ROLE_SLUGS), z.literal("payroll")]))
+        .min(1)
+        .transform((parts) => ({ roles: parts.filter((p): p is (typeof ROLE_SLUGS)[number] => p !== "payroll"), payroll: parts.includes("payroll") })),
+    ]),
   );
 
 export const frontmatterSchema = z.object({

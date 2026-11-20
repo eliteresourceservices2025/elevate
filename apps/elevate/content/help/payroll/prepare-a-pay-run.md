@@ -2,7 +2,7 @@
 title: Prepare a pay run
 summary: For Preparers. Set the rates, add pay lines, start a run for a pay period, fill it in, send it to an Approver, then record the payments.
 category: payroll
-audience: all
+audience: payroll
 order: 2
 updated: 2026-11-12
 ---
