@@ -13,6 +13,7 @@ import {
   FileText,
   LayoutDashboard,
   LogOut,
+  MessageSquare,
   Network,
   UserRound,
   PenLine,
@@ -29,9 +30,12 @@ import {
   Hourglass,
   GraduationCap,
   ListChecks,
+  Receipt,
   UsersRound,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
+import { PAYSLIP_LABELS } from "@/modules/payroll/constants";
 
 /** Shown only to people who hold one of these scopes for the action. Pages and actions still enforce it; this just keeps the menu short. */
 export type NavAccess = { action: string; scopes: ("own" | "team" | "all")[] };
@@ -45,6 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, description: "Your day at a glance." },
+      { href: "/messages", label: "Messages", icon: MessageSquare, description: "Chat with your team and groups." },
       { href: "/approvals", label: "Approvals", icon: CheckCheck, description: "Requests and hours waiting for your decision." },
     ],
   },
@@ -54,6 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/people", label: "People", icon: Users, description: "Profiles, employment details and client assignments." },
       { href: "/people/me", label: "My profile", icon: UserRound, description: "Your own details, documents and requests." },
       { href: "/my-data", label: "My data", icon: ShieldCheck, description: "What ELEVATE holds about you, downloads and privacy requests." },
+      { href: "/my-pay", label: PAYSLIP_LABELS.pageTitle, icon: Wallet, description: "Your contractor payment statements, once the pay run they belong to is paid.", access: { action: "payroll.view_own", scopes: ["own"] } },
       { href: "/org-chart", label: "Org chart", icon: Network, description: "Departments, teams and reporting lines." },
       { href: "/documents", label: "Documents", icon: FileText, description: "Per-person files and company policies." },
       { href: "/announcements", label: "Announcements", icon: Bell, description: "Company posts and policy acknowledgments." },
@@ -104,6 +110,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Admin",
     items: [
+      { href: "/payroll", label: "Payroll", icon: Wallet, description: "Pay runs, rates and settings for the people chosen to run payroll.", access: { action: "payroll.view", scopes: ["all"] } },
+      { href: "/invoices", label: "Invoices", icon: Receipt, description: "Bill each client for the client payroll hours of a pay run, and set billing rates.", access: { action: "invoices.view", scopes: ["all"] } },
       { href: "/settings", label: "Settings", icon: Settings, description: "Roles, policies, templates, time zones and audit log." },
     ],
   },

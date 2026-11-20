@@ -9,7 +9,7 @@ const baseURL = externalUrl ?? `http://localhost:${port}`;
 
 export default defineConfig({
   testDir: "./tests/help",
-  testMatch: /capture\.spec\.ts$/,
+  testMatch: /capture(-payroll)?\.spec\.ts$/,
   timeout: 20 * 60_000,
   expect: { timeout: 15_000 },
   workers: 1,

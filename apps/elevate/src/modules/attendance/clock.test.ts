@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MINUTE, breakLabel, buildDays, formatClock, formatDuration, ipAllowed, isPossiblyOffline, isValidRange, lastSeenOf, needsHrDecision, needsWelcomeBack, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
+import { MINUTE, allocateMinutes, breakLabel, buildDays, formatClock, formatDuration, hasLongSession, ipAllowed, isPossiblyOffline, isValidRange, lastSeenOf, needsHrDecision, needsWelcomeBack, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
 
 const T = (iso: string) => Date.parse(iso);
 const ev = (type: ClockType, iso: string): ClockEventLite => ({ type, at: T(iso) });
@@ -237,5 +237,84 @@ describe("connection and presence rules", () => {
       "UTC",
     );
     expect(days[0].sessionList[0].eventId).toBe("in-1");
+  });
+});
+
+describe("long sessions (a forgotten clock-out)", () => {
+  it("flags a finished session longer than 12 hours, not one of exactly 12", () => {
+    const wed = buildDays([ev("clock_in", "2026-11-11T12:50:00Z"), ev("clock_out", "2026-11-12T12:47:00Z")], "America/Phoenix");
+    expect(wed[0].workedMinutes).toBe(1437);
+    expect(hasLongSession(wed[0].sessionList)).toBe(true);
+    const twelve = buildDays([ev("clock_in", "2026-11-11T12:00:00Z"), ev("clock_out", "2026-11-12T00:00:00Z")], "America/Phoenix");
+    expect(hasLongSession(twelve[0].sessionList)).toBe(false);
+  });
+
+  it("leaves an open session to its own flag", () => {
+    const open = buildDays([ev("clock_in", "2026-11-11T12:00:00Z")], "America/Phoenix");
+    expect(hasLongSession(open[0].sessionList)).toBe(false);
+  });
+});
+
+describe("working for more than one client in a day", () => {
+  const A = "11111111-1111-4111-8111-111111111111";
+  const B = "22222222-2222-4222-8222-222222222222";
+  const cev = (type: ClockType, iso: string, clientId?: string): ClockEventLite => ({ type, at: T(iso), clientId });
+
+  it("lets a person switch client only while working", () => {
+    expect(transition("working", "switch_client")).toBe("working");
+    expect(transition("out", "switch_client")).toBeNull();
+    expect(transition("break", "switch_client")).toBeNull();
+  });
+
+  it("keeps one session and records each switch", () => {
+    const { sessions, state } = replayClock([cev("clock_in", "2026-11-11T16:00:00Z", A), cev("switch_client", "2026-11-11T20:00:00Z", B), cev("clock_out", "2026-11-12T00:00:00Z")]);
+    expect(state).toBe("out");
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({ clientId: A, switches: [{ at: T("2026-11-11T20:00:00Z"), clientId: B }] });
+  });
+
+  it("splits the day's hours between the clients, with the break taken out of the client it fell in", () => {
+    const days = buildDays(
+      [
+        cev("clock_in", "2026-11-11T16:00:00Z", A), // 9:00 AM in Phoenix
+        cev("break_start", "2026-11-11T19:00:00Z"), // 12:00
+        cev("break_end", "2026-11-11T19:30:00Z"),
+        cev("switch_client", "2026-11-11T20:00:00Z", B), // 1:00 PM
+        cev("clock_out", "2026-11-12T00:00:00Z"), // 5:00 PM
+      ],
+      "America/Phoenix",
+    );
+    expect(days).toHaveLength(1);
+    expect(days[0].workedMinutes).toBe(450);
+    expect(days[0].clients).toEqual([
+      { clientId: A, workedMinutes: 210, breakMinutes: 30 },
+      { clientId: B, workedMinutes: 240, breakMinutes: 0 },
+    ]);
+    const sum = days[0].clients.reduce((n, c) => n + c.workedMinutes, 0);
+    expect(sum).toBe(days[0].workedMinutes);
+  });
+
+  it("returns to the same client later in the day and adds the two stretches together", () => {
+    const days = buildDays(
+      [cev("clock_in", "2026-11-11T16:00:00Z", A), cev("switch_client", "2026-11-11T18:00:00Z", B), cev("switch_client", "2026-11-11T19:00:00Z", A), cev("clock_out", "2026-11-11T21:00:00Z")],
+      "America/Phoenix",
+    );
+    expect(days[0].clients).toEqual([
+      { clientId: A, workedMinutes: 240, breakMinutes: 0 },
+      { clientId: B, workedMinutes: 60, breakMinutes: 0 },
+    ]);
+  });
+
+  it("has no split for a day with no client at all, and the parts always add up to the total minutes", () => {
+    expect(buildDays([cev("clock_in", "2026-11-11T16:00:00Z"), cev("clock_out", "2026-11-11T20:00:00Z")], "America/Phoenix")[0].clients).toEqual([]);
+    // 3 equal parts of 100 minutes: no minute is lost to rounding
+    expect(allocateMinutes(100, [1, 1, 1]).reduce((a, b) => a + b, 0)).toBe(100);
+    expect(allocateMinutes(0, [5, 5])).toEqual([0, 0]);
+    expect(allocateMinutes(7, [0, 0])).toEqual([0, 0]);
+  });
+
+  it("splits an odd length without losing a minute", () => {
+    const days = buildDays([cev("clock_in", "2026-11-11T16:00:00Z", A), cev("switch_client", "2026-11-11T16:00:20Z", B), cev("clock_out", "2026-11-11T17:01:00Z")], "America/Phoenix");
+    expect(days[0].clients.reduce((n, c) => n + c.workedMinutes, 0)).toBe(days[0].workedMinutes);
   });
 });

@@ -1,5 +1,5 @@
 // Pure pay period rules for the hours export. Dates are yyyy-MM-dd; nothing here reads a clock.
-// ELEVATE does not compute pay: it cuts hours into the periods HR's payroll uses and exports them.
+// The hours export computes nothing: it cuts hours into the periods HR's payroll uses and exports them. Only the payroll module computes pay, and it never computes tax.
 
 export type PayPeriodKind = "semi_monthly" | "weekly" | "biweekly" | "monthly";
 export type PayPeriod = { start: string; end: string; label: string };

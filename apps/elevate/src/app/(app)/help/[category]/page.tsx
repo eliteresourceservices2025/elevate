@@ -13,7 +13,7 @@ import { listHelpArticlesIn } from "@/modules/help/content";
 export async function generateMetadata({ params }: PageProps<"/help/[category]">): Promise<Metadata> {
   const user = await requireUser();
   const { category } = await params;
-  return { title: listHelpArticlesIn(user.roles, category).length > 0 ? (helpCategory(category)?.title ?? "Help center") : "Help center" };
+  return { title: listHelpArticlesIn(user, category).length > 0 ? (helpCategory(category)?.title ?? "Help center") : "Help center" };
 }
 
 export default async function HelpCategoryPage({ params }: PageProps<"/help/[category]">) {
@@ -21,7 +21,7 @@ export default async function HelpCategoryPage({ params }: PageProps<"/help/[cat
   await orNotFound(authorize(user, "help.view"));
   const { category: slug } = await params;
   const category = helpCategory(slug);
-  const articles = category ? listHelpArticlesIn(user.roles, slug) : [];
+  const articles = category ? listHelpArticlesIn(user, slug) : [];
   if (!category || articles.length === 0) notFound();
 
   return (

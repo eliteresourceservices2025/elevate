@@ -1,17 +1,18 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { formatInZone } from "@/lib/time";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { timeChainUserIds, reportName } from "@/modules/org/service";
-import { MAX_OPEN_SESSION_MS, QUIET_AFTER_MS, buildDays } from "./clock";
-import { attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices, quietNotices } from "./schema";
+import { MAX_OPEN_SESSION_MS, QUIET_AFTER_MS, buildDays, hasLongSession } from "./clock";
+import { clockSourceOf } from "./clock-source";
+import { attendanceDayClients, attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices, quietNotices } from "./schema";
 import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
 import { EXTRA_THRESHOLD_MINUTES, addDays, earlyLeaveMinutes, extraMinutes, hasScheduleAround, lateMinutes, shiftOn } from "./schedule";
 import { loadSchedules, loadSchedulesFor } from "./schedule-service";
-import { approvedExtra, effectiveEndMs, grantedByDate } from "./extra-hours";
-import { approvedWindows } from "./extra-hours-service";
+import { approvedExtra, effectiveEndMs, grantedByDate, minutesInWindows } from "./extra-hours";
+import { approvedWindows, assignedClients } from "./extra-hours-service";
 import { historicalHolidayDatesFor } from "@/modules/timeoff/service";
 import { approvalKey, attendanceRows, dayState, latestApprovals } from "./hours-service";
 import { mondayOf } from "./pay-periods";
@@ -121,6 +122,10 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
   for (const { employee_id: employeeId } of people) {
     const prefs = await prefsFor(db, employeeId);
     const rules = await rulesFor(db, employeeId);
+    // Someone whose hours come from Jibble: the screenshot checks do not apply (there is no ELEVATE clock call to compare), and time with
+    // no client is flagged when they work for more than one client, so a lead maps it before approving.
+    const fromJibble = (await clockSourceOf(db, employeeId)) === "jibble";
+    const multiClient = fromJibble && (await assignedClients(db, employeeId)).length > 1;
     const earliest = normalDaysBack === undefined ? from : formatInZone(now.getTime() - normalDaysBack * DAY_MS, prefs.zone, "yyyy-MM-dd");
     const today = normalDaysBack === undefined ? to : formatInZone(now, prefs.zone, "yyyy-MM-dd");
     // A two-day margin pairs overnight sessions at either edge without reading unrelated attendance history.
@@ -128,7 +133,8 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
     const days = buildDays(events, prefs.zone).filter((d) => d.date >= earliest && d.date <= today);
     const schedules = await loadSchedules(db, employeeId);
     const holidays = await historicalHolidayDatesFor(db, employeeId, earliest, today);
-    const granted = grantedByDate(await approvedWindows(db, employeeId, eventFromMs, eventToMs + DAY_MS), prefs.zone);
+    const approved = await approvedWindows(db, employeeId, eventFromMs, eventToMs + DAY_MS);
+    const granted = grantedByDate(approved, prefs.zone);
 
     for (const d of days) {
       const end = d.lastOut ?? (normalDaysBack === undefined ? eventToMs : now.getTime());
@@ -164,12 +170,16 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
       const holiday = holidays.has(d.date);
       const late = shift && !holiday ? lateMinutes(d.firstIn, shift, rules.lateGraceMinutes) : 0;
       const early = shift && !holiday && d.lastOut !== null && !d.open ? earlyLeaveMinutes(d.lastOut, shift, rules.lateGraceMinutes) : 0;
-      const extra = extraMinutes({ workedMinutes: d.workedMinutes, breakMinutes: d.breakMinutes, shift, hasSchedule, holiday });
+      // A person with no schedule has no regular hours to measure against, so only time worked INSIDE an approved extra-hours window
+      // is extra (and it is approved by definition). Everything else is plain worked time, with nothing flagged.
+      const inWindows = hasSchedule ? 0 : minutesInWindows(d.sessionList, approved);
+      const extra = hasSchedule ? extraMinutes({ workedMinutes: d.workedMinutes, breakMinutes: d.breakMinutes, shift, hasSchedule, holiday }) : inWindows >= EXTRA_THRESHOLD_MINUTES ? inWindows : 0;
       // What approved extra hours requests cover, and what is left over (unapproved).
-      const split = approvedExtra(extra, granted.get(d.date) ?? 0);
+      const split = hasSchedule ? approvedExtra(extra, granted.get(d.date) ?? 0) : { approved: extra, unapproved: 0 };
 
       const flags = [
         d.open ? "open_session" : null,
+        hasLongSession(d.sessionList) ? "long_session" : null,
         late > 0 ? "late" : null,
         early > 0 ? "left_early" : null,
         extra > 0 ? "extra_hours" : null,
@@ -181,8 +191,9 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         idle.n > 0 ? "idle_unanswered" : null,
         d.overbreakMinutes > 0 ? "overbreak" : null,
         missingEod ? "no_eod" : null,
-        jibbleFlag ? "jibble_mismatch" : null,
-        noShots ? "no_screenshots" : null,
+        jibbleFlag && !fromJibble ? "jibble_mismatch" : null,
+        noShots && !fromJibble ? "no_screenshots" : null,
+        multiClient && d.sessionList.some((x) => x.clients.some((c) => c.clientId === null)) ? "needs_client" : null,
         (await onFullDayLeave(db, employeeId, d.date)) ? "on_leave" : null,
       ].filter((f): f is string => f !== null);
 
@@ -201,7 +212,14 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         flags,
         builtAt: new Date(),
       };
-      await db.insert(attendanceDays).values({ employeeId, date: d.date, ...values }).onConflictDoUpdate({ target: [attendanceDays.employeeId, attendanceDays.date], set: values });
+      await db.transaction(async (tx) => {
+        await tx.insert(attendanceDays).values({ employeeId, date: d.date, ...values }).onConflictDoUpdate({ target: [attendanceDays.employeeId, attendanceDays.date], set: values });
+        // The day's time by client (rebuilt with the day; only days with time that belongs to a client have rows).
+        await tx.delete(attendanceDayClients).where(and(eq(attendanceDayClients.employeeId, employeeId), eq(attendanceDayClients.date, d.date)));
+        if (d.clients.length > 0) {
+          await tx.insert(attendanceDayClients).values(d.clients.map((c) => ({ employeeId, date: d.date, clientId: c.clientId, workedMinutes: c.workedMinutes, breakMinutes: c.breakMinutes })));
+        }
+      });
       written += 1;
     }
   }
@@ -321,8 +339,10 @@ export async function runQuietSessionAlerts(now = new Date()): Promise<{ noticed
     ) s
     join core.employees e on e.id = s.employee_id
     left join time.clock_presence p on p.employee_id = s.employee_id
-    where s.last_type in ('clock_in', 'break_end') and s.event_id is not null
+    where s.last_type in ('clock_in', 'break_end', 'switch_client') and s.event_id is not null
       and greatest(s.last_event, coalesce(p.last_seen_at, s.last_event)) < ${cutoff.toISOString()}::timestamptz
+      -- Someone whose hours come from Jibble never opens ELEVATE's clock page, so there is no presence to miss.
+      and coalesce((select cs.source from time.clock_source cs where cs.employee_id = s.employee_id order by cs.set_at desc, cs.id desc limit 1), 'elevate') <> 'jibble'
       and not exists (select 1 from time.quiet_notices n where n.event_id = s.event_id)`)) as unknown as {
     employee_id: string; event_id: string; user_id: string | null; first: string; last: string; preferred: string | null;
   }[];

@@ -1,0 +1,2 @@
+ALTER TABLE "chat"."user_settings" ADD COLUMN "sound" text DEFAULT 'chime' NOT NULL;--> statement-breakpoint
+ALTER TABLE "chat"."user_settings" ADD CONSTRAINT "user_settings_sound_chk" CHECK ("chat"."user_settings"."sound" in ('chime','pop','bell','ding','off'));

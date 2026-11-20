@@ -11,6 +11,7 @@ import { EditLayout } from "@/modules/dashboard/components/edit-layout";
 import { EXECUTIVE_TILES, ExecutiveBento } from "@/modules/dashboard/components/executive-bento";
 import { GreetingHeader } from "@/modules/dashboard/components/greeting-header";
 import { HR_TILES, HrBento } from "@/modules/dashboard/components/hr-bento";
+import { PayrollApprovals } from "@/modules/dashboard/components/payroll-approvals";
 import { MY_WORK_TILES, MyWorkBento } from "@/modules/dashboard/components/my-work-bento";
 import { QuickActions } from "@/modules/dashboard/components/quick-actions";
 import { RECRUITER_TILES, RecruiterBento } from "@/modules/dashboard/components/recruiter-bento";
@@ -50,6 +51,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
     <PageContainer>
       <Suspense fallback={<PageHeader title="Dashboard" actions={quickActions} />}>
         <GreetingHeader roles={user.roles} lenses={lenses} lens={lens} actions={quickActions} />
+      </Suspense>
+
+      {/* Payroll access is a level chosen per person, not a role, so it is not tied to a view. Shows only while a pay run waits for this Approver. */}
+      <Suspense fallback={null}>
+        <PayrollApprovals />
       </Suspense>
 
       {lens === "my_work" ? (

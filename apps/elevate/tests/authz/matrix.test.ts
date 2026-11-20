@@ -48,6 +48,20 @@ const EXPECTED: Record<string, string> = {
   "announcements.manage_popups": "A A - - - -",
   "announcements.export": "A A - - - -",
   "notifications.read": "O O O O O O",
+  "messages.use": "O O O O O O",
+  "messages.create_group": "A A - - - -",
+  "messages.manage_group": "A A - - - -",
+  "messages.invite_guests": "A A - - - -",
+  "calls.start": "O O O O O O",
+  "calls.join": "O O O O O O",
+  "calls.start_townhall": "A A - - A -",
+  "calls.record": "- - - - - -", // recorder flag only (a Super Admin picks the people)
+  "calls.manage_recorders": "A - - - - -",
+  "calls.settings": "A - - - - -",
+  "chataccess.request": "A A - - - -", // HR Admin (or a Super Admin) asks for a chat or recording they are not part of
+  "chataccess.decide": "A - - - - -", // a DIFFERENT Super Admin decides
+  "chataccess.list": "A O - - - -",
+  "chataccess.read": "O O - - - -", // only the person who asked reads what was granted
   "privacy.view_my_data": "O O O O O O",
   "privacy.export_my_data": "O O O O O O",
   "privacy.request_data_rights": "O O O O O O",
@@ -156,6 +170,7 @@ const EXPECTED: Record<string, string> = {
   "demographics.edit_own": "O O O O O O",
   "demographics.view_summary": "A A - - - -",
   "hours.mark_test": "A A T - - -",
+  "hours.reopen": "A A T - - -",
   "learn.launch": "O O O O O O",
   "learn.view_status": "A A T - - -",
   "learn.view_compliance": "A A - - A -",
@@ -176,11 +191,31 @@ const EXPECTED: Record<string, string> = {
   "analytics.export": "A A - - - -",
   "settings.manage_roles": "A - - - - -",
   "settings.set_safevoice_handler": "A - - - - -",
+  "settings.set_payroll_access": "A - - - - -",
+  "settings.set_payroll_signatory": "A - - - - -",
   "settings.reset_mfa": "A - - - - -",
   "settings.deactivate_account": "A - - - - -",
   "settings.view_audit": "A - - - - -",
   "settings.manage_policies": "A A - - - -",
   "invitations.create": "A A - - - -",
+  // payroll level only: no role grants these (the level is checked in the "payroll access" test below)
+  "payroll.view": "- - - - - -",
+  "payroll.view_history": "- - - - - -",
+  "payroll.prepare": "- - - - - -",
+  "payroll.manage_rates": "- - - - - -",
+  "payroll.mark_paid": "- - - - - -",
+  "payroll.export": "- - - - - -",
+  "payroll.approve": "- - - - - -",
+  "payroll.manage_test_runs": "- - - - - -",
+  "payroll.purge_archived": "- - - - - -",
+  "payroll.release_statements": "- - - - - -",
+  "payroll.view_own": "O O O O O O",
+  // client invoices: roles only (a payroll level adds nothing)
+  "invoices.view": "A A - - A -",
+  "invoices.create": "A A - - A -",
+  "invoices.manage_rates": "A A - - A -",
+  "invoices.manage": "A A - - A -",
+  "invoices.delete": "A A - - A -",
 };
 
 const SCOPE_CODE: Record<string, Scope | null> = { A: "all", T: "team", O: "own", "-": null };
@@ -287,6 +322,54 @@ describe("Privacy Officer flag", () => {
 
   it("a Safe Voice handler flag does not open incidents", () => {
     expect(can({ id: "h", roles: ["employee"], isSafevoiceHandler: true }, "incidents.handle")).toBe(false);
+  });
+});
+
+const level = (payrollAccess: "preparer" | "approver" | "viewer" | null) => ({ id: "p", roles: ["super_admin"] as RoleSlug[], payrollAccess });
+describe("payroll access", () => {
+  it("comes only from the level", () => {
+    expect(can(level(null), "payroll.view")).toBe(false);
+    expect(can(level("viewer"), "payroll.view")).toBe(true);
+    expect(can(level("viewer"), "payroll.view_history")).toBe(true);
+    expect(can(level("viewer"), "payroll.prepare")).toBe(false);
+    expect(can(level("preparer"), "payroll.prepare")).toBe(true);
+    expect(can(level("preparer"), "payroll.approve")).toBe(false);
+    expect(can(level("approver"), "payroll.approve")).toBe(true);
+    // Releasing statements to the contractors: a Preparer or an Approver, never a viewer or a person with no level.
+    expect(can(level("approver"), "payroll.release_statements")).toBe(true);
+    expect(can(level("preparer"), "payroll.release_statements")).toBe(true);
+    expect(can(level("viewer"), "payroll.release_statements")).toBe(false);
+    expect(can(level(null), "payroll.release_statements")).toBe(false);
+    // Paying: both working levels (owner decision 2026-11-12), never a viewer or a person with no level.
+    expect(can(level("approver"), "payroll.export")).toBe(true);
+    expect(can(level("approver"), "payroll.mark_paid")).toBe(true);
+    expect(can(level("preparer"), "payroll.export")).toBe(true);
+    expect(can(level("viewer"), "payroll.export")).toBe(false);
+    expect(can(level("viewer"), "payroll.mark_paid")).toBe(false);
+    expect(can(level(null), "payroll.export")).toBe(false);
+    // Test runs (mark, archive, restore): both working levels, never a viewer or a person with no level.
+    expect(can(level(null), "payroll.manage_test_runs")).toBe(false);
+    expect(can(level("viewer"), "payroll.manage_test_runs")).toBe(false);
+    expect(can(level("preparer"), "payroll.manage_test_runs")).toBe(true);
+    expect(can(level("approver"), "payroll.manage_test_runs")).toBe(true);
+    // Deleting archived test runs for good: the same two working levels.
+    expect(can(level(null), "payroll.purge_archived")).toBe(false);
+    expect(can(level("viewer"), "payroll.purge_archived")).toBe(false);
+    expect(can(level("preparer"), "payroll.purge_archived")).toBe(true);
+    expect(can(level("approver"), "payroll.purge_archived")).toBe(true);
+  });
+
+  it("no role, not even Super Admin, opens a payroll action without a level", () => {
+    for (const role of ROLE_SLUGS)
+      for (const action of ["payroll.view", "payroll.prepare", "payroll.approve", "payroll.mark_paid"] as const)
+        expect(can({ id: "p", roles: [role], payrollAccess: null }, action)).toBe(false);
+  });
+
+  it("the level does not widen anything outside payroll", () => {
+    expect(can({ id: "p", roles: ["employee"], payrollAccess: "preparer" }, "settings.set_payroll_access")).toBe(false);
+    expect(can({ id: "p", roles: ["employee"], payrollAccess: "preparer" }, "settings.set_payroll_signatory")).toBe(false);
+    expect(can({ id: "p", roles: ["super_admin"], payrollAccess: null }, "settings.set_payroll_signatory")).toBe(true);
+    expect(can({ id: "p", roles: ["employee"], payrollAccess: "preparer" }, "people.view_sensitive", { ownerUserId: "x" })).toBe(false);
   });
 });
 

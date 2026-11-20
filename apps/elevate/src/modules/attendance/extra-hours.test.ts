@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvedExtra, checkWindow, coveringWindow, dayLimitWarning, effectiveEndMs, grantedByDate, isAfterTheFact, needsHrForAge, windowMinutes } from "./extra-hours";
+import { approvedExtra, checkWindow, coveringWindow, dayLimitWarning, effectiveEndMs, grantedByDate, isAfterTheFact, needsHrForAge, windowMinutes, minutesInWindows } from "./extra-hours";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -91,5 +91,26 @@ describe("approved windows against the clock", () => {
     expect(effectiveEndMs(shiftEnd, [w(10, 60)])).toBe(NOW + 60 * MIN); // starts within the slack
     expect(effectiveEndMs(shiftEnd, [w(60, 120)])).toBe(shiftEnd); // a gap: not part of this shift
     expect(effectiveEndMs(shiftEnd, [w(0, 60), w(60, 120)])).toBe(NOW + 120 * MIN); // chained
+  });
+});
+
+describe("minutesInWindows (time worked inside approved extra-hours windows)", () => {
+  const HOUR = 3_600_000;
+  const t = (h: number) => Date.UTC(2026, 10, 12, h, 0, 0);
+  const session = (from: number, to: number | null, breaks: { startAt: number; endAt: number | null }[] = []) => ({ startAt: t(from), endAt: to === null ? null : t(to), breaks });
+
+  it("counts only the time inside the window", () => {
+    expect(minutesInWindows([session(9, 19)], [{ startMs: t(17), endMs: t(19) }])).toBe(120);
+    expect(minutesInWindows([session(9, 18)], [{ startMs: t(17), endMs: t(19) }])).toBe(60);
+    expect(minutesInWindows([session(9, 12)], [{ startMs: t(17), endMs: t(19) }])).toBe(0);
+  });
+
+  it("takes breaks out of the time", () => {
+    expect(minutesInWindows([session(9, 19, [{ startAt: t(17), endAt: t(17) + HOUR / 2 }])], [{ startMs: t(17), endMs: t(19) }])).toBe(90);
+  });
+
+  it("adds several windows and several sessions, and ignores an open session", () => {
+    expect(minutesInWindows([session(9, 11), session(16, 20)], [{ startMs: t(10), endMs: t(11) }, { startMs: t(17), endMs: t(18) }])).toBe(120);
+    expect(minutesInWindows([session(9, null)], [{ startMs: t(9), endMs: t(12) }])).toBe(0);
   });
 });

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Menu, MessageSquare, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -99,6 +100,12 @@ export function AppHeader({
         <ZoneClock zone={zone} />
       </div>
       <ThemeToggle className="hidden sm:flex" />
+      <Link href="/messages" aria-label={workCounts["/messages"] ? `Messages, ${workCounts["/messages"]} unread` : "Messages"} className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative")}>
+        <MessageSquare aria-hidden />
+        {workCounts["/messages"] ? (
+          <span className="absolute -top-1 -right-1 min-w-4 rounded-full bg-primary px-1 text-center text-[0.65rem] leading-4 font-semibold text-primary-foreground">{workCounts["/messages"] > 99 ? "99+" : workCounts["/messages"]}</span>
+        ) : null}
+      </Link>
       {/* keyed by the count so a fresh server count resets the bell */}
       <NotificationBell key={unread} unread={unread} />
       <ClockWidget status={clock} />

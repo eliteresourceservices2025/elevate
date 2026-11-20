@@ -1,11 +1,18 @@
 "use client";
 
-import { Suspense, useCallback, useState, type ComponentProps, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { ConfirmProvider } from "@/components/confirm-dialog";
 import { OperationResultProvider } from "@/components/operation-result";
 import { UnsavedChangesProvider } from "@/components/unsaved-changes";
 import { PopupQueue, type PopupItem } from "@/modules/announcements/components/popup-queue";
+import { playChatSound, unlockAudio } from "@/modules/messages/components/play-sound";
+import { CallOverlays } from "@/modules/calls/components/call-overlays";
+import { CallProvider, type Abilities } from "@/modules/calls/components/call-provider";
+import { useChatLive } from "@/modules/messages/components/use-chat-live";
+import { useLiveChatCount } from "@/modules/messages/components/use-live-chat-count";
+import type { ChatSound } from "@/modules/messages/sound-options";
 import { AppHeader } from "./app-header";
 import { QuickTour } from "./quick-tour";
 import { SidebarNav } from "./sidebar-nav";
@@ -17,8 +24,24 @@ type HeaderProps = Omit<ComponentProps<typeof AppHeader>, "collapsed" | "onToggl
  * The frame of every signed-in page: the menu and the header stay put and only the content scrolls.
  * The menu can be narrowed to icons; the choice is a plain cookie so the server renders the right width at once.
  */
-export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [], banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; tourAutoStart?: boolean; popups?: PopupItem[]; banner: ReactNode; children: ReactNode }) {
+export function AppShell({ initialCollapsed, callAbilities, chatSound = "chime", tourAutoStart = false, popups = [], banner, children, ...header }: HeaderProps & { initialCollapsed: boolean; callAbilities?: Abilities; chatSound?: ChatSound; tourAutoStart?: boolean; popups?: PopupItem[]; banner: ReactNode; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
+  const pathname = usePathname();
+  // The chat count in the header and the menu stays current on every page (a shared live connection), not only on the Messages page.
+  const liveChat = useLiveChatCount(header.userId ?? "", header.workCounts?.["/messages"] ?? 0, () => {
+    // A new message plays the person's chosen sound, unless they are looking at Messages right now.
+    if (chatSound === "off") return;
+    playChatSound(chatSound);
+  });
+  // A message from someone else in the chat that is open right now never raises the unread count (it is read at once), so it sounds here.
+  useChatLive(header.userId ?? "", (signal) => {
+    if (chatSound === "off" || signal.type !== "message" || !signal.senderUserId || signal.senderUserId === header.userId) return;
+    if (pathname === `/messages/${signal.conversationId}`) playChatSound(chatSound);
+  });
+  useEffect(() => {
+    if (chatSound !== "off") unlockAudio();
+  }, [chatSound]);
+  const workCounts = { ...header.workCounts, "/messages": liveChat || undefined };
   // Queued announcements and policies come first; the quick tour waits until they are closed or acknowledged.
   const [popupsDone, setPopupsDone] = useState(popups.length === 0);
   const onPopupsDone = useCallback(() => setPopupsDone(true), []);
@@ -33,11 +56,13 @@ export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [],
     }
   }
 
+  // "relative" makes the frame the containing block for the screen-reader-only text (absolutely positioned), so it cannot stretch the page.
+  // "overflow-clip", not "overflow-hidden": a hidden box can still be scrolled by the browser itself (focusing a field, scrolling a
+  // link into view, a route change), which pushed the header and the top of the menu out of sight until a refresh. A clipped box
+  // cannot scroll at all, so only the content area below ever moves.
+  // The call provider wraps everything so a call survives moving between pages (its sound, mini window and ring are CallOverlays).
   return (
-    // "relative" makes this the containing block for the screen-reader-only text (absolutely positioned), so it cannot stretch the page.
-    // "overflow-clip", not "overflow-hidden": a hidden box can still be scrolled by the browser itself (focusing a field, scrolling a
-    // link into view, a route change), which pushed the header and the top of the menu out of sight until a refresh. A clipped box
-    // cannot scroll at all, so only the content area below ever moves.
+    <CallProvider userId={header.userId ?? ""} abilities={callAbilities}>
     <div data-app-shell className="relative flex h-dvh overflow-clip print:block print:h-auto print:overflow-visible">
       {/* Skip link: first stop for keyboard users. Fixed, not absolute, so focusing it can never scroll the shell. */}
       <a
@@ -53,10 +78,10 @@ export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [],
           collapsed ? "w-16" : "w-64",
         )}
       >
-        <SidebarNav hidden={header.hiddenNav} safeVoiceUrl={header.safeVoiceUrl} workCounts={header.workCounts} collapsed={collapsed} />
+        <SidebarNav hidden={header.hiddenNav} safeVoiceUrl={header.safeVoiceUrl} workCounts={workCounts} collapsed={collapsed} />
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
-        <AppHeader {...header} collapsed={collapsed} onToggleSidebar={toggle} />
+        <AppHeader {...header} workCounts={workCounts} collapsed={collapsed} onToggleSidebar={toggle} />
         <div className="flex-1 scroll-smooth overflow-y-auto motion-reduce:scroll-auto print:overflow-visible">
           {banner}
           {/* Side padding: 16px on a phone, 40px on a tablet or laptop, 48px on a large screen. Pages fill the width between. */}
@@ -75,6 +100,8 @@ export function AppShell({ initialCollapsed, tourAutoStart = false, popups = [],
         <QuickTour autoStart={tourAutoStart && popupsDone} />
       </Suspense>
       {popups.length > 0 ? <PopupQueue items={popups} onDone={onPopupsDone} /> : null}
+      <CallOverlays />
     </div>
+    </CallProvider>
   );
 }

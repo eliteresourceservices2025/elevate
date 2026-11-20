@@ -1,0 +1,1023 @@
+"use server";
+
+import { randomUUID } from "node:crypto";
+import { and, desc, eq, gte, isNull, ne, sql } from "drizzle-orm";
+import { shortRange } from "@/lib/short-range";
+import { revalidatePath } from "next/cache";
+import { authorize } from "@/lib/authz";
+import { requireUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { allowRequest } from "@/lib/rate-limit";
+import { fail, runAction, type ActionResult } from "@/lib/run-action";
+import { writeAudit } from "@/modules/audit/write";
+import { clients, employees } from "@/modules/people/schema";
+import type { Tx } from "@/modules/people/service";
+import { HOLIDAY_BP } from "./calculate";
+import { logChange } from "./changes";
+import { autoTidyRates, lineKeysOnRealRuns, removedRatesOf, restoreRemovedRates, type RemovedRateView } from "./doubled-service";
+import { isWithdrawn, lineLastDay, sameJob } from "./lines";
+import { detailOf, insertEndVersion, insertWithdrawnVersion, newestVersion, setFteOnLine, type LineRow } from "./line-writes";
+import { parseMoney } from "./money";
+import { payLines, payRunLines, payRuns, paySettings } from "./schema";
+import { amountsToJson, decryptLineAmounts, encryptLineAmounts, payrollToday, settingsInForce, type LineAmounts } from "./service";
+import { releaseRun } from "./statements";
+import type { BulkResult } from "@/lib/bulk";
+import { archiveRun, archiveRunsIn, cancelRun, deleteRunsIn, restoreRunsIn, confirmLine, createRun, dismissItem, removeRunLine, restoreRun, restoreRunLine, saveItem, setRunTest, syncRunPeople } from "./runs";
+import { applyAssign, applyConfirm, applyRefresh } from "./suggestions";
+import { readJibbleTimesheet } from "./jibble/timesheet";
+import { MAX_XLSX_BYTES, XlsxError } from "./jibble/xlsx";
+import { applyTimesheet, confirmAllSuggestions as confirmAll, discardTimesheet, saveTimesheetUpload } from "./timesheet-import";
+import { approve, sendBack, submit, unapprove } from "./approval";
+import { recordPayment, remitlyList } from "./payments";
+import {
+  applyTimesheetSchema,
+  approveRunSchema,
+  confirmAllSuggestionsSchema,
+  discardTimesheetSchema,
+  exportRemitlySchema,
+  markPaidSchema,
+  sendBackRunSchema,
+  unapproveRunSchema,
+  submitRunSchema,
+  assignSuggestionSchema,
+  confirmSuggestionSchema,
+  refreshSuggestionsSchema,
+  uploadTimesheetSchema,
+  removePersonFromRunSchema,
+  restorePersonToRunSchema,
+  updateRunPeopleSchema,
+  cancelPayRunSchema,
+  confirmRunLineSchema,
+  createPayLineSchema,
+  archiveRunSchema,
+  bulkArchiveRunsSchema,
+  bulkRunsSchema,
+  createPayRunSchema,
+  dismissPayItemSchema,
+  endPayLineSchema,
+  markRunTestSchema,
+  releaseStatementsSchema,
+  restoreRunSchema,
+  restoreRemovedRatesSchema,
+  removeStoppedRatesSchema,
+  withdrawPayLineSchema,
+  savePayItemSchema,
+  savePaySettingsSchema,
+  updatePayLineSchema,
+  setLineFtesSchema,
+} from "./validators";
+
+// Every action: requireUser() first, then authorize() inside runAction, then Zod. Each change writes the payroll change log (amounts and
+// reasons only inside its encrypted detail) and an audit row (ids only) in the same transaction.
+
+const BAD_REQUEST = "Check the request and try again.";
+
+/** Fields whose Zod message is plain enough to show as it is ("Enter an amount above zero"); every other failure stays the generic line. */
+const SHOWN_FIELDS = new Set(["monthly", "perFte", "fte", "amountUsd"]);
+function badRequestOf(error: { issues: readonly { path: readonly PropertyKey[]; message: string }[] }): string {
+  const shown = error.issues.find((i) => i.path.some((p) => typeof p === "string" && SHOWN_FIELDS.has(p)));
+  return shown?.message ?? BAD_REQUEST;
+}
+
+const refreshed = () => {
+  revalidatePath("/payroll/rates");
+  revalidatePath("/payroll/settings");
+};
+
+/** One writer per line (or per settings table) at a time, so two edits cannot both pass the date checks. */
+const lock = (tx: Tx, key: string) => tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
+
+
+/** Every version of a line, newest first (later effective date, then later created_at). */
+async function versionsOf(tx: Tx, lineKey: string): Promise<LineRow[]> {
+  return tx.select().from(payLines).where(eq(payLines.lineKey, lineKey)).orderBy(desc(payLines.effectiveFrom), desc(payLines.createdAt));
+}
+
+/**
+ * A new version dated before the line's newest one (a correction that goes back, for example a raise that should count from the cutoff whose
+ * run is still a draft). It may even go before the line's own first day: a raise saved as a separate rate part-way through a cutoff then
+ * starts with that cutoff, and the older rate for the same job is cut off the day before (`applySupersede`). Allowed only when no real run
+ * from that date on has been sent for review, approved or paid: those runs are never changed. A draft run picks the new rate up with "Fill or
+ * update this run". The runs from that date on are locked (the same row lock sending for review takes), so a run can't be sent for review
+ * while this is checked.
+ */
+async function refuseEarlierStart(tx: Tx, effectiveFrom: string) {
+  const runs = await tx
+    .select({ start: payRuns.periodStart, end: payRuns.periodEnd, status: payRuns.status })
+    .from(payRuns)
+    .where(and(eq(payRuns.isTest, false), gte(payRuns.periodEnd, effectiveFrom)))
+    .orderBy(payRuns.periodStart)
+    .for("update");
+  const made = runs.find((r) => MADE_STATUSES.includes(r.status));
+  if (made) return fail(`The run for ${shortRange(made.start, made.end)} is already sent for review or approved, and it can't change. Pick a later cutoff, or add an adjustment in that run.`);
+  return null;
+}
+
+const MADE_STATUSES = ["in_review", "approved", "paid"];
+
+/** The person must not be separated or archived (onboarding, active, probation and on leave are all paid), and the client (when given) must not be archived. */
+async function checkPersonAndClient(tx: Tx, employeeId: string, clientId: string | null | undefined) {
+  const [person] = await tx
+    .select({ id: employees.id })
+    .from(employees)
+    .where(and(eq(employees.id, employeeId), isNull(employees.archivedAt), ne(employees.status, "separated")))
+    .limit(1);
+  if (!person) return fail("That person was not found.");
+  if (clientId) {
+    const [client] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.id, clientId), isNull(clients.archivedAt))).limit(1);
+    if (!client) return fail("That client was not found.");
+  }
+  return null;
+}
+
+type AmountFields = {
+  basis?: "monthly" | "per_fte";
+  monthly?: string;
+  perFte?: string;
+  fte?: number | null;
+  otRegular?: number | null;
+  otRestDay?: number | null;
+  otRestDayOver8?: number | null;
+};
+
+/** The amounts a rate version keeps: the monthly rate and the default FTE count, or (internal team) the amount per FTE with a monthly of 0. */
+const amountsOf = (v: AmountFields): LineAmounts => {
+  const otBp: Partial<Record<"regular" | "restDay" | "restDayOver8", number>> = {};
+  if (v.otRegular != null) otBp.regular = v.otRegular;
+  if (v.otRestDay != null) otBp.restDay = v.otRestDay;
+  if (v.otRestDayOver8 != null) otBp.restDayOver8 = v.otRestDayOver8;
+  const ot = Object.keys(otBp).length > 0 ? { otBp } : {};
+  if (v.basis === "per_fte") return { monthlyCentavos: 0n, perFteCentavos: parseMoney(v.perFte ?? "") ?? 0n, ...ot };
+  return { monthlyCentavos: parseMoney(v.monthly ?? "") ?? 0n, ...(v.fte != null ? { fteHundredths: v.fte } : {}), ...ot };
+};
+
+/**
+ * A second pay line for the same person, client and alias whose dates overlap the new one would pay the person twice for the same cutoff
+ * (each line pays a full cutoff). Refused with a plain way out. Different aliases, different clients and lines that do not overlap are fine.
+ * `staggered` (a change to a line that already exists): lines for the same job that start on different days are fine too, because a run takes
+ * the newer one over from its first day and cuts the older one off the day before (`applySupersede`), so they never both pay for a day.
+ * Only two lines that start on the very same day are refused (nothing says which is right).
+ * A line that was removed (added by mistake, or tidied away) never applies to any period, so it is not compared; neither are the versions of a
+ * stopped line dated after its last day.
+ */
+async function refuseDuplicateLine(tx: Tx, v: { employeeId: string; clientId: string | null; alias: string | null; from: string; to: string | null; exceptLineKey?: string; staggered?: boolean }) {
+  const rows = await tx.select().from(payLines).where(eq(payLines.employeeId, v.employeeId));
+  const byKey = new Map<string, (typeof rows)[number][]>();
+  for (const r of rows) byKey.set(r.lineKey, [...(byKey.get(r.lineKey) ?? []), r]);
+  for (const group of byKey.values()) {
+    if (group[0].lineKey === v.exceptLineKey) continue;
+    if (isWithdrawn(group)) continue; // removed: the Rates tab no longer shows it and nothing is paid from it
+    const end = lineLastDay(group);
+    const live = end === null ? group : group.filter((g) => g.effectiveFrom <= end);
+    if (live.length === 0) continue;
+    const newest = [...live].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : a.effectiveFrom > b.effectiveFrom ? -1 : b.createdAt.getTime() - a.createdAt.getTime()))[0];
+    if (!sameJob({ employeeId: v.employeeId, clientId: newest.clientId ?? null, alias: newest.alias ?? null }, { employeeId: v.employeeId, clientId: v.clientId, alias: v.alias })) continue;
+    const start = live.map((g) => g.effectiveFrom).sort()[0];
+    if (v.staggered && start !== v.from) continue;
+    if (start <= (v.to ?? "9999-12-31") && v.from <= (end ?? "9999-12-31")) {
+      return fail(
+        `This person already has a pay line for the same job (same alias, and the same client or none) from ${start}${end ? ` to ${end}` : ""}. A second one for the same dates would pay them twice. ${end ? `It stops after ${end}, so a new rate that starts the day after is fine. ` : ""}Change that line instead (the change keeps its history), or give the new rate its own alias, for example "Internal team", to pay them for a second role.`,
+      );
+    }
+  }
+  return null;
+}
+
+export async function createPayLine(input: unknown): Promise<ActionResult<{ lineKey: string }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = createPayLineSchema.safeParse(input);
+    if (!parsed.success) return fail(badRequestOf(parsed.error));
+    const v = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      const refused = await checkPersonAndClient(tx, v.employeeId, v.clientId);
+      if (refused) return refused;
+      const duplicate = await refuseDuplicateLine(tx, { employeeId: v.employeeId, clientId: v.clientId ?? null, alias: v.alias ?? null, from: v.effectiveFrom, to: v.endsOn ?? null });
+      if (duplicate) return duplicate;
+
+      const id = randomUUID();
+      const lineKey = randomUUID();
+      const amounts = amountsOf(v);
+      const row = {
+        id,
+        lineKey,
+        employeeId: v.employeeId,
+        clientId: v.clientId ?? null,
+        alias: v.alias ?? null,
+        hoursPerDay: v.hoursPerDay,
+        paymentMethod: v.paymentMethod,
+        endsOn: v.endsOn ?? null,
+        effectiveFrom: v.effectiveFrom,
+        amountsEnc: encryptLineAmounts(id, amounts),
+        createdBy: actor.id,
+      };
+      await tx.insert(payLines).values(row);
+      await writeAudit({ actor, action: "payroll.line.create", targetType: "pay_line", targetId: lineKey, metadata: { employeeId: v.employeeId } }, tx);
+      await logChange(tx, actor, { action: "line_created", employeeId: v.employeeId, lineKey, detail: { new: detailOf(row, amounts) } });
+      return { ok: true, data: { lineKey } } as const;
+    });
+
+    if (result.ok) refreshed();
+    return result;
+  });
+}
+
+/** A change is a new version of the line with its own effective date; nothing is overwritten. */
+export async function updatePayLine(input: unknown): Promise<ActionResult<{ lineKey: string }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = updatePayLineSchema.safeParse(input);
+    if (!parsed.success) return fail(badRequestOf(parsed.error));
+    const { reason, lineKey, ...v } = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      await lock(tx, `pay_line:${lineKey}`);
+      const versions = await versionsOf(tx, lineKey);
+      const latest = versions[0];
+      if (!latest) return fail("That pay line was not found.");
+      const refused = await checkPersonAndClient(tx, latest.employeeId, v.clientId);
+      if (refused) return refused;
+      // A rate that stops later can still be corrected up to its last day (the stop date stays: the earliest end on any version counts).
+      const lastDay = lineLastDay(versions);
+      if (lastDay !== null && lastDay < v.effectiveFrom) return fail(`This rate stops after ${lastDay}. Add a new rate instead.`);
+      if (v.effectiveFrom < latest.effectiveFrom) {
+        const refusedEarlier = await refuseEarlierStart(tx, v.effectiveFrom);
+        if (refusedEarlier) return refusedEarlier;
+      }
+      // Changing the client or alias must not make this line a twin of another line of the same person.
+      if ((v.clientId ?? null) !== (latest.clientId ?? null) || (v.alias ?? "").trim().toLowerCase() !== (latest.alias ?? "").trim().toLowerCase()) {
+        // The line's first day, or the earlier day a correction moves it back to.
+        const from = [...versions.map((x) => x.effectiveFrom), v.effectiveFrom].sort()[0];
+        const twin = await refuseDuplicateLine(tx, { employeeId: latest.employeeId, clientId: v.clientId ?? null, alias: v.alias ?? null, from, to: v.endsOn ?? null, exceptLineKey: lineKey, staggered: true });
+        if (twin) return twin;
+      }
+
+      const before = decryptLineAmounts(latest.id, latest.amountsEnc);
+      const id = randomUUID();
+      // A blank FTE on the form keeps the count the rate already had (it is cleared on the Set FTE table, with "Not set").
+      const amounts = amountsOf({ ...v, fte: v.fte ?? before.fteHundredths ?? null });
+      const row = {
+        id,
+        lineKey,
+        employeeId: latest.employeeId,
+        clientId: v.clientId ?? null,
+        alias: v.alias ?? null,
+        hoursPerDay: v.hoursPerDay,
+        paymentMethod: v.paymentMethod,
+        endsOn: v.endsOn ?? null,
+        effectiveFrom: v.effectiveFrom,
+        amountsEnc: encryptLineAmounts(id, amounts),
+        createdBy: actor.id,
+      };
+      await tx.insert(payLines).values(row);
+      await writeAudit({ actor, action: "payroll.line.update", targetType: "pay_line", targetId: lineKey, metadata: { employeeId: latest.employeeId } }, tx);
+      await logChange(tx, actor, {
+        action: "line_updated",
+        employeeId: latest.employeeId,
+        lineKey,
+        detail: { old: detailOf(latest, before), new: detailOf(row, amounts), reason },
+      });
+      return { ok: true, data: { lineKey } } as const;
+    });
+
+    if (result.ok) refreshed();
+    return result;
+  });
+}
+
+/**
+ * Withdraws a line that was added by mistake: a new version marks the whole line as never in force, so it disappears from the Rates tab and
+ * from every run. Allowed only while the line has never been on a real run (a test, archived or cancelled run does not count); a line that was
+ * paid can only be stopped. Nothing is deleted (the history keeps every version and the reason).
+ */
+export async function withdrawPayLine(input: unknown): Promise<ActionResult<{ lineKey: string }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = withdrawPayLineSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const { lineKey, reason } = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      await lock(tx, `pay_line:${lineKey}`);
+      const versions = await versionsOf(tx, lineKey);
+      if (versions.length === 0) return fail("That pay line was not found.");
+      if (isWithdrawn(versions)) return fail("This pay line was already removed.");
+      const used = await tx
+        .select({ start: payRuns.periodStart, end: payRuns.periodEnd })
+        .from(payRunLines)
+        .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
+        .innerJoin(payRuns, eq(payRuns.id, payRunLines.runId))
+        .where(and(eq(payLines.lineKey, lineKey), eq(payRuns.isTest, false), ne(payRuns.status, "cancelled")))
+        .orderBy(desc(payRuns.periodStart))
+        .limit(1);
+      if (used.length > 0) return fail(`It was already on the pay run for ${used[0].start} to ${used[0].end}, so it can't be removed. Use Stop paying instead.`);
+
+      const latest = versions[0];
+      const amounts = await insertWithdrawnVersion(tx, actor.id, latest);
+      await writeAudit({ actor, action: "payroll.line.withdraw", targetType: "pay_line", targetId: lineKey, metadata: { employeeId: latest.employeeId } }, tx);
+      await logChange(tx, actor, { action: "line_withdrawn", employeeId: latest.employeeId, lineKey, detail: { old: detailOf(latest, amounts), reason } });
+      return { ok: true, data: { lineKey } } as const;
+    });
+
+    if (result.ok) refreshed();
+    return result;
+  });
+}
+
+/**
+ * Sets the default FTE count on many rates at once (the Set FTE table). Each change is a same-date correction of the live versions (see
+ * `setFteOnLine`), logged as a rate update with the reason "FTE set"; the audit log keeps only counts. Rates that were removed or have already
+ * ended, rates paid per FTE and counts that did not change are skipped. A draft run picks the new counts up with "Fill or update this run".
+ */
+export async function setLineFtes(input: unknown): Promise<ActionResult<{ changed: number; skipped: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = setLineFtesSchema.safeParse(input);
+    if (!parsed.success) return fail(badRequestOf(parsed.error));
+    // Sorted, so two people saving at once take the locks in the same order.
+    const rows = [...new Map(parsed.data.rows.map((r) => [r.lineKey, r])).values()].sort((a, b) => (a.lineKey < b.lineKey ? -1 : 1));
+
+    const result = await db.transaction(async (tx) => {
+      // A draft built for an earlier cutoff still uses the counts of that time, so start from the earlier of today and the first draft day.
+      const [firstDraft] = await tx
+        .select({ start: payRuns.periodStart })
+        .from(payRuns)
+        .where(and(eq(payRuns.status, "draft"), isNull(payRuns.archivedAt)))
+        .orderBy(payRuns.periodStart)
+        .limit(1);
+      const today = payrollToday();
+      const from = firstDraft && firstDraft.start < today ? firstDraft.start : today;
+      let changed = 0;
+      for (const row of rows) {
+        await lock(tx, `pay_line:${row.lineKey}`);
+        const versions = await versionsOf(tx, row.lineKey);
+        const last = lineLastDay(versions);
+        if (versions.length === 0 || isWithdrawn(versions) || (last !== null && last < from)) continue;
+        const done = await setFteOnLine(tx, actor.id, versions, row.fte, from, last);
+        if (!done) continue;
+        changed += 1;
+        await logChange(tx, actor, { action: "line_updated", employeeId: versions[0].employeeId, lineKey: row.lineKey, detail: { old: done.old, new: done.new, reason: "FTE set" } });
+      }
+      await writeAudit({ actor, action: "payroll.line.set_fte", targetType: "pay_line", metadata: { requested: rows.length, changed } }, tx);
+      return { ok: true, data: { changed, skipped: rows.length - changed } } as const;
+    });
+
+    if (result.ok) refreshed();
+    return result;
+  });
+}
+
+/**
+ * The automatic tidy of doubled rates (the same person and client with overlapping dates): takes away the ones that were never on a real pay
+ * run, keeping the newest of each set. It also runs when a pay run is made or filled. A paid doubled rate is left for a person to stop. Every
+ * rate it takes away is listed under "Removed rates" and can be restored. Safe to call again: it finds nothing the second time.
+ */
+export async function tidyDoubledRates(): Promise<ActionResult<{ removed: number; left: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+    const result = await db.transaction(async (tx) => autoTidyRates(tx, actor));
+    if (result.removed > 0) refreshed();
+    return { ok: true, data: result } as const;
+  });
+}
+
+/** The rates the tidy took away that nobody restored, with their figures (a sensitive read: a count in the audit log, never a figure). */
+export async function listRemovedRates(): Promise<ActionResult<{ rates: RemovedRateView[] }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+    const { views } = await removedRatesOf(db);
+    if (views.length > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_lines", metadata: { fields: ["monthly rate"], count: views.length } });
+    return { ok: true, data: { rates: views } } as const;
+  });
+}
+
+/**
+ * Brings tidied rates back: one contractor's, or all of them. A restored rate is marked as decided on, so the tidy does not take it away again
+ * (for example a real second role on the same client). Each restore is a new version with history.
+ */
+export async function restoreTidiedRates(input: unknown): Promise<ActionResult<{ restored: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = restoreRemovedRatesSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const result = await db.transaction(async (tx) => ({ restored: await restoreRemovedRates(tx, actor, parsed.data.lineKeys) }));
+    if (result.restored > 0) refreshed();
+    return { ok: true, data: result } as const;
+  });
+}
+
+/**
+ * Takes every stopped rate that was never on a real pay run off the Rates list (a stopped rate whose last day has passed; a paid one stays,
+ * because it is part of the pay history). `apply: false` only counts them. Each removal is a withdrawing version with history, as in Remove.
+ */
+export async function removeStoppedRates(input: unknown): Promise<ActionResult<{ count: number; applied: boolean }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = removeStoppedRatesSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('pay_line_stopped'))`);
+      const today = payrollToday();
+      const used = await lineKeysOnRealRuns(tx);
+      const rows = await tx.select().from(payLines);
+      const byKey = new Map<string, LineRow[]>();
+      for (const r of rows) byKey.set(r.lineKey, [...(byKey.get(r.lineKey) ?? []), r]);
+      const todo: LineRow[] = [];
+      for (const [lineKey, versions] of byKey) {
+        if (isWithdrawn(versions) || used.has(lineKey)) continue;
+        const last = lineLastDay(versions);
+        if (last === null || last >= today) continue;
+        todo.push([...versions].sort(newestVersion)[0]);
+      }
+      if (!parsed.data.apply) return { ok: true, data: { count: todo.length, applied: false as boolean } } as const;
+
+      let done = 0;
+      for (const latest of todo) {
+        await lock(tx, `pay_line:${latest.lineKey}`);
+        let amounts;
+        try {
+          amounts = await insertWithdrawnVersion(tx, actor.id, latest);
+        } catch {
+          continue; // a figure that can't be read is decrypted before anything is written: skip this line
+        }
+        done += 1;
+        await writeAudit({ actor, action: "payroll.line.withdraw", targetType: "pay_line", targetId: latest.lineKey, metadata: { employeeId: latest.employeeId, stopped: true } }, tx);
+        await logChange(tx, actor, { action: "line_withdrawn", employeeId: latest.employeeId, lineKey: latest.lineKey, detail: { old: detailOf(latest, amounts), reason: "Stopped rate removed" } });
+      }
+      return { ok: true, data: { count: done, applied: true as boolean } } as const;
+    });
+
+    if (result.ok && result.data.applied) refreshed();
+    return result;
+  });
+}
+
+/** Ending a line is a new version, dated like the latest one, that carries the last day. */
+export async function endPayLine(input: unknown): Promise<ActionResult<{ lineKey: string }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = endPayLineSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const { lineKey, endsOn, reason } = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      await lock(tx, `pay_line:${lineKey}`);
+      const versions = await versionsOf(tx, lineKey);
+      if (versions.length === 0) return fail("That pay line was not found.");
+      const employeeId = versions[0].employeeId;
+      // No status check here: ending a line is what is done for a leaver, who may already be separated or archived.
+      const already = lineLastDay(versions);
+      if (already !== null) return fail(`This rate already stops after ${already}.`);
+      // The end is dated like the version in force on the last day, so a version scheduled for after it is ignored.
+      const latest = versions.find((x) => x.effectiveFrom <= endsOn);
+      if (!latest) return fail("The last day can't be before the line starts.");
+
+      const amounts = await insertEndVersion(tx, actor.id, latest, endsOn);
+      await writeAudit({ actor, action: "payroll.line.end", targetType: "pay_line", targetId: lineKey, metadata: { employeeId } }, tx);
+      await logChange(tx, actor, { action: "line_ended", employeeId, lineKey, detail: { old: detailOf(latest, amounts), endsOn, reason } });
+      return { ok: true, data: { lineKey } } as const;
+    });
+
+    if (result.ok) refreshed();
+    return result;
+  });
+}
+
+const refreshedRun = (runId?: string) => {
+  revalidatePath("/payroll");
+  if (runId) revalidatePath(`/payroll/${runId}`);
+};
+
+/** Builds a draft run for a period. Refuses a period that overlaps an existing run. */
+export async function createPayRun(input: unknown): Promise<ActionResult<{ runId: string }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = createPayRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const created = await db.transaction((tx) => createRun(tx, actor, { periodStart: parsed.data.periodStart, periodEnd: parsed.data.periodEnd }, { test: parsed.data.test === true }));
+    refreshedRun();
+    return { ok: true, data: { runId: created.runId } } as const;
+  });
+}
+
+/** Confirms or overrides an amount for one line of a draft run, then recomputes that person's lines. */
+export async function savePayItem(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = savePayItemSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => saveItem(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Removes an amount from a line (a new "dismissed" row; the old one stays in the history). */
+export async function dismissPayItem(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = dismissPayItemSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => dismissItem(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Reads the approved hours and writes suggested amounts. Pay does not change until a Preparer confirms one. */
+export async function refreshSuggestions(input: unknown): Promise<ActionResult<{ written: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = refreshSuggestionsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const done = await db.transaction((tx) => applyRefresh(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: done } as const;
+  });
+}
+
+/** Confirms a suggestion on a line, as suggested or with another amount (a reason is needed then). */
+export async function confirmSuggestion(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = confirmSuggestionSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => applyConfirm(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Chooses the pay line an unassigned suggestion belongs to. */
+export async function assignSuggestion(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = assignSuggestionSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => applyAssign(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Cancels a draft run (for example when pay lines changed after it was built). The run stays on record and its period is free again. */
+export async function cancelPayRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = cancelPayRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => cancelRun(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Marks a run as a test run (until it is paid), or makes a draft test run a real run again. */
+export async function markRunAsTest(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_test_runs");
+
+    const parsed = markRunTestSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => setRunTest(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Deletes the ticked archived runs for good (with their test invoices). Returns which were deleted and which were skipped, with the reason. */
+export async function deleteRuns(input: unknown): Promise<ActionResult<BulkResult>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.purge_archived");
+    const parsed = bulkRunsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const data = await db.transaction((tx) => deleteRunsIn(tx, actor, parsed.data.ids));
+    revalidatePath("/payroll");
+    revalidatePath("/invoices");
+    return { ok: true, data } as const;
+  });
+}
+
+/** Archives the ticked test runs and cancelled runs, with one reason. */
+export async function archiveRuns(input: unknown): Promise<ActionResult<BulkResult>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_test_runs");
+    const parsed = bulkArchiveRunsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const data = await db.transaction((tx) => archiveRunsIn(tx, actor, parsed.data));
+    revalidatePath("/payroll");
+    return { ok: true, data } as const;
+  });
+}
+
+/** Brings the ticked archived runs back. */
+export async function restoreRuns(input: unknown): Promise<ActionResult<BulkResult>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_test_runs");
+    const parsed = bulkRunsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const data = await db.transaction((tx) => restoreRunsIn(tx, actor, parsed.data.ids));
+    revalidatePath("/payroll");
+    return { ok: true, data } as const;
+  });
+}
+
+/** Archives a test run or a cancelled run (a real run in any other status can never be archived): it leaves the lists but stays on record. */
+export async function archivePayRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_test_runs");
+
+    const parsed = archiveRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => archiveRun(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Brings an archived test run back. */
+export async function restorePayRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_test_runs");
+
+    const parsed = restoreRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => restoreRun(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Releases a real, approved run's contractor payment statements to the people on it (Preparers and Approvers). Once; never undone. Notices carry no amount. */
+export async function releaseStatements(input: unknown): Promise<ActionResult<{ people: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.release_statements");
+
+    const parsed = releaseStatementsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const released = await db.transaction((tx) => releaseRun(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    revalidatePath("/payroll/statements");
+    revalidatePath(`/payroll/statements/${parsed.data.runId}`);
+    revalidatePath("/my-pay");
+    return { ok: true, data: released } as const;
+  });
+}
+
+/** A Preparer other than the line's owner checks the line. Any later change to the line clears the confirmation. */
+export async function confirmRunLine(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = confirmRunLineSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => confirmLine(tx, actor, parsed.data.runLineId));
+    refreshedRun();
+    revalidatePath("/payroll/[runId]", "page");
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Sends a draft for review. Refused while any check blocks; the checks are worked out again under the run lock. */
+export async function submitRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = submitRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => submit(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Returns a run in review to draft with a note for the Preparer. */
+export async function sendBackRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.approve");
+
+    const parsed = sendBackRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => sendBack(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** An Approver takes an approval back: the approved run returns to draft with a note, until a payment is recorded or its statements are released. */
+export async function unapproveRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.approve");
+
+    const parsed = unapproveRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => unapprove(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/**
+ * Approves a run in review, against the hash the page was given. Refused when a check blocks, and when the run
+ * changed since the page loaded ("This payroll changed. Reload and review it again.").
+ */
+export async function approveRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.approve");
+
+    const parsed = approveRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => approve(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** The Remitly list (person, alias, pesos and payout details: full for a real run, masked for a test run) for an approved run. Preparers and Approvers. Audited and rate limited. */
+export async function exportRemitlyList(input: unknown): Promise<ActionResult<{ fileName: string; csv: string; rows: number; missingDetails: number; test: boolean }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.export");
+
+    const parsed = exportRemitlySchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    if (!(await allowRequest("download", actor.id))) return fail("Too many downloads. Wait a few minutes and try again.");
+
+    const built = await db.transaction((tx) => remitlyList(tx, actor, parsed.data.runId));
+    return { ok: true, data: built } as const;
+  });
+}
+
+/** Records that a person on an approved run was paid (their Remitly reference and date). Marking again corrects it. Any day, any date, own line included. */
+export async function markPaid(input: unknown): Promise<ActionResult<{ runPaid: boolean }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.mark_paid");
+
+    const parsed = markPaidSchema.safeParse(input);
+    if (!parsed.success) return fail(badRequestOf(parsed.error));
+
+    const result = await db.transaction((tx) => recordPayment(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: result } as const;
+  });
+}
+
+/** Settings are append-only too: a change is a new row with an effective date. */
+export async function savePaySettings(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.manage_rates");
+
+    const parsed = savePaySettingsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+    const v = parsed.data;
+
+    const result = await db.transaction(async (tx) => {
+      await lock(tx, "pay_settings");
+      const [same] = await tx.select({ id: paySettings.id }).from(paySettings).where(eq(paySettings.effectiveFrom, v.effectiveFrom)).limit(1);
+      if (same) return fail("There is already a version of the settings with that date. Choose a later date.");
+
+      const old = await settingsInForce(tx, v.effectiveFrom);
+      const next = {
+        cutoffDivisor: v.cutoffDivisor,
+        changeWarnBp: v.changeWarnPercent * 100,
+        multipliersBp: { regular: v.extraRegular, restDay: v.extraRestDay, restDayOver8: v.extraRestDayOver8, holiday: HOLIDAY_BP },
+      };
+      await tx.insert(paySettings).values({
+        effectiveFrom: v.effectiveFrom,
+        cutoffDivisor: next.cutoffDivisor,
+        extraRegularBp: v.extraRegular,
+        extraRestDayBp: v.extraRestDay,
+        extraRestDayOver8Bp: v.extraRestDayOver8,
+        changeWarnBp: next.changeWarnBp,
+        createdBy: actor.id,
+      });
+      await writeAudit({ actor, action: "payroll.settings.update", targetType: "pay_settings", targetId: v.effectiveFrom }, tx);
+      await logChange(tx, actor, { action: "settings_changed", detail: { effectiveFrom: v.effectiveFrom, old, new: next, reason: v.reason ?? null } });
+      return { ok: true, data: undefined } as const;
+    });
+
+    if (result.ok) refreshed();
+    return result;
+  });
+}
+
+/** Brings a draft run up to date with the Rates tab: adds people, moves lines to a newer rate, takes off lines no longer in force. */
+export async function updateRunPeople(input: unknown): Promise<ActionResult<{ added: number; updated: number; removed: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = updateRunPeopleSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const done = await db.transaction((tx) => syncRunPeople(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: done } as const;
+  });
+}
+
+/** Takes one person off a draft run (their line and amounts stay on record and are ignored). */
+export async function removePersonFromRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = removePersonFromRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => removeRunLine(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Puts a removed person back on the draft run. */
+export async function restorePersonToRun(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = restorePersonToRunSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => restoreRunLine(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/**
+ * Reads a Jibble timesheet file (.xlsx) uploaded for a draft run and keeps its totals, encrypted, for the preview. Rate limited. The file
+ * is checked by its contents, never its name or type; only totals per member are kept, never clock times.
+ */
+export async function uploadJibbleTimesheet(formData: FormData): Promise<ActionResult<{ importId: string; members: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+    if (!(await allowRequest("upload", actor.id))) return fail("Too many uploads. Wait a few minutes and try again.");
+
+    const runId = uploadTimesheetSchema.safeParse({ runId: formData.get("runId") });
+    const file = formData.get("file");
+    if (!runId.success || !(file instanceof File)) return fail(BAD_REQUEST);
+    if (file.size === 0 || file.size > MAX_XLSX_BYTES) return fail("Choose the Excel file exported from Jibble (up to 8 MB).");
+
+    let timesheet;
+    try {
+      timesheet = readJibbleTimesheet(new Uint8Array(await file.arrayBuffer()));
+    } catch (error) {
+      if (error instanceof XlsxError) return fail(error.message);
+      console.error("payroll timesheet upload unreadable:", { error: error instanceof Error ? error.name : "UnknownError" });
+      return fail("That file could not be read. Export the timesheet from Jibble again.");
+    }
+
+    const done = await db.transaction((tx) => saveTimesheetUpload(tx, actor, runId.data.runId, timesheet));
+    refreshedRun(runId.data.runId);
+    return { ok: true, data: done } as const;
+  });
+}
+
+/** Fills the draft run with suggested amounts from the uploaded timesheet, for the members the Preparer matched. */
+export async function applyJibbleTimesheet(input: unknown): Promise<ActionResult<{ lines: number; written: number; kept: number; held: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = applyTimesheetSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const done = await db.transaction((tx) => applyTimesheet(tx, actor, parsed.data));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: done } as const;
+  });
+}
+
+/** Throws away an uploaded timesheet without using it. */
+export async function discardJibbleTimesheet(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = discardTimesheetSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    await db.transaction((tx) => discardTimesheet(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: undefined } as const;
+  });
+}
+
+/** Confirms every suggested amount that sits on a line, as suggested (after the Preparer has read them). */
+export async function confirmAllSuggestions(input: unknown): Promise<ActionResult<{ confirmed: number }>> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "payroll.prepare");
+
+    const parsed = confirmAllSuggestionsSchema.safeParse(input);
+    if (!parsed.success) return fail(BAD_REQUEST);
+
+    const done = await db.transaction((tx) => confirmAll(tx, actor, parsed.data.runId));
+    refreshedRun(parsed.data.runId);
+    return { ok: true, data: done } as const;
+  });
+}

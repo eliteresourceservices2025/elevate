@@ -450,3 +450,43 @@ describe("the team rule for late grace", () => {
     expect((await dayRow(p.employeeId, Y)).flags).not.toContain("late");
   });
 });
+
+describe("ending schedules for many people", () => {
+  it("ends the current schedule of everyone selected, skips people with none, keeps the history, rebuilds days and tells each person", async () => {
+    const hrUser = await makeUser("EndHr", ["hr_admin", "employee"]);
+    const a = await person("EndA");
+    const b = await person("EndB");
+    const none = await person("EndNone");
+    as(hrUser);
+    for (const p of [a, b]) {
+      await db.execute(sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone) values (${p.employeeId}, current_date - 20, '09:00', '17:00', array[1,2,3,4,5]::smallint[], 60, 'America/Phoenix')`);
+    }
+    const today = formatInZone(Date.now(), "America/Phoenix", "yyyy-MM-dd");
+    const result = await scheduleActions.endSchedules({ employeeIds: [a.employeeId, b.employeeId, none.employeeId], endDate: today });
+    expect(result).toEqual({ ok: true, data: { ended: 2, skipped: 1 } });
+    const ended = await rows<{ effective_to: string }>(sql`select effective_to::text as effective_to from time.schedules where employee_id in (${a.employeeId}, ${b.employeeId})`);
+    expect(ended.map((r) => r.effective_to)).toEqual([today, today]); // nothing deleted, closed on that day
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'schedule.end' and target_id = ${a.employeeId}`)).toHaveLength(1);
+    expect(await rows(sql`select 1 from ops.notifications where user_id = ${a.user.id} and kind = 'schedule.assigned'`)).toHaveLength(1);
+    // Ending again changes nothing
+    expect(await scheduleActions.endSchedules({ employeeIds: [a.employeeId], endDate: today })).toEqual({ ok: true, data: { ended: 0, skipped: 1 } });
+  });
+
+  it("refuses a date too far back, a person whose next schedule starts later, nobody selected, and anyone but HR", async () => {
+    const hrUser = await makeUser("EndHr2", ["hr_admin", "employee"]);
+    const p = await person("EndLater");
+    const today = formatInZone(Date.now(), "America/Phoenix", "yyyy-MM-dd");
+    await db.execute(sql`insert into time.schedules (employee_id, effective_from, effective_to, start_time, end_time, weekdays, break_minutes, zone) values (${p.employeeId}, current_date - 20, current_date + 4, '09:00', '17:00', array[1,2,3,4,5]::smallint[], 60, 'America/Phoenix')`);
+    await db.execute(sql`insert into time.schedules (employee_id, effective_from, start_time, end_time, weekdays, break_minutes, zone) values (${p.employeeId}, current_date + 5, '10:00', '18:00', array[1,2,3,4,5]::smallint[], 60, 'America/Phoenix')`);
+    as(hrUser);
+    const tooOld = await scheduleActions.endSchedules({ employeeIds: [p.employeeId], endDate: formatInZone(Date.now() - 30 * 86_400_000, "America/Phoenix", "yyyy-MM-dd") });
+    expect(!tooOld.ok && tooOld.error).toContain("cannot end more than");
+    const later = await scheduleActions.endSchedules({ employeeIds: [p.employeeId], endDate: today });
+    expect(!later.ok && later.error).toContain("starts");
+    expect((await scheduleActions.endSchedules({ employeeIds: [], endDate: today })).ok).toBe(false);
+    for (const role of ["team_lead", "employee", "executive"] as const) {
+      as(await makeUser("EndNo", [role]));
+      expect(await scheduleActions.endSchedules({ employeeIds: [p.employeeId], endDate: today })).toEqual({ ok: false, error: "You do not have access to do that." });
+    }
+  });
+});

@@ -7,7 +7,7 @@ order: 4
 updated: 2026-10-21
 ---
 
-Two offboarding tasks need care: getting company equipment back and approving the last hours. ELEVATE tracks both but never works out pay.
+Two offboarding tasks need care: getting company equipment back and approving the last hours. ELEVATE tracks both; the hours themselves compute nothing, and pay is worked out in the Payroll module.
 
 # Hand equipment to someone
 

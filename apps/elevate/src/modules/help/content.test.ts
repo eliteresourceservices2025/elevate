@@ -1,9 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { ROLE_SLUGS, type RoleSlug } from "@/lib/roles";
+import { ROLE_SLUGS, type PayrollLevel, type RoleSlug } from "@/lib/roles";
 import { getHelpArticle, listHelpArticles, mayOpenHelpFile, searchHelp, visibleCategories } from "./content";
 
 // Reads the real articles in content/help: what each role may see is the whole point of the audience tag.
-const asRoles = (...extra: RoleSlug[]): RoleSlug[] => ["employee", ...extra];
+const asRoles = (...extra: RoleSlug[]) => ({ roles: ["employee", ...extra] as RoleSlug[] });
+const withPayroll = (level: PayrollLevel, ...extra: RoleSlug[]) => ({ roles: ["employee", ...extra] as RoleSlug[], payrollAccess: level });
+
+describe("the payroll guides", () => {
+  const FOR_EVERYONE = ["how-payroll-works", "read-your-payslip"];
+  const FOR_PAYROLL = ["prepare-a-pay-run", "approve-a-pay-run", "import-jibble-timesheet", "release-statements", "rehearse-a-pay-cycle"];
+  const payrollSlugs = (viewer: Parameters<typeof listHelpArticles>[0]) => listHelpArticles(viewer).filter((a) => a.category === "payroll").map((a) => a.slug);
+
+  it("a VA or employee with no payroll level sees only the two guides for everyone", () => {
+    for (const viewer of [asRoles(), { roles: ["employee"] as RoleSlug[], payrollAccess: null }]) {
+      expect(payrollSlugs(viewer).sort()).toEqual([...FOR_EVERYONE].sort());
+    }
+  });
+
+  it("HR and a Super Admin without a payroll level don't see the staff guides either (the invoice guide is theirs by role)", () => {
+    for (const viewer of [asRoles("hr_admin"), asRoles("super_admin")]) {
+      const seen = payrollSlugs(viewer);
+      for (const slug of FOR_PAYROLL) expect(seen, slug).not.toContain(slug);
+      for (const slug of FOR_EVERYONE) expect(seen, slug).toContain(slug);
+    }
+  });
+
+  it("someone with any payroll level also sees the staff guides", () => {
+    for (const level of ["preparer", "approver", "viewer"] as const) {
+      const seen = payrollSlugs(withPayroll(level));
+      for (const slug of [...FOR_EVERYONE, ...FOR_PAYROLL]) expect(seen, `${level}: ${slug}`).toContain(slug);
+    }
+  });
+
+  it("the staff guides, their search results and their pictures stay hidden from everyone else", () => {
+    expect(getHelpArticle(asRoles(), "payroll", "prepare-a-pay-run")).toBeNull();
+    expect(getHelpArticle(withPayroll("preparer"), "payroll", "prepare-a-pay-run")).not.toBeNull();
+    expect(searchHelp(asRoles(), "Preparer").some((a) => a.slug === "prepare-a-pay-run")).toBe(false);
+    expect(searchHelp(withPayroll("preparer"), "Preparer").some((a) => a.slug === "prepare-a-pay-run")).toBe(true);
+    expect(mayOpenHelpFile(asRoles(), "assets", "prepare-a-pay-run/10-payment.png")).toBe(false);
+    expect(mayOpenHelpFile(withPayroll("approver"), "assets", "prepare-a-pay-run/10-payment.png")).toBe(true);
+    expect(mayOpenHelpFile(asRoles(), "assets", "read-your-payslip/01.png")).toBe(true);
+  });
+});
 
 describe("who sees which real article", () => {
   it("an employee sees only articles for everyone", () => {

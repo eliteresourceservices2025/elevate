@@ -39,14 +39,14 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 1. **Modular monolith.** Each module lives in `src/modules/<module>/` with `schema.ts`, `actions.ts`, `queries.ts`, `validators.ts`, `permissions.ts`, `components/`. A module never imports another module's `schema.ts` directly for writes; call that module's exported functions.
 2. **Server Components by default.** Add `"use client"` only for interactivity. No Redux/Zustand; URL state via `nuqs`; TanStack Query only for live-refresh grids.
-3. **All data access is server-side through Drizzle** (`src/lib/db.ts`, which imports `server-only`). Never query app tables with supabase-js from the browser. supabase-js is used only for auth and signed storage URLs.
+3. **All data access is server-side through Drizzle** (`src/lib/db.ts`, which imports `server-only`). Never query app tables with supabase-js from the browser. supabase-js is used only for auth and signed storage URLs. **One exception (owner decision 2026-11-17, Messages):** the browser may subscribe to Supabase Realtime private channels that carry ids only (no message text); every read still goes through server actions.
 4. **Every server action and query starts with** `const user = await requireUser()` (AAL2 enforced) and `await authorize(user, "<module>.<action>", resource)`. Hiding a button is never the only guard.
 5. **Validate every input with Zod on the server**, even if the form already did.
 6. Leave balances come only from the append-only `time.leave_ledger`; never store a mutable balance number.
 7. Use soft delete (`archived_at`); never hard-delete employee records except through the retention job.
 8. Dates: store `timestamptz` in UTC; display in the viewer's zone; schedules also show the client's zone. Use `date-fns-tz`.
-9. **Time and attendance: ELEVATE is the time clock and the only source of hours.** `time.clock_events` is append-only (clock_in, break_start, break_end, clock_out); corrections are new rows with a reason and lead approval, never edits. Timestamps come from the server clock and the IP from the request, never from values the browser sends. Location is optional, needs the employee's permission, and is stored rounded (~1 km). `time.attendance_days` is always rebuilt from clock events, never edited by hand.
-10. **Jibble is used only for screenshots.** On clock-in/clock-out, ELEVATE mirrors the event to Jibble through its API (queued in Inngest, retried, logged in `time.jibble_link_log`). Never read hours from Jibble into payroll exports, and never copy Jibble screenshots, GPS or activity data into ELEVATE: screenshots can contain client patient data.
+9. **Time and attendance: ELEVATE is the one ledger of hours.** Most people use the ELEVATE clock; people HR sets to the **Jibble clock** (`time.clock_source`, owner decision 2026-11-14) clock in Jibble and a job imports their time entries as clock events (`source = 'jibble'`, never edited: an edited or deleted Jibble entry voids the old event). Either way hours review, approval and the export read only `time.clock_events`. `time.clock_events` is append-only (clock_in, break_start, break_end, clock_out); corrections are new rows with a reason and lead approval, never edits. Timestamps come from the server clock and the IP from the request, never from values the browser sends. Location is optional, needs the employee's permission, and is stored rounded (~1 km). `time.attendance_days` is always rebuilt from clock events, never edited by hand.
+10. **Jibble is used for screenshots, and for the hours of people on the Jibble clock.** On clock-in/clock-out, ELEVATE mirrors the event to Jibble through its API (queued in Inngest, retried, logged in `time.jibble_link_log`); it never mirrors back for someone on the Jibble clock. For people on the Jibble clock only, `jibble/import.ts` reads their time entries (the time, the kind, and the project and activity ids) every 30 minutes into clock events, so they go through the same review and approval as everyone's hours. Never read hours from Jibble by API straight into payroll exports (always through imported events and approval), and never copy Jibble screenshots, GPS, device facts or activity data into ELEVATE: screenshots can contain client patient data. **One exception (owner decision 2026-11-12):** a Preparer may upload the Jibble "Custom Timesheets" export file on a draft pay run to fill SUGGESTED payroll amounts (client payroll hours, overtime, holiday pay, PTO days); only totals per member are read, never clock times, and the rows are encrypted and wiped (see the Payroll notes).
 
 ## Job frequency (Inngest cost)
 
@@ -126,7 +126,8 @@ Clock events, breaks, corrections, time claims, end-of-day notes.
 ### The Jibble link — `docs/modules/jibble.md`
 Jibble mirror, repair job, safety lock, pause switch.
 
-- Jibble is only for screenshots; ELEVATE is the only source of hours. Never store Jibble screenshots, GPS or activity.
+- Jibble is for screenshots, and the source of hours only for people HR sets to the **Jibble clock** (`time.clock_source`, owner decision 2026-11-14): `jibble/import.ts` turns their time entries into `source = 'jibble'` clock events every 30 minutes (edits and deletions are followed by voiding, never editing; an empty answer never voids, it alerts HR). Never store Jibble screenshots, GPS, device facts or activity.
+- A person on the Jibble clock cannot use the ELEVATE clock, is never mirrored to Jibble, and has no screenshot flags. Which Jibble project or activity means which client is mapped by HR on the Jibble page (`jibble_client_map`; an activity wins over a project; a person with one client needs none; unmapped time is flagged "Choose the client" and blocks approval).
 - ELEVATE sends to Jibble only when `ELEVATE_ENV=production`; tests use a fake client and never call the real API.
 - Jibble being down must never block or slow the ELEVATE clock.
 
@@ -134,12 +135,12 @@ Jibble mirror, repair job, safety lock, pause switch.
 Shift schedules, nightly flags, extra-hours requests.
 
 - A shift belongs to the day it starts in the person's own zone; people with no schedule get no flags.
-- Copy says "extra hours", never "overtime"; ELEVATE labels hours and never computes pay.
+- On schedules and extra-hours requests copy says "extra hours", never "overtime" (payroll screens say "overtime (OT)", by the executives' choice); ELEVATE labels hours; the hours export computes nothing, and only the payroll module computes pay (never tax).
 
 ### Hours review, export and system health — `docs/modules/hours-review-and-health.md`
 Hours approval, payroll export, test-only days, job health, backstop.
 
-- `time.hours_approvals` and `hours_marks` are append-only; nobody approves their own hours; export never computes pay.
+- `time.hours_approvals` and `hours_marks` are append-only; nobody approves their own hours; the hours export computes nothing (only the payroll module computes pay, never tax).
 - A new scheduled job must be added to both `src/inngest/functions.ts` and `health/registry.ts` and wrapped in `track()`.
 - `docs/RUNBOOK.md` is the operations guide; keep it current.
 
@@ -164,6 +165,23 @@ Review cycles, calibration, visibility rules, goals.
 
 - No pay, raise or bonus field exists; ratings are never converted into pay; no review content in emails or notifications.
 - Visibility is the pure `visibility()` function; nobody writes or shares their own review.
+
+### Payroll — `docs/modules/payroll.md`
+Pay runs, rates, change history, contractor payment statements (the former payslips).
+
+- No role grants payroll (not even Super Admin): only people a Super Admin chose, by level (preparer, approver, viewer; `core.users.payroll_access`).
+- Amounts are encrypted bigint centavos, all in pesos (no dollar rate). FTE (1, 0.5 or 0) is a count kept with each rate; it only sets the internal team's pay (their rate is "paid per FTE": the run's total FTE times an amount) and never appears on a contractor's statement; one person prepares and a different person approves; nothing computes tax or sends money.
+- Allowances, reimbursements, bonuses and adjustments are named lines per run; holiday pay is always 1:1; the statement says "Total payable compensation" (see the 2026-11-06 revision at the top of the module notes).
+- Change history is append-only; audit rows never carry an amount or reason.
+- Round 2 (2026-11-12): blank OT settings mean the standard percents; only an unreadable line blocks a run (every other check is a note); a draft run is updated from the Rates tab (`updateRunPeople`) and a removed line is `excluded`, ignored by every reader; Jibble timesheet import writes suggestions only (`docs/modules/payroll.md`). **Test runs** (`is_test`, 2026-11-12): a run can be marked as a test until it is paid and a test run can be archived in any status (never a real run, never deleted); test runs may repeat a period, never reach `/my-pay` or notify people, and invoices from them are `TEST-` numbered and stamped (`docs/modules/payroll.md`, `docs/modules/invoices.md`). **Statements are released, not automatic** (migration 0133): a contractor sees a payment statement only for a real run an Approver has released (`pay_run_releases`); the payroll team reads every statement on `/payroll/statements`. **Paying and releasing** are for Preparers and Approvers (a statement's Prepared by, Authorized by and Date fill in from the run); the Remitly list carries bank details (see the exception under Security).
+
+### Client invoices — `docs/modules/invoices.md`
+Per-client invoices from a pay run's client payroll hours, billing rates in US dollars, PDF the executives send themselves.
+
+- Only HR Admin, Executive and Super Admin (`invoices.view`, `invoices.create`, `invoices.manage_rates`, `invoices.manage`); a payroll level adds nothing and no one else gets in.
+- Reads pay runs only through `clientHoursForRun` (client hours, never a pay figure, rate or amount); the module imports nothing else from payroll (a test scans for it).
+- `ops.client_bill_rates` and `ops.invoices` are append-only by trigger and encrypted at rest; an invoice is a snapshot (rate, hours, lines) that never changes; a second one for the same run and client is a revision (`-R2`).
+- Money is integer cents and hours integer hundredths; line = round half up(hours x rate), total = sum of lines. ELEVATE sends no invoice email. Audit rows carry ids and counts only.
 
 ### Safe Voice — `docs/modules/safe-voice.md`
 The anonymous reporting app and the handler side.
@@ -231,6 +249,18 @@ Plain-English how-to guides (files in `apps/elevate/content/help`), role-aware, 
 - Guides name real buttons: after changing a screen a guide shows, run `pnpm help:shots` and re-read the guide. Fake data only; never client or patient information.
 - The tool runs against the local database only; reset it first for clean pictures (see the note).
 
+### Messages and calls — `docs/modules/messages.md`
+Internal chat (direct, groups, channels, polls, files, search, client groups with guests) and later calls; chat first, calls second.
+
+- Message text is encrypted and never travels in Realtime payloads, notifications, email, audit rows, logs or Sentry; Realtime carries ids only (`ChatSignal`).
+- Membership is checked on every read, write and channel join; a member who left sees only what came before.
+- HR reads a chat (never a direct message) or watches a recording only through a logged request (`src/modules/chat-access`): an HR Admin or Super Admin asks, a DIFFERENT Super Admin approves (also a database check), read-only, the requested dates only, 72 hours, only the person who asked can read it; members are told afterwards if it was used. Audit rows carry ids and counts only; the reason is encrypted. `loadWindowForAccess` and `openRecordingForAccess` skip membership on purpose: call them only from `chat-access` after the grant is checked.
+- Recording only by people a Super Admin picks, with consent, never in client calls. Client groups are attendance only: never patient details.
+- Messages are insert-only (a delete sets `deleted_at`, an edit adds a revision); message rate limits live in Postgres, not Upstash.
+- Calls (`src/modules/calls`, details in the Calls sections of the module notes): the server is the authority (membership on every call action; muting, removing, putting a speaker back and leaving close the person's media at Cloudflare). An all-hands (`mode = 'townhall'`) is for HR, Executive and Super Admin, never in a DM or client group; the audience only watches. **Recording** is only by people a Super Admin picks (`can_record_calls`), only with the company switch on, **never in a client group or with a guest**, nothing of a person is recorded before their yes (consents are insert-only; the latest answer counts), recordings live in the private bucket `call-recordings`, are watched only by people who were in the call through `/api/calls/recordings/[id]` (audited), and are deleted after 30 days by the `calls-daily` job. Audit rows carry ids and counts, never content.
+- Only HR Admin and Super Admin create, rename, change the people of and delete (archive) group chats, up to 200 people each (owner decision 2026-11-17); managing a group never lets them read it or add themself to it.
+- Client guests (`core.users.is_guest`, no roles ever, trigger-enforced) may use Messages only: `requireUser()` redirects a guest unless the caller passes `{ allowGuest: true }` (only Messages does), the registry grants guests `messages.use` alone (`alsoFlag.guest`), a guest accepts the guest notice before anything opens, joins only client groups of their own client, and cannot start chats or look people up. Only HR Admin and Super Admin invite guests and make client groups. Never add `allowGuest` outside Messages.
+
 ## Adding a permission or action
 
 1. Add the action to that module's `permissions.ts` (`"<module>.<action>": { roles: { hr_admin: "all", ... } }`). Scopes: own, team, all. Nothing listed = no access.
@@ -254,14 +284,14 @@ The audit log is insert-only at the database level (trigger). Test data written 
 
 - **MFA:** the `(app)` layout and `proxy.ts` require AAL2. No page or action works at AAL1 except MFA enrollment/challenge.
 - **Roles:** Super Admin, HR Admin, Team Lead, Recruiter, Executive, Employee. Scopes: own, team, all. The matrix in `docs/architecture-plan.md` §3 is the source of truth; `src/lib/authz.ts` implements it; `tests/authz/` must cover every action for every role.
-- **Sensitive fields** (government IDs: TIN, SSS, PhilHealth, Pag-IBIG; bank/payout details; pay rates) live only in `core.employee_sensitive`, encrypted with `src/lib/crypto.ts` (AES-256-GCM, versioned keys). Decrypt only for Super Admin, HR Admin, or the employee (masked by default). Every decrypt writes an audit entry.
+- **Sensitive fields** (government IDs: TIN, SSS, PhilHealth, Pag-IBIG; bank/payout details) live only in `core.employee_sensitive`, encrypted with `src/lib/crypto.ts` (AES-256-GCM, versioned keys). Decrypt only for Super Admin, HR Admin, or the employee (masked by default). Every decrypt writes an audit entry. **One owner-approved exception (2026-11-12):** a Preparer or Approver (`payroll.export`) reads the full bank details of the people on an approved REAL pay run to build the Remitly list, as one audited `sensitive.view` row per download (field names and a count); a TEST run only ever uses the masks. **Pay amounts** live in the `payroll` tables, always encrypted, readable only by people a Super Admin chose (`core.users.payroll_access`); no role grants payroll. The old `payRate` field is read-only reference until the parallel run ends.
 - **Audit:** call `writeAudit()` for logins, role changes, approvals, exports, imports, sensitive views, and every create/update/delete on employee data (store before/after JSON, minus secrets).
 - **RLS:** every new table gets `ENABLE ROW LEVEL SECURITY` in its migration with no public policies.
 - **Secrets:** only `NEXT_PUBLIC_*` values may reach the browser. Never log tokens, passwords, government IDs or file contents. Sentry must not receive PII.
 - **Files:** private buckets only; signed URLs expire in 60 seconds; allowlist PDF, JPG, PNG, WEBP, DOC, DOCX up to 10 MB, judged by the file's bytes (`sniffFileKind`), never its name; check MIME type server-side. An old-format Word file (DOC) is accepted only when it holds a Word part and no macro project, a DOCX only with no `vbaProject`; Excel, PowerPoint, Outlook files and anything with macros stay refused.
 - **Rate limit** login, careers apply, and Safe Voice endpoints with Upstash.
 - **Safe Voice** is anonymous: it runs on its own subdomain/app, never reads auth cookies or sessions, never stores user ID, IP, user agent or file metadata. Reporters get a random case code + passphrase (hashed with a pepper). Only designated handlers can read cases.
-- **No patient data (HIPAA):** no module may have fields for client patient information. Upload screens show a warning not to upload client records.
+- **No patient data (HIPAA):** no module may have fields for client patient information. Upload screens show a warning not to upload client records. **Messages (owner decision 2026-11-17):** client groups are for attendance matters only under a written never-share-patient-details rule, with no vendor BAAs; the guest notice and banners enforce it, but free text cannot be technically blocked.
 - **Real data only in production.** Seeds and tests use fake data (Filipino and US names, fake IDs).
 
 ## Conventions

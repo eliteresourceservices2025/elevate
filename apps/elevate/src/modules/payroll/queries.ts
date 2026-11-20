@@ -1,0 +1,547 @@
+import "server-only";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { users } from "@/modules/core/schema";
+import { authorize, can } from "@/lib/authz";
+import { requireUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { writeAudit } from "@/modules/audit/write";
+import { clients, employees } from "@/modules/people/schema";
+import type { SettingsSnapshot } from "./calculate";
+import { z } from "zod";
+import type { PaymentMethod, RunStatus } from "./constants";
+import { applySupersede, isWithdrawn, lineLastDay, resolveLines } from "./lines";
+import { hhmm, zoneOf, type PaymentZone } from "./payment-when";
+import { formatPesos, formatUsd } from "./money";
+import { countAwaiting, hashOf, latestSendBackNote, listWasDownloaded, refusalFor, unapproveRefusal } from "./approval";
+import { readRun, worksheetOf, type Worksheet } from "./runs";
+import type { BulkAction } from "@/lib/bulk";
+import { nextCutoff, nextStepOf, runActions, runWhy, stepOf, type RunsView, type ViewerRights } from "./runs-list";
+import { recentPeriods } from "@/modules/attendance/pay-periods";
+import { cutoffChoices, draftCutoffs, type CutoffChoice } from "./rate-start";
+import { personName } from "./remitly";
+import { logChange } from "./changes";
+import { payLines, payRunLines, payRuns, paySettings } from "./schema";
+import { decryptReference, decryptUsdCents, latestPayments } from "./payments";
+import { formatFte } from "./fte";
+import { decryptLineAmounts, employeeIdForUser, payrollToday, snapshotOf } from "./service";
+
+const today = payrollToday;
+const UNREADABLE = "Can't be read";
+
+function readableAmounts(id: string, stored: string) {
+  try {
+    return decryptLineAmounts(id, stored);
+  } catch (error) {
+    // Only the line id and the kind of error: never an amount or the stored ciphertext.
+    console.error("payroll rate unreadable:", { lineId: id, error: error instanceof Error ? error.name : "UnknownError" });
+    return null;
+  }
+}
+
+/** Basis points as the percent typed in the form: 12500 -> "125"; blank when not set. */
+const otText = (bp: number | undefined) => (bp === undefined ? "" : formatPesos(BigInt(bp)).replace(/\.00$/, ""));
+
+export type RateRow = {
+  lineKey: string;
+  employeeId: string;
+  name: string;
+  /** The line belongs to the viewer's own people record: they can see it but never change it. */
+  isOwn: boolean;
+  clientId: string | null;
+  clientName: string | null;
+  alias: string | null;
+  hoursPerDay: number;
+  paymentMethod: PaymentMethod;
+  effectiveFrom: string;
+  endsOn: string | null;
+  /** The date of the next version, when one is already scheduled. */
+  upcomingFrom: string | null;
+  /** The line has been on a real run (not a test, not cancelled): it can only be stopped, never withdrawn. */
+  onRealRun: boolean;
+  /** The line's last day has already passed: it is only listed when ended lines are asked for, and it can still be part of a run for an earlier period. */
+  ended: boolean;
+  /** Pesos, "31,415.92": the monthly rate, or for a per-FTE (internal team) rate the amount per FTE per cutoff (see `basis`). */
+  monthly: string;
+  /** How the person is paid: a monthly rate, or an amount per FTE (internal team). */
+  basis: "monthly" | "per_fte";
+  /** The line's default FTE count as people read it ("1", "0.5", "0"), or null when not set. Always null for a per-FTE rate. */
+  fte: string | null;
+  /** The monthly rate as whole centavos in text, for sorting; null when it can't be read. */
+  monthlyCentavos: string | null;
+  /** This person's own overtime percents as typed ("125"); blank means the company standard from Settings applies. */
+  otPercent: { regular: string; restDay: string; restDayOver8: string };
+  /** The stored amount could not be decrypted (usually a wrong or rotated encryption key). The amount above then reads "Can't be read". */
+  unreadable: boolean;
+};
+
+/**
+ * The lines in force today (and, when asked, the lines that already ended: a run for an earlier period still includes them), with the
+ * monthly rate and allowances decrypted for the people who can open payroll. Showing them is a
+ * sensitive read: one `sensitive.view` audit row per view (field names and a count, never a figure).
+ */
+export async function getRates(options: { includeEnded?: boolean } = {}): Promise<RateRow[]> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.view");
+
+  const rows = await db
+    .select({
+      line: payLines,
+      first: employees.legalFirstName,
+      last: employees.legalLastName,
+      preferred: employees.preferredName,
+      employeeUserId: employees.userId,
+      clientName: clients.name,
+    })
+    .from(payLines)
+    .innerJoin(employees, eq(employees.id, payLines.employeeId))
+    .leftJoin(clients, eq(clients.id, payLines.clientId))
+    .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName), asc(payLines.effectiveFrom));
+
+  const day = today();
+  const byId = new Map(rows.map((r) => [r.line.id, r]));
+  const out: RateRow[] = [];
+  // A withdrawn line (added by mistake) is not shown at all.
+  const byLineKey = new Map<string, (typeof rows)[number]["line"][]>();
+  for (const r of rows) byLineKey.set(r.line.lineKey, [...(byLineKey.get(r.line.lineKey) ?? []), r.line]);
+  const withdrawn = new Set([...byLineKey].filter(([, versions]) => isWithdrawn(versions)).map(([key]) => key));
+  const all = applySupersede(rows.map((r) => r.line)).filter((l) => !withdrawn.has(l.lineKey));
+  const usedOnRealRun = new Set(
+    (
+      await db
+        .selectDistinct({ lineKey: payLines.lineKey })
+        .from(payRunLines)
+        .innerJoin(payLines, eq(payLines.id, payRunLines.lineId))
+        .innerJoin(payRuns, eq(payRuns.id, payRunLines.runId))
+        .where(and(eq(payRuns.isTest, false), ne(payRuns.status, "cancelled")))
+    ).map((r) => r.lineKey),
+  );
+  const inForce = resolveLines(all, { start: day, end: day }).map((r) => r.version);
+  // A line that has not started yet is still listed (with its future start date), so a Preparer can see what they added.
+  const known = new Set(all.filter((l) => l.effectiveFrom <= day).map((l) => l.lineKey));
+  const notStarted = [...new Set(all.map((l) => l.lineKey))]
+    .filter((key) => !known.has(key))
+    .map((key) => all.filter((l) => l.lineKey === key).sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : b.createdAt.getTime() - a.createdAt.getTime()))[0]); // the first date, newest version on it (a correction on that date wins)
+  // Lines whose last day has passed: not in force today, but still part of any run for a period they covered. The version shown is the one
+  // in force on the last day.
+  const endedVersions = options.includeEnded
+    ? [...new Set(all.map((l) => l.lineKey))].flatMap((key) => {
+        const versions = all.filter((l) => l.lineKey === key);
+        const last = lineLastDay(versions);
+        if (last === null || last >= day) return [];
+        const shown = versions
+          .filter((l) => l.effectiveFrom <= last)
+          .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : a.effectiveFrom > b.effectiveFrom ? -1 : b.createdAt.getTime() - a.createdAt.getTime()))[0];
+        return shown ? [shown] : [];
+      })
+    : [];
+  for (const version of [...inForce, ...notStarted, ...endedVersions]) {
+    const r = byId.get(version.id)!;
+    // One row that cannot be read (wrong key, damaged data) must not take the whole page down: it is listed as unreadable.
+    const amounts = readableAmounts(version.id, version.amountsEnc);
+    const lastDay = lineLastDay(all.filter((l) => l.lineKey === version.lineKey));
+    const upcoming = rows
+      .filter((x) => x.line.lineKey === version.lineKey && x.line.effectiveFrom > day && (lastDay === null || x.line.effectiveFrom <= lastDay))
+      .map((x) => x.line.effectiveFrom)
+      .sort()[0];
+    out.push({
+      lineKey: version.lineKey,
+      employeeId: version.employeeId,
+      name: `${r.preferred?.trim() || r.first} ${r.last}`,
+      isOwn: r.employeeUserId === actor.id,
+      clientId: version.clientId,
+      clientName: r.clientName,
+      alias: version.alias,
+      hoursPerDay: version.hoursPerDay,
+      paymentMethod: version.paymentMethod as PaymentMethod,
+      effectiveFrom: version.effectiveFrom,
+      endsOn: lastDay,
+      upcomingFrom: upcoming ?? null,
+      ended: lastDay !== null && lastDay < day,
+      onRealRun: usedOnRealRun.has(version.lineKey),
+      monthly: amounts ? formatPesos(amounts.perFteCentavos ?? amounts.monthlyCentavos) : UNREADABLE,
+      monthlyCentavos: amounts ? (amounts.perFteCentavos ?? amounts.monthlyCentavos).toString() : null,
+      basis: amounts?.perFteCentavos !== undefined ? "per_fte" : "monthly",
+      fte: amounts && amounts.perFteCentavos === undefined && amounts.fteHundredths !== undefined ? formatFte(amounts.fteHundredths) : null,
+      otPercent: {
+        regular: otText(amounts?.otBp?.regular),
+        restDay: otText(amounts?.otBp?.restDay),
+        restDayOver8: otText(amounts?.otBp?.restDayOver8),
+      },
+      unreadable: amounts === null,
+    });
+  }
+
+  const shown = out.filter((r) => !r.unreadable).length;
+  if (shown > 0) {
+    await writeAudit({
+      actor,
+      action: "sensitive.view",
+      targetType: "pay_lines",
+      metadata: { fields: ["monthly rate", "FTE", "amount per FTE", "allowances"], count: shown },
+    });
+  }
+  return out;
+}
+
+/**
+ * The cutoffs to choose from on the Rates forms (the one being prepared first), from the real runs that already exist, and the recent
+ * cutoffs whose real run is still a draft (only a Correction on Update rate may start there).
+ */
+export async function getRateCutoffs(): Promise<{ choices: CutoffChoice[]; drafts: CutoffChoice[] }> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.view");
+  const real = await db
+    .select({ start: payRuns.periodStart, status: payRuns.status })
+    .from(payRuns)
+    .where(and(eq(payRuns.isTest, false), ne(payRuns.status, "cancelled")));
+  const day = today();
+  // A cutoff counts as a draft only when every real run for it is still a draft.
+  const made = new Set(real.filter((r) => r.status !== "draft").map((r) => r.start));
+  const drafts = new Set(real.filter((r) => r.status === "draft" && !made.has(r.start)).map((r) => r.start));
+  return { choices: cutoffChoices(day, new Set(real.map((r) => r.start))), drafts: draftCutoffs(day, drafts) };
+}
+
+export type RateOptions = {
+  people: { id: string; name: string }[];
+  clients: { id: string; name: string }[];
+};
+
+/** Who can be given a line, and the clients to choose from. Only a Preparer adds lines. */
+export async function getRateOptions(): Promise<RateOptions> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.manage_rates");
+
+  const people = await db
+    .select({ id: employees.id, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
+    .from(employees)
+    .where(and(isNull(employees.archivedAt), ne(employees.status, "separated")))
+    .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName));
+  const clientRows = await db.select({ id: clients.id, name: clients.name }).from(clients).where(isNull(clients.archivedAt)).orderBy(asc(clients.name));
+  return {
+    people: people.map((p) => ({ id: p.id, name: `${p.preferred?.trim() || p.first} ${p.last}` })),
+    clients: clientRows,
+  };
+}
+
+export type RunListRow = {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  status: RunStatus;
+  lineCount: number;
+  createdAt: string;
+  isTest: boolean;
+  peopleCount: number;
+  paidCount: number;
+  released: boolean;
+  /** 1 to 4 (prepared, in review, approved, paid); 0 for a cancelled run. */
+  step: 0 | 1 | 2 | 3 | 4;
+  /** What this viewer does next (or is waiting for), and whether the action is theirs. Null when there is nothing to say. */
+  nextStep: { label: string; mine: boolean } | null;
+  /** What the list can do to this run, and why not when nothing fits. */
+  actions: BulkAction[];
+  whyNot: string | null;
+  /** Why each action does not fit this run. */
+  why: Partial<Record<BulkAction, string>>;
+};
+
+export type RunsSummary = {
+  /** The oldest recent cutoff with no real run yet, or null when every recent cutoff has one. */
+  nextCutoff: { start: string; end: string; daysLeft: number } | null;
+  inReview: number;
+  /** The newest real run that is approved and not fully paid. */
+  approvedNotPaid: { count: number; periodStart: string; periodEnd: string; paidCount: number; peopleCount: number } | null;
+  lastPaid: { periodStart: string; periodEnd: string; peopleCount: number } | null;
+};
+
+const PEOPLE = (run: ReturnType<typeof sql>) => sql<number>`(select count(distinct l.employee_id)::int from payroll.pay_run_lines l where l.run_id = ${run} and not l.excluded)`;
+const PAID = (run: ReturnType<typeof sql>) => sql<number>`(select count(distinct p.employee_id)::int from payroll.pay_payments p where p.run_id = ${run})`;
+
+/**
+ * One page of runs, newest period first, with the people and payments counted, the step each run is at and what this viewer does next.
+ * Archived runs (test runs and cancelled runs) are left out unless `archived` is true. `view` narrows the list to the runs that need this
+ * viewer ("action") or to test runs. Also returns the summary tiles (real runs only). Counts and dates, never a figure.
+ */
+export async function getRuns(
+  paging: { page: number; pageSize: number },
+  options: { archived?: boolean; view?: RunsView } = {},
+): Promise<{ rows: RunListRow[]; total: number; archivedCount: number; showingArchived: boolean; canPrepare: boolean; canPurge: boolean; view: RunsView; actionCount: number; summary: RunsSummary; views: Record<RunsView, number>; canArchive: boolean }> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.view");
+
+  const rights: ViewerRights = { prepare: can(actor, "payroll.prepare"), approve: can(actor, "payroll.approve"), markPaid: can(actor, "payroll.mark_paid"), release: can(actor, "payroll.release_statements") };
+  const showingArchived = options.archived === true || options.view === "archived";
+  const view: RunsView = showingArchived ? "archived" : (options.view ?? "all");
+  const released = sql<boolean>`exists (select 1 from payroll.pay_run_releases rr where rr.run_id = ${payRuns.id})`;
+  // The runs that wait for this viewer: a draft for a Preparer, a run in review for an Approver, an approved run for someone who pays, a paid real run nobody has released yet.
+  const mine = or(
+    rights.prepare ? eq(payRuns.status, "draft") : undefined,
+    rights.approve ? eq(payRuns.status, "in_review") : undefined,
+    rights.markPaid ? eq(payRuns.status, "approved") : undefined,
+    rights.release ? and(eq(payRuns.status, "paid"), eq(payRuns.isTest, false), sql`not ${released}`) : undefined,
+  );
+  const base = showingArchived ? isNotNull(payRuns.archivedAt) : isNull(payRuns.archivedAt);
+  const shown = view === "test" ? and(base, eq(payRuns.isTest, true)) : view === "action" ? and(base, mine ?? sql`false`) : base;
+
+  const [{ total }] = await db.select({ total: count() }).from(payRuns).where(shown);
+  const [{ archivedCount }] = await db.select({ archivedCount: count() }).from(payRuns).where(isNotNull(payRuns.archivedAt));
+  const [{ actionCount }] = await db.select({ actionCount: count() }).from(payRuns).where(and(isNull(payRuns.archivedAt), mine ?? sql`false`));
+  const [{ allCount }] = await db.select({ allCount: count() }).from(payRuns).where(isNull(payRuns.archivedAt));
+  const [{ testCount }] = await db.select({ testCount: count() }).from(payRuns).where(and(isNull(payRuns.archivedAt), eq(payRuns.isTest, true)));
+  const rows = await db
+    .select({
+      id: payRuns.id,
+      periodStart: payRuns.periodStart,
+      periodEnd: payRuns.periodEnd,
+      status: payRuns.status,
+      isTest: payRuns.isTest,
+      createdAt: payRuns.createdAt,
+      lineCount: sql<number>`(select count(*)::int from payroll.pay_run_lines l where l.run_id = ${payRuns.id})`,
+      peopleCount: PEOPLE(sql`${payRuns.id}`),
+      paidCount: PAID(sql`${payRuns.id}`),
+      released,
+      blockedByInvoice: sql<boolean>`exists (select 1 from ops.invoices i where i.run_id = ${payRuns.id} and (not i.is_test or ops.invoice_last_kind(i.id) not in ('archived', 'superseded')))`,
+    })
+    .from(payRuns)
+    .where(shown)
+    .orderBy(desc(payRuns.periodStart), desc(payRuns.createdAt))
+    .limit(paging.pageSize)
+    .offset((paging.page - 1) * paging.pageSize);
+
+  // The tiles: real runs only (a practice run never counts), nothing archived or cancelled.
+  const recent = recentPeriods("semi_monthly", today(), 3);
+  const real = and(eq(payRuns.isTest, false), isNull(payRuns.archivedAt), ne(payRuns.status, "cancelled"));
+  const realRuns = await db
+    .select({ start: payRuns.periodStart })
+    .from(payRuns)
+    .where(and(real, inArray(payRuns.periodStart, recent.map((p) => p.start))));
+  const [{ inReview }] = await db.select({ inReview: count() }).from(payRuns).where(and(real, eq(payRuns.status, "in_review")));
+  const [approved] = await db
+    .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, peopleCount: PEOPLE(sql`${payRuns.id}`), paidCount: PAID(sql`${payRuns.id}`) })
+    .from(payRuns)
+    .where(and(real, eq(payRuns.status, "approved")))
+    .orderBy(desc(payRuns.periodStart))
+    .limit(1);
+  const [{ approvedCount }] = await db.select({ approvedCount: count() }).from(payRuns).where(and(real, eq(payRuns.status, "approved")));
+  const [paid] = await db
+    .select({ periodStart: payRuns.periodStart, periodEnd: payRuns.periodEnd, peopleCount: PEOPLE(sql`${payRuns.id}`) })
+    .from(payRuns)
+    .where(and(real, eq(payRuns.status, "paid")))
+    .orderBy(desc(payRuns.periodStart))
+    .limit(1);
+
+  return {
+    rows: rows.map((r) => {
+      const status = r.status as RunStatus;
+      return {
+        id: r.id,
+        periodStart: r.periodStart,
+        periodEnd: r.periodEnd,
+        status,
+        lineCount: r.lineCount,
+        createdAt: r.createdAt.toISOString(),
+        isTest: r.isTest,
+        peopleCount: r.peopleCount,
+        paidCount: r.paidCount,
+        released: r.released,
+        step: stepOf(status),
+        ...runActions({ status, isTest: r.isTest, archived: showingArchived, blockedByInvoice: r.blockedByInvoice }),
+        why: runWhy({ status, isTest: r.isTest, archived: showingArchived, blockedByInvoice: r.blockedByInvoice }),
+        nextStep: nextStepOf({ status, isTest: r.isTest, peopleCount: r.peopleCount, paidCount: r.paidCount, released: r.released }, rights),
+      };
+    }),
+    total,
+    archivedCount,
+    showingArchived,
+    canPrepare: rights.prepare,
+    canPurge: can(actor, "payroll.purge_archived"),
+    view,
+    actionCount,
+    views: { all: allCount, action: actionCount, test: testCount, archived: archivedCount },
+    canArchive: can(actor, "payroll.manage_test_runs"),
+    summary: {
+      nextCutoff: nextCutoff(recent, new Set(realRuns.map((r) => r.start)), today()),
+      inReview,
+      approvedNotPaid: approved ? { count: approvedCount, periodStart: approved.periodStart, periodEnd: approved.periodEnd, paidCount: approved.paidCount, peopleCount: approved.peopleCount } : null,
+      lastPaid: paid ?? null,
+    },
+  };
+}
+
+export type WorksheetView = Worksheet & {
+  canPrepare: boolean;
+  canApprove: boolean;
+  /** Only for an Approver looking at a run in review: the hash of exactly the figures shown, which an approval must name. */
+  expectedHash: string | null;
+  /** Only for an Approver looking at a run in review: why they may not approve it, or null when they may. */
+  approvalRefusal: string | null;
+  /** An approved run an Approver could take back: why it can't be (payments recorded, statements released), or null when it can. */
+  unapproveRefusal: string | null;
+  /** The Remitly list of an approved run was already downloaded (the Unapprove dialog warns about it). */
+  listDownloaded: boolean;
+  /** The note of the latest send-back, while the run is back in draft. */
+  sentBackNote: { note: string; kind: "sent_back" | "unapproved" } | null;
+};
+
+/**
+ * The worksheet of a run, decrypted, or null when there is no such run. Opening it is a sensitive read: one `sensitive.view` audit row
+ * per call (ids and a count, never a figure) and at most one change-log view row per person, run and day.
+ */
+export async function getWorksheet(runId: string): Promise<WorksheetView | null> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.view");
+  if (!z.uuid().safeParse(runId).success) return null;
+  const canPrepare = can(actor, "payroll.prepare");
+  const canApprove = can(actor, "payroll.approve");
+
+  // One snapshot: the figures shown and the hash handed to an Approver come from the same reads, so the hash can never stand for
+  // figures the page did not show.
+  const view = await db.transaction(
+    async (tx): Promise<WorksheetView | null> => {
+      const data = await readRun(tx, runId);
+      if (!data) return null;
+      const sheet = await worksheetOf(tx, { id: actor.id, canPrepare }, data);
+      const deciding = canApprove && data.run.status === "in_review";
+      return {
+        ...sheet,
+        canPrepare,
+        canApprove,
+        expectedHash: deciding ? await hashOf(tx, data) : null,
+        approvalRefusal: deciding ? await refusalFor(tx, data) : null,
+        unapproveRefusal: canApprove && data.run.status === "approved" ? await unapproveRefusal(tx, data.run.id) : null,
+        listDownloaded: canApprove && data.run.status === "approved" ? await listWasDownloaded(tx, data.run.id) : false,
+        sentBackNote: await latestSendBackNote(tx, data.run),
+      };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
+  if (!view) return null;
+  await db.transaction(async (tx) => {
+    await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["pay figures"], count: view.lines.length } }, tx);
+    await logChange(tx, actor, { action: "run_viewed", runId });
+  });
+  return view;
+}
+
+export type PaymentsView = {
+  runId: string;
+  status: RunStatus;
+  isTest: boolean;
+  canMarkPaid: boolean;
+  canExport: boolean;
+  people: {
+    employeeId: string;
+    name: string;
+    /** The client of each of the person's lines on this run ("Golden Years, Nourish Health"), or "No client". */
+    clients: string;
+    isOwn: boolean;
+    /** `reference` and `usd` are null unless the viewer holds `payroll.mark_paid`: others see who marked it and when, not the reference or the dollars. */
+    payment: { reference: string | null; paidOn: string; sentTime: string | null; expectedOn: string | null; expectedTime: string | null; expectedZone: PaymentZone | null; markedBy: string; markedAt: string; usd: string | null; usdCents: string | null } | null;
+  }[];
+  /** The dollars recorded as paid across the run ("$1,250.50"); null unless the viewer holds `payroll.mark_paid` and some were recorded. */
+  usdTotal: string | null;
+};
+
+/**
+ * Who is paid on a run. Transfer references are decrypted only for people who hold `payroll.mark_paid`; that is a sensitive read, so
+ * it writes one `sensitive.view` audit row (field name and a count of references actually decrypted, never a reference) and none when
+ * nothing was decrypted. Everyone else sees who marked each payment and when.
+ */
+export async function getPayments(runId: string): Promise<PaymentsView | null> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.view");
+  if (!z.uuid().safeParse(runId).success) return null;
+  const canMarkPaid = can(actor, "payroll.mark_paid");
+
+  let decrypted = 0;
+  const view = await db.transaction(async (tx): Promise<PaymentsView | null> => {
+    const [run] = await tx.select().from(payRuns).where(eq(payRuns.id, runId)).limit(1);
+    if (!run) return null;
+    const lines = await tx
+      .select({ employeeId: payRunLines.employeeId, alias: payRunLines.alias, clientName: clients.name, first: employees.legalFirstName, last: employees.legalLastName, preferred: employees.preferredName })
+      .from(payRunLines)
+      .innerJoin(employees, eq(employees.id, payRunLines.employeeId))
+      .leftJoin(clients, eq(clients.id, payRunLines.clientId))
+      .where(and(eq(payRunLines.runId, runId), eq(payRunLines.excluded, false)))
+      .orderBy(asc(employees.legalLastName), asc(employees.legalFirstName), asc(payRunLines.alias));
+    const own = await employeeIdForUser(tx, actor.id);
+    const paid = await latestPayments(tx, runId);
+    const markers = new Map(
+      (paid.size === 0 ? [] : await tx.select({ id: users.id, email: users.email }).from(users).where(inArray(users.id, [...new Set([...paid.values()].map((p) => p.markedBy))]))).map((u) => [u.id, u.email]),
+    );
+
+    const byPerson = new Map<string, { name: string; clients: string[] }>();
+    for (const l of lines) {
+      const person = byPerson.get(l.employeeId) ?? { name: personName(l), clients: [] };
+      const client = l.clientName ?? "No client";
+      if (!person.clients.includes(client)) person.clients.push(client);
+      byPerson.set(l.employeeId, person);
+    }
+    let usdSum = 0n;
+    let usdAny = false;
+    const people = [...byPerson].map(([employeeId, person]): PaymentsView["people"][number] => {
+      const p = paid.get(employeeId);
+      let payment: PaymentsView["people"][number]["payment"] = null;
+      if (p) {
+        let reference: string | null = null;
+        let usd: string | null = null;
+        let usdCents: string | null = null;
+        if (canMarkPaid) {
+          try {
+            reference = decryptReference(p.id, p.referenceEnc);
+          } catch (error) {
+            console.error("payroll payment reference unreadable:", { paymentId: p.id, error: error instanceof Error ? error.name : "UnknownError" });
+            reference = UNREADABLE;
+          }
+          decrypted += 1;
+          try {
+            const cents = decryptUsdCents(p.id, p.amountUsdEnc);
+            if (cents !== null) {
+              usd = formatUsd(cents);
+              usdCents = cents.toString();
+              usdSum += cents;
+              usdAny = true;
+              decrypted += 1;
+            }
+          } catch (error) {
+            console.error("payroll payment dollars unreadable:", { paymentId: p.id, error: error instanceof Error ? error.name : "UnknownError" });
+            usd = UNREADABLE;
+          }
+        }
+        payment = { reference, paidOn: p.paidOn, sentTime: hhmm(p.sentTime), expectedOn: p.expectedOn, expectedTime: hhmm(p.expectedTime), expectedZone: p.expectedOn ? zoneOf(p.expectedZone) : null, markedBy: markers.get(p.markedBy) ?? "Unknown", markedAt: p.createdAt.toISOString(), usd, usdCents };
+      }
+      return { employeeId, name: person.name, clients: [...person.clients].sort((a, b) => a.localeCompare(b)).join(", "), isOwn: own !== null && own === employeeId, payment };
+    });
+    return { runId, status: run.status as RunStatus, isTest: run.isTest, canMarkPaid, canExport: can(actor, "payroll.export"), people, usdTotal: usdAny ? formatUsd(usdSum) : null };
+  });
+  if (view && decrypted > 0) await writeAudit({ actor, action: "sensitive.view", targetType: "pay_run", targetId: runId, metadata: { fields: ["payment references", "payment amounts in dollars"], count: decrypted } });
+  return view;
+}
+
+/** How many runs in review are waiting for an Approver. A count only, for the dashboard. */
+export async function payrollRunsAwaitingApproval(): Promise<number> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.approve");
+  return countAwaiting(db);
+}
+
+export type SettingsVersion = SettingsSnapshot & { effectiveFrom: string };
+
+export type PaySettingsView = {
+  /** In force today; null when no version is dated today or earlier. */
+  current: SettingsVersion | null;
+  /** Every version, newest first. */
+  history: SettingsVersion[];
+  canManage: boolean;
+};
+
+export async function getPaySettings(): Promise<PaySettingsView> {
+  const actor = await requireUser();
+  await authorize(actor, "payroll.view");
+
+  const rows = await db.select().from(paySettings).orderBy(desc(paySettings.effectiveFrom), desc(paySettings.createdAt));
+  const history = rows.map((r) => ({ effectiveFrom: r.effectiveFrom, ...snapshotOf(r) }));
+  // Newest first, so the first version dated today or earlier is the one in force (the same rule as settingsInForce).
+  const current = history.find((h) => h.effectiveFrom <= today()) ?? null;
+  return { current, history, canManage: can(actor, "payroll.manage_rates") };
+}

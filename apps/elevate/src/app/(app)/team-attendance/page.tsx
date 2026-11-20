@@ -25,6 +25,10 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
   const canEdit = editScope === "all" || editScope === "team";
   const editPeople = canEdit ? await orNotFound(listFilablePeople()) : [];
   const params = await searchParams;
+  // A link from hours review ("Fix clock-out") opens the form on that person's day. Only a person in the list is accepted.
+  const fixId = one(params.fix);
+  const fixDate = one(params.date);
+  const fix = canEdit && fixId && fixDate && /^\d{4}-\d{2}-\d{2}$/.test(fixDate) && editPeople.some((p) => p.id === fixId) ? { employeeId: fixId, date: fixDate } : undefined;
   const [working, flags, notes] = await Promise.all([orNotFound(listWorkingNow()), orNotFound(listFlags()), orNotFound(listShiftNotes())]);
   const query = { wpage: one(params.wpage), wsize: one(params.wsize), fpage: one(params.fpage), fsize: one(params.fsize), npage: one(params.npage), nsize: one(params.nsize) };
   const cut = <T,>(rows: T[], page?: string, size?: string, defaultSize?: number) => {
@@ -49,8 +53,9 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
                 description="Remove an event that was recorded wrongly and add the right ones, with a reason."
                 size="xl"
                 variant="outline"
+                defaultOpen={Boolean(fix)}
               >
-                <EditHoursForm people={editPeople} applyNow={editScope === "all"} />
+                <EditHoursForm people={editPeople} applyNow={editScope === "all"} initial={fix} />
               </FormDialog>
             ) : null}
           </>

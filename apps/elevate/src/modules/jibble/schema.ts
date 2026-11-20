@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { clockEvents } from "@/modules/attendance/schema";
-import { employees } from "@/modules/people/schema";
+import { clients, employees } from "@/modules/people/schema";
 import { time } from "@/modules/timeoff/schema";
 
 // The Jibble link (B2). Jibble only takes screenshots; ELEVATE is the time clock. Nothing from Jibble except
@@ -20,6 +20,39 @@ export const jibblePeople = time
       matchedAt: timestamp("matched_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [uniqueIndex("jibble_people_jibble_idx").on(t.jibblePersonId), check("jibble_people_matched_chk", sql`${t.matchedBy} in ('email','manual')`)],
+  )
+  .enableRLS();
+
+/** Which ELEVATE client a Jibble project or activity means. HR sets it once; the import uses it for people who clock in Jibble. */
+export const jibbleClientMap = time
+  .table(
+    "jibble_client_map",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      kind: text("kind").notNull(),
+      jibbleId: text("jibble_id").notNull(),
+      clientId: uuid("client_id")
+        .notNull()
+        .references(() => clients.id),
+      setBy: uuid("set_by").notNull(),
+      setAt: timestamp("set_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [uniqueIndex("jibble_client_map_idx").on(t.kind, t.jibbleId), check("jibble_client_map_kind_chk", sql`${t.kind} in ('project','activity')`)],
+  )
+  .enableRLS();
+
+/** Project and activity ids the import saw on time entries that have no client yet, so HR can pick a client for each. Ids only. */
+export const jibbleUnmappedIds = time
+  .table(
+    "jibble_unmapped_ids",
+    {
+      kind: text("kind").notNull(),
+      jibbleId: text("jibble_id").notNull(),
+      lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+      /** One person who used it, to help HR recognize it. */
+      exampleEmployeeId: uuid("example_employee_id").references(() => employees.id),
+    },
+    (t) => [uniqueIndex("jibble_unmapped_ids_idx").on(t.kind, t.jibbleId), check("jibble_unmapped_kind_chk", sql`${t.kind} in ('project','activity')`)],
   )
   .enableRLS();
 

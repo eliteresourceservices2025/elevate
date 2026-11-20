@@ -1,5 +1,5 @@
 {
-  "id": "edc997e3-bf3c-48ce-9544-360a34ac4928",
+  "id": "1e124255-69a4-4566-9b45-2c2c16231a1f",
   "prevId": "79398ed8-9883-44b2-beb3-bf8a2df0b21b",
   "version": "7",
   "dialect": "postgresql",
@@ -4824,6 +4824,12 @@
           "notNull": true,
           "default": false
         },
+        "payroll_access": {
+          "name": "payroll_access",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -4883,7 +4889,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "users_payroll_access_chk": {
+          "name": "users_payroll_access_chk",
+          "value": "\"core\".\"users\".\"payroll_access\" in ('preparer', 'approver', 'viewer')"
+        }
+      },
       "isRLSEnabled": true
     },
     "talent.credential_reminders": {
@@ -13685,54 +13696,6 @@
           ]
         }
       },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": true
-    },
-    "core.birthday_preferences": {
-      "name": "birthday_preferences",
-      "schema": "core",
-      "columns": {
-        "employee_id": {
-          "name": "employee_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "hidden": {
-          "name": "hidden",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "birthday_preferences_employee_id_employees_id_fk": {
-          "name": "birthday_preferences_employee_id_employees_id_fk",
-          "tableFrom": "birthday_preferences",
-          "tableTo": "employees",
-          "schemaTo": "core",
-          "columnsFrom": [
-            "employee_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

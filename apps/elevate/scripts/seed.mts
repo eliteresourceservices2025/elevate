@@ -1,15 +1,15 @@
 // Seeds FAKE data for development: one sign-in account per role, 6 clients and 40 people
-// (with encrypted fake IDs). Run: pnpm db:seed
+// (with encrypted fake IDs), plus invented payroll levels and pay lines. Run: pnpm db:seed
 // Refuses to run against production or any unknown remote database. Safe to run repeatedly.
 //
 // Teams and reporting lines are added in Phase 1.2 (the dataset already knows each person's team).
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import postgres from "postgres";
 import { createFieldCrypto } from "@/lib/crypto-core";
-import { buildSeedDataset, type SeedDataset } from "@/lib/seed/data";
+import { buildSeedDataset, SEED_ACCOUNT_ROLES, SEED_PAY_LINES, SEED_PAYROLL_LEVELS, type SeedDataset } from "@/lib/seed/data";
 import { assertSeedAllowed } from "@/lib/seed/guard";
 import { SENSITIVE_FIELDS, type SensitiveField } from "@/modules/people/constants";
 import { maskFor, sensitiveContext } from "@/modules/people/sensitive";
@@ -17,7 +17,7 @@ import { maskFor, sensitiveContext } from "@/modules/people/sensitive";
 config({ path: ".env.local" });
 assertSeedAllowed(process.env);
 
-const ROLES = ["super_admin", "hr_admin", "team_lead", "recruiter", "executive", "employee"] as const;
+const ROLES = SEED_ACCOUNT_ROLES;
 const CREDENTIALS_FILE = ".seed-credentials.local"; // git-ignored
 
 const url = process.env.DATABASE_URL_DIRECT ?? process.env.DATABASE_URL!;
@@ -142,7 +142,41 @@ async function seedPeople(accounts: Account[]) {
     created += 1;
   }
   await seedOrganization(data, employeeIds);
+  await seedPayroll(accounts, employeeIds, crypto);
   console.log(`people: ${created} created, ${data.employees.length - created} already there; ${data.clients.length} clients`);
+}
+
+/**
+ * Invented payroll levels (a Preparer, an Approver and a Viewer among the fake accounts) and a few pay lines with invented amounts,
+ * encrypted with the same context the app uses (`pay_line:<id>`). Fills only what is missing: a level is set only on an account that
+ * has none, and a person who already has a pay line gets no new one. Rows are authored by the fake Super Admin account.
+ */
+async function seedPayroll(accounts: Account[], employeeIds: string[], crypto: ReturnType<typeof createFieldCrypto>) {
+  let levels = 0;
+  for (const { role, level } of SEED_PAYROLL_LEVELS) {
+    const account = accounts.find((a) => a.role === role);
+    if (!account) continue;
+    const done = await sql`update core.users set payroll_access = ${level} where id = ${account.id} and payroll_access is null`;
+    levels += done.count;
+  }
+  const author = accounts.find((a) => a.role === "super_admin");
+  if (!author) throw new Error("The fake Super Admin account is missing.");
+
+  let lines = 0;
+  for (const l of SEED_PAY_LINES) {
+    const employeeId = employeeIds.at(l.employeeIndex);
+    if (!employeeId) continue;
+    const [has] = await sql`select 1 from payroll.pay_lines where employee_id = ${employeeId} limit 1`;
+    if (has) continue;
+    const id = randomUUID();
+    const amounts = JSON.stringify({ monthlyCentavos: l.monthlyCentavos, pesoAllowanceCentavos: l.pesoAllowanceCentavos, dollarAllowanceCents: l.dollarAllowanceCents });
+    await sql`
+      insert into payroll.pay_lines (id, line_key, employee_id, alias, hours_per_day, payment_method, fte, effective_from, amounts_enc, created_by)
+      values (${id}, ${randomUUID()}, ${employeeId}, ${l.alias}, ${l.hoursPerDay}, 'remitly', ${l.fte}::numeric, ${l.effectiveFrom}::date,
+              ${crypto.encrypt(amounts, `pay_line:${id}`)}, ${author.id})`;
+    lines += 1;
+  }
+  console.log(`payroll: ${levels} levels set, ${lines} fake pay lines added (invented amounts)`);
 }
 
 /**

@@ -1,0 +1,1 @@
+ALTER TABLE "chat"."conversations" ADD COLUMN "hr_managed" boolean DEFAULT false NOT NULL;

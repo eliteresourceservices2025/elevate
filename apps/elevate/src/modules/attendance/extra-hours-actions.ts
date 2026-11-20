@@ -15,6 +15,7 @@ import { hrUserIds, notify } from "@/modules/notifications/service";
 import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { checkWindow, dayLimitWarning, isAfterTheFact, needsHrForAge, windowMinutes } from "./extra-hours";
+import { rebuildAfterChange } from "./edit-service";
 import { assignedToClient, liveMinutesOnDay } from "./extra-hours-service";
 import { shiftOn } from "./schedule";
 import { loadSchedules } from "./schedule-service";
@@ -174,6 +175,19 @@ export async function fileExtraHoursFor(input: unknown): Promise<ActionResult> {
   });
 }
 
+/**
+ * Approved extra hours change a day's approved-extra figure, so the person's days are rebuilt from the window's day. The decision is
+ * already saved, so a failed rebuild is not reported as a failed decision: approving the week rebuilds again before it stores numbers.
+ */
+async function rebuildForWindow(employeeId: string, windowStartMs: number): Promise<void> {
+  try {
+    await rebuildAfterChange(employeeId, windowStartMs);
+  } catch (error) {
+    // Left for the next rebuild (the nightly job, or approving the week). Only the error's name is logged, never details.
+    console.error("extra hours rebuild failed:", error instanceof Error ? error.name : "unknown error");
+  }
+}
+
 /** The VA confirms or declines what the client asked for (filed by a lead or HR). Confirming approves it; declining tells the filer. */
 export async function answerExtraHours(input: unknown): Promise<ActionResult> {
   const actor = await requireUser();
@@ -182,11 +196,13 @@ export async function answerExtraHours(input: unknown): Promise<ActionResult> {
     const parsed = answerExtraSchema.safeParse(input);
     if (!parsed.success) return fail(first(parsed.error));
     const person = await personForUser(db, actor.id);
+    const toRebuild: { employeeId: string; startMs: number }[] = [];
     await db.transaction(async (tx) => {
       const [r] = await tx.select().from(extraHoursRequests).where(eq(extraHoursRequests.id, parsed.data.requestId)).for("update");
       if (!r || r.employeeId !== person.id) throw new ActionFailure("That request was not found.");
       if (r.status !== "pending_confirm") throw new ActionFailure("That request was already answered.");
       const confirm = parsed.data.answer === "confirm";
+      if (confirm) toRebuild.push({ employeeId: person.id, startMs: r.windowStart.getTime() });
       await tx
         .update(extraHoursRequests)
         .set({ status: confirm ? "approved" : "declined", decidedBy: confirm ? r.filedBy : actor.id, decidedAt: new Date(), decisionNote: parsed.data.note ?? null })
@@ -195,6 +211,7 @@ export async function answerExtraHours(input: unknown): Promise<ActionResult> {
       await notify(tx, { userId: r.filedBy, kind: confirm ? "extrahours.confirmed" : "extrahours.declined_by_va", title: confirm ? `${me.name} confirmed the extra hours` : `${me.name} declined the extra hours`, body: parsed.data.note, link: "/extra-hours" });
       await writeAudit({ actor, action: confirm ? "extra_hours.confirm" : "extra_hours.decline_by_va", targetType: "employee", targetId: person.id, metadata: { requestId: r.id } }, tx);
     });
+    for (const w of toRebuild) await rebuildForWindow(w.employeeId, w.startMs);
     refresh();
     return { ok: true, data: undefined };
   });
@@ -214,6 +231,7 @@ export async function decideExtraHours(input: unknown): Promise<ActionResult> {
     if ((v.windowStart || v.windowEnd) && v.decision !== "approve") return fail("The window can only be changed when approving.");
     if (Boolean(v.windowStart) !== Boolean(v.windowEnd)) return fail("Change both the start and the end.");
 
+    const toRebuild: { employeeId: string; startMs: number }[] = [];
     try {
       await db.transaction(async (tx) => {
         const [r] = await tx.select().from(extraHoursRequests).where(eq(extraHoursRequests.id, v.requestId)).for("update");
@@ -247,6 +265,7 @@ export async function decideExtraHours(input: unknown): Promise<ActionResult> {
             ...(v.decision === "approve" && changed ? { windowStart: new Date(startMs), windowEnd: new Date(endMs), minutes, originalWindowStart: r.windowStart, originalWindowEnd: r.windowEnd } : {}),
           })
           .where(eq(extraHoursRequests.id, r.id));
+        if (v.decision === "approve") toRebuild.push({ employeeId: r.employeeId, startMs });
         if (person.userId) {
           await notify(tx, {
             userId: person.userId,
@@ -262,6 +281,7 @@ export async function decideExtraHours(input: unknown): Promise<ActionResult> {
       if (isExclusionViolation(error)) return fail(OVERLAP);
       throw error;
     }
+    for (const w of toRebuild) await rebuildForWindow(w.employeeId, w.startMs);
     refresh();
     return { ok: true, data: undefined };
   });

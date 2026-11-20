@@ -58,6 +58,31 @@ describe("deactivating an account", () => {
     expect(await reactivateAccount({ userId: test.id })).toEqual({ ok: false, error: "That account is not deactivated." });
   });
 
+  it("clears the payroll level, so switching the account back on does not quietly restore it", async () => {
+    const admin = await account("super_admin");
+    const test = await account("employee");
+    await db.execute(sql`update core.users set payroll_access = 'approver' where id = ${test.id}`);
+    current.user = admin;
+
+    expect(await deactivateAccount({ userId: test.id })).toEqual({ ok: true, data: undefined });
+    const level = async () => (await rows<{ payroll_access: string | null }>(sql`select payroll_access from core.users where id = ${test.id}`))[0].payroll_access;
+    expect(await level()).toBeNull();
+    const [audit] = await rows<{ before: unknown; after: unknown; metadata: unknown }>(
+      sql`select before, after, metadata from ops.audit_log where action = 'user.payroll_access.update' and target_id = ${test.id}`,
+    );
+    expect(audit).toMatchObject({ before: { payrollAccess: "approver" }, after: { payrollAccess: null } });
+    expect(JSON.stringify(audit)).not.toContain(test.email);
+    expect(await rows(sql`select 1 from payroll.pay_change_log where actor_id = ${admin.id} and action = 'access_changed'`)).toHaveLength(1);
+
+    expect(await reactivateAccount({ userId: test.id })).toEqual({ ok: true, data: undefined });
+    expect(await level()).toBeNull();
+
+    // An account with no level writes no payroll rows when switched off.
+    const plain = await account("employee");
+    expect(await deactivateAccount({ userId: plain.id })).toEqual({ ok: true, data: undefined });
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'user.payroll_access.update' and target_id = ${plain.id}`)).toHaveLength(0);
+  });
+
   it("refuses your own account and a person who works on the team", async () => {
     const admin = await account("super_admin");
     current.user = admin;

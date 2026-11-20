@@ -32,15 +32,21 @@ export function isRoleSlug(value: string): value is RoleSlug {
 /** own < team < all. The widest scope a role holds for an action decides. */
 export type Scope = "own" | "team" | "all";
 
+/** Chosen individually by a Super Admin; no role grants payroll. */
+export type PayrollLevel = "preparer" | "approver" | "viewer";
+
 export type PermissionRule = {
   /** Scope each role gets. A missing role gets nothing. */
   roles: Partial<Record<RoleSlug, Scope>>;
   /** Extra per-person flag required on top of (or instead of) roles. */
-  requiresFlag?: "safevoice_handler";
+  requiresFlag?: "safevoice_handler" | "call_recorder";
+  /** Payroll: only people holding one of these levels (core.users.payroll_access) get the action; roles are ignored. */
+  payrollLevels?: readonly PayrollLevel[];
   /** Flag holders get this scope; roles are ignored when set. */
   flagScope?: Scope;
   /** Per-person flags that grant a scope IN ADDITION to the roles (the Privacy Officer: HR and Super Admin keep their role access). */
-  alsoFlag?: { privacy_officer?: Scope };
+  /** `guest`: a client guest (no roles at all) gets this scope. Only Messages lists it; every other action stays closed to guests. */
+  alsoFlag?: { privacy_officer?: Scope; guest?: Scope };
 };
 
 export function definePermissions<T extends Record<string, PermissionRule>>(rules: T): T {

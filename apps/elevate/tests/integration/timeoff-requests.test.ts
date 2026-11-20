@@ -255,7 +255,8 @@ describe("making a request", () => {
     expect(await ask({ startDate: saturday, endDate: saturday })).toEqual({ ok: false, error: "There are no working days in that range." });
 
     const [two] = await workdays(2);
-    const tooMuch = await ask({ startDate: two, endDate: addDays(two, 4) }); // 5 days against a balance of 1
+    // Two calendar weeks: always several working days whatever holidays fall in them (a holiday or two must not make this fit the balance of 1).
+    const tooMuch = await ask({ startDate: two, endDate: addDays(two, 13) });
     expect(tooMuch.ok).toBe(false);
     expect(tooMuch.ok ? "" : tooMuch.error).toContain("You have 1 day available");
 
@@ -282,8 +283,16 @@ describe("making a request", () => {
   it("does not count weekends or holidays, and a holiday-only range is refused", async () => {
     const gil = await person("Gil");
     await award(gil.employeeId, 5);
-    // Find a Monday-to-Friday week containing a PH holiday inside the seeded years
-    const [h] = await rows<{ date: string }>(sql`select date::text as date from time.holidays where calendar = 'PH' and date > ${addDays(today, 30)}::date and extract(dow from date) between 2 and 4 order by date limit 1`);
+    // Find a Monday-to-Friday week containing exactly one holiday (a PH one) inside the seeded years: a week with two holidays would count three days
+    const [h] = await rows<{ date: string }>(sql`
+      select h.date::text as date from time.holidays h
+      where h.calendar = 'PH' and h.date > ${addDays(today, 30)}::date and extract(dow from h.date) between 2 and 4
+        and not exists (
+          select 1 from time.holidays o
+          where o.date <> h.date
+            and o.date between h.date - ((extract(dow from h.date)::int + 6) % 7) and h.date - ((extract(dow from h.date)::int + 6) % 7) + 4
+        )
+      order by h.date limit 1`);
     const d = new Date(`${h.date}T00:00:00Z`);
     const monday = addDays(h.date, -((d.getUTCDay() + 6) % 7));
     const friday = addDays(monday, 4);

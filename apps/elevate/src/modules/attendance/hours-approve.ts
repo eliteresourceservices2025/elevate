@@ -9,7 +9,7 @@ import { notify } from "@/modules/notifications/service";
 import { timeChainUserIds } from "@/modules/org/service";
 import { employees } from "@/modules/people/schema";
 import { replayClock } from "./clock";
-import { CLEAN_FLAGS, approvalKey, attendanceRows, dayState, latestApprovals } from "./hours-service";
+import { CLEAN_FLAGS, HARD_STOP_FLAGS, approvalKey, attendanceRows, dayState, latestApprovals } from "./hours-service";
 import { rebuildAttendanceDays } from "./jobs";
 import { addDays } from "./schedule";
 import { hoursApprovals } from "./schema";
@@ -52,12 +52,15 @@ export async function approvePersonWeek(actor: Actor, employeeId: string, weekSt
   return db.transaction(async (tx) => {
     await lockEmployeeClock(tx, employeeId);
     const rows = (await attendanceRows(tx, [employeeId], dates[0], dates[dates.length - 1])).filter((r) => r.sessions > 0 || r.scheduledMinutes !== null);
+    // Hours that are probably wrong (a forgotten clock-out) are never approved, even one person at a time with a note.
+    const hardStop = rows.find((r) => r.flags.some((f) => HARD_STOP_FLAGS.has(f)));
+    if (hardStop && !options.onlyIfClean) throw new ActionFailure(`The day ${hardStop.date} has a very long or still-open clock session, so this week cannot be approved yet. Fix that clock-out first (Team attendance > Change someone's time), then approve the week.`);
     if (options.onlyIfClean && rows.some((r) => r.flags.some((f) => !CLEAN_FLAGS.has(f)))) return { approved: 0, skipped: "flags" as const };
     const current = await latestApprovals(tx, [employeeId], dates[0], dates[dates.length - 1]);
     const todo = rows.filter((r) => dayState(r, current.get(approvalKey(r.employeeId, r.date))) !== "approved");
     if (todo.length === 0) return { approved: 0, skipped: null };
     await tx.insert(hoursApprovals).values(
-      todo.map((r) => ({ employeeId, date: r.date, scheduledMinutes: r.scheduledMinutes, workedMinutes: r.workedMinutes, breakMinutes: r.breakMinutes, extraMinutes: r.extraMinutes, approvedExtraMinutes: r.approvedExtraMinutes, approvedBy: actor.id, note: note ?? null })),
+      todo.map((r) => ({ employeeId, date: r.date, scheduledMinutes: r.scheduledMinutes, workedMinutes: r.workedMinutes, breakMinutes: r.breakMinutes, extraMinutes: r.extraMinutes, approvedExtraMinutes: r.approvedExtraMinutes, clientSplit: r.clientSplit, approvedBy: actor.id, note: note ?? null })),
     );
     await writeAudit({ actor: actor as never, action: "hours.approve", targetType: "employee", targetId: employeeId, after: { weekStart, days: todo.length, workedMinutes: todo.reduce((n, r) => n + r.workedMinutes, 0), extraMinutes: todo.reduce((n, r) => n + r.extraMinutes, 0), approvedExtraMinutes: todo.reduce((n, r) => n + r.approvedExtraMinutes, 0) }, metadata: { note: note ?? null } }, tx);
     if (person.userId) await notify(tx, { userId: person.userId, kind: "hours.approved", title: "Your hours were approved", body: `Week of ${weekStart}: ${todo.length} ${todo.length === 1 ? "day" : "days"}.${note ? ` ${note}` : ""}`, link: "/attendance" });

@@ -210,3 +210,48 @@ describe("Jibble HTTP client", () => {
     expect(err.retryable).toBe(true);
   });
 });
+
+describe("Jibble time entries for importing hours", () => {
+  const PERSON = "11111111-1111-4111-8111-111111111111";
+  const row = (over: Record<string, unknown>) => ({ id: "t-1", type: "In", time: "2026-11-11T16:00:00Z", personId: PERSON, status: "Active", projectId: "proj-1", activityId: "act-1", ...over });
+
+  it("asks for one person's entries in a window, and reads type, time, project and activity", async () => {
+    const client = new JibbleHttpClient({ ...DEFAULT_URLS, accessToken: "pat-123" });
+    answer([{ json: { value: [row({}), row({ id: "t-2", type: "Out", time: "2026-11-12T00:00:00+00:00", projectId: null, activityId: null })] } }]);
+    const entries = await client.listTimeEntries(PERSON, "2026-11-10T00:00:00Z", "2026-11-13T00:00:00Z");
+    expect(entries).toEqual([
+      { id: "t-1", personId: PERSON, type: "In", time: "2026-11-11T16:00:00.000Z", projectId: "proj-1", activityId: "act-1" },
+      { id: "t-2", personId: PERSON, type: "Out", time: "2026-11-12T00:00:00.000Z", projectId: null, activityId: null },
+    ]);
+    const url = decodeURIComponent(calls[0].url).replaceAll("+", " ");
+    expect(url).toContain("https://time-tracking.prod.jibble.io/v1/TimeEntries?");
+    expect(url).toContain(`personId eq ${PERSON}`);
+    expect(url).toContain("time ge 2026-11-10T00:00:00.000Z");
+    expect(url).toContain("projectId,activityId");
+  });
+
+  it("leaves out entries that are deleted, of another person, of an unknown kind, or without a clear time", async () => {
+    const client = new JibbleHttpClient({ ...DEFAULT_URLS, accessToken: "pat-123" });
+    answer([{ json: { value: [row({ id: "gone", status: "Deleted" }), row({ id: "other", personId: "someone-else" }), row({ id: "odd", type: "Transfer" }), row({ id: "notime", time: "yesterday" }), row({ id: "ok" })] } }]);
+    expect((await client.listTimeEntries(PERSON, "2026-11-10T00:00:00Z", "2026-11-13T00:00:00Z")).map((e) => e.id)).toEqual(["ok"]);
+  });
+
+  it("carries on without project and activity when Jibble refuses those fields, and pages through long answers", async () => {
+    const client = new JibbleHttpClient({ ...DEFAULT_URLS, accessToken: "pat-123" });
+    const many = Array.from({ length: 200 }, (_, i) => row({ id: `p-${i}`, projectId: undefined, activityId: undefined }));
+    answer([{ status: 400, json: { error: "no such property" } }, { json: { value: many } }, { json: { value: [row({ id: "last" })] } }]);
+    const entries = await client.listTimeEntries(PERSON, "2026-11-10T00:00:00Z", "2026-11-13T00:00:00Z");
+    expect(entries).toHaveLength(201);
+    expect(decodeURIComponent(calls[0].url).replaceAll("+", " ")).toContain("projectId,activityId");
+    expect(decodeURIComponent(calls[1].url).replaceAll("+", " ")).not.toContain("projectId");
+    expect(decodeURIComponent(calls[2].url).replaceAll("+", " ")).toContain("$skip=200");
+  });
+
+  it("returns nothing for something that is not a person id or a time, without calling Jibble", async () => {
+    const client = new JibbleHttpClient({ ...DEFAULT_URLS, accessToken: "pat-123" });
+    answer([{ json: { value: [row({})] } }]);
+    expect(await client.listTimeEntries("not-a-uuid", "2026-11-10T00:00:00Z", "2026-11-13T00:00:00Z")).toEqual([]);
+    expect(await client.listTimeEntries(PERSON, "yesterday", "2026-11-13T00:00:00Z")).toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
+});

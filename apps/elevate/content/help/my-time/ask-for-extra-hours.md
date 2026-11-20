@@ -7,7 +7,7 @@ order: 5
 updated: 2026-10-22
 ---
 
-Work beyond your schedule needs your client's OK and your lead's approval before it counts. ELEVATE calls this **extra hours**. It labels the hours and never works out pay.
+Work beyond your schedule needs your client's OK and your lead's approval before it counts. ELEVATE calls this **extra hours**. It labels the hours; pay is worked out in the Payroll module.
 
 # Before you start
 

@@ -61,5 +61,5 @@ A person whose work email or name was edited here could end up in the directory 
 
 ## Birthday visibility on the dashboard
 
-- `core.birthday_preferences` (migration 0119): one row per person once they switch their birthday off or on; no row means shown. Only the person changes it (`setMyBirthdayHidden`, `people.set_birthday_visibility`, own scope for every role). The toggle is on My profile > Personal. Copy: month and day only, never the year.
+- `core.birthday_preferences` (migration 0165): one row per person once they switch their birthday off or on; no row means shown. Only the person changes it (`setMyBirthdayHidden`, `people.set_birthday_visibility`, own scope for every role). The toggle is on My profile > Personal. Copy: month and day only, never the year.
 - **Privacy notice:** add one line saying colleagues see your birthday (month and day) on the dashboard unless you hide it; it joins the pending notice update (do not publish a notice just for this).

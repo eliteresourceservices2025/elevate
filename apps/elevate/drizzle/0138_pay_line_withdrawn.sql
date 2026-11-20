@@ -1,0 +1,1 @@
+ALTER TABLE "payroll"."pay_lines" ADD COLUMN "withdrawn" boolean DEFAULT false NOT NULL;

@@ -13,6 +13,8 @@ export const clockSchema = z.object({
   longitude: z.preprocess(toNumber, z.number().min(-180).max(180).optional()),
   /** The path returned by requestClockSelfie, for teams that require a selfie. */
   selfiePath: z.preprocess(blankToUndefined, z.string().max(200).optional()),
+  /** Clock in, or switch client: the client the time belongs to. Left out when the person has one client or none. */
+  clientId: z.preprocess(blankToUndefined, uuid.optional()),
   /** For a break: how long it is meant to be (15, 30 or 60 minutes). Leave out for a break with no limit. */
   breakMinutes: z.preprocess(toNumber, z.union([z.literal(15), z.literal(30), z.literal(60)]).optional()),
 });
@@ -103,6 +105,11 @@ export const assignScheduleSchema = z.object({
   zone: z.preprocess(blankToUndefined, z.string().refine(isValidTimeZone, "Choose a valid time zone").optional()),
 });
 export const endScheduleSchema = z.object({ employeeId: uuid, endDate: ymd });
+/** HR ends the current schedule of many people on the same date (for example imported schedules that should not have been set). */
+export const endSchedulesSchema = z.object({
+  employeeIds: z.array(uuid).min(1, "Choose at least one person").max(200, "Choose 200 people at most"),
+  endDate: ymd,
+});
 /** HR fixes a recent schedule in place (a mistake), with a reason. Dates are not changed here. */
 export const correctScheduleSchema = z.object({
   employeeId: uuid,
@@ -160,6 +167,9 @@ export const approveWeekSchema = z.object({ employeeId: uuid, weekStart: ymd, no
 /** Mark one person's day as test only (a note says why), or take the mark off. */
 export const markTestDaySchema = z.object({ employeeId: uuid, date: ymd, note: z.string().trim().min(3, "Say why in a few words").max(200, "Use 200 characters or fewer") });
 export const clearTestDaySchema = z.object({ employeeId: uuid, date: ymd });
+export const reopenHoursSchema = z
+  .object({ employeeId: uuid, from: ymd, to: ymd, reason: z.string().trim().min(5, "Say why in a few words").max(300, "Use 300 characters or fewer") })
+  .refine((v) => v.from <= v.to && (Date.parse(`${v.to}T00:00:00Z`) - Date.parse(`${v.from}T00:00:00Z`)) / 86_400_000 <= 6, "Choose one day, or one week at most.");
 export const approveCleanSchema = z.object({ weekStart: ymd });
 export const payPeriodSchema = z.object({ kind: z.enum(["semi_monthly", "weekly", "biweekly", "monthly"]), biweeklyAnchor: z.preprocess(blankToUndefined, ymd.optional()) });
 export const exportHoursSchema = z.object({ periodStart: ymd, kind: z.enum(["daily", "summary"]), includeUnapproved: z.boolean().default(false) });

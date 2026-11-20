@@ -11,6 +11,22 @@ export const setUserRolesSchema = z.object({
 
 export const setSafevoiceHandlerSchema = z.object({ userId, enabled: z.boolean() });
 
+export const setPayrollAccessSchema = z.object({ userId, level: z.enum(["preparer", "approver", "viewer"]).nullable() });
+
+/** The payslip signatory. `signature` is a base64 JPEG the browser made (the server checks the bytes again); null keeps the earlier one. */
+export const savePayrollSignatorySchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  title: z.string().trim().min(1).max(120),
+  signature: z
+    .string()
+    .max(210_000)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/)
+    .nullable(),
+  removeSignature: z.boolean(),
+  /** Who is printed under "Prepared by" on the statements (someone with the Preparer payroll level). Null: whoever sent the run for review. */
+  preparedByUserId: userId.nullable(),
+});
+
 export const resetAuthenticatorSchema = z.object({ userId });
 
 export const accountSchema = z.object({ userId });

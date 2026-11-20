@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { BREAK_CHOICES, EOD_TEMPLATE, HEARTBEAT_MS, MINUTE, breakLabel, formatClock, needsWelcomeBack } from "@/modules/attendance/clock";
 import { coveringWindow } from "@/modules/attendance/extra-hours";
 import { EvidenceField, uploadEvidence } from "@/modules/attendance/components/evidence-field";
-import { answerIdlePrompt, cancelCorrection, clockIn, clockOut, endBreak, pingPresence, reportIdlePrompt, requestClockSelfie, requestCorrection, saveShiftNote, startBreak } from "@/modules/attendance/actions";
+import { answerIdlePrompt, cancelCorrection, clockIn, clockOut, endBreak, pingPresence, reportIdlePrompt, requestClockSelfie, requestCorrection, saveShiftNote, startBreak, switchClient } from "@/modules/attendance/actions";
 import type { ClockStatus } from "@/modules/attendance/queries";
 
 type IdleDetectorLike = EventTarget & { userState: "active" | "idle"; screenState: string; start(options: { threshold: number; signal?: AbortSignal }): Promise<void> };
@@ -236,6 +236,9 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const [now, setNow] = useState<number | null>(null);
   const [selfie, setSelfie] = useState(false);
   const [breakMenu, setBreakMenu] = useState(false);
+  // Several clients: the menu to pick one before clocking in, or to switch while working, and the one picked for a clock-in that waits for a selfie.
+  const [clientMenu, setClientMenu] = useState<"in" | "switch" | null>(null);
+  const [chosenClient, setChosenClient] = useState<string | undefined>(undefined);
   const [idlePrompt, setIdlePrompt] = useState<string | null>(null);
   /** The break (by its start time) whose "your break is up" pop-up the person has already dismissed. */
   const [dismissedBreak, setDismissedBreak] = useState<number | null>(null);
@@ -270,7 +273,8 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const idleRef = useRef<{ detector: IdleDetectorLike | null; abort: AbortController | null }>({ detector: null, abort: null });
   const promptShown = useRef(false);
 
-  const working = status?.state === "working" || status?.state === "break";
+  // Someone whose hours come from Jibble has no ELEVATE clock: no idle prompts, welcome-back or shift-end questions (their time is read from Jibble).
+  const working = status?.clockSource !== "jibble" && (status?.state === "working" || status?.state === "break");
 
   // Count from the server's clock.
   useEffect(() => {
@@ -389,11 +393,11 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
     });
   const blocked = pending || !browserOnline; // a failed request only shows the notice; buttons stay usable so the person can retry
 
-  async function doClockIn(selfiePath?: string) {
+  async function doClockIn(selfiePath?: string, clientId?: string) {
     setSelfie(false);
     const position = status!.locationOn ? await here() : null;
     run(
-      () => clockIn({ ...(position ?? {}), selfiePath }),
+      () => clockIn({ ...(position ?? {}), selfiePath, clientId: clientId ?? chosenClient }),
       "Clocked in.",
       () => {
         if (status!.idleMinutes) void startIdleApi(status!.idleMinutes);
@@ -441,16 +445,50 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
         </span>
       ) : null}
 
-      {!working ? (
-        <Button
-          size="lg"
-          disabled={blocked}
-          onClick={() => (status.needsSelfie ? setSelfie(true) : void doClockIn())}
-          className="h-11 gap-2 px-3 text-base font-bold shadow-lg shadow-primary/30 sm:min-w-36 sm:px-6 ring-2 ring-primary/40 transition-transform hover:scale-[1.03]"
-        >
-          <Clock className="size-5" aria-hidden />
-          Clock in
-        </Button>
+      {status.clockSource === "jibble" ? (
+        <span className="max-w-64 text-xs leading-tight text-muted-foreground" role="status">
+          You clock in Jibble. ELEVATE reads your hours from there.
+        </span>
+      ) : !working ? (
+        <div className="relative">
+          <Button
+            size="lg"
+            disabled={blocked}
+            aria-haspopup={status.clients.length > 1 ? "menu" : undefined}
+            aria-expanded={status.clients.length > 1 ? clientMenu === "in" : undefined}
+            onClick={() => {
+              if (status.clients.length > 1) setClientMenu(clientMenu === "in" ? null : "in");
+              else if (status.needsSelfie) setSelfie(true);
+              else void doClockIn();
+            }}
+            className="h-11 gap-2 px-3 text-base font-bold shadow-lg shadow-primary/30 sm:min-w-36 sm:px-6 ring-2 ring-primary/40 transition-transform hover:scale-[1.03]"
+          >
+            <Clock className="size-5" aria-hidden />
+            Clock in
+            {status.clients.length > 1 ? <ChevronDown aria-hidden /> : null}
+          </Button>
+          {clientMenu === "in" ? (
+            <div role="menu" aria-label="Which client are you working for?" className="absolute right-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-xl border bg-popover py-1 shadow-lg">
+              <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Clock in for</p>
+              {status.clients.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="menuitem"
+                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                  onClick={() => {
+                    setClientMenu(null);
+                    setChosenClient(c.id);
+                    if (status.needsSelfie) setSelfie(true);
+                    else void doClockIn(undefined, c.id);
+                  }}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       ) : waitingOnClockOut ? (
         <>
           <span className="max-w-56 text-xs leading-tight text-muted-foreground max-sm:sr-only" role="status">
@@ -462,6 +500,35 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
         </>
       ) : (
         <>
+          {status.clients.length > 1 ? (
+            <div className="relative">
+              <Button variant="ghost" size="lg" className="h-10 max-w-40 gap-1 px-2 sm:px-3" disabled={blocked || onBreak} aria-label="Switch client" aria-haspopup="menu" aria-expanded={clientMenu === "switch"} onClick={() => setClientMenu(clientMenu === "switch" ? null : "switch")}>
+                <span className="truncate">{status.clients.find((c) => c.id === status.currentClientId)?.name ?? "Client"}</span>
+                <ChevronDown aria-hidden />
+              </Button>
+              {clientMenu === "switch" ? (
+                <div role="menu" aria-label="Switch client" className="absolute right-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-xl border bg-popover py-1 shadow-lg">
+                  <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Move the rest of this session to</p>
+                  {status.clients
+                    .filter((c) => c.id !== status.currentClientId)
+                    .map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        role="menuitem"
+                        className="block w-full px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                        onClick={() => {
+                          setClientMenu(null);
+                          run(() => switchClient({ clientId: c.id }), `Now working for ${c.name}.`);
+                        }}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {onBreak ? (
             <Button variant="default" size="lg" className="h-10 gap-2 px-3 font-semibold sm:px-4" disabled={blocked} aria-label="End break" onClick={() => run(() => endBreak(), "Break ended.")}>
               <Play aria-hidden />

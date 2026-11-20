@@ -65,6 +65,37 @@ export function approvedExtra(extraMinutes: number, grantedMinutes: number, thre
   return { approved, unapproved: rest >= threshold ? rest : 0 };
 }
 
+/**
+ * Worked minutes that fall inside approved windows: each finished session's time with its breaks taken out, kept to the windows.
+ * Open sessions have no end yet and count nothing. Used for people with no schedule, whose extra hours are exactly the time worked
+ * inside what was approved.
+ */
+export function minutesInWindows(
+  sessions: readonly { startAt: number; endAt: number | null; breaks: readonly { startAt: number; endAt: number | null }[] }[],
+  windows: readonly { startMs: number; endMs: number }[],
+): number {
+  let ms = 0;
+  for (const session of sessions) {
+    if (session.endAt === null) continue;
+    // Worked stretches: the session with each break cut out.
+    let stretches: [number, number][] = [[session.startAt, session.endAt]];
+    for (const b of [...session.breaks].sort((x, y) => x.startAt - y.startAt)) {
+      const breakEnd = Math.min(b.endAt ?? session.endAt, session.endAt);
+      stretches = stretches.flatMap(([from, to]): [number, number][] => {
+        if (breakEnd <= from || b.startAt >= to) return [[from, to]];
+        const parts: [number, number][] = [];
+        if (b.startAt > from) parts.push([from, b.startAt]);
+        if (breakEnd < to) parts.push([breakEnd, to]);
+        return parts;
+      });
+    }
+    for (const [from, to] of stretches) {
+      for (const w of windows) ms += Math.max(0, Math.min(to, w.endMs) - Math.max(from, w.startMs));
+    }
+  }
+  return Math.round(ms / MINUTE);
+}
+
 /** Granted minutes per calendar day of the person's own zone, by the day each window STARTS. */
 export function grantedByDate(requests: readonly { startMs: number; minutes: number }[], zone: string): Map<string, number> {
   const out = new Map<string, number>();

@@ -1,0 +1,2 @@
+ALTER TABLE "payroll"."pay_lines" ADD COLUMN "tidy_state" text;--> statement-breakpoint
+ALTER TABLE "payroll"."pay_lines" ADD CONSTRAINT "pay_lines_tidy_chk" CHECK ("payroll"."pay_lines"."tidy_state" is null or "payroll"."pay_lines"."tidy_state" in ('removed', 'kept'));

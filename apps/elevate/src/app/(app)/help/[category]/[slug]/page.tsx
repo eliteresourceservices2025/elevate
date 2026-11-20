@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: PageProps<"/help/[category]/[
   // Only a guide the person may read gets its own title; anything else stays generic so a hidden guide is not confirmed.
   const user = await requireUser();
   const { category, slug } = await params;
-  return { title: getHelpArticle(user.roles, category, slug)?.title ?? "Help center" };
+  return { title: getHelpArticle(user, category, slug)?.title ?? "Help center" };
 }
 
 export default async function HelpArticlePage({ params }: PageProps<"/help/[category]/[slug]">) {
@@ -22,7 +22,7 @@ export default async function HelpArticlePage({ params }: PageProps<"/help/[cate
   await orNotFound(authorize(user, "help.view"));
   const { category: categorySlug, slug } = await params;
   const category = helpCategory(categorySlug);
-  const article = category ? getHelpArticle(user.roles, categorySlug, slug) : null;
+  const article = category ? getHelpArticle(user, categorySlug, slug) : null;
   if (!category || !article) notFound();
 
   return (

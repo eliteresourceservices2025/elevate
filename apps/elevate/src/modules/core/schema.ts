@@ -14,6 +14,10 @@ export const users = core
       isSafevoiceHandler: boolean("is_safevoice_handler").notNull().default(false),
       // The Privacy Officer reads and handles privacy incident reports together with HR; named individually by Super Admin or HR.
       isPrivacyOfficer: boolean("is_privacy_officer").notNull().default(false),
+      // May record calls (with everyone's consent, never with clients): picked individually by a Super Admin; a role never grants it. Never true for a guest.
+      canRecordCalls: boolean("can_record_calls").notNull().default(false),
+      // Payroll access is chosen individually by a Super Admin (preparer, approver or viewer); no role grants it. Read fresh on every request.
+      payrollAccess: text("payroll_access"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
       archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -22,8 +26,13 @@ export const users = core
       // Profile photo: a path in the private employee-docs bucket (avatars/<user id>/<random>.jpg), written only by the photo service.
       photoPath: text("photo_path"),
       photoUpdatedAt: timestamp("photo_updated_at", { withTimezone: true }),
+      // A client guest (Messages only, no roles ever; a database trigger refuses to give a guest a role). requireUser() turns guests away unless the caller opts in.
+      isGuest: boolean("is_guest").notNull().default(false),
     },
-    (t) => [uniqueIndex("users_email_lower_idx").on(sql`lower(${t.email})`)],
+    (t) => [
+      uniqueIndex("users_email_lower_idx").on(sql`lower(${t.email})`),
+      check("users_payroll_access_chk", sql`${t.payrollAccess} in ('preparer', 'approver', 'viewer')`),
+    ],
   )
   .enableRLS();
 
@@ -43,8 +52,11 @@ export const invitations = core
       // Employee is not listed: everyone gets it.
       roles: text("roles").array().notNull().default(sql`'{}'::text[]`),
       isSafevoiceHandler: boolean("is_safevoice_handler").notNull().default(false),
+      // Set for a client guest invitation: the client they belong to. A guest invitation never carries roles or the Safe Voice handler flag.
+      guestClientId: uuid("guest_client_id"),
     },
     (t) => [
+      check("invitations_guest_chk", sql`${t.guestClientId} is null or (${t.roles} = '{}' and not ${t.isSafevoiceHandler})`),
       uniqueIndex("invitations_email_lower_idx").on(sql`lower(${t.email})`),
       check("invitations_roles_chk", sql`${t.roles} <@ array['super_admin', 'hr_admin', 'team_lead', 'recruiter', 'executive']::text[]`),
     ],

@@ -1,0 +1,182 @@
+---
+title: Prepare a pay run
+summary: For Preparers. Set the rates, add pay lines, start a run for a pay period, fill it in, send it to an Approver, then record the payments.
+category: payroll
+audience: payroll
+order: 2
+updated: 2026-11-12
+---
+
+This guide is for people a Super Admin chose as a **Preparer**. If you do not see **Payroll** under **Admin** in the left menu, you have not been chosen, and you cannot open these pages. All names and amounts in this guide and its pictures are made up. For the big picture first, read "How payroll works".
+
+A pay run is prepared by one person and approved by a different person. ELEVATE works out each person's pay for the period, all in pesos. It never works out tax, it keeps no dollar rate, and it never sends money: you pay in Remitly at Remitly's own rate and record it here.
+
+# Before you start
+
+Open **Payroll** under **Admin** in the left menu. It has four tabs: **Runs**, **Rates**, **Settings** and **History**.
+
+Start with **Settings**. It shows the **Cutoff divisor**, the **Warn at** percentage and the overtime (OT) rates. Each row is a version with a start date, and the one marked **In force** is the one used today. Overtime is paid at the person's **own hourly rate** times a percent. These Settings are the **company standard**; a person who is paid differently can have their own percents on their pay line (see **Rates**). If you leave an overtime box blank, the **standard** percent is used: 125 for a regular day, 130 for a rest day and 169 for a rest day past 8 hours, so overtime pays from your first run. Holiday pay is not a setting: it is always one to one (100% of the hourly rate).
+
+![Payroll, Settings: the versions of the pay settings, and the Change settings button.](help:prepare-a-pay-run/01-settings.png)
+
+To change them, click **Change settings**. Choose **Starts on**, check the **Cutoff divisor**, and type each overtime rate as a percent of the normal hourly rate: 125 means 1.25 times. Leave a rate blank until the figure is confirmed. Then click **Save settings**. The old version stays on record. Every box has a small **(i)** button: tap or hover it to read what the box is for.
+
+To give one person their own overtime percents, open **Rates**, then **Add contractor** (under **More options**) or **More**, then **Edit details** on their row, and fill in **Overtime (OT) for this person**. A box left blank uses the company standard from Settings. The statement shows the percent that was used.
+
+![The Change pay settings window: the start date, the divisor and the overtime (OT) rates.](help:prepare-a-pay-run/02-change-settings.png)
+
+# Add a contractor, update a rate, or stop paying
+
+A rate says what one person is paid. Someone who works for two clients has one rate for each client. You never type a start date: you choose a pay cutoff.
+
+1. Open the **Rates** tab. It shows one row for each rate in force.
+2. Click **Add contractor**.
+3. Choose the **Person**, the **Client** if there is one, and the **Monthly rate (pesos)**. Set the **FTE** too: 1 for a full-time person on that client, 0.5 for half-time, or 0 when the line does not count. FTE only sets the pay of the internal team and is never shown to a contractor; leave it **Not set** if you don't know yet. **Paying from** already has the cutoff being prepared chosen; pick the next one if the rate should wait. **More options** has hours per day, alias, payment method and overtime. Allowances are not set here: you add them by name on each run.
+4. Click **Add contractor**.
+
+If the person already has a rate for the same client, the window tells you to use **Update rate** on that row instead.
+
+![Payroll, Rates: one row for each pay line, with Add contractor.](help:prepare-a-pay-run/03-rates.png)
+
+![The Add a contractor window: the person, the monthly rate and the cutoff it is paid from.](help:prepare-a-pay-run/04-add-pay-line.png)
+
+**To update a rate,** click **Update rate** on the person's row, type the **New monthly rate**, pick a **Reason** (Raise, New contract, Correction or Other) and the cutoff it counts from, then click **Update rate**. The old rate stays on record, and pay runs already made are never changed. Choose **Correction** to fix a typo from when the rate started. **Correction** can also go back to a recent cutoff whose run is still a draft (it reads "draft run: update it after"), for example a raise that should count for the whole cutoff being paid, even when the raise was added as its own rate part-way through the cutoff (the older rate then stops the day before). Save it, open that run and choose **Fill or update this run**. Once a run is sent for review it can't change: add an adjustment in it instead.
+
+**To stop paying,** click **More**, then **Stop paying**, choose the **Last cutoff paid** (they are paid for all of it) and a reason, then click **Stop paying**. Tick **Show stopped rates** to see rates that have stopped. A stopped rate that was never on a real pay run has a **Remove** button, and **Remove stopped rates** takes all of those off the list at once. A stopped rate that was paid stays, because it is part of the pay history.
+
+**To change the client, alias, hours, payment method or overtime,** click **More**, then **Edit details**.
+
+**If you added a rate by mistake,** click **More**, then **Remove (added by mistake)**. It is offered only while the rate has never been on a real pay run (a practice run does not count). If the person was paid with it, use **Stop paying** instead.
+
+If you are paid through payroll yourself, you can add and change your own pay line and enter amounts on your own line. The change history records it, and you can mark your own line as checked (or ask another Preparer to). You can record your own payment yourself.
+
+On a laptop, the table of people scrolls inside its own box. Scroll down in it and the column headings, with the **Person** and **Client** columns, stay in view, so you always see which number is which. When you reach the last person, the page scrolls on. The **Payment** table at the bottom keeps its headings in view the same way.
+
+# FTE and the internal team
+
+The internal team (the ELITE Resource Services team) is paid by **FTE**: each cutoff, their pay is the run's **Total FTE** times their **amount per FTE**.
+
+- **Set FTE.** On the **Rates** tab click **Set FTE**. Every rate is listed under its client with an FTE box. Type 1, 0.5 or 0 for each (choose **Not set** to clear a count), and click **Save FTE**. It also reaches a draft run for an earlier cutoff. The total at the top should match your payroll sheet. A run already started picks the new counts up with **Update people**; people who were already checked stay checked.
+- **Add an internal-team member.** Click **Add contractor**, choose the person, and under **How is this person paid?** choose **Per FTE (internal team)**. Type the **Amount per FTE per cutoff**, for example 1,500.00. Someone who is also a VA gets this as a second rate with its own alias: choosing **Per FTE** fills the **Alias** box with "Internal team" for you. If you see "already has a rate for the same job", the person has another rate with the same client and alias that is still running or stops later: give this one an alias, or start it the day after the other one stops. A rate you removed no longer counts.
+- **In a run.** The **Total FTE** tile shows the total of everyone on the run. An internal-team line shows its pay as "28 FTE × 1,500.00", and it follows the total when someone is added, taken off or given a different count.
+- **A new contractor or client in this run.** Open **Actions**, then **Amounts**, choose **FTE for this run** and type 1, 0.5 or 0. It counts for this run only. A line with no count counts as 0, and a note reminds you. A run whose lines paid per FTE have a total FTE of 0 can't be sent for review, because the internal team would be paid nothing: set the counts first. A person who started or left part-way through the cutoff still counts their full FTE unless you type FTE for this run.
+
+# Start a run
+
+1. Open the **Runs** tab and click **New run**.
+2. Check **First day** and **Last day**. They are filled in for the last cutoff; change them if you need to.
+3. Click **Create run**. ELEVATE opens the run with one line for each pay line in force during the period.
+
+![The Start a pay run window: the first and last day of one cutoff.](help:prepare-a-pay-run/05-new-run.png)
+
+A run always covers one cutoff: the 1st to the 15th, or the 16th to the last day of the month. Any other dates are refused. There is one run for each cutoff. If you chose the wrong period, or the pay lines changed after you made the run, click **Cancel run**, give a **Reason**, and create it again. To tidy the cancelled run away, open it, choose **Run options**, then **Archive this cancelled run**. It moves to **Archived runs**, where **Delete archived runs for good** removes it.
+
+# Fill in the run
+
+The new run shows notes above the worksheet, then one row for each person. Nothing in the notes stops you from sending the run: they are there to be read, and the Approver decides. Only a line that **cannot be read** has to be fixed first. Notes in yellow are under **Look at these**.
+
+![A new run: the checks above the worksheet and one row for each person.](help:prepare-a-pay-run/06-worksheet.png)
+
+- **Forgot to add or remove a person?** Add the pay line on the **Rates** tab, then open the run and choose **Fill or update this run**, then **Update people**. It adds the people who now have a pay line in force, moves a line to a newer rate, and takes off a line that is no longer in force, without making another run. To take one person off yourself, open **Actions** on their row, choose **Remove from this run** and give a reason: their line and amounts stay on record but are ignored, and you can put them back from **Taken off this run** under the notes.
+- **Fill the run from a Jibble timesheet.** Open **Fill or update this run** and choose **Import Jibble timesheet**; see "Import a Jibble timesheet".
+- Click **Confirm all suggestions** to confirm every suggested amount on the run in one step, after you have read them. Each changed line then needs a new check.
+- Open **Fill or update this run** and choose **Suggest from approved hours**. ELEVATE suggests absent days, late minutes, overtime (OT) and holiday pay from hours a lead approved. Hours worked on a holiday are suggested as holiday pay. Nothing changes pay until you confirm it.
+- Click **Confirm** to accept a suggestion. If a person has more than one pay line, choose the line first (**Assign to line**, or **Assign and confirm**). To use a different amount, enter it yourself and write a reason.
+- Open **Actions** on a person's row and choose **Amounts** to type anything else. Choose **What to enter**, type the **Amount** and click **Save amount**:
+  - **Time:** absent days, late minutes, overtime (OT) minutes, holiday pay minutes, and days of **Sick leave (SL), unpaid** (taken off like an absence). **Bereavement days, paid** and **PTO days, paid** are written on the statement and take nothing off. ELEVATE does not suggest these three, because Time off does not hold them: you type the days.
+  - **Money added:** **Allowance**, **Reimbursement**, **Bonus** and **Adjustment**. Each of these asks for a **Name**, and you can add as many as you need, one at a time (for example Health allowance and Internet allowance). The name is printed on the person's statement.
+  - **Money taken off:** a **Loan** and **Other deduction**, each with a **Reason**. A reduction is never a negative amount.
+  - Overtime and holiday pay can be typed as **hours or minutes**: choose hours or minutes beside the box and type 1.5 for an hour and a half, or type `1.5 h`, `90 m` or `1:30`. To remove a named line, click **Remove** beside it in the same window.
+
+![The Amounts window: what to enter and the amount, here 120 minutes of overtime.](help:prepare-a-pay-run/07-amounts.png)
+
+![The Amounts window for an allowance: give it a name, like Health allowance, and an amount.](help:prepare-a-pay-run/08-named-allowance.png)
+
+- For someone paid for part of the cutoff, enter the days or hours they worked. These can never pay more than a full cutoff; if they do, check what you typed (for example "15" instead of "1.5").
+- Open **Actions** on a line and choose **Mark as checked** when you have read it. It records that a Preparer looked at it. Any change to a line asks for a new check. If you are paid through payroll yourself, you can check your own line too (or ask another Preparer). Changing your line clears that check.
+
+# The checklist and the flags on a row
+
+- **The checklist** above the sheet lists what is left to do, one row for each kind of problem (for example "No client payroll hours, 58 people"). Each row says what it means and what to do. Click **Show who** to show only those people in the sheet, or use the chips above the sheet (**All**, **Needs attention**, **Not yet checked**, and the main problems). Click **See every note by person** for the full list, with **Go to this line** beside each name.
+- **The small pill under a name** says why that line is flagged, with the date: **Starts 6 Nov**, **Ends 12 Nov**, **New rate 10 Nov**, **Has left**. Click it for a plain explanation and the fix.
+  - **Starts or ends part-way.** ELEVATE pays a full cutoff unless you tell it how many days the person worked. Click **Use 8 days** (the weekdays between the dates, up to a full cutoff) or **Enter different days**. The suggestion doesn't count holidays or the person's own schedule, so check it. If the date itself is wrong, fix it on the **Rates** tab and then choose **Update people**.
+  - **New rate.** ELEVATE pays the rate that was in force on the first day of the cutoff for the whole cutoff. The new rate counts from the next cutoff. If it should count sooner, click **Add an adjustment** for the difference. If it should count for this whole cutoff and the run is still a draft, use **Update rate** with the reason **Correction** and the run's cutoff on the **Rates** tab, then **Fill or update this run**.
+  - **Has left.** Check the person should still be paid for this cutoff. If not, open **Actions** on their row and choose **Remove from this run**.
+
+# Sort the list
+
+The sheet starts in name order (last name, then first name). To see it another way, choose **Sort** above the sheet, or click a column title (click it again to turn the order around; the arrow shows which way it runs):
+
+- **Name, A to Z** or **Z to A**.
+- **Client, then name.** Clients A to Z, people with no client last, and the people of one client in name order.
+- **Monthly rate**, high to low or low to high. (The rate column is one of the columns the sheet shows by default on a laptop. Untick **Show every column** for a shorter sheet.)
+- **Total payable**, high to low or low to high.
+- **Biggest change from last run.** The people whose total moved the most, up or down, come first; a person with no earlier run comes last.
+- **Not yet checked first** and **Needs attention first**, for reading a run before you send or approve it.
+
+Turn on **Group by client** to put a heading above each client's people. The heading shows how many people, their client hours and their total payable, for the whole run (not just the page you are on). The sort you chose orders the people inside each client.
+
+The sort and the grouping are in the address, so they stay when you change page or use a filter chip, and you can send the link to someone. They are not saved for next time: the sheet opens in name order again. The **Rates** tab has the same **Sort** menu and sortable column titles (name, client and monthly rate).
+
+# Practice runs (test runs)
+
+While you are still practising, mark a run as a **test run** so you can repeat the same pay cycle and tidy up afterwards.
+
+- **Start one:** in **New run**, tick **This is a test run**. A test run can repeat a period that already has a run.
+- **Mark one you already made:** open the run, choose **Run options**, then **Mark as a test run**, and give a short reason. This works until the run is marked paid.
+- **Repeat a cycle you already approved:** mark the old run as a test run, then choose **Archive this test run**. Its period is free, so you can create the real run again.
+- **Archive:** a test run can be archived in any status, and so can a cancelled run. It leaves the list and you can bring it back from the **Archived** view (tick it, then **Bulk actions**, **Restore**, **Apply**). To tidy many at once, tick several runs and choose **Archive**. Any other real run can never be archived. To delete archived test and cancelled runs permanently, tick them in the Archived view and choose **Delete for good**.
+- **Nobody sees a statement from a test run.** The people on it are not told, and it never shows under **My pay**. An invoice made from a test run is numbered TEST and stamped TEST, and must not be sent.
+
+A test run can also cover any dates, up to 31 days (a part of a cutoff, or the dates of a Jibble file), while a real run is always one whole cutoff. To rehearse a whole pay cycle, see "Rehearse a pay cycle with a test run".
+
+A Preparer or an Approver can do this. Every step is written to the change history with its reason.
+
+# Fix a mistake from an earlier run
+
+An approved run never changes. Open **Actions** on the person's line in a later run, choose **Amounts**, and choose **Adjustment** (they were underpaid) or **Other deduction** (they were overpaid). Choose the earlier run under **Corrects the run of**, and write a **Reason**.
+
+# Send it for review
+
+Read the notes first (an unassigned suggestion, pay below zero, days or hours worked that pay more than a full cutoff, your own line not checked yet, pay lines that changed after the run was made, days not approved yet). Only a line that cannot be read stops the run; everything else you can send as it is.
+
+Click **Send for review** at the bottom of the run. The Approvers are told that a run is waiting. You cannot change the run while it is in review. If it comes back, read the note and fix what it asks.
+
+![The bottom of a run that is ready: Send for review.](help:prepare-a-pay-run/09-ready.png)
+
+# Pay and record
+
+When the run is approved, the **Payment** section appears at the bottom.
+
+1. Click **Download Remitly list**. It has each person's name, alias and **Total payable compensation** in pesos, and their **Bank**, **Account name** and **Account number**, so you can pay them without looking anything up. There are no dollar amounts: pay at the rate Remitly shows. If two people share a name, use the alias to tell them apart. Someone with no bank details on file has blank cells, and the page tells you how many. The file holds real account numbers: keep it private and delete it once you have paid. Every download is recorded. On a test run the file shows masked details and says TEST on every row. A Preparer or an Approver can download the list and record the payments.
+2. Pay each person in Remitly.
+3. Click **Mark paid** on the person's row.
+
+![An approved run: the Payment section with Download Remitly list and a Mark paid button for each person.](help:prepare-a-pay-run/10-payment.png)
+
+Type the **Remitly reference**. **Sent on** is the day and time (Arizona time, MST) you sent it in Remitly: it starts at now, and the **Today**, **Tomorrow** and **Next Tuesday** buttons or the calendar set another day, including a later one. If Remitly shows when the money should arrive, fill **Expected to arrive** (the date, and the time if you know it; it can be left empty). It starts in Arizona time; if Remitly gave you Manila time, change the time zone beside it and ELEVATE shows the same moment on the Arizona clock. Only payroll staff see the expected date; the contractor's statement shows the sent date. If you want the dollars kept with the payment, type them under **Amount paid in dollars (optional)**, for example 351.66. ELEVATE only records them: it converts nothing and does not check them against the pesos. Then click **Mark paid**. To fix a mistake, click **Correct** and save the right reference or dollars (leave the dollars blank to clear them).
+
+The **Payment** table shows each person's **Client**, **Status**, **Remitly reference** and **Paid (USD)**, and the dollars paid for the whole run at the top. Click a column title to sort by it, and click it again to reverse the order. On a phone, use **Sort by**. The first sort is by **Person**, A to Z. **Status** puts the people not paid yet first, and the people with no payment date or no dollars always stay at the end.
+
+**Which amount do I pay?** Pay each person their **Total payable compensation**, marked **Pay this** on the run. It is the amount on the Remitly list. **Gross** is only the pay before reimbursements, bonuses, adjustments and deductions, so do not pay from it. The (i) beside each name says the same.
+
+![The Mark paid window: the Remitly reference and the date it was paid.](help:prepare-a-pay-run/11-mark-paid.png)
+
+When everyone is marked paid, the run becomes **Paid**. The contractors' statements are not sent by paying: a Preparer or an Approver releases them from **Statements** (see "Release the contractor payment statements"). You can record your own payment too.
+
+![Everyone on the run is paid.](help:prepare-a-pay-run/12-all-paid.png)
+
+# Common mistakes
+
+- **Writing a client's or patient's details in a reason.** Reasons are kept in the change history. Never put client or patient information in them.
+- **Sending a run for review with warnings you have not read.** Read each one.
+- **A person's statement shows "Line: 1" and "Line: 2" with the same pay.** They have two pay lines for the same job in this cutoff (the same alias, and the same client or one with no client), and each pays a full cutoff, so they would be paid twice. The Rates tab only lists lines still in force today, so an old line that already ended is hidden: tick **Show stopped rates** to see it. The run warns **Paid twice for the same job**. ELEVATE now treats the newer line as the one that pays: the older line stops the day before the newer one starts, so a new run (or **Fill or update this run** on a draft) includes only one of them. ELEVATE now takes the doubled rate away for you. A doubled rate is the same person and the same client with two rates whose dates overlap. The newest rate stays; the older one is removed automatically when a Preparer opens the **Rates** tab, and again when a pay run is made or filled (**Fill or update this run**). It never removes a rate that was already paid on a real run: that one keeps the **Paid twice** note, and you stop it by hand (**More**, then **Stop paying**). The same person with a different client is never touched, and neither is a person's second role that has no client and its own alias. Nothing is deleted: the change history keeps it. To get a removed rate back, click **Removed rates**, then **Restore** next to the contractor (or **Restore all**). A restored rate is left alone from then on, so use this for a real second role on the same client. To pay someone for two roles, give each rate its own alias. You can no longer add two overlapping rates for the same job: use **Update rate**.
+- **Choosing the wrong period.** Cancel and create the run again; do not try to edit it.
+- **Approving a run you never read.** Anyone with the Approver level may approve, so read the totals and the checks first.
+- **Looking for a dollar rate or dollar allowance.** There are none. Type every amount in pesos.
+
+# Try it yourself
+
+- Open the **Rates** tab and read one row.
+- Click **New run**, look at the dates, and close the window without saving.
+- Open the **History** tab and find the last change you made.

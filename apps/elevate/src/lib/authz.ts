@@ -11,6 +11,9 @@ import { scheduleImportPermissions } from "@/modules/schedule-import/permissions
 import { incidentsPermissions } from "@/modules/incidents/permissions";
 import { healthPermissions } from "@/modules/health/permissions";
 import { jibblePermissions } from "@/modules/jibble/permissions";
+import { messagesPermissions } from "@/modules/messages/permissions";
+import { callsPermissions } from "@/modules/calls/permissions";
+import { chatAccessPermissions } from "@/modules/chat-access/permissions";
 import { notificationsPermissions } from "@/modules/notifications/permissions";
 import { offersPermissions } from "@/modules/offers/permissions";
 import { onboardingPermissions } from "@/modules/onboarding/permissions";
@@ -22,11 +25,13 @@ import { recruitingPermissions } from "@/modules/recruiting/permissions";
 import { reviewsPermissions } from "@/modules/reviews/permissions";
 import { learnPermissions } from "@/modules/learn/permissions";
 import { safevoicePermissions } from "@/modules/safevoice/permissions";
+import { invoicesPermissions } from "@/modules/invoices/permissions";
+import { payrollPermissions } from "@/modules/payroll/permissions";
 import { signingPermissions } from "@/modules/signing/permissions";
 import { settingsPermissions } from "@/modules/settings/permissions";
 import { supportPermissions } from "@/modules/support/permissions";
 import { timeoffPermissions } from "@/modules/timeoff/permissions";
-import type { PermissionRule, RoleSlug, Scope } from "./roles";
+import type { PayrollLevel, PermissionRule, RoleSlug, Scope } from "./roles";
 
 // Pure module: no server-only imports, so the authz tests can run it directly.
 
@@ -37,6 +42,9 @@ export const PERMISSIONS = {
   ...documentsPermissions,
   ...announcementsPermissions,
   ...notificationsPermissions,
+  ...messagesPermissions,
+  ...callsPermissions,
+  ...chatAccessPermissions,
   ...privacyPermissions,
   ...timeoffPermissions,
   ...attendancePermissions,
@@ -51,6 +59,8 @@ export const PERMISSIONS = {
   ...reviewsPermissions,
   ...learnPermissions,
   ...safevoicePermissions,
+  ...payrollPermissions,
+  ...invoicesPermissions,
   ...assetsPermissions,
   ...credentialsPermissions,
   ...supportPermissions,
@@ -67,8 +77,14 @@ export type AuthzUser = {
   id: string;
   roles: readonly RoleSlug[];
   isSafevoiceHandler?: boolean;
+  /** Payroll level, read fresh on every request; no role grants payroll. */
+  payrollAccess?: PayrollLevel | null;
   /** Named individually (privacy incident inbox); a role never grants it. */
   isPrivacyOfficer?: boolean;
+  /** Picked by a Super Admin to record calls (never a guest); a role never grants it. */
+  canRecordCalls?: boolean;
+  /** A client guest: no roles, Messages only (see requireUser). */
+  isGuest?: boolean;
 };
 
 /**
@@ -100,8 +116,15 @@ function ruleFor(action: ActionName): PermissionRule {
 function grantedScopes(user: AuthzUser, rule: PermissionRule): Scope[] {
   const scopes: Scope[] = [];
 
+  if (rule.payrollLevels) return user.payrollAccess && rule.payrollLevels.includes(user.payrollAccess) ? ["all"] : [];
+
   if (rule.requiresFlag === "safevoice_handler") {
     if (user.isSafevoiceHandler && rule.flagScope) scopes.push(rule.flagScope);
+    return scopes;
+  }
+
+  if (rule.requiresFlag === "call_recorder") {
+    if (user.canRecordCalls && rule.flagScope) scopes.push(rule.flagScope);
     return scopes;
   }
 
@@ -111,6 +134,7 @@ function grantedScopes(user: AuthzUser, rule: PermissionRule): Scope[] {
     if (scope) scopes.push(scope);
   }
   if (user.isPrivacyOfficer && rule.alsoFlag?.privacy_officer) scopes.push(rule.alsoFlag.privacy_officer);
+  if (user.isGuest && rule.alsoFlag?.guest) scopes.push(rule.alsoFlag.guest);
   return scopes.sort((a, b) => rank(b) - rank(a));
 }
 

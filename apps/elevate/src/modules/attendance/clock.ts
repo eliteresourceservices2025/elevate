@@ -3,15 +3,24 @@
 
 import { formatInZone } from "@/lib/time";
 
-export type ClockType = "clock_in" | "break_start" | "break_end" | "clock_out";
+export type ClockType = "clock_in" | "break_start" | "break_end" | "clock_out" | "switch_client";
 export type ClockState = "out" | "working" | "break";
 
-export type ClockEventLite = { id?: string; type: ClockType; at: number; createdAtMs?: number; /** break_start only: 15, 30 or 60, or null/undefined for an open-ended break. */ plannedBreakMinutes?: number | null };
+export type ClockEventLite = {
+  id?: string;
+  type: ClockType;
+  at: number;
+  createdAtMs?: number;
+  /** break_start only: 15, 30 or 60, or null/undefined for an open-ended break. */
+  plannedBreakMinutes?: number | null;
+  /** clock_in and switch_client: the client the time that follows belongs to (null or left out: none). */
+  clientId?: string | null;
+};
 
 /** What state a person is in after this event, or null when the event is not allowed in the current state. */
 export function transition(state: ClockState, type: ClockType): ClockState | null {
   if (state === "out") return type === "clock_in" ? "working" : null;
-  if (state === "working") return type === "break_start" ? "break" : type === "clock_out" ? "out" : null;
+  if (state === "working") return type === "break_start" ? "break" : type === "clock_out" ? "out" : type === "switch_client" ? "working" : null; // switching client keeps the session going
   return type === "break_end" ? "working" : null; // on a break: only ending it (clock-out ends the break first)
 }
 
@@ -19,10 +28,17 @@ const byTime = (a: ClockEventLite, b: ClockEventLite) => a.at - b.at || (a.creat
 
 export type Break = { startAt: number; endAt: number | null; plannedMinutes: number | null; startEventId?: string };
 
+/** A change of client inside a session: the time from `at` on belongs to `clientId`. */
+export type ClientSwitch = { at: number; clientId: string | null; eventId?: string };
+
 export type Session = {
   startAt: number;
   endAt: number | null;
   breaks: Break[];
+  /** The client the session started with (the clock-in's client), or null. */
+  clientId: string | null;
+  /** Changes of client during the session, in time order. */
+  switches: ClientSwitch[];
   startEventId?: string;
   /** The clock-out that closed the session (undefined while it is open). */
   endEventId?: string;
@@ -42,7 +58,8 @@ export function replayClock(events: readonly ClockEventLite[]): Replay {
       continue;
     }
     const current = sessions[sessions.length - 1];
-    if (e.type === "clock_in") sessions.push({ startAt: e.at, endAt: null, breaks: [], startEventId: e.id });
+    if (e.type === "clock_in") sessions.push({ startAt: e.at, endAt: null, breaks: [], clientId: e.clientId ?? null, switches: [], startEventId: e.id });
+    else if (e.type === "switch_client") current.switches.push({ at: e.at, clientId: e.clientId ?? null, eventId: e.id });
     else if (e.type === "break_start") current.breaks.push({ startAt: e.at, endAt: null, plannedMinutes: e.plannedBreakMinutes ?? null, startEventId: e.id });
     else if (e.type === "break_end") current.breaks[current.breaks.length - 1].endAt = e.at;
     else {
@@ -81,8 +98,48 @@ export function workedMs(session: Session, until: number): number {
   return Math.max(0, end - session.startAt - breakMs(session, until));
 }
 
+/** Time of one stretch of a session that belongs to one client, in milliseconds. */
+export type SegmentMs = { clientId: string | null; workedMs: number; breakMs: number };
+
+/**
+ * Cuts a session at each client switch and says how much of it was worked and how much was break, for each stretch. The stretches add
+ * up to the whole session (the same worked and break time the session has in total). An open session counts up to `until`.
+ */
+export function segmentMs(session: Session, until: number): SegmentMs[] {
+  const end = session.endAt ?? until;
+  const cuts = session.switches.filter((c) => c.at > session.startAt && c.at < end).sort((a, b) => a.at - b.at);
+  const stretches: { from: number; to: number; clientId: string | null }[] = [];
+  let from = session.startAt;
+  let client = session.clientId;
+  for (const c of cuts) {
+    stretches.push({ from, to: c.at, clientId: client });
+    from = c.at;
+    client = c.clientId;
+  }
+  stretches.push({ from, to: end, clientId: client });
+  return stretches.map((st) => {
+    const brk = session.breaks.reduce((sum, b) => sum + Math.max(0, Math.min(b.endAt ?? end, st.to) - Math.max(b.startAt, st.from)), 0);
+    return { clientId: st.clientId, workedMs: Math.max(0, st.to - st.from - brk), breakMs: brk };
+  });
+}
+
+/** Shares a whole number of minutes between parts in proportion to their milliseconds, so the parts always add up to the total. */
+export function allocateMinutes(total: number, ms: readonly number[]): number[] {
+  const sum = ms.reduce((a, b) => a + b, 0);
+  if (sum === 0 || total === 0) return ms.map(() => 0);
+  const raw = ms.map((m) => (m / sum) * total);
+  const base = raw.map((r) => Math.floor(r));
+  let rest = total - base.reduce((a, b) => a + b, 0);
+  const order = raw.map((r, i) => ({ i, frac: r - Math.floor(r) })).sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (let k = 0; rest > 0 && k < order.length; k += 1, rest -= 1) base[order[k].i] += 1;
+  return base;
+}
+
+/** One client's share of a day (client null: time with no client). */
+export type ClientMinutes = { clientId: string | null; workedMinutes: number; breakMinutes: number };
+
 export type BreakDetail = { startAt: number; endAt: number | null; minutes: number; plannedMinutes: number | null; overMinutes: number };
-export type SessionDetail = { eventId?: string; startAt: number; endAt: number | null; workedMinutes: number; breakMinutes: number; overbreakMinutes: number; breaks: BreakDetail[] };
+export type SessionDetail = { eventId?: string; startAt: number; endAt: number | null; workedMinutes: number; breakMinutes: number; overbreakMinutes: number; breaks: BreakDetail[]; /** Worked and break minutes for each client of the session (they add up to the session's own minutes). */ clients: ClientMinutes[] };
 
 export type DayTotals = {
   date: string;
@@ -97,6 +154,11 @@ export type DayTotals = {
   open: boolean;
   /** Every clock-in to clock-out on this day, each as its own record (nothing is merged away). */
   sessionList: SessionDetail[];
+  /**
+   * The day's worked and break minutes by client. Empty when no time of the day has a client (people with no assignments), so a
+   * per-client split exists only for people who clock in for a client. The parts add up to the day's totals.
+   */
+  clients: ClientMinutes[];
 };
 
 /**
@@ -108,7 +170,7 @@ export function buildDays(events: readonly ClockEventLite[], zone: string, openU
   const days = new Map<string, DayTotals>();
   for (const s of replayClock(events).sessions) {
     const date = formatInZone(s.startAt, zone, "yyyy-MM-dd");
-    const day = days.get(date) ?? { date, sessions: 0, workedMinutes: 0, breakMinutes: 0, overbreakMinutes: 0, firstIn: s.startAt, lastOut: null, open: false, sessionList: [] };
+    const day = days.get(date) ?? { date, sessions: 0, workedMinutes: 0, breakMinutes: 0, overbreakMinutes: 0, firstIn: s.startAt, lastOut: null, open: false, sessionList: [], clients: [] };
     day.sessions += 1;
     day.firstIn = Math.min(day.firstIn, s.startAt);
 
@@ -122,6 +184,7 @@ export function buildDays(events: readonly ClockEventLite[], zone: string, openU
       breakMinutes: counted ? Math.round(breakMs(s, until) / MINUTE) : 0,
       // A break that has ended is a settled fact, so its overbreak counts even while the session is still open.
       overbreakMinutes: Math.round(s.breaks.reduce((sum, b) => sum + (b.endAt !== null || counted ? overbreakOf(b, until) : 0), 0) / MINUTE),
+      clients: [],
       breaks: s.breaks.map((b) => ({
         startAt: b.startAt,
         endAt: b.endAt,
@@ -130,6 +193,18 @@ export function buildDays(events: readonly ClockEventLite[], zone: string, openU
         overMinutes: b.endAt !== null || counted ? Math.round(overbreakOf(b, until) / MINUTE) : 0,
       })),
     };
+    if (counted) {
+      const parts = segmentMs(s, until);
+      const worked = allocateMinutes(detail.workedMinutes, parts.map((p) => p.workedMs));
+      const brk = allocateMinutes(detail.breakMinutes, parts.map((p) => p.breakMs));
+      for (const [i, p] of parts.entries()) {
+        const mine = detail.clients.find((c) => c.clientId === p.clientId);
+        if (mine) {
+          mine.workedMinutes += worked[i];
+          mine.breakMinutes += brk[i];
+        } else detail.clients.push({ clientId: p.clientId, workedMinutes: worked[i], breakMinutes: brk[i] });
+      }
+    }
     day.sessionList.push(detail);
     day.workedMinutes += detail.workedMinutes;
     day.breakMinutes += detail.breakMinutes;
@@ -137,6 +212,20 @@ export function buildDays(events: readonly ClockEventLite[], zone: string, openU
     if (s.endAt === null) day.open = true;
     else day.lastOut = Math.max(day.lastOut ?? 0, s.endAt);
     days.set(date, day);
+  }
+  // The day's split by client: only when some of the day's time belongs to a client.
+  for (const day of days.values()) {
+    const merged = new Map<string | null, ClientMinutes>();
+    for (const session of day.sessionList) {
+      for (const c of session.clients) {
+        const have = merged.get(c.clientId);
+        if (have) {
+          have.workedMinutes += c.workedMinutes;
+          have.breakMinutes += c.breakMinutes;
+        } else merged.set(c.clientId, { ...c });
+      }
+    }
+    day.clients = [...merged.values()].some((c) => c.clientId !== null) ? [...merged.values()] : [];
   }
   return [...days.values()].sort((x, y) => x.date.localeCompare(y.date));
 }
@@ -231,3 +320,10 @@ export const EOD_EDIT_WINDOW_MS = 24 * 60 * MINUTE;
 export const EOD_TEMPLATE = ["Done today:", "- ", "", "In progress:", "- ", "", "Blockers:", "- ", "", "Tomorrow:", "- "].join("\n");
 
 export const MAX_OPEN_SESSION_MS = 12 * 60 * MINUTE;
+
+/** A finished session longer than this (clock-in to clock-out, breaks included) is almost always a forgotten clock-out. */
+export const LONG_SESSION_MS = MAX_OPEN_SESSION_MS;
+
+/** Whether any finished session in a day ran longer than {@link LONG_SESSION_MS}. Open sessions have their own flag. */
+export const hasLongSession = (sessions: readonly { startAt: number; endAt: number | null }[]) =>
+  sessions.some((s) => s.endAt !== null && s.endAt - s.startAt > LONG_SESSION_MS);

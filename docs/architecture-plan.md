@@ -62,6 +62,7 @@ Access is decided by role plus scope: every permission is limited to **own** rec
 | View people directory and org chart | All | All | All | All | All | All |
 | View full profile | All | All | Team (no sensitive fields) | — | — | Own |
 | Sensitive fields (gov IDs, payout, pay rate) | All | All | — | — | — | Own, masked |
+| Payroll (runs, rates, history) | Chosen people only | Chosen people only | Chosen people only | Chosen people only | Chosen people only | Own payslips |
 | Edit profile | All | All | — | — | — | Own contact info (HR approves) |
 | Documents | All | All | — | — | — | Own |
 | Approve time off | All | All (final) | Team (first level) | — | — | — |
@@ -129,7 +130,7 @@ Everything hangs off one `employees` table, with about 55 tables across 5 Postgr
 **Design rules**
 
 - Leave balances come from an append-only ledger (accrual, usage, adjustment, carry-over), so any balance can be explained line by line.
-- Government IDs, payout details and pay rates live in `employee_sensitive`, encrypted in the app with AES-256-GCM before they reach the database.
+- Government IDs and payout details live in `employee_sensitive`, encrypted in the app with AES-256-GCM before they reach the database. Payroll pay amounts live in the `payroll` tables, always encrypted; the old `payRate` field is read-only reference until the parallel run ends. Payroll access comes only from a level (`core.users.payroll_access`: preparer, approver or viewer) chosen by a Super Admin, never from a role.
 - Candidates are separate from employees until hired, so applicant data can be deleted on its own retention schedule.
 - Every table has Row Level Security turned on with no public policies, so the Supabase public API key can read nothing even if leaked.
 

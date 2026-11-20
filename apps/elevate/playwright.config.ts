@@ -16,7 +16,8 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
   use: { baseURL, trace: "on-first-retry" },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: /privacy-gate/ },
+    // A fake microphone so the voice-note test can record without a real device or a permission prompt.
+    { name: "chromium", use: { ...devices["Desktop Chrome"], permissions: ["microphone"], launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] } }, testIgnore: /privacy-gate/ },
     // Publishing a privacy notice stops every signed-in person at the acceptance screen, so this runs alone, last.
     { name: "privacy-gate", use: { ...devices["Desktop Chrome"] }, testMatch: /privacy-gate/, dependencies: ["chromium"] },
   ],

@@ -99,6 +99,17 @@ You proved the API clock-in works with `pnpm jibble:probe`. For the real link al
 - [ ] **No patient data**: remind HR and leads (the upload screens already warn). Jibble screenshots can contain client data, which is why ELEVATE never copies them.
 - [ ] Data-processing terms with each vendor (Supabase, Vercel, Brevo, Resend, Upstash, Inngest, Jibble) kept on file, since they handle personal data for ERS.
 
+### 6b. Payroll (before any real pay data)
+
+- [ ] **Publish the updated privacy notice first** (Settings > Policies). It carries the Pay point (who can see pay). Real pay data must not enter ELEVATE until it is published. **Blocker: the privacy notice is currently over the 10,000-character policy limit** (`MARKDOWN_MAX_LENGTH`, enforced by `createPolicySchema` and the Markdown box) by about 200 characters, so it cannot be pasted into Settings > Policies as it is. Before publishing, the owner must either trim at least about 300 characters of counsel-approved wording or deliberately raise the policy limit (announcements module).
+- [ ] **Choose at least 2 Preparers and at least 2 Approvers** (Settings > Payroll access, Super Admin only). Make sure the Approvers did **not** write the rates: anyone who wrote a rate a run pays can never approve that run. If the only Approver also wrote the only rates, nobody can approve until another Approver exists, or another Preparer writes new versions of those rates (which forces cancelling and recreating the run).
+- [ ] **Enter the extra-time multipliers and the cutoff divisor** in Payroll > Settings, from the sheet owner (never guessed). Until they are set, any extra hours block sending for review.
+- [ ] **Keep EVERY old `FIELD_ENCRYPTION_KEYS` entry, forever.** Approved pay rows are frozen and cannot be re-encrypted. No re-encrypt job exists in the code, although CLAUDE.md describes one for other fields. Dropping an old key makes old pay unreadable.
+- [ ] **Parallel run, at least 2 cutoffs:** prepare each cutoff in ELEVATE beside the sheet, compare line by line to the centavo, and explain every difference before retiring the sheet (steps in `docs/modules/payroll.md`).
+- [ ] After the parallel run, **remove the old `payRate` field from profiles** as a separate small change (until then HR Admins and Super Admins can still see it, which the privacy notice says).
+- [ ] **Counsel:** 1099 wording; whether paying premiums (extra hours) and making deductions affects contractor status; the retention period for pay records (none is set, nothing is deleted).
+- [ ] Run `docs/RUNBOOK.md` section 5e2 past the people who will prepare and approve.
+
 ## 7. Set up the live app (first sign-in as Super Admin)
 
 - [ ] **People with roles**: use Settings > Invitations to invite HR admins, leads and recruiters with their roles in the invitation (Super Admin only). Check Settings > Roles afterwards.
@@ -140,3 +151,34 @@ You proved the API clock-in works with `pnpm jibble:probe`. For the real link al
 ## 11. If something breaks
 
 Start at `docs/RUNBOOK.md`. For a stuck or slow page: Vercel > Logs for the request (look for `dashboard panel failed` lines), Supabase > Reports, and the SQL in `docs/DEPLOY.md` ("If something goes wrong").
+
+## Calls go-live (after the chat checklist below)
+
+- [ ] **Migration 0160 applied** (call tables, heartbeat, the second Cloudflare session, what each person pulled and who was removed; it comes after 0159, the HR-managed channels). Apply before the new code runs.
+- [ ] **Cloudflare:** in Vercel (Production) set `CLOUDFLARE_REALTIME_APP_ID` and `CLOUDFLARE_REALTIME_APP_SECRET` (the Serverless SFU application, NOT RealtimeKit) and `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_TOKEN` (a TURN key). Use keys made for production and rotate any key that was ever pasted in a chat. Never set `CALLS_FAKE` or `NEXT_PUBLIC_CALLS_FAKE` in production (they are ignored there, but keep them out).
+- [ ] Check **Settings > Calls** shows no "Calls are off" notice, then make a test call between two real computers (one on a phone hotspot to exercise the relay).
+- [ ] Rehearse with 10 to 25 people on their own computers before announcing, then the all-hands: follow `docs/CALLS-REHEARSAL.md` (steps, pass marks, what to write down); watch Cloudflare's dashboard (Realtime) against the estimate on Settings > Calls.
+- [ ] Publish the updated Monitoring policy (calls, screen share warning) before use.
+- [ ] **All-hands and recording (migration 0161):** apply it with the rest; run `pnpm storage:setup` against production so the private bucket `call-recordings` exists (WebM only, 24 MB per piece; the project-wide file size cap is already at least 100 MB). The daily job `calls-daily` must show in Settings > System health after the first night (it ends calls nobody is in and deletes recordings after 30 days).
+- [ ] **Recording stays OFF** (Settings > Calls > Allow recording) until: the Monitoring policy v3 (recording, who may record, consent, 30 days, never with clients) and the privacy notice (call logs, recordings; it is near its 10,000-character limit) are published, counsel has agreed the consent wording, and a Super Admin has picked the recorders. Then try it once with two real people: the other person must be asked, a No must leave them out, the recording must appear at Messages > Call recordings for both, and the file must be gone after the expiry (set `expires_at` back in a test database to check the job).
+- [ ] Rehearse an all-hands with the real company (or half of it): watch Cloudflare's dashboard (Realtime) against Settings > Calls, the speed of raised hands and reactions with 100+ people, and how many people see the speaker's picture within a few seconds.
+
+## HR access to chats and recordings (Phase 6)
+
+- [ ] **Migration 0162 applied** (the access request table and its guards) before the new code runs. The daily job `chat-access-notices` appears in Settings > System health after its first night.
+- [ ] At least **two** Super Admins exist (one asks or approves, a different one decides); with only one, requests wait for a second.
+- [ ] Counsel has confirmed the wording and the rule that the people in a chat are told after access that was used (`docs/policies/COUNSEL-NOTES.md`), and the Monitoring policy and privacy notice mention HR access to chats and recordings with two-person approval. Try it once on test chats: ask, approve as someone else, read, and see the line in the chat after the 72 hours.
+
+## Messages (chat) go-live
+
+- [ ] **Migrations 0146 to 0156 applied** (the chat tables, guards, channels, polls, files, search, settings, guests and the notification sound), *before* the new code runs: `pnpm db:migrate` with the session pooler string, as in DEPLOY Part 1 step 5. Check: `select count(*) from drizzle.__drizzle_migrations;` is 11 higher than before. Migration 0147 also creates the two Realtime policies (it skips them quietly on a plain Postgres, so confirm in Supabase > Database > Policies, schema `realtime`, table `messages`, that `chat_receive` and `chat_send` exist).
+- [ ] **Storage bucket `chat-files`** exists and is private: run `pnpm storage:setup` from your computer against production (it creates any missing bucket).
+- [ ] **Supabase Realtime settings:** turn OFF "Allow public access" (Project settings > Realtime). Chat uses private channels only.
+- [ ] **The new privacy notice and Monitoring policy are published** (drafts in `docs/policies/`) before anyone uses chat with real data. Publishing is permanent and makes everyone accept at next sign-in.
+- [ ] **Sentry and logs:** nothing to change; chat never logs message text.
+- [ ] **Migrations 0157, 0158 and 0159** (quote replies, hand-made channels, group pictures, the picture link, HR-managed automatic channels) are applied the same way: they are additive and must run before the new code. After them, `select count(*) from drizzle.__drizzle_migrations;` is three higher again.
+- [ ] GIFs now have two services. To use GIPHY (works now, 100 calls an hour for the whole company): set `GIPHY_API_KEY` in Vercel and `GIF_PROVIDER=giphy`. To use KLIPY once approved: set `KLIPY_API_KEY` and `GIF_PROVIDER=klipy`. Leave both unset to keep GIFs off.
+- [ ] Optional, GIFs: add `KLIPY_API_KEY` in Vercel (server only). Without it the GIF button says GIFs are not set up. KLIPY's production key needs their approval first (a test key works for local checks only). Check their attribution rules, then search one GIF after adding the key. The response format was verified against a test key on 2026-11-17.
+- [ ] The messages retention (one year) is promised in the privacy notice but **no job enforces it yet**: tell counsel, and build it or adjust the wording before the first year ends.
+- [ ] Do NOT rotate `FIELD_ENCRYPTION_KEYS` until a search re-index exists (older messages stop matching in search).
+- [ ] Guests: HR invites at Messages > Client guests; the guest notice text is a draft for counsel (`apps/elevate/src/modules/messages/guests.ts`).

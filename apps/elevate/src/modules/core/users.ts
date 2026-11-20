@@ -1,10 +1,11 @@
 import "server-only";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { BASE_ROLE, isRoleSlug, type RoleSlug } from "@/lib/roles";
+import { BASE_ROLE, isRoleSlug, type PayrollLevel, type RoleSlug } from "@/lib/roles";
 import { writeAudit } from "@/modules/audit/write";
 import { linkEmployeeToUser } from "@/modules/people/service";
 import { needsProvisioning } from "./provision-rules";
+import { provisionGuest } from "@/modules/messages/guest-provision";
 import { invitations, userRoles, users } from "./schema";
 
 export type CoreUser = {
@@ -12,9 +13,17 @@ export type CoreUser = {
   email: string;
   archivedAt: Date | null;
   isSafevoiceHandler: boolean;
+  payrollAccess: PayrollLevel | null;
   isPrivacyOfficer: boolean;
+  canRecordCalls: boolean;
+  /** A client guest: Messages only, no roles (never the Employee role either). */
+  isGuest: boolean;
   roles: RoleSlug[];
 };
+
+function asPayrollLevel(v: string | null): PayrollLevel | null {
+  return v === "preparer" || v === "approver" || v === "viewer" ? v : null;
+}
 
 function superAdminEmails(): string[] {
   return (process.env.SUPER_ADMIN_EMAILS ?? "")
@@ -34,7 +43,14 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
   return db.transaction(async (tx) => {
     // If another request is setting up the same account, fail in seconds instead of queueing behind it for minutes.
     await tx.execute(sql`set local lock_timeout = '5s'`);
-    await tx.insert(users).values({ id: input.id, email }).onConflictDoNothing({ target: users.id });
+    // A guest invitation (it names a client) makes a guest account, whatever its expiry: a guest invitation must never end up as staff.
+    const [guestInvite] = await tx
+      .select({ clientId: invitations.guestClientId })
+      .from(invitations)
+      .where(and(sql`lower(${invitations.email}) = ${email}`, isNull(invitations.acceptedAt), sql`${invitations.guestClientId} is not null`))
+      .limit(1);
+    await tx.insert(users).values({ id: input.id, email, isGuest: Boolean(guestInvite) }).onConflictDoNothing({ target: users.id });
+    const [account] = await tx.select({ isGuest: users.isGuest }).from(users).where(eq(users.id, input.id)).limit(1);
 
     // Marks the invitation accepted and reads what the Super Admin chose for this person. Only the first set-up gets a row back, so the
     // choices are applied exactly once, and an invitation that had already run out gives nothing.
@@ -42,7 +58,17 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
       .update(invitations)
       .set({ acceptedAt: new Date() })
       .where(and(sql`lower(${invitations.email}) = ${email}`, isNull(invitations.acceptedAt)))
-      .returning({ roles: invitations.roles, isSafevoiceHandler: invitations.isSafevoiceHandler, invitedBy: invitations.invitedBy, expiresAt: invitations.expiresAt });
+      .returning({ roles: invitations.roles, isSafevoiceHandler: invitations.isSafevoiceHandler, invitedBy: invitations.invitedBy, expiresAt: invitations.expiresAt, guestClientId: invitations.guestClientId });
+
+    if (account.isGuest) {
+      // A guest gets no role (a trigger refuses one), no Super Admin promotion and no people record: only a guest row tied to the client.
+      if (accepted?.guestClientId) {
+        await provisionGuest(tx, { userId: input.id, clientId: accepted.guestClientId, invitedBy: accepted.invitedBy });
+        await writeAudit({ actor: null, action: "guest.account_created", targetType: "user", targetId: input.id, after: { clientId: accepted.guestClientId }, metadata: { invitedBy: accepted.invitedBy } }, tx);
+      }
+      const [guestRow] = await tx.select().from(users).where(eq(users.id, input.id)).limit(1);
+      return { id: guestRow.id, email: guestRow.email, archivedAt: guestRow.archivedAt, isSafevoiceHandler: false, payrollAccess: null, isPrivacyOfficer: false, canRecordCalls: false, isGuest: true, roles: [] };
+    }
 
     await tx
       .insert(userRoles)
@@ -108,7 +134,10 @@ export async function provisionCoreUser(input: { id: string; email: string }): P
       email: row.email,
       archivedAt: row.archivedAt,
       isSafevoiceHandler: row.isSafevoiceHandler,
+      payrollAccess: asPayrollLevel(row.payrollAccess),
       isPrivacyOfficer: row.isPrivacyOfficer,
+      canRecordCalls: row.canRecordCalls,
+      isGuest: row.isGuest,
       roles: roleRows.map((r) => r.slug).filter(isRoleSlug),
     };
   });
@@ -127,7 +156,10 @@ async function loadCoreUser(id: string): Promise<CoreUser | null> {
     email: row.email,
     archivedAt: row.archivedAt,
     isSafevoiceHandler: row.isSafevoiceHandler,
+    payrollAccess: asPayrollLevel(row.payrollAccess),
     isPrivacyOfficer: row.isPrivacyOfficer,
+      canRecordCalls: row.canRecordCalls,
+    isGuest: row.isGuest,
     roles: roleRows.map((r) => r.slug).filter(isRoleSlug),
   };
 }
@@ -139,6 +171,8 @@ async function loadCoreUser(id: string): Promise<CoreUser | null> {
  */
 export async function ensureCoreUser(input: { id: string; email: string }): Promise<CoreUser> {
   const existing = await loadCoreUser(input.id);
+  // A guest never needs the staff set-up (no base role, no promotion, no people record).
+  if (existing?.isGuest) return existing;
   const email = input.email.toLowerCase();
 
   const listed = superAdminEmails().includes(email);

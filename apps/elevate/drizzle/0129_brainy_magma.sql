@@ -1,0 +1,1 @@
+ALTER TABLE "payroll"."pay_run_lines" ADD COLUMN "excluded" boolean DEFAULT false NOT NULL;

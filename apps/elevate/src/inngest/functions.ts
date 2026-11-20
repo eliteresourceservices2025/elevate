@@ -3,6 +3,7 @@ import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
 import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runExtraHoursReminders, runHrApprovalSummary, runLeadApprovalReminders, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts, runWeeklyExtraHoursNotice } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
 import { purgeOrphanContentFiles } from "@/modules/announcements/content-files";
+import { listJibbleImportPeople, runJibbleImport } from "@/modules/jibble/import";
 import { processMirrorQueue, purgeJibbleData, runJibbleComparison, runJibbleRepair, runJibbleUnmatchedReport, syncJibblePeople } from "@/modules/jibble/jobs";
 import { runCredentialReminders } from "@/modules/credentials/jobs";
 import { listLearnCourses } from "@/modules/learn/course-catalog";
@@ -20,6 +21,9 @@ import { runPeopleRetention } from "@/modules/people/retention";
 import { runEsignReminders, runEsignSealSweep } from "@/modules/signing/jobs";
 import { runChecklistReminders, runChecklistSync, runSeparations } from "@/modules/onboarding/jobs";
 import { runImportPurge } from "@/modules/imports/jobs";
+import { runCallsDaily } from "@/modules/calls/jobs";
+import { runChatAccessNotices } from "@/modules/chat-access/jobs";
+import { runChatChannelSync, runChatDigest } from "@/modules/messages/jobs";
 import { runSafevoiceNotify } from "@/modules/safevoice/jobs";
 import { runEarlyReviewScheduler, runReviewReminders } from "@/modules/reviews/jobs";
 import { runAnalyticsNightly } from "@/modules/analytics/build";
@@ -169,6 +173,25 @@ export const jibbleMirror = inngest.createFunction(
   async ({ step }) => step.run("send", () => track("jibble-mirror", () => processMirrorQueue())),
 );
 
+/** Every 30 minutes: bring in the hours of people who clock in Jibble (their time entries become clock events; edits and deletions are followed). */
+export const jibbleImport = inngest.createFunction(
+  { id: "jibble-import", triggers: [{ event: "jibble/import.requested" }, { cron: "*/30 * * * *" }] },
+  async ({ event, step }) => {
+    // The event (sent when HR moves many people to the Jibble clock) names who to read and how many days back; the schedule reads everyone for 3 days.
+    const data = (event?.data ?? {}) as { employeeIds?: unknown; days?: unknown };
+    const requested = Array.isArray(data.employeeIds) ? data.employeeIds.filter((id): id is string => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)) : null;
+    const days = typeof data.days === "number" ? data.days : undefined;
+    const due = await step.run("list", () => listJibbleImportPeople());
+    const ids = requested ? due.filter((id) => requested.includes(id)) : due;
+    // A few people per step, so each step is short and one slow person cannot stop the rest.
+    for (let i = 0; i < ids.length; i += 8) {
+      const chunk = ids.slice(i, i + 8);
+      await step.run(`import-${i / 8}`, () => track("jibble-import", () => runJibbleImport({ employeeIds: chunk, days })));
+    }
+    return { people: ids.length };
+  },
+);
+
 /** The experimental checker targets five minutes; the legacy repair schedule remains every 30 minutes. */
 export const jibbleRepair = inngest.createFunction(
   { id: "jibble-repair", triggers: { cron: process.env.JIBBLE_COORDINATION_ENABLED === "true" ? "*/5 * * * *" : "*/30 * * * *" } },
@@ -305,4 +328,28 @@ export const importPurge = inngest.createFunction(
   async ({ step }) => step.run("purge", () => track("import-purge", () => runImportPurge())),
 );
 
-export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge];
+/** Daily at 3:40 AM Phoenix: bring the automatic team, department and company chat channels in line with ELEVATE's organization. */
+export const chatChannelSync = inngest.createFunction(
+  { id: "chat-channel-sync", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 40 3 * * *` } },
+  async ({ step }) => step.run("sync", () => track("chat-channel-sync", () => runChatChannelSync())),
+);
+
+/** Daily at 8:00 AM Phoenix: one lowest-priority email to people with unread chat messages (a count and a link, never the messages). */
+export const chatDigest = inngest.createFunction(
+  { id: "chat-digest", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 0 8 * * *` } },
+  async ({ step }) => step.run("digest", () => track("chat-digest", () => runChatDigest(todayInZone()))),
+);
+
+/** Daily at 3:50 AM Phoenix: end calls nobody is in, and delete call recordings older than 30 days. */
+export const callsDaily = inngest.createFunction(
+  { id: "calls-daily", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 50 3 * * *` } },
+  async ({ step }) => step.run("daily", () => track("calls-daily", () => runCallsDaily())),
+);
+
+/** Daily at 4:00 AM Phoenix: tell the people in a chat when HR's approved access to it has ended and was used. */
+export const chatAccessNotices = inngest.createFunction(
+  { id: "chat-access-notices", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 0 4 * * *` } },
+  async ({ step }) => step.run("notices", () => track("chat-access-notices", () => runChatAccessNotices())),
+);
+
+export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge, chatChannelSync, chatDigest, callsDaily, chatAccessNotices];

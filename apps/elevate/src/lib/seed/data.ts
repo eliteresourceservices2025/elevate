@@ -123,3 +123,37 @@ export function buildSeedDataset(count = 40, seed = 20260930): SeedDataset {
 
   return { teams: TEAMS, clients: CLIENTS, employees };
 }
+
+// ---- Payroll (FAKE) ----
+// Invented levels and pay lines for the fake accounts, so the Payroll screens have something to show. Amounts are invented and
+// bear no relation to anyone. The seed script writes them encrypted, only where a person has no pay line yet.
+
+/** The fake sign-in accounts, in order: account i is the person at index i of the seeded people. */
+export const SEED_ACCOUNT_ROLES = ["super_admin", "hr_admin", "team_lead", "recruiter", "executive", "employee"] as const;
+
+/** Payroll levels for the fake sign-in accounts (by role). One of each level; the Super Admin account is left without a level on purpose. */
+export const SEED_PAYROLL_LEVELS = [
+  { role: "hr_admin", level: "preparer" },
+  { role: "executive", level: "approver" },
+  { role: "recruiter", level: "viewer" },
+] as const;
+
+export type SeedPayLine = {
+  /** Index into the 40 seeded people. The people behind the Preparer, Approver and Viewer accounts (1, 3, 4) get no line. */
+  employeeIndex: number;
+  alias: string | null;
+  monthlyCentavos: string;
+  pesoAllowanceCentavos: string;
+  dollarAllowanceCents: string;
+  hoursPerDay: number;
+  fte: string;
+  effectiveFrom: string;
+};
+
+export const SEED_PAY_LINES: readonly SeedPayLine[] = [
+  { employeeIndex: 2, alias: null, monthlyCentavos: "3200000", pesoAllowanceCentavos: "0", dollarAllowanceCents: "0", hoursPerDay: 8, fte: "1.00", effectiveFrom: "2026-01-01" },
+  { employeeIndex: 5, alias: null, monthlyCentavos: "2200000", pesoAllowanceCentavos: "150000", dollarAllowanceCents: "2500", hoursPerDay: 8, fte: "1.00", effectiveFrom: "2026-01-01" },
+  { employeeIndex: 6, alias: "Jamie Doe", monthlyCentavos: "2400000", pesoAllowanceCentavos: "0", dollarAllowanceCents: "0", hoursPerDay: 8, fte: "1.00", effectiveFrom: "2026-01-01" },
+  { employeeIndex: 7, alias: null, monthlyCentavos: "1800000", pesoAllowanceCentavos: "0", dollarAllowanceCents: "0", hoursPerDay: 4, fte: "0.50", effectiveFrom: "2026-01-01" },
+  { employeeIndex: 8, alias: null, monthlyCentavos: "2600000", pesoAllowanceCentavos: "100000", dollarAllowanceCents: "0", hoursPerDay: 8, fte: "1.00", effectiveFrom: "2026-01-01" },
+];

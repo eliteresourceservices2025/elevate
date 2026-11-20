@@ -5,8 +5,11 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatInZone, resolveTimeZone } from "@/lib/time";
 import { timeDownlineEmployeeIds, reportName, todayInZone } from "@/modules/org/service";
-import { approvalKey, attendanceRows, dayState, latestApprovals, testMarks, zonesFor, type DayState } from "./hours-service";
+import { approvalKey, attendanceRows, dayState, latestApprovals, testMarks, zonesFor, type Approval, type DayState } from "./hours-service";
 import { addDays, mondayOf, recentPeriods, type PayPeriod, type PayPeriodKind } from "./pay-periods";
+import { mayReopenDay } from "./reopen-rules";
+import { hasScheduleAround } from "./schedule";
+import { loadSchedulesFor } from "./schedule-service";
 import { hoursSettings } from "./schema";
 
 // Every query starts with requireUser() and authorize(). Pages wrap them in orNotFound().
@@ -17,6 +20,8 @@ export type ReviewDay = {
   date: string;
   weekday: string;
   scheduledMinutes: number | null;
+  /** The person has a schedule around this day, so a day without a shift is a rest day (otherwise they have no schedule). */
+  hasSchedule: boolean;
   workedMinutes: number;
   /** Break time actually taken that day (the scheduled unpaid break is already taken out of the scheduled hours). */
   breakMinutes: number;
@@ -28,6 +33,10 @@ export type ReviewDay = {
   firstIn: number | null;
   lastOut: number | null;
   state: DayState;
+  /** The day's worked and break time by client, when some of it belongs to a client (empty otherwise). */
+  clients: { clientId: string | null; name: string; workedMinutes: number; breakMinutes: number }[];
+  /** The signed-in person may take this day's approval back now. */
+  canReopen: boolean;
   /** The day is over in the person's own zone, so it can be approved. */
   finished: boolean;
 };
@@ -49,6 +58,8 @@ export type ReviewRow = {
   state: "approved" | "partly" | "changed" | "none" | "empty";
   /** The signed-in person may approve this week now. */
   canApprove: boolean;
+  /** The signed-in person may take back the approval of at least one day of this week. */
+  canReopen: boolean;
 };
 
 /** A day someone marked "test only": it is not in the list above, and can be taken off again. */
@@ -74,6 +85,12 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
 
   const approvals = await latestApprovals(db, ids, weekStart, weekEnd);
   const zones = await zonesFor(db, ids);
+  const schedules = await loadSchedulesFor(db, ids);
+  const clientIds = [...new Set(days.flatMap((d) => d.clientSplit.map((c) => c.clientId)).filter((id): id is string => id !== null))];
+  const clientNames = new Map(
+    clientIds.length === 0 ? [] : ((await db.execute(sql`select id, name from core.clients where id in (${sql.join(clientIds.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { id: string; name: string }[]).map((c) => [c.id, c.name] as const),
+  );
+  const reopenScope = scopeFor(user, "hours.reopen");
   const people = (await db.execute(sql`
     select e.id, e.user_id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team
     from core.employees e left join core.teams t on t.id = e.team_id where e.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)) as unknown as { id: string; user_id: string | null; first: string; last: string; preferred: string | null; team: string | null }[];
@@ -86,10 +103,14 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
       const zone = resolveTimeZone(zones.get(id));
       const today = formatInZone(now, zone, "yyyy-MM-dd");
       const mine = days.filter((d) => d.employeeId === id).sort((a, b) => a.date.localeCompare(b.date));
+      // Never one's own hours; HR any approval, a lead only theirs within a week (the server checks again, and the payroll run too).
+      const canReopenDay = (approval: Approval | undefined) =>
+        approval !== undefined && (reopenScope === "all" || reopenScope === "team") && p.user_id !== user.id && mayReopenDay(reopenScope, user.id, approval, now);
       const reviewDays: ReviewDay[] = mine.map((d) => ({
         date: d.date,
         weekday: WEEKDAY.format(new Date(`${d.date}T00:00:00Z`)),
         scheduledMinutes: d.scheduledMinutes,
+        hasSchedule: hasScheduleAround(schedules.get(id) ?? [], d.date),
         workedMinutes: d.workedMinutes,
         breakMinutes: d.breakMinutes,
         extraMinutes: d.extraMinutes,
@@ -100,6 +121,8 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
         firstIn: d.firstIn?.getTime() ?? null,
         lastOut: d.lastOut?.getTime() ?? null,
         state: dayState(d, approvals.get(approvalKey(id, d.date))),
+        clients: d.clientSplit.map((c) => ({ clientId: c.clientId, name: c.clientId ? (clientNames.get(c.clientId) ?? "Client") : "No client", workedMinutes: c.workedMinutes, breakMinutes: c.breakMinutes })),
+        canReopen: canReopenDay(approvals.get(approvalKey(id, d.date))),
         finished: d.date < today,
       }));
       const finished = reviewDays.filter((d) => d.finished);
@@ -120,6 +143,7 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
         flags: [...new Set(reviewDays.flatMap((d) => d.flags))],
         state,
         canApprove: p.user_id !== user.id && (state === "none" || state === "partly" || state === "changed"),
+        canReopen: reviewDays.some((d) => d.canReopen),
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));

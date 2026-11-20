@@ -1,0 +1,55 @@
+// Plain-words descriptions shown beside payroll form fields (the (i) button, `FieldHint`). One place, so the wording stays consistent.
+// Say what the box is for and what to type, in a sentence or two.
+
+export const PAYROLL_HINTS = {
+  // Settings
+  settingsStartsOn: "The first day these settings apply. A pay run uses the version that was in force on the run's first day. Older versions stay on record, so past runs never change.",
+  settingsDivisor:
+    "Turns a monthly rate into a daily rate: daily rate = monthly rate ÷ (2 × this number). The hourly rate is the daily rate ÷ the person's hours per day. The usual number is 11.",
+  settingsWarn:
+    "On a run, a person whose total payable compensation moved by more than this percent from their last run is flagged for a second look. It only warns; nothing is blocked.",
+  settingsOt:
+    "The company standard overtime (OT) rate, used for every pay line that doesn't set its own. 125 means 1.25 times the person's own hourly rate. Leave a box blank to use the built-in standard. A single person can have a different percent on their pay line (Rates tab).",
+  settingsReason: "Why you are changing the settings. Kept in the change history, never in notices.",
+
+  // Pay lines (Rates)
+  lineStartsOn: "The first pay run this counts for. Pick the cutoff being prepared unless the change should wait for a later one. Pay runs that are already made are never changed.",
+  linePerson: "Who is paid by this line. Someone who works for two clients has two lines.",
+  lineClient: "The client this person works for on this line. It is printed on their statement. Optional.",
+  lineAlias: "A short label, such as the role or account name, that tells two lines of the same person apart. Printed on their statement. Optional.",
+  lineHours: "How many hours are in this person's normal workday (1 to 12). The hourly rate is the daily rate ÷ this number. It is used for overtime, late time and part days.",
+  lineMonthly: "The person's full monthly rate in pesos. Each cutoff pays half of it.",
+  lineBasis: "A contractor is paid a monthly rate. A member of the internal team (the ELITE Resource Services team) can instead be paid per FTE: each cutoff pays the run's total FTE times the amount below.",
+  linePerFte: "The amount in pesos for one FTE for one cutoff. The cutoff pay is the run's total FTE times this amount (28 FTE times 1,500.00 is 42,000.00).",
+  lineFte: "How much of a full-time person this line counts for in the run's total FTE: 1, 0.5 or 0. 0 means it does not count. It only sets the internal team's pay and is never shown to the contractor. Leave it as Not set if you don't know yet; the run will remind you.",
+  lineMethod: "How this person is paid. Remitly lines appear on the Remitly payment list.",
+  lineOt:
+    "This person's own overtime (OT) percent of their hourly rate, for when it differs from the company standard. 125 means 1.25 times. Leave a box blank to use the standard from Settings.",
+  lineOtRegular: "OT on a normal working day, as a percent of the hourly rate.",
+  lineOtRestDay: "OT on a rest day, as a percent of the hourly rate (up to 8 hours).",
+  lineOtRestDayOver8: "OT on a rest day beyond 8 hours, as a percent of the hourly rate.",
+  lineReason: "Why the rate is changing. Kept in the change history, never in notices.",
+  lineLastDay: "The last cutoff this person is paid for. They are paid for all of it; pay runs after it leave this rate out.",
+
+  // New run
+  runFirstDay: "The first day the pay run covers. A real run is exactly one cutoff: the 1st to the 15th, or the 16th to the end of the month.",
+  runLastDay: "The last day the pay run covers.",
+  runTest:
+    "A practice run. It may repeat a period that already has a run, can cover any dates up to 31 days, is stamped TEST, never reaches anyone's statements, and shows masked bank details. Use it to rehearse a past cycle.",
+
+  // Amounts on a run line
+  itemType: "What kind of amount you are adding to this person's pay for the period, such as overtime, an allowance, a bonus or a loan payment.",
+  itemName: "A name for this amount. It is printed on the statement, for example Health allowance.",
+  itemValue: "The amount or time to add. Money is in pesos. Time is in hours and minutes. Days are in days.",
+  itemCorrects: "Pick the earlier amount this one replaces, so the statement shows one corrected line.",
+  itemReason: "Why you are entering or changing this amount. Kept in the change history, never in notices.",
+
+  // Payments
+  paymentReference: "The reference number from Remitly for this payment.",
+  paymentPaidOn: "The day the money was sent in Remitly. Any day, so a payment sent on a later day can be recorded ahead.",
+  paymentSentTime: "The time it was sent, in Arizona time (MST), the company zone. It starts at the time now.",
+  paymentExpected: "When the contractor should have the money, as Remitly shows it. Optional. It starts in Arizona time (MST); change the zone if Remitly gave Manila time. Only payroll staff see it; the statement does not.",
+  paymentUsd: "The dollars you paid in Remitly for this person, kept for your records, for example 351.66. Optional. ELEVATE converts nothing and does not check it against the pesos.",
+  grossPay: "The pay for the cutoff after absences and late time, plus overtime, holiday pay and allowances. It does NOT include reimbursements, bonuses, adjustments, a loan or other deductions, so do not pay from this number.",
+  totalPayable: "The amount to pay this person. It is the gross pay plus reimbursements, bonuses and adjustments, minus a loan and other deductions. This is the Pesos amount on the Remitly list: use this one for payment.",
+} as const;

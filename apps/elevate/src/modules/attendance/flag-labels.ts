@@ -1,5 +1,6 @@
 export const FLAG_LABELS = new Map<string, string>(Object.entries({
   open_session: "Still clocked in",
+  long_session: "Very long session (check the clock-out)",
   outside_range: "Outside allowed IP range",
   corrected: "Corrected",
   idle_unanswered: "Idle prompt unanswered",
@@ -14,5 +15,28 @@ export const FLAG_LABELS = new Map<string, string>(Object.entries({
   no_screenshots: "No screenshots (Jibble not linked or failed)",
   unapproved_extra: "Unapproved extra hours",
   jibble_mismatch: "Jibble and ELEVATE totals differ",
+  needs_client: "Choose the client",
   on_leave: "On approved leave",
+}));
+
+/** One plain sentence for each flag: what it means and what to do. Shown when a reviewer opens a day's status. */
+export const FLAG_HELP = new Map<string, string>(Object.entries({
+  open_session: "They have not clocked out. The hours are not final until they do.",
+  long_session: "A session longer than 12 hours is almost always a forgotten clock-out. Fix the clock-out before approving.",
+  outside_range: "They clocked in from outside the allowed IP range.",
+  corrected: "A time correction was approved for this day.",
+  idle_unanswered: "An idle prompt went unanswered while they were clocked in.",
+  overbreak: "A break ran longer than planned.",
+  no_eod: "No end-of-day report was written.",
+  late: "They clocked in after the shift started.",
+  left_early: "They clocked out before the shift ended.",
+  extra_hours: "They worked beyond the scheduled hours, or inside an approved extra-hours window.",
+  rest_day_work: "They worked on a day with no shift.",
+  holiday_work: "They worked on a holiday.",
+  absent: "A scheduled day with no clocking, leave or holiday. Check whether they were really absent.",
+  no_screenshots: "Jibble was not linked or failed, so no screenshots were taken.",
+  unapproved_extra: "Extra time with no approved extra-hours request. Approve a request or leave it as it is.",
+  jibble_mismatch: "Jibble's total for this day differs from ELEVATE's.",
+  needs_client: "Some of this day's Jibble time has no client, and the person works for more than one. Map the Jibble project or activity to a client on the Jibble page.",
+  on_leave: "They are on approved leave.",
 }));

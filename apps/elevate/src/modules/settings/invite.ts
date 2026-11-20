@@ -1,6 +1,7 @@
 import "server-only";
 import { eq, sql } from "drizzle-orm";
 import type { db } from "@/lib/db";
+import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { invitations, users } from "@/modules/core/schema";
 
@@ -23,7 +24,9 @@ export async function ensureInvitation(tx: Tx, actor: { id: string; email: strin
 
   const expiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000);
   // Re-inviting refreshes the expiry. The unique index on lower(email) guards against a race.
-  const [existing] = await tx.select({ id: invitations.id }).from(invitations).where(sql`lower(${invitations.email}) = ${email}`).limit(1);
+  const [existing] = await tx.select({ id: invitations.id, guestClientId: invitations.guestClientId }).from(invitations).where(sql`lower(${invitations.email}) = ${email}`).limit(1);
+  // An email invited as a client guest can't also be invited as staff: revoke the guest invitation first.
+  if (existing?.guestClientId) throw new ActionFailure("That email is invited as a client guest. Revoke that invitation in Settings > Invitations first.");
   if (existing) {
     await tx
       .update(invitations)
