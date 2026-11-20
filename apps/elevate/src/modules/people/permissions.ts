@@ -27,5 +27,7 @@ export const peoplePermissions = definePermissions({
   "people.manage_custom_fields": { roles: { super_admin: "all", hr_admin: "all" } },
   // The retention settings and the legal hold on a person's record (HR and Super Admin only).
   "people.manage_retention": { roles: { super_admin: "all", hr_admin: "all" } },
+  // Show or hide your own birthday (month and day) on colleagues' dashboards. Everyone with a people record, only for themselves.
+  "people.set_birthday_visibility": { roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" } },
   "people.view_history": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", employee: "own" } },
 });

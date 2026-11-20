@@ -344,3 +344,17 @@ export const anniversaryNotices = core
     (t) => [primaryKey({ columns: [t.employeeId, t.year] })],
   )
   .enableRLS();
+
+/**
+ * A person's own choice about showing their birthday (month and day, never the year) on colleagues' dashboards.
+ * No row means "show"; the row only exists once someone has switched it off or back on. Nothing else reads it.
+ */
+export const birthdayPreferences = core
+  .table("birthday_preferences", {
+    employeeId: uuid("employee_id")
+      .primaryKey()
+      .references(() => employees.id),
+    hidden: boolean("hidden").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  })
+  .enableRLS();

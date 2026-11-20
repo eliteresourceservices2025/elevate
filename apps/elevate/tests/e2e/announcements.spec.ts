@@ -47,13 +47,13 @@ test("HR posts, an employee acknowledges, and HR sees the status", async ({ brow
   await expect(banner).toContainText(/needs? your acknowledgment/); // it lists only the first 3; the dashboard list below has them all
   await expect(empPage.getByRole("button", { name: /Notifications, \d+ unread/ })).toBeVisible();
 
-  await empPage.getByRole("region", { name: "Waiting for you" }).getByRole("link", { name: title }).click();
+  await empPage.getByRole("region", { name: "My to-do" }).getByRole("link", { name: title }).click();
   await empPage.waitForURL(announcementUrl);
   await (await hydrated(empPage.getByRole("button", { name: "I have read and understand" }))).click();
   await expect(empPage.getByText("Your acknowledgment is recorded.")).toBeVisible();
   await expect(empPage.getByText(/You acknowledged this on/)).toBeVisible();
   await empPage.goto("/dashboard");
-  await expect(empPage.getByRole("region", { name: "Waiting for you" }).getByRole("link", { name: title })).toHaveCount(0);
+  await expect(empPage.getByRole("region", { name: "My to-do" }).getByRole("link", { name: title })).toHaveCount(0);
 
   // The employee cannot see who else acknowledged
   await empPage.goto(announcementUrl);

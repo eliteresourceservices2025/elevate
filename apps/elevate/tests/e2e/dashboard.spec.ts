@@ -15,7 +15,7 @@ test("a person with two roles gets both views and the buttons for each", async (
   await expect(views.getByRole("link", { name: "Admin" })).toHaveAttribute("aria-current", "page");
   await expect(views.getByRole("link", { name: "My team" })).toBeVisible();
   await expect(views.getByRole("link", { name: "My work" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Key numbers" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "System health" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Add person" })).toBeVisible();
 
   // The team view leads with the lead's own buttons; the choice survives a reload.
@@ -110,7 +110,9 @@ test("a lead decides a request from the dashboard queue; declining needs a reaso
   }
 
   await leadPage.goto("/dashboard");
-  const queue = leadPage.getByRole("region", { name: "Approval queue" });
+  await expect(leadPage.getByRole("region", { name: "Needs your decision" })).toContainText(`Asks${stamp}`);
+  await leadPage.goto("/approvals");
+  const queue = leadPage.getByRole("region", { name: "Routine approval inbox" });
   const rows = queue.getByRole("listitem").filter({ hasText: `Asks${stamp}` });
   await expect(rows).toHaveCount(2);
 
@@ -142,7 +144,7 @@ test("the management panels show for HR and never for a plain employee", async (
   test.setTimeout(150_000);
   const hr = await (await browser.newContext()).newPage();
   await signInEnrollingMfa(hr, await createHrAccount());
-  await expect(hr.getByRole("region", { name: "Early warnings" })).toBeVisible({ timeout: 20_000 });
+  await expect(hr.getByRole("region", { name: "Risks", exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(hr.getByRole("region", { name: "Onboarding and offboarding" })).toBeVisible();
   await expect(hr.getByRole("region", { name: "Who is out" })).toBeVisible();
   await expect(hr.getByRole("region", { name: "Needs attention" })).toBeVisible();
