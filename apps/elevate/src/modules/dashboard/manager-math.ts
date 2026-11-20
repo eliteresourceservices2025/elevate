@@ -14,3 +14,18 @@ export function flagCounts(rows: readonly { flags: readonly string[] }[], labels
     .map(([flag, count]) => ({ label: labels.get(flag) ?? flag, count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
+
+export type HrKpi = { id: string; label: string; value: number | null; hint?: string; href: string };
+export type HrKpiInputs = { active: number | null; onboarding: number | null; offboarding: number | null; changeRequests: number | null; docsExpiring: number | null; trainingOverdue: number | null };
+
+/** The six HR number tiles, always in this order. A source that was refused arrives as null and stays a tile (shown as a dash). */
+export function shapeHrKpis(i: HrKpiInputs): HrKpi[] {
+  return [
+    { id: "active", label: "Active", value: i.active, hint: "people", href: "/people" },
+    { id: "onboarding", label: "Onboarding", value: i.onboarding, hint: "in progress", href: "/onboarding" },
+    { id: "offboarding", label: "Offboarding", value: i.offboarding, hint: "open cases", href: "/offboarding" },
+    { id: "change-requests", label: "Change requests", value: i.changeRequests, hint: "waiting", href: "/people/requests" },
+    { id: "docs-expiring", label: "Docs expiring", value: i.docsExpiring, hint: "next 30 days", href: "/documents" },
+    { id: "training-overdue", label: "Training overdue", value: i.trainingOverdue, href: "/training" },
+  ];
+}

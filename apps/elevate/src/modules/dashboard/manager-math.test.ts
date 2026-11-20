@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flagCounts, percentOf } from "./manager-math";
+import { flagCounts, percentOf, shapeHrKpis } from "./manager-math";
 
 describe("percentOf", () => {
   it("is 0 when nothing is scheduled, never NaN or Infinity", () => {
@@ -27,5 +27,24 @@ describe("flagCounts", () => {
   it("falls back to the raw flag when it has no label, and returns nothing for no rows", () => {
     expect(flagCounts([{ flags: ["mystery"] }], labels, ignore)).toEqual([{ label: "mystery", count: 1 }]);
     expect(flagCounts([], labels, ignore)).toEqual([]);
+  });
+});
+
+describe("shapeHrKpis", () => {
+  const all = { active: 126, onboarding: 7, offboarding: 2, changeRequests: 3, docsExpiring: 5, trainingOverdue: 7 };
+
+  it("returns exactly six tiles in the fixed order, each with a page to open", () => {
+    const tiles = shapeHrKpis(all);
+    expect(tiles.map((t) => t.id)).toEqual(["active", "onboarding", "offboarding", "change-requests", "docs-expiring", "training-overdue"]);
+    expect(tiles.map((t) => t.value)).toEqual([126, 7, 2, 3, 5, 7]);
+    expect(tiles.every((t) => t.href.startsWith("/"))).toBe(true);
+  });
+
+  it("keeps a tile with a null value (shown as a dash) when its source was refused, instead of dropping or zeroing it", () => {
+    const tiles = shapeHrKpis({ ...all, docsExpiring: null, trainingOverdue: null });
+    expect(tiles).toHaveLength(6);
+    expect(tiles[4].value).toBeNull();
+    expect(tiles[5].value).toBeNull();
+    expect(tiles[0].value).toBe(126);
   });
 });

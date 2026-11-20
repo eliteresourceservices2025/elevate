@@ -16,6 +16,7 @@ import { Tracker } from "@/modules/dashboard/components/tracker";
 import { LatestAnnouncements, WaitingForYou } from "@/modules/dashboard/components/waiting-and-news";
 import { WhosOut } from "@/modules/dashboard/components/whos-out";
 import { WorkforceOverview } from "@/modules/dashboard/components/workforce-overview";
+import { HrBento } from "@/modules/dashboard/components/hr-bento";
 import { TeamLeadBento } from "@/modules/dashboard/components/team-lead-bento";
 import { MyWorkBento } from "@/modules/dashboard/components/my-work-bento";
 import { LENS_COOKIE, availableLenses, pickLens } from "@/modules/dashboard/lens";
@@ -60,6 +61,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
         <MyWorkBento />
       ) : lens === "team_lead" ? (
         <TeamLeadBento />
+      ) : lens === "hr" ? (
+        <HrBento />
       ) : (
         <>
           <Suspense fallback={<KpiCardsSkeleton />}>

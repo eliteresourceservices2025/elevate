@@ -1,5 +1,7 @@
 import "server-only";
-import { authorize } from "@/lib/authz";
+import { cache } from "react";
+import { sql } from "drizzle-orm";
+import { authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { CLEAN_FLAGS } from "@/modules/attendance/hours-service";
@@ -8,7 +10,12 @@ import { FLAG_LABELS } from "@/modules/attendance/flag-labels";
 import { listFlags, listWorkingNow } from "@/modules/attendance/queries";
 import { timeDownlineEmployeeIds, todayInZone } from "@/modules/org/service";
 import { listGoals, listReviews } from "@/modules/reviews/queries";
-import { flagCounts, percentOf } from "./manager-math";
+import { getTrainingCounts } from "@/modules/learn/queries";
+import { countPendingChangeRequests } from "@/modules/people/queries";
+import { documentCounts } from "./feed-queries";
+import { orFallback } from "./or-fallback";
+import { getKpis } from "./queries";
+import { flagCounts, percentOf, shapeHrKpis, type HrKpi } from "./manager-math";
 
 // Tiles for the manager views. Each starts with `requireUser()` + `authorize()` (or calls a query that does), returns counts and short
 // lines only, and returns null or an empty result when the person has no reach for it; a tile never throws for lack of access.
@@ -74,3 +81,28 @@ export async function getReviewsGoalsTile(): Promise<ReviewsGoals> {
     goalsToUpdate: goals.filter((g) => !g.mine && (g.status === "not_started" || g.status === "in_progress") && g.targetOn !== null && g.targetOn <= soon).length,
   };
 }
+
+// ---- HR ------------------------------------------------------------------------------------------------------------------------
+
+/** The six HR number tiles. One read shared by the six tiles of a page; a source this person may not see arrives as a dash, not a zero. */
+export const getHrKpiTiles = cache(async (): Promise<HrKpi[]> => {
+  const user = await me();
+  const [kpis, offboarding, changeRequests, docs, training] = await Promise.all([
+    orFallback(() => getKpis("hr"), []),
+    scopeFor(user, "onboarding.view") === "all"
+      ? db.execute(sql`select count(*)::int as n from talent.offboarding_cases where status = 'open'`).then((r) => (r as unknown as { n: number }[])[0]?.n ?? 0)
+      : Promise.resolve(null),
+    orFallback(() => countPendingChangeRequests(), null),
+    scopeFor(user, "documents.view_overview") === "all" ? documentCounts(user).then((d) => d.soon) : Promise.resolve(null),
+    orFallback(async () => (await getTrainingCounts()).reduce((sum, c) => sum + c.overdue, 0), null),
+  ]);
+  const byId = new Map(kpis.map((k) => [k.id, k.value]));
+  return shapeHrKpis({
+    active: byId.get("people") ?? null,
+    onboarding: byId.get("onboarding") ?? null,
+    offboarding,
+    changeRequests,
+    docsExpiring: docs,
+    trainingOverdue: training,
+  });
+});

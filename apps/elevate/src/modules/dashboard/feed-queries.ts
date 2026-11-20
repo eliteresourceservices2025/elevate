@@ -126,7 +126,7 @@ async function orgOnboardingCounts(userId: string): Promise<{ overdueTasks: numb
 }
 
 /** Documents past their expiry date or expiring within 30 days, counted for HR only. */
-async function documentCounts(user: { id: string; roles: readonly import("@/lib/roles").RoleSlug[] }): Promise<{ expired: number; soon: number }> {
+export async function documentCounts(user: { id: string; roles: readonly import("@/lib/roles").RoleSlug[] }): Promise<{ expired: number; soon: number }> {
   if (scopeFor(user, "documents.view_overview") !== "all") return { expired: 0, soon: 0 };
   const today = todayInZone();
   const later = new Date(`${today}T00:00:00Z`);
