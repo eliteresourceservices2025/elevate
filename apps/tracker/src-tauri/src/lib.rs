@@ -1,3 +1,5 @@
+pub mod core;
+
 use tauri::Manager;
 
 /// The version shown in the window; it comes from tauri.conf.json, the one source of truth.
