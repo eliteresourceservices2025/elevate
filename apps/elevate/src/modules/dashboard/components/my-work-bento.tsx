@@ -1,51 +1,24 @@
-import { Suspense, type ReactNode } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-import { AnniversariesTile, AnnouncementsTile, BirthdaysTile, MyTeamTile, NewJoinersTile, WhosOutTile } from "./people-tiles";
+import type { TileDef, TileLayout } from "../bento-tiles";
+import { BentoView } from "./bento-view";
 import { HoursTile, ScheduleTile, TodoTile } from "./my-work-tiles";
-
-function Cell({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <div className={cn("min-w-0", className)}>
-      <Suspense fallback={<Skeleton className="h-full min-h-32 rounded-2xl" />}>{children}</Suspense>
-    </div>
-  );
-}
+import { AnniversariesTile, AnnouncementsTile, BirthdaysTile, MyTeamTile, NewJoinersTile, WhosOutTile } from "./people-tiles";
 
 /**
- * The VA's dashboard as a bento grid: six columns on a wide screen, every row full, the birthdays tile two rows tall on the right, scrolling inside itself so it never stretches the rows; two columns on a
- * tablet and one on a phone. Work first (hours, schedule, to-do), people second. Tiles are compact and never stretch to fill space.
+ * The VA's dashboard: work first (hours, schedule, to-do), people second. The birthdays tile is two rows tall on the right and scrolls
+ * inside itself, so it never stretches the rows.
  */
-export function MyWorkBento() {
-  return (
-    <div className="grid grid-flow-dense grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
-      <Cell className="lg:col-span-2">
-        <HoursTile />
-      </Cell>
-      <Cell className="lg:col-span-2">
-        <ScheduleTile />
-      </Cell>
-      <Cell className="sm:col-span-2 lg:relative lg:col-span-2 lg:row-span-2">
-        <BirthdaysTile />
-      </Cell>
-      <Cell className="sm:col-span-2 lg:col-span-4">
-        <TodoTile />
-      </Cell>
-      <Cell className="lg:col-span-2">
-        <AnniversariesTile />
-      </Cell>
-      <Cell className="lg:col-span-2">
-        <NewJoinersTile />
-      </Cell>
-      <Cell className="lg:col-span-2">
-        <WhosOutTile />
-      </Cell>
-      <Cell className="lg:col-span-3">
-        <MyTeamTile />
-      </Cell>
-      <Cell className="lg:col-span-3">
-        <AnnouncementsTile />
-      </Cell>
-    </div>
-  );
+export const MY_WORK_TILES: TileDef[] = [
+  { id: "hours", label: "Hours this week", span: 2, render: () => <HoursTile /> },
+  { id: "schedule", label: "Schedule", span: 2, render: () => <ScheduleTile /> },
+  { id: "birthdays", label: "Birthdays", span: 2, rows: 2, render: () => <BirthdaysTile /> },
+  { id: "todo", label: "To-do", span: 4, render: () => <TodoTile /> },
+  { id: "anniversaries", label: "Anniversaries", span: 2, render: () => <AnniversariesTile /> },
+  { id: "joiners", label: "New joiners", span: 2, render: () => <NewJoinersTile /> },
+  { id: "out", label: "Who is out", span: 2, render: () => <WhosOutTile /> },
+  { id: "team", label: "My team", span: 3, render: () => <MyTeamTile /> },
+  { id: "announcements", label: "Announcements", span: 3, render: () => <AnnouncementsTile /> },
+];
+
+export function MyWorkBento({ layout = null }: { layout?: TileLayout | null }) {
+  return <BentoView tiles={MY_WORK_TILES} layout={layout} />;
 }
