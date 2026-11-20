@@ -16,6 +16,7 @@ import { Tracker } from "@/modules/dashboard/components/tracker";
 import { LatestAnnouncements, WaitingForYou } from "@/modules/dashboard/components/waiting-and-news";
 import { WhosOut } from "@/modules/dashboard/components/whos-out";
 import { WorkforceOverview } from "@/modules/dashboard/components/workforce-overview";
+import { ExecutiveBento } from "@/modules/dashboard/components/executive-bento";
 import { HrBento } from "@/modules/dashboard/components/hr-bento";
 import { TeamLeadBento } from "@/modules/dashboard/components/team-lead-bento";
 import { MyWorkBento } from "@/modules/dashboard/components/my-work-bento";
@@ -38,10 +39,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
   const lens = pickLens(user.roles, Array.isArray(asked) ? asked[0] : asked, saved);
 
   const showApprovals = lens === "admin" || lens === "hr" || lens === "team_lead";
-  const showAttention = lens !== "executive";
+  const showAttention = true;
   const showRisks = lens !== "my_work";
   const showTracker = lens === "admin" || lens === "hr" || lens === "team_lead";
-  const showWorkforce = showTracker || lens === "executive";
+  const showWorkforce = showTracker;
   // The Executive has no approvals or attention list, so the warnings take the left column.
   const risks = showRisks ? (
     <Suspense fallback={<Loading />}>
@@ -63,6 +64,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
         <TeamLeadBento />
       ) : lens === "hr" ? (
         <HrBento />
+      ) : lens === "executive" ? (
+        <ExecutiveBento />
       ) : (
         <>
           <Suspense fallback={<KpiCardsSkeleton />}>
@@ -81,14 +84,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
                   <AttentionFeed lens={lens} />
                 </Suspense>
               ) : null}
-              {lens === "executive" ? risks : null}
             </div>
 
             <div className="min-w-0 space-y-6">
               <Suspense fallback={<Loading height="h-56" />}>
                 <WhosOut />
               </Suspense>
-              {lens !== "executive" ? risks : null}
+              {risks}
             </div>
           </div>
 

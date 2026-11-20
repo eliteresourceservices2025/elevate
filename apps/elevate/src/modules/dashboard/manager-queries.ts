@@ -10,12 +10,16 @@ import { FLAG_LABELS } from "@/modules/attendance/flag-labels";
 import { listFlags, listWorkingNow } from "@/modules/attendance/queries";
 import { timeDownlineEmployeeIds, todayInZone } from "@/modules/org/service";
 import { listGoals, listReviews } from "@/modules/reviews/queries";
-import { getTrainingCounts } from "@/modules/learn/queries";
+import { getTrainingCompliance, getTrainingCounts } from "@/modules/learn/queries";
 import { countPendingChangeRequests } from "@/modules/people/queries";
 import { documentCounts } from "./feed-queries";
 import { orFallback } from "./or-fallback";
 import { getKpis } from "./queries";
-import { flagCounts, percentOf, shapeHrKpis, type HrKpi } from "./manager-math";
+import { jobHealth } from "@/modules/health/service";
+import { getRecruitingSummary } from "@/modules/recruiting/queries";
+import { getWhosOut } from "./feed-queries";
+import { getWorkforce } from "./panel-queries";
+import { dropSmall, flagCounts, percentOf, shapeHrKpis, trainingPercent, type HrKpi } from "./manager-math";
 
 // Tiles for the manager views. Each starts with `requireUser()` + `authorize()` (or calls a query that does), returns counts and short
 // lines only, and returns null or an empty result when the person has no reach for it; a tile never throws for lack of access.
@@ -106,3 +110,58 @@ export const getHrKpiTiles = cache(async (): Promise<HrKpi[]> => {
     trainingOverdue: training,
   });
 });
+
+// ---- Executive -----------------------------------------------------------------------------------------------------------------
+// Counts only: never a name, never pay, never a per-person score. Groups under 5 people are hidden on the server.
+
+const MIN_GROUP = 5;
+
+export type HeadcountMovement = { active: number; joined: number; left: number; teams: { name: string; count: number }[] };
+
+/** Company headcount, this month's joiners and leavers, and people by team (teams under 5 are merged or hidden before they get here, and dropped again here). Null without directory analytics. */
+export async function getHeadcountMovement(): Promise<HeadcountMovement | null> {
+  await me();
+  const [kpis, workforce] = await Promise.all([getKpis("executive"), orFallback(() => getWorkforce(), null)]);
+  const byId = new Map(kpis.map((k) => [k.id, k.value]));
+  const active = byId.get("people");
+  if (active === null || active === undefined) return null;
+  const teams = workforce?.teams && !workforce.teams.hiddenAll ? workforce.teams.rows.map((r) => ({ name: r.name, count: r.headcount })) : [];
+  return { active, joined: byId.get("joined") ?? 0, left: byId.get("left") ?? 0, teams: dropSmall(teams, MIN_GROUP).sort((a, b) => b.count - a.count).slice(0, 4) };
+}
+
+export type HiringPipeline = { stages: { stage: string; count: number }[]; openRoles: number };
+
+/** Applicants by stage and open roles, counts only. Null for someone without the hiring summary. */
+export async function getHiringPipeline(): Promise<HiringPipeline | null> {
+  await me();
+  const s = await getRecruitingSummary();
+  const order = ["applied", "screening", "interview", "offer", "hired"] as const;
+  return { openRoles: s.openJobs, stages: order.map((stage) => ({ stage, count: s.counts[stage] })) };
+}
+
+export type TrainingComplianceTile = { currentPercent: number | null; overdue: number };
+
+/** Share of assigned people with a current certificate, and how many are overdue. Percent is null when nobody is assigned. */
+export async function getTrainingComplianceTile(): Promise<TrainingComplianceTile> {
+  await me();
+  const c = await getTrainingCompliance();
+  return { currentPercent: trainingPercent(c.current, c.assigned), overdue: c.overdue };
+}
+
+/** How many background jobs are late or failing, out of how many. Nothing else about them. */
+export async function getHealthSummary(): Promise<{ late: number; total: number }> {
+  const user = await requireUser();
+  await authorize(user, "health.view_status");
+  const jobs = await jobHealth();
+  return { total: jobs.length, late: jobs.filter((j) => (j.state === "late" || j.state === "failing") && j.job !== "health-check").length };
+}
+
+export type TimeOffDay = { label: string; count: number; holidays: string[] };
+
+/** The next seven days: how many people are off each day and which holidays fall there. Counts and holiday names only, never who. */
+export async function getTimeOffCounts(): Promise<TimeOffDay[]> {
+  await me();
+  const data = await getWhosOut();
+  if (!data) return [];
+  return data.days.filter((d) => d.count > 0 || d.holidays.length > 0).map((d) => ({ label: d.label, count: d.count, holidays: d.holidays }));
+}

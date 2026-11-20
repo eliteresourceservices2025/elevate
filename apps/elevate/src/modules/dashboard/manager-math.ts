@@ -29,3 +29,14 @@ export function shapeHrKpis(i: HrKpiInputs): HrKpi[] {
     { id: "training-overdue", label: "Training overdue", value: i.trainingOverdue, href: "/training" },
   ];
 }
+
+/** People with a current certificate as a whole percent of people assigned: null when nobody is assigned (no 0/0), never above 100. */
+export function trainingPercent(current: number, assigned: number): number | null {
+  if (!(assigned > 0)) return null;
+  return Math.min(100, Math.max(0, Math.round((current / assigned) * 100)));
+}
+
+/** Groups of fewer than `min` people are removed, so a team of 1 to 4 never shows a count. */
+export function dropSmall<T extends { count: number }>(groups: readonly T[], min: number): T[] {
+  return groups.filter((g) => g.count >= min);
+}

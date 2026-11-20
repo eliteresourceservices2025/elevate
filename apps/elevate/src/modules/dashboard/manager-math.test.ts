@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flagCounts, percentOf, shapeHrKpis } from "./manager-math";
+import { dropSmall, flagCounts, percentOf, shapeHrKpis, trainingPercent } from "./manager-math";
 
 describe("percentOf", () => {
   it("is 0 when nothing is scheduled, never NaN or Infinity", () => {
@@ -46,5 +46,27 @@ describe("shapeHrKpis", () => {
     expect(tiles[4].value).toBeNull();
     expect(tiles[5].value).toBeNull();
     expect(tiles[0].value).toBe(126);
+  });
+});
+
+describe("trainingPercent", () => {
+  it("is null when nobody is assigned, never NaN", () => {
+    expect(trainingPercent(0, 0)).toBeNull();
+    expect(trainingPercent(5, 0)).toBeNull();
+  });
+
+  it("rounds to a whole percent and never goes above 100", () => {
+    expect(trainingPercent(47, 50)).toBe(94);
+    expect(trainingPercent(1, 3)).toBe(33);
+    expect(trainingPercent(60, 50)).toBe(100);
+    expect(trainingPercent(0, 10)).toBe(0);
+  });
+});
+
+describe("dropSmall", () => {
+  it("removes groups under the minimum, so a team of 1 to 4 people never shows", () => {
+    const teams = [{ name: "Dental", count: 48 }, { name: "Tiny", count: 3 }, { name: "Edge", count: 4 }, { name: "Five", count: 5 }];
+    expect(dropSmall(teams, 5).map((t) => t.name)).toEqual(["Dental", "Five"]);
+    expect(dropSmall([], 5)).toEqual([]);
   });
 });

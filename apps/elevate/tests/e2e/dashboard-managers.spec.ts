@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import postgres from "postgres";
 import { createEmployeeAccount, createHrAccount, signInEnrollingMfa } from "./helpers";
 
 // Needs the local Supabase with migrations applied. Each manager view is a bento grid with its own tiles.
@@ -34,4 +35,28 @@ test("HR sees six number tiles and the HR tiles", async ({ browser }) => {
   await regions(page, ["Active", "Onboarding", "Offboarding", "Change requests", "Docs expiring", "Training overdue", "Needs your decision", "Risks", "Onboarding and offboarding", "Needs attention", "Who is out", "Celebrations"]);
   await expect(page.getByRole("region", { name: "Key numbers" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Active", exact: true })).toContainText(/\d/);
+});
+
+test("an executive sees headline tiles with counts only: no person's name outside Celebrations", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const stamp = Date.now().toString(36);
+  const exec = await createEmployeeAccount("Exa", `Exec${stamp}`, { roles: ["executive"] });
+  const newcomer = await createEmployeeAccount("Zelda", `Quirkson${stamp}`);
+  const sql = postgres(process.env.DATABASE_URL_DIRECT!, { prepare: false, onnotice: () => {} });
+  try {
+    await sql`update core.employees set start_date = (now() at time zone 'America/Phoenix')::date where id = ${newcomer.employeeId}`;
+  } finally {
+    await sql.end();
+  }
+
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, exec);
+  const names = ["Me", "Headcount and movement", "Hiring pipeline", "Training compliance", "Risks", "System health", "Time off this week", "Celebrations"];
+  await regions(page, names);
+  await expect(page.getByRole("region", { name: "Celebrations", exact: true })).toContainText("Zelda");
+  for (const name of names.filter((n) => n !== "Celebrations" && n !== "Me")) {
+    await expect(page.getByRole("region", { name, exact: true })).not.toContainText("Zelda");
+    await expect(page.getByRole("region", { name, exact: true })).not.toContainText("Quirkson");
+  }
+  await expect(page.getByRole("region", { name: "System health", exact: true })).toContainText(/on time|late/);
 });

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ClipboardCheck, ListChecks, ShieldAlert, Users } from "lucide-react";
 import { SEVERITY_VARIANT } from "./severity";
 import { getAttention } from "../feed-queries";
+import type { Lens } from "../lens";
 import { getHrKpiTiles } from "../manager-queries";
 import { orFallback } from "../or-fallback";
 import { getRisks, getTracker, getWorkforce } from "../panel-queries";
@@ -25,9 +26,9 @@ export async function HrKpiTile({ id }: { id: string }) {
 }
 
 /** The early warnings, three at most. */
-export async function HrRisksTile() {
+export async function RisksTile({ lens }: { lens: Lens }) {
   return guarded("Risks", async () => {
-    const { cards, ready } = await getRisks("hr");
+    const { cards, ready } = await getRisks(lens);
     return (
       <Tile label="Risks" title="Risks" icon={<ShieldAlert className="size-4 text-primary" aria-hidden />}>
         {!ready ? (

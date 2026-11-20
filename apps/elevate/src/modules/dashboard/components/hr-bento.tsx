@@ -2,7 +2,7 @@ import type { TileDef, TileLayout } from "../bento-tiles";
 import { BentoView } from "./bento-view";
 import { CelebrationsTile } from "./celebrations-tile";
 import { DecisionsTile } from "./decisions-tile";
-import { HrAttentionTile, HrKpiTile, HrRisksTile, HrTrackerTile, HrWorkforceTile } from "./hr-tiles";
+import { HrAttentionTile, HrKpiTile, HrTrackerTile, HrWorkforceTile, RisksTile } from "./hr-tiles";
 import { MeStrip } from "./me-strip";
 import { WhosOutTile } from "./people-tiles";
 
@@ -17,7 +17,7 @@ export const HR_TILES: TileDef[] = [
   kpi("docs-expiring", "Docs expiring"),
   kpi("training-overdue", "Training overdue"),
   { id: "decisions", label: "Needs your decision", span: 4, render: () => <DecisionsTile /> },
-  { id: "risks", label: "Risks", span: 2, render: () => <HrRisksTile /> },
+  { id: "risks", label: "Risks", span: 2, render: () => <RisksTile lens="hr" /> },
   { id: "tracker", label: "Onboarding and offboarding", span: 3, render: () => <HrTrackerTile /> },
   { id: "workforce", label: "Workforce by team", span: 3, render: () => <HrWorkforceTile /> },
   { id: "attention", label: "Needs attention", span: 2, render: () => <HrAttentionTile /> },
