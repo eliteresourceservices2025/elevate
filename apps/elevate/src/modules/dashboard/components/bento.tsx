@@ -6,13 +6,14 @@ import { cn } from "@/lib/utils";
  * A compact dashboard tile for the bento grid: tight padding, a small heading with an optional link, and rows that never stretch
  * to fill space. `label` is the region's accessible name. `tone="gold"` is the one celebratory tile (the brand gold as a border, never as text).
  */
-export function Tile({ label, title, icon, href, hrefLabel, tone, className, children }: { label: string; title: ReactNode; icon?: ReactNode; href?: string; hrefLabel?: string; tone?: "gold"; className?: string; children: ReactNode }) {
+export function Tile({ label, title, icon, href, hrefLabel, tone, className, children }: { label: string; title: ReactNode; icon?: ReactNode; href?: string; hrefLabel?: string; tone?: "gold" | "primary"; className?: string; children: ReactNode }) {
   return (
     <section
       aria-label={label}
       className={cn(
         "flex h-full min-w-0 flex-col rounded-2xl border bg-card p-3.5 shadow-sm animate-in fade-in-0 duration-300 motion-reduce:animate-none",
         tone === "gold" && "border-brand-gold ring-1 ring-brand-gold/40",
+        tone === "primary" && "border-primary/60 ring-1 ring-primary/20",
         className,
       )}
     >
@@ -31,6 +32,9 @@ export function Tile({ label, title, icon, href, hrefLabel, tone, className, chi
     </section>
   );
 }
+
+/** Minutes as hours with one decimal, e.g. 26.5 h. */
+export const hoursLabel = (minutes: number) => `${(Math.round(minutes / 6) / 10).toString()} h`;
 
 /** Rows of a tile, divided by hairlines. */
 export function TileList({ children, className }: { children: ReactNode; className?: string }) {

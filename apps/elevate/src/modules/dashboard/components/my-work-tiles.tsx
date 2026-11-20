@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { CalendarClock, CheckCircle2, Clock, FileCheck, GraduationCap, ListChecks, Target } from "lucide-react";
 import { getMyHours, getMyScheduleTile, getMyTodo, type TodoItem } from "../my-queries";
-import { RowMeta, Tile, TileList, TileNote, TileRow } from "./bento";
+import { hoursLabel, RowMeta, Tile, TileList, TileNote, TileRow } from "./bento";
 import { guarded } from "./guard";
 
-const hours = (minutes: number) => `${(Math.round(minutes / 6) / 10).toString()} h`;
 const STATE_LABEL = { out: "Clocked out", working: "Clocked in", break: "On break" } as const;
 
 /** This week's hours from the ELEVATE clock, against the schedule, and last week's approval. */
@@ -16,8 +15,8 @@ export async function HoursTile() {
     return (
       <Tile label="My hours this week" title="Hours this week" icon={<Clock className="size-4 text-primary" aria-hidden />} href="/attendance" hrefLabel="Time clock">
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-semibold tabular-nums">{hours(h.weekMinutes)}</span>
-          {h.scheduledMinutes ? <span className="text-xs text-muted-foreground">of {hours(h.scheduledMinutes)} scheduled</span> : null}
+          <span className="text-2xl font-semibold tabular-nums">{hoursLabel(h.weekMinutes)}</span>
+          {h.scheduledMinutes ? <span className="text-xs text-muted-foreground">of {hoursLabel(h.scheduledMinutes)} scheduled</span> : null}
         </div>
         {pct !== null ? (
           <div role="progressbar" aria-label="Hours worked this week" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="my-2 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -26,7 +25,7 @@ export async function HoursTile() {
         ) : null}
         <p className="mt-auto text-xs text-muted-foreground">
           {STATE_LABEL[h.state]}
-          {h.lastWeek ? ` · Last week ${hours(h.lastWeek.workedMinutes)}, ${h.lastWeek.approved ? "approved" : "waiting for approval"}` : ""}
+          {h.lastWeek ? ` · Last week ${hoursLabel(h.lastWeek.workedMinutes)}, ${h.lastWeek.approved ? "approved" : "waiting for approval"}` : ""}
         </p>
       </Tile>
     );

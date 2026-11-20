@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anniversariesThisMonth, birthdaysThisMonth, monthDayInYear, monthDayLabel, shortName } from "./celebrations";
+import { anniversariesThisMonth, birthdaysThisMonth, celebrationRows, monthDayInYear, monthDayLabel, shortName } from "./celebrations";
 
 describe("birthdaysThisMonth", () => {
   const today = "2026-11-19";
@@ -52,5 +52,24 @@ describe("small helpers", () => {
     expect(shortName("Cher", "")).toBe("Cher");
     expect(monthDayLabel("02-09")).toBe("Feb 9");
     expect(monthDayInYear("03-01", 2027)).toBe("03-01");
+  });
+});
+
+describe("celebrationRows", () => {
+  const bday = (name: string, label: string, today = false) => ({ name, monthDay: "11-19", label, today });
+  const anniv = (name: string, years: number) => ({ name, monthDay: "11-24", label: "Nov 24", today: false, years });
+
+  it("keeps two birthdays, one anniversary and one new joiner, with today's birthday first", () => {
+    const rows = celebrationRows([bday("Maria S.", "Nov 19", true), bday("Jun R.", "Nov 23"), bday("Ana T.", "Nov 27")], [anniv("Karl D.", 3), anniv("Liza P.", 1)], [{ name: "Rica B.", label: "Nov 9" }, { name: "Dan M.", label: "Nov 3" }]);
+    expect(rows.map((r) => [r.kind, r.name])).toEqual([["Bday", "Maria S."], ["Bday", "Jun R."], ["Anniv", "Karl D."], ["New", "Rica B."]]);
+    expect(rows[0]).toMatchObject({ meta: "Today", today: true });
+    expect(rows[2].meta).toBe("3 years");
+    expect(celebrationRows([], [anniv("Liza P.", 1)], [])[0].meta).toBe("1 year");
+    expect(rows[3].meta).toBe("Started Nov 9");
+  });
+
+  it("returns nothing when nobody has a moment, and never a year", () => {
+    expect(celebrationRows([], [], [])).toEqual([]);
+    expect(JSON.stringify(celebrationRows([bday("Maria S.", "Nov 19", true)], [], []))).not.toMatch(/\b(19|20)\d{2}\b/);
   });
 });

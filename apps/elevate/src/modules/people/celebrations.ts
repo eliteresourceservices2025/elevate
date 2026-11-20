@@ -65,3 +65,15 @@ export function anniversariesThisMonth(rows: readonly { first: string; last: str
   }
   return out.sort((a, b) => a.monthDay.localeCompare(b.monthDay) || a.name.localeCompare(b.name));
 }
+
+export type CelebrationRow = { kind: "Bday" | "Anniv" | "New"; name: string; meta: string; today: boolean };
+
+/** The rows of the combined Celebrations tile: two birthdays (today's first), one anniversary, one new joiner. Month and day only, never a year. */
+export function celebrationRows(birthdays: readonly Celebrant[], anniversaries: readonly Celebrant[], joiners: readonly { name: string; label: string }[]): CelebrationRow[] {
+  const sorted = [...birthdays].sort((a, b) => Number(b.today) - Number(a.today));
+  return [
+    ...sorted.slice(0, 2).map((c): CelebrationRow => ({ kind: "Bday", name: c.name, meta: c.today ? "Today" : c.label, today: c.today })),
+    ...anniversaries.slice(0, 1).map((c): CelebrationRow => ({ kind: "Anniv", name: c.name, meta: c.years === 1 ? "1 year" : `${c.years ?? 0} years`, today: c.today })),
+    ...joiners.slice(0, 1).map((j): CelebrationRow => ({ kind: "New", name: j.name, meta: `Started ${j.label}`, today: false })),
+  ];
+}
