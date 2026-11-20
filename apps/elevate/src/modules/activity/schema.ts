@@ -167,3 +167,66 @@ export const trackerOfflineNotices = time
     noticedAt: timestamp("noticed_at", { withTimezone: true }).notNull().defaultNow(),
   })
   .enableRLS();
+
+export const RELEASE_STATUSES = ["draft", "published", "withdrawn"] as const;
+export const BUILD_KINDS = ["installer", "update"] as const;
+
+/**
+ * A release of the ELEVATE Tracker App. Frozen by a database trigger once published: only withdrawing it is allowed afterwards.
+ * `policy_version_id` (a docs.policy_versions row, foreign key added by hand in the migration) is required before publishing a release
+ * that adds new data collection.
+ */
+export const trackerReleases = time
+  .table(
+    "tracker_releases",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      version: text("version").notNull(),
+      status: text("status").notNull().default("draft"),
+      notesAdded: text("notes_added").array().notNull().default(sql`'{}'::text[]`),
+      notesImproved: text("notes_improved").array().notNull().default(sql`'{}'::text[]`),
+      notesFixed: text("notes_fixed").array().notNull().default(sql`'{}'::text[]`),
+      minRequired: boolean("min_required").notNull().default(false),
+      addsCollection: boolean("adds_collection").notNull().default(false),
+      policyVersionId: uuid("policy_version_id"),
+      createdBy: uuid("created_by").notNull(),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+      publishedBy: uuid("published_by"),
+      publishedAt: timestamp("published_at", { withTimezone: true }),
+      withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+    },
+    (t) => [
+      uniqueIndex("tracker_releases_version_idx").on(t.version),
+      check("tracker_releases_version_check", sql`${t.version} ~ '^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})$'`),
+      check("tracker_releases_status_check", sql`${t.status} in ('draft', 'published', 'withdrawn')`),
+    ],
+  )
+  .enableRLS();
+
+/** A file of a release for one platform: the installer people download, or the update file the app's updater downloads (with its signature). */
+export const trackerReleaseBuilds = time
+  .table(
+    "tracker_release_builds",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      releaseId: uuid("release_id")
+        .notNull()
+        .references(() => trackerReleases.id),
+      platform: text("platform").notNull(),
+      kind: text("kind").notNull(),
+      storagePath: text("storage_path").notNull(),
+      fileName: text("file_name").notNull(),
+      sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+      sha256: text("sha256").notNull(),
+      signature: text("signature"),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+      uniqueIndex("tracker_release_builds_kind_idx").on(t.releaseId, t.platform, t.kind),
+      uniqueIndex("tracker_release_builds_path_idx").on(t.storagePath),
+      check("tracker_release_builds_platform_check", sql`${t.platform} in ('windows-x86_64', 'darwin-aarch64', 'darwin-x86_64')`),
+      check("tracker_release_builds_kind_check", sql`${t.kind} in ('installer', 'update')`),
+      check("tracker_release_builds_signature_check", sql`${t.kind} <> 'update' or (${t.signature} is not null and length(${t.signature}) > 0)`),
+    ],
+  )
+  .enableRLS();
