@@ -150,7 +150,7 @@ async fn a_discard_answer_removes_the_shot_and_its_file_without_uploading() {
 #[tokio::test]
 async fn a_failing_upload_backs_off_and_the_picture_is_dropped_after_three_tries() {
     let mut r = rig().await;
-    mount_storage(&r, 500).await;
+    let _storage = mount_storage(&r, 500).await;
     r.queue.push_shot(jpeg(), NOW).unwrap();
     assert_eq!(r.sender.run_once(&r.api, TOKEN, &r.queue, HEALTH).await, SendOutcome::Backoff);
     assert_eq!(r.queue.len().unwrap().1, 1);
@@ -164,7 +164,7 @@ async fn a_failing_upload_backs_off_and_the_picture_is_dropped_after_three_tries
 #[tokio::test]
 async fn a_finalize_refusal_discards_the_shot() {
     let mut r = rig().await;
-    mount_storage(&r, 200).await;
+    let _storage = mount_storage(&r, 200).await;
     answer(&r.server, "POST", "/api/tracker/shots/finalize", 409, json!({ "error": "not_working" })).await;
     r.queue.push_shot(jpeg(), NOW).unwrap();
     assert_eq!(r.sender.run_once(&r.api, TOKEN, &r.queue, HEALTH).await, SendOutcome::Sent(0));
