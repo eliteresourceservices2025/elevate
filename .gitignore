@@ -28,3 +28,8 @@ wordpress/*.zip
 
 # Subagent-driven development scratch
 .superpowers/
+
+# ELEVATE Tracker App build output
+apps/tracker/src-tauri/target
+apps/tracker/src-tauri/gen
+apps/tracker/dist
