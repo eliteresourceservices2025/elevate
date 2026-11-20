@@ -24,4 +24,10 @@ describe("tracker pages are wired in", () => {
     expect(page).toContain("<EnrollDialog ");
     expect(page).toContain("<ReleaseList ");
   });
+  it("the releases admin page renders the table and the new-release form, and settings links to it", () => {
+    const page = read("app/(app)/settings/tracker/releases/page.tsx");
+    expect(page).toContain("<ReleasesTable ");
+    expect(page).toContain("<NewReleaseForm ");
+    expect(read("app/(app)/settings/tracker/page.tsx")).toContain("/settings/tracker/releases");
+  });
 });

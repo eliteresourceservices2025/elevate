@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -63,4 +63,18 @@ export async function getDownloadPage(): Promise<DownloadPageData> {
     // No people record yet: the page still works, with no computers listed.
   }
   return { policy: await monitoringPolicyPublished(db), current: releases[0] ?? null, releases, devices };
+}
+
+export type ReleaseAdminView = { releases: AdminRelease[]; policyVersions: { id: string; label: string }[] };
+
+/** The admin page's data: every release, and the published monitoring policy versions a release that adds data collection can name. */
+export async function getReleaseAdminView(): Promise<ReleaseAdminView> {
+  const releases = await listReleasesAdmin(); // checks tracker.manage_releases
+  const versions = (await db.execute(sql`
+    select v.id, v.version, v.published_at from docs.policy_versions v join docs.policies p on p.id = v.policy_id
+    where p.kind = 'monitoring' and v.status = 'published' order by v.version desc limit 20`)) as unknown as { id: string; version: number; published_at: string | Date | null }[];
+  return {
+    releases,
+    policyVersions: versions.map((v) => ({ id: v.id, label: `Version ${v.version}, published ${v.published_at ? new Date(v.published_at).toISOString().slice(0, 10) : "earlier"}` })),
+  };
 }

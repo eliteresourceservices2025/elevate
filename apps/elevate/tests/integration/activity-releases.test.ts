@@ -187,3 +187,15 @@ describe("listReleasesAdmin", () => {
     expect(list[0].id).toBe(r.id); // the newest version is first
   });
 });
+
+describe("getReleaseAdminView", () => {
+  it("lists the releases and the published monitoring policy versions a release can name", async () => {
+    current.user = await user(["hr_admin", "employee"]);
+    const versionId = await publishedMonitoringVersion();
+    const r = await make();
+    const view = await queries.getReleaseAdminView();
+    expect(view.releases.some((x) => x.id === r.id)).toBe(true);
+    const mine = view.policyVersions.find((v) => v.id === versionId);
+    expect(mine?.label).toMatch(/^Version [0-9]+, published /);
+  });
+});

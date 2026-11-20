@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Camera } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { FormDialog } from "@/components/form-dialog";
 import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { StatusChip } from "@/components/status-chip";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { orNotFound } from "@/lib/or-not-found";
@@ -23,9 +25,14 @@ export default async function TrackerSettingsPage() {
         description="Numbers the ELEVATE Tracker App and the nightly notes use, and which apps count as work. Changes apply from now on; days already recorded keep their notes."
         breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "ELEVATE Tracker" }]}
         actions={
-          <FormDialog label="Add a rule" title="Add a work rule" description="Say whether an app counts as work. Only the app name is ever recorded, never window titles or web addresses.">
-            <CategoryForm />
-          </FormDialog>
+          <>
+            <Link href="/settings/tracker/releases" className={buttonVariants({ variant: "outline" })}>
+              Releases
+            </Link>
+            <FormDialog label="Add a rule" title="Add a work rule" description="Say whether an app counts as work. Only the app name is ever recorded, never window titles or web addresses.">
+              <CategoryForm />
+            </FormDialog>
+          </>
         }
       />
 

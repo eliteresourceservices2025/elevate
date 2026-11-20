@@ -70,6 +70,7 @@ describe("tracker queries, every role", () => {
     { name: "listFloor", call: () => queries.listFloor({}), allowed: ["super_admin", "hr_admin", "team_lead"] },
     { name: "getActivitySettings", call: () => queries.getActivitySettings(), allowed: ["super_admin", "hr_admin"] },
     { name: "listAllDevices", call: () => queries.listAllDevices({ filter: "all", page: 1, pageSize: 25 }), allowed: ["super_admin", "hr_admin"] },
+    { name: "getReleaseAdminView", call: () => releaseQueries.getReleaseAdminView(), allowed: ["super_admin", "hr_admin"] },
     { name: "listReleasesAdmin", call: () => releaseQueries.listReleasesAdmin(), allowed: ["super_admin", "hr_admin"] },
     { name: "listCategories", call: () => queries.listCategories(), allowed: ["super_admin", "hr_admin"] },
     { name: "listDevices (everyone's)", call: () => queries.listDevices({ employeeId: OTHER }), allowed: ["super_admin", "hr_admin"] },
