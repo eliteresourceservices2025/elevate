@@ -2,7 +2,7 @@
 title: Rehearse a pay cycle with a test run
 summary: For people with payroll access. Practise a whole pay cycle, including payment, the statements and the invoice, without anything reaching the contractors or your real numbers.
 category: payroll
-audience: all
+audience: payroll
 order: 7
 updated: 2026-11-12
 ---

@@ -2,7 +2,7 @@
 title: Approve a pay run
 summary: For Approvers. Read a run sent for review, then approve it or send it back with a note.
 category: payroll
-audience: all
+audience: payroll
 order: 3
 updated: 2026-11-05
 ---

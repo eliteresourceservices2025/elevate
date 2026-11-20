@@ -16,8 +16,8 @@ export default async function HelpPage({ searchParams }: PageProps<"/help">) {
   await orNotFound(authorize(user, "help.view"));
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q.trim().slice(0, 80) : "";
-  const results = q ? searchHelp(user.roles, q) : [];
-  const categories = visibleCategories(user.roles);
+  const results = q ? searchHelp(user, q) : [];
+  const categories = visibleCategories(user);
 
   return (
     <PageContainer width="medium">

@@ -2,7 +2,7 @@
 title: Release the contractor payment statements
 summary: For people with payroll access. Read, download and check every contractor's statement for a pay run, and release them all in one step.
 category: payroll
-audience: all
+audience: payroll
 order: 6
 updated: 2026-11-12
 ---
