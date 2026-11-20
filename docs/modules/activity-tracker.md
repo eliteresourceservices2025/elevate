@@ -52,7 +52,9 @@ Team scope uses the time chain (`timeChainUserIds`), so an attendance lead count
 
 The day is in the person's own zone; times are shown in the viewer's. `timeline.ts` is the pure layout behind `TimelineStrip`. Help guides: `content/help/attendance/your-tracker-day.md`, `read-the-activity-pages.md`.
 
-Checked: unit, render and real-database tests for the above. **Not yet looked at in a browser** (needs the new migrations applied to a dev database and a seeded clocked-in session).
+Checked: unit, render and real-database tests for the above, and a live run on 2026-11-20 against the local stack (local Supabase, `pnpm dev`, `pnpm tracker:sim` as the app, fake seed accounts): enrolling with a code, the app's clock-state / segments / screenshot calls, then as the Team Lead (Live floor, person day, a screenshot opened with a reason and audited, 404 for an employee on `/activity`), the employee (My day card, enrollment code with countdown, "Who looked" panel showing the lead's view), and HR (Devices, Settings validation and a save with before/after audit). Looked at in the dark theme at desktop-narrow width and in the light theme at phone width. Not checked: dark theme at phone width, macOS/Windows app (does not exist), long-running refresh, more than a handful of people on the floor.
+
+Found and fixed during that run: hour labels overlapped on a phone, apps with 0 minutes were listed, and a storage outage made the screenshot routes answer a bare 500 (now JSON 503). Setup notes learnt: `pnpm storage:setup` must run on each environment before screenshots work; `pnpm dev:mfa reset` could not find accounts in a database with 1,400+ users.
 
 ## Flags and jobs
 

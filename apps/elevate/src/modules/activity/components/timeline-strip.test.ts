@@ -21,4 +21,11 @@ describe("TimelineStrip", () => {
     expect(html).toContain("bg-warning");
     expect(html).not.toMatch(/(?:bg|text)-(?:red|green|amber|yellow|blue)-\d/);
   });
+
+  it("hides every other hour label on a narrow screen so they do not overlap", () => {
+    const ticks = [0, 1, 2, 3].map((i) => ({ leftPct: i * 8.33, label: `T${i}` }));
+    const out = renderToStaticMarkup(createElement(TimelineStrip, { blocks: [], ticks, ariaLabel: "x" }));
+    const hidden = (label: string) => new RegExp(`max-sm:hidden[^>]*>${label}<`).test(out);
+    expect([hidden("T0"), hidden("T1"), hidden("T2"), hidden("T3")]).toEqual([false, true, false, true]);
+  });
 });

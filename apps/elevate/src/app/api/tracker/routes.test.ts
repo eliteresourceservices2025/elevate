@@ -94,3 +94,16 @@ describe("screenshot upload link", () => {
     vi.unstubAllEnvs();
   });
 });
+
+describe("when storage is down", () => {
+  it("answers the app with a JSON 503 it can retry on, not a bare 500", async () => {
+    const { requestShot, finalizeShot } = await import("@/modules/activity/ingest");
+    vi.mocked(requestShot).mockRejectedValueOnce(new Error("Could not create an upload link"));
+    const res = await shotRequest.POST(post("/api/tracker/shots/request", { takenAt: new Date().toISOString() }, AUTH));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "storage_unavailable" });
+    vi.mocked(finalizeShot).mockRejectedValueOnce(new Error("storage down"));
+    const fin = await shotFinalize.POST(post("/api/tracker/shots/finalize", { shotId: uuid }, AUTH));
+    expect(fin.status).toBe(503);
+  });
+});

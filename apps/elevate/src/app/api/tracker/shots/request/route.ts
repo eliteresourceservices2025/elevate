@@ -15,8 +15,13 @@ function uploadUrl(path: string, token: string): string | null {
 
 export async function POST(request: Request) {
   return deviceRoute(request, shotRequestSchema, async (device, body) => {
-    const result = await requestShot(device, body);
-    if (!result.ok) return json({ error: result.reason }, 409);
-    return json({ shotId: result.shotId, uploadUrl: uploadUrl(result.path, result.token) });
+    try {
+      const result = await requestShot(device, body);
+      if (!result.ok) return json({ error: result.reason }, 409);
+      return json({ shotId: result.shotId, uploadUrl: uploadUrl(result.path, result.token) });
+    } catch {
+      // Storage is unavailable: say so in a way the app can retry on, with nothing about the request in the answer.
+      return json({ error: "storage_unavailable" }, 503);
+    }
   });
 }

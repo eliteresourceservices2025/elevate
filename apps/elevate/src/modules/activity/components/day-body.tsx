@@ -31,11 +31,11 @@ export function DayBody({ day, viewerZone }: { day: ActivityDay; viewerZone: str
           </div>
         ))}
       </dl>
-      {day.topApps.length > 0 ? (
+      {day.topApps.some((a) => a.minutes > 0) ? (
         <section aria-label="Top apps" className="space-y-2">
           <h3 className="text-sm font-semibold">Top apps</h3>
           <ul className="divide-y rounded-xl border bg-card text-sm">
-            {day.topApps.map((a) => (
+            {day.topApps.filter((a) => a.minutes > 0).map((a) => (
               <li key={a.app} className="flex items-center justify-between gap-3 px-3 py-2">
                 <span>{a.app}</span>
                 <span className="tabular-nums text-muted-foreground">{minutesText(a.minutes)}</span>

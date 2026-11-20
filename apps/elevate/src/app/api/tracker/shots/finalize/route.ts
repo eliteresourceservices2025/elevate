@@ -6,7 +6,11 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   return deviceRoute(request, shotFinalizeSchema, async (device, body) => {
-    const result = await finalizeShot(device, body);
-    return result.ok ? json({ ok: true }) : json({ error: result.reason }, 409);
+    try {
+      const result = await finalizeShot(device, body);
+      return result.ok ? json({ ok: true }) : json({ error: result.reason }, 409);
+    } catch {
+      return json({ error: "storage_unavailable" }, 503);
+    }
   });
 }

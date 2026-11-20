@@ -30,4 +30,11 @@ describe("DayBody time zones", () => {
     const empty = { ...day, segments: [], minutes: { active: 0, idle: 0, work: 0, nonWork: 0 }, topApps: [] };
     expect(renderToStaticMarkup(createElement(DayBody, { day: empty, viewerZone: "America/Phoenix" }))).toContain("Nothing recorded for this day");
   });
+
+  it("leaves out apps that rounded down to 0 minutes", () => {
+    const withTiny = { ...day, topApps: [{ app: "Chrome", minutes: 60 }, { app: "Blink", minutes: 0 }] };
+    const html = renderToStaticMarkup(createElement(DayBody, { day: withTiny, viewerZone: "America/Phoenix" }));
+    expect(html).toContain("Chrome");
+    expect(html).not.toContain("Blink");
+  });
 });

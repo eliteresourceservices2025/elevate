@@ -20,8 +20,9 @@ export function TimelineStrip({ blocks, ticks, ariaLabel, className }: { blocks:
         ))}
       </div>
       <div aria-hidden className="relative h-4 text-xs text-muted-foreground">
-        {ticks.map((t) => (
-          <span key={t.label + t.leftPct} className="absolute -translate-x-1/2 first:translate-x-0" style={{ left: `${t.leftPct}%` }}>
+        {ticks.map((t, i) => (
+          // On a phone only every other label fits, so the odd ones are hidden there.
+          <span key={t.label + t.leftPct} className={cn("absolute -translate-x-1/2 first:translate-x-0", i % 2 === 1 && "max-sm:hidden")} style={{ left: `${t.leftPct}%` }}>
             {t.label}
           </span>
         ))}
