@@ -58,3 +58,8 @@ A person whose work email or name was edited here could end up in the directory 
 - Rules follow the country: US state code in the list and ZIP `12345` or `12345-6789`; Philippines province and city in the lists and a 4-digit postal code; other countries are free text. Barangay is typed in the address line.
 - Saved values are never blocked: `updateEmployee` and `requestContactChange` read the saved address and pass it as `legacy`, so an old free-text value that is not being changed still saves (the picker shows it as "(current) X"). Imports (`importedEmployeeSchema`) skip the lists.
 - PSGC lists Maguindanao as one province (the 2022 split into del Norte and del Sur is not in the mirror yet); regenerate the file when the PSA publishes it.
+
+## Birthday visibility on the dashboard
+
+- `core.birthday_preferences` (migration 0119): one row per person once they switch their birthday off or on; no row means shown. Only the person changes it (`setMyBirthdayHidden`, `people.set_birthday_visibility`, own scope for every role). The toggle is on My profile > Personal. Copy: month and day only, never the year.
+- **Privacy notice:** add one line saying colleagues see your birthday (month and day) on the dashboard unless you hide it; it joins the pending notice update (do not publish a notice just for this).

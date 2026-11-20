@@ -16,6 +16,7 @@ import { Tracker } from "@/modules/dashboard/components/tracker";
 import { LatestAnnouncements, WaitingForYou } from "@/modules/dashboard/components/waiting-and-news";
 import { WhosOut } from "@/modules/dashboard/components/whos-out";
 import { WorkforceOverview } from "@/modules/dashboard/components/workforce-overview";
+import { MyWorkBento } from "@/modules/dashboard/components/my-work-bento";
 import { LENS_COOKIE, availableLenses, pickLens } from "@/modules/dashboard/lens";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -54,60 +55,66 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
         <GreetingHeader roles={user.roles} lenses={lenses} lens={lens} actions={quickActions} />
       </Suspense>
 
-      <Suspense fallback={<KpiCardsSkeleton />}>
-        <KpiCards lens={lens} />
-      </Suspense>
-
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <div className="min-w-0 space-y-6">
-          {showApprovals ? (
-            <Suspense fallback={<Loading />}>
-              <ApprovalQueue />
-            </Suspense>
-          ) : null}
-          {showAttention ? (
-            <Suspense fallback={<Loading />}>
-              <AttentionFeed lens={lens} />
-            </Suspense>
-          ) : null}
-          {lens === "executive" ? risks : null}
-        </div>
-
-        <div className="min-w-0 space-y-6">
-          <Suspense fallback={<Loading height="h-56" />}>
-            <WhosOut />
+      {lens === "my_work" ? (
+        <MyWorkBento />
+      ) : (
+        <>
+          <Suspense fallback={<KpiCardsSkeleton />}>
+            <KpiCards lens={lens} />
           </Suspense>
-          {lens !== "executive" ? risks : null}
-        </div>
-      </div>
 
-      {showTracker || showWorkforce ? (
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-          {showTracker ? (
-            <Suspense fallback={<Loading height="h-56" />}>
-              <Tracker />
-            </Suspense>
-          ) : null}
-          {showWorkforce ? (
-            <Suspense fallback={<Loading height="h-56" />}>
-              <WorkforceOverview />
-            </Suspense>
-          ) : null}
-        </div>
-      ) : null}
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+            <div className="min-w-0 space-y-6">
+              {showApprovals ? (
+                <Suspense fallback={<Loading />}>
+                  <ApprovalQueue />
+                </Suspense>
+              ) : null}
+              {showAttention ? (
+                <Suspense fallback={<Loading />}>
+                  <AttentionFeed lens={lens} />
+                </Suspense>
+              ) : null}
+              {lens === "executive" ? risks : null}
+            </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <div className="min-w-0 space-y-6">
-          <Suspense fallback={<Loading />}>
-            <WaitingForYou />
-          </Suspense>
-        </div>
-        <div className="min-w-0 space-y-6">
-          <Suspense fallback={<Loading />}>
-            <LatestAnnouncements />
-          </Suspense>
-        </div>
-      </div>
+            <div className="min-w-0 space-y-6">
+              <Suspense fallback={<Loading height="h-56" />}>
+                <WhosOut />
+              </Suspense>
+              {lens !== "executive" ? risks : null}
+            </div>
+          </div>
+
+          {showTracker || showWorkforce ? (
+            <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+              {showTracker ? (
+                <Suspense fallback={<Loading height="h-56" />}>
+                  <Tracker />
+                </Suspense>
+              ) : null}
+              {showWorkforce ? (
+                <Suspense fallback={<Loading height="h-56" />}>
+                  <WorkforceOverview />
+                </Suspense>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+            <div className="min-w-0 space-y-6">
+              <Suspense fallback={<Loading />}>
+                <WaitingForYou />
+              </Suspense>
+            </div>
+            <div className="min-w-0 space-y-6">
+              <Suspense fallback={<Loading />}>
+                <LatestAnnouncements />
+              </Suspense>
+            </div>
+          </div>
+        </>
+      )}
     </PageContainer>
   );
 }

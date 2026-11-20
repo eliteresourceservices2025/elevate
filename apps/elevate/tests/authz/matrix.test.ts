@@ -147,6 +147,7 @@ const EXPECTED: Record<string, string> = {
   "search.use": "O O O O O O",
   "tour.complete": "O O O O O O",
   "people.manage_photo": "A A O O O O",
+  "people.set_birthday_visibility": "O O O O O O",
   "demographics.view_pronouns": "A A A A A A",
   "demographics.view_shared": "A A A A A A",
   "demographics.view_own": "O O O O O O",

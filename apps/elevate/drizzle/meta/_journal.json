@@ -834,6 +834,13 @@
       "when": 1793832202679,
       "tag": "0118_common_shockwave",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1795139268701,
+      "tag": "0119_smiling_clea",
+      "breakpoints": true
     }
   ]
 }
