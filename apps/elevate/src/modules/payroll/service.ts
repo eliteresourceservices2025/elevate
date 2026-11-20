@@ -15,6 +15,9 @@ import { payRuns, paySettings } from "./schema";
 /** Today as YYYY-MM-DD in the company time zone (a pay date never depends on the viewer's zone). */
 export const payrollToday = (): string => formatInZone(Date.now(), DEFAULT_TIMEZONE, "yyyy-MM-dd");
 
+/** The date and time now in the company zone (Arizona), where a payment is sent: the starting point of the payment form's dates. */
+export const payrollNow = (): { date: string; time: string } => ({ date: formatInZone(Date.now(), DEFAULT_TIMEZONE, "yyyy-MM-dd"), time: formatInZone(Date.now(), DEFAULT_TIMEZONE, "HH:mm") });
+
 type Executor = Pick<typeof db, "select">;
 
 /** The people record linked to a sign-in account, or null when the account has none. */

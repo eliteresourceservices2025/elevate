@@ -307,3 +307,77 @@ describe("what review and approval see", () => {
     expect(d?.flags).not.toContain("jibble_mismatch");
   });
 });
+
+describe("moving contractors who use Jibble alone", () => {
+  const overviewQueries = import("@/modules/jibble/clock-source-queries");
+
+  it("lists matched people with no recent ELEVATE clock use who are clocked out, and nobody else", async () => {
+    const { getClockSourceOverview } = await overviewQueries;
+    const c = await client();
+    const alone = await person("AloneA", [c.id]);
+    const usesElevate = await person("AloneUsesElevate", [c.id]);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${usesElevate.employeeId}, 'clock_in', now() - interval '2 days'), (${usesElevate.employeeId}, 'clock_out', now() - interval '2 days' + interval '8 hours')`);
+    const old = await person("AloneOldElevate", [c.id]);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${old.employeeId}, 'clock_in', now() - interval '40 days'), (${old.employeeId}, 'clock_out', now() - interval '40 days' + interval '8 hours')`);
+    const unmatched = await person("AloneUnmatched", [c.id], { matched: false });
+    const already = await person("AloneAlready", [c.id]);
+    await onJibble(already);
+    const openNow = await person("AloneOpen", [c.id]);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${openNow.employeeId}, 'clock_in', now() - interval '20 days')`); // never clocked out
+
+    as(hr);
+    const listed = (await getClockSourceOverview()).jibbleAlone.map((p) => p.employeeId);
+    expect(listed).toContain(alone.employeeId);
+    expect(listed).toContain(old.employeeId); // used it, but not in the last 14 days
+    for (const other of [usesElevate, unmatched, already, openNow]) expect(listed).not.toContain(other.employeeId);
+    const row = (await getClockSourceOverview()).jibbleAlone.find((p) => p.employeeId === old.employeeId);
+    expect(row?.lastElevate).not.toBeNull();
+    expect((await getClockSourceOverview()).jibbleAlone.find((p) => p.employeeId === alone.employeeId)?.lastElevate).toBeNull();
+  });
+
+  it("moves the ticked people at once, skips anyone who cannot move with the reason, is HR only, and asks for at least one", async () => {
+    const c = await client();
+    const a = await person("BulkA", [c.id]);
+    const b = await person("BulkB", [c.id]);
+    const unmatched = await person("BulkNoMatch", [c.id], { matched: false });
+    const clockedIn = await person("BulkOpen", [c.id]);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${clockedIn.employeeId}, 'clock_in', now() - interval '1 hour')`);
+    const already = await person("BulkAlready", [c.id]);
+    await onJibble(already);
+
+    as(hr);
+    const result = await sourceActions.setJibbleClockForMany({ employeeIds: [a.employeeId, b.employeeId, unmatched.employeeId, clockedIn.employeeId, already.employeeId] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toMatchObject({ switched: 2, already: 1 });
+    expect(result.data.skipped).toHaveLength(2);
+    expect(result.data.skipped.map((s) => s.reason).sort()).toEqual(["Match them to their Jibble account first.", "They are clocked in right now. Change this after they clock out, so no session is cut in two."].sort());
+    expect(await rows(sql`select 1 from time.clock_source where employee_id in (${a.employeeId}, ${b.employeeId}) and source = 'jibble'`)).toHaveLength(2);
+    expect(await rows(sql`select 1 from ops.notifications where user_id = ${a.user.id} and kind = 'clock_source.changed'`)).toHaveLength(1);
+    expect(await rows(sql`select 1 from ops.audit_log where action = 'clock_source.set' and target_id = ${a.employeeId}`)).toHaveLength(1);
+
+    expect((await sourceActions.setJibbleClockForMany({ employeeIds: [] })).ok).toBe(false);
+    for (const role of ["team_lead", "employee", "executive"] as RoleSlug[]) {
+      as(await makeUser("BulkNo", [role]));
+      expect(await sourceActions.setJibbleClockForMany({ employeeIds: [a.employeeId] })).toEqual({ ok: false, error: NO_ACCESS });
+    }
+  });
+
+  it("imports only the people it is asked to, when a list is given", async () => {
+    const c = await client();
+    const one = await person("OnlyOne", [c.id]);
+    const two = await person("OnlyTwo", [c.id]);
+    await onJibble(one);
+    await onJibble(two);
+    fake.entries.set(one.jibbleId, [entry(one.jibbleId, "o1", "In", "09:00"), entry(one.jibbleId, "o2", "Out", "17:00")]);
+    fake.entries.set(two.jibbleId, [entry(two.jibbleId, "t1", "In", "09:00"), entry(two.jibbleId, "t2", "Out", "17:00")]);
+    expect(await runJibbleImport({ days: 5, employeeIds: [one.employeeId] })).toMatchObject({ people: 1, imported: 2 });
+    expect(await events(one.employeeId)).toHaveLength(2);
+    expect(await events(two.employeeId)).toHaveLength(0);
+    expect(await runJibbleImport({ days: 5, employeeIds: [] })).toMatchObject({ people: 0, imported: 0 });
+    const { listJibbleImportPeople } = await import("@/modules/jibble/import");
+    const due = await listJibbleImportPeople();
+    expect(due).toContain(one.employeeId);
+    expect(due).toContain(two.employeeId);
+  });
+});

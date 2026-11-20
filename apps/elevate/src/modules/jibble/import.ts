@@ -118,7 +118,7 @@ async function importPerson(client: JibbleClient, person: Person, days: number, 
  * Imports Jibble hours for everyone whose source is Jibble (or for one person, for the last `days` days). Nothing happens when Jibble is not
  * configured or HR paused the link. Per person: a Jibble failure is counted and the others carry on.
  */
-export async function runJibbleImport(options: { days?: number; employeeId?: string; now?: Date; client?: JibbleClient | null } = {}): Promise<ImportRun> {
+export async function runJibbleImport(options: { days?: number; employeeId?: string; employeeIds?: string[]; now?: Date; client?: JibbleClient | null } = {}): Promise<ImportRun> {
   const run: ImportRun = { people: 0, imported: 0, voided: 0, failed: 0, keptBecauseEmpty: 0, skipped: null };
   const client = options.client === undefined ? getJibbleClient() : options.client;
   if (!client?.listTimeEntries) return { ...run, skipped: "not_configured" };
@@ -126,7 +126,9 @@ export async function runJibbleImport(options: { days?: number; employeeId?: str
   const days = Math.min(MAX_IMPORT_DAYS, Math.max(1, options.days ?? DEFAULT_DAYS));
   const now = options.now ?? new Date();
 
-  const filter = options.employeeId ? sql`and e.id = ${options.employeeId}` : sql``;
+  const only = options.employeeId ? [options.employeeId] : (options.employeeIds ?? null);
+  if (only !== null && only.length === 0) return run;
+  const filter = only ? sql`and e.id in (${sql.join(only.map((id) => sql`${id}`), sql`, `)})` : sql``;
   const people = ((await db.execute(sql`
     select e.id as employee_id, p.jibble_person_id from core.employees e join time.jibble_people p on p.employee_id = e.id
     where e.archived_at is null and e.status <> 'separated' ${filter}
@@ -155,4 +157,18 @@ export async function runJibbleImport(options: { days?: number; employeeId?: str
   if (refused) await alertHr("jibble.import_refused", "Jibble refused the hours import", "Jibble did not accept the access token, so hours of people who clock in Jibble are not being imported. Check the connection on the Jibble page.", 12);
   if (run.keptBecauseEmpty > 0) await alertHr("jibble.import_empty", "Jibble returned no entries for someone who had hours", "Their imported hours were kept. If entries were really deleted in Jibble, fix their hours with a correction.", 24);
   return run;
+}
+
+/**
+ * Who the import would read right now: the ids of people on the Jibble clock who are matched and allowed (empty while the link is paused
+ * or Jibble cannot list entries). The scheduled job splits these into small steps, so a long list never runs into one function's time limit.
+ */
+export async function listJibbleImportPeople(client: JibbleClient | null = getJibbleClient()): Promise<string[]> {
+  if (!client?.listTimeEntries || (await jibblePaused())) return [];
+  const people = (await db.execute(sql`
+    select e.id as employee_id, p.jibble_person_id from core.employees e join time.jibble_people p on p.employee_id = e.id
+    where e.archived_at is null and e.status <> 'separated'
+      and (select s.source from time.clock_source s where s.employee_id = e.id order by s.set_at desc, s.id desc limit 1) = 'jibble'
+    order by e.id`)) as unknown as Person[];
+  return people.filter((p) => sendsAllowed(p.jibble_person_id)).map((p) => p.employee_id);
 }

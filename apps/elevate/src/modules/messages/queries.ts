@@ -538,3 +538,25 @@ export async function searchChatPeople(input: unknown): Promise<{ userId: string
     .limit(can(actor, "messages.manage_group") ? PEOPLE_LIMIT_MANAGER : PEOPLE_LIMIT);
   return rows.map((r) => ({ userId: r.userId!, name: `${r.preferred?.trim() || r.first} ${r.last}`.trim(), position: r.position ?? null }));
 }
+
+/**
+ * Messages of one conversation inside a date window, for HR access that two administrators approved (Phase 6). It does NOT check
+ * membership: the only caller is `chat-access/queries.ts`, which has already checked the approved request, that it is the requester
+ * asking, and that the 72 hours are not over. Oldest first, replies included, removed text is never returned (a removed message shows as removed).
+ */
+export async function loadWindowForAccess(input: { readerId: string; conversationId: string; from: Date; to: Date; afterSeq?: number; limit: number }): Promise<{ messages: ChatMessage[]; hasMore: boolean; members: { userId: string; name: string }[] }> {
+  const after = input.afterSeq !== undefined ? sql`and seq > ${input.afterSeq}` : sql``;
+  const fetched = (await db.execute(sql`
+    select ${MESSAGE_COLUMNS} from chat.messages
+    where conversation_id = ${input.conversationId} and created_at >= ${input.from.toISOString()}::timestamptz and created_at < ${input.to.toISOString()}::timestamptz ${after}
+    order by seq asc limit ${input.limit + 1}`)) as unknown as MessageRow[];
+  const hasMore = fetched.length > input.limit;
+  const page = hasMore ? fetched.slice(0, input.limit) : fetched;
+  const { messages, nameOf } = await buildMessages(input.readerId, input.conversationId, page);
+  const memberRows = await db
+    .select({ userId: conversationMembers.userId })
+    .from(conversationMembers)
+    .where(and(eq(conversationMembers.conversationId, input.conversationId), isNull(conversationMembers.leftAt)))
+    .orderBy(asc(conversationMembers.joinedAt));
+  return { messages, hasMore, members: memberRows.map((r) => ({ userId: r.userId, name: nameOf(r.userId) })) };
+}

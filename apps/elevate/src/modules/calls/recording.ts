@@ -276,3 +276,80 @@ export async function setCanRecordCalls(actor: { id: string; email: string }, in
     await writeAudit({ actor, action: "call.recorder.set", targetType: "user", targetId: input.userId, before: { canRecordCalls: person.was }, after: { canRecordCalls: input.enabled } }, tx);
   });
 }
+
+export type AccessibleRecording = { id: string; conversationId: string; title: string; kind: string; startedAt: string; minutes: number; recorderName: string; expiresAt: string | null };
+
+/**
+ * Recordings the person was NOT part of and could ask to watch (Phase 6): finished, not deleted, not expired, never from a direct message.
+ * Facts only (which chat, when, how long, who recorded). The caller (chat-access) has checked the permission to ask.
+ */
+export async function listRecordingsForAccess(actorId: string): Promise<AccessibleRecording[]> {
+  const rows = await db
+    .select({ rec: callRecordings, conversationId: calls.conversationId, title: conversations.title, kind: conversations.kind })
+    .from(callRecordings)
+    .innerJoin(calls, eq(calls.id, callRecordings.callId))
+    .innerJoin(conversations, eq(conversations.id, calls.conversationId))
+    .where(
+      and(
+        isNull(callRecordings.deletedAt),
+        isNotNull(callRecordings.endedAt),
+        gt(callRecordings.expiresAt, sql`now()`),
+        sql`${conversations.kind} <> 'dm'`,
+        sql`not exists (select 1 from chat.call_participants p where p.call_id = ${callRecordings.callId} and p.user_id = ${actorId})`,
+      ),
+    )
+    .orderBy(desc(callRecordings.startedAt))
+    .limit(50);
+  const names = await peopleByUserId([...new Set(rows.map((r) => r.rec.recorderUserId))]);
+  return rows.map((r) => ({
+    id: r.rec.id,
+    conversationId: r.conversationId,
+    title: r.title ?? "Group call",
+    kind: r.kind,
+    startedAt: r.rec.startedAt.toISOString(),
+    minutes: r.rec.endedAt ? Math.max(1, Math.round((r.rec.endedAt.getTime() - r.rec.startedAt.getTime()) / 60000)) : 0,
+    recorderName: names.get(r.rec.recorderUserId)?.name ?? "Someone",
+    expiresAt: r.rec.expiresAt?.toISOString() ?? null,
+  }));
+}
+
+/** Facts about a recording for a request (and the check that it can be asked for): its chat, and whether the person was in the call. */
+export async function recordingFactsForAccess(recordingId: string, actorId: string): Promise<{ conversationId: string; kind: string; usable: boolean; wasThere: boolean } | null> {
+  const [row] = await db
+    .select({ rec: callRecordings, conversationId: calls.conversationId, kind: conversations.kind })
+    .from(callRecordings)
+    .innerJoin(calls, eq(calls.id, callRecordings.callId))
+    .innerJoin(conversations, eq(conversations.id, calls.conversationId))
+    .where(eq(callRecordings.id, recordingId))
+    .limit(1);
+  if (!row) return null;
+  const [was] = await db.select({ id: callParticipants.id }).from(callParticipants).where(and(eq(callParticipants.callId, row.rec.callId), eq(callParticipants.userId, actorId))).limit(1);
+  const usable = Boolean(row.rec.endedAt) && !row.rec.deletedAt && Boolean(row.rec.expiresAt && row.rec.expiresAt.getTime() > Date.now());
+  return { conversationId: row.conversationId, kind: row.kind, usable, wasThere: Boolean(was) };
+}
+
+/**
+ * Plays a recording for HR whose request two administrators approved. The caller (chat-access) has checked the approval, that it is the
+ * requester, that the 72 hours are not over, and that the request is for THIS recording. Audited as a play with the request's id.
+ */
+export async function openRecordingForAccess(actor: Actor, recordingId: string, requestId: string): Promise<ReadableStream<Uint8Array>> {
+  const [rec] = await db
+    .select()
+    .from(callRecordings)
+    .where(and(eq(callRecordings.id, recordingId), isNull(callRecordings.deletedAt), isNotNull(callRecordings.endedAt), gt(callRecordings.expiresAt, sql`now()`)))
+    .limit(1);
+  if (!rec) throw new ActionFailure(NOT_FOUND);
+  const parts = await readyParts(rec.id);
+  if (parts.length === 0) throw new ActionFailure(NOT_FOUND);
+  await writeAudit({ actor, action: "call.recording.play", targetType: "call_recording", targetId: rec.id, metadata: { callId: rec.callId, parts: parts.length, accessRequestId: requestId } });
+  const storage = getDocumentStorage();
+  let next = 0;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (next >= parts.length) return controller.close();
+      const bytes = await storage.read(BUCKETS.calls, parts[next++].path);
+      if (!bytes) return controller.error(new Error("A part of the recording is missing."));
+      controller.enqueue(bytes);
+    },
+  });
+}
