@@ -1,14 +1,16 @@
-//! Turns the pictures of every monitor into one small, lightly blurred JPEG. This is the only way a screenshot leaves this module:
+//! Turns the pictures of every monitor into one small blurred JPEG. This is the only way a screenshot leaves this module:
 //! `capture_blurred` returns a `BlurredJpeg`, and nothing here ever writes a raw capture anywhere.
 //!
-//! The blur is "not too strong" by the owner's choice: a lead can tell what kind of screen it is (browser, spreadsheet, chat) and read
-//! large headings, but ordinary body text is unreadable. The strength is the one constant `BLUR_SIGMA` so it can be tuned after looking
-//! at real captures (Task 9).
+//! The aim (the owner's): a lead can tell what kind of screen it is (browser, spreadsheet, chat) and read large headings, but ordinary
+//! body text is unreadable. The strength is the one constant `BLUR_SIGMA`; it was set by looking at real captures (see
+//! docs/modules/activity-tracker.md), because a synthetic test pattern alone proved too forgiving.
 
 use crate::platform::{CaptureError, MonitorShot, Platform};
 
-/// Gaussian blur strength, in pixels of the final (already scaled down) picture.
-pub const BLUR_SIGMA: f32 = 2.5;
+/// Gaussian blur strength, in pixels of the final (already scaled down) picture. Chosen by looking at real captures on 2026-11-20: from 2.5
+/// to 6 ordinary chat text was still readable; at 8 body text is a smudge while the layout (windows, panels, the taskbar) and large
+/// headings stay.
+pub const BLUR_SIGMA: f32 = 8.0;
 /// The widest the finished picture gets. Wider desktops are scaled down; a narrower one is never scaled up.
 pub const MAX_WIDTH: u32 = 1600;
 /// The server accepts at most 300 KB.
@@ -144,8 +146,13 @@ pub(crate) fn scale_down(canvas: &RawCanvas) -> Result<image::RgbaImage, BlurErr
 
 /// Scale, blur with `BLUR_SIGMA`, and encode as JPEG (quality 60, lowered in steps to 35 until it is at most 300 KB).
 pub fn blur_and_encode(canvas: RawCanvas) -> Result<BlurredJpeg, BlurError> {
+    blur_and_encode_with(canvas, BLUR_SIGMA)
+}
+
+/// Like `blur_and_encode` with a chosen strength (used to compare strengths on a real capture).
+pub fn blur_and_encode_with(canvas: RawCanvas, sigma: f32) -> Result<BlurredJpeg, BlurError> {
     let small = shrink(to_image(canvas)?);
-    let blurred = image::imageops::blur(&small, BLUR_SIGMA);
+    let blurred = image::imageops::blur(&small, sigma);
     let rgb = image::DynamicImage::ImageRgba8(blurred).to_rgb8();
     let mut last = 0;
     for quality in QUALITIES {
@@ -302,6 +309,36 @@ mod tests {
         let before = edge_energy(&DynamicImage::ImageRgba8(scale_down(&canvas).unwrap()).to_luma8());
         let after = edge_energy(&decode(&blur_and_encode(canvas).unwrap()));
         assert!(after < before * 0.15, "after {after} should be under 15% of {before}");
+    }
+
+
+    /// White page with body-sized text: dark stems 7 px wide every 14 px (about the size of a 14 px font), in 14 px tall lines. The first
+    /// version of this check used 1 px strokes 4 px apart, which no real text looks like; a real capture at the old strength was still readable.
+    fn body_text_page() -> image::RgbaImage {
+        let mut img = image::RgbaImage::from_pixel(1920, 1080, image::Rgba([255, 255, 255, 255]));
+        for line_y in (40..1040).step_by(26) {
+            for block_x in (60..1700).step_by(240) {
+                for x in (block_x..block_x + 200).step_by(14) {
+                    for y in line_y..line_y + 14 {
+                        for dx in 0..7 {
+                            img.put_pixel(x + dx, y, image::Rgba([20, 20, 20, 255]));
+                        }
+                    }
+                }
+            }
+        }
+        img
+    }
+
+    #[test]
+    fn body_sized_text_comes_out_almost_flat() {
+        let page = body_text_page();
+        let canvas = canvas_from(&page);
+        let before = edge_energy(&DynamicImage::ImageRgba8(scale_down(&canvas).unwrap()).to_luma8());
+        let after = edge_energy(&decode(&blur_and_encode(canvas).unwrap()));
+        // Measured on this pattern: strength 2.5 keeps 67%, 4.5 keeps 25%, 6 keeps 12% (still partly readable on a real capture), 8 keeps 5.7%
+        // (unreadable on a real capture). The line is between 6 and 8.
+        assert!(after < before * 0.08, "body-sized text keeps {:.1}% of its detail, it must keep under 8%", 100.0 * after / before);
     }
 
     #[test]

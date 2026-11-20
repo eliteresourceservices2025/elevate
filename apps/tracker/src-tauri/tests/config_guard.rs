@@ -75,3 +75,16 @@ fn the_uninstaller_always_removes_the_saved_sign_in_but_never_during_an_update()
     let target = format!("{}.{}", constant(&token, "USER"), constant(&token, "SERVICE"));
     assert!(hook.contains(&format!("target={target}")), "the hook must delete the target {target}");
 }
+
+#[test]
+fn a_closed_window_is_really_closed_so_the_tray_app_stays_small() {
+    // The window runs in WebView2 helper processes worth hundreds of MB. Closing the window must end them (the app keeps running in the
+    // tray and builds the window again when asked), so the window is not created at start and an exit request only stops when it is the
+    // last window closing, never an explicit quit.
+    let c = conf();
+    assert_eq!(c["app"]["windows"][0]["create"], false, "the window must be created on demand, not at start");
+    let lib = fs::read_to_string(root().join("src/lib.rs")).unwrap();
+    assert!(lib.contains("prevent_exit"), "closing the last window must not quit the app");
+    assert!(lib.contains("code.is_none()"), "an explicit quit (with an exit code) must still quit");
+    assert!(!lib.contains("prevent_close"), "closing must destroy the window, not just hide it");
+}

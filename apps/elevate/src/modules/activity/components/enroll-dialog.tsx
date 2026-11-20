@@ -33,7 +33,7 @@ function Inner() {
     <div className="space-y-4">
       <ol className="list-decimal space-y-1 pl-5 text-sm">
         <li>Open the ELEVATE Tracker App on the computer you work on.</li>
-        <li>Choose &ldquo;Sign in with a code&rdquo; and type the code below.</li>
+        <li>On &ldquo;Connect this computer&rdquo;, type the code below and choose Connect.</li>
         <li>Clock in here as usual. The app records only while you are clocked in.</li>
       </ol>
       {code && left > 0 ? (

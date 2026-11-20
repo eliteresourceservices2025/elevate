@@ -10,6 +10,7 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 - `apps/elevate/` — the main Next.js app (`pnpm dev` from the repo root runs it)
 - `apps/safe-voice/` — separate anonymous app, deployed on its own subdomain (Phase 4.2; see the Safe Voice section)
+- `apps/tracker/` — the ELEVATE Tracker App for Windows (Tauri 2, Rust and React: a tray app that clocks in and out through ELEVATE and, while clocked in, records app names, active or idle, and blurred screenshots; README in `apps/tracker/README.md`, notes in `docs/modules/activity-tracker.md`; macOS is Phase 4)
 - `apps/learn/` — ELEVATE Learn, the training app (HIPAA and Cybersecurity courses, client add-ons, own subdomain; notes in `docs/modules/learn.md`, plan in `docs/learn/`)
 - `packages/` — shared code (empty for now)
 - `supabase/` — Supabase CLI config (repo root). The CLI is a dev dependency: `pnpm --filter elevate exec supabase ...` with `--workdir ../..`
@@ -250,7 +251,7 @@ Plain-English how-to guides (files in `apps/elevate/content/help`), role-aware, 
 - The tool runs against the local database only; reset it first for clean pictures (see the note).
 
 ### ELEVATE Tracker (activity and blurred screenshots) — `docs/modules/activity-tracker.md`
-Replaces Jibble's screenshots and flags. Server side and the monitoring pages (`/activity`, My day on Attendance, `/settings/tracker`) exist; the desktop app, download page and reports come later.
+Replaces Jibble's screenshots and flags. Server side, the monitoring pages (`/activity`, My day on Attendance, `/settings/tracker`), the download page, releases and the Windows app (`apps/tracker`) exist; the Mac app, exceptions inbox, reports and client PDF come later.
 
 - Evidence and flags only: it never writes clock events or changes hours. Records only while clocked in, app name only (no titles, URLs, keystrokes), and nothing at all until a monitoring policy is published.
 - The app talks to `/api/tracker/*` with a per-device bearer token (outside the sign-in gate, like the cron route); only hashes are stored. Segments are append-only; screenshots are blurred on the person's computer, checked by bytes, kept 30 days in the private bucket `activity-shots`.

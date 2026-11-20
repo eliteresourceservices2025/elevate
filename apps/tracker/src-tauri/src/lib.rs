@@ -60,13 +60,6 @@ pub fn run() {
             commands::whats_new,
             commands::mark_whats_new_seen,
         ])
-        .on_window_event(|window, event| {
-            // Closing the window hides it: the app keeps running in the tray.
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
-            }
-        })
         .setup(move |app| {
             let version = app.package_info().version.to_string();
             let data_dir = app.path().app_data_dir()?;
@@ -108,14 +101,21 @@ pub fn run() {
                 }
             });
 
-            // Show the window unless Windows started the app at sign-in and the computer is already set up.
+            // Show the window unless Windows started the app at sign-in and the computer is already set up. The window is not created at
+            // start: it is built when shown and destroyed when closed, so a tray-only app does not keep WebView2 (hundreds of MB) alive.
             if !(started_minimized && signed_in) {
-                if let Some(window) = app.get_webview_window("status") {
-                    let _ = window.show();
-                }
+                tray::show_window(app.handle());
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running the ELEVATE Tracker App");
+        .build(tauri::generate_context!())
+        .expect("error while building the ELEVATE Tracker App")
+        .run(|_app, event| {
+            // Closing the last window ends its WebView2 processes but not the app; only an explicit quit (which carries an exit code) exits.
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+                if code.is_none() {
+                    api.prevent_exit();
+                }
+            }
+        });
 }

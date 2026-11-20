@@ -31,7 +31,10 @@ pub struct Engine {
     sender: Sender,
     builder: SegmentBuilder,
     plan: ShotPlan,
-    backoff: Backoff,
+    /// Waits between failed status checks: short, so coming back online is noticed within about a minute.
+    poll_backoff: Backoff,
+    /// Waits between failed sends: longer, so a down server is not hammered.
+    send_backoff: Backoff,
     token: Option<String>,
     idle_timeout: u32,
     next_poll: i64,
@@ -54,7 +57,8 @@ impl Engine {
             sender: Sender::new(),
             builder: SegmentBuilder::new(idle_timeout),
             plan: ShotPlan::new(seed()),
-            backoff: Backoff::new(5_000, 300_000).with_jitter(seed()),
+            poll_backoff: Backoff::new(5_000, 60_000).with_jitter(seed()),
+            send_backoff: Backoff::new(5_000, 300_000).with_jitter(seed()),
             token: None,
             idle_timeout,
             next_poll: i64::MIN,
@@ -196,7 +200,12 @@ impl Engine {
                     self.d.logger.log_event(Event::PolicyOff);
                 }
                 self.next_poll = now + POLL_MS;
-                self.backoff.reset();
+                self.poll_backoff.reset();
+                if came_back {
+                    // ELEVATE is reachable again: send what is waiting now, not after the long pause that grew while it was down.
+                    self.send_backoff.reset();
+                    self.next_send = now;
+                }
                 self.changed();
             }
             Err(ApiError::Unauthorized) => self.sign_out(),
@@ -213,7 +222,7 @@ impl Engine {
                 if went_offline {
                     self.d.logger.log_event(Event::WentOffline);
                 }
-                self.next_poll = now + self.backoff.next() as i64;
+                self.next_poll = now + self.poll_backoff.next() as i64;
                 self.changed();
             }
             Err(_) => self.next_poll = now + 2 * POLL_MS,
@@ -279,13 +288,13 @@ impl Engine {
                 self.d.logger.log_event(Event::Delivered(n as u32));
                 let more = self.d.queue.len().map(|(a, b)| a + b > 0).unwrap_or(false);
                 self.next_send = now + if more && n > 0 { 1_000 } else { SEND_MS };
-                self.backoff.reset();
+                self.send_backoff.reset();
                 self.changed();
             }
             SendOutcome::Idle => self.next_send = now + SEND_MS,
             SendOutcome::Backoff => {
                 self.d.logger.log_event(Event::SendBackoff);
-                self.next_send = now + self.backoff.next() as i64;
+                self.next_send = now + self.send_backoff.next() as i64;
             }
             SendOutcome::SignedOut => self.sign_out(),
             SendOutcome::UpdateRequired(min) => {

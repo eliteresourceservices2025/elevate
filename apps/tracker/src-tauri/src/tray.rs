@@ -66,8 +66,13 @@ fn build_menu(app: &AppHandle, plan: &TrayPlan) -> tauri::Result<Menu<tauri::Wry
     Ok(menu)
 }
 
+/// Shows the window, building it first when it was closed (a closed window really goes away; see `lib.rs`).
 pub fn show_window(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("status") {
+    let window = app.get_webview_window("status").or_else(|| {
+        let config = app.config().app.windows.first()?.clone();
+        tauri::WebviewWindowBuilder::from_config(app, &config).ok()?.build().ok()
+    });
+    if let Some(w) = window {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();

@@ -4,7 +4,7 @@ summary: Add your computer with a code, read your timeline and see who looked at
 category: attendance
 audience: all
 order: 9
-updated: 2026-11-19
+updated: 2026-11-20
 ---
 
 The **ELEVATE Tracker App** runs on your work computer while you are clocked in. It records only the **name of the app** you are using and whether you were active or idle. It never records window titles, web addresses or what you type. It also takes a screenshot now and then, blurred on your computer before it is sent.
@@ -15,9 +15,12 @@ You can always see what it recorded about you. This page shows you where.
 
 1. Click **ELEVATE Tracker App** in the left menu.
 2. Click the **Download** button for your computer: **Download for Windows**, **Download for Apple silicon** or **Download for Intel Mac**. The page picks the right one for the computer you are using. If a button says **Not available yet**, that kind of computer is not supported yet.
-3. Open the file and let it install. On a Mac, when asked, allow **Screen Recording** and **Accessibility** in System Settings, then reopen the app.
+3. Open the file. It installs for you only: you do not need an administrator password. When it finishes, the app starts and its window opens on **Connect this computer**.
+4. Windows may warn you first ("Windows protected your PC"). That happens while the company's installer is not yet signed with a company certificate. If you downloaded the file from the **ELEVATE Tracker App** page, choose **More info**, then **Run anyway**. If you got the file anywhere else, do not run it.
 
-The page also lists **What changed** in each version. A version marked **Required update** must be installed: the app stops sending until you update. The app updates itself when it can.
+On a Mac, the Mac version is not available yet.
+
+The page also lists **What changed** in each version. A version marked **Required update** must be installed: the app stops sending until you update. The app updates itself: a normal update waits until you are not working, a required one installs at once. After an update the app shows **What's new** once.
 
 # Add your computer
 
@@ -26,9 +29,22 @@ This part appears once your company has published its monitoring policy. You can
 1. Click **Attendance** in the left menu. You land on **My time**.
 2. Find the card **My day in the ELEVATE Tracker App** and click **Add this computer**.
 3. Click **Get a code**. A short code appears. It works once and for 15 minutes.
-4. Open the ELEVATE Tracker App on your computer, choose **Sign in with a code** and type it.
+4. In the ELEVATE Tracker App, on **Connect this computer**, type the code and choose **Connect**.
 
 If the code runs out, click **Get a new code**.
+
+# Use the app
+
+The app sits in the tray, the small icons next to the clock. If you cannot see it, click the arrow ^ to show hidden icons. Click its icon to open the window. Closing the window does not stop the app.
+
+- **Clock in**, **Start break** (choose 15 minutes, 30 minutes, 1 hour or no time limit), **End break** and **Clock out** work here exactly as in ELEVATE, and ELEVATE records the time. The same choices are in the icon's menu.
+- If you work for more than one client, **Clock in for** lets you choose the client or project, and **Switch to** moves the rest of your shift to another one. ELEVATE then shows which client and project each stretch of your day was for.
+- The icon is **green** while the app is recording, **grey** when you are clocked out, on a break, or recording is not switched on yet, **orange** when ELEVATE cannot be reached (it keeps what it records and sends it later) and **red** when the app needs an update.
+- **What was captured** shows the apps and minutes it noted today and your last blurred picture. Nothing is hidden from you.
+- The app never clocks you in or out by itself. Only your click does.
+- A team that needs a selfie to clock in, or a person whose hours come from Jibble, clocks in on the ELEVATE page: the buttons in the app say so and stay off.
+
+If you start working on a different computer, ask HR to sign the old one out on the **Devices** page, then connect the new one with a new code.
 
 # Read your day
 

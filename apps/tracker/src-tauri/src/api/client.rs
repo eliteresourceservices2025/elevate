@@ -121,7 +121,8 @@ impl ApiClient {
         if !address_allowed(upload_url) {
             return Err(ApiError::Invalid);
         }
-        let part = Part::bytes(jpeg.to_vec()).mime_str("image/jpeg").map_err(|_| ApiError::Invalid)?;
+        // Storage only treats the part as a file when it has a file name (found against the real local storage: without one it says "No content provided").
+        let part = Part::bytes(jpeg.to_vec()).file_name("blob").mime_str("image/jpeg").map_err(|_| ApiError::Invalid)?;
         let form = Form::new().text("cacheControl", "3600").part("", part);
         let response = self.storage.put(upload_url).multipart(form).send().await.map_err(|_| ApiError::Unavailable)?;
         match response.status().as_u16() {

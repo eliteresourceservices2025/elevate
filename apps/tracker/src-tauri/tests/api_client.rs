@@ -196,6 +196,8 @@ async fn the_screenshot_goes_request_upload_finalize_and_the_upload_never_carrie
     let put = storage.received_requests().await.unwrap().pop().unwrap();
     assert!(put.headers.get("content-type").unwrap().to_str().unwrap().starts_with("multipart/form-data"));
     assert!(String::from_utf8_lossy(&put.body).contains("name=\"cacheControl\""));
+    // Real storage answers "No content provided" to a picture part that has no file name, so it must have one.
+    assert!(String::from_utf8_lossy(&put.body).contains("filename=\""), "the picture part needs a file name");
     assert!(!put.headers.contains_key("authorization"), "the storage host must never see the device token");
     assert!(!put.headers.contains_key("x-tracker-version"));
 

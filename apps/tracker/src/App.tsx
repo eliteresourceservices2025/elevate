@@ -30,6 +30,13 @@ export function App() {
     };
   }, [reload]);
 
+  // A message about a click ("Clocked in.") goes away by itself after a few seconds.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
   if (!status) return <main className="app"><p className="muted">Loading…</p></main>;
 
   return (

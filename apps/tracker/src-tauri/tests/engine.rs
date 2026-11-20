@@ -417,3 +417,35 @@ async fn over_a_whole_simulated_day_no_clock_request_is_ever_sent_unless_a_perso
     assert!(r.changes.load(Ordering::SeqCst) > 0, "the window was told about changes");
     assert_eq!(r.calls("/api/tracker/clock").await, 0, "nothing the app does by itself ever clocks anyone");
 }
+
+/// Every route answers 503: ELEVATE is down.
+async fn down(server: &MockServer) {
+    server.reset().await;
+    for (verb, route) in [("GET", "/api/tracker/clock-state"), ("POST", "/api/tracker/segments"), ("POST", "/api/tracker/shots/request"), ("POST", "/api/tracker/shots/finalize"), ("POST", "/api/tracker/clock")] {
+        Mock::given(method(verb)).and(path(route)).respond_with(ResponseTemplate::new(503).set_body_json(json!({}))).mount(server).await;
+    }
+}
+
+#[tokio::test]
+async fn when_elevate_comes_back_what_is_waiting_is_sent_at_once_not_after_the_long_retry_pause() {
+    let mut r = rig(true).await;
+    r.run(0, 60, 5).await;
+    r.app(Some("excel"));
+    r.run(65, 120, 5).await;
+    down(&r.server).await;
+    // A long outage: the retry pauses have grown by now. Work keeps being recorded and queued.
+    for minute in 0..13 {
+        r.app(Some(if minute % 2 == 0 { "chrome" } else { "excel" }));
+        r.run(125 + minute * 60, 125 + minute * 60 + 55, 5).await;
+    }
+    r.run(905, 905, 5).await;
+    assert!(!r.shared.lock().unwrap().online);
+    let queued = r.queue.len().unwrap().0;
+    assert!(queued > 0, "the work was kept while offline");
+
+    says(&r.server, "working", true).await; // ELEVATE is back
+    r.run(905, 1000, 5).await; // within about a minute and a half
+    assert!(r.shared.lock().unwrap().online, "the app noticed within a minute");
+    assert_eq!(r.queue.len().unwrap().0, 0, "everything waiting went out as soon as ELEVATE was seen again");
+    assert!(r.calls("/api/tracker/segments").await > 0);
+}
