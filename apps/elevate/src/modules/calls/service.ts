@@ -403,7 +403,8 @@ export async function leaveCall(actor: Actor, input: { callId: string }): Promis
 
 /** Runs slow follow-up work after the response has been sent. Outside a request (tests, jobs) there is no "after", so it simply runs now. */
 async function afterReply(task: () => Promise<void>): Promise<void> {
-  const safe = () => task().catch(() => {});
+  // A failure here must not turn a finished leave into an error, but it must not vanish either (the error's name only: never ids or content).
+  const safe = () => task().catch((error: unknown) => console.error("call follow-up failed:", error instanceof Error ? error.name : "unknown error"));
   try {
     after(safe);
   } catch {

@@ -137,7 +137,8 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
     micStream.current = stream;
     setMicVersion((v) => v + 1);
   }, []);
-  const recorder = useRef<CallRecorder | null>(null);  const transport = useRef<CallTransport | null>(null);
+  const recorder = useRef<CallRecorder | null>(null);
+  const transport = useRef<CallTransport | null>(null);
   const channel = useRef<{ update: (p: CallPresence) => void; stop: () => void } | null>(null);
   const timers = useRef<{ heartbeat?: ReturnType<typeof setInterval>; unanswered?: ReturnType<typeof setTimeout> }>({});
   const live = useRef({ callId: null as string | null, phase: "idle" as Phase, state: null as CallState | null, micOn: false, handUp: false, othersEverJoined: false, remote: {} as Record<string, RemoteMedia> });
