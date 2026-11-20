@@ -2,7 +2,7 @@
 
 Design: `docs/superpowers/specs/2026-11-19-elevate-tracker-design.md`. Phase 1 plan (this server side): `docs/superpowers/plans/2026-11-19-elevate-tracker-phase1-server.md`. Code: `apps/elevate/src/modules/activity/`.
 
-Status: **server side only (Phase 1)**. The desktop app (Tauri, Windows and macOS), the pages (`/activity`, My day, `/tracker/download`, Releases), the client PDF and the digest email are later phases. Until the app exists, `pnpm tracker:sim` stands in for it.
+Status: **server side (Phase 1) and the monitoring pages (Phase 2a)**. The desktop app (Tauri, Windows and macOS), the download page and releases admin (Phase 2b), and the exceptions inbox, reports, client PDF and digests (Phase 2c) are later. Until the app exists, `pnpm tracker:sim` stands in for it. Plans: `docs/superpowers/plans/2026-11-19-elevate-tracker-phase2a-pages.md`.
 
 ## Hard rules
 
@@ -40,6 +40,20 @@ Team scope uses the time chain (`timeChainUserIds`), so an attendance lead count
 | `queries.ts`, `access.ts` | `getMyDay`, `getPersonDay`, `listFloor`, `listCategories`, `listDevices`; scope checks that run before the database |
 | `jobs.ts`, `flags.ts` | Daily totals, screenshot purge, offline alerts; day flags |
 
+## Pages (Phase 2a)
+
+| Address | Who | What |
+|---|---|---|
+| `/attendance` (My time tab) | everyone | "My day" card: enrol a computer with a one-time code, timeline, totals, top apps, screenshots, "who looked at my screenshots" |
+| `/activity` | lead (team), HR, Super Admin | Live floor: counts by state, filters, "needs attention", refreshes every minute (menu item "Activity"; a plain 404 for anyone else) |
+| `/activity/people/[id]?date=` | same, within reach | One person's day. A person outside the viewer's reach is a plain 404. Opening someone else's screenshot needs a reason, which is audited |
+| `/activity/devices` | HR, Super Admin | Every computer, "Needs attention" filter, Sign out |
+| `/settings/tracker` | HR, Super Admin | Idle / offline / low-activity thresholds and work-app rules |
+
+The day is in the person's own zone; times are shown in the viewer's. `timeline.ts` is the pure layout behind `TimelineStrip`. Help guides: `content/help/attendance/your-tracker-day.md`, `read-the-activity-pages.md`.
+
+Checked: unit, render and real-database tests for the above. **Not yet looked at in a browser** (needs the new migrations applied to a dev database and a seeded clocked-in session).
+
 ## Flags and jobs
 
 Flags (added to `time.attendance_days.flags` by the nightly rebuild, all "review", never blocking): `tracker_offline` (30+ working minutes with nothing recorded), `low_activity` (under the setting's percent of recorded time, after an hour recorded; default 30), `no_shots` (an hour or more of work, no screenshot). A person with no tracker, or while no policy is published, is never flagged.
@@ -56,4 +70,4 @@ The automated checks that cover the same ground without a running server: `pnpm 
 
 ## Not built yet
 
-Tracker app (Windows, then macOS), My day / `/activity` pages / `/tracker/download` and the Releases admin, client proof PDF, daily digest email, weekly "who viewed" summary for the person, thresholds screen (`activity_settings` has defaults only), per-team settings, aggregate reports with the under-5 rule.
+Tracker app (Windows, then macOS), `/tracker/download` and the Releases admin (2b), Exceptions inbox, Reports and client PDF, daily digest email, weekly "who viewed" email, day notes, schedule comparison, per-team settings, aggregate reports with the under-5 rule (2c).

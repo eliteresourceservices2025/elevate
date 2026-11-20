@@ -250,7 +250,7 @@ Plain-English how-to guides (files in `apps/elevate/content/help`), role-aware, 
 - The tool runs against the local database only; reset it first for clean pictures (see the note).
 
 ### ELEVATE Tracker (activity and blurred screenshots) — `docs/modules/activity-tracker.md`
-Replaces Jibble's screenshots and flags. Phase 1 (server side) only; the desktop app and pages come later.
+Replaces Jibble's screenshots and flags. Server side and the monitoring pages (`/activity`, My day on Attendance, `/settings/tracker`) exist; the desktop app, download page and reports come later.
 
 - Evidence and flags only: it never writes clock events or changes hours. Records only while clocked in, app name only (no titles, URLs, keystrokes), and nothing at all until a monitoring policy is published.
 - The app talks to `/api/tracker/*` with a per-device bearer token (outside the sign-in gate, like the cron route); only hashes are stored. Segments are append-only; screenshots are blurred on the person's computer, checked by bytes, kept 30 days in the private bucket `activity-shots`.
