@@ -120,6 +120,9 @@ describe("the floor", () => {
     as(lead);
     const team = await queries.listFloor({});
     expect(team.map((r) => r.employeeId)).toEqual([report.employeeId]);
+    expect(team[0].teamName).toBeNull(); // no team assigned in this test
+    expect(team[0].lastSeenMinutes).toBeGreaterThanOrEqual(9); // the last segment ended 10 minutes ago
+    expect(team[0].lastSeenMinutes).toBeLessThanOrEqual(12);
     as(hr);
     const all = await queries.listFloor({});
     expect(all.map((r) => r.employeeId)).toEqual(expect.arrayContaining([report.employeeId, lead.employeeId, stranger.employeeId]));

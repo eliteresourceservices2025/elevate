@@ -1,4 +1,5 @@
 import {
+  Activity,
   BookOpen,
   LifeBuoy,
   PencilRuler,
@@ -72,6 +73,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/attendance", label: "Attendance", icon: Clock, description: "Time clock, lates, absences and hours export." },
       { href: "/extra-hours", label: "Extra hours", icon: Hourglass, description: "Ask for extra hours, confirm the client's requests and decide them." },
       { href: "/team-attendance", label: "Team attendance", icon: UsersRound, description: "Who is clocked in, flags and end-of-day reports.", access: { action: "attendance.view", scopes: ["all", "team"] } },
+      { href: "/activity", label: "Activity", icon: Activity, description: "Who is working right now and what the ELEVATE Tracker App recorded.", access: { action: "activity.view", scopes: ["all", "team"] } },
       { href: "/hours-review", label: "Hours review", icon: ListChecks, description: "Approve weekly hours for payroll.", access: { action: "hours.approve", scopes: ["all", "team"] } },
       { href: "/schedules", label: "Schedules", icon: CalendarClock, description: "Shifts in the client's time zone and Manila time." },
       { href: "/jibble", label: "Jibble", icon: Camera, description: "Screenshot link status and people matching.", access: { action: "jibble.manage", scopes: ["all", "team", "own"] } },

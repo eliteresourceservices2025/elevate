@@ -102,7 +102,7 @@ export async function getPersonDay(input: unknown): Promise<ActivityDay> {
 }
 
 export type FloorState = "active" | "idle" | "break" | "offline" | "out";
-export type FloorRow = { employeeId: string; name: string; state: FloorState; minutesInState: number; activePercentToday: number };
+export type FloorRow = { employeeId: string; name: string; state: FloorState; minutesInState: number; activePercentToday: number; teamName: string | null; lastSeenMinutes: number | null };
 
 /** Who is doing what right now, for everyone with a tracker (a lead sees their team). At most 200 people. */
 export async function listFloor(input: unknown): Promise<FloorRow[]> {
@@ -115,11 +115,12 @@ export async function listFloor(input: unknown): Promise<FloorRow[]> {
   const only = restrict ? sql`and e.id in (${sql.join(restrict.map((id) => sql`${id}`), sql`, `)})` : sql``;
   const team = parsed.teamId ? sql`and e.team_id = ${parsed.teamId}` : sql``;
   const people = (await db.execute(sql`
-    select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
+    select e.id, e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team_name
     from core.employees e
+    left join core.teams t on t.id = e.team_id
     where e.archived_at is null and e.status = 'active' ${only} ${team}
       and exists (select 1 from time.tracker_devices d where d.employee_id = e.id and d.status = 'active')
-    order by e.legal_last_name, e.legal_first_name limit 200`)) as unknown as { id: string; first: string; last: string; preferred: string | null }[];
+    order by e.legal_last_name, e.legal_first_name limit 200`)) as unknown as { id: string; first: string; last: string; preferred: string | null; team_name: string | null }[];
   if (people.length === 0) return [];
   const ids = sql.join(people.map((p) => sql`${p.id}`), sql`, `);
 
@@ -168,6 +169,8 @@ export async function listFloor(input: unknown): Promise<FloorRow[]> {
       state,
       minutesInState: Math.max(0, Math.round((now - since) / MINUTE)),
       activePercentToday: t ? activePercent(Number(t.active_ms), Number(t.all_ms)) : 0,
+      teamName: p.team_name,
+      lastSeenMinutes: seg ? Math.max(0, Math.round((now - Number(seg.e)) / MINUTE)) : null,
     };
   });
 }

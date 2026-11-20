@@ -17,3 +17,10 @@ describe("hiddenNavFor and the Payroll menu item", () => {
     expect(hiddenNavFor(user(["super_admin"], "viewer"))).not.toContain("/payroll");
   });
 });
+
+describe("hiddenNavFor and the Activity menu item", () => {
+  it("shows Activity to leads, HR and Super Admin, and hides it from everyone else", () => {
+    for (const role of ["team_lead", "hr_admin", "super_admin"] as const) expect(hiddenNavFor(user([role]))).not.toContain("/activity");
+    for (const role of ["employee", "recruiter", "executive"] as const) expect(hiddenNavFor(user([role]))).toContain("/activity");
+  });
+});
