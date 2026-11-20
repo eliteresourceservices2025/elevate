@@ -282,3 +282,16 @@ describe("what admins see: hours review and team attendance", () => {
     expect(day?.clients.every((x) => x.name === cName || x.name === "No client")).toBe(true);
   });
 });
+
+describe("an open session in a wide window", () => {
+  it("counts only up to now, never to the end of the window (today's day in hours review and the day pages)", async () => {
+    const w = await worker();
+    const c = await client();
+    await assign(w.employeeId, c);
+    const p = await project(c);
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at, client_id, project_id) values (${w.employeeId}, 'clock_in', ${new Date(Date.now() - 30 * 60_000).toISOString()}, ${c}, ${p})`);
+    const log = await loadWorkLog(db, w.employeeId, Date.now() - 3_600_000, Date.now() + 12 * 3_600_000);
+    expect(log).toHaveLength(1);
+    expect(log[0].to).toBeLessThanOrEqual(Date.now() + 1000);
+  });
+});

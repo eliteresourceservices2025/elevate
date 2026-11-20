@@ -21,7 +21,7 @@ const LOOKBACK_MS = 36 * 3_600_000;
 export async function loadWorkLog(executor: Executor, employeeId: string, fromMs: number, toMs: number): Promise<NamedStretch[]> {
   const events = await loadEventsBetween(executor, employeeId, fromMs - LOOKBACK_MS, toMs);
   const stretches = replayClock(events)
-    .sessions.flatMap((s) => workLog(s, toMs))
+    .sessions.flatMap((s) => workLog(s, Math.min(toMs, Date.now()))) // an open session counts up to now, never to the end of a wider window
     .map((s) => ({ ...s, from: Math.max(s.from, fromMs), to: Math.min(s.to, toMs) }))
     .filter((s) => s.to > s.from);
   const clientIds = [...new Set(stretches.map((s) => s.clientId).filter((x): x is string => x !== null))];
