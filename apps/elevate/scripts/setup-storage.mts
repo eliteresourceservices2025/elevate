@@ -26,6 +26,10 @@ const BUCKETS: { name: string; types: string[]; maxBytes: number }[] = [
   { name: "chat-files", types: [...ALLOWED_MIME_TYPES, "audio/webm", "audio/ogg", "audio/mp4"], maxBytes: MAX_FILE_BYTES },
   // Call recordings: WebM pieces of about 10 MB (24 MB at most), kept 30 days. Only the recorder's browser uploads, with a one-time token.
   { name: "call-recordings", types: ["video/webm"], maxBytes: 24 * 1024 * 1024 },
+  // ELEVATE Tracker screenshots: already blurred on the person's computer, small JPEG or PNG files (300 KB checked by the server), kept 30 days.
+  { name: "activity-shots", types: ["image/jpeg", "image/png"], maxBytes: 512 * 1024 },
+  // ELEVATE Tracker App installers and update files (registered by pnpm tracker:build). Not reachable except through signed links.
+  { name: "tracker-builds", types: ["application/octet-stream", "application/x-msi", "application/x-msdownload", "application/x-apple-diskimage", "application/gzip"], maxBytes: 150 * 1024 * 1024 },
 ];
 
 console.log(`Project: ${new URL(url).host}`);

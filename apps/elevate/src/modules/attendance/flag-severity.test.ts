@@ -28,3 +28,14 @@ describe("flag severity", () => {
     for (const flag of [...CLEAN_FLAGS, ...BLOCKING_FLAGS, ...HARD_STOP_FLAGS]) expect(FLAG_LABELS.has(flag)).toBe(true);
   });
 });
+
+describe("tracker flags", () => {
+  it("are notes for the reviewer: they ask for a look but never block a day", async () => {
+    const { FLAG_HELP } = await import("./flag-labels");
+    for (const flag of ["tracker_offline", "low_activity", "no_shots"]) {
+      expect(flagSeverity(flag)).toBe("review");
+      expect(FLAG_LABELS.has(flag)).toBe(true);
+      expect(FLAG_HELP.has(flag)).toBe(true);
+    }
+  });
+});

@@ -15,6 +15,8 @@ export type ClockEventLite = {
   plannedBreakMinutes?: number | null;
   /** clock_in and switch_client: the client the time that follows belongs to (null or left out: none). */
   clientId?: string | null;
+  /** clock_in and switch_client, with a client: the client's project the time belongs to (null or left out: no specific project). */
+  projectId?: string | null;
 };
 
 /** What state a person is in after this event, or null when the event is not allowed in the current state. */
@@ -29,7 +31,7 @@ const byTime = (a: ClockEventLite, b: ClockEventLite) => a.at - b.at || (a.creat
 export type Break = { startAt: number; endAt: number | null; plannedMinutes: number | null; startEventId?: string };
 
 /** A change of client inside a session: the time from `at` on belongs to `clientId`. */
-export type ClientSwitch = { at: number; clientId: string | null; eventId?: string };
+export type ClientSwitch = { at: number; clientId: string | null; projectId: string | null; eventId?: string };
 
 export type Session = {
   startAt: number;
@@ -37,7 +39,9 @@ export type Session = {
   breaks: Break[];
   /** The client the session started with (the clock-in's client), or null. */
   clientId: string | null;
-  /** Changes of client during the session, in time order. */
+  /** The project the session started with, or null. */
+  projectId: string | null;
+  /** Changes of client or project during the session, in time order. */
   switches: ClientSwitch[];
   startEventId?: string;
   /** The clock-out that closed the session (undefined while it is open). */
@@ -58,8 +62,8 @@ export function replayClock(events: readonly ClockEventLite[]): Replay {
       continue;
     }
     const current = sessions[sessions.length - 1];
-    if (e.type === "clock_in") sessions.push({ startAt: e.at, endAt: null, breaks: [], clientId: e.clientId ?? null, switches: [], startEventId: e.id });
-    else if (e.type === "switch_client") current.switches.push({ at: e.at, clientId: e.clientId ?? null, eventId: e.id });
+    if (e.type === "clock_in") sessions.push({ startAt: e.at, endAt: null, breaks: [], clientId: e.clientId ?? null, projectId: e.projectId ?? null, switches: [], startEventId: e.id });
+    else if (e.type === "switch_client") current.switches.push({ at: e.at, clientId: e.clientId ?? null, projectId: e.projectId ?? null, eventId: e.id });
     else if (e.type === "break_start") current.breaks.push({ startAt: e.at, endAt: null, plannedMinutes: e.plannedBreakMinutes ?? null, startEventId: e.id });
     else if (e.type === "break_end") current.breaks[current.breaks.length - 1].endAt = e.at;
     else {
@@ -121,6 +125,41 @@ export function segmentMs(session: Session, until: number): SegmentMs[] {
     const brk = session.breaks.reduce((sum, b) => sum + Math.max(0, Math.min(b.endAt ?? end, st.to) - Math.max(b.startAt, st.from)), 0);
     return { clientId: st.clientId, workedMs: Math.max(0, st.to - st.from - brk), breakMs: brk };
   });
+}
+
+/** One stretch of working time (no break inside it) that belonged to one client and project. */
+export type WorkStretch = { from: number; to: number; clientId: string | null; projectId: string | null };
+
+/**
+ * Where a session's time went, in order: each stretch with its client and project and the exact times, with breaks cut out. An open
+ * session counts up to `until`. This is what the app and the day pages show as "working for X on Y from ... to ...".
+ */
+export function workLog(session: Session, until: number): WorkStretch[] {
+  const end = session.endAt ?? until;
+  const cuts = session.switches.filter((c) => c.at > session.startAt && c.at < end).sort((a, b) => a.at - b.at);
+  const parts: WorkStretch[] = [];
+  let from = session.startAt;
+  let client = session.clientId;
+  let project = session.projectId;
+  for (const c of cuts) {
+    parts.push({ from, to: c.at, clientId: client, projectId: project });
+    from = c.at;
+    client = c.clientId;
+    project = c.projectId;
+  }
+  parts.push({ from, to: end, clientId: client, projectId: project });
+  const breaks = session.breaks.map((b) => ({ from: b.startAt, to: b.endAt ?? end })).sort((a, b) => a.from - b.from);
+  const out: WorkStretch[] = [];
+  for (const part of parts) {
+    let cursor = part.from;
+    for (const b of breaks) {
+      if (b.to <= cursor || b.from >= part.to) continue;
+      if (b.from > cursor) out.push({ ...part, from: cursor, to: b.from });
+      cursor = Math.max(cursor, b.to);
+    }
+    if (cursor < part.to) out.push({ ...part, from: cursor });
+  }
+  return out;
 }
 
 /** Shares a whole number of minutes between parts in proportion to their milliseconds, so the parts always add up to the total. */

@@ -16,6 +16,7 @@ const day = (over: Partial<ReviewDay>): ReviewDay => ({
   scheduledMinutes: null,
   hasSchedule: false,
   clients: [],
+  work: [],
   workedMinutes: 480,
   breakMinutes: 30,
   extraMinutes: 0,
@@ -54,6 +55,22 @@ const html = (r: ReviewRow, over: { canMarkTest?: boolean; previewMode?: boolean
   renderToStaticMarkup(createElement(DayList, { row: r, canMarkTest: over.canMarkTest ?? false, previewMode: over.previewMode ?? false, label }));
 
 describe("the daily detail of hours review", () => {
+  it("lists which client and project each stretch was for, with the exact times in the person's zone", () => {
+    const start = Date.UTC(2026, 10, 11, 16, 0); // 9:00 AM in Phoenix
+    const out = html(row([day({ work: [{ start, end: start + 2 * 3_600_000, client: "Acme Dental", project: "Intake" }, { start: start + 2 * 3_600_000, end: start + 4 * 3_600_000, client: "Acme Dental", project: "Billing" }] })]));
+    expect(out).toContain("Where the time went");
+    expect(out).toContain("Acme Dental");
+    expect(out).toContain("Intake");
+    expect(out).toContain("9:00 AM to 11:00 AM");
+    expect(out).toContain("Billing");
+  });
+
+  it("shows no project list when no stretch has a project, so a plain client day looks as before", () => {
+    const start = Date.UTC(2026, 10, 11, 16, 0);
+    const out = html(row([day({ work: [{ start, end: start + 3_600_000, client: "Acme Dental", project: null }] })]));
+    expect(out).not.toContain("Where the time went");
+  });
+
   it("shows one status per day, not a chip for every flag", () => {
     const out = html(row([day({ flags: ["long_session", "no_screenshots", "jibble_mismatch", "late"] })]));
     expect(out).toContain("Fix needed");

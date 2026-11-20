@@ -1,0 +1,123 @@
+# ELEVATE Tracker (activity and blurred screenshots)
+
+Design: `docs/superpowers/specs/2026-11-19-elevate-tracker-design.md`. Phase 1 plan (this server side): `docs/superpowers/plans/2026-11-19-elevate-tracker-phase1-server.md`. Code: `apps/elevate/src/modules/activity/`.
+
+Status: **server side (Phase 1), the monitoring pages (Phase 2a), the download page and releases admin (Phase 2b) and the Windows app (Phase 3)**. The Mac app (Phase 4) and the exceptions inbox, reports, client PDF and digests (Phase 2c) are later. `pnpm tracker:sim` still stands in for the app in server-side tests. Plans: `docs/superpowers/plans/2026-11-19-elevate-tracker-phase2a-pages.md` and the Phase 3 plan named below.
+
+## Hard rules
+
+- **Evidence and flags only.** Nothing here writes `time.clock_events` or changes hours. Hours still come from the clock (rule 9 in CLAUDE.md). Tracker flags enter the day through the nightly attendance rebuild and never block approval.
+- **App name only.** No window titles, URLs, keystrokes or clipboard are accepted, stored or logged: the request schema has no field for them, and unknown fields are dropped.
+- **Only while clocked in.** `ingestSegments` cuts every segment to the working time (clocked-in sessions minus breaks); time before clock-in, on a break or after clock-out is dropped. Screenshots are refused outside working time too.
+- **Off until a monitoring policy is published** (`monitoringPolicyPublished()`): no code can be created or redeemed, nothing is ingested, no flags are set.
+- **Screenshots are blurred on the person's computer.** The server cannot prove a picture was blurred; it checks the real type (JPEG or PNG by its bytes), at most 300 KB, one per person per 10-minute window, taken in the last 30 minutes while working. Files live in the private bucket `activity-shots` (run `pnpm storage:setup`), are deleted after 30 days (row kept, `purged_at`), and are opened only through `viewShot` (60-second link).
+- **Segments are append-only** (database trigger). Retries are safe: overlapping time from any of the person's computers is trimmed, so nothing counts twice.
+- **Device tokens** are 32 random bytes; only the SHA-256 hash is stored, and it can never change. Enrollment codes are 8 characters, hashed, single use, valid 15 minutes. A device is active as soon as the code is redeemed; HR or the person can revoke it (`revokeDevice`).
+- **Every screenshot view is audited** (`activity.shot_view`: shot id, person id, reason code only). Own screenshots need no reason (audited as `own`); a lead, HR and Super Admin must pick a reason; the Executive and Recruiter never see someone else's.
+
+## Who sees what
+
+| Permission | super_admin | hr_admin | team_lead | recruiter | executive | employee |
+|---|---|---|---|---|---|---|
+| `tracker.enroll`, `activity.view_own` (own) | O | O | O | O | O | O |
+| `tracker.revoke_device` | A | A | O | O | O | O |
+| `activity.view` (timeline, floor) | A | A | T | - | - | O |
+| `activity.view_shots` | A | A | T | - | - | O |
+| `activity.view_summary` (aggregates, not built yet) | A | A | T | - | A | - |
+| `activity.manage` (categories, everyone's devices) | A | A | - | - | - | - |
+
+Team scope uses the time chain (`timeChainUserIds`), so an attendance lead counts. The floor (`listFloor`) is for leads and HR only.
+
+## Pieces
+
+| File | Job |
+|---|---|
+| `logic.ts` | Pure rules: sanitize, validate, clip to working time, de-duplicate, active percent, categories, day summary, day flags |
+| `ingest.ts` | `clockStateFor`, `ingestSegments`, `requestShot`, `finalizeShot` (used by the routes) |
+| `device-auth.ts`, `device-token.ts` | Redeem a code, authenticate a bearer token; pure secret helpers |
+| `src/app/api/tracker/*` | `enroll`, `clock-state`, `segments`, `shots/request`, `shots/finalize` (outside the sign-in gate; each checks the device token, a rate limit and a Zod body itself) |
+| `actions.ts`, `shot-actions.ts` | `createEnrollmentCode`, `revokeDevice`, `saveCategory`, `viewShot` |
+| `queries.ts`, `access.ts` | `getMyDay`, `getPersonDay`, `listFloor`, `listCategories`, `listDevices`; scope checks that run before the database |
+| `jobs.ts`, `flags.ts` | Daily totals, screenshot purge, offline alerts; day flags |
+
+## Pages (Phase 2a)
+
+| Address | Who | What |
+|---|---|---|
+| `/attendance` (My time tab) | everyone | "My day" card: enrol a computer with a one-time code, timeline, totals, top apps, screenshots, "who looked at my screenshots" |
+| `/activity` | lead (team), HR, Super Admin | Live floor: counts by state, filters, "needs attention", refreshes every minute (menu item "Activity"; a plain 404 for anyone else) |
+| `/activity/people/[id]?date=` | same, within reach | One person's day. A person outside the viewer's reach is a plain 404. Opening someone else's screenshot needs a reason, which is audited |
+| `/activity/devices` | HR, Super Admin | Every computer, "Needs attention" filter, Sign out |
+| `/settings/tracker` | HR, Super Admin | Idle / offline / low-activity thresholds and work-app rules |
+
+The day is in the person's own zone; times are shown in the viewer's. `timeline.ts` is the pure layout behind `TimelineStrip`. Help guides: `content/help/attendance/your-tracker-day.md`, `read-the-activity-pages.md`.
+
+Checked: unit, render and real-database tests for the above, and a live run on 2026-11-20 against the local stack (local Supabase, `pnpm dev`, `pnpm tracker:sim` as the app, fake seed accounts): enrolling with a code, the app's clock-state / segments / screenshot calls, then as the Team Lead (Live floor, person day, a screenshot opened with a reason and audited, 404 for an employee on `/activity`), the employee (My day card, enrollment code with countdown, "Who looked" panel showing the lead's view), and HR (Devices, Settings validation and a save with before/after audit). Looked at in the dark theme at desktop-narrow width and in the light theme at phone width. Not checked: dark theme at phone width, macOS/Windows app (does not exist), long-running refresh, more than a handful of people on the floor.
+
+Found and fixed during that run: hour labels overlapped on a phone, apps with 0 minutes were listed, and a storage outage made the screenshot routes answer a bare 500 (now JSON 503). Setup notes learnt: `pnpm storage:setup` must run on each environment before screenshots work; `pnpm dev:mfa reset` could not find accounts in a database with 1,400+ users.
+
+## Releases, the download page and updates (Phase 2b)
+
+Product name: **ELEVATE Tracker App**. Plan: `docs/superpowers/plans/2026-11-20-elevate-tracker-phase2b-download-releases.md`.
+
+- **Data:** `time.tracker_releases` (version, three note lists, `min_required`, `adds_collection` + `policy_version_id`, status draft / published / withdrawn) and `time.tracker_release_builds` (per platform and kind: `installer` or `update` with its signature, size, SHA-256). A **published release is frozen by a trigger**: only withdrawing is possible; a draft's builds cannot change once it is published. Files live in the private bucket `tracker-builds` (run `pnpm storage:setup`).
+- **Builds come from CI, not from HR:** `pnpm tracker:build --version 1.2.0 --platform windows-x86_64 --kind installer --file <path>` (and `--kind update --sig <file.sig>`). It checks the extension, first bytes and size, uploads with the service role, records the SHA-256, and refuses a remote database unless `ELEVATE_ENV` is staging or production. These checks are sanity checks: the real protection is code signing (checked by the operating system) and the updater signature (checked by the app against the public key inside it).
+- **Pages:** `/tracker/download` (everyone signed in; OS-aware buttons, "Check the file" SHA-256, install steps, your computers, notes with a "Required update" chip) and `/settings/tracker/releases` (HR, Super Admin: New release, Publish, Withdraw, Delete draft). Installers go through `/api/tracker/download/[platform]`: signed-in check, audit (`tracker.download`: platform and version only), then a redirect to a 60-second link.
+- **Rules at publish:** at least one installer; every platform with an installer also has an update build; the version is higher than every released one (withdrawn ones count: a version is never reused); a release that adds data collection names a **published monitoring policy version**.
+- **For the app (device token):** `GET /api/tracker/update?platform=&version=` (204 when nothing is newer; otherwise Tauri's dynamic update shape `version, notes, pub_date, url, signature`; the url is our own download route), `GET /api/tracker/update/download/[platform]?version=` (302 to a 60-second link; withdrawn is a 404), `GET /api/tracker/releases/[version]` (notes for "What's new"). The feed never offers an older or equal version or a withdrawn release.
+- **Version floor:** when the app sends `X-Tracker-Version` below the highest published, non-withdrawn "Required update", every route except the three above and `clock` answers `426 { error: "update_required", minVersion }`. No header (the simulator) or an unreadable one is not enforced: it is an operations control, not a security boundary. The floor is cached for a minute.
+- **Devices page** shows "Behind (newest x.y.z)" for a computer on an older readable version, and "Needs attention" includes them.
+- **Checked live (2026-11-20, local stack, fake files):** created a draft as HR, a publish with no builds refused with a plain reason, `pnpm tracker:build` refused a tiny text file named .exe and an unknown release, registered an installer and an update file, published; the freeze trigger refused a direct edit; as an employee, `/tracker/download` (desktop and phone width, light theme) showed the button, version, date, size, matching SHA-256, install steps, "Your computers" and the notes; the installer route redirected and wrote one audit row (platform and version); a Mac route with no build was a 404; the device feed offered the new version to an older one and answered 204 to a current one; after withdrawing, the page said "not ready" and the feed, update download, notes and installer routes all stopped. **Not checked:** dark theme at phone width, the Publish/Withdraw buttons for Withdraw (done by SQL in the check, the action is covered by tests), a real signed installer or updater run, and Mac.
+- Found in that check and fixed: the update download and installer routes answered a bare 500 when storage was waking up (now JSON 503; the installer's audit row is written only after the link exists), the feed's notes now read as a heading and one "- " line per change, and `pnpm tracker:build` no longer says "has storage:setup been run?" when a file already exists.
+- **App side (built in Phase 3, see below):** the updater, the "What's new" box and install when not working are in the Windows app. It reads this feed's shape (`version`, `notes`, `pub_date`, `url`, `signature`) with its own code rather than the Tauri updater plugin, so it can send the device token to ELEVATE only. **Still not built:** macOS notarization.
+
+## Clock buttons in the app (Phase 3, Task 0)
+
+`POST /api/tracker/clock` (device token, **exempt from the version floor** so an old app can still clock out): body `{ action: "clock_in" | "break_start" | "break_end" | "clock_out" | "switch_client", clientId?, projectId?, breakMinutes?: 15 | 30 | 60 }`, nothing else is read (no time, address or location). It calls the web clock's `performClock` through `activity/device-clock.ts`, so the rules are identical (server clock, request IP, leave, client assignment, Jibble-clock refusal, audit). Events keep `source = 'web'`; the audit row carries `via: "tracker_app"`. Answers `200 { state, at, outsideAllowedRange }`, `409 { error: "refused", message }` for a plain-language refusal, `403 { error: "no_person" }`. `clock-state` is also exempt from the floor (final review, 2026-11-20): an old app still gets the clock state, plus `updateRequired` (the version, or null), so it stops recording but keeps its clock buttons. `clock-state` also returns `workingSince`, `onBreak`, `clients` and `clockBlockedReason` (`"jibble"`, or `"selfie"` when the team needs a selfie, which the app cannot take). Tests: `src/app/api/tracker/clock-route.test.ts`, `tests/integration/activity-clock.test.ts`.
+
+## Client projects (owner decision 2026-11-20)
+
+HR Admin and Super Admin add **projects** under a client (Clients page, `people.manage_clients`: `createClientProject`, `renameClientProject`, `archiveClientProject`; audit rows carry ids only). Table `core.client_projects` (name unique per client among active ones; archived, never deleted); `time.clock_events.project_id` (optional, only on `clock_in` and `switch_client`, only with a client; a trigger checks the project is that client's, and a project can never move to another client). People stay assigned to **clients**: anyone assigned to a client can pick any of its active projects. Picking a project alone names its client.
+
+- A person with two or more clients (or a client that has projects) picks on the clock: the web clock header menu and the app's clock-in and "switch" use the same rules (`performClock`: `projectId`; refused with plain reasons: project not available, not that client's, not assigned, already on it). A client with no project is still a valid choice.
+- `clock-state` gives the app `clients: [{ id, name, projects: [{ id, name }] }]` and `current: { clientId, clientName, projectId, projectName, since }`. `POST /api/tracker/clock` takes `projectId` and the `switch_client` action.
+- **At what time and day:** `loadWorkLog` (`attendance/work-log.ts`, pure part `workLog` in `clock.ts`) lists each stretch with client, project and exact times, breaks left out. "Who the time was for" on My day and the person day page shows it in the viewer's zone. It is evidence of who the time was for, never a pay figure; hours review and the export are unchanged (client minutes per day still come from `segmentMs`).
+- **Admin side:** hours review day detail lists "Where the time went" (client · project, exact times in the person's zone, breaks left out; only when a project was chosen; `ReviewDay.work`, cut into the person's own days by `splitByDay`), and Team attendance "Working now" has a "Working on" column (client · project and since when; `loadCurrentWork`). The client split, approval, the hours export and invoices stay client-level and unchanged.
+- Not built: per-project totals in hours review and invoices, assigning people to a single project, a per-project rate.
+
+## The ELEVATE Tracker App for Windows (Phase 3)
+
+Code and build notes: `apps/tracker/` (its README has the commands, the update-key steps and the release hand-off). Plan: `docs/superpowers/plans/2026-11-20-elevate-tracker-phase3-windows-app.md`. A Tauri 2 tray app (Rust core, a small React window). macOS is Phase 4: the platform layer has a stub so the crate builds there, and a coworker will test the Mac build.
+
+**What it does.** Signs in with a one-time code (Attendance > Add this computer; the app's screen is "Connect this computer"); the device token lives in Windows Credential Manager (`device.ELEVATE Tracker App`). Clock in, breaks (15 or 30 minutes, 1 hour, no limit), clock out, and choosing or switching the client or project all go to `POST /api/tracker/clock`, one request per click; the app never clocks anyone by itself. While `clock-state` says working and the monitoring policy is published it notes the front program's name (never a title) and active or idle every 5 seconds, merges that into segments, takes one blurred picture of all screens per 10-minute window, keeps everything in a SQLite queue, and sends every minute. The lock screen counts as idle. Updates: checked at start, every 6 hours, on request and when ELEVATE answers 426; the file comes through ELEVATE's own route (the storage redirect carries nothing of ours) and is run only when signed by the key inside the app; a required update installs at once (the clock buttons stay usable meanwhile), an optional one when the person is not working; "What's new" shows once afterwards.
+
+**Rules enforced by tests.** A source scan fails on printing, tracing, any window-title, class-name, keystroke or clipboard API, a log call mentioning an app or segment, and a raw capture used outside `capture/`. A config guard fixes: per-user NSIS install, signed update files, HTTPS in release builds, no devtools, an uninstall hook that always removes the saved sign-in (never during an update), and a window that is created on demand and destroyed on close. Over a simulated 8-hour day with sleep, lock, idle, offline, an update notice and signing in again, zero clock requests are sent unless a person clicked.
+
+**Blur strength: set by looking, not by a synthetic pattern.** `BLUR_SIGMA` is **8.0** (output at most 1600 px wide). The first value, 2.5, passed a test built from 1-pixel strokes 4 px apart, but a real capture of this desktop at 2.5 to 6 left ordinary chat text partly readable (checked by eye on 2026-11-20). Text-sized stripes (14 px apart, like a 14 px font) keep 67% of their detail at 2.5, 25% at 4.5, 12% at 6 (still borderline on a real capture) and 5.7% at 8 (unreadable: lines are smudges, while the windows, panels, taskbar and large headings stay recognisable). The test `body_sized_text_comes_out_almost_flat` now requires under 8%. **This is the owner's call:** a lighter value shows more but can leave a patient name in on-screen body text readable; change the one constant and look again.
+
+**Live check, 2026-11-20** (Windows 11 laptop, one 1536 x 864 monitor; local Supabase and `pnpm dev`; fake seed accounts; an optimised build with debug assertions pointed at `http://localhost:3000`; the window driven through WebView2's debugging port):
+- Verified against the real ELEVATE: enrolling with a code; the app shows ELEVATE's own state and the person's client and project choices; Start break (15 minutes) and End break; Clock out with a **double click sending exactly one** `clock_out`; clocking in on a chosen project (client and project recorded, audit row `via: tracker_app`, `withProject: true`); ELEVATE's own refusal sentence "You are already clocked in." shown by the app; segments with real program names only (`Notepad`, `explorer`, `WindowsTerminal`, `Lightshot`, the app's own window) and no duplicates or overlaps in ELEVATE; the Activity day page (timeline, Active and Idle minutes, top apps, "Who the time was for", screenshots) and opening a stored screenshot (1600 x 900); an outage of about 2 minutes (offline banner, buttons off, the queue kept, drained afterwards); revoking the device from the Devices page (the app logged `signed_out`, removed its saved sign-in within about 20 seconds and returned to "Connect this computer").
+- **Bugs found only by the live check, each fixed with a test written first:** (1) the picture upload failed against real storage ("No content provided") because the picture part had no file name, which the mock server never noticed (`api_client`); (2) after an outage the app waited for the long retry pause before sending, so the queue lingered (now a status check retries at most every minute, and coming back online sends at once: `engine`); (3) hiding the window kept its WebView2 processes alive, about 390 MB (see below; the window is now destroyed on close); (4) the blur was too light (above); (5) ELEVATE's "Add this computer" text named a button that does not exist ("Sign in with a code").
+- **Measured** (10 minutes of tracking including an outage, a clock out and in, and a capture; later memory snapshots): CPU averaged **0.38% of one core** (8 logical cores), with a 10-second sample peaking at 10% when a picture is processed. The app process alone is about 33 MB steady and 95 MB at the peak of a capture. **The window is the expensive part:** with the window open the app's whole process tree (WebView2 helpers included) is about 390 MB working set (about 180 MB private); with the window closed it is **2 processes, 40 MB working set and 6.9 MB private**, within the 80 MB budget. Starting the app again reopens the window instead of starting a second copy.
+- Windows Security: no detection mentioning the app (real-time protection on); the unsigned installer's signature status is `NotSigned`. The exact SmartScreen wording for an unsigned installer was **not observed** (the silent install does not show it).
+- Installer: a 2.74 MB per-user NSIS installer builds and is signed with the update key; installed on this machine without an administrator prompt, an update over an existing install kept the sign-in, a plain uninstall removed the sign-in, files, Start menu and registry entries and kept the application data, then everything was removed again.
+
+**Computer clock moved** (final review): the engine notices the clock set back (closes what is open, everything is due again) and holds back deleting old waiting data for 15 minutes after a jump either way; segment times still come from the computer's clock, so a wrong clock is still a wrong time (a server-time offset is a deferred improvement). A new sign-in clears the queue and history. **Not tested** (state this plainly when planning the pilot): macOS; more than one monitor live (the layout rules, including a monitor above or to the left of the main one, are unit-tested only); locking the screen and sleep/wake live (simulated in tests only); the update download and "What's new" against a really published newer release, and a really published "Required update" (the feed, download, signature and 426 handling are tested against mock servers and the real build's signature verifies under the committed key); the interactive "Delete the application data" box (this installer version reads it only from its dialog; it is unchecked by default); SmartScreen's wording; Windows versions other than this Windows 11 machine; DPI scales other than this one; the GitHub Actions workflow (not yet run); Windows code signing (no certificate yet); a real 30-minute run (10 minutes were measured). **The signing key used for the local builds is a development key with no password; make the real one (README) before the first release.**
+
+## Flags and jobs
+
+Flags (added to `time.attendance_days.flags` by the nightly rebuild, all "review", never blocking): `tracker_offline` (30+ working minutes with nothing recorded), `low_activity` (under the setting's percent of recorded time, after an hour recorded; default 30), `no_shots` (an hour or more of work, no screenshot). A person with no tracker, or while no policy is published, is never flagged.
+
+Jobs (in `src/inngest/functions.ts` and `health/registry.ts`): `tracker-rollup` (daily 03:00 Phoenix, yesterday and today), `tracker-shot-purge` (daily 03:10), `tracker-offline-alerts` (every 30 minutes; tells the lead once per clock-in when nothing was reported for the grace plus 10 minutes; the notice names the person, never an app).
+
+## Trying it locally
+
+1. `supabase start`, `pnpm db:migrate`, `pnpm db:seed`, `pnpm storage:setup`; publish a monitoring policy (Settings > Policies).
+2. Sign in as a seed account, clock in, and create a code with `createEnrollmentCode` (no page yet: call it from a test or a temporary route).
+3. `pnpm tracker:sim --code <CODE> --minutes 10`. Check `time.activity_segments` rows exist only inside the clocked-in span, and `time.activity_shots` has a row with `finalized_at`.
+
+The automated checks that cover the same ground without a running server: `pnpm test:integration` (`activity-schema`, `activity-device`, `activity-ingest`, `activity-jobs`, `activity-access`) and the route tests in `src/app/api/tracker/routes.test.ts`.
+
+## Not built yet
+
+The Mac app (Phase 4: platform layer, permissions onboarding, notarization), Windows code signing, a pause button in the app, Exceptions inbox, Reports and client PDF, daily digest email, weekly "who viewed" email, day notes, schedule comparison, per-team settings, aggregate reports with the under-5 rule (2c).

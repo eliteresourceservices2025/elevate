@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { listRecordsToClaim } from "@/modules/people/duplicates-queries";
 import { MyTimeOverview } from "@/modules/attendance/components/my-time";
+import { MyDayCard } from "@/modules/activity/components/my-day";
 import { AutoRefresh } from "@/modules/attendance/components/auto-refresh";
 import { CorrectionForm, CorrectionList, FileForOthersForm, PreferencesForm, RulesForm, SetupProfileForm } from "@/modules/attendance/components/attendance-forms";
 import { BulkCorrectionsPanel } from "@/modules/attendance/components/bulk-corrections-panel";
@@ -111,6 +112,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
           <div className="space-y-6">
             {mine.days.some((d) => d.open) ? <AutoRefresh seconds={30} /> : null}
             <MyTimeOverview mine={mine} />
+            <MyDayCard date={typeof params.day === "string" ? params.day : undefined} />
 
             <div className="grid items-start gap-6 lg:grid-cols-2">
               <section aria-label="My corrections" className="space-y-3">

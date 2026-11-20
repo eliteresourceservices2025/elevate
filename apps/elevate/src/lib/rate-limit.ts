@@ -19,6 +19,10 @@ export const POLICIES = {
   signCheck: { requests: 120, window: "10 m" },
   download: { requests: 60, window: "10 m" },
   clock: { requests: 30, window: "10 m" },
+  /** The ELEVATE Tracker: asking for an enrollment code (per person) and trading one for a token (per address). */
+  trackerEnroll: { requests: 10, window: "1 h" },
+  /** The tracker app uploading activity and screenshots (per device). It must never break the clock, so it fails open. */
+  trackerIngest: { requests: 120, window: "10 m" },
   presence: { requests: 60, window: "10 m" },
   /** Public applications, per address. */
   careers: { requests: 5, window: "1 h" },
@@ -54,7 +58,7 @@ export const POLICIES = {
  * "still here" ping keep working (the clock has its own state checks and lock). The public job feed only shows what the public careers page
  * already shows, so it stays up too. Login, uploads and the rest still fail closed.
  */
-const FAIL_OPEN: ReadonlySet<keyof typeof POLICIES> = new Set(["clock", "presence", "careersFeed"]);
+const FAIL_OPEN: ReadonlySet<keyof typeof POLICIES> = new Set(["clock", "presence", "careersFeed", "trackerIngest"]);
 
 /** Whether a request may go ahead when the limiter is missing or down. */
 export function allowWhenLimiterUnavailable(policy: keyof typeof POLICIES, production: boolean): boolean {

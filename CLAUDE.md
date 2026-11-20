@@ -10,6 +10,7 @@ pnpm workspace. All paths in this file (`src/...`, `tests/...`, `drizzle/`) are 
 
 - `apps/elevate/` — the main Next.js app (`pnpm dev` from the repo root runs it)
 - `apps/safe-voice/` — separate anonymous app, deployed on its own subdomain (Phase 4.2; see the Safe Voice section)
+- `apps/tracker/` — the ELEVATE Tracker App for Windows (Tauri 2, Rust and React: a tray app that clocks in and out through ELEVATE and, while clocked in, records app names, active or idle, and blurred screenshots; README in `apps/tracker/README.md`, notes in `docs/modules/activity-tracker.md`; macOS is Phase 4)
 - `apps/learn/` — ELEVATE Learn, the training app (HIPAA and Cybersecurity courses, client add-ons, own subdomain; notes in `docs/modules/learn.md`, plan in `docs/learn/`)
 - `packages/` — shared code (empty for now)
 - `supabase/` — Supabase CLI config (repo root). The CLI is a dev dependency: `pnpm --filter elevate exec supabase ...` with `--workdir ../..`
@@ -248,6 +249,15 @@ Plain-English how-to guides (files in `apps/elevate/content/help`), role-aware, 
 - Each guide has an `audience`; a guide a person may not read is a 404 everywhere (page, title, picture, video). Pictures and videos are served by a signed-in route, never `public/`.
 - Guides name real buttons: after changing a screen a guide shows, run `pnpm help:shots` and re-read the guide. Fake data only; never client or patient information.
 - The tool runs against the local database only; reset it first for clean pictures (see the note).
+
+### ELEVATE Tracker (activity and blurred screenshots) — `docs/modules/activity-tracker.md`
+Replaces Jibble's screenshots and flags. Server side, the monitoring pages (`/activity`, My day on Attendance, `/settings/tracker`), the download page, releases and the Windows app (`apps/tracker`) exist; the Mac app, exceptions inbox, reports and client PDF come later.
+
+- Evidence and flags only: it never writes clock events or changes hours. Records only while clocked in, app name only (no titles, URLs, keystrokes), and nothing at all until a monitoring policy is published.
+- The app talks to `/api/tracker/*` with a per-device bearer token (outside the sign-in gate, like the cron route); only hashes are stored. Segments are append-only; screenshots are blurred on the person's computer, checked by bytes, kept 30 days in the private bucket `activity-shots`.
+- Releases of the app (`/tracker/download`, `/settings/tracker/releases`): a published release is frozen by a trigger (only withdrawing is possible); installers and update files are in the private bucket `tracker-builds`, added by `pnpm tracker:build` (never uploaded by HR), and only ever handed out as 60-second signed links after a signed-in or device-token check; a release that adds data collection needs a published monitoring policy version.
+- Client projects (`core.client_projects`, owner decision 2026-11-20): HR and Super Admin add projects under a client (`people.manage_clients`); people pick a client or project on the clock (web header and the app); `time.clock_events.project_id` records it (a trigger keeps it that client's own); "Who the time was for" shows client, project, day and times. Evidence only: pay and hours are unchanged.
+- Every screenshot view is audited (ids and reason code only); the Executive and Recruiter never see anyone else's; own data is always open to the person. Tracker flags never block approval.
 
 ### Messages and calls — `docs/modules/messages.md`
 Internal chat (direct, groups, channels, polls, files, search, client groups with guests) and later calls; chat first, calls second.

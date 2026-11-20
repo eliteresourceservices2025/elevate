@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bell, Compass, FileText, FileUp, History, LifeBuoy, ListChecks, Mail, PenLine, Phone, ShieldCheck, Wallet } from "lucide-react";
+import { Bell, Camera, Compass, FileText, FileUp, History, LifeBuoy, ListChecks, Mail, PenLine, Phone, ShieldCheck, Wallet } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { can } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
@@ -58,6 +58,13 @@ const SECTIONS = [
     icon: Phone,
     title: "Calls",
     description: "See how much call media you use against the free allowance and set the warning level.",
+  },
+  {
+    href: "/settings/tracker",
+    action: "activity.manage",
+    icon: Camera,
+    title: "ELEVATE Tracker",
+    description: "Idle and offline thresholds, and which apps count as work.",
   },
   {
     href: "/settings/invitations",

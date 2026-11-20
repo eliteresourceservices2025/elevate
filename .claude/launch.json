@@ -47,6 +47,16 @@
       "port": 3100
     },
     {
+      "name": "tracker-window",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "elevate-tracker",
+        "dev"
+      ],
+      "port": 1420
+    },
+    {
       "name": "omniroute",
       "runtimeExecutable": "omniroute",
       "runtimeArgs": [

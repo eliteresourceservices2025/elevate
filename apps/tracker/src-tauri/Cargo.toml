@@ -1,0 +1,46 @@
+[package]
+name = "elevate-tracker"
+version = "0.1.0"
+description = "ELEVATE Tracker App"
+authors = ["Elite Resource Services"]
+edition = "2021"
+publish = false
+
+[lib]
+name = "elevate_tracker_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
+xcap = "0.9.10"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+reqwest = { version = "0.13.5", features = ["json", "multipart"] }
+keyring = "4.2.0"
+rusqlite = { version = "0.43.0", features = ["bundled"] }
+tauri-plugin-single-instance = "2.5.5"
+tauri-plugin-autostart = "2.7.0"
+base64 = "0.23.1"
+minisign-verify = "0.3.0"
+
+[dev-dependencies]
+minisign = "0.10.0"
+serde_json = "1"
+tempfile = "3.27.0"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time"] }
+wiremock = "0.6.5"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[target."cfg(windows)".dependencies]
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }

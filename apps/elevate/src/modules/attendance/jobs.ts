@@ -6,6 +6,7 @@ import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { MAX_OPEN_SESSION_MS, QUIET_AFTER_MS, buildDays, hasLongSession } from "./clock";
+import { activityFlagsFor } from "@/modules/activity/flags";
 import { clockSourceOf } from "./clock-source";
 import { attendanceDayClients, attendanceDays, clockSelfies, correctionEvidence, missedClockoutNotices, quietNotices } from "./schema";
 import { OVERBREAK_GRACE_MS, MINUTE } from "./clock";
@@ -195,6 +196,7 @@ async function rebuildRange(people: { employee_id: string }[], from: string, to:
         noShots && !fromJibble ? "no_screenshots" : null,
         multiClient && d.sessionList.some((x) => x.clients.some((c) => c.clientId === null)) ? "needs_client" : null,
         (await onFullDayLeave(db, employeeId, d.date)) ? "on_leave" : null,
+        ...(await activityFlagsFor(employeeId, d.firstIn, end)),
       ].filter((f): f is string => f !== null);
 
       const values = {

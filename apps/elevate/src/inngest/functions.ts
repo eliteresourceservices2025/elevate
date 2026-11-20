@@ -1,5 +1,6 @@
 import "server-only";
 import { DEFAULT_TIMEZONE, SECONDARY_TIMEZONE, formatInZone } from "@/lib/time";
+import { purgeShots, rebuildActivityMinutes, runTrackerOfflineAlerts } from "@/modules/activity/jobs";
 import { purgeEvidence, purgeSelfies, rebuildAttendanceDays, runExtraHoursReminders, runHrApprovalSummary, runLeadApprovalReminders, runMissedClockouts, runOverbreakAlerts, runQuietSessionAlerts, runWeeklyExtraHoursNotice } from "@/modules/attendance/jobs";
 import { runAckReminders } from "@/modules/announcements/jobs";
 import { purgeOrphanContentFiles } from "@/modules/announcements/content-files";
@@ -15,6 +16,7 @@ import { runHolidaySync, runLeaveExpiry } from "@/modules/timeoff/jobs";
 import { runLeaveRequestReminders } from "@/modules/timeoff/request-jobs";
 import { runDailyDigest } from "@/modules/notifications/digest";
 import { flushEmailQueue } from "@/modules/notifications/email-queue";
+import { addDays } from "@/modules/attendance/schedule";
 import { todayInZone } from "@/modules/org/service";
 import { runRecruitingRetention, sendCandidateEmails } from "@/modules/recruiting/jobs";
 import { runPeopleRetention } from "@/modules/people/retention";
@@ -153,6 +155,33 @@ export const overbreakAlerts = inngest.createFunction(
 export const selfiePurge = inngest.createFunction(
   { id: "selfie-purge", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 40 2 * * *` } },
   async ({ step }) => step.run("purge", () => track("selfie-purge", () => purgeSelfies())),
+);
+
+/** Daily at 3:00 AM: rebuild yesterday's and today's ELEVATE Tracker activity totals. */
+export const trackerRollup = inngest.createFunction(
+  { id: "tracker-rollup", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 0 3 * * *` } },
+  async ({ step }) =>
+    step.run("rebuild", () =>
+      track("tracker-rollup", async () => {
+        const today = todayInZone();
+        const yesterday = addDays(today, -1);
+        const a = await rebuildActivityMinutes(yesterday);
+        const b = await rebuildActivityMinutes(today);
+        return { people: a.people + b.people };
+      }),
+    ),
+);
+
+/** Daily at 3:10 AM: delete ELEVATE Tracker screenshots after 30 days. */
+export const trackerShotPurge = inngest.createFunction(
+  { id: "tracker-shot-purge", triggers: { cron: `TZ=${DEFAULT_TIMEZONE} 10 3 * * *` } },
+  async ({ step }) => step.run("purge", () => track("tracker-shot-purge", () => purgeShots())),
+);
+
+/** Every 30 minutes: tell leads when a clocked-in person's tracker has gone quiet. */
+export const trackerOfflineAlerts = inngest.createFunction(
+  { id: "tracker-offline-alerts", triggers: { cron: "*/30 * * * *" } },
+  async ({ step }) => step.run("check", () => track("tracker-offline-alerts", () => runTrackerOfflineAlerts())),
 );
 
 /** Every 30 minutes: tell leads about clocked-in people who have not been seen for 2 hours. */
@@ -352,4 +381,4 @@ export const chatAccessNotices = inngest.createFunction(
   async ({ step }) => step.run("notices", () => track("chat-access-notices", () => runChatAccessNotices())),
 );
 
-export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge, chatChannelSync, chatDigest, callsDaily, chatAccessNotices];
+export const functions = [documentExpiryReminders, credentialReminders, learnAssign, learnRemind, learnSync, learnPurge, anniversaryReminders, documentPendingCleanup, acknowledgmentReminders, dailyDigest, emailSender, leaveExpiry, holidaySync, leaveRequestReminders, attendanceRebuild, missedClockouts, overbreakAlerts, selfiePurge, trackerRollup, trackerShotPurge, trackerOfflineAlerts, quietSessionAlerts, evidencePurge, jibbleMirror, jibblePeopleSync, jibbleComparison, jibbleImport, jibbleRepair, jibbleUnmatched, extraHoursReminders, extraHoursWeekly, approvalReminders, approvalSummary, healthCheck, candidateEmailSender, recruitingRetention, esignReminders, esignSealSweep, offboardingSeparations, checklistSync, checklistReminders, earlyReviews, reviewReminders, safevoiceNotify, analyticsNightly, importPurge, chatChannelSync, chatDigest, callsDaily, chatAccessNotices];

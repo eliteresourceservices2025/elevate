@@ -272,6 +272,23 @@ export function DayList({ row, canMarkTest, previewMode, label }: { row: ReviewR
                   ))}
                 </ul>
               ) : null}
+              {/* Projects: which client and project each stretch was for, with the exact times (only when a project was chosen). */}
+              {d.work.some((w) => w.project) ? (
+                <ul className="col-span-full mt-1 space-y-0.5 border-l-2 border-primary/30 pl-3" aria-label={`Where the time went on ${formatDateOnly(d.date)}`}>
+                  <li className="text-xs font-medium text-muted-foreground">Where the time went</li>
+                  {d.work.map((w) => (
+                    <li key={`${w.start}-${w.end}`} className="flex flex-wrap items-baseline gap-x-4">
+                      <span className="min-w-40 font-medium">
+                        {w.client ?? "Client"}
+                        {w.project ? <span className="font-normal text-muted-foreground"> · {w.project}</span> : null}
+                      </span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {formatInZone(w.start, row.zone, "h:mm a")} to {formatInZone(w.end, row.zone, "h:mm a")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </li>
           );
         })}

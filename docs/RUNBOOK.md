@@ -247,6 +247,23 @@ Who can do what: only people a Super Admin chose (Settings > Payroll access) as 
 - **A mistake in the course after publishing:** change the content, save and publish a new version (`pnpm learn:publish`), marking it `--material` only when people already trained must relearn it.
 - **Turning Learn off:** remove `NEXT_PUBLIC_LEARN_URL` from ELEVATE and redeploy.
 
+## 5g. ELEVATE Tracker problems
+
+Server side only for now (see `docs/modules/activity-tracker.md`). Jobs: `tracker-rollup`, `tracker-shot-purge`, `tracker-offline-alerts` (watch them on the Health page). Run `pnpm storage:setup` on every environment so the private bucket `activity-shots` exists. Nothing is collected until a monitoring policy is published. A lost or stolen computer: the person or HR revokes the device (`revokeDevice`); its token stops working at once. "Tracker offline" notices mean the app was closed, the computer asleep or the connection down; they are notes, never a reason to change hours.
+
+### 5g2. Releasing a version of the ELEVATE Tracker App
+
+1. Build and sign the app (outside ELEVATE). 2. HR creates the draft release (Settings > ELEVATE Tracker > Releases > New release). 3. Register each file: `pnpm tracker:build --version X --platform P --kind installer|update --file F [--sig F.sig]` (needs `pnpm storage:setup` once per environment). 4. HR publishes. A bad release: **Withdraw** it (the previous version is offered again); a published release cannot be edited. "Required update" makes older apps refuse to send until they update (they must send the `X-Tracker-Version` header). Details: `docs/modules/activity-tracker.md`.
+
+### 5g3. The ELEVATE Tracker App on people's computers (Windows)
+
+- **Where it lives:** installed per user under `%LOCALAPPDATA%\ELEVATE Tracker App`; its queue, history and log are in `%APPDATA%\com.eliteresourceservices.elevate-tracker` (`queue\queue.db`, `logs\tracker.log`, 1 MB, one rotation). The log holds event names and numbers only: no app names, titles or tokens. The device token is in Windows Credential Manager as `device.ELEVATE Tracker App`.
+- **A person says "it does not record":** the tray icon colour tells: green recording; grey clocked out, on a break, or the monitoring policy is not published; orange ELEVATE could not be reached (it queues and sends later); red this version is too old. Devices page: "Behind" and "Needs attention". Common causes: policy not published, device signed out (Devices > Sign out sends the app back to its code screen), version below the required one.
+- **Move a person to another computer:** Devices > Sign out on the old one, then the person makes a new code (Attendance > Add this computer) on the new one.
+- **Uninstall:** Windows Settings > Apps. It always removes the saved sign-in. The box "Delete the application data" is unticked by default and loses only what was not yet sent; a quiet uninstall (`uninstall.exe /S`) never deletes the data.
+- **Releases and the signing key:** the app only installs updates signed with the key whose public half is `apps/tracker/src-tauri/updater.pub`. The private key and its password live in the password manager and in the GitHub secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. **If the private key is lost, installed copies can never update** and people must reinstall by hand. Build and hand-off steps: `apps/tracker/README.md`. Unsigned Windows installers make SmartScreen warn until the company has a code-signing certificate.
+- **A bad release:** Withdraw it (section 5g2). A computer that already installed it is offered the next higher version; there is no downgrade.
+
 ## 6. Deploying changes (developer)
 
 - Deploy at the **Manila shift change**, not in the middle of a night shift (that is the US day, when most VAs are working). Check Attendance > Health before and after.

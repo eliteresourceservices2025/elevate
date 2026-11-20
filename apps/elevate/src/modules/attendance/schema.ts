@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, jsonb, numeric, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { teams } from "@/modules/org/schema";
-import { clients, employees } from "@/modules/people/schema";
+import { clientProjects, clients, employees } from "@/modules/people/schema";
 import { time } from "@/modules/timeoff/schema";
 
 // The ELEVATE time clock (B2). ELEVATE is the only source of hours. Clock events are append-only; a correction is
@@ -37,6 +37,8 @@ export const clockEvents = time
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       /** clock_in and switch_client only: the client the time that follows belongs to. Null: no client (people with no assignments). */
       clientId: uuid("client_id").references(() => clients.id),
+      /** clock_in and switch_client only, and only with a client: the project of that client the time belongs to (a trigger checks the project is the client's). Optional. */
+      projectId: uuid("project_id").references(() => clientProjects.id),
       /** Events imported from Jibble only (source 'jibble'): the Jibble time entry they came from. Never any screenshot, location or activity data. */
       jibbleEntryId: text("jibble_entry_id"),
     },
@@ -47,6 +49,7 @@ export const clockEvents = time
       check("clock_events_jibble_chk", sql`(${t.source} = 'jibble') = (${t.jibbleEntryId} is not null)`),
       check("clock_events_type_chk", sql`${t.type} in ('clock_in','break_start','break_end','clock_out','switch_client')`),
       check("clock_events_client_chk", sql`(${t.clientId} is null or ${t.type} in ('clock_in','switch_client')) and (${t.type} <> 'switch_client' or ${t.clientId} is not null)`),
+      check("clock_events_project_chk", sql`${t.projectId} is null or (${t.clientId} is not null and ${t.type} in ('clock_in','switch_client'))`),
       check("clock_events_source_chk", sql`${t.source} in ('web','admin_correction','jibble')`),
       check("clock_events_correction_chk", sql`(${t.source} in ('web','jibble')) or (${t.correctionId} is not null and coalesce(length(trim(${t.correctionReason})), 0) > 0)`),
       check("clock_events_planned_chk", sql`${t.plannedBreakMinutes} is null or (${t.type} = 'break_start' and ${t.plannedBreakMinutes} in (15, 30, 60))`),

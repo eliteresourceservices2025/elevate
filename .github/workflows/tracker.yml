@@ -1,0 +1,113 @@
+name: ELEVATE Tracker App (Windows build)
+
+# Builds, tests and signs the Windows installer of the ELEVATE Tracker App. It never publishes anything: a person downloads the run's
+# artifacts and registers them on a draft release in ELEVATE (see apps/tracker/README.md). Run it by hand (Actions > Run workflow) or
+# by pushing a tag that starts with tracker-v.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "tracker-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      # Optional repository variable: build against another ELEVATE address (for example a staging site). Leave it unset for production.
+      ELEVATE_TRACKER_BASE_URL: ${{ vars.ELEVATE_TRACKER_BASE_URL }}
+      # The signing secrets are NOT set here: they are given only to the steps that need them, so install scripts of dependencies and
+      # third-party actions never see them.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/tracker/src-tauri
+
+      - run: pnpm install --frozen-lockfile --filter "elevate-tracker..."
+      - run: pnpm --filter elevate-tracker typecheck
+      - run: pnpm --filter elevate-tracker test:rust
+
+      - name: The update signing key is present
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            Write-Error "TAURI_SIGNING_PRIVATE_KEY is not set. Add it (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) under Settings > Secrets and variables > Actions. Without it the build cannot sign its update file."
+            exit 1
+          }
+
+      - name: A release is never built with the development update key
+        if: startsWith(github.ref, refs/tags/tracker-v)
+        shell: pwsh
+        run: |
+          $pub = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Get-Content apps/tracker/src-tauri/updater.pub -Raw).Trim()))
+          if ($pub -match "A0EB8191FF5A1177") {
+            Write-Error "apps/tracker/src-tauri/updater.pub is still the development key. Make the real key (see apps/tracker/README.md) and commit its public half before tagging a release."
+            exit 1
+          }
+
+      # Code signing has to happen BEFORE the update signature is made (the update signature covers the final installer), so it is wired
+      # into the build itself through Tauri's signCommand, and only when a certificate is configured. Not exercised yet: no certificate exists.
+      - name: Prepare Windows code signing (only when a certificate is configured)
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+        run: |
+          $file = Join-Path $env:RUNNER_TEMP "tauri-codesign.json"
+          if ($env:WINDOWS_CERTIFICATE) {
+            $pfx = Join-Path $env:RUNNER_TEMP "cert.pfx"
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+            $config = @{ bundle = @{ windows = @{ signCommand = "signtool sign /f `"$pfx`" /p %WINDOWS_CERTIFICATE_PASSWORD% /fd sha256 /tr http://timestamp.digicert.com /td sha256 %1" } } } | ConvertTo-Json -Compress -Depth 5
+            Set-Content -Path $file -Value $config -Encoding utf8
+            Write-Host "Windows code signing is on."
+          } else {
+            Set-Content -Path $file -Value "{}" -Encoding utf8
+            Write-Host "::notice::No Windows code-signing certificate is configured (WINDOWS_CERTIFICATE). The installer is unsigned: Windows SmartScreen will warn before it runs."
+          }
+
+      - name: Build the installer
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: pnpm --filter elevate-tracker build:win --config (Join-Path $env:RUNNER_TEMP "tauri-codesign.json")
+
+      - name: Remove the certificate file
+        if: always()
+        shell: pwsh
+        run: Remove-Item (Join-Path $env:RUNNER_TEMP "cert.pfx") -Force -ErrorAction SilentlyContinue
+
+      - name: Fingerprints
+        shell: pwsh
+        run: |
+          $dir = "apps/tracker/src-tauri/target/release/bundle/nsis"
+          Get-ChildItem $dir -Filter "*-setup.exe*" | ForEach-Object { Write-Host $_.Name ($_.Length / 1MB) "MB" }
+          Push-Location $dir
+          Get-ChildItem -Filter "*-setup.exe" | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } | Out-File SHA256SUMS.txt -Encoding ascii
+          Get-Content SHA256SUMS.txt
+          Pop-Location
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: elevate-tracker-windows
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            apps/tracker/src-tauri/target/release/bundle/nsis/*-setup.exe
+            apps/tracker/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+            apps/tracker/src-tauri/target/release/bundle/nsis/SHA256SUMS.txt
+
+  # macos:
+  #   Phase 4. A coworker tests the Mac build; it needs an Apple Developer ID certificate, notarization and its own update key entry
+  #   (platforms darwin-aarch64 and darwin-x86_64). Left out until then on purpose.
