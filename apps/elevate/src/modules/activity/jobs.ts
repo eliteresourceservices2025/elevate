@@ -6,7 +6,7 @@ import { monitoringPolicyPublished, prefsFor } from "@/modules/attendance/servic
 import { addDays } from "@/modules/attendance/schedule";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
-import { reportName, timeNoticeUserIds } from "@/modules/org/service";
+import { timeNoticeUserIds } from "@/modules/org/service";
 import { summarizeDay, type CategoryRule } from "./logic";
 import { activityCategories, activityMinutes, activitySettings, trackerOfflineNotices } from "./schema";
 
@@ -51,16 +51,23 @@ export async function rebuildActivityMinutes(date: string, onlyEmployeeId?: stri
   return { people: ids.length };
 }
 
-/** Daily: delete screenshot files 30 days after they were taken. The row stays, marked purged. */
-export async function purgeShots(now = new Date()): Promise<{ purged: number }> {
+/**
+ * Daily: delete screenshot files 30 days after they were taken. The row stays, marked purged. Works through the backlog in batches
+ * until none are left, so retention holds however many screenshots a day brings (about 6,000 at full size).
+ */
+export async function purgeShots(now = new Date(), batch = 500): Promise<{ purged: number }> {
   const cutoff = new Date(now.getTime() - SHOT_KEEP_DAYS * DAY_MS);
-  const stale = (await db.execute(sql`
-    select id, storage_path as path from time.activity_shots
-    where purged_at is null and taken_at < ${cutoff.toISOString()}::timestamptz limit 500`)) as unknown as { id: string; path: string }[];
-  if (stale.length === 0) return { purged: 0 };
-  await getDocumentStorage().remove(BUCKETS.tracker, stale.map((s) => s.path));
-  for (const s of stale) await db.execute(sql`update time.activity_shots set purged_at = ${now.toISOString()}::timestamptz where id = ${s.id}`);
-  return { purged: stale.length };
+  let purged = 0;
+  for (;;) {
+    const stale = (await db.execute(sql`
+      select id, storage_path as path from time.activity_shots
+      where purged_at is null and taken_at < ${cutoff.toISOString()}::timestamptz order by taken_at limit ${batch}`)) as unknown as { id: string; path: string }[];
+    if (stale.length === 0) return { purged };
+    await getDocumentStorage().remove(BUCKETS.tracker, stale.map((s) => s.path));
+    for (const s of stale) await db.execute(sql`update time.activity_shots set purged_at = ${now.toISOString()}::timestamptz where id = ${s.id}`);
+    purged += stale.length;
+    if (stale.length < batch) return { purged };
+  }
 }
 
 /**
@@ -98,11 +105,10 @@ export async function runTrackerOfflineAlerts(now = new Date()): Promise<{ notic
       const claimed = await tx.insert(trackerOfflineNotices).values({ clockInEventId: c.event_id }).onConflictDoNothing().returning({ id: trackerOfflineNotices.clockInEventId });
       if (claimed.length === 0) return;
       noticed += 1;
-      const name = reportName({ first: c.first, last: c.last, preferred: c.preferred });
       const chain = await timeNoticeUserIds(tx, c.employee_id);
       const targets = (chain.length > 0 ? chain : hr).filter((id) => id !== c.user_id);
       const minutes = Math.round((now.getTime() - lastSeen) / MINUTE);
-      await notify(tx, targets.map((userId) => ({ userId, kind: "tracker.offline", title: `${name}'s tracker has not reported for ${minutes} minutes`, body: "They are still clocked in. The app may be closed, the computer asleep or the connection down.", link: "/team-attendance" })));
+      await notify(tx, targets.map((userId) => ({ userId, kind: "tracker.offline", title: `A tracker on your team has not reported for ${minutes} minutes`, body: "Someone is still clocked in. Open Team attendance to see who. The app may be closed, the computer asleep or the connection down.", link: "/team-attendance" })));
     });
   }
   return { noticed };

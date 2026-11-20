@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { allowRequest } from "@/lib/rate-limit";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
+import { clockSourceOf } from "@/modules/attendance/clock-source";
 import { monitoringPolicyPublished, personForUser } from "@/modules/attendance/service";
 import { employees } from "@/modules/people/schema";
 import { ENROLLMENT_TTL_MS, hashSecret, newEnrollmentCode } from "./device-token";
@@ -26,6 +27,7 @@ export async function createEnrollmentCode(): Promise<ActionResult<{ code: strin
     if (!(await allowRequest("trackerEnroll", actor.id))) return fail("Too many codes. Wait a few minutes and try again.");
     const person = await personForUser(db, actor.id);
     if (!(await monitoringPolicyPublished(db))) return fail("The tracker is not available yet. It turns on once the monitoring policy is published.");
+    if ((await clockSourceOf(db, person.id)) === "jibble") return fail("Your hours come from Jibble for now, so the tracker is not available to you yet. Ask HR.");
     const code = newEnrollmentCode();
     const expiresAt = new Date(Date.now() + ENROLLMENT_TTL_MS);
     await db.transaction(async (tx) => {

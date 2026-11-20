@@ -2,6 +2,7 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { replayClock } from "@/modules/attendance/clock";
+import { clockSourceOf } from "@/modules/attendance/clock-source";
 import { loadEventsBetween, monitoringPolicyPublished } from "@/modules/attendance/service";
 import { clipToIntervals, trackerFlags, workingIntervals, type Interval } from "./logic";
 import { activitySettings } from "./schema";
@@ -20,6 +21,8 @@ export async function workingBetween(employeeId: string, fromMs: number, toMs: n
  */
 export async function activityFlagsFor(employeeId: string, fromMs: number, toMs: number): Promise<string[]> {
   if (!(await monitoringPolicyPublished(db))) return [];
+  // Someone on the Jibble clock has no ELEVATE working time to judge the tracker against (their hours arrive by import).
+  if ((await clockSourceOf(db, employeeId)) === "jibble") return [];
   const [device] = (await db.execute(sql`
     select 1 as ok from time.tracker_devices
     where employee_id = ${employeeId} and created_at <= to_timestamp(${toMs / 1000})

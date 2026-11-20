@@ -93,6 +93,14 @@ describe("activityFlagsFor", () => {
     await withPolicy(async () => expect(await activityFlagsFor(p.employeeId, now.getTime() - 4 * 60 * MIN, now.getTime())).toEqual([]));
   });
 
+  it("is empty for someone on the Jibble clock: their hours are imported, so the tracker cannot judge them", async () => {
+    const now = new Date();
+    const p = await makePerson();
+    await db.execute(sql`insert into time.clock_source (employee_id, source, set_by) values (${p.employeeId}, 'jibble', ${p.userId})`);
+    await worked(p, now, 3);
+    await withPolicy(async () => expect(await activityFlagsFor(p.employeeId, now.getTime() - 4 * 60 * MIN, now.getTime())).toEqual([]));
+  });
+
   it("is empty while no monitoring policy is published", async () => {
     const now = new Date();
     const p = await makePerson();
@@ -139,6 +147,21 @@ describe("purgeShots", () => {
   });
 });
 
+describe("purgeShots in batches", () => {
+  it("keeps going until every stale screenshot is gone, however many there are", async () => {
+    const p = await makePerson();
+    for (let i = 0; i < 5; i++) {
+      const path = `shots/${p.employeeId}/batch${i}.jpg`;
+      await fake.write("activity-shots", path, PNG_BYTES);
+      await db.execute(sql`insert into time.activity_shots (employee_id, device_id, window_index, storage_path, taken_at, finalized_at) values (${p.employeeId}, ${p.deviceId}, ${100 + i}, ${path}, now() - interval '45 days', now() - interval '45 days')`);
+    }
+    const r = await jobs.purgeShots(new Date(), 2); // a batch of 2 needs three passes
+    expect(r.purged).toBeGreaterThanOrEqual(5);
+    const [left] = await rows<{ n: number }>(sql`select count(*)::int as n from time.activity_shots where employee_id = ${p.employeeId} and purged_at is null`);
+    expect(left.n).toBe(0);
+  });
+});
+
 describe("runTrackerOfflineAlerts", () => {
   it("tells the lead once when a clocked-in person's tracker has been quiet too long", async () => {
     const now = new Date();
@@ -152,7 +175,7 @@ describe("runTrackerOfflineAlerts", () => {
       expect(await jobs.runTrackerOfflineAlerts(now)).toEqual({ noticed: 0 });
       const n = await rows<{ title: string }>(sql`select title from ops.notifications where user_id = ${lead.userId} and kind = 'tracker.offline'`);
       expect(n).toHaveLength(1);
-      expect(n[0].title).not.toMatch(/ZzApp/); // no app names in a notice
+      expect(n[0].title).not.toMatch(/ZzApp|Job Er/); // no app names and no person's name in a notice (the spec: counts and links only)
     });
   });
 

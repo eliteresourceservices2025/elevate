@@ -93,6 +93,19 @@ describe("enrollment codes", () => {
   });
 });
 
+describe("people on the Jibble clock", () => {
+  it("cannot enroll: their hours come from Jibble, so there is no ELEVATE working time to record against", async () => {
+    const { user, employeeId } = await makePerson();
+    await db.execute(sql`insert into time.clock_source (employee_id, source, set_by) values (${employeeId}, 'jibble', ${user.id})`);
+    current.user = user;
+    await withPolicy(async () => {
+      const made = await actions.createEnrollmentCode();
+      expect(made.ok).toBe(false);
+      if (!made.ok) expect(made.error).toMatch(/Jibble/);
+    });
+  });
+});
+
 describe("device tokens", () => {
   it("authenticate an active device and stop working once it is revoked", async () => {
     const { user, employeeId } = await makePerson();
