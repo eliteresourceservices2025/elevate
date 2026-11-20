@@ -83,3 +83,21 @@ export async function getPublishedReleases(): Promise<PublishedRelease[]> {
   }));
   return out.sort((a, b) => (isNewer(a.version, b.version) ? -1 : isNewer(b.version, a.version) ? 1 : 0));
 }
+
+// The version floor is read on every upload, so it is kept for a minute (and dropped at once when a release is published or withdrawn
+// in this process; other servers pick the change up within the minute).
+let floorCache: { at: number; value: string | null } | null = null;
+const FLOOR_TTL_MS = 60_000;
+
+export function clearReleaseCache(): void {
+  floorCache = null;
+}
+
+/** The highest version among published (not withdrawn) releases marked "Required update", or null when none is required. */
+export async function minRequiredVersion(): Promise<string | null> {
+  if (floorCache && Date.now() - floorCache.at < FLOOR_TTL_MS) return floorCache.value;
+  const rows = await db.select({ version: trackerReleases.version }).from(trackerReleases).where(and(eq(trackerReleases.status, "published"), eq(trackerReleases.minRequired, true)));
+  const value = rows.map((r) => r.version).reduce<string | null>((best, v) => (best === null || isNewer(v, best) ? v : best), null);
+  floorCache = { at: Date.now(), value };
+  return value;
+}

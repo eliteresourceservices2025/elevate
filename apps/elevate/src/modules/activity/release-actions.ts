@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { fail, runAction, type ActionResult } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
-import { highestReleasedVersion, highestVersionEver } from "./releases-service";
+import { clearReleaseCache, highestReleasedVersion, highestVersionEver } from "./releases-service";
 import { isNewer, normalizeNotes, parseVersion } from "./releases-logic";
 import { trackerReleaseBuilds, trackerReleases } from "./schema";
 import { createReleaseSchema, releaseIdSchema } from "./validators";
@@ -17,6 +17,7 @@ import { createReleaseSchema, releaseIdSchema } from "./validators";
 // A published release is frozen by a database trigger; only withdrawing it is possible afterwards.
 
 const refresh = () => {
+  clearReleaseCache();
   revalidatePath("/tracker/download");
   revalidatePath("/settings/tracker/releases");
 };

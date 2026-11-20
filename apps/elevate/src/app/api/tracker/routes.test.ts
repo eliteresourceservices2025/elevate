@@ -14,6 +14,7 @@ vi.mock("@/modules/activity/ingest", () => ({
   finalizeShot: vi.fn(async () => ({ ok: true })),
 }));
 vi.mock("@/lib/rate-limit", () => ({ allowRequest: vi.fn(async () => state.allow) }));
+vi.mock("@/modules/activity/releases-service", () => ({ minRequiredVersion: vi.fn(async () => null), clearReleaseCache: vi.fn(), getPublishedReleases: vi.fn(async () => []) }));
 
 const enroll = await import("./enroll/route");
 const clockState = await import("./clock-state/route");
