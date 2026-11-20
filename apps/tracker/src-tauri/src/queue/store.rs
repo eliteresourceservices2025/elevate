@@ -34,7 +34,12 @@ impl Queue {
              CREATE TABLE IF NOT EXISTS shots (
                id INTEGER PRIMARY KEY AUTOINCREMENT,
                file TEXT NOT NULL, taken_at_ms INTEGER NOT NULL,
-               attempts INTEGER NOT NULL DEFAULT 0);",
+               attempts INTEGER NOT NULL DEFAULT 0);
+             CREATE TABLE IF NOT EXISTS history (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL,
+               app TEXT NOT NULL, state TEXT NOT NULL);
+             CREATE INDEX IF NOT EXISTS history_start ON history (start_ms, id);",
         )
         .map_err(err)?;
         Ok(Queue { dir: dir.to_path_buf(), conn: Mutex::new(conn) })
@@ -65,6 +70,47 @@ impl Queue {
             }
         }
         tx.commit().map_err(err)
+    }
+
+    /// Keeps a copy of finished segments for 24 hours so the person can see what was captured. App names and times only; it is never sent.
+    pub fn record_history(&self, segments: &[Segment]) -> Result<(), QueueError> {
+        if segments.is_empty() {
+            return Ok(());
+        }
+        let mut conn = self.lock()?;
+        let tx = conn.transaction().map_err(err)?;
+        {
+            let mut insert = tx.prepare("INSERT INTO history (start_ms, end_ms, app, state) VALUES (?1, ?2, ?3, ?4)").map_err(err)?;
+            for s in segments {
+                insert.execute(params![s.start_ms, s.end_ms, s.app, if s.state == State::Idle { "idle" } else { "active" }]).map_err(err)?;
+            }
+        }
+        tx.commit().map_err(err)
+    }
+
+    /// Finished segments that ended at or after `since_ms`, oldest first.
+    pub fn history_since(&self, since_ms: i64) -> Result<Vec<Segment>, QueueError> {
+        let conn = self.lock()?;
+        let mut q = conn.prepare("SELECT start_ms, end_ms, app, state FROM history WHERE end_ms >= ?1 ORDER BY start_ms, id").map_err(err)?;
+        let rows = q
+            .query_map([since_ms], |r| {
+                let state: String = r.get(3)?;
+                Ok(Segment { start_ms: r.get(0)?, end_ms: r.get(1)?, app: r.get(2)?, state: if state == "idle" { State::Idle } else { State::Active } })
+            })
+            .map_err(err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(err)
+    }
+
+    /// Everything: waiting segments, waiting pictures with their files, and the history (disconnecting this computer).
+    pub fn clear(&self) -> Result<(), QueueError> {
+        let conn = self.lock()?;
+        conn.execute_batch("DELETE FROM segments; DELETE FROM shots; DELETE FROM history;").map_err(err)?;
+        if let Ok(files) = fs::read_dir(self.dir.join("shots")) {
+            for f in files.flatten() {
+                let _ = fs::remove_file(f.path());
+            }
+        }
+        Ok(())
     }
 
     /// Oldest first, at most `max` (and never more than 200).
@@ -153,6 +199,7 @@ impl Queue {
     pub fn enforce_caps(&self, now_ms: i64) -> Result<(), QueueError> {
         let conn = self.lock()?;
         conn.execute("DELETE FROM segments WHERE end_ms < ?1", [now_ms - SEGMENT_MAX_AGE_MS]).map_err(err)?;
+        conn.execute("DELETE FROM history WHERE end_ms < ?1", [now_ms - SEGMENT_MAX_AGE_MS]).map_err(err)?;
         let count: i64 = conn.query_row("SELECT COUNT(*) FROM shots", [], |r| r.get(0)).map_err(err)?;
         let extra = count - MAX_SHOTS as i64;
         if extra > 0 {

@@ -23,6 +23,8 @@ tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time", "
 reqwest = { version = "0.13.5", features = ["json", "multipart"] }
 keyring = "4.2.0"
 rusqlite = { version = "0.43.0", features = ["bundled"] }
+tauri-plugin-single-instance = "2.5.5"
+tauri-plugin-autostart = "2.7.0"
 
 [dev-dependencies]
 serde_json = "1"

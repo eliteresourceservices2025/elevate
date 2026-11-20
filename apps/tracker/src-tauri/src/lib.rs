@@ -1,8 +1,12 @@
 pub mod api;
 pub mod capture;
+pub mod controller;
 pub mod core;
+pub mod engine;
+pub mod log;
 pub mod platform;
 pub mod queue;
+pub mod state;
 
 use tauri::Manager;
 

@@ -118,3 +118,33 @@ fn nothing_waiting_is_fine() {
     assert!(q.next_batch(10).unwrap().is_empty());
     assert_eq!(q.len().unwrap(), (0, 0));
 }
+
+#[test]
+fn history_keeps_finished_segments_for_a_day_and_is_separate_from_what_is_waiting() {
+    let dir = tempfile::tempdir().unwrap();
+    let q = Queue::open(dir.path()).unwrap();
+    q.record_history(&[seg(NOW - SEGMENT_MAX_AGE_MS - 5000, 1000, "ancient"), seg(NOW - 60_000, 30_000, "chrome"), seg(NOW - 10_000, 5_000, "excel")]).unwrap();
+    // Sending and acknowledging segments never touches the history.
+    q.push_segments(&[seg(NOW, 1000, "chrome")]).unwrap();
+    let id = q.next_batch(10).unwrap()[0].0;
+    q.ack(&[id]).unwrap();
+
+    let all = q.history_since(NOW - SEGMENT_MAX_AGE_MS).unwrap();
+    assert_eq!(all.iter().map(|s| s.app.as_str()).collect::<Vec<_>>(), vec!["chrome", "excel"], "oldest first, and the one older than 24 hours is not returned");
+
+    q.enforce_caps(NOW).unwrap();
+    assert_eq!(q.history_since(0).unwrap().len(), 2, "caps remove what is older than a day");
+}
+
+#[test]
+fn clearing_the_queue_removes_everything_and_the_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let q = Queue::open(dir.path()).unwrap();
+    q.push_segments(&[seg(NOW, 1000, "a")]).unwrap();
+    q.record_history(&[seg(NOW, 1000, "a")]).unwrap();
+    q.push_shot(jpeg(), NOW).unwrap();
+    q.clear().unwrap();
+    assert_eq!(q.len().unwrap(), (0, 0));
+    assert!(q.history_since(0).unwrap().is_empty());
+    assert_eq!(files_in(dir.path()), 0);
+}
