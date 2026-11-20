@@ -249,6 +249,13 @@ Plain-English how-to guides (files in `apps/elevate/content/help`), role-aware, 
 - Guides name real buttons: after changing a screen a guide shows, run `pnpm help:shots` and re-read the guide. Fake data only; never client or patient information.
 - The tool runs against the local database only; reset it first for clean pictures (see the note).
 
+### ELEVATE Tracker (activity and blurred screenshots) — `docs/modules/activity-tracker.md`
+Replaces Jibble's screenshots and flags. Phase 1 (server side) only; the desktop app and pages come later.
+
+- Evidence and flags only: it never writes clock events or changes hours. Records only while clocked in, app name only (no titles, URLs, keystrokes), and nothing at all until a monitoring policy is published.
+- The app talks to `/api/tracker/*` with a per-device bearer token (outside the sign-in gate, like the cron route); only hashes are stored. Segments are append-only; screenshots are blurred on the person's computer, checked by bytes, kept 30 days in the private bucket `activity-shots`.
+- Every screenshot view is audited (ids and reason code only); the Executive and Recruiter never see anyone else's; own data is always open to the person. Tracker flags never block approval.
+
 ### Messages and calls — `docs/modules/messages.md`
 Internal chat (direct, groups, channels, polls, files, search, client groups with guests) and later calls; chat first, calls second.
 

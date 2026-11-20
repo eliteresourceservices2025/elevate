@@ -247,6 +247,10 @@ Who can do what: only people a Super Admin chose (Settings > Payroll access) as 
 - **A mistake in the course after publishing:** change the content, save and publish a new version (`pnpm learn:publish`), marking it `--material` only when people already trained must relearn it.
 - **Turning Learn off:** remove `NEXT_PUBLIC_LEARN_URL` from ELEVATE and redeploy.
 
+## 5g. ELEVATE Tracker problems
+
+Server side only for now (see `docs/modules/activity-tracker.md`). Jobs: `tracker-rollup`, `tracker-shot-purge`, `tracker-offline-alerts` (watch them on the Health page). Run `pnpm storage:setup` on every environment so the private bucket `activity-shots` exists. Nothing is collected until a monitoring policy is published. A lost or stolen computer: the person or HR revokes the device (`revokeDevice`); its token stops working at once. "Tracker offline" notices mean the app was closed, the computer asleep or the connection down; they are notes, never a reason to change hours.
+
 ## 6. Deploying changes (developer)
 
 - Deploy at the **Manila shift change**, not in the middle of a night shift (that is the US day, when most VAs are working). Check Attendance > Health before and after.

@@ -83,3 +83,14 @@ describe("rate limit", () => {
     expect((await segments.POST(post("/api/tracker/segments", { segments: [] }, AUTH))).status).toBe(429);
   });
 });
+
+describe("screenshot upload link", () => {
+  it("gives the app a ready upload address, so it never needs to know the storage service", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://storage.example.test");
+    const res = await shotRequest.POST(post("/api/tracker/shots/request", { takenAt: new Date().toISOString() }, AUTH));
+    const body = await res.json();
+    expect(body.uploadUrl).toBe("https://storage.example.test/storage/v1/object/upload/sign/activity-shots/p?token=t");
+    expect(body.shotId).toBe("s1");
+    vi.unstubAllEnvs();
+  });
+});
