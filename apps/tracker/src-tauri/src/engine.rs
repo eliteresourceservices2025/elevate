@@ -23,6 +23,12 @@ pub const SAMPLE_MS: i64 = 5_000;
 pub const SEND_MS: i64 = 60_000;
 /// How often the queue's caps are enforced.
 const CAPS_MS: i64 = 60_000;
+/// The clock moving back by more than this between two ticks counts as the computer's clock being set back.
+const BACKWARDS_JUMP_MS: i64 = 10_000;
+/// A gap between two ticks (about a second apart) longer than this is sleep or a clock set forward.
+const FORWARD_JUMP_MS: i64 = 3_600_000;
+/// How long old data is kept after the clock moved.
+const CAPS_HOLD_MS: i64 = 15 * 60_000;
 /// The name used when nothing readable is in front: the lock screen. It is always idle.
 const LOCKED: &str = "Locked";
 
@@ -41,6 +47,10 @@ pub struct Engine {
     next_send: i64,
     next_caps: i64,
     last_sample: i64,
+    /// The clock reading of the previous tick, to notice the computer's clock being moved.
+    last_tick: i64,
+    /// Until this time the queue's old data is not deleted (after the clock was moved).
+    caps_hold_until: i64,
     was_recording: bool,
     last_state: Option<WorkState>,
 }
@@ -65,6 +75,8 @@ impl Engine {
             next_send: i64::MIN,
             next_caps: i64::MIN,
             last_sample: i64::MIN,
+            last_tick: i64::MIN,
+            caps_hold_until: i64::MIN,
             was_recording: false,
             last_state: None,
             d,
@@ -110,11 +122,34 @@ impl Engine {
         self.changed();
     }
 
+    /// Notices the computer's clock being moved. Set back: what is open is closed at the last good moment and everything is due again, so a
+    /// wrong time cannot stall polling, sampling or sending for hours. A big jump either way holds back the deletion of old waiting data for
+    /// a while, so setting the clock forward and correcting it a minute later cannot wipe what has not been sent yet.
+    fn watch_clock(&mut self, now: i64) {
+        let last = std::mem::replace(&mut self.last_tick, now);
+        if last == i64::MIN {
+            return;
+        }
+        if now < last.saturating_sub(BACKWARDS_JUMP_MS) {
+            self.flush(last);
+            self.next_poll = i64::MIN;
+            self.next_send = i64::MIN;
+            self.next_caps = i64::MIN;
+            self.last_sample = i64::MIN;
+            self.caps_hold_until = now.saturating_add(CAPS_HOLD_MS);
+        } else if now.saturating_sub(last) > FORWARD_JUMP_MS {
+            self.caps_hold_until = now.saturating_add(CAPS_HOLD_MS);
+        }
+    }
+
     pub async fn tick(&mut self, now: i64) {
+        self.watch_clock(now);
         let signed_in = self.d.shared.lock().map(|s| s.signed_in).unwrap_or(false);
         if !signed_in {
             self.token = None;
             self.was_recording = false;
+            // What was open belongs to the previous sign-in: drop it rather than finish it under the next one.
+            self.builder = SegmentBuilder::new(self.idle_timeout);
             return;
         }
         let forced = self.d.poll_now.swap(false, Ordering::SeqCst);
@@ -154,7 +189,7 @@ impl Engine {
         if now >= self.next_send {
             self.send(now).await;
         }
-        if now >= self.next_caps {
+        if now >= self.next_caps && now >= self.caps_hold_until {
             self.next_caps = now + CAPS_MS;
             let _ = self.d.queue.enforce_caps(now);
             self.refresh_counts();
@@ -171,7 +206,7 @@ impl Engine {
                     s.online = true;
                     s.work_state = Some(cs.state);
                     s.policy = cs.policy;
-                    s.update_required = None;
+                    s.update_required = cs.update_required.clone().filter(|v| !v.is_empty());
                     s.clients = cs.clients;
                     s.working_since = cs.working_since;
                     s.on_break = cs.on_break;
@@ -198,6 +233,9 @@ impl Engine {
                 }
                 if !cs.policy {
                     self.d.logger.log_event(Event::PolicyOff);
+                }
+                if cs.update_required.as_deref().is_some_and(|v| !v.is_empty()) {
+                    self.d.logger.log_event(Event::UpdateRequired);
                 }
                 self.next_poll = now + POLL_MS;
                 self.poll_backoff.reset();

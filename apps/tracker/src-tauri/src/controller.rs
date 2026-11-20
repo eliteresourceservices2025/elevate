@@ -39,6 +39,8 @@ impl Controller {
         }
         match self.d.api.enroll(code, computer_name).await {
             Ok(enrolled) => {
+                // A new sign-in starts clean: whatever a previous person (or a revoked sign-in) left waiting is never sent under it.
+                let _ = self.d.queue.clear();
                 if self.d.store.save(&enrolled.token).is_err() {
                     self.d.logger.log_event(Event::EnrollFailed);
                     return Err("The sign-in could not be saved on this computer.".into());

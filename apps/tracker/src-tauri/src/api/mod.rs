@@ -77,6 +77,10 @@ pub struct ClockState {
     pub clock_blocked_reason: Option<String>,
     pub policy: bool,
     pub settings: TrackerSettings,
+    /// The version this app must update to. The app still gets the clock state (time keeping is never blocked by the version floor),
+    /// but records and sends nothing until it is updated.
+    #[serde(default)]
+    pub update_required: Option<String>,
 }
 
 /// What the person asked for on the clock. Nothing here is a time: ELEVATE stamps the moment.

@@ -70,7 +70,8 @@ pub fn plan(view: &StatusView) -> TrayPlan {
     };
 
     let mut entries = vec![item("open", "Open", true), Entry::Separator];
-    if view.signed_in && view.update_required.is_none() {
+    // The clock stays available on an old version: time keeping is never blocked by the version floor.
+    if view.signed_in {
         let many = choice_count(view) > 1;
         if let Some(reason) = &view.clock_blocked_reason {
             entries.push(item("blocked", &format!("Clock is off: {}", short_reason(reason)), false));
@@ -211,12 +212,14 @@ mod tests {
     }
 
     #[test]
-    fn an_old_version_shows_needs_update_and_no_clock_items() {
+    fn an_old_version_shows_needs_update_but_keeps_the_clock_items() {
         let mut v = view();
+        v.state = Some(WorkState::Working);
         v.update_required = Some("2.0.0".into());
         let p = plan(&v);
         assert_eq!(p.state, TrayState::NeedsUpdate);
-        assert_eq!(ids(&p), vec!["open", "updates", "quit"]);
+        assert!(ids(&p).contains(&"clock_out"), "someone mid-shift can always clock out");
+        assert!(ids(&p).contains(&"updates"));
     }
 
     #[test]

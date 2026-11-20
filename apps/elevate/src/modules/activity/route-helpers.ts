@@ -25,6 +25,14 @@ export async function readBody<T>(request: Request, schema: ZodType<T>): Promise
   }
 }
 
+/** The version the app must update to, when the version it reports is below the required one; otherwise null (also when it reports none). */
+export async function requiredUpdateFor(request: Request): Promise<string | null> {
+  const reported = request.headers.get("x-tracker-version");
+  if (!reported || !parseVersion(reported)) return null;
+  const required = await minRequiredVersion();
+  return required && compareVersions(reported, required) < 0 ? required : null;
+}
+
 /**
  * Runs a route for an enrolled device: 401 without a valid token, 429 when too busy, 426 when the app reports a version below the
  * required one, 400 for a bad body. The version comes from the `X-Tracker-Version` header; with no header (or one that is not a
@@ -40,11 +48,8 @@ export async function deviceRoute<T>(
   if (!device) return json({ error: "unauthorized" }, 401);
   if (!(await allowRequest("trackerIngest", device.deviceId))) return json({ error: "too_many_requests" }, 429);
   if (!options.exemptFromFloor) {
-    const reported = request.headers.get("x-tracker-version");
-    if (reported && parseVersion(reported)) {
-      const required = await minRequiredVersion();
-      if (required && compareVersions(reported, required) < 0) return json({ error: "update_required", minVersion: required }, 426);
-    }
+    const required = await requiredUpdateFor(request);
+    if (required) return json({ error: "update_required", minVersion: required }, 426);
   }
   if (!schema) return run(device, undefined as T);
   const body = await readBody(request, schema);

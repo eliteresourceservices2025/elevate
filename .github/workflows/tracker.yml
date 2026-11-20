@@ -16,14 +16,10 @@ jobs:
   windows:
     runs-on: windows-latest
     env:
-      # The update signing key (required: updates are only ever installed when signed by it). Never printed, never committed.
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      # Windows code signing (optional until the company has a certificate): a base64 .pfx file and its password.
-      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
       # Optional repository variable: build against another ELEVATE address (for example a staging site). Leave it unset for production.
       ELEVATE_TRACKER_BASE_URL: ${{ vars.ELEVATE_TRACKER_BASE_URL }}
+      # The signing secrets are NOT set here: they are given only to the steps that need them, so install scripts of dependencies and
+      # third-party actions never see them.
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -42,9 +38,21 @@ jobs:
 
       - name: The update signing key is present
         shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
             Write-Error "TAURI_SIGNING_PRIVATE_KEY is not set. Add it (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) under Settings > Secrets and variables > Actions. Without it the build cannot sign its update file."
+            exit 1
+          }
+
+      - name: A release is never built with the development update key
+        if: startsWith(github.ref, refs/tags/tracker-v)
+        shell: pwsh
+        run: |
+          $pub = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Get-Content apps/tracker/src-tauri/updater.pub -Raw).Trim()))
+          if ($pub -match "A0EB8191FF5A1177") {
+            Write-Error "apps/tracker/src-tauri/updater.pub is still the development key. Make the real key (see apps/tracker/README.md) and commit its public half before tagging a release."
             exit 1
           }
 
@@ -52,6 +60,8 @@ jobs:
       # into the build itself through Tauri's signCommand, and only when a certificate is configured. Not exercised yet: no certificate exists.
       - name: Prepare Windows code signing (only when a certificate is configured)
         shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
         run: |
           $file = Join-Path $env:RUNNER_TEMP "tauri-codesign.json"
           if ($env:WINDOWS_CERTIFICATE) {
@@ -67,7 +77,16 @@ jobs:
 
       - name: Build the installer
         shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: pnpm --filter elevate-tracker build:win --config (Join-Path $env:RUNNER_TEMP "tauri-codesign.json")
+
+      - name: Remove the certificate file
+        if: always()
+        shell: pwsh
+        run: Remove-Item (Join-Path $env:RUNNER_TEMP "cert.pfx") -Force -ErrorAction SilentlyContinue
 
       - name: Fingerprints
         shell: pwsh

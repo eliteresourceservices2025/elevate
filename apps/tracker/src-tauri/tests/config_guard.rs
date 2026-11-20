@@ -88,3 +88,11 @@ fn a_closed_window_is_really_closed_so_the_tray_app_stays_small() {
     assert!(lib.contains("code.is_none()"), "an explicit quit (with an exit code) must still quit");
     assert!(!lib.contains("prevent_close"), "closing must destroy the window, not just hide it");
 }
+
+#[test]
+fn the_build_workflow_gives_signing_secrets_only_to_the_steps_that_need_them() {
+    let flow = fs::read_to_string(root().join("../../../.github/workflows/tracker.yml")).expect("workflow");
+    let job_env: Vec<&str> = flow.lines().skip_while(|l| !l.starts_with("    env:")).skip(1).take_while(|l| l.starts_with("      ")).collect();
+    assert!(job_env.iter().all(|l| !l.contains("secrets.")), "a secret at job level is visible to every dependency install script and action: {job_env:?}");
+    assert!(flow.contains("cert.pfx") && flow.contains("if: always()"), "the certificate file is removed even when the build fails");
+}

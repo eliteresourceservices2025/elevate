@@ -200,6 +200,20 @@ async fn an_update_required_answer_stops_sampling_and_sending() {
 }
 
 #[tokio::test]
+async fn an_old_app_stops_recording_but_can_still_clock_out() {
+    let mut r = rig(true).await;
+    let mut body = state_body("working", true);
+    body["updateRequired"] = json!("2.0.0");
+    says_status(&r.server, 200, body).await;
+    r.run(0, 300, 5).await;
+    assert_eq!(r.shared.lock().unwrap().update_required.as_deref(), Some("2.0.0"));
+    assert_eq!(r.shared.lock().unwrap().work_state, Some(WorkState::Working), "it still knows what the clock says");
+    assert_eq!(r.foreground_calls(), 0, "nothing is recorded until it is updated");
+    r.controller.clock(ClockAction::ClockOut).await.expect("clock out works on an old version");
+    assert_eq!(r.calls("/api/tracker/clock").await, 1, "one request, however old the app is");
+}
+
+#[tokio::test]
 async fn a_signed_out_answer_clears_the_token_and_stops_asking() {
     let mut r = rig(true).await;
     says_status(&r.server, 401, json!({ "error": "unauthorized" })).await;
@@ -416,6 +430,51 @@ async fn over_a_whole_simulated_day_no_clock_request_is_ever_sent_unless_a_perso
     r.run(10 * hour, 10 * hour + 300, 5).await;
     assert!(r.changes.load(Ordering::SeqCst) > 0, "the window was told about changes");
     assert_eq!(r.calls("/api/tracker/clock").await, 0, "nothing the app does by itself ever clocks anyone");
+}
+
+#[tokio::test]
+async fn a_new_sign_in_never_sends_what_the_previous_person_left_behind() {
+    let mut r = rig(true).await;
+    r.run(0, 60, 5).await;
+    r.app(Some("excel"));
+    r.run(65, 120, 5).await;
+    down(&r.server).await;
+    r.app(Some("chrome"));
+    r.run(125, 200, 5).await;
+    assert!(r.queue.len().unwrap().0 > 0, "the first person's recording is waiting");
+    says_status(&r.server, 401, json!({ "error": "unauthorized" })).await; // the device was revoked
+    r.run(205, 500, 5).await; // the retry pauses are over by now
+    assert!(!r.shared.lock().unwrap().signed_in);
+    Mock::given(method("POST")).and(path("/api/tracker/enroll")).respond_with(ResponseTemplate::new(200).set_body_json(json!({ "token": "second", "deviceId": "d2" }))).mount(&r.server).await;
+    r.controller.enroll("ABCD2345", "PC").await.unwrap();
+    assert_eq!(r.queue.len().unwrap(), (0, 0), "nothing of the first person is kept for the second");
+    assert!(r.history().is_empty(), "and it does not show in the second person's captured list");
+}
+
+#[tokio::test]
+async fn setting_the_computer_clock_back_does_not_stall_polling_or_sampling() {
+    let mut r = rig(true).await;
+    r.run(0, 120, 5).await;
+    let polls = r.calls("/api/tracker/clock-state").await;
+    let samples = r.foreground_calls();
+    r.run(-7200, -7200 + 90, 5).await; // someone sets the clock back two hours
+    assert!(r.calls("/api/tracker/clock-state").await > polls, "it asks ELEVATE again within one interval, not two hours later");
+    assert!(r.foreground_calls() > samples + 5, "and keeps sampling");
+}
+
+#[tokio::test]
+async fn a_big_forward_clock_jump_does_not_wipe_what_is_waiting_to_be_sent() {
+    let mut r = rig(true).await;
+    r.run(0, 60, 5).await;
+    r.app(Some("excel"));
+    r.run(65, 120, 5).await;
+    down(&r.server).await;
+    r.app(Some("chrome"));
+    r.run(125, 200, 5).await;
+    let waiting = r.queue.len().unwrap().0;
+    assert!(waiting > 0, "something is waiting while ELEVATE is down");
+    r.run(25 * 3600, 25 * 3600 + 5, 5).await; // the clock jumps a day forward (it may be set back again a minute later)
+    assert!(r.queue.len().unwrap().0 >= waiting, "nothing waiting was deleted by the jump");
 }
 
 /// Every route answers 503: ELEVATE is down.

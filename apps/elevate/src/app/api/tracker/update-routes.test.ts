@@ -35,6 +35,7 @@ const update = await import("./update/route");
 const download = await import("./update/download/[platform]/route");
 const notes = await import("./releases/[version]/route");
 const clockState = await import("./clock-state/route");
+const segments = await import("./segments/route");
 
 const AUTH = { authorization: "Bearer abc" };
 const rel = (version: string, status: "published" | "withdrawn" = "published", minRequired = false) => ({
@@ -137,11 +138,19 @@ describe("the release notes route", () => {
 
 describe("the version floor", () => {
   const ping = (headers: Record<string, string>) => clockState.GET(get("/api/tracker/clock-state", { ...AUTH, ...headers }));
-  it("refuses an older app with an answer it can show", async () => {
+  it("refuses an older app's recording with an answer it can show", async () => {
     state.required = "2.0.0";
-    const res = await ping({ "x-tracker-version": "1.0.0" });
+    const res = await segments.POST(new Request("http://localhost/api/tracker/segments", { method: "POST", headers: { ...AUTH, "x-tracker-version": "1.0.0" }, body: "{}" }));
     expect(res.status).toBe(426);
     expect(await res.json()).toEqual({ error: "update_required", minVersion: "2.0.0" });
+  });
+  it("still tells an older app what the clock says, so time keeping is never blocked by the floor", async () => {
+    state.required = "2.0.0";
+    const res = await ping({ "x-tracker-version": "1.0.0" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ state: "working", updateRequired: "2.0.0" });
+    const current = await ping({ "x-tracker-version": "2.0.0" });
+    expect((await current.json()).updateRequired).toBeNull();
   });
   it("lets a current app, an app with no version header and an unreadable version through", async () => {
     state.required = "2.0.0";

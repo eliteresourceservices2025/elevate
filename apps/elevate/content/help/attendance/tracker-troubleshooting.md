@@ -15,7 +15,7 @@ ELEVATE cannot be reached: your internet may be down, or ELEVATE may be busy. Th
 
 # The icon is red or the window says "Update needed"
 
-This version is too old. The app records and sends nothing until it is updated. It looks for the update by itself. To look now, use **Update now** in the window, or **Check for updates** in the icon's menu. If it does not update, open the **ELEVATE Tracker App** page in ELEVATE, download the newest version and install it over the old one.
+This version is too old. The app records and sends nothing until it is updated. The clock buttons in the app (and on the ELEVATE page) still work, so you can always clock out. It looks for the update by itself. To look now, use **Update now** in the window, or **Check for updates** in the icon's menu. If it does not update, open the **ELEVATE Tracker App** page in ELEVATE, download the newest version and install it over the old one.
 
 # The clock buttons are off
 

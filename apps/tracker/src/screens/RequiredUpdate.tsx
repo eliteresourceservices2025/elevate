@@ -7,7 +7,7 @@ export function RequiredUpdate({ minVersion, readyVersion }: { minVersion: strin
   return (
     <section className="card stack" role="alert">
       <h2>Update needed</h2>
-      <p>This version is too old to keep recording. Version {minVersion} or newer is needed, and nothing is recorded or sent until the app is updated. Your hours in ELEVATE are not affected.</p>
+      <p>This version is too old to keep recording. Version {minVersion} or newer is needed, and nothing is recorded or sent until the app is updated. Your hours in ELEVATE are not affected, and the clock buttons below still work.</p>
       {readyVersion ? <p className="notice ok">Version {readyVersion} is downloaded and installing now.</p> : null}
       <button
         className="primary"
