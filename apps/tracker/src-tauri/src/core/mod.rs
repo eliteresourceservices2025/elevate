@@ -3,4 +3,5 @@ pub mod app_name;
 pub mod backoff;
 pub mod schedule;
 pub mod segments;
+pub mod timefmt;
 pub mod version;
