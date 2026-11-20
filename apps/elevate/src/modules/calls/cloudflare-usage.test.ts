@@ -57,6 +57,8 @@ describe("fetchTurnUsage", () => {
     expect(await fetchTurnUsage()).toMatchObject({ state: "error", reason: expect.stringContaining("Account Analytics") });
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ errors: [{ message: "no" }] }))));
     expect(await fetchTurnUsage()).toMatchObject({ state: "error" });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: { viewer: { accounts: [] } } }))));
+    expect(await fetchTurnUsage()).toMatchObject({ state: "error", reason: expect.stringContaining("no account") });
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down"); }));
     const result = await fetchTurnUsage();
     expect(result).toMatchObject({ state: "error" });

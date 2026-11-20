@@ -39,6 +39,8 @@ export const FREE_GB = 1000;
 export async function getCallSettingsView(): Promise<CallSettingsView> {
   const actor = await requireUser();
   await authorize(actor, "calls.settings");
+  // Started now so Cloudflare's answer (up to 8 seconds if it is slow) is waited for alongside the database queries, not after them.
+  const cloudflarePending = fetchTurnUsage();
   const [settings] = await db.select().from(callSettings).where(eq(callSettings.id, 1)).limit(1);
   const monthStart = sql`date_trunc('month', now() at time zone 'utc')`;
   const [month] = await db
@@ -60,7 +62,7 @@ export async function getCallSettingsView(): Promise<CallSettingsView> {
   const names = await peopleByUserId(staff.map((u) => u.id));
   const named = staff.map((u) => ({ id: u.id, name: names.get(u.id)?.name ?? "", can: u.can })).filter((u) => u.name);
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
-  const cloudflare = await fetchTurnUsage();
+  const cloudflare = await cloudflarePending;
   const monthGb = Number(month.gb);
   const warningGb = settings?.monthlyGbWarning ?? 700;
   return {
