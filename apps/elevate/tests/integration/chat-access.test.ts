@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { formatInTimeZone } from "date-fns-tz";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { FakeStorage } from "./fake-storage";
 
@@ -28,7 +29,8 @@ const rows = async <T = Record<string, unknown>>(q: ReturnType<typeof sql>) => (
 const fake = new FakeStorage();
 setDocumentStorage(fake);
 const REASON = "A complaint about conduct in this chat.";
-const today = () => new Date().toISOString().slice(0, 10);
+// The company day is in Phoenix (the feature counts days there), NOT UTC: between 5 PM and midnight Phoenix time the UTC date is already tomorrow.
+const today = () => formatInTimeZone(new Date(), "America/Phoenix", "yyyy-MM-dd");
 
 beforeAll(async () => {
   await db.execute(sql`create schema if not exists auth`);
