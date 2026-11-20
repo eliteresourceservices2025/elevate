@@ -157,3 +157,37 @@ impl std::fmt::Debug for Enrolled {
     }
 }
 
+
+/// The newest published update for this platform, in Tauri's dynamic update shape. `url` is ELEVATE's own download address.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct UpdateOffer {
+    pub version: String,
+    #[serde(default)]
+    pub notes: String,
+    #[serde(default)]
+    pub pub_date: Option<String>,
+    pub url: String,
+    pub signature: String,
+}
+
+/// What changed in one release, in three plain lists.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ChangeLists {
+    #[serde(default)]
+    pub added: Vec<String>,
+    #[serde(default)]
+    pub improved: Vec<String>,
+    #[serde(default)]
+    pub fixed: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseNotes {
+    pub version: String,
+    #[serde(default)]
+    pub published_at: Option<String>,
+    pub notes: ChangeLists,
+    #[serde(default)]
+    pub min_required: bool,
+}

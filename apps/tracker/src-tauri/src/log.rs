@@ -34,6 +34,8 @@ pub enum Event {
     StateOut,
     PolicyOff,
     UpdateRequired,
+    UpdateReady,
+    UpdateRejected,
     /// How many things were delivered.
     Delivered(u32),
     SendBackoff,
@@ -60,6 +62,8 @@ impl Event {
             Event::StateOut => "state_out".into(),
             Event::PolicyOff => "policy_off".into(),
             Event::UpdateRequired => "update_required".into(),
+            Event::UpdateReady => "update_ready".into(),
+            Event::UpdateRejected => "update_rejected".into(),
             Event::Delivered(n) => format!("delivered {n}"),
             Event::SendBackoff => "send_backoff".into(),
             Event::ShotCaptured => "shot_captured".into(),

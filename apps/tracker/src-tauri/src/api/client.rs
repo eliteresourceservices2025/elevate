@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::error::map_error;
-use super::{ApiError, ClockAction, ClockReply, ClockState, Enrolled, Health, IngestReply, ShotTicket};
+use super::{ApiError, ClockAction, ClockReply, ClockState, Enrolled, Health, IngestReply, ReleaseNotes, ShotTicket, UpdateOffer};
 use crate::core::segments::{Segment, State};
 use crate::core::timefmt::iso_from_ms;
 
@@ -135,5 +135,73 @@ impl ApiClient {
     pub async fn finalize_shot(&self, token: &str, shot_id: &str) -> Result<(), ApiError> {
         let _: Value = self.call(self.http.post(self.url("shots/finalize")).bearer_auth(token).json(&json!({ "shotId": shot_id }))).await?;
         Ok(())
+    }
+}
+
+/// Plain names only (letters, digits, dot, dash, underscore): nothing that could change the path or the query it is placed in.
+fn plain(text: &str) -> bool {
+    !text.is_empty() && text.len() <= 64 && text.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
+/// Updates are never bigger than this.
+const MAX_UPDATE_BYTES: u64 = 200 * 1024 * 1024;
+
+impl ApiClient {
+    /// The newest update for `platform` that is newer than `version`, or `None` (a 204). The answer is only an offer: nothing is trusted yet.
+    pub async fn update_feed(&self, token: &str, platform: &str, version: &str) -> Result<Option<UpdateOffer>, ApiError> {
+        if !plain(platform) || !plain(version) {
+            return Err(ApiError::Invalid);
+        }
+        let url = format!("{}?platform={platform}&version={version}", self.url("update"));
+        let response = self.http.get(url).bearer_auth(token).send().await.map_err(|_| ApiError::Unavailable)?;
+        let status = response.status().as_u16();
+        let bytes = response.bytes().await.map_err(|_| ApiError::Unavailable)?;
+        match status {
+            204 => Ok(None),
+            200..=299 => serde_json::from_slice(&bytes).map(Some).map_err(|_| ApiError::Invalid),
+            _ => Err(map_error(status, &serde_json::from_slice(&bytes).unwrap_or(Value::Null))),
+        }
+    }
+
+    /// Downloads an update file. The address must be ELEVATE's own download route; ELEVATE answers with a redirect to a short-lived storage
+    /// link, and that second request carries nothing of ours (no token, no version).
+    pub async fn fetch_update_file(&self, token: &str, url: &str) -> Result<Vec<u8>, ApiError> {
+        let prefix = format!("{}/api/tracker/update/download/", self.base);
+        let rest = url.strip_prefix(&prefix).ok_or(ApiError::Invalid)?;
+        if rest.is_empty() || !rest.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b'/' | b'?' | b'=' | b'&')) || rest.contains("..") {
+            return Err(ApiError::Invalid);
+        }
+        let first = self.http.get(url).bearer_auth(token).send().await.map_err(|_| ApiError::Unavailable)?;
+        let status = first.status().as_u16();
+        if !matches!(status, 301 | 302 | 303 | 307 | 308) {
+            let bytes = first.bytes().await.map_err(|_| ApiError::Unavailable)?;
+            return Err(if (200..300).contains(&status) { ApiError::Invalid } else { map_error(status, &serde_json::from_slice(&bytes).unwrap_or(Value::Null)) });
+        }
+        let location = first.headers().get(reqwest::header::LOCATION).and_then(|v| v.to_str().ok()).map(str::to_string).ok_or(ApiError::Invalid)?;
+        if !address_allowed(&location) {
+            return Err(ApiError::Invalid);
+        }
+        let second = self.storage.get(&location).send().await.map_err(|_| ApiError::Unavailable)?;
+        match second.status().as_u16() {
+            200..=299 => {
+                if second.content_length().is_some_and(|n| n > MAX_UPDATE_BYTES) {
+                    return Err(ApiError::Invalid);
+                }
+                let bytes = second.bytes().await.map_err(|_| ApiError::Unavailable)?;
+                if bytes.len() as u64 > MAX_UPDATE_BYTES {
+                    return Err(ApiError::Invalid);
+                }
+                Ok(bytes.to_vec())
+            }
+            429 | 500..=599 => Err(ApiError::Unavailable),
+            _ => Err(ApiError::Rejected("download_failed".into())),
+        }
+    }
+
+    pub async fn release_notes(&self, token: &str, version: &str) -> Result<ReleaseNotes, ApiError> {
+        if !plain(version) {
+            return Err(ApiError::Invalid);
+        }
+        self.call(self.http.get(self.url(&format!("releases/{version}"))).bearer_auth(token)).await
     }
 }

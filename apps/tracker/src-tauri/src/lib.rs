@@ -10,6 +10,8 @@ pub mod queue;
 pub mod state;
 pub mod tray;
 pub mod tray_plan;
+pub mod update_task;
+pub mod updates;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -54,6 +56,9 @@ pub fn run() {
             commands::captured_today_list,
             commands::last_shot_thumbnail,
             commands::disconnect,
+            commands::check_for_updates,
+            commands::whats_new,
+            commands::mark_whats_new_seen,
         ])
         .on_window_event(|window, event| {
             // Closing the window hides it: the app keeps running in the tray.
@@ -87,9 +92,12 @@ pub fn run() {
                 poll_now: Arc::new(AtomicBool::new(false)),
                 on_change,
             };
-            let core = Arc::new(Core { controller: Controller::new(deps.clone()), deps: deps.clone(), version });
+            let core = Arc::new(Core { controller: Controller::new(deps.clone()), deps: deps.clone(), version, data_dir: data_dir.clone(), update_notify: Arc::new(tokio::sync::Notify::new()) });
             app.manage(core.clone());
             tray::build(app.handle(), &core)?;
+
+            // Updates: at start, every 6 hours, on request, and when ELEVATE says this version is too old.
+            tauri::async_runtime::spawn(update_task::run(core.clone(), app.handle().clone()));
 
             // The engine: about once a second it does whatever is due.
             tauri::async_runtime::spawn(async move {

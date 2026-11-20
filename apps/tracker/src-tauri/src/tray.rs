@@ -104,6 +104,12 @@ fn on_menu(app: &AppHandle, id: &str) {
         "break_none" => clock_from_menu(app, ClockAction::StartBreak { minutes: None }, "Break started."),
         "end_break" => clock_from_menu(app, ClockAction::EndBreak, "Break ended."),
         "clock_out" => clock_from_menu(app, ClockAction::ClockOut, "Clocked out."),
+        "updates" => {
+            if let Some(core) = app.try_state::<Arc<Core>>() {
+                core.update_notify.notify_one();
+                notice(app, true, "Looking for an update…");
+            }
+        }
         "quit" => app.exit(0),
         _ => {}
     }

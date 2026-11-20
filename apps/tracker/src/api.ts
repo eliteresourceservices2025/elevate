@@ -15,6 +15,7 @@ export type StatusView = {
   queueLen: number;
   version: string;
   updateRequired: string | null;
+  updateVersion: string | null;
   clients: ClientChoice[];
   workingSince: string | null;
   onBreak: { startedAt: string; plannedMinutes: number | null } | null;
@@ -22,6 +23,7 @@ export type StatusView = {
   clockBlockedReason: string | null;
   hasShot: boolean;
 };
+export type ReleaseNotes = { version: string; publishedAt: string | null; notes: { added: string[]; improved: string[]; fixed: string[] }; minRequired: boolean };
 export type CapturedApp = { app: string; startMs: number; minutes: number };
 export type Notice = { ok: boolean; message: string };
 
@@ -39,6 +41,7 @@ let mockState: StatusView = {
   queueLen: mockMode === "offline" ? 14 : 0,
   version: "0.1.0",
   updateRequired: mockMode === "update" ? "0.2.0" : null,
+  updateVersion: mockMode === "ready" ? "0.2.0" : null,
   clients: [
     { id: "c1", name: "Summit Dental Care", projects: [{ id: "p1", name: "Intake desk" }, { id: "p2", name: "Billing follow-up" }] },
     { id: "c2", name: "Harbor Legal Group", projects: [] },
@@ -88,6 +91,16 @@ export async function capturedToday(): Promise<CapturedApp[]> {
 export async function lastShot(): Promise<string | null> {
   if (inTauri) return invoke<string | null>("last_shot_thumbnail");
   return "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#e9e4f2"/><rect x="16" y="16" width="288" height="14" fill="#c8bde0"/><rect x="16" y="44" width="180" height="60" rx="6" fill="#d6cdea"/><rect x="208" y="44" width="96" height="120" rx="6" fill="#d6cdea"/><rect x="16" y="116" width="180" height="48" rx="6" fill="#dcd4ee"/></svg>`);
+}
+export async function checkForUpdates(): Promise<void> {
+  if (inTauri) await invoke("check_for_updates");
+}
+export async function whatsNew(): Promise<ReleaseNotes | null> {
+  if (inTauri) return invoke<ReleaseNotes | null>("whats_new");
+  return mockMode === "whatsnew" ? { version: "0.1.0", publishedAt: iso(60 * 24), notes: { added: ["Pick a client or project when you clock in"], improved: ["The window opens faster"], fixed: ["The last picture now shows right after it is taken"] }, minRequired: false } : null;
+}
+export async function markWhatsNewSeen(): Promise<void> {
+  if (inTauri) await invoke("mark_whats_new_seen");
 }
 export async function disconnect(): Promise<void> {
   if (inTauri) return invoke("disconnect");

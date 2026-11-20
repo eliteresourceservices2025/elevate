@@ -1,11 +1,13 @@
 //! What the window can ask the app to do. Each clock command is one click: it sends one request through the controller, which is the
 //! only code that can clock anyone.
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use base64::Engine as _;
 use tauri::{AppHandle, State};
+use tokio::sync::Notify;
 
-use crate::api::ClockAction;
+use crate::api::{ClockAction, ReleaseNotes};
 use crate::controller::Controller;
 use crate::state::{captured_today, CapturedApp, Deps, StatusView};
 
@@ -14,6 +16,10 @@ pub struct Core {
     pub deps: Deps,
     pub controller: Controller,
     pub version: String,
+    /// Where the app keeps its small files (the queue folder lives inside it).
+    pub data_dir: PathBuf,
+    /// Wakes the update task: the person asked to check, or ELEVATE said this version is too old.
+    pub update_notify: Arc<Notify>,
 }
 
 impl Core {
@@ -92,4 +98,33 @@ pub fn last_shot_thumbnail(core: State<'_, Arc<Core>>) -> Option<String> {
 #[tauri::command]
 pub fn disconnect(core: State<'_, Arc<Core>>) -> Result<(), String> {
     core.controller.disconnect()
+}
+
+/// Look for an update now (the tray item, or the Update now button).
+#[tauri::command]
+pub fn check_for_updates(core: State<'_, Arc<Core>>) {
+    core.update_notify.notify_one();
+}
+
+/// The notes of the release this app was just updated to, once. `None` on a first install, when nothing changed, or when ELEVATE is
+/// not reachable (it asks again at the next start, because the version is only marked seen when the person closes the box).
+#[tauri::command]
+pub async fn whats_new(core: State<'_, Arc<Core>>) -> Result<Option<ReleaseNotes>, String> {
+    let core = core.inner().clone();
+    let last = crate::updates::read_last_seen(&core.data_dir);
+    let Some(_) = last.as_deref() else {
+        // A first install: nothing was updated, so there is nothing new to show. Remember this version.
+        let _ = crate::updates::write_last_seen(&core.data_dir, &core.version);
+        return Ok(None);
+    };
+    if !crate::updates::whats_new_due(last.as_deref(), &core.version) {
+        return Ok(None);
+    }
+    let Some(token) = core.deps.store.load() else { return Ok(None) };
+    Ok(core.deps.api.release_notes(&token, &core.version).await.ok())
+}
+
+#[tauri::command]
+pub fn mark_whats_new_seen(core: State<'_, Arc<Core>>) {
+    let _ = crate::updates::write_last_seen(&core.data_dir, &core.version);
 }

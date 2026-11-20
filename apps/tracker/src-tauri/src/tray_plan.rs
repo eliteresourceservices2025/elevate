@@ -101,6 +101,9 @@ pub fn plan(view: &StatusView) -> TrayPlan {
                 }
             }
         }
+    }
+    if view.signed_in {
+        entries.push(item("updates", "Check for updates", true));
         entries.push(Entry::Separator);
     }
     entries.push(item("quit", "Quit", true));
@@ -122,6 +125,7 @@ mod tests {
             queue_len: 0,
             version: "1.0.0".into(),
             update_required: None,
+            update_version: None,
             clients: vec![],
             working_since: None,
             on_break: None,
@@ -146,7 +150,7 @@ mod tests {
     fn clocked_out_offers_clock_in() {
         let p = plan(&view());
         assert_eq!(p.state, TrayState::Waiting);
-        assert_eq!(ids(&p), vec!["open", "clock_in", "quit"]);
+        assert_eq!(ids(&p), vec!["open", "clock_in", "updates", "quit"]);
     }
 
     #[test]
@@ -155,7 +159,7 @@ mod tests {
         v.state = Some(WorkState::Working);
         let p = plan(&v);
         assert_eq!(p.state, TrayState::Tracking);
-        assert_eq!(ids(&p), vec!["open", "break_15", "break_30", "break_60", "break_none", "clock_out", "quit"]);
+        assert_eq!(ids(&p), vec!["open", "break_15", "break_30", "break_60", "break_none", "clock_out", "updates", "quit"]);
     }
 
     #[test]
@@ -164,7 +168,7 @@ mod tests {
         v.state = Some(WorkState::Break);
         let p = plan(&v);
         assert_eq!(p.state, TrayState::Waiting);
-        assert_eq!(ids(&p), vec!["open", "end_break", "clock_out", "quit"]);
+        assert_eq!(ids(&p), vec!["open", "end_break", "clock_out", "updates", "quit"]);
         assert!(p.tooltip.contains("break"));
     }
 
@@ -181,7 +185,7 @@ mod tests {
         let mut v = view();
         v.clients = vec![ClientChoice { id: "c1".into(), name: "Acme".into(), projects: vec![ProjectChoice { id: "p1".into(), name: "Intake".into() }] }];
         assert_eq!(choice_count(&v), 2);
-        assert_eq!(ids(&plan(&v)), vec!["open", "open", "quit"]);
+        assert_eq!(ids(&plan(&v)), vec!["open", "open", "updates", "quit"]);
         v.state = Some(WorkState::Working);
         assert!(ids(&plan(&v)).windows(2).any(|w| w == ["open", "break_15"]), "a switch entry opens the window while working");
         v.clients = vec![ClientChoice { id: "c1".into(), name: "Acme".into(), projects: vec![] }];
@@ -212,7 +216,7 @@ mod tests {
         v.update_required = Some("2.0.0".into());
         let p = plan(&v);
         assert_eq!(p.state, TrayState::NeedsUpdate);
-        assert_eq!(ids(&p), vec!["open", "quit"]);
+        assert_eq!(ids(&p), vec!["open", "updates", "quit"]);
     }
 
     #[test]

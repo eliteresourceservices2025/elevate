@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { status as loadStatus, subscribe, type Notice, type StatusView } from "./api";
 import { Captured } from "./screens/Captured";
+import { RequiredUpdate } from "./screens/RequiredUpdate";
 import { SignIn } from "./screens/SignIn";
 import { Status } from "./screens/Status";
+import { WhatsNew } from "./screens/WhatsNew";
 
 type Tab = "status" | "captured";
 
@@ -40,12 +42,11 @@ export function App() {
       {!status.signedIn ? (
         <SignIn onDone={reload} />
       ) : status.updateRequired ? (
-        <section className="card stack" role="alert">
-          <h2>Update needed</h2>
-          <p>This version is too old to keep recording. Version {status.updateRequired} or newer is needed. Your hours are not affected.</p>
-        </section>
+        <RequiredUpdate minVersion={status.updateRequired} readyVersion={status.updateVersion} />
       ) : (
         <>
+          <WhatsNew />
+          {status.updateVersion ? <p className="notice info">Version {status.updateVersion} is ready. It installs when you are not working.</p> : null}
           <nav className="tabs" aria-label="Sections">
             <button className={tab === "status" ? "active" : ""} aria-current={tab === "status"} onClick={() => setTab("status")}>Clock</button>
             <button className={tab === "captured" ? "active" : ""} aria-current={tab === "captured"} onClick={() => setTab("captured")}>What was captured</button>
