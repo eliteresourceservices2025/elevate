@@ -4,11 +4,12 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { ForbiddenError, authorize, scopeFor } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { DEFAULT_TIMEZONE } from "@/lib/time";
+import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { addDays } from "@/modules/attendance/schedule";
-import { personForUser, prefsFor } from "@/modules/attendance/service";
+import { monitoringPolicyPublished, personForUser, prefsFor } from "@/modules/attendance/service";
 import { reportName, timeDownlineEmployeeIds, todayInZone } from "@/modules/org/service";
 import { authorizeForEmployee, requireScope } from "./access";
+import { workingBetween } from "./flags";
 import { activePercent, summarizeDay, type CategoryRule, type DaySummary } from "./logic";
 import { activityCategories, activitySettings, activityShots, trackerDevices } from "./schema";
 import { daySchema, deviceListSchema, floorSchema, personDaySchema } from "./validators";
@@ -25,6 +26,13 @@ export type ActivityDay = {
   topApps: DaySummary["topApps"];
   shots: { id: string; takenAt: string }[];
   trackerOnline: boolean;
+  /** Clocked-in time (breaks left out) inside the day, as a faint underlay on the timeline. */
+  working: { start: string; end: string }[];
+  /** The zone the day is in: the person's own. */
+  zone: string;
+  /** The day's start and end (ms since the epoch) in that zone, for laying out the timeline. */
+  dayStart: number;
+  dayEnd: number;
 };
 
 async function loadRules(): Promise<CategoryRule[]> {
@@ -61,6 +69,10 @@ async function dayFor(employeeId: string, date: string, withShots: boolean): Pro
     minutes: { active: summary.activeMinutes, idle: summary.idleMinutes, work: summary.workMinutes, nonWork: summary.nonWorkMinutes },
     topApps: summary.topApps,
     shots: shots.map((s) => ({ id: s.id, takenAt: s.takenAt.toISOString() })),
+    working: (await workingBetween(employeeId, dayStart, dayEnd)).map((w) => ({ start: new Date(w.start).toISOString(), end: new Date(w.end).toISOString() })),
+    zone,
+    dayStart,
+    dayEnd,
     trackerOnline: Boolean(last?.has_device) && last?.ms != null && Date.now() - Number(last.ms) <= ONLINE_WITHIN_MS,
   };
 }
@@ -197,4 +209,47 @@ export async function getActivitySettings(): Promise<ActivitySettingsView> {
     lowActivityPercent: row?.lowActivityPercent ?? 30,
     updatedAt: row?.updatedAt.toISOString() ?? null,
   };
+}
+
+export type ShotViewRow = { viewer: string; day: string; reason: string; count: number };
+
+/** Who looked at the signed-in person's screenshots in the last 30 days (grouped by viewer, day and reason). Their own views are left out. */
+export async function listMyShotViews(): Promise<ShotViewRow[]> {
+  const user = await requireUser();
+  await authorize(user, "activity.view_own", { ownerUserId: user.id });
+  const person = await personForUser(db, user.id);
+  const rows = (await db.execute(sql`
+    select coalesce(nullif(trim(coalesce(e.preferred_name, e.legal_first_name) || ' ' || e.legal_last_name), ''), a.actor_email, 'Someone') as viewer,
+           to_char(a.occurred_at at time zone 'UTC', 'YYYY-MM-DD') as day,
+           a.metadata->>'reason' as reason,
+           count(*)::int as n
+    from ops.audit_log a
+    left join core.employees e on e.user_id = a.actor_user_id
+    where a.action = 'activity.shot_view'
+      and a.metadata->>'employeeId' = ${person.id}
+      and a.actor_user_id is distinct from ${user.id}
+      and a.occurred_at > now() - interval '30 days'
+    group by 1, 2, 3
+    order by day desc, viewer
+    limit 50`)) as unknown as { viewer: string; day: string; reason: string; n: number }[];
+  return rows.map((r) => ({ viewer: r.viewer, day: r.day, reason: r.reason, count: r.n }));
+}
+
+export type MyDayCardData = { date: string; today: string; policy: boolean; hasDevice: boolean; zone: string; day: ActivityDay | null; views: ShotViewRow[]; devices: DeviceRow[] };
+
+/** Everything the "My day" card shows. Nothing is read unless a monitoring policy is published (the tracker is off before that). */
+export async function getMyDayCard(input: unknown): Promise<MyDayCardData> {
+  const user = await requireUser();
+  await authorize(user, "activity.view_own", { ownerUserId: user.id });
+  const person = await personForUser(db, user.id);
+  const { zone } = await prefsFor(db, person.id);
+  // A missing, malformed or future day becomes today (in the person's own zone).
+  const today = formatInZone(Date.now(), zone, "yyyy-MM-dd");
+  const asked = daySchema.safeParse(input);
+  const date = asked.success && asked.data.date <= today ? asked.data.date : today;
+  if (!(await monitoringPolicyPublished(db))) return { date, today, policy: false, hasDevice: false, zone, day: null, views: [], devices: [] };
+  const devices = await db.select().from(trackerDevices).where(and(eq(trackerDevices.employeeId, person.id), eq(trackerDevices.status, "active"))).orderBy(trackerDevices.createdAt).limit(10);
+  const rows: DeviceRow[] = devices.map((d) => ({ id: d.id, employeeId: d.employeeId, name: d.name, os: d.os, appVersion: d.appVersion, lastSeenAt: d.lastSeenAt?.toISOString() ?? null, status: d.status, permissionsOk: d.permissionsOk, queueSize: d.queueSize }));
+  if (rows.length === 0) return { date, today, policy: true, hasDevice: false, zone, day: null, views: [], devices: [] };
+  return { date, today, policy: true, hasDevice: true, zone, day: await dayFor(person.id, date, true), views: await listMyShotViews(), devices: rows };
 }

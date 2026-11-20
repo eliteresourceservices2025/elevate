@@ -71,6 +71,37 @@ describe("a person's own day", () => {
   });
 });
 
+describe("the day's extras", () => {
+  it("carries the clocked-in time and the zone the day is in", async () => {
+    await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${report.employeeId}, 'clock_in', now() - interval '40 minutes')`);
+    as(report);
+    const day = await queries.getMyDay({ date: today });
+    expect(day.zone).toBe('America/Phoenix');
+    expect(day.working.length).toBeGreaterThan(0);
+    expect(Date.parse(day.working[0].end)).toBeGreaterThan(Date.parse(day.working[0].start));
+  });
+});
+
+describe("who looked at my activity", () => {
+  it("lists the lead's and HR's views with their names, reasons and counts, but not my own", async () => {
+    as(lead);
+    await shotActions.viewShot({ shotId, reason: 'coaching' });
+    as(hr);
+    await shotActions.viewShot({ shotId, reason: 'dispute' });
+    as(report);
+    await shotActions.viewShot({ shotId, reason: 'coaching' });
+    const views = await queries.listMyShotViews();
+    expect(views.length).toBeGreaterThanOrEqual(2);
+    expect(views.every((v) => v.viewer.length > 0 && v.count >= 1)).toBe(true);
+    expect(views.map((v) => v.reason)).toEqual(expect.arrayContaining(['coaching', 'dispute']));
+    expect(views.some((v) => v.reason === "own")).toBe(false); // the person's own views are not "someone looked"
+  });
+  it("shows a person nothing about someone else's screenshots", async () => {
+    as(stranger);
+    expect(await queries.listMyShotViews()).toEqual([]);
+  });
+});
+
 describe("someone else's day", () => {
   it("is open to their lead, to HR, and to nobody unrelated", async () => {
     as(lead);

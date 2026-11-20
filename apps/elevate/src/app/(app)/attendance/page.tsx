@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
 import { listRecordsToClaim } from "@/modules/people/duplicates-queries";
 import { MyTimeOverview } from "@/modules/attendance/components/my-time";
+import { MyDayCard } from "@/modules/activity/components/my-day";
 import { AutoRefresh } from "@/modules/attendance/components/auto-refresh";
 import { CorrectionForm, CorrectionList, FileForOthersForm, PreferencesForm, RulesForm, SetupProfileForm } from "@/modules/attendance/components/attendance-forms";
 import { BulkCorrectionsPanel } from "@/modules/attendance/components/bulk-corrections-panel";
