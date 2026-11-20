@@ -9,6 +9,8 @@ export const activityPermissions = definePermissions({
   "tracker.enroll": { roles: EVERYONE_OWN },
   // Signing a computer out: the person for their own, HR and Super Admin for anyone.
   "tracker.revoke_device": { roles: { super_admin: "all", hr_admin: "all", employee: "own", team_lead: "own", recruiter: "own", executive: "own" } },
+  // One's own day and own screenshots, for anyone who enrolled a computer (people can always see what is recorded about them).
+  "activity.view_own": { roles: EVERYONE_OWN },
   // A day's timeline and totals: own, a lead's team (time chain), HR and Super Admin everyone.
   "activity.view": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team", employee: "own" } },
   // Aggregates only (groups under 5 hidden), including the Executive.

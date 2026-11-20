@@ -11,8 +11,8 @@ import { writeAudit } from "@/modules/audit/write";
 import { monitoringPolicyPublished, personForUser } from "@/modules/attendance/service";
 import { employees } from "@/modules/people/schema";
 import { ENROLLMENT_TTL_MS, hashSecret, newEnrollmentCode } from "./device-token";
-import { trackerDevices, trackerEnrollmentCodes } from "./schema";
-import { revokeDeviceSchema } from "./validators";
+import { activityCategories, trackerDevices, trackerEnrollmentCodes } from "./schema";
+import { categorySchema, revokeDeviceSchema } from "./validators";
 
 // Person-facing actions of the ELEVATE Tracker. The app itself talks to /api/tracker/* with a device token instead.
 
@@ -59,5 +59,21 @@ export async function revokeDevice(input: unknown): Promise<ActionResult> {
     });
     refresh();
     return { ok: true, data: undefined };
+  });
+}
+
+/** Adds an app -> work / non-work rule. The highest rank wins when several match; totals pick it up the next time they are rebuilt. */
+export async function saveCategory(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "activity.manage");
+    const parsed = categorySchema.safeParse(input);
+    if (!parsed.success) return fail("Enter a valid app pattern, a category and a rank from 1 to 100.");
+    const id = await db.transaction(async (tx) => {
+      const [row] = await tx.insert(activityCategories).values({ pattern: parsed.data.pattern, category: parsed.data.category, rank: parsed.data.rank, createdBy: actor.id }).returning({ id: activityCategories.id });
+      await writeAudit({ actor, action: "activity.category_saved", targetType: "activity_category", targetId: row.id, metadata: { category: parsed.data.category, rank: parsed.data.rank } }, tx);
+      return row.id;
+    });
+    return { ok: true, data: { id } };
   });
 }

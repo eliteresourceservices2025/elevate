@@ -7,7 +7,7 @@ import { addDays } from "@/modules/attendance/schedule";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { hrUserIds, notify } from "@/modules/notifications/service";
 import { reportName, timeNoticeUserIds } from "@/modules/org/service";
-import { categorize, type CategoryRule } from "./logic";
+import { summarizeDay, type CategoryRule } from "./logic";
 import { activityCategories, activityMinutes, activitySettings, trackerOfflineNotices } from "./schema";
 
 // Background work of the ELEVATE Tracker (no signed-in person). src/inngest wraps these in scheduled functions.
@@ -39,36 +39,13 @@ export async function rebuildActivityMinutes(date: string, onlyEmployeeId?: stri
       from time.activity_segments
       where employee_id = ${employeeId} and started_at < to_timestamp(${dayEnd / 1000}) and ended_at > to_timestamp(${dayStart / 1000})`)) as unknown as { app: string; state: string; s: number; e: number }[];
 
-    let activeMs = 0;
-    let idleMs = 0;
-    let workMs = 0;
-    let nonWorkMs = 0;
-    const perApp = new Map<string, number>();
-    for (const r of segs) {
-      const ms = Math.min(Number(r.e), dayEnd) - Math.max(Number(r.s), dayStart);
-      if (ms <= 0) continue;
-      if (r.state === "idle") {
-        idleMs += ms;
-        continue;
-      }
-      activeMs += ms;
-      perApp.set(r.app, (perApp.get(r.app) ?? 0) + ms);
-      const category = categorize(r.app, rules);
-      if (category === "work") workMs += ms;
-      else if (category === "non_work") nonWorkMs += ms;
-    }
-    const topApps = [...perApp.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([app, ms]) => ({ app, minutes: Math.round(ms / MINUTE) }));
-    const values = {
-      activeMinutes: Math.round(activeMs / MINUTE),
-      idleMinutes: Math.round(idleMs / MINUTE),
-      workMinutes: Math.round(workMs / MINUTE),
-      nonWorkMinutes: Math.round(nonWorkMs / MINUTE),
-      topApps,
-      rebuiltAt: new Date(),
-    };
+    const summary = summarizeDay(
+      segs.map((r) => ({ start: Number(r.s), end: Number(r.e), app: r.app, state: r.state as "active" | "idle" })),
+      dayStart,
+      dayEnd,
+      rules,
+    );
+    const values = { ...summary, rebuiltAt: new Date() };
     await db.insert(activityMinutes).values({ employeeId, date, ...values }).onConflictDoUpdate({ target: [activityMinutes.employeeId, activityMinutes.date], set: values });
   }
   return { people: ids.length };

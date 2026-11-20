@@ -151,3 +151,32 @@ export function trackerFlags(i: TrackerFlagInput): string[] {
   if (i.workingMs >= HOUR && i.shots === 0) flags.push("no_shots");
   return flags;
 }
+
+export type DaySummary = { activeMinutes: number; idleMinutes: number; workMinutes: number; nonWorkMinutes: number; topApps: { app: string; minutes: number }[] };
+
+/** One day's totals from segments (only the part inside [dayStartMs, dayEndMs) counts). Used by the nightly rollup and the live day view. */
+export function summarizeDay(segments: readonly RawSegment[], dayStartMs: number, dayEndMs: number, rules: readonly CategoryRule[]): DaySummary {
+  let activeMs = 0;
+  let idleMs = 0;
+  let workMs = 0;
+  let nonWorkMs = 0;
+  const perApp = new Map<string, number>();
+  for (const s of segments) {
+    const ms = Math.min(s.end, dayEndMs) - Math.max(s.start, dayStartMs);
+    if (ms <= 0) continue;
+    if (s.state === "idle") {
+      idleMs += ms;
+      continue;
+    }
+    activeMs += ms;
+    perApp.set(s.app, (perApp.get(s.app) ?? 0) + ms);
+    const category = categorize(s.app, rules);
+    if (category === "work") workMs += ms;
+    else if (category === "non_work") nonWorkMs += ms;
+  }
+  const topApps = [...perApp.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([app, ms]) => ({ app, minutes: Math.round(ms / MINUTE) }));
+  return { activeMinutes: Math.round(activeMs / MINUTE), idleMinutes: Math.round(idleMs / MINUTE), workMinutes: Math.round(workMs / MINUTE), nonWorkMinutes: Math.round(nonWorkMs / MINUTE), topApps };
+}

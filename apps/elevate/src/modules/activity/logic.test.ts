@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeMinutes, activePercent, categorize, clipToIntervals, dropOverlaps, isTrackerOffline, sanitizeApp, shotWindow, trackerFlags, validateSegment, workingIntervals, type RawSegment } from "./logic";
+import { activeMinutes, activePercent, categorize, clipToIntervals, dropOverlaps, isTrackerOffline, sanitizeApp, shotWindow, summarizeDay, trackerFlags, validateSegment, workingIntervals, type RawSegment } from "./logic";
 
 const MIN = 60_000;
 const T0 = Date.UTC(2026, 10, 19, 10, 0, 0);
@@ -150,5 +150,32 @@ describe("trackerFlags", () => {
   it("flags no_shots after an hour of work with none", () => {
     expect(trackerFlags({ ...base, shots: 0 })).toEqual(["no_shots"]);
     expect(trackerFlags({ ...base, workingMs: 59 * MIN, coveredMs: 59 * MIN, shots: 0 })).toEqual([]);
+  });
+});
+
+describe("summarizeDay", () => {
+  const rules = [
+    { pattern: "^chrome$", category: "work" as const, rank: 10 },
+    { pattern: "^spotify$", category: "non_work" as const, rank: 10 },
+  ];
+  const day0 = T0;
+  const day1 = T0 + 24 * 60 * MIN;
+  it("totals active, idle, work and non-work minutes, with the top apps by active time", () => {
+    const out = summarizeDay([seg(0, 60), seg(60, 90, "idle"), seg(90, 105, "active", "Spotify")], day0, day1, rules);
+    expect(out).toEqual({
+      activeMinutes: 75,
+      idleMinutes: 30,
+      workMinutes: 60,
+      nonWorkMinutes: 15,
+      topApps: [{ app: "Chrome", minutes: 60 }, { app: "Spotify", minutes: 15 }],
+    });
+  });
+  it("counts only the part of a segment inside the day", () => {
+    const out = summarizeDay([{ start: day0 - 10 * MIN, end: day0 + 20 * MIN, app: "Chrome", state: "active" }], day0, day1, rules);
+    expect(out.activeMinutes).toBe(20);
+  });
+  it("keeps at most 10 apps", () => {
+    const many = Array.from({ length: 15 }, (_, i) => seg(i * 2, i * 2 + 1, "active", `App${i}`));
+    expect(summarizeDay(many, day0, day1, []).topApps).toHaveLength(10);
   });
 });
