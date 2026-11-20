@@ -74,6 +74,13 @@ describe("listAllDevices", () => {
     expect(second.rows.map((r) => r.id)).not.toEqual(expect.arrayContaining(first.rows.map((r) => r.id)));
   });
 
+  it("snaps a page past the end to the last page instead of showing an empty list", async () => {
+    current.user = hr.user;
+    const far = await queries.listAllDevices({ filter: "all", page: 99, pageSize: 2 });
+    expect(far.rows.length).toBeGreaterThan(0);
+    expect(far.page).toBe(Math.ceil(far.total / 2));
+  });
+
   it("is refused to everyone but HR and Super Admin", async () => {
     current.user = (await person(["team_lead", "employee"])).user;
     await expect(queries.listAllDevices({ filter: "all", page: 1, pageSize: 25 })).rejects.toThrow();

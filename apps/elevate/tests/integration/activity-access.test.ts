@@ -43,6 +43,8 @@ let hr: Person;
 let executive: Person;
 let shotId: string;
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Phoenix" }).format(new Date()); // yyyy-mm-dd, the company day
+// The fixtures were recorded 10 to 20 minutes ago, so they belong to the day that moment fell on (not always today: just after midnight it is yesterday).
+const fixtureDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Phoenix" }).format(new Date(Date.now() - 20 * MIN));
 
 beforeAll(async () => {
   setDocumentStorage(fake);
@@ -62,10 +64,10 @@ beforeAll(async () => {
 describe("a person's own day", () => {
   it("is open to them, including every role with no other tracker access", async () => {
     as(executive);
-    const day = await queries.getMyDay({ date: today });
-    expect(day.date).toBe(today);
+    const day = await queries.getMyDay({ date: fixtureDay });
+    expect(day.date).toBe(fixtureDay);
     as(report);
-    const mine = await queries.getMyDay({ date: today });
+    const mine = await queries.getMyDay({ date: fixtureDay });
     expect(mine.topApps[0]?.app).toBe("ZzApp");
     expect(mine.shots).toHaveLength(1);
   });
@@ -75,7 +77,7 @@ describe("the day's extras", () => {
   it("carries the clocked-in time and the zone the day is in", async () => {
     await db.execute(sql`insert into time.clock_events (employee_id, type, occurred_at) values (${report.employeeId}, 'clock_in', now() - interval '40 minutes')`);
     as(report);
-    const day = await queries.getMyDay({ date: today });
+    const day = await queries.getMyDay({ date: fixtureDay });
     expect(day.zone).toBe('America/Phoenix');
     expect(day.working.length).toBeGreaterThan(0);
     expect(Date.parse(day.working[0].end)).toBeGreaterThan(Date.parse(day.working[0].start));
@@ -105,12 +107,12 @@ describe("who looked at my activity", () => {
 describe("the person page's data", () => {
   it("names the person, says whether it is their own day, and keeps to a valid day", async () => {
     as(hr);
-    const theirs = await queries.getPersonDay({ employeeId: report.employeeId, date: today });
+    const theirs = await queries.getPersonDay({ employeeId: report.employeeId, date: fixtureDay });
     expect(theirs.person.name.length).toBeGreaterThan(0);
     expect(theirs.own).toBe(false);
     expect(theirs.canShots).toBe(true);
     as(report);
-    expect((await queries.getPersonDay({ employeeId: report.employeeId, date: today })).own).toBe(true);
+    expect((await queries.getPersonDay({ employeeId: report.employeeId, date: fixtureDay })).own).toBe(true);
   });
   it("turns a future or malformed day into today instead of failing", async () => {
     as(hr);
@@ -123,13 +125,13 @@ describe("the person page's data", () => {
 describe("someone else's day", () => {
   it("is open to their lead, to HR, and to nobody unrelated", async () => {
     as(lead);
-    expect((await queries.getPersonDay({ employeeId: report.employeeId, date: today })).shots).toHaveLength(1);
+    expect((await queries.getPersonDay({ employeeId: report.employeeId, date: fixtureDay })).shots).toHaveLength(1);
     as(hr);
-    expect((await queries.getPersonDay({ employeeId: report.employeeId, date: today })).minutes.active).toBeGreaterThan(0);
+    expect((await queries.getPersonDay({ employeeId: report.employeeId, date: fixtureDay })).minutes.active).toBeGreaterThan(0);
     as(stranger);
-    await expect(queries.getPersonDay({ employeeId: report.employeeId, date: today })).rejects.toThrow();
+    await expect(queries.getPersonDay({ employeeId: report.employeeId, date: fixtureDay })).rejects.toThrow();
     as(executive);
-    await expect(queries.getPersonDay({ employeeId: report.employeeId, date: today })).rejects.toThrow();
+    await expect(queries.getPersonDay({ employeeId: report.employeeId, date: fixtureDay })).rejects.toThrow();
   });
 });
 

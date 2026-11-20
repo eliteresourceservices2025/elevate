@@ -112,6 +112,7 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
           <div className="space-y-6">
             {mine.days.some((d) => d.open) ? <AutoRefresh seconds={30} /> : null}
             <MyTimeOverview mine={mine} />
+            <MyDayCard date={typeof params.day === "string" ? params.day : undefined} />
 
             <div className="grid items-start gap-6 lg:grid-cols-2">
               <section aria-label="My corrections" className="space-y-3">

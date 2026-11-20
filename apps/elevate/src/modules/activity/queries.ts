@@ -289,11 +289,13 @@ export type FleetRow = DeviceRow & { person: string };
 export async function listAllDevices(input: unknown): Promise<{ rows: FleetRow[]; total: number; page: number; pageSize: number }> {
   const user = await requireUser();
   await authorize(user, "activity.manage");
-  const { filter, page, pageSize } = allDevicesSchema.parse(input ?? {});
+  const { filter, page: asked, pageSize } = allDevicesSchema.parse(input ?? {});
   const where = filter === "attention"
     ? sql`where d.status = 'active' and (d.permissions_ok = false or d.last_seen_at is null or d.last_seen_at < now() - interval '1 day' or d.queue_size > 100)`
     : sql``;
   const [count] = (await db.execute(sql`select count(*)::int as n from time.tracker_devices d ${where}`)) as unknown as { n: number }[];
+  // A page past the end (a stale link after sign-outs) shows the last page, not an empty list.
+  const page = Math.min(asked, Math.max(1, Math.ceil((count?.n ?? 0) / pageSize)));
   const found = (await db.execute(sql`
     select d.id, d.employee_id, d.name, d.os, d.app_version, d.last_seen_at, d.status, d.permissions_ok, d.queue_size,
            e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred

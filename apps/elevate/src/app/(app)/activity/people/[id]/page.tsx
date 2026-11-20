@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth";
 import { orNotFound } from "@/lib/or-not-found";
-import { DayBody } from "@/modules/activity/components/my-day";
+import { DayBody } from "@/modules/activity/components/day-body";
 import { DayPicker } from "@/modules/activity/components/day-picker";
 import { ShotGallery } from "@/modules/activity/components/shot-gallery";
 import { getPersonDay } from "@/modules/activity/queries";
