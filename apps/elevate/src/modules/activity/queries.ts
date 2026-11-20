@@ -10,7 +10,7 @@ import { personForUser, prefsFor } from "@/modules/attendance/service";
 import { reportName, timeDownlineEmployeeIds, todayInZone } from "@/modules/org/service";
 import { authorizeForEmployee, requireScope } from "./access";
 import { activePercent, summarizeDay, type CategoryRule, type DaySummary } from "./logic";
-import { activityCategories, activityShots, trackerDevices } from "./schema";
+import { activityCategories, activitySettings, activityShots, trackerDevices } from "./schema";
 import { daySchema, deviceListSchema, floorSchema, personDaySchema } from "./validators";
 
 // Reads for the ELEVATE Tracker pages. Every query starts with requireUser(), then checks its permission before touching the database.
@@ -182,4 +182,19 @@ export async function listDevices(input: unknown): Promise<DeviceRow[]> {
   }
   const rows = await db.select().from(trackerDevices).where(eq(trackerDevices.employeeId, employeeId)).orderBy(trackerDevices.createdAt).limit(50);
   return rows.map((d) => ({ id: d.id, employeeId: d.employeeId, name: d.name, os: d.os, appVersion: d.appVersion, lastSeenAt: d.lastSeenAt?.toISOString() ?? null, status: d.status, permissionsOk: d.permissionsOk, queueSize: d.queueSize }));
+}
+
+export type ActivitySettingsView = { idleTimeoutSeconds: number; offlineGraceMinutes: number; lowActivityPercent: number; updatedAt: string | null };
+
+/** The company-wide thresholds (defaults when nobody has saved any). */
+export async function getActivitySettings(): Promise<ActivitySettingsView> {
+  const user = await requireUser();
+  await authorize(user, "activity.manage");
+  const [row] = await db.select().from(activitySettings).where(eq(activitySettings.scope, "default")).limit(1);
+  return {
+    idleTimeoutSeconds: row?.idleTimeoutSeconds ?? 180,
+    offlineGraceMinutes: row?.offlineGraceMinutes ?? 5,
+    lowActivityPercent: row?.lowActivityPercent ?? 30,
+    updatedAt: row?.updatedAt.toISOString() ?? null,
+  };
 }

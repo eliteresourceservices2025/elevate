@@ -12,8 +12,8 @@ import { clockSourceOf } from "@/modules/attendance/clock-source";
 import { monitoringPolicyPublished, personForUser } from "@/modules/attendance/service";
 import { employees } from "@/modules/people/schema";
 import { ENROLLMENT_TTL_MS, hashSecret, newEnrollmentCode } from "./device-token";
-import { activityCategories, trackerDevices, trackerEnrollmentCodes } from "./schema";
-import { categorySchema, revokeDeviceSchema } from "./validators";
+import { activityCategories, activitySettings, trackerDevices, trackerEnrollmentCodes } from "./schema";
+import { activitySettingsSchema, archiveCategorySchema, categorySchema, revokeDeviceSchema } from "./validators";
 
 // Person-facing actions of the ELEVATE Tracker. The app itself talks to /api/tracker/* with a device token instead.
 
@@ -77,5 +77,52 @@ export async function saveCategory(input: unknown): Promise<ActionResult<{ id: s
       return row.id;
     });
     return { ok: true, data: { id } };
+  });
+}
+
+/** Changes the company-wide thresholds the app and the nightly flags use. Past days are not rewritten; the numbers apply from now on. */
+export async function saveActivitySettings(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "activity.manage");
+    const parsed = activitySettingsSchema.safeParse(input);
+    if (!parsed.success) return fail("Idle time must be 60 to 900 seconds, the offline wait 2 to 60 minutes and low activity 5 to 90 percent.");
+    await db.transaction(async (tx) => {
+      const [before] = await tx.select().from(activitySettings).where(eq(activitySettings.scope, "default")).limit(1);
+      const values = { ...parsed.data, updatedAt: new Date() };
+      await tx.insert(activitySettings).values({ scope: "default", ...values }).onConflictDoUpdate({ target: activitySettings.scope, set: values });
+      await writeAudit(
+        {
+          actor,
+          action: "activity.settings_saved",
+          targetType: "activity_settings",
+          targetId: "default",
+          before: before ? { idleTimeoutSeconds: before.idleTimeoutSeconds, offlineGraceMinutes: before.offlineGraceMinutes, lowActivityPercent: before.lowActivityPercent } : null,
+          after: parsed.data,
+        },
+        tx,
+      );
+    });
+    revalidatePath("/settings/tracker");
+    return { ok: true, data: undefined };
+  });
+}
+
+/** Retires a work/non-work rule. It stops counting the next time totals are rebuilt. */
+export async function archiveCategory(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+  return runAction(async () => {
+    await authorize(actor, "activity.manage");
+    const parsed = archiveCategorySchema.safeParse(input);
+    if (!parsed.success) return fail("Choose a rule.");
+    const done = await db.transaction(async (tx) => {
+      const rows = await tx.update(activityCategories).set({ archivedAt: new Date() }).where(and(eq(activityCategories.id, parsed.data.id), isNull(activityCategories.archivedAt))).returning({ id: activityCategories.id });
+      if (rows.length === 0) return false;
+      await writeAudit({ actor, action: "activity.category_archived", targetType: "activity_category", targetId: parsed.data.id }, tx);
+      return true;
+    });
+    if (!done) return fail("That rule was not found.");
+    revalidatePath("/settings/tracker");
+    return { ok: true, data: undefined };
   });
 }

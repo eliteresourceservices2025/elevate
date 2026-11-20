@@ -32,6 +32,8 @@ const actionCases: ActionCase[] = [
   { name: "createEnrollmentCode", call: () => actions.createEnrollmentCode(), allowed: ALL },
   { name: "revokeDevice", call: () => actions.revokeDevice({ deviceId: OTHER }), allowed: ALL },
   { name: "saveCategory", call: () => actions.saveCategory({ pattern: "^zoom$", category: "work", rank: 10 }), allowed: ["super_admin", "hr_admin"] },
+  { name: "saveActivitySettings", call: () => actions.saveActivitySettings({ idleTimeoutSeconds: 180, offlineGraceMinutes: 5, lowActivityPercent: 30 }), allowed: ["super_admin", "hr_admin"] },
+  { name: "archiveCategory", call: () => actions.archiveCategory({ id: OTHER }), allowed: ["super_admin", "hr_admin"] },
   // Anyone may open their own screenshots, so every role reaches the lookup; others' screenshots are checked in tests/integration/activity-access.test.ts.
   { name: "viewShot", call: () => shotActions.viewShot({ shotId: OTHER, reason: "coaching" }), allowed: ALL },
 ];
@@ -60,6 +62,7 @@ describe("tracker queries, every role", () => {
     { name: "getMyDay", call: () => queries.getMyDay({ date: "2026-11-10" }), allowed: ALL },
     { name: "getPersonDay", call: () => queries.getPersonDay({ employeeId: OTHER, date: "2026-11-10" }), allowed: ["super_admin", "hr_admin", "team_lead", "employee"] },
     { name: "listFloor", call: () => queries.listFloor({}), allowed: ["super_admin", "hr_admin", "team_lead"] },
+    { name: "getActivitySettings", call: () => queries.getActivitySettings(), allowed: ["super_admin", "hr_admin"] },
     { name: "listCategories", call: () => queries.listCategories(), allowed: ["super_admin", "hr_admin"] },
     { name: "listDevices (everyone's)", call: () => queries.listDevices({ employeeId: OTHER }), allowed: ["super_admin", "hr_admin"] },
     { name: "listDevices (own)", call: () => queries.listDevices({}), allowed: ALL },

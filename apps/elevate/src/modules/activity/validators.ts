@@ -57,3 +57,12 @@ export const categorySchema = z.object({
   category: z.enum(["work", "non_work"]),
   rank: z.number().int().min(1).max(100),
 });
+
+export const activitySettingsSchema = z.object({
+  idleTimeoutSeconds: z.number().int().min(60).max(900),
+  offlineGraceMinutes: z.number().int().min(2).max(60),
+  lowActivityPercent: z.number().int().min(5).max(90),
+});
+export type ActivitySettingsInput = z.infer<typeof activitySettingsSchema>;
+
+export const archiveCategorySchema = z.object({ id: uuid });
