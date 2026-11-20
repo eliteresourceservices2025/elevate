@@ -33,7 +33,8 @@ export const shotFinalizeSchema = z.object({ shotId: uuid });
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((v) => Number.isFinite(Date.parse(`${v}T00:00:00Z`)), "Not a date");
 
 export const daySchema = z.object({ date: dateOnly });
-export const personDaySchema = z.object({ employeeId: uuid, date: dateOnly });
+// A missing or malformed day is not an error: the query shows today (in the person's own zone).
+export const personDaySchema = z.object({ employeeId: uuid, date: dateOnly.optional().catch(undefined) });
 export const floorSchema = z.object({ teamId: uuid.optional() });
 export const deviceListSchema = z.object({ employeeId: uuid.optional() });
 

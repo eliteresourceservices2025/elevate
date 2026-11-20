@@ -102,6 +102,24 @@ describe("who looked at my activity", () => {
   });
 });
 
+describe("the person page's data", () => {
+  it("names the person, says whether it is their own day, and keeps to a valid day", async () => {
+    as(hr);
+    const theirs = await queries.getPersonDay({ employeeId: report.employeeId, date: today });
+    expect(theirs.person.name.length).toBeGreaterThan(0);
+    expect(theirs.own).toBe(false);
+    expect(theirs.canShots).toBe(true);
+    as(report);
+    expect((await queries.getPersonDay({ employeeId: report.employeeId, date: today })).own).toBe(true);
+  });
+  it("turns a future or malformed day into today instead of failing", async () => {
+    as(hr);
+    expect((await queries.getPersonDay({ employeeId: report.employeeId, date: "2999-01-01" })).date).toBe(today);
+    expect((await queries.getPersonDay({ employeeId: report.employeeId, date: "garbage" })).date).toBe(today);
+    expect((await queries.getPersonDay({ employeeId: report.employeeId })).date).toBe(today);
+  });
+});
+
 describe("someone else's day", () => {
   it("is open to their lead, to HR, and to nobody unrelated", async () => {
     as(lead);

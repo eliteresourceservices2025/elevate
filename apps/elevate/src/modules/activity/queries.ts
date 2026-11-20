@@ -86,19 +86,42 @@ export async function getMyDay(input: unknown): Promise<ActivityDay> {
   return dayFor(person.id, parsed.date, true);
 }
 
+export type PersonDay = ActivityDay & {
+  person: { name: string; team: string | null };
+  /** True when the viewer is looking at their own day. */
+  own: boolean;
+  /** Whether the viewer may open this person's screenshots (the list is empty when not). */
+  canShots: boolean;
+  viewerZone: string;
+  today: string;
+};
+
 /** One person's day: their own, a team's (time chain) or anyone's, by role. Screenshots only for those who may see them. */
-export async function getPersonDay(input: unknown): Promise<ActivityDay> {
+export async function getPersonDay(input: unknown): Promise<PersonDay> {
   const user = await requireUser();
   requireScope(user, "activity.view");
   const parsed = personDaySchema.parse(input);
-  await authorizeForEmployee(user, "activity.view", parsed.employeeId);
+  const { ownerUserId } = await authorizeForEmployee(user, "activity.view", parsed.employeeId);
   let canShots = true;
   try {
     await authorizeForEmployee(user, "activity.view_shots", parsed.employeeId);
   } catch {
     canShots = false;
   }
-  return dayFor(parsed.employeeId, parsed.date, canShots);
+  const { zone } = await prefsFor(db, parsed.employeeId);
+  const today = formatInZone(Date.now(), zone, "yyyy-MM-dd");
+  const date = parsed.date && parsed.date <= today ? parsed.date : today;
+  const [who] = (await db.execute(sql`
+    select e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred, t.name as team
+    from core.employees e left join core.teams t on t.id = e.team_id where e.id = ${parsed.employeeId}`)) as unknown as { first: string; last: string; preferred: string | null; team: string | null }[];
+  let viewerZone = DEFAULT_TIMEZONE;
+  try {
+    viewerZone = (await prefsFor(db, (await personForUser(db, user.id)).id)).zone;
+  } catch {
+    // The viewer has no people record: the company zone.
+  }
+  const day = await dayFor(parsed.employeeId, date, canShots);
+  return { ...day, person: { name: reportName({ first: who.first, last: who.last, preferred: who.preferred }), team: who.team }, own: ownerUserId === user.id, canShots, viewerZone, today };
 }
 
 export type FloorState = "active" | "idle" | "break" | "offline" | "out";
