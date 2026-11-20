@@ -82,6 +82,8 @@ const EXPECTED: Record<string, string> = {
   "attendance.view": "A A T - - O",
   "attendance.view_summary": "A A T - A -",
   "tracker.enroll": "O O O O O O",
+  "tracker.download": "O O O O O O",
+  "tracker.manage_releases": "A A - - - -",
   "tracker.revoke_device": "A A O O O O",
   "activity.view_own": "O O O O O O",
   "activity.view": "A A T - - O",

@@ -73,3 +73,14 @@ export const allDevicesSchema = z.object({
   page: z.number().int().min(1).max(10_000).catch(1),
   pageSize: z.number().int().min(1).max(100).catch(25),
 });
+
+export const createReleaseSchema = z.object({
+  version: z.string().trim().min(1).max(20),
+  added: z.string().max(5000),
+  improved: z.string().max(5000),
+  fixed: z.string().max(5000),
+  minRequired: z.boolean(),
+  addsCollection: z.boolean(),
+  policyVersionId: uuid.nullable(),
+});
+export const releaseIdSchema = z.object({ id: uuid });
