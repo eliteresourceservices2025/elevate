@@ -1,10 +1,13 @@
 import "server-only";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { authorize } from "@/lib/authz";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { monitoringPolicyPublished, personForUser } from "@/modules/attendance/service";
+import type { DeviceRow } from "./queries";
 import { isNewer, type Platform, type ReleaseNotes } from "./releases-logic";
-import { trackerReleaseBuilds, trackerReleases } from "./schema";
+import { getPublishedReleases, type PublishedRelease } from "./releases-service";
+import { trackerDevices, trackerReleaseBuilds, trackerReleases } from "./schema";
 
 export type AdminRelease = {
   id: string;
@@ -42,4 +45,22 @@ export async function listReleasesAdmin(): Promise<AdminRelease[]> {
       };
     })
     .sort((a, b) => (isNewer(a.version, b.version) ? -1 : isNewer(b.version, a.version) ? 1 : 0));
+}
+
+export type DownloadPageData = { policy: boolean; current: PublishedRelease | null; releases: PublishedRelease[]; devices: DeviceRow[] };
+
+/** Everything the download page shows: published releases (never drafts or withdrawn ones), the newest as current, and the person's own computers. */
+export async function getDownloadPage(): Promise<DownloadPageData> {
+  const user = await requireUser();
+  await authorize(user, "tracker.download", { ownerUserId: user.id });
+  const releases = (await getPublishedReleases()).filter((r) => r.status === "published");
+  let devices: DeviceRow[] = [];
+  try {
+    const person = await personForUser(db, user.id);
+    const mine = await db.select().from(trackerDevices).where(and(eq(trackerDevices.employeeId, person.id), eq(trackerDevices.status, "active"))).orderBy(trackerDevices.createdAt).limit(10);
+    devices = mine.map((d) => ({ id: d.id, employeeId: d.employeeId, name: d.name, os: d.os, appVersion: d.appVersion, lastSeenAt: d.lastSeenAt?.toISOString() ?? null, status: d.status, permissionsOk: d.permissionsOk, queueSize: d.queueSize }));
+  } catch {
+    // No people record yet: the page still works, with no computers listed.
+  }
+  return { policy: await monitoringPolicyPublished(db), current: releases[0] ?? null, releases, devices };
 }

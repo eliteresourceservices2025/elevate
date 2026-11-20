@@ -24,3 +24,9 @@ describe("hiddenNavFor and the Activity menu item", () => {
     for (const role of ["employee", "recruiter", "executive"] as const) expect(hiddenNavFor(user([role]))).toContain("/activity");
   });
 });
+
+describe("hiddenNavFor and the ELEVATE Tracker App menu item", () => {
+  it("shows it to every role", () => {
+    for (const role of ["super_admin", "hr_admin", "team_lead", "recruiter", "executive", "employee"] as const) expect(hiddenNavFor(user([role]))).not.toContain("/tracker/download");
+  });
+});

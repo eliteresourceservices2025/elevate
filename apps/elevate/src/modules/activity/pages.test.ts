@@ -18,4 +18,10 @@ describe("tracker pages are wired in", () => {
     expect(read("app/(app)/activity/people/[id]/page.tsx")).toMatch(/<DayBody\b/);
     expect(read("app/(app)/activity/devices/page.tsx")).toMatch(/<DevicesTable\b/);
   });
+  it("the download page renders the buttons, the steps' enrollment dialog and the release notes", () => {
+    const page = read("app/(app)/tracker/download/page.tsx");
+    expect(page).toMatch(/<DownloadHero/);
+    expect(page).toMatch(/<EnrollDialog/);
+    expect(page).toMatch(/<ReleaseList/);
+  });
 });
