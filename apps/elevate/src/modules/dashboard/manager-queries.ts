@@ -165,3 +165,31 @@ export async function getTimeOffCounts(): Promise<TimeOffDay[]> {
   if (!data) return [];
   return data.days.filter((d) => d.count > 0 || d.holidays.length > 0).map((d) => ({ label: d.label, count: d.count, holidays: d.holidays }));
 }
+
+// ---- Super Admin ---------------------------------------------------------------------------------------------------------------
+// Counts from the audit log and the invitation list. Super Admin only (the audit log's own rule); the content of an entry is never selected.
+
+export type AccessCounts = { invitationsPending: number; roleChangesWeek: number; mfaResetsWeek: number };
+
+export async function getAccessCounts(): Promise<AccessCounts> {
+  const user = await requireUser();
+  await authorize(user, "settings.view_audit");
+  const [r] = (await db.execute(sql`
+    select (select count(*)::int from core.invitations where accepted_at is null and expires_at > now()) as invitations_pending,
+           (select count(*)::int from ops.audit_log where action = 'roles.update' and occurred_at > now() - interval '7 days') as role_changes,
+           (select count(*)::int from ops.audit_log where action = 'user.mfa_reset' and occurred_at > now() - interval '7 days') as mfa_resets`)) as unknown as { invitations_pending: number; role_changes: number; mfa_resets: number }[];
+  return { invitationsPending: r?.invitations_pending ?? 0, roleChangesWeek: r?.role_changes ?? 0, mfaResetsWeek: r?.mfa_resets ?? 0 };
+}
+
+export type AuditHighlights = { exportsWeek: number; sensitiveViewsWeek: number; importsWeek: number };
+
+export async function getAuditHighlights(): Promise<AuditHighlights> {
+  const user = await requireUser();
+  await authorize(user, "settings.view_audit");
+  const [r] = (await db.execute(sql`
+    select (count(*) filter (where action like '%export%'))::int as exports,
+           (count(*) filter (where action = 'sensitive.view'))::int as sensitive_views,
+           (count(*) filter (where action like 'import.%' or action like 'imports.%' or action like 'scheduleimport.%'))::int as imports
+    from ops.audit_log where occurred_at > now() - interval '7 days'`)) as unknown as { exports: number; sensitive_views: number; imports: number }[];
+  return { exportsWeek: r?.exports ?? 0, sensitiveViewsWeek: r?.sensitive_views ?? 0, importsWeek: r?.imports ?? 0 };
+}

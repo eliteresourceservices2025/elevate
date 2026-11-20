@@ -60,3 +60,22 @@ test("an executive sees headline tiles with counts only: no person's name outsid
   }
   await expect(page.getByRole("region", { name: "System health", exact: true })).toContainText(/on time|late/);
 });
+
+test("a recruiter sees the hiring tiles", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, await createEmployeeAccount("Rex", `Recruit${Date.now().toString(36)}`, { roles: ["recruiter"] }));
+  await regions(page, ["Me", "Pipeline by stage", "Offers pending", "Interviews", "New applicants waiting", "Open roles", "Talent pool", "Celebrations"]);
+  await expect(page.getByRole("region", { name: "Offers pending", exact: true })).toContainText("Awaiting signature");
+  await expect(page.getByRole("region", { name: "Needs your decision", exact: true })).toHaveCount(0);
+});
+
+test("a Super Admin sees the admin tiles with counts only", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, await createEmployeeAccount("Ada", `Admin${Date.now().toString(36)}`, { roles: ["super_admin"] }));
+  await regions(page, ["Me", "System health", "Risks", "Needs your decision", "Access", "Audit highlights", "Celebrations"]);
+  await expect(page.getByRole("region", { name: "Access", exact: true })).toContainText("Invitations pending");
+  await expect(page.getByRole("region", { name: "Audit highlights", exact: true })).toContainText("Exports this week");
+  await expect(page.getByRole("region", { name: "Key numbers" })).toHaveCount(0);
+});
