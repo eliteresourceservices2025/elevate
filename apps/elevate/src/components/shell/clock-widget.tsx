@@ -397,6 +397,8 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   // What a person can clock in for or switch to: each client with no projects, and each project (plus "no specific project") of a client that has some.
   const choices = workChoices(status.clients);
   const needsChoice = choices.length > 1;
+  // The header is tight (the sidebar and two clocks take room): with a Switch button, the text of Break and Clock out waits for a very wide screen.
+  const clockLabel = needsChoice ? "max-2xl:sr-only" : "max-sm:sr-only";
   const currentChoice = choices.find((c) => c.clientId === status.currentClientId && (c.projectId ?? null) === status.currentProjectId);
   const nowLabel = currentChoice?.label ?? status.clients.find((c) => c.id === status.currentClientId)?.name ?? "Client";
 
@@ -514,7 +516,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
               <Button
                 variant="ghost"
                 size="lg"
-                className="h-10 gap-1 px-2 sm:px-3 xl:max-w-52"
+                className="h-10 gap-1 px-2 sm:px-3 2xl:max-w-44"
                 disabled={blocked || onBreak}
                 title={nowLabel}
                 aria-label={`Switch client or project. Now: ${nowLabel}`}
@@ -522,9 +524,9 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
                 aria-expanded={clientMenu === "switch"}
                 onClick={() => setClientMenu(clientMenu === "switch" ? null : "switch")}
               >
-                <Briefcase aria-hidden className="xl:hidden" />
-                <span className="hidden truncate xl:inline">{nowLabel}</span>
-                <ChevronDown aria-hidden />
+                <Briefcase aria-hidden className="2xl:hidden" />
+                <span className="hidden truncate 2xl:inline">{nowLabel}</span>
+                <ChevronDown aria-hidden className="max-sm:hidden" />
               </Button>
               {clientMenu === "switch" ? (
                 <div role="menu" aria-label="Switch client or project" className="absolute right-0 top-full z-50 mt-1 max-h-96 w-64 overflow-y-auto rounded-xl border bg-popover py-1 shadow-lg">
@@ -553,13 +555,13 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
           {onBreak ? (
             <Button variant="default" size="lg" className="h-10 gap-2 px-3 font-semibold sm:px-4" disabled={blocked} aria-label="End break" onClick={() => run(() => endBreak(), "Break ended.")}>
               <Play aria-hidden />
-              <span className="max-lg:sr-only">End break</span>
+              <span className={clockLabel}>End break</span>
             </Button>
           ) : (
             <div className="relative">
               <Button variant="ghost" size="lg" className="h-10 gap-1 px-2 sm:px-3" disabled={blocked} aria-label="Break" aria-haspopup="menu" aria-expanded={breakMenu} onClick={() => setBreakMenu((v) => !v)}>
                 <Coffee aria-hidden />
-                <span className="max-lg:sr-only">Break</span>
+                <span className={clockLabel}>Break</span>
                 <ChevronDown aria-hidden />
               </Button>
               {breakMenu ? (
@@ -599,7 +601,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
             }
           >
             <LogOut aria-hidden />
-            <span className="max-lg:sr-only">Clock out</span>
+            <span className={clockLabel}>Clock out</span>
           </Button>
         </>
       )}
