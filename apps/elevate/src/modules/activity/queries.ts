@@ -9,6 +9,8 @@ import { addDays } from "@/modules/attendance/schedule";
 import { monitoringPolicyPublished, personForUser, prefsFor } from "@/modules/attendance/service";
 import { reportName, timeDownlineEmployeeIds, todayInZone } from "@/modules/org/service";
 import { authorizeForEmployee, requireScope } from "./access";
+import { isNewer, parseVersion } from "./releases-logic";
+import { latestPublishedVersion } from "./releases-service";
 import { workingBetween } from "./flags";
 import { activePercent, summarizeDay, type CategoryRule, type DaySummary } from "./logic";
 import { activityCategories, activitySettings, activityShots, trackerDevices } from "./schema";
@@ -280,18 +282,23 @@ export async function getMyDayCard(input: unknown): Promise<MyDayCardData> {
   return { date, today, policy: true, hasDevice: true, zone, day: await dayFor(person.id, date, true), views: await listMyShotViews(), devices: rows };
 }
 
-export type FleetRow = DeviceRow & { person: string };
+export type FleetRow = DeviceRow & { person: string; behind: boolean };
 
 /**
  * Every computer, for HR and Super Admin. "attention" = still signed in and (permission missing, or silent for a day or more, or a
- * backlog of more than 100 waiting uploads). Paged in the database.
+ * backlog of more than 100 waiting uploads, or an app version older than the newest published release). `behind` is only true for a
+ * version we can read (a computer reporting 0.0.0-sim is not "behind"). Paged in the database.
  */
-export async function listAllDevices(input: unknown): Promise<{ rows: FleetRow[]; total: number; page: number; pageSize: number }> {
+export async function listAllDevices(input: unknown): Promise<{ rows: FleetRow[]; total: number; page: number; pageSize: number; latestVersion: string | null }> {
   const user = await requireUser();
   await authorize(user, "activity.manage");
   const { filter, page: asked, pageSize } = allDevicesSchema.parse(input ?? {});
+  const latest = await latestPublishedVersion();
+  const behindSql = latest
+    ? sql`(d.app_version ~ '^[0-9]+[.][0-9]+[.][0-9]+$' and string_to_array(d.app_version, '.')::int[] < string_to_array(${latest}, '.')::int[])`
+    : sql`false`;
   const where = filter === "attention"
-    ? sql`where d.status = 'active' and (d.permissions_ok = false or d.last_seen_at is null or d.last_seen_at < now() - interval '1 day' or d.queue_size > 100)`
+    ? sql`where d.status = 'active' and (d.permissions_ok = false or d.last_seen_at is null or d.last_seen_at < now() - interval '1 day' or d.queue_size > 100 or ${behindSql})`
     : sql``;
   const [count] = (await db.execute(sql`select count(*)::int as n from time.tracker_devices d ${where}`)) as unknown as { n: number }[];
   // A page past the end (a stale link after sign-outs) shows the last page, not an empty list.
@@ -309,6 +316,7 @@ export async function listAllDevices(input: unknown): Promise<{ rows: FleetRow[]
     total: count?.n ?? 0,
     page,
     pageSize,
+    latestVersion: latest,
     rows: found.map((r) => ({
       id: r.id,
       employeeId: r.employee_id,
@@ -320,6 +328,7 @@ export async function listAllDevices(input: unknown): Promise<{ rows: FleetRow[]
       status: r.status,
       permissionsOk: r.permissions_ok,
       queueSize: r.queue_size,
+      behind: latest !== null && parseVersion(r.app_version) !== null && isNewer(latest, r.app_version),
     })),
   };
 }

@@ -101,3 +101,9 @@ export async function minRequiredVersion(): Promise<string | null> {
   floorCache = { at: Date.now(), value };
   return value;
 }
+
+/** The highest version among published (not withdrawn) releases: what a computer should be running. Null when nothing is published. */
+export async function latestPublishedVersion(): Promise<string | null> {
+  const rows = await db.select({ version: trackerReleases.version }).from(trackerReleases).where(eq(trackerReleases.status, "published"));
+  return rows.map((r) => r.version).reduce<string | null>((best, v) => (best === null || isNewer(v, best) ? v : best), null);
+}

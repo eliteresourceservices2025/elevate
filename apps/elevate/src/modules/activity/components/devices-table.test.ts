@@ -7,7 +7,7 @@ vi.mock("../actions", () => ({ revokeDevice: vi.fn() }));
 
 const { DevicesTable } = await import("./devices-table");
 
-const base = { id: "d1", employeeId: "e1", person: "Ana Reyes", name: "Work PC", os: "windows", appVersion: "1.0.0", lastSeenAt: "2026-11-10T10:00:00.000Z", status: "active", permissionsOk: true, queueSize: 0 };
+const base = { id: "d1", employeeId: "e1", person: "Ana Reyes", name: "Work PC", os: "windows", appVersion: "1.0.0", lastSeenAt: "2026-11-10T10:00:00.000Z", status: "active", permissionsOk: true, queueSize: 0, behind: false };
 
 describe("DevicesTable", () => {
   it("escapes a person's name", () => {
@@ -20,5 +20,9 @@ describe("DevicesTable", () => {
     expect(html).toContain("Permission missing");
     expect((html.match(/Sign out/g) ?? []).length).toBe(1);
     expect(html).toContain("Signed out");
+  });
+  it("shows a Behind chip with the newest version for a computer that is behind", () => {
+    const html = renderToStaticMarkup(createElement(DevicesTable, { rows: [{ ...base, behind: true }, { ...base, id: "d2", behind: false }], zone: "America/Phoenix", latestVersion: "1.2.0" }));
+    expect(html.split("Behind (newest 1.2.0)").length - 1).toBe(1);
   });
 });

@@ -30,7 +30,7 @@ function SignOutButton({ id, person }: { id: string; person: string }) {
   );
 }
 
-export function DevicesTable({ rows, zone }: { rows: FleetRow[]; zone: string }) {
+export function DevicesTable({ rows, zone, latestVersion = null }: { rows: FleetRow[]; zone: string; latestVersion?: string | null }) {
   return (
     <Table stack>
       <TableHeader>
@@ -59,7 +59,7 @@ export function DevicesTable({ rows, zone }: { rows: FleetRow[]; zone: string })
               {d.name} <span className="text-muted-foreground">({OS[d.os] ?? d.os})</span>
             </TableCell>
             <TableCell label="App version" className="font-mono text-sm">
-              {d.appVersion}
+              {d.appVersion} {d.behind && latestVersion ? <StatusChip tone="warning">{`Behind (newest ${latestVersion})`}</StatusChip> : null}
             </TableCell>
             <TableCell label="Last seen">{d.lastSeenAt ? formatInZone(d.lastSeenAt, zone, "MMM d, h:mm a") : "Never"}</TableCell>
             <TableCell label="Permissions">{d.permissionsOk ? <StatusChip tone="success">OK</StatusChip> : <StatusChip tone="danger">Permission missing</StatusChip>}</TableCell>

@@ -23,10 +23,10 @@ async function person(roles: RoleSlug[], first = "Fleet") {
   const [e] = await rows<{ id: string }>(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values (${first}, 'Device', ${email}, 'active', ${id}) returning id`);
   return { user: { id, email, roles }, employeeId: e.id };
 }
-const device = async (employeeId: string, over: { permissionsOk?: boolean; lastSeenDaysAgo?: number | null; queue?: number } = {}) => {
+const device = async (employeeId: string, over: { permissionsOk?: boolean; lastSeenDaysAgo?: number | null; queue?: number; appVersion?: string } = {}) => {
   const seen = over.lastSeenDaysAgo === null ? null : new Date(Date.now() - (over.lastSeenDaysAgo ?? 0) * 86_400_000 - 60_000);
   const [d] = await rows<{ id: string }>(
-    sql`insert into time.tracker_devices (employee_id, name, os, token_hash, permissions_ok, queue_size, last_seen_at) values (${employeeId}, 'PC', 'windows', ${randomUUID()}, ${over.permissionsOk ?? true}, ${over.queue ?? 0}, ${seen?.toISOString() ?? null}) returning id`,
+    sql`insert into time.tracker_devices (employee_id, name, os, token_hash, permissions_ok, queue_size, last_seen_at, app_version) values (${employeeId}, 'PC', 'windows', ${randomUUID()}, ${over.permissionsOk ?? true}, ${over.queue ?? 0}, ${seen?.toISOString() ?? null}, ${over.appVersion ?? "999.0.0"}) returning id`,
   );
   return d.id;
 };
@@ -93,5 +93,34 @@ describe("listAllDevices", () => {
     expect(need.rows.map((r) => r.id)).not.toContain(noPerm);
     const all = await queries.listAllDevices({ filter: "all", page: 1, pageSize: 100 });
     expect(all.rows.find((r) => r.id === noPerm)?.status).toBe("revoked");
+  });
+});
+
+describe("devices that are behind the newest release", () => {
+  const publishDirect = (version: string, status: "published" | "withdrawn") =>
+    db.execute(sql`insert into time.tracker_releases (version, status, notes_added, created_by, published_at, published_by, withdrawn_at) values (${version}, ${status}, array['x'], ${randomUUID()}, now(), ${randomUUID()}, ${status === "withdrawn" ? sql`now()` : null})`);
+
+  it("marks a computer on an older version as behind, includes it under 'attention', and ignores a withdrawn newer release", async () => {
+    current.user = hr.user;
+    await publishDirect("95.0.0", "published");
+    await publishDirect("96.0.0", "withdrawn");
+    const old = await person(["employee"], "Oldver");
+    const same = await person(["employee"], "Samever");
+    const sim = await person(["employee"], "Simver");
+    const behind = await device(old.employeeId, { appVersion: "1.0.0" });
+    const upToDate = await device(same.employeeId, { appVersion: "95.0.0" });
+    const odd = await device(sim.employeeId, { appVersion: "0.0.0-sim" });
+
+    const all = await queries.listAllDevices({ filter: "all", page: 1, pageSize: 100 });
+    expect(all.latestVersion).toBe("95.0.0");
+    expect(all.rows.find((r) => r.id === behind)?.behind).toBe(true);
+    expect(all.rows.find((r) => r.id === upToDate)?.behind).toBe(false);
+    expect(all.rows.find((r) => r.id === odd)?.behind).toBe(false);
+
+    const need = await queries.listAllDevices({ filter: "attention", page: 1, pageSize: 100 });
+    const ids = need.rows.map((r) => r.id);
+    expect(ids).toContain(behind);
+    expect(ids).not.toContain(upToDate);
+    expect(ids).not.toContain(odd);
   });
 });

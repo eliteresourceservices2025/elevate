@@ -46,7 +46,7 @@ export default async function ActivityDevicesPage({ searchParams }: PageProps<"/
         <EmptyState icon={Camera} title={filter === "attention" ? "Nothing needs attention" : "No computers yet"} description={filter === "attention" ? "Every signed-in computer has reported in the last day with its permissions in place." : "People add their computer from their Attendance page."} />
       ) : (
         <>
-          <DevicesTable rows={found.rows} zone={DEFAULT_TIMEZONE} />
+          <DevicesTable rows={found.rows} zone={DEFAULT_TIMEZONE} latestVersion={found.latestVersion} />
           <PagerLinks info={info} basePath="/activity/devices" query={{ filter: filter === "attention" ? "attention" : undefined }} label="computers" />
         </>
       )}
