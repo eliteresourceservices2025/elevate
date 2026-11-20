@@ -159,3 +159,11 @@ export const activitySettings = time
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   })
   .enableRLS();
+
+/** One "tracker offline" notice per clock-in, so a lead is told once per session. */
+export const trackerOfflineNotices = time
+  .table("tracker_offline_notices", {
+    clockInEventId: uuid("clock_in_event_id").primaryKey(),
+    noticedAt: timestamp("noticed_at", { withTimezone: true }).notNull().defaultNow(),
+  })
+  .enableRLS();

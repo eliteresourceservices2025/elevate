@@ -16,6 +16,9 @@ export const FLAG_LABELS = new Map<string, string>(Object.entries({
   unapproved_extra: "Unapproved extra hours",
   jibble_mismatch: "Jibble and ELEVATE totals differ",
   needs_client: "Choose the client",
+  tracker_offline: "Tracker offline",
+  low_activity: "Low activity",
+  no_shots: "No screenshots",
   on_leave: "On approved leave",
 }));
 
@@ -39,4 +42,7 @@ export const FLAG_HELP = new Map<string, string>(Object.entries({
   jibble_mismatch: "Jibble's total for this day differs from ELEVATE's.",
   needs_client: "Some of this day's Jibble time has no client, and the person works for more than one. Map the Jibble project or activity to a client on the Jibble page.",
   on_leave: "They are on approved leave.",
+  tracker_offline: "They were clocked in for 30 minutes or more while the ELEVATE Tracker App recorded nothing. Ask whether the app was closed, the computer asleep or the connection down.",
+  low_activity: "Less than the team's share of their recorded time was active. A note to talk about, not a reason to change the hours.",
+  no_shots: "They worked an hour or more with the ELEVATE Tracker App but no screenshot was taken.",
 }));

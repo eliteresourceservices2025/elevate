@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeMinutes, activePercent, categorize, clipToIntervals, dropOverlaps, isTrackerOffline, sanitizeApp, shotWindow, validateSegment, workingIntervals, type RawSegment } from "./logic";
+import { activeMinutes, activePercent, categorize, clipToIntervals, dropOverlaps, isTrackerOffline, sanitizeApp, shotWindow, trackerFlags, validateSegment, workingIntervals, type RawSegment } from "./logic";
 
 const MIN = 60_000;
 const T0 = Date.UTC(2026, 10, 19, 10, 0, 0);
@@ -127,5 +127,28 @@ describe("workingIntervals", () => {
   });
   it("returns nothing when there is no session", () => {
     expect(workingIntervals([], T0)).toEqual([]);
+  });
+});
+
+describe("trackerFlags", () => {
+  const base = { workingMs: 120 * MIN, coveredMs: 120 * MIN, activeMs: 100 * MIN, shots: 5, lowActivityPercent: 30 };
+  it("is clean for a normal day", () => expect(trackerFlags(base)).toEqual([]));
+  it("flags tracker_offline when 30 or more working minutes have no recording", () => {
+    expect(trackerFlags({ ...base, coveredMs: 90 * MIN })).toContain("tracker_offline");
+    expect(trackerFlags({ ...base, coveredMs: 91 * MIN })).not.toContain("tracker_offline");
+  });
+  it("does not flag a short day as offline", () => {
+    expect(trackerFlags({ ...base, workingMs: 25 * MIN, coveredMs: 0, activeMs: 0, shots: 0 })).toEqual([]);
+  });
+  it("flags low_activity from recorded time, not from the offline gap", () => {
+    expect(trackerFlags({ ...base, activeMs: 30 * MIN })).toEqual(["low_activity"]); // 25% of 120
+    expect(trackerFlags({ ...base, workingMs: 240 * MIN, coveredMs: 120 * MIN, activeMs: 100 * MIN })).toEqual(["tracker_offline"]);
+  });
+  it("needs an hour of recorded time before judging activity", () => {
+    expect(trackerFlags({ ...base, workingMs: 50 * MIN, coveredMs: 50 * MIN, activeMs: 5 * MIN, shots: 5 })).not.toContain("low_activity");
+  });
+  it("flags no_shots after an hour of work with none", () => {
+    expect(trackerFlags({ ...base, shots: 0 })).toEqual(["no_shots"]);
+    expect(trackerFlags({ ...base, workingMs: 59 * MIN, coveredMs: 59 * MIN, shots: 0 })).toEqual([]);
   });
 });

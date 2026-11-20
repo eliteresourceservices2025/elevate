@@ -135,3 +135,19 @@ export function workingIntervals(sessions: readonly SessionLike[], nowMs: number
   }
   return out.filter((i) => i.end > i.start);
 }
+
+export type TrackerFlagInput = { workingMs: number; coveredMs: number; activeMs: number; shots: number; lowActivityPercent: number };
+
+/**
+ * The day's flags from the tracker, for someone with a tracker. All are notes for the lead, none blocks approval:
+ * - tracker_offline: 30 or more working minutes with nothing recorded
+ * - low_activity: active under the team's percent of RECORDED time (an offline gap is not "low activity"), after an hour recorded
+ * - no_shots: an hour or more of work and no screenshot
+ */
+export function trackerFlags(i: TrackerFlagInput): string[] {
+  const flags: string[] = [];
+  if (i.workingMs >= 30 * MINUTE && i.workingMs - i.coveredMs >= 30 * MINUTE) flags.push("tracker_offline");
+  if (i.coveredMs >= HOUR && activePercent(i.activeMs, i.coveredMs) < i.lowActivityPercent) flags.push("low_activity");
+  if (i.workingMs >= HOUR && i.shots === 0) flags.push("no_shots");
+  return flags;
+}
