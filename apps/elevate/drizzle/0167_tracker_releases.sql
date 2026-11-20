@@ -30,7 +30,7 @@ CREATE TABLE "time"."tracker_releases" (
 	"published_by" uuid,
 	"published_at" timestamp with time zone,
 	"withdrawn_at" timestamp with time zone,
-	CONSTRAINT "tracker_releases_version_check" CHECK ("time"."tracker_releases"."version" ~ '^(0|[1-9][0-9]{0,5}).(0|[1-9][0-9]{0,5}).(0|[1-9][0-9]{0,5})$'),
+	CONSTRAINT "tracker_releases_version_check" CHECK ("time"."tracker_releases"."version" ~ '^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})$'),
 	CONSTRAINT "tracker_releases_status_check" CHECK ("time"."tracker_releases"."status" in ('draft', 'published', 'withdrawn'))
 );
 --> statement-breakpoint
