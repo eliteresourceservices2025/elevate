@@ -101,7 +101,9 @@ export function CallChat({ conversationId, userId, open, onNew }: { conversation
     return () => clearTimeout(t);
   }, [open, load]);
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "end" });
+    // Scroll the chat's own box, never the page (scrollIntoView would also pull the whole page down to the newest message).
+    const log = end.current?.parentElement;
+    if (log) log.scrollTop = log.scrollHeight;
   }, [messages.length, open]);
 
   async function send() {

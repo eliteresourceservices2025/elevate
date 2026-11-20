@@ -453,6 +453,8 @@ export function CallProvider({ userId, abilities = NO_ABILITIES, children }: { u
     // If I am recording, the last piece goes up first (the server keeps the recording open for it), but never for long.
     await flushRecorder();
     stopQuietly();
+    // Must finish before the page changes (the browser drops a request that is still running when the page moves on). The server answers as soon
+    // as the seat is closed; closing the media at Cloudflare and the "call ended" line happen after its reply.
     if (id) await callApi.leave(id).catch(() => {});
     reset();
   }, [flushRecorder, reset, stopQuietly]);

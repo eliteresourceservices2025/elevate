@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { ActionFailure } from "@/lib/run-action";
 import { writeAudit } from "@/modules/audit/write";
@@ -391,9 +392,24 @@ export async function leaveCall(actor: Actor, input: { callId: string }): Promis
     cuts.push(...(await endSeats(tx, input.callId, mine.map((s) => s.id))));
     return sweep(tx, input.callId, cuts);
   });
-  await closeAtCloudflare(cuts);
-  if (ended) await announceEnd(ended);
-  else if (!quietLeave) await Promise.all([broadcastCallEvent({ type: "roster", callId: input.callId }), broadcastCallEvent({ type: "tracks", callId: input.callId })]);
+  // The person is out as soon as the seat is closed above. The rest (cutting their media at Cloudflare, the "call ended" line, the signals) can
+  // take several seconds, so it runs after the reply and Leave never makes anyone wait for it.
+  await afterReply(async () => {
+    await closeAtCloudflare(cuts);
+    if (ended) await announceEnd(ended);
+    else if (!quietLeave) await Promise.all([broadcastCallEvent({ type: "roster", callId: input.callId }), broadcastCallEvent({ type: "tracks", callId: input.callId })]);
+  });
+}
+
+/** Runs slow follow-up work after the response has been sent. Outside a request (tests, jobs) there is no "after", so it simply runs now. */
+async function afterReply(task: () => Promise<void>): Promise<void> {
+  // A failure here must not turn a finished leave into an error, but it must not vanish either (the error's name only: never ids or content).
+  const safe = () => task().catch((error: unknown) => console.error("call follow-up failed:", error instanceof Error ? error.name : "unknown error"));
+  try {
+    after(safe);
+  } catch {
+    await safe();
+  }
 }
 
 /** Ends the call for everyone. Only the host (the person who started it). */
