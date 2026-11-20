@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MINUTE, allocateMinutes, breakLabel, buildDays, formatClock, formatDuration, hasLongSession, ipAllowed, isPossiblyOffline, isValidRange, lastSeenOf, needsHrDecision, needsWelcomeBack, replayClock, roundCoordinate, transition, validCoordinates, workedMs, type ClockEventLite, type ClockType } from "./clock";
+import { MINUTE, allocateMinutes, breakLabel, buildDays, formatClock, formatDuration, hasLongSession, ipAllowed, isPossiblyOffline, isValidRange, lastSeenOf, needsHrDecision, needsWelcomeBack, replayClock, roundCoordinate, transition, validCoordinates, workLog, workedMs, type ClockEventLite, type ClockType } from "./clock";
 
 const T = (iso: string) => Date.parse(iso);
 const ev = (type: ClockType, iso: string): ClockEventLite => ({ type, at: T(iso) });
@@ -252,6 +252,39 @@ describe("long sessions (a forgotten clock-out)", () => {
   it("leaves an open session to its own flag", () => {
     const open = buildDays([ev("clock_in", "2026-11-11T12:00:00Z")], "America/Phoenix");
     expect(hasLongSession(open[0].sessionList)).toBe(false);
+  });
+});
+
+describe("projects inside a client", () => {
+  const A = "11111111-1111-4111-8111-111111111111";
+  const B = "22222222-2222-4222-8222-222222222222";
+  const P1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const P2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const pev = (type: ClockType, iso: string, clientId?: string, projectId?: string): ClockEventLite => ({ type, at: T(iso), clientId, projectId });
+
+  it("carries the project of the clock-in and of each switch", () => {
+    const { sessions } = replayClock([pev("clock_in", "2026-11-11T16:00:00Z", A, P1), pev("switch_client", "2026-11-11T18:00:00Z", A, P2), pev("clock_out", "2026-11-11T20:00:00Z")]);
+    expect(sessions[0]).toMatchObject({ clientId: A, projectId: P1, switches: [{ clientId: A, projectId: P2 }] });
+  });
+
+  it("lists where the time went: each stretch with its client and project, breaks left out", () => {
+    const { sessions } = replayClock([
+      pev("clock_in", "2026-11-11T09:00:00Z", A, P1),
+      pev("switch_client", "2026-11-11T11:00:00Z", B),
+      pev("break_start", "2026-11-11T12:00:00Z"),
+      pev("break_end", "2026-11-11T12:30:00Z"),
+      pev("clock_out", "2026-11-11T14:00:00Z"),
+    ]);
+    expect(workLog(sessions[0], T("2026-11-11T15:00:00Z"))).toEqual([
+      { from: T("2026-11-11T09:00:00Z"), to: T("2026-11-11T11:00:00Z"), clientId: A, projectId: P1 },
+      { from: T("2026-11-11T11:00:00Z"), to: T("2026-11-11T12:00:00Z"), clientId: B, projectId: null },
+      { from: T("2026-11-11T12:30:00Z"), to: T("2026-11-11T14:00:00Z"), clientId: B, projectId: null },
+    ]);
+  });
+
+  it("counts an open session up to now", () => {
+    const { sessions } = replayClock([pev("clock_in", "2026-11-11T09:00:00Z", A, P1)]);
+    expect(workLog(sessions[0], T("2026-11-11T10:00:00Z"))).toEqual([{ from: T("2026-11-11T09:00:00Z"), to: T("2026-11-11T10:00:00Z"), clientId: A, projectId: P1 }]);
   });
 });
 

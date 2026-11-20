@@ -31,7 +31,8 @@ describe("POST /api/tracker/clock", () => {
     expect(clockForDevice).not.toHaveBeenCalled();
   });
   it("answers 400 for an unknown action or a bad break length", async () => {
-    expect((await route.POST(post({ action: "switch_client" }))).status).toBe(400);
+    expect((await route.POST(post({ action: "start_over" }))).status).toBe(400);
+    expect((await route.POST(post({ action: "switch_client", projectId: "nope" }))).status).toBe(400);
     expect((await route.POST(post({ action: "break_start", breakMinutes: 20 }))).status).toBe(400);
     expect((await route.POST(post({ action: "clock_in", clientId: "nope" }))).status).toBe(400);
     expect((await route.POST(post("not json"))).status).toBe(400);
@@ -40,6 +41,13 @@ describe("POST /api/tracker/clock", () => {
     const res = await route.POST(post({ action: "break_start", breakMinutes: 15, clientId: uuid, at: "2020-01-01T00:00:00Z", occurredAt: "2020-01-01T00:00:00Z", ip: "1.2.3.4" }));
     expect(res.status).toBe(200);
     expect(vi.mocked(clockForDevice).mock.calls[0]).toEqual(["e1", "break_start", { clientId: uuid, breakMinutes: 15 }]);
+  });
+  it("passes a chosen project, for clocking in and for switching", async () => {
+    await route.POST(post({ action: "clock_in", projectId: uuid }));
+    expect(vi.mocked(clockForDevice).mock.calls[0]).toEqual(["e1", "clock_in", { projectId: uuid }]);
+    const res = await route.POST(post({ action: "switch_client", clientId: uuid, projectId: uuid }));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(clockForDevice).mock.calls[1]).toEqual(["e1", "switch_client", { clientId: uuid, projectId: uuid }]);
   });
   it("answers 200 with the new state", async () => {
     const res = await route.POST(post({ action: "clock_in" }));

@@ -75,6 +75,7 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
                     <TableHead>Person</TableHead>
                     <TableHead>Team</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Working on</TableHead>
                     <TableHead>Since</TableHead>
                     <TableHead>Last seen</TableHead>
                   </TableRow>
@@ -89,6 +90,17 @@ export default async function TeamAttendancePage({ searchParams }: PageProps<"/t
                         {r.outsideRange ? <Badge variant="outline">Outside IP range</Badge> : null}
                         {r.longOpen ? <Badge variant="destructive">Over 12 hours</Badge> : null}
                         {r.possiblyOffline ? <Badge variant="outline">Possibly offline</Badge> : null}
+                      </TableCell>
+                      <TableCell label="Working on">
+                        {r.workingOn ? (
+                          <>
+                            {r.workingOn.client ?? "Client"}
+                            {r.workingOn.project ? <span className="text-muted-foreground"> · {r.workingOn.project}</span> : null}
+                            <span className="block text-xs text-muted-foreground">since {formatInZone(r.workingOn.sinceMs, undefined, "MMM d, h:mm a")}</span>
+                          </>
+                        ) : (
+                          "-"
+                        )}
                       </TableCell>
                       <TableCell label="Since">{formatInZone(r.sinceMs, undefined, "MMM d, h:mm a")}</TableCell>
                       <TableCell label="Last seen">{r.lastSeenMs ? formatInZone(r.lastSeenMs, undefined, "h:mm a") : "-"}</TableCell>

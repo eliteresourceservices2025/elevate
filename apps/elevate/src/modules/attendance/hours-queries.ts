@@ -8,7 +8,10 @@ import { timeDownlineEmployeeIds, reportName, todayInZone } from "@/modules/org/
 import { approvalKey, attendanceRows, dayState, latestApprovals, testMarks, zonesFor, type Approval, type DayState } from "./hours-service";
 import { addDays, mondayOf, recentPeriods, type PayPeriod, type PayPeriodKind } from "./pay-periods";
 import { mayReopenDay } from "./reopen-rules";
+import { fromZonedTime } from "date-fns-tz";
 import { hasScheduleAround } from "./schedule";
+import { splitByDay } from "./work-log-days";
+import { loadWorkLog, type NamedStretch } from "./work-log";
 import { loadSchedulesFor } from "./schedule-service";
 import { hoursSettings } from "./schema";
 
@@ -35,6 +38,8 @@ export type ReviewDay = {
   state: DayState;
   /** The day's worked and break time by client, when some of it belongs to a client (empty otherwise). */
   clients: { clientId: string | null; name: string; workedMinutes: number; breakMinutes: number }[];
+  /** Where the day's working time went, in order: client and project with the exact times (ms since the epoch), breaks left out. Empty when the person has no clients. */
+  work: { start: number; end: number; client: string | null; project: string | null }[];
   /** The signed-in person may take this day's approval back now. */
   canReopen: boolean;
   /** The day is over in the person's own zone, so it can be approved. */
@@ -97,12 +102,24 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
   const byId = new Map(people.map((p) => [p.id, p]));
   const now = Date.now();
 
+  // Client and project of each stretch, read from the clock events and cut into the person's own days. Only for people whose week has a client.
+  const weekDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const workByPerson = new Map<string, ReturnType<typeof splitByDay<NamedStretch>>>();
+  for (const id of ids) {
+    if (!days.some((d) => d.employeeId === id && d.clientSplit.some((c) => c.clientId !== null))) continue;
+    const zone = resolveTimeZone(zones.get(id));
+    const from = fromZonedTime(`${weekStart}T00:00:00`, zone).getTime();
+    const to = fromZonedTime(`${addDays(weekEnd, 1)}T00:00:00`, zone).getTime();
+    workByPerson.set(id, splitByDay(await loadWorkLog(db, id, from, to), weekDates, zone));
+  }
+
   const rows: ReviewRow[] = ids
     .map((id) => {
       const p = byId.get(id)!;
       const zone = resolveTimeZone(zones.get(id));
       const today = formatInZone(now, zone, "yyyy-MM-dd");
       const mine = days.filter((d) => d.employeeId === id).sort((a, b) => a.date.localeCompare(b.date));
+      const workByDay = workByPerson.get(id) ?? {};
       // Never one's own hours; HR any approval, a lead only theirs within a week (the server checks again, and the payroll run too).
       const canReopenDay = (approval: Approval | undefined) =>
         approval !== undefined && (reopenScope === "all" || reopenScope === "team") && p.user_id !== user.id && mayReopenDay(reopenScope, user.id, approval, now);
@@ -122,6 +139,7 @@ export async function getTeamReview(weekStartInput?: string): Promise<TeamReview
         lastOut: d.lastOut?.getTime() ?? null,
         state: dayState(d, approvals.get(approvalKey(id, d.date))),
         clients: d.clientSplit.map((c) => ({ clientId: c.clientId, name: c.clientId ? (clientNames.get(c.clientId) ?? "Client") : "No client", workedMinutes: c.workedMinutes, breakMinutes: c.breakMinutes })),
+        work: (workByDay[d.date] ?? []).filter((w) => w.clientId !== null).map((w) => ({ start: w.from, end: w.to, client: w.clientName, project: w.projectName })),
         canReopen: canReopenDay(approvals.get(approvalKey(id, d.date))),
         finished: d.date < today,
       }));

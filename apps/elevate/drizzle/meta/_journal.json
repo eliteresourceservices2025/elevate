@@ -1177,6 +1177,13 @@
       "when": 1795161117361,
       "tag": "0167_tracker_releases",
       "breakpoints": true
+    },
+    {
+      "idx": 168,
+      "version": "7",
+      "when": 1795168945273,
+      "tag": "0168_client_projects",
+      "breakpoints": true
     }
   ]
 }

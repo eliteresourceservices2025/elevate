@@ -11,7 +11,8 @@ import { employees } from "@/modules/people/schema";
 import { EOD_EDIT_WINDOW_MS, MAX_OPEN_SESSION_MS, buildDays, isPossiblyOffline, needsHrDecision, replayClock, type ClockState, type DayTotals, type SessionDetail } from "./clock";
 import { approvedExtra, grantedByDate } from "./extra-hours";
 import { clockSourceOf } from "./clock-source";
-import { approvedWindows, assignedClients } from "./extra-hours-service";
+import { approvedWindows } from "./extra-hours-service";
+import { assignedClientsWithProjects, loadCurrentWork } from "./work-log";
 import { describeSchedule, extraMinutes, hasScheduleAround, scheduleFor, shiftOn, shiftRange } from "./schedule";
 import { clockRules } from "./schema";
 import { loadSchedules, loadSchedulesFor } from "./schedule-service";
@@ -50,7 +51,9 @@ export type ClockStatus = {
   /** Approved extra hours windows around now, so the header knows when the person is allowed to keep working. */
   extraWindows: { startMs: number; endMs: number }[];
   /** The clients the person is assigned to today. With two or more they choose one when clocking in and can switch while working. */
-  clients: { id: string; name: string }[];
+  clients: { id: string; name: string; projects: { id: string; name: string }[] }[];
+  /** The project the session is working on now (null when none). */
+  currentProjectId: string | null;
   /** The client the session is working for now (null when not working, or when the session has no client). */
   currentClientId: string | null;
   /** Where this person's hours come from. "jibble": they clock in Jibble and ELEVATE shows the state but has no clock buttons. */
@@ -85,7 +88,8 @@ export async function getClockStatus(): Promise<ClockStatus | null> {
     pendingClockOut: replay.state === "out" ? null : await pendingClockOut(db, me.id),
     shiftEndMs: await currentShiftEnd(me.id, prefs.zone, live?.startAt ?? Date.now()),
     extraWindows: (await approvedWindows(db, me.id, Date.now() - 12 * 3_600_000, Date.now() + DAY_MS)).map((w) => ({ startMs: w.startMs, endMs: w.endMs })),
-    clients: (await assignedClients(db, me.id)).map((c) => ({ id: c.id, name: c.name })),
+    clients: await assignedClientsWithProjects(db, me.id),
+    currentProjectId: live ? (live.switches.length > 0 ? live.switches[live.switches.length - 1].projectId : live.projectId) : null,
     currentClientId: live ? (live.switches[live.switches.length - 1]?.clientId ?? live.clientId) : null,
     clockSource: await clockSourceOf(db, me.id),
   };
@@ -251,7 +255,7 @@ export async function getMyTime(weekStartInput?: string): Promise<MyTime | null>
   };
 }
 
-export type WorkingNowRow = { employeeId: string; name: string; team: string | null; state: "working" | "break"; sinceMs: number; outsideRange: boolean; longOpen: boolean; lastSeenMs: number | null; possiblyOffline: boolean };
+export type WorkingNowRow = { employeeId: string; name: string; team: string | null; state: "working" | "break"; sinceMs: number; outsideRange: boolean; longOpen: boolean; lastSeenMs: number | null; possiblyOffline: boolean; /** The client and project the open session is for, and since when (null when the session has no client). */ workingOn: { client: string | null; project: string | null; sinceMs: number } | null };
 
 /** Who is clocked in right now. HR sees everyone; a Team Lead their downline. */
 export async function listWorkingNow(): Promise<{ rows: WorkingNowRow[]; scope: "all" | "team" }> {
@@ -279,6 +283,7 @@ export async function listWorkingNow(): Promise<{ rows: WorkingNowRow[]; scope: 
   const seen = (await db.execute(sql`select employee_id, (extract(epoch from last_seen_at) * 1000)::float8 as ms from time.clock_presence where employee_id in (${list(rows.map((r) => r.employee_id))})`)) as unknown as { employee_id: string; ms: number }[];
   const seenBy = new Map(seen.map((s) => [s.employee_id, Number(s.ms)]));
   const now = Date.now();
+  const workingFor = await loadCurrentWork(db, rows.map((r) => r.employee_id), now);
   return {
     scope,
     rows: rows
@@ -293,6 +298,7 @@ export async function listWorkingNow(): Promise<{ rows: WorkingNowRow[]; scope: 
           outsideRange: r.outside_allowed_range,
           longOpen: now - Number(r.at) > MAX_OPEN_SESSION_MS,
           lastSeenMs: seenBy.get(r.employee_id) ?? null,
+          workingOn: workingFor.get(r.employee_id) ?? null,
           // Only someone actually working can be "possibly offline"; people on a break often close the page.
           possiblyOffline: r.type !== "break_start" && isPossiblyOffline(seenBy.get(r.employee_id) ?? null, Number(r.at), now),
         };

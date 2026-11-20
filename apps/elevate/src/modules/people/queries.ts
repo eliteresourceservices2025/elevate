@@ -13,6 +13,7 @@ import type { ChangeCategory, ChangeStatus, CustomFieldType, CustomFieldVisibili
 import {
   changeRequests,
   clientAssignments,
+  clientProjects,
   clients,
   customFieldDefs,
   customFieldValues,
@@ -453,6 +454,13 @@ export async function listClients() {
   const user = await requireUser();
   await authorize(user, "people.manage_clients");
   return db.select().from(clients).where(isNull(clients.archivedAt)).orderBy(clients.name);
+}
+
+/** The active projects of every client, for the Clients page (HR and Super Admin). */
+export async function listClientProjectsForAdmin() {
+  const user = await requireUser();
+  await authorize(user, "people.manage_clients");
+  return db.select({ id: clientProjects.id, clientId: clientProjects.clientId, name: clientProjects.name }).from(clientProjects).where(isNull(clientProjects.archivedAt)).orderBy(clientProjects.name);
 }
 
 export async function listCustomFieldDefs() {

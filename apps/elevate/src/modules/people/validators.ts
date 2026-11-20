@@ -209,6 +209,11 @@ export const clientSchema = z.object({
 });
 export const updateClientSchema = clientSchema.extend({ clientId: uuid });
 
+/** A project of a client: only a name; the client is fixed when it is added. */
+export const clientProjectSchema = z.object({ clientId: uuid, name: requiredText("the project name", 80) });
+export const renameProjectSchema = z.object({ projectId: uuid, name: requiredText("the project name", 80) });
+export const archiveProjectSchema = z.object({ projectId: uuid });
+
 const assignmentHours = z.preprocess(
   (v) => (v === "" || v === null ? null : typeof v === "string" ? Number(v) : v),
   z.number().gt(0, "Hours must be more than 0").max(80, "80 hours at most")

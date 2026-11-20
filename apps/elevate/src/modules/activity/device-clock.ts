@@ -17,7 +17,7 @@ export type DeviceClockResult =
  * Clocks a person in or out for the tracker app, through the same code as the web clock (server clock, request IP, leave and client
  * checks, audit, Jibble rules). The device has already been checked by the route; this only maps the device's person to their account.
  */
-export async function clockForDevice(employeeId: string, action: (typeof CLOCK_ACTIONS)[number], input: Pick<ClockInput, "clientId" | "breakMinutes">): Promise<DeviceClockResult> {
+export async function clockForDevice(employeeId: string, action: (typeof CLOCK_ACTIONS)[number], input: Pick<ClockInput, "clientId" | "projectId" | "breakMinutes">): Promise<DeviceClockResult> {
   const [owner] = await db.select({ userId: employees.userId, email: users.email }).from(employees).innerJoin(users, eq(users.id, employees.userId)).where(eq(employees.id, employeeId)).limit(1);
   if (!owner?.userId) return { ok: false, error: "no_person" };
   try {

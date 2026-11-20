@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { DEFAULT_TIMEZONE, formatInZone } from "@/lib/time";
 import { addDays } from "@/modules/attendance/schedule";
 import { monitoringPolicyPublished, personForUser, prefsFor } from "@/modules/attendance/service";
+import { loadWorkLog } from "@/modules/attendance/work-log";
 import { reportName, timeDownlineEmployeeIds, todayInZone } from "@/modules/org/service";
 import { authorizeForEmployee, requireScope } from "./access";
 import { isNewer, parseVersion } from "./releases-logic";
@@ -30,6 +31,8 @@ export type ActivityDay = {
   trackerOnline: boolean;
   /** Clocked-in time (breaks left out) inside the day, as a faint underlay on the timeline. */
   working: { start: string; end: string }[];
+  /** Which client and project the working time was for, in order, with the exact times (breaks left out). Empty when the person has no clients. */
+  workLog: { start: string; end: string; client: string | null; project: string | null }[];
   /** The zone the day is in: the person's own. */
   zone: string;
   /** The day's start and end (ms since the epoch) in that zone, for laying out the timeline. */
@@ -72,6 +75,9 @@ async function dayFor(employeeId: string, date: string, withShots: boolean): Pro
     topApps: summary.topApps,
     shots: shots.map((s) => ({ id: s.id, takenAt: s.takenAt.toISOString() })),
     working: (await workingBetween(employeeId, dayStart, dayEnd)).map((w) => ({ start: new Date(w.start).toISOString(), end: new Date(w.end).toISOString() })),
+    workLog: (await loadWorkLog(db, employeeId, dayStart, dayEnd))
+      .filter((w) => w.clientId !== null)
+      .map((w) => ({ start: new Date(w.from).toISOString(), end: new Date(w.to).toISOString(), client: w.clientName, project: w.projectName })),
     zone,
     dayStart,
     dayEnd,

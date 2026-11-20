@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     request,
     clockBodySchema,
     async (device, body) => {
-      const r = await clockForDevice(device.employeeId, body.action, { clientId: body.clientId, breakMinutes: body.breakMinutes });
+      const r = await clockForDevice(device.employeeId, body.action, { clientId: body.clientId, projectId: body.projectId, breakMinutes: body.breakMinutes });
       if (r.ok) return json(r.result);
       if (r.error === "no_person") return json({ error: "no_person" }, 403);
       return json({ error: "refused", message: r.message }, 409);

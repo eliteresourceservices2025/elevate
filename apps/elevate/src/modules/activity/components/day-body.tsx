@@ -6,6 +6,29 @@ import type { ActivityDay } from "../queries";
 import { hourTicks, layoutTimeline } from "../timeline";
 import { TimelineStrip } from "./timeline-strip";
 
+/** Which client and project the working time was for, with the day and the exact times. Nothing is shown for a person with no clients. */
+function WorkLog({ day, viewerZone }: { day: ActivityDay; viewerZone: string }) {
+  if (day.workLog.length === 0) return null;
+  return (
+    <section aria-label="Who the time was for" className="space-y-2">
+      <h3 className="text-sm font-semibold">Who the time was for</h3>
+      <ul className="divide-y rounded-xl border bg-card text-sm">
+        {day.workLog.map((w) => (
+          <li key={`${w.start}-${w.end}`} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2">
+            <span>
+              {w.client ?? "Client"}
+              {w.project ? <span className="text-muted-foreground"> · {w.project}</span> : null}
+            </span>
+            <span className="tabular-nums text-muted-foreground">
+              {formatInZone(w.start, viewerZone, "EEE MMM d")}, {formatInZone(w.start, viewerZone, "h:mm a")} to {formatInZone(w.end, viewerZone, "h:mm a")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** A day's timeline, totals and top apps. Shared by "My day" and the person page. `dayStart`/`dayEnd` are the person's day. */
 export function DayBody({ day, viewerZone }: { day: ActivityDay; viewerZone: string }) {
   const { dayStart, dayEnd } = day;
@@ -14,7 +37,10 @@ export function DayBody({ day, viewerZone }: { day: ActivityDay; viewerZone: str
   const m = day.minutes;
   const other = Math.max(0, m.active - m.work - m.nonWork);
   const none = m.active + m.idle === 0;
-  if (none) return <EmptyState icon={Camera} title="Nothing recorded for this day" description="The ELEVATE Tracker App records only while you are clocked in." />;
+  const log = (
+    <WorkLog day={day} viewerZone={viewerZone} />
+  );
+  if (none) return day.workLog.length > 0 ? log : <EmptyState icon={Camera} title="Nothing recorded for this day" description="The ELEVATE Tracker App records only while you are clocked in." />;
   return (
     <div className="space-y-4">
       <TimelineStrip blocks={blocks} ticks={ticks} ariaLabel={`Timeline of ${formatDateOnly(day.date)}: ${minutesText(m.active)} active, ${minutesText(m.idle)} idle`} />
@@ -31,6 +57,7 @@ export function DayBody({ day, viewerZone }: { day: ActivityDay; viewerZone: str
           </div>
         ))}
       </dl>
+      {log}
       {day.topApps.some((a) => a.minutes > 0) ? (
         <section aria-label="Top apps" className="space-y-2">
           <h3 className="text-sm font-semibold">Top apps</h3>

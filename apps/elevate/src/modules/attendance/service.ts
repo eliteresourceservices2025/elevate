@@ -12,7 +12,7 @@ import { timeChainUserIds, reportName } from "@/modules/org/service";
 import { selfTestEmails } from "@/modules/jibble/client";
 import { enqueueMirror, kickMirror } from "@/modules/jibble/enqueue";
 import { isSelfTestEmail } from "@/modules/jibble/mirror-rules";
-import { employees } from "@/modules/people/schema";
+import { clientProjects, employees } from "@/modules/people/schema";
 import { MINUTE, breakLabel, ipAllowed, overbreakOf, replayClock, roundCoordinate, transition, validCoordinates, type ClockEventLite, type ClockState, type ClockType } from "./clock";
 import { clockSourceOf } from "./clock-source";
 import { assignedClients } from "./extra-hours-service";
@@ -34,21 +34,21 @@ export async function lockEmployeeClock(tx: Executor, employeeId: string): Promi
 /** The most recent events for one person (enough to know the current state), oldest first. */
 export async function loadRecentEvents(executor: Executor, employeeId: string, limit = 60): Promise<ClockEventLite[]> {
   const rows = (await executor.execute(sql`
-    select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms, planned_break_minutes as planned, client_id
+    select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms, planned_break_minutes as planned, client_id, project_id
     from time.v_clock_events where employee_id = ${employeeId} order by occurred_at desc, created_at desc limit ${limit}`)) as unknown as {
-    id: string; type: ClockType; at: number; created_ms: number; planned: number | null; client_id: string | null;
+    id: string; type: ClockType; at: number; created_ms: number; planned: number | null; client_id: string | null; project_id: string | null;
   }[];
-  return rows.reverse().map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned, clientId: r.client_id }));
+  return rows.reverse().map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned, clientId: r.client_id, projectId: r.project_id }));
 }
 
 /** Every event between two instants (inclusive), for timesheets and rebuilding days. */
 export async function loadEventsBetween(executor: Executor, employeeId: string, fromMs: number, toMs: number): Promise<ClockEventLite[]> {
   const rows = (await executor.execute(sql`
-    select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms, planned_break_minutes as planned, client_id
+    select id, type, (extract(epoch from occurred_at) * 1000)::float8 as at, (extract(epoch from created_at) * 1000)::float8 as created_ms, planned_break_minutes as planned, client_id, project_id
     from time.v_clock_events
     where employee_id = ${employeeId} and occurred_at >= to_timestamp(${fromMs / 1000}) and occurred_at <= to_timestamp(${toMs / 1000})
-    order by occurred_at, created_at`)) as unknown as { id: string; type: ClockType; at: number; created_ms: number; planned: number | null; client_id: string | null }[];
-  return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned, clientId: r.client_id }));
+    order by occurred_at, created_at`)) as unknown as { id: string; type: ClockType; at: number; created_ms: number; planned: number | null; client_id: string | null; project_id: string | null }[];
+  return rows.map((r) => ({ id: r.id, type: r.type, at: Number(r.at), createdAtMs: Number(r.created_ms), plannedBreakMinutes: r.planned, clientId: r.client_id, projectId: r.project_id }));
 }
 
 export type EffectiveRules = { allowedCidrs: string[]; selfieRequired: boolean; idleMinutes: number | null; graceMinutes: number; eodExpected: boolean; jibbleMirror: boolean; lateGraceMinutes: number; maxExtraMinutesPerDay: number; maxDayMinutes: number };
@@ -124,7 +124,7 @@ export async function checkSelfie(employeeId: string, path: string): Promise<voi
   }
 }
 
-export type ClockInput = { latitude?: number; longitude?: number; selfiePath?: string; /** break_start only: 15, 30 or 60. */ breakMinutes?: 15 | 30 | 60; /** clock_in and switch_client: the client the time belongs to. */ clientId?: string; /** Where the action came from; recorded in the audit row only (the event source stays 'web'). */ via?: "web" | "tracker_app" };
+export type ClockInput = { latitude?: number; longitude?: number; selfiePath?: string; /** break_start only: 15, 30 or 60. */ breakMinutes?: 15 | 30 | 60; /** clock_in and switch_client: the client the time belongs to. */ clientId?: string; /** clock_in and switch_client: a project of that client. With a project and no clientId, the project's own client is used. */ projectId?: string; /** Where the action came from; recorded in the audit row only (the event source stays 'web'). */ via?: "web" | "tracker_app" };
 export type ClockResult = {
   state: ClockState;
   at: string;
@@ -175,15 +175,25 @@ export async function performClock(actor: { id: string; email: string }, type: C
     // Who the time belongs to. A person with one client needs no choice (it is filled in); with several they pick, and only a client they are
     // assigned to is accepted. A person with no assignments has no client. Switching needs a client that is not the current one.
     let clientId: string | null = null;
+    let projectId: string | null = null;
     if (type === "clock_in" || type === "switch_client") {
       const assigned = await assignedClients(tx, person.id);
-      const picked = input.clientId ?? null;
+      let picked = input.clientId ?? null;
+      if (input.projectId) {
+        const [proj] = await tx.select({ id: clientProjects.id, clientId: clientProjects.clientId, archivedAt: clientProjects.archivedAt }).from(clientProjects).where(eq(clientProjects.id, input.projectId)).limit(1);
+        if (!proj || proj.archivedAt) throw new ActionFailure("That project is not available.");
+        if (picked !== null && proj.clientId !== picked) throw new ActionFailure("That project does not belong to that client.");
+        picked = proj.clientId;
+        projectId = proj.id;
+      }
       if (picked !== null && !assigned.some((c) => c.id === picked)) throw new ActionFailure("You are not assigned to that client.");
       if (type === "switch_client") {
         if (picked === null) throw new ActionFailure("Choose the client you are switching to.");
         const current = replay.sessions[replay.sessions.length - 1];
-        const now = current ? (current.switches[current.switches.length - 1]?.clientId ?? current.clientId) : null;
-        if (picked === now) throw new ActionFailure("You are already working for that client.");
+        const last = current?.switches[current.switches.length - 1];
+        const nowClient = current ? (last ? last.clientId : current.clientId) : null;
+        const nowProject = current ? (last ? last.projectId : current.projectId) : null;
+        if (picked === nowClient && projectId === nowProject) throw new ActionFailure(projectId ? "You are already working on that project." : "You are already working for that client.");
       } else if (picked === null && assigned.length > 1) throw new ActionFailure("Choose the client you are working for.");
       clientId = picked ?? (assigned.length === 1 ? assigned[0].id : null);
     }
@@ -213,6 +223,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
           approxLng: t === type && location ? location.lng : null,
           createdBy: actor.id,
           clientId: t === type ? clientId : null,
+          projectId: t === type ? projectId : null,
         })
         .returning({ id: clockEvents.id, occurredAt: clockEvents.occurredAt });
       inserted.push({ id: last!.id, type: t });
@@ -229,7 +240,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
     if (type === "clock_in" && input.selfiePath && rules.selfieRequired && monitoring && last) {
       await tx.insert(clockSelfies).values({ eventId: last.id, employeeId: person.id, storagePath: input.selfiePath });
     }
-    await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired), via: input.via ?? "web" } }, tx);
+    await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired), withProject: Boolean(projectId), via: input.via ?? "web" } }, tx);
     if (type === "clock_in") await touchPresence(tx, person.id);
     // Jibble screenshots: queued in this same transaction when the team uses Jibble and monitoring is published (never blocks the clock).
     // A person listed in JIBBLE_SELF_TEST_EMAILS is testing the link on their own account: allowed without the policy and team switch.

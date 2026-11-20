@@ -86,10 +86,12 @@ export const createReleaseSchema = z.object({
 export const releaseIdSchema = z.object({ id: uuid });
 
 /** The app's clock buttons. No time, no address, no location: the server clock and the request decide those. */
-export const CLOCK_ACTIONS = ["clock_in", "break_start", "break_end", "clock_out"] as const;
+export const CLOCK_ACTIONS = ["clock_in", "break_start", "break_end", "clock_out", "switch_client"] as const;
 export const clockBodySchema = z.object({
   action: z.enum(CLOCK_ACTIONS),
   clientId: uuid.optional(),
+  /** A project of a client the person is assigned to; it also names the client when no clientId is sent. */
+  projectId: uuid.optional(),
   breakMinutes: z.union([z.literal(15), z.literal(30), z.literal(60)]).optional(),
 });
 export type ClockBody = z.infer<typeof clockBodySchema>;

@@ -24,6 +24,7 @@ import { SENSITIVE_LABELS } from "./constants";
 import {
   changeRequests,
   clientAssignments,
+  clientProjects,
   clients,
   customFieldDefs,
   customFieldValues,
@@ -45,9 +46,11 @@ import {
 import {
   archiveCustomFieldSchema,
   archiveEmployeeSchema,
+  archiveProjectSchema,
   assignmentSchema,
   bankChangeSchema,
   cancelChangeSchema,
+  clientProjectSchema,
   clientSchema,
   contactChangeSchemaFor,
   createEmployeeSchema,
@@ -57,6 +60,7 @@ import {
   emergencyContactsChangeSchema,
   endAssignmentSchema,
   myProfileSchema,
+  renameProjectSchema,
   revealSensitiveSchema,
   reviewChangeSchema,
   updateAssignmentSchema,
@@ -695,6 +699,72 @@ export async function updateClient(input: unknown): Promise<ActionResult> {
       if (isUniqueViolation(error)) return fail("A client with that name already exists.");
       throw error;
     }
+  });
+}
+
+// Projects of a client (HR and Super Admin, the same permission as managing clients). Names only; no pay, no patient details.
+export async function createClientProject(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "people.manage_clients");
+    const parsed = clientProjectSchema.safeParse(input);
+    if (!parsed.success) return fail(firstIssue(parsed.error));
+    try {
+      return await db.transaction(async (tx) => {
+        const [client] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.id, parsed.data.clientId), isNull(clients.archivedAt))).limit(1);
+        if (!client) return fail("That client was not found.");
+        const [p] = await tx.insert(clientProjects).values({ clientId: parsed.data.clientId, name: parsed.data.name, createdBy: actor.id }).returning({ id: clientProjects.id });
+        await writeAudit({ actor, action: "client.project.create", targetType: "client_project", targetId: p.id, after: { clientId: parsed.data.clientId } }, tx);
+        revalidatePath("/people/clients");
+        return { ok: true, data: undefined } as const;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) return fail("That client already has a project with that name.");
+      throw error;
+    }
+  });
+}
+
+export async function renameClientProject(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "people.manage_clients");
+    const parsed = renameProjectSchema.safeParse(input);
+    if (!parsed.success) return fail(firstIssue(parsed.error));
+    try {
+      return await db.transaction(async (tx) => {
+        const [before] = await tx.select().from(clientProjects).where(eq(clientProjects.id, parsed.data.projectId)).for("update");
+        if (!before || before.archivedAt) return fail("That project was not found.");
+        await tx.update(clientProjects).set({ name: parsed.data.name, updatedAt: new Date() }).where(eq(clientProjects.id, before.id));
+        await writeAudit({ actor, action: "client.project.rename", targetType: "client_project", targetId: before.id, after: { clientId: before.clientId } }, tx);
+        revalidatePath("/people/clients");
+        return { ok: true, data: undefined } as const;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) return fail("That client already has a project with that name.");
+      throw error;
+    }
+  });
+}
+
+/** Archiving keeps the project on the time already recorded; it just cannot be picked any more. */
+export async function archiveClientProject(input: unknown): Promise<ActionResult> {
+  const actor = await requireUser();
+
+  return runAction(async () => {
+    await authorize(actor, "people.manage_clients");
+    const parsed = archiveProjectSchema.safeParse(input);
+    if (!parsed.success) return fail(firstIssue(parsed.error));
+    return db.transaction(async (tx) => {
+      const [before] = await tx.select().from(clientProjects).where(eq(clientProjects.id, parsed.data.projectId)).for("update");
+      if (!before || before.archivedAt) return fail("That project was not found.");
+      await tx.update(clientProjects).set({ archivedAt: new Date(), updatedAt: new Date() }).where(eq(clientProjects.id, before.id));
+      await writeAudit({ actor, action: "client.project.archive", targetType: "client_project", targetId: before.id, after: { clientId: before.clientId } }, tx);
+      revalidatePath("/people/clients");
+      return { ok: true, data: undefined } as const;
+    });
   });
 }
 

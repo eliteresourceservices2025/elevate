@@ -6,7 +6,7 @@ import { toast } from "@/components/feedback-dialog";
 import { SelectField, TextField } from "@/components/form-fields";
 import { TimeZonePicker } from "@/components/time-zone-picker";
 import { Button } from "@/components/ui/button";
-import { archiveCustomFieldDef, createClient, createCustomFieldDef, updateClient } from "../actions";
+import { archiveClientProject, archiveCustomFieldDef, createClient, createClientProject, createCustomFieldDef, renameClientProject, updateClient } from "../actions";
 import { CUSTOM_FIELD_TYPES, CUSTOM_FIELD_VISIBILITY } from "../constants";
 import { useAsk } from "@/components/confirm-dialog";
 
@@ -125,6 +125,87 @@ export function ClientRow({ client, timeZones }: { client: { id: string; name: s
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * A client's projects: add one, rename it, archive it. People assigned to the client pick a project on the clock (the web clock and the
+ * ELEVATE Tracker App), and the time then shows which client and project it was for. Archiving keeps the project on time already recorded.
+ */
+export function ClientProjects({ clientId, projects }: { clientId: string; projects: { id: string; name: string }[] }) {
+  const { run, pending } = useRun();
+  const ask = useAsk();
+  const [name, setName] = useState("");
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  return (
+    <div className="mt-2 border-t pt-2 pl-3" aria-label="Projects">
+      <p className="text-xs font-medium text-muted-foreground">Projects</p>
+      {projects.length === 0 ? <p className="py-1 text-sm text-muted-foreground">No projects. People pick just the client.</p> : null}
+      <ul>
+        {projects.map((p) => (
+          <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-1">
+            {renaming === p.id ? (
+              <form
+                className="flex flex-wrap items-end gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  run(() => renameClientProject({ projectId: p.id, name: newName }), "Project renamed.", () => setRenaming(null));
+                }}
+              >
+                <TextField id={`rp-${p.id}`} label="Project name" value={newName} onChange={(e) => setNewName(e.target.value)} required />
+                <Button type="submit" size="sm" disabled={pending || !newName.trim()}>
+                  Save
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setRenaming(null)}>
+                  Cancel
+                </Button>
+              </form>
+            ) : (
+              <>
+                <span className="text-sm">{p.name}</span>
+                <span className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setNewName(p.name);
+                      setRenaming(p.id);
+                    }}
+                  >
+                    Rename
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={pending}
+                    onClick={async () => {
+                      if (await ask(`Archive the project "${p.name}"? People can no longer pick it. Time already recorded keeps its name.`, { confirmLabel: "Archive project", destructive: false })) {
+                        run(() => archiveClientProject({ projectId: p.id }), "Project archived.");
+                      }
+                    }}
+                  >
+                    Archive
+                  </Button>
+                </span>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+      <form
+        className="mt-1 flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(() => createClientProject({ clientId, name }), "Project added.", () => setName(""));
+        }}
+      >
+        <TextField id={`np-${clientId}`} label="New project name" value={name} onChange={(e) => setName(e.target.value)} />
+        <Button type="submit" size="sm" variant="outline" disabled={pending || !name.trim()}>
+          Add project
+        </Button>
+      </form>
+    </div>
   );
 }
 

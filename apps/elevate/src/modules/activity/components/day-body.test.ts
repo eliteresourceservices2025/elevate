@@ -14,6 +14,7 @@ const day: ActivityDay = {
   shots: [],
   trackerOnline: true,
   working: [],
+  workLog: [],
   zone: "Asia/Manila",
   dayStart,
   dayEnd: dayStart + 24 * 3_600_000,
@@ -29,6 +30,20 @@ describe("DayBody time zones", () => {
   it("says there is nothing recorded without claiming the viewer is the person", () => {
     const empty = { ...day, segments: [], minutes: { active: 0, idle: 0, work: 0, nonWork: 0 }, topApps: [] };
     expect(renderToStaticMarkup(createElement(DayBody, { day: empty, viewerZone: "America/Phoenix" }))).toContain("Nothing recorded for this day");
+  });
+
+  it("says which client and project the time was for, with the day and times in the viewer's zone", () => {
+    const withLog = { ...day, workLog: [{ start: new Date(dayStart + 3_600_000).toISOString(), end: new Date(dayStart + 2 * 3_600_000).toISOString(), client: "Acme Dental", project: "Intake" }] };
+    const html = renderToStaticMarkup(createElement(DayBody, { day: withLog, viewerZone: "America/Phoenix" }));
+    expect(html).toContain("Who the time was for");
+    expect(html).toContain("Acme Dental");
+    expect(html).toContain("Intake");
+    expect(html).toContain("Mon Nov 9, 10:00 AM to 11:00 AM");
+  });
+  it("shows no such list for a person with no clients, and still lists it when only the clock has data", () => {
+    expect(renderToStaticMarkup(createElement(DayBody, { day, viewerZone: "America/Phoenix" }))).not.toContain("Who the time was for");
+    const onlyClock = { ...day, segments: [], minutes: { active: 0, idle: 0, work: 0, nonWork: 0 }, topApps: [], workLog: [{ start: new Date(dayStart).toISOString(), end: new Date(dayStart + 3_600_000).toISOString(), client: "Acme Dental", project: null }] };
+    expect(renderToStaticMarkup(createElement(DayBody, { day: onlyClock, viewerZone: "America/Phoenix" }))).toContain("Acme Dental");
   });
 
   it("leaves out apps that rounded down to 0 minutes", () => {

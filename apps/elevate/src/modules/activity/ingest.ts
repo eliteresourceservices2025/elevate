@@ -1,11 +1,12 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { clientProjects, clients as clientsTable } from "@/modules/people/schema";
 import { db } from "@/lib/db";
 import { replayClock } from "@/modules/attendance/clock";
 import { clockSourceOf } from "@/modules/attendance/clock-source";
-import { assignedClients } from "@/modules/attendance/extra-hours-service";
 import { loadEventsBetween, monitoringPolicyPublished, rulesFor } from "@/modules/attendance/service";
+import { assignedClientsWithProjects } from "@/modules/attendance/work-log";
 import { sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { MAX_AGE_MS, SHOT_WINDOW_MS, clipToIntervals, dropOverlaps, sanitizeApp, shotWindow, validateSegment, workingIntervals, type Interval, type RawSegment } from "./logic";
@@ -36,6 +37,16 @@ export async function clockStateFor(employeeId: string, now = new Date()) {
   const policy = await monitoringPolicyPublished(db);
   const brk = replay.state === "break" ? open?.breaks.at(-1) : undefined;
   const rules = await rulesFor(db, employeeId);
+  const clients = await assignedClientsWithProjects(db, employeeId);
+  let current: { clientId: string | null; clientName: string | null; projectId: string | null; projectName: string | null; since: string } | null = null;
+  if (replay.state !== "out" && open) {
+    const last = open.switches.at(-1);
+    const clientId = last ? last.clientId : open.clientId;
+    const projectId = last ? last.projectId : open.projectId;
+    const [client] = clientId ? await db.select({ name: clientsTable.name }).from(clientsTable).where(eq(clientsTable.id, clientId)).limit(1) : [];
+    const [project] = projectId ? await db.select({ name: clientProjects.name }).from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1) : [];
+    current = { clientId, clientName: client?.name ?? null, projectId, projectName: project?.name ?? null, since: new Date(last ? last.at : open.startAt).toISOString() };
+  }
   const clockBlockedReason: "jibble" | "selfie" | null = (await clockSourceOf(db, employeeId)) === "jibble" ? "jibble" : rules.selfieRequired && policy ? "selfie" : null;
   return {
     state: replay.state,
@@ -44,7 +55,9 @@ export async function clockStateFor(employeeId: string, now = new Date()) {
     workingSince: replay.state === "out" || !open ? null : new Date(open.startAt).toISOString(),
     onBreak: brk ? { startedAt: new Date(brk.startAt).toISOString(), plannedMinutes: brk.plannedMinutes } : null,
     /** The clients the person can clock in for today (the app asks when there is more than one). */
-    clients: (await assignedClients(db, employeeId)).map((c) => ({ id: c.id, name: c.name })),
+    clients,
+    /** The client and project the time is going to right now, and since when (the last switch, or the clock-in). */
+    current,
     /** Why the app's clock buttons are off: a Jibble-clock person, or a team that needs a selfie (the app cannot take one). */
     clockBlockedReason,
     policy,

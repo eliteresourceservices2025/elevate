@@ -203,6 +203,32 @@ export const clients = core
   )
   .enableRLS();
 
+/**
+ * A project of a client (owner decision 2026-11-20): a named piece of work a person handling two or more clients picks on the clock,
+ * so the time shows which client and project it belonged to. Added by HR and Super Admin; archived, never deleted (clock events point at it).
+ * People are assigned to clients, not projects: anyone assigned to the client can pick any of its active projects.
+ */
+export const clientProjects = core
+  .table(
+    "client_projects",
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      clientId: uuid("client_id")
+        .notNull()
+        .references(() => clients.id),
+      name: text("name").notNull(),
+      createdBy: uuid("created_by"),
+      archivedAt: timestamp("archived_at", { withTimezone: true }),
+      ...stamps,
+    },
+    (t) => [
+      // A name is unique within its client among the active projects (an archived one frees its name).
+      uniqueIndex("client_projects_name_idx").on(t.clientId, sql`lower(${t.name})`).where(sql`${t.archivedAt} is null`),
+      index("client_projects_client_idx").on(t.clientId),
+    ],
+  )
+  .enableRLS();
+
 export const clientAssignments = core
   .table(
     "client_assignments",
