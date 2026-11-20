@@ -124,7 +124,7 @@ export async function checkSelfie(employeeId: string, path: string): Promise<voi
   }
 }
 
-export type ClockInput = { latitude?: number; longitude?: number; selfiePath?: string; /** break_start only: 15, 30 or 60. */ breakMinutes?: 15 | 30 | 60; /** clock_in and switch_client: the client the time belongs to. */ clientId?: string };
+export type ClockInput = { latitude?: number; longitude?: number; selfiePath?: string; /** break_start only: 15, 30 or 60. */ breakMinutes?: 15 | 30 | 60; /** clock_in and switch_client: the client the time belongs to. */ clientId?: string; /** Where the action came from; recorded in the audit row only (the event source stays 'web'). */ via?: "web" | "tracker_app" };
 export type ClockResult = {
   state: ClockState;
   at: string;
@@ -229,7 +229,7 @@ export async function performClock(actor: { id: string; email: string }, type: C
     if (type === "clock_in" && input.selfiePath && rules.selfieRequired && monitoring && last) {
       await tx.insert(clockSelfies).values({ eventId: last.id, employeeId: person.id, storagePath: input.selfiePath });
     }
-    await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired) } }, tx);
+    await writeAudit({ actor, action: `clock.${type}`, targetType: "employee", targetId: person.id, metadata: { outsideAllowedRange, withLocation: Boolean(location), withSelfie: Boolean(input.selfiePath && rules.selfieRequired), via: input.via ?? "web" } }, tx);
     if (type === "clock_in") await touchPresence(tx, person.id);
     // Jibble screenshots: queued in this same transaction when the team uses Jibble and monitoring is published (never blocks the clock).
     // A person listed in JIBBLE_SELF_TEST_EMAILS is testing the link on their own account: allowed without the policy and team switch.

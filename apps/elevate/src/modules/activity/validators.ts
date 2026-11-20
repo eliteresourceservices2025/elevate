@@ -84,3 +84,12 @@ export const createReleaseSchema = z.object({
   policyVersionId: uuid.nullable(),
 });
 export const releaseIdSchema = z.object({ id: uuid });
+
+/** The app's clock buttons. No time, no address, no location: the server clock and the request decide those. */
+export const CLOCK_ACTIONS = ["clock_in", "break_start", "break_end", "clock_out"] as const;
+export const clockBodySchema = z.object({
+  action: z.enum(CLOCK_ACTIONS),
+  clientId: uuid.optional(),
+  breakMinutes: z.union([z.literal(15), z.literal(30), z.literal(60)]).optional(),
+});
+export type ClockBody = z.infer<typeof clockBodySchema>;

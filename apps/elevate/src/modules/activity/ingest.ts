@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { replayClock } from "@/modules/attendance/clock";
-import { loadEventsBetween, monitoringPolicyPublished } from "@/modules/attendance/service";
+import { clockSourceOf } from "@/modules/attendance/clock-source";
+import { assignedClients } from "@/modules/attendance/extra-hours-service";
+import { loadEventsBetween, monitoringPolicyPublished, rulesFor } from "@/modules/attendance/service";
 import { sniffFileKind } from "@/modules/documents/files";
 import { BUCKETS, getDocumentStorage } from "@/modules/documents/storage";
 import { MAX_AGE_MS, SHOT_WINDOW_MS, clipToIntervals, dropOverlaps, sanitizeApp, shotWindow, validateSegment, workingIntervals, type Interval, type RawSegment } from "./logic";
@@ -31,10 +33,21 @@ export async function clockStateFor(employeeId: string, now = new Date()) {
   const open = replay.sessions.at(-1);
   const since = replay.state === "out" || !open ? null : new Date(replay.state === "break" ? (open.breaks.at(-1)?.startAt ?? open.startAt) : open.startAt).toISOString();
   const [settings] = await db.select().from(activitySettings).where(eq(activitySettings.scope, "default")).limit(1);
+  const policy = await monitoringPolicyPublished(db);
+  const brk = replay.state === "break" ? open?.breaks.at(-1) : undefined;
+  const rules = await rulesFor(db, employeeId);
+  const clockBlockedReason: "jibble" | "selfie" | null = (await clockSourceOf(db, employeeId)) === "jibble" ? "jibble" : rules.selfieRequired && policy ? "selfie" : null;
   return {
     state: replay.state,
     since,
-    policy: await monitoringPolicyPublished(db),
+    /** When the current clocked-in session began (the break, if any, is inside it); null when clocked out. */
+    workingSince: replay.state === "out" || !open ? null : new Date(open.startAt).toISOString(),
+    onBreak: brk ? { startedAt: new Date(brk.startAt).toISOString(), plannedMinutes: brk.plannedMinutes } : null,
+    /** The clients the person can clock in for today (the app asks when there is more than one). */
+    clients: (await assignedClients(db, employeeId)).map((c) => ({ id: c.id, name: c.name })),
+    /** Why the app's clock buttons are off: a Jibble-clock person, or a team that needs a selfie (the app cannot take one). */
+    clockBlockedReason,
+    policy,
     settings: { idleTimeoutSeconds: settings?.idleTimeoutSeconds ?? 180, shotIntervalMinutes: SHOT_WINDOW_MS / 60_000 },
   };
 }

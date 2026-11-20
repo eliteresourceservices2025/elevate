@@ -71,6 +71,10 @@ Product name: **ELEVATE Tracker App**. Plan: `docs/superpowers/plans/2026-11-20-
 - Found in that check and fixed: the update download and installer routes answered a bare 500 when storage was waking up (now JSON 503; the installer's audit row is written only after the link exists), the feed's notes now read as a heading and one "- " line per change, and `pnpm tracker:build` no longer says "has storage:setup been run?" when a file already exists.
 - **Not built (needs the real app):** the updater's client side, "What's new" box, install at next clock-out, macOS notarization. The Tauri manifest shape must be re-checked against the Tauri version chosen then.
 
+## Clock buttons in the app (Phase 3, Task 0)
+
+`POST /api/tracker/clock` (device token, **exempt from the version floor** so an old app can still clock out): body `{ action: "clock_in" | "break_start" | "break_end" | "clock_out", clientId?, breakMinutes?: 15 | 30 | 60 }`, nothing else is read (no time, address or location). It calls the web clock's `performClock` through `activity/device-clock.ts`, so the rules are identical (server clock, request IP, leave, client assignment, Jibble-clock refusal, audit). Events keep `source = 'web'`; the audit row carries `via: "tracker_app"`. Answers `200 { state, at, outsideAllowedRange }`, `409 { error: "refused", message }` for a plain-language refusal, `403 { error: "no_person" }`. `clock-state` also returns `workingSince`, `onBreak`, `clients` and `clockBlockedReason` (`"jibble"`, or `"selfie"` when the team needs a selfie, which the app cannot take). Tests: `src/app/api/tracker/clock-route.test.ts`, `tests/integration/activity-clock.test.ts`.
+
 ## Flags and jobs
 
 Flags (added to `time.attendance_days.flags` by the nightly rebuild, all "review", never blocking): `tracker_offline` (30+ working minutes with nothing recorded), `low_activity` (under the setting's percent of recorded time, after an hour recorded; default 30), `no_shots` (an hour or more of work, no screenshot). A person with no tracker, or while no policy is published, is never flagged.
