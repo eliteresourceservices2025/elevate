@@ -1,6 +1,6 @@
 {
-  "id": "a539ed32-b03a-40c3-8400-17091f2453d0",
-  "prevId": "1d631c4d-4a45-49c6-9174-f318e1eb2efd",
+  "id": "1d631c4d-4a45-49c6-9174-f318e1eb2efd",
+  "prevId": "3202f011-bc6d-46d0-8d41-ff7aacf455e8",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3886,12 +3886,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "jibble_entry_id": {
           "name": "jibble_entry_id",
           "type": "text",
@@ -3984,20 +3978,6 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "clock_events_project_id_client_projects_id_fk": {
-          "name": "clock_events_project_id_client_projects_id_fk",
-          "tableFrom": "clock_events",
-          "tableTo": "client_projects",
-          "schemaTo": "core",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4015,10 +3995,6 @@
         "clock_events_client_chk": {
           "name": "clock_events_client_chk",
           "value": "(\"time\".\"clock_events\".\"client_id\" is null or \"time\".\"clock_events\".\"type\" in ('clock_in','switch_client')) and (\"time\".\"clock_events\".\"type\" <> 'switch_client' or \"time\".\"clock_events\".\"client_id\" is not null)"
-        },
-        "clock_events_project_chk": {
-          "name": "clock_events_project_chk",
-          "value": "\"time\".\"clock_events\".\"project_id\" is null or (\"time\".\"clock_events\".\"client_id\" is not null and \"time\".\"clock_events\".\"type\" in ('clock_in','switch_client'))"
         },
         "clock_events_source_chk": {
           "name": "clock_events_source_chk",
@@ -20579,117 +20555,6 @@
       },
       "isRLSEnabled": true
     },
-    "core.client_projects": {
-      "name": "client_projects",
-      "schema": "core",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "client_id": {
-          "name": "client_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "archived_at": {
-          "name": "archived_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "client_projects_name_idx": {
-          "name": "client_projects_name_idx",
-          "columns": [
-            {
-              "expression": "client_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "lower(\"name\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"core\".\"client_projects\".\"archived_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "client_projects_client_idx": {
-          "name": "client_projects_client_idx",
-          "columns": [
-            {
-              "expression": "client_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "client_projects_client_id_clients_id_fk": {
-          "name": "client_projects_client_id_clients_id_fk",
-          "tableFrom": "client_projects",
-          "tableTo": "clients",
-          "schemaTo": "core",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": true
-    },
     "core.clients": {
       "name": "clients",
       "schema": "core",
@@ -27178,6 +27043,123 @@
         }
       },
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "core.dashboard_layouts": {
+      "name": "dashboard_layouts",
+      "schema": "core",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "view": {
+          "name": "view",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hidden": {
+          "name": "hidden",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "order": {
+          "name": "order",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dashboard_layouts_user_id_users_id_fk": {
+          "name": "dashboard_layouts_user_id_users_id_fk",
+          "tableFrom": "dashboard_layouts",
+          "tableTo": "users",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "dashboard_layouts_user_id_view_pk": {
+          "name": "dashboard_layouts_user_id_view_pk",
+          "columns": [
+            "user_id",
+            "view"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "core.birthday_preferences": {
+      "name": "birthday_preferences",
+      "schema": "core",
+      "columns": {
+        "employee_id": {
+          "name": "employee_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "hidden": {
+          "name": "hidden",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "birthday_preferences_employee_id_employees_id_fk": {
+          "name": "birthday_preferences_employee_id_employees_id_fk",
+          "tableFrom": "birthday_preferences",
+          "tableTo": "employees",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "employee_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

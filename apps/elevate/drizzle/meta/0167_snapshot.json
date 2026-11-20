@@ -1,6 +1,6 @@
 {
-  "id": "1d631c4d-4a45-49c6-9174-f318e1eb2efd",
-  "prevId": "3202f011-bc6d-46d0-8d41-ff7aacf455e8",
+  "id": "3202f011-bc6d-46d0-8d41-ff7aacf455e8",
+  "prevId": "b591580b-2c66-47b9-aefd-fe1f7fa61c59",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -779,282 +779,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": true
-    },
-    "time.tracker_release_builds": {
-      "name": "tracker_release_builds",
-      "schema": "time",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "release_id": {
-          "name": "release_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "platform": {
-          "name": "platform",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "storage_path": {
-          "name": "storage_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "file_name": {
-          "name": "file_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "size_bytes": {
-          "name": "size_bytes",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sha256": {
-          "name": "sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "signature": {
-          "name": "signature",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "tracker_release_builds_kind_idx": {
-          "name": "tracker_release_builds_kind_idx",
-          "columns": [
-            {
-              "expression": "release_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "platform",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "kind",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "tracker_release_builds_path_idx": {
-          "name": "tracker_release_builds_path_idx",
-          "columns": [
-            {
-              "expression": "storage_path",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "tracker_release_builds_release_id_tracker_releases_id_fk": {
-          "name": "tracker_release_builds_release_id_tracker_releases_id_fk",
-          "tableFrom": "tracker_release_builds",
-          "tableTo": "tracker_releases",
-          "schemaTo": "time",
-          "columnsFrom": [
-            "release_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "tracker_release_builds_platform_check": {
-          "name": "tracker_release_builds_platform_check",
-          "value": "\"time\".\"tracker_release_builds\".\"platform\" in ('windows-x86_64', 'darwin-aarch64', 'darwin-x86_64')"
-        },
-        "tracker_release_builds_kind_check": {
-          "name": "tracker_release_builds_kind_check",
-          "value": "\"time\".\"tracker_release_builds\".\"kind\" in ('installer', 'update')"
-        },
-        "tracker_release_builds_signature_check": {
-          "name": "tracker_release_builds_signature_check",
-          "value": "\"time\".\"tracker_release_builds\".\"kind\" <> 'update' or (\"time\".\"tracker_release_builds\".\"signature\" is not null and length(\"time\".\"tracker_release_builds\".\"signature\") > 0)"
-        }
-      },
-      "isRLSEnabled": true
-    },
-    "time.tracker_releases": {
-      "name": "tracker_releases",
-      "schema": "time",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "version": {
-          "name": "version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'draft'"
-        },
-        "notes_added": {
-          "name": "notes_added",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "notes_improved": {
-          "name": "notes_improved",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "notes_fixed": {
-          "name": "notes_fixed",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "min_required": {
-          "name": "min_required",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "adds_collection": {
-          "name": "adds_collection",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "policy_version_id": {
-          "name": "policy_version_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "published_by": {
-          "name": "published_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "withdrawn_at": {
-          "name": "withdrawn_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "tracker_releases_version_idx": {
-          "name": "tracker_releases_version_idx",
-          "columns": [
-            {
-              "expression": "version",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "tracker_releases_version_check": {
-          "name": "tracker_releases_version_check",
-          "value": "\"time\".\"tracker_releases\".\"version\" ~ '^(0|[1-9][0-9]{0,5}).(0|[1-9][0-9]{0,5}).(0|[1-9][0-9]{0,5})$'"
-        },
-        "tracker_releases_status_check": {
-          "name": "tracker_releases_status_check",
-          "value": "\"time\".\"tracker_releases\".\"status\" in ('draft', 'published', 'withdrawn')"
-        }
-      },
       "isRLSEnabled": true
     },
     "ops.analytics_attendance_weekly": {
@@ -27043,6 +26767,123 @@
         }
       },
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "core.dashboard_layouts": {
+      "name": "dashboard_layouts",
+      "schema": "core",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "view": {
+          "name": "view",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hidden": {
+          "name": "hidden",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "order": {
+          "name": "order",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dashboard_layouts_user_id_users_id_fk": {
+          "name": "dashboard_layouts_user_id_users_id_fk",
+          "tableFrom": "dashboard_layouts",
+          "tableTo": "users",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "dashboard_layouts_user_id_view_pk": {
+          "name": "dashboard_layouts_user_id_view_pk",
+          "columns": [
+            "user_id",
+            "view"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "core.birthday_preferences": {
+      "name": "birthday_preferences",
+      "schema": "core",
+      "columns": {
+        "employee_id": {
+          "name": "employee_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "hidden": {
+          "name": "hidden",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "birthday_preferences_employee_id_employees_id_fk": {
+          "name": "birthday_preferences_employee_id_employees_id_fk",
+          "tableFrom": "birthday_preferences",
+          "tableTo": "employees",
+          "schemaTo": "core",
+          "columnsFrom": [
+            "employee_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
