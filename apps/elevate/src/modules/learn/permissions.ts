@@ -6,6 +6,8 @@ import { definePermissions } from "@/lib/roles";
 export const learnPermissions = definePermissions({
   "learn.launch": { roles: { super_admin: "own", hr_admin: "own", team_lead: "own", recruiter: "own", executive: "own", employee: "own" } },
   "learn.view_status": { roles: { super_admin: "all", hr_admin: "all", team_lead: "team" } },
+  /** Company-wide COUNTS only (people assigned, people with a current certificate, people overdue) for the executive dashboard tile. No names, no scores, no per-person rows. */
+  "learn.view_compliance": { roles: { super_admin: "all", hr_admin: "all", executive: "all" } },
   "learn.view_results": { roles: { super_admin: "all", hr_admin: "all" } },
   "learn.assign": { roles: { super_admin: "all", hr_admin: "all" } },
   "learn.grant_retry": { roles: { super_admin: "all", hr_admin: "all" } },

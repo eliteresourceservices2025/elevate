@@ -575,3 +575,56 @@ export async function listEmailTemplates(): Promise<EmailTemplateView[]> {
     return { kind, label: TEMPLATE_LABELS[kind], when: TEMPLATE_WHEN[kind], subject: row?.subject ?? BUILT_IN_TEMPLATES[kind].subject, body: row?.body ?? BUILT_IN_TEMPLATES[kind].body, custom: Boolean(row), builtIn: BUILT_IN_TEMPLATES[kind] };
   });
 }
+
+// ---- Dashboard tiles for the recruiter view (counts and short lines only) ------------------------------------------------------
+
+export type UpcomingInterview = { title: string; startsAt: Date; kind: string; scorecardDue: boolean };
+
+/** Scheduled interviews from the start of today (company zone) to 7 days ahead, soonest first. `scorecardDue`: it has started and nobody has filed a scorecard. */
+export async function getUpcomingInterviews(limit = 3): Promise<UpcomingInterview[]> {
+  const user = await requireUser();
+  await authorize(user, "recruiting.interview");
+  const rows = (await db.execute(sql`
+    select o.title, i.starts_at, i.kind,
+           (i.starts_at < now() and not exists (select 1 from talent.scorecards s where s.interview_id = i.id)) as scorecard_due
+    from talent.interviews i
+    join talent.applications a on a.id = i.application_id
+    join talent.job_openings o on o.id = a.opening_id
+    where i.status = 'scheduled'
+      and i.starts_at >= (${todayInZone()}::date)::timestamp at time zone ${DEFAULT_TIMEZONE}
+      and i.starts_at < now() + interval '7 days'
+    order by i.starts_at limit ${Math.min(Math.max(Math.trunc(limit), 1), 20)}`)) as unknown as { title: string; starts_at: Date | string; kind: string; scorecard_due: boolean }[];
+  return rows.map((r) => ({ title: r.title, startsAt: new Date(r.starts_at), kind: r.kind, scorecardDue: r.scorecard_due }));
+}
+
+export type OffersPending = { awaitingSignature: number; declined: number; expiringSoon: number };
+
+/** Offers by where their signing envelope stands: out for signature, expiring within 3 days, and declined in the last 30 days. */
+export async function getOffersPending(): Promise<OffersPending> {
+  const user = await requireUser();
+  await authorize(user, "offers.make");
+  const [r] = (await db.execute(sql`
+    select (count(*) filter (where e.status = 'out'))::int as awaiting_signature,
+           (count(*) filter (where e.status = 'out' and e.expires_at between now() and now() + interval '3 days'))::int as expiring_soon,
+           (count(*) filter (where e.status = 'declined' and coalesce(e.ended_at, e.created_at) > now() - interval '30 days'))::int as declined
+    from talent.offers o join docs.esign_envelopes e on e.id = o.envelope_id`)) as unknown as { awaiting_signature: number; expiring_soon: number; declined: number }[];
+  return { awaitingSignature: r?.awaiting_signature ?? 0, expiringSoon: r?.expiring_soon ?? 0, declined: r?.declined ?? 0 };
+}
+
+/** Openings with new applicants this week (most first, three at most). Same reach as the openings list. */
+export async function getNewApplicantsByOpening(): Promise<{ title: string; count: number }[]> {
+  const { rows } = await listOpenings();
+  return rows
+    .filter((r) => r.newThisWeek > 0)
+    .sort((a, b) => b.newThisWeek - a.newThisWeek || a.title.localeCompare(b.title))
+    .slice(0, 3)
+    .map((r) => ({ title: r.title, count: r.newThisWeek }));
+}
+
+/** People who ticked "keep my details" and whose consent has not run out. A count, never a name. */
+export async function getTalentPoolCount(): Promise<number> {
+  const user = await requireUser();
+  await authorize(user, "recruiting.pool");
+  const [r] = (await db.execute(sql`select count(*)::int as n from talent.candidates where in_pool and pool_expires_at > now() and anonymized_at is null`)) as unknown as { n: number }[];
+  return r?.n ?? 0;
+}

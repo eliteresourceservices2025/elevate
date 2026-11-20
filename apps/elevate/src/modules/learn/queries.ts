@@ -328,3 +328,28 @@ export async function getInstructionFacts(courseSlug: string): Promise<Instructi
     renewalMonths: row.exam_config.renewalMonths ?? null,
   };
 }
+
+export type TrainingCompliance = { assigned: number; current: number; overdue: number };
+
+/**
+ * Company-wide counts for the executive dashboard tile: how many people are assigned a course, how many hold a current (not revoked, not ended)
+ * certificate for it, and how many are overdue, summed over every course. Counts only: no names, no scores, no per-person rows.
+ */
+export async function getTrainingCompliance(): Promise<TrainingCompliance> {
+  const user = await requireUser();
+  await authorize(user, "learn.view_compliance");
+  const today = todayInZone();
+  const rows = (await db.execute(sql`
+    select count(*)::int as assigned,
+           (count(*) filter (where cur.user_id is not null))::int as current,
+           (count(*) filter (where cur.user_id is null and ov.user_id is not null))::int as overdue
+    from (select distinct a.user_id, a.course_id from learn.assignments a join core.users u on u.id = a.user_id where u.archived_at is null and a.status <> 'cancelled') pair
+    left join lateral (
+      select c.user_id from learn.certificates c join learn.assignments ca on ca.id = c.assignment_id
+      where c.user_id = pair.user_id and ca.course_id = pair.course_id and c.ends_on >= ${today}::date
+        and not exists (select 1 from learn.certificate_revocations r where r.certificate_id = c.id) limit 1) cur on true
+    left join lateral (
+      select oa.user_id from learn.assignments oa
+      where oa.user_id = pair.user_id and oa.course_id = pair.course_id and oa.status in ('assigned', 'in_progress') and oa.due_on < ${today}::date limit 1) ov on true`)) as unknown as TrainingCompliance[];
+  return rows[0] ?? { assigned: 0, current: 0, overdue: 0 };
+}

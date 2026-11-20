@@ -25,6 +25,9 @@ import { initialsOf } from "@/lib/initials";
 import { ChangePhotoButton, ProfilePicture, RemovePhotoButton } from "@/modules/people/components/profile-picture";
 import { listOrgOptions } from "@/modules/org/queries";
 import { getProfile, listClientsForFilter } from "@/modules/people/queries";
+import { requireUser } from "@/lib/auth";
+import { BirthdayToggle } from "@/modules/people/components/birthday-toggle";
+import { getOwnBirthdayHidden } from "@/modules/people/birthday-service";
 import { SelfIdCard } from "@/modules/demographics/components/self-id-card";
 import { getMySelfIdentification, getPronounsFor, getSharedIdentityFor } from "@/modules/demographics/queries";
 
@@ -61,6 +64,7 @@ export async function ProfileView({ id, requestedTab, basePath, own, returnTo = 
     shared.religion ? `Religion: ${shared.religion}` : null,
   ].filter((x): x is string => x !== null);
   const mine = (own || access.isSelf) && active.key === "personal" ? await getMySelfIdentification() : null;
+  const birthdayHidden = mine ? await getOwnBirthdayHidden(await requireUser()) : null;
   const clients = active.key === "clients" && access.canManageAssignments ? await listClientsForFilter() : [];
 
   // The key facts under the name: only what this person's view of the profile already allows. The client comes from the assignments, which
@@ -126,7 +130,8 @@ export async function ProfileView({ id, requestedTab, basePath, own, returnTo = 
 
       {active.key === "personal" ? <PersonalSection profile={profile} /> : null}
       {mine ? (
-        <div>
+        <div className="space-y-3">
+          {birthdayHidden !== null ? <BirthdayToggle initialHidden={birthdayHidden} /> : null}
           <SelfIdCard initial={mine} />
         </div>
       ) : null}
