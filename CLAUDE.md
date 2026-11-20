@@ -254,6 +254,7 @@ Replaces Jibble's screenshots and flags. Server side and the monitoring pages (`
 
 - Evidence and flags only: it never writes clock events or changes hours. Records only while clocked in, app name only (no titles, URLs, keystrokes), and nothing at all until a monitoring policy is published.
 - The app talks to `/api/tracker/*` with a per-device bearer token (outside the sign-in gate, like the cron route); only hashes are stored. Segments are append-only; screenshots are blurred on the person's computer, checked by bytes, kept 30 days in the private bucket `activity-shots`.
+- Releases of the app (`/tracker/download`, `/settings/tracker/releases`): a published release is frozen by a trigger (only withdrawing is possible); installers and update files are in the private bucket `tracker-builds`, added by `pnpm tracker:build` (never uploaded by HR), and only ever handed out as 60-second signed links after a signed-in or device-token check; a release that adds data collection needs a published monitoring policy version.
 - Every screenshot view is audited (ids and reason code only); the Executive and Recruiter never see anyone else's; own data is always open to the person. Tracker flags never block approval.
 
 ### Messages and calls — `docs/modules/messages.md`

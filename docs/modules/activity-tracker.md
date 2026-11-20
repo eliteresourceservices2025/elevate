@@ -56,6 +56,19 @@ Checked: unit, render and real-database tests for the above, and a live run on 2
 
 Found and fixed during that run: hour labels overlapped on a phone, apps with 0 minutes were listed, and a storage outage made the screenshot routes answer a bare 500 (now JSON 503). Setup notes learnt: `pnpm storage:setup` must run on each environment before screenshots work; `pnpm dev:mfa reset` could not find accounts in a database with 1,400+ users.
 
+## Releases, the download page and updates (Phase 2b)
+
+Product name: **ELEVATE Tracker App**. Plan: `docs/superpowers/plans/2026-11-20-elevate-tracker-phase2b-download-releases.md`.
+
+- **Data:** `time.tracker_releases` (version, three note lists, `min_required`, `adds_collection` + `policy_version_id`, status draft / published / withdrawn) and `time.tracker_release_builds` (per platform and kind: `installer` or `update` with its signature, size, SHA-256). A **published release is frozen by a trigger**: only withdrawing is possible; a draft's builds cannot change once it is published. Files live in the private bucket `tracker-builds` (run `pnpm storage:setup`).
+- **Builds come from CI, not from HR:** `pnpm tracker:build --version 1.2.0 --platform windows-x86_64 --kind installer --file <path>` (and `--kind update --sig <file.sig>`). It checks the extension, first bytes and size, uploads with the service role, records the SHA-256, and refuses a remote database unless `ELEVATE_ENV` is staging or production. These checks are sanity checks: the real protection is code signing (checked by the operating system) and the updater signature (checked by the app against the public key inside it).
+- **Pages:** `/tracker/download` (everyone signed in; OS-aware buttons, "Check the file" SHA-256, install steps, your computers, notes with a "Required update" chip) and `/settings/tracker/releases` (HR, Super Admin: New release, Publish, Withdraw, Delete draft). Installers go through `/api/tracker/download/[platform]`: signed-in check, audit (`tracker.download`: platform and version only), then a redirect to a 60-second link.
+- **Rules at publish:** at least one installer; every platform with an installer also has an update build; the version is higher than every released one (withdrawn ones count: a version is never reused); a release that adds data collection names a **published monitoring policy version**.
+- **For the app (device token):** `GET /api/tracker/update?platform=&version=` (204 when nothing is newer; otherwise Tauri's dynamic update shape `version, notes, pub_date, url, signature`; the url is our own download route), `GET /api/tracker/update/download/[platform]?version=` (302 to a 60-second link; withdrawn is a 404), `GET /api/tracker/releases/[version]` (notes for "What's new"). The feed never offers an older or equal version or a withdrawn release.
+- **Version floor:** when the app sends `X-Tracker-Version` below the highest published, non-withdrawn "Required update", every route except the three above answers `426 { error: "update_required", minVersion }`. No header (the simulator) or an unreadable one is not enforced: it is an operations control, not a security boundary. The floor is cached for a minute.
+- **Devices page** shows "Behind (newest x.y.z)" for a computer on an older readable version, and "Needs attention" includes them.
+- **Not built (needs the real app):** the updater's client side, "What's new" box, install at next clock-out, macOS notarization. The Tauri manifest shape must be re-checked against the Tauri version chosen then.
+
 ## Flags and jobs
 
 Flags (added to `time.attendance_days.flags` by the nightly rebuild, all "review", never blocking): `tracker_offline` (30+ working minutes with nothing recorded), `low_activity` (under the setting's percent of recorded time, after an hour recorded; default 30), `no_shots` (an hour or more of work, no screenshot). A person with no tracker, or while no policy is published, is never flagged.

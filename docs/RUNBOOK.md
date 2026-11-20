@@ -251,6 +251,10 @@ Who can do what: only people a Super Admin chose (Settings > Payroll access) as 
 
 Server side only for now (see `docs/modules/activity-tracker.md`). Jobs: `tracker-rollup`, `tracker-shot-purge`, `tracker-offline-alerts` (watch them on the Health page). Run `pnpm storage:setup` on every environment so the private bucket `activity-shots` exists. Nothing is collected until a monitoring policy is published. A lost or stolen computer: the person or HR revokes the device (`revokeDevice`); its token stops working at once. "Tracker offline" notices mean the app was closed, the computer asleep or the connection down; they are notes, never a reason to change hours.
 
+### 5g2. Releasing a version of the ELEVATE Tracker App
+
+1. Build and sign the app (outside ELEVATE). 2. HR creates the draft release (Settings > ELEVATE Tracker > Releases > New release). 3. Register each file: `pnpm tracker:build --version X --platform P --kind installer|update --file F [--sig F.sig]` (needs `pnpm storage:setup` once per environment). 4. HR publishes. A bad release: **Withdraw** it (the previous version is offered again); a published release cannot be edited. "Required update" makes older apps refuse to send until they update (they must send the `X-Tracker-Version` header). Details: `docs/modules/activity-tracker.md`.
+
 ## 6. Deploying changes (developer)
 
 - Deploy at the **Manila shift change**, not in the middle of a night shift (that is the US day, when most VAs are working). Check Attendance > Health before and after.

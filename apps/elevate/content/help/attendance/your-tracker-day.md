@@ -11,9 +11,17 @@ The **ELEVATE Tracker App** runs on your work computer while you are clocked in.
 
 You can always see what it recorded about you. This page shows you where.
 
+# Download the app
+
+1. Click **ELEVATE Tracker App** in the left menu.
+2. Click the **Download** button for your computer: **Download for Windows**, **Download for Apple silicon** or **Download for Intel Mac**. The page picks the right one for the computer you are using. If a button says **Not available yet**, that kind of computer is not supported yet.
+3. Open the file and let it install. On a Mac, when asked, allow **Screen Recording** and **Accessibility** in System Settings, then reopen the app.
+
+The page also lists **What changed** in each version. A version marked **Required update** must be installed: the app stops sending until you update. The app updates itself when it can.
+
 # Add your computer
 
-This part appears once your company has published its monitoring policy.
+This part appears once your company has published its monitoring policy. You can install the app before then; it records nothing until the policy is published.
 
 1. Click **Attendance** in the left menu. You land on **My time**.
 2. Find the card **My day in the ELEVATE Tracker App** and click **Add this computer**.
