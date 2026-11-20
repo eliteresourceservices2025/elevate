@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { RoleSlug } from "@/lib/roles";
+import { nextVersion } from "./release-test-helpers";
 
 // The devices list for HR: who needs attention, paging, and signing a computer out.
 
@@ -102,17 +103,23 @@ describe("devices that are behind the newest release", () => {
 
   it("marks a computer on an older version as behind, includes it under 'attention', and ignores a withdrawn newer release", async () => {
     current.user = hr.user;
-    await publishDirect("95.0.0", "published");
-    await publishDirect("96.0.0", "withdrawn");
+    const newest = await nextVersion();
+    await publishDirect(newest, "published");
+    await publishDirect(`${newest.split(".")[0]}.${Number(newest.split(".")[1]) + 1}.0`, "withdrawn");
+    // A computer can report anything: an absurdly large number and a zero-padded one must neither crash the list nor count as behind.
+    const huge = await device((await person(["employee"], "Hugever")).employeeId, { appVersion: "99999999999.0.0" });
+    const padded = await device((await person(["employee"], "Padver")).employeeId, { appVersion: "0.01.0" });
     const old = await person(["employee"], "Oldver");
     const same = await person(["employee"], "Samever");
     const sim = await person(["employee"], "Simver");
-    const behind = await device(old.employeeId, { appVersion: "1.0.0" });
-    const upToDate = await device(same.employeeId, { appVersion: "95.0.0" });
+    const behind = await device(old.employeeId, { appVersion: "0.0.1" }); // lower than any release the helper can make
+    const upToDate = await device(same.employeeId, { appVersion: newest });
     const odd = await device(sim.employeeId, { appVersion: "0.0.0-sim" });
 
     const all = await queries.listAllDevices({ filter: "all", page: 1, pageSize: 100 });
-    expect(all.latestVersion).toBe("95.0.0");
+    expect(all.latestVersion).toBe(newest);
+    expect(all.rows.find((r) => r.id === huge)?.behind).toBe(false);
+    expect(all.rows.find((r) => r.id === padded)?.behind).toBe(false);
     expect(all.rows.find((r) => r.id === behind)?.behind).toBe(true);
     expect(all.rows.find((r) => r.id === upToDate)?.behind).toBe(false);
     expect(all.rows.find((r) => r.id === odd)?.behind).toBe(false);
@@ -122,5 +129,7 @@ describe("devices that are behind the newest release", () => {
     expect(ids).toContain(behind);
     expect(ids).not.toContain(upToDate);
     expect(ids).not.toContain(odd);
+    expect(ids).not.toContain(huge);
+    expect(ids).not.toContain(padded);
   });
 });

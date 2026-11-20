@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { FakeStorage } from "./fake-storage";
+import { nextVersion } from "./release-test-helpers";
 
 // The download page's data and the installer route: who can download, what is audited, what is never offered.
 
@@ -32,9 +33,8 @@ async function user(roles: string[]) {
   await db.execute(sql`insert into core.employees (legal_first_name, legal_last_name, work_email, status, user_id) values ('Down', 'Load', ${email}, 'active', ${id})`);
   return { id, email, roles };
 }
-let minor = 1;
 async function publish(platforms: ("windows-x86_64" | "darwin-aarch64")[] = ["windows-x86_64"]) {
-  const version = `90.${minor++}.0`;
+  const version = await nextVersion();
   const made = await releaseActions.createRelease({ version, added: "A thing", improved: "", fixed: "", minRequired: false, addsCollection: false, policyVersionId: null });
   if (!made.ok) throw new Error(made.error);
   for (const platform of platforms) {
@@ -56,7 +56,7 @@ describe("getDownloadPage", () => {
     const b = await publish();
     const withdrawn = await publish();
     await releaseActions.withdrawRelease({ id: withdrawn.id });
-    const draft = await releaseActions.createRelease({ version: `90.${minor++}.0`, added: "Draft only", improved: "", fixed: "", minRequired: false, addsCollection: false, policyVersionId: null });
+    const draft = await releaseActions.createRelease({ version: await nextVersion(), added: "Draft only", improved: "", fixed: "", minRequired: false, addsCollection: false, policyVersionId: null });
     expect(draft.ok).toBe(true);
     current.user = await user(["employee"]);
     const page = await queries.getDownloadPage();

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { FakeStorage } from "./fake-storage";
+import { nextVersion } from "./release-test-helpers";
 
 // The update feed, release notes and the version floor with real releases, called through the real route handlers.
 
@@ -38,10 +39,9 @@ async function device(status = "active") {
   await db.execute(sql`insert into time.tracker_devices (employee_id, name, os, token_hash, status) values (${e.id}, 'PC', 'windows', ${hash}, ${status})`);
   return token;
 }
-let minor = 1;
 const requiredVersions: string[] = []; // every release published as "required", in order
 async function publish(opts: { minRequired?: boolean } = {}) {
-  const version = `80.${minor++}.0`;
+  const version = await nextVersion();
   const created = await releaseActions.createRelease({ version, added: "A thing", improved: "", fixed: "", minRequired: opts.minRequired ?? false, addsCollection: false, policyVersionId: null });
   if (!created.ok) throw new Error(created.error);
   for (const kind of ["installer", "update"] as const) {
@@ -96,12 +96,12 @@ describe("the version floor with real releases", () => {
     const token = await device();
     const body = JSON.stringify({ segments: [{ start: new Date(Date.now() - 120_000).toISOString(), end: new Date(Date.now() - 60_000).toISOString(), app: "Chrome", state: "active" }] });
     const post = (version?: string) => segments.POST(new Request("http://localhost/api/tracker/segments", { method: "POST", headers: { ...auth(token, version ? { "x-tracker-version": version } : {}), "content-type": "application/json" }, body }));
-    const old = await post("80.0.5");
+    const old = await post("0.0.5");
     expect(old.status).toBe(426);
     expect(await old.json()).toEqual({ error: "update_required", minVersion: required.version });
     expect((await post(required.version)).status).not.toBe(426);
     expect((await post()).status).not.toBe(426); // an app that sends no version is not blocked (the simulator)
-    const feed = await update.GET(req("/api/tracker/update?platform=windows-x86_64&version=80.0.5", token, { "x-tracker-version": "80.0.5" }));
+    const feed = await update.GET(req("/api/tracker/update?platform=windows-x86_64&version=0.0.5", token, { "x-tracker-version": "0.0.5" }));
     expect(feed.status).toBe(200);
   });
 
@@ -109,7 +109,7 @@ describe("the version floor with real releases", () => {
     current.user = await hrUser();
     const required = await publish({ minRequired: true });
     const token = await device();
-    const post = () => segments.POST(new Request("http://localhost/api/tracker/segments", { method: "POST", headers: { ...auth(token, { "x-tracker-version": "80.0.5" }), "content-type": "application/json" }, body: JSON.stringify({ segments: [{ start: new Date(Date.now() - 120_000).toISOString(), end: new Date(Date.now() - 60_000).toISOString(), app: "Chrome", state: "active" }] }) }));
+    const post = () => segments.POST(new Request("http://localhost/api/tracker/segments", { method: "POST", headers: { ...auth(token, { "x-tracker-version": "0.0.5" }), "content-type": "application/json" }, body: JSON.stringify({ segments: [{ start: new Date(Date.now() - 120_000).toISOString(), end: new Date(Date.now() - 60_000).toISOString(), app: "Chrome", state: "active" }] }) }));
     const before = await post();
     expect(before.status).toBe(426);
     expect((await before.json()).minVersion).toBe(required.version);

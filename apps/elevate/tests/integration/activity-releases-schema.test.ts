@@ -72,6 +72,15 @@ describe("builds", () => {
     expect(await dbMessage(() => build(published.id, "darwin-aarch64"))).toMatch(/draft|published|frozen/);
     expect(await dbMessage(() => db.execute(sql`delete from time.tracker_release_builds where release_id = ${published.id}`))).toMatch(/draft|published|frozen/);
   });
+  it("cannot be moved out of a published release into a draft, and cannot all be wiped by truncating the table", async () => {
+    const published = await release();
+    await build(published.id);
+    await db.execute(sql`update time.tracker_releases set status = 'published', published_at = now(), published_by = ${randomUUID()} where id = ${published.id}`);
+    const draft = await release();
+    expect(await dbMessage(() => db.execute(sql`update time.tracker_release_builds set release_id = ${draft.id} where release_id = ${published.id}`))).toMatch(/draft/);
+    expect(await rows(sql`select 1 from time.tracker_release_builds where release_id = ${published.id}`)).toHaveLength(1);
+    expect(await dbMessage(() => db.execute(sql`truncate time.tracker_release_builds`))).toMatch(/truncated/);
+  });
   it("allow one per release, platform and kind", async () => {
     const r = await release();
     await build(r.id);

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import type { RoleSlug } from "@/lib/roles";
 import { FakeStorage } from "./fake-storage";
+import { nextVersion } from "./release-test-helpers";
 
 // Creating, building, publishing and withdrawing releases, against a real database.
 
@@ -29,13 +30,11 @@ async function user(roles: RoleSlug[]) {
   return { id, email, roles };
 }
 // Versions far above anything else, rising by one each time, so a new release is always the highest.
-let minor = 100;
-const nextVersion = () => `50.${minor++}.0`;
 const notes = { added: "A new thing", improved: "", fixed: "" };
 const base = { minRequired: false, addsCollection: false, policyVersionId: null };
 
 const make = async (over: Record<string, unknown> = {}) => {
-  const version = (over.version as string) ?? nextVersion();
+  const version = (over.version as string) ?? (await nextVersion());
   const r = await actions.createRelease({ version, ...notes, ...base, ...over });
   if (!r.ok) throw new Error(r.error);
   return { id: r.data.id, version };
@@ -59,7 +58,7 @@ async function publishedMonitoringVersion(): Promise<string> {
 describe("createRelease", () => {
   it("makes a draft with cleaned-up notes, and audits the id and version only", async () => {
     current.user = await user(["hr_admin", "employee"]);
-    const version = nextVersion();
+    const version = await nextVersion();
     const r = await make({ version, added: "  New page \n\n", fixed: "Fixed it" });
     const [row] = await rows<{ status: string; notes_added: string[]; notes_fixed: string[] }>(sql`select status, notes_added, notes_fixed from time.tracker_releases where id = ${r.id}`);
     expect(row).toEqual({ status: "draft", notes_added: ["New page"], notes_fixed: ["Fixed it"] });
@@ -70,9 +69,9 @@ describe("createRelease", () => {
   it("refuses a version that is not higher than every earlier one, an empty note and a bad version", async () => {
     current.user = await user(["hr_admin", "employee"]);
     const high = await make();
-    expect((await actions.createRelease({ version: "1.0.0", ...notes, ...base })).ok).toBe(false);
+    expect((await actions.createRelease({ version: "0.0.1", ...notes, ...base })).ok).toBe(false); // lower than the release made just above
     expect((await actions.createRelease({ version: high.version, ...notes, ...base })).ok).toBe(false);
-    expect((await actions.createRelease({ version: `70.${minor++}.0`, added: "", improved: "", fixed: "", ...base })).ok).toBe(false);
+    expect((await actions.createRelease({ version: await nextVersion(), added: "", improved: "", fixed: "", ...base })).ok).toBe(false);
     expect((await actions.createRelease({ version: "1.2", ...notes, ...base })).ok).toBe(false);
   });
 });
@@ -146,6 +145,34 @@ describe("withdrawRelease and what is offered", () => {
     });
     expect(offered).not.toBe(b.version);
     expect(offered).toBe(a.version);
+  });
+});
+
+describe("a required release cannot lock a platform out", () => {
+  it("is refused when an earlier published release had a Mac update this one lacks, and allowed once it has one", async () => {
+    current.user = await user(["hr_admin", "employee"]);
+    const a = await make();
+    await addBuilds(a.version, ["windows-x86_64", "darwin-aarch64"]);
+    expect((await actions.publishRelease({ id: a.id })).ok).toBe(true);
+
+    const b = await make({ minRequired: true });
+    await addBuilds(b.version); // Windows only
+    const refused = await actions.publishRelease({ id: b.id });
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.error).toMatch(/darwin-aarch64/);
+
+    const c = await make({ minRequired: true });
+    await addBuilds(c.version, ["windows-x86_64", "darwin-aarch64"]);
+    expect((await actions.publishRelease({ id: c.id })).ok).toBe(true);
+
+    // A release that is not required may drop a platform.
+    const d = await make();
+    await addBuilds(d.version);
+    expect((await actions.publishRelease({ id: d.id })).ok).toBe(true);
+
+    // Withdrawn releases do not count, so other tests sharing this database are not held to these Mac builds.
+    await actions.withdrawRelease({ id: a.id });
+    await actions.withdrawRelease({ id: c.id });
   });
 });
 

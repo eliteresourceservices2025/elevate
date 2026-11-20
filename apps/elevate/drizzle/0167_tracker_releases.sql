@@ -94,9 +94,19 @@ AS $$
 DECLARE
   parent_status text;
 BEGIN
-  SELECT status INTO parent_status FROM time.tracker_releases WHERE id = COALESCE(NEW.release_id, OLD.release_id);
-  IF parent_status IS DISTINCT FROM 'draft' THEN
-    RAISE EXCEPTION 'builds can only change while the release is a draft';
+  -- The row as it was (an update or delete) and the row as it will be (an insert or update) must each belong to a draft, so a build
+  -- cannot be moved out of a published release by changing its release_id.
+  IF TG_OP IN ('UPDATE', 'DELETE') THEN
+    SELECT status INTO parent_status FROM time.tracker_releases WHERE id = OLD.release_id;
+    IF parent_status IS DISTINCT FROM 'draft' THEN
+      RAISE EXCEPTION 'builds can only change while the release is a draft';
+    END IF;
+  END IF;
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    SELECT status INTO parent_status FROM time.tracker_releases WHERE id = NEW.release_id;
+    IF parent_status IS DISTINCT FROM 'draft' THEN
+      RAISE EXCEPTION 'builds can only change while the release is a draft';
+    END IF;
   END IF;
   RETURN COALESCE(NEW, OLD);
 END;
@@ -105,3 +115,7 @@ $$;
 CREATE TRIGGER tracker_release_builds_guard
   BEFORE INSERT OR UPDATE OR DELETE ON time.tracker_release_builds
   FOR EACH ROW EXECUTE FUNCTION time.guard_tracker_release_build();
+--> statement-breakpoint
+CREATE TRIGGER tracker_release_builds_no_truncate
+  BEFORE TRUNCATE ON time.tracker_release_builds
+  FOR EACH STATEMENT EXECUTE FUNCTION time.refuse_release_truncate();

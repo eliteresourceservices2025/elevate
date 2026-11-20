@@ -295,7 +295,7 @@ export async function listAllDevices(input: unknown): Promise<{ rows: FleetRow[]
   const { filter, page: asked, pageSize } = allDevicesSchema.parse(input ?? {});
   const latest = await latestPublishedVersion();
   const behindSql = latest
-    ? sql`(d.app_version ~ '^[0-9]+[.][0-9]+[.][0-9]+$' and string_to_array(d.app_version, '.')::int[] < string_to_array(${latest}, '.')::int[])`
+    ? sql`(d.app_version ~ '^(0|[1-9][0-9]{0,5})[.](0|[1-9][0-9]{0,5})[.](0|[1-9][0-9]{0,5})$' and string_to_array(d.app_version, '.')::int[] < string_to_array(${latest}, '.')::int[])`
     : sql`false`;
   const where = filter === "attention"
     ? sql`where d.status = 'active' and (d.permissions_ok = false or d.last_seen_at is null or d.last_seen_at < now() - interval '1 day' or d.queue_size > 100 or ${behindSql})`
