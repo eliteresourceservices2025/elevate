@@ -11,17 +11,17 @@ const read = (rel: string) => readFileSync(path.join(SRC, rel), "utf8");
 describe("tracker pages are wired in", () => {
   it("the Attendance page renders the My day card and passes it the chosen day", () => {
     const page = read("app/(app)/attendance/page.tsx");
-    expect(page).toMatch(/<MyDayCard\b/);
-    expect(page).toMatch(/params\.day/);
+    expect(page).toContain("<MyDayCard ");
+    expect(page).toContain("params.day");
   });
   it("the person page and the devices page render their bodies", () => {
-    expect(read("app/(app)/activity/people/[id]/page.tsx")).toMatch(/<DayBody\b/);
-    expect(read("app/(app)/activity/devices/page.tsx")).toMatch(/<DevicesTable\b/);
+    expect(read("app/(app)/activity/people/[id]/page.tsx")).toContain("<DayBody ");
+    expect(read("app/(app)/activity/devices/page.tsx")).toContain("<DevicesTable ");
   });
-  it("the download page renders the buttons, the steps' enrollment dialog and the release notes", () => {
+  it("the download page renders the buttons, the enrollment dialog and the release notes", () => {
     const page = read("app/(app)/tracker/download/page.tsx");
-    expect(page).toMatch(/<DownloadHero/);
-    expect(page).toMatch(/<EnrollDialog/);
-    expect(page).toMatch(/<ReleaseList/);
+    expect(page).toContain("<DownloadHero ");
+    expect(page).toContain("<EnrollDialog ");
+    expect(page).toContain("<ReleaseList ");
   });
 });
