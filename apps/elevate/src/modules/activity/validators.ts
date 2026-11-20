@@ -67,3 +67,9 @@ export const activitySettingsSchema = z.object({
 export type ActivitySettingsInput = z.infer<typeof activitySettingsSchema>;
 
 export const archiveCategorySchema = z.object({ id: uuid });
+
+export const allDevicesSchema = z.object({
+  filter: z.enum(["all", "attention"]).catch("all"),
+  page: z.number().int().min(1).max(10_000).catch(1),
+  pageSize: z.number().int().min(1).max(100).catch(25),
+});

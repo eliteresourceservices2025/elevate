@@ -63,6 +63,7 @@ describe("tracker queries, every role", () => {
     { name: "getPersonDay", call: () => queries.getPersonDay({ employeeId: OTHER, date: "2026-11-10" }), allowed: ["super_admin", "hr_admin", "team_lead", "employee"] },
     { name: "listFloor", call: () => queries.listFloor({}), allowed: ["super_admin", "hr_admin", "team_lead"] },
     { name: "getActivitySettings", call: () => queries.getActivitySettings(), allowed: ["super_admin", "hr_admin"] },
+    { name: "listAllDevices", call: () => queries.listAllDevices({ filter: "all", page: 1, pageSize: 25 }), allowed: ["super_admin", "hr_admin"] },
     { name: "listCategories", call: () => queries.listCategories(), allowed: ["super_admin", "hr_admin"] },
     { name: "listDevices (everyone's)", call: () => queries.listDevices({ employeeId: OTHER }), allowed: ["super_admin", "hr_admin"] },
     { name: "listDevices (own)", call: () => queries.listDevices({}), allowed: ALL },

@@ -12,7 +12,7 @@ import { authorizeForEmployee, requireScope } from "./access";
 import { workingBetween } from "./flags";
 import { activePercent, summarizeDay, type CategoryRule, type DaySummary } from "./logic";
 import { activityCategories, activitySettings, activityShots, trackerDevices } from "./schema";
-import { daySchema, deviceListSchema, floorSchema, personDaySchema } from "./validators";
+import { allDevicesSchema, daySchema, deviceListSchema, floorSchema, personDaySchema } from "./validators";
 
 // Reads for the ELEVATE Tracker pages. Every query starts with requireUser(), then checks its permission before touching the database.
 
@@ -278,4 +278,46 @@ export async function getMyDayCard(input: unknown): Promise<MyDayCardData> {
   const rows: DeviceRow[] = devices.map((d) => ({ id: d.id, employeeId: d.employeeId, name: d.name, os: d.os, appVersion: d.appVersion, lastSeenAt: d.lastSeenAt?.toISOString() ?? null, status: d.status, permissionsOk: d.permissionsOk, queueSize: d.queueSize }));
   if (rows.length === 0) return { date, today, policy: true, hasDevice: false, zone, day: null, views: [], devices: [] };
   return { date, today, policy: true, hasDevice: true, zone, day: await dayFor(person.id, date, true), views: await listMyShotViews(), devices: rows };
+}
+
+export type FleetRow = DeviceRow & { person: string };
+
+/**
+ * Every computer, for HR and Super Admin. "attention" = still signed in and (permission missing, or silent for a day or more, or a
+ * backlog of more than 100 waiting uploads). Paged in the database.
+ */
+export async function listAllDevices(input: unknown): Promise<{ rows: FleetRow[]; total: number; page: number; pageSize: number }> {
+  const user = await requireUser();
+  await authorize(user, "activity.manage");
+  const { filter, page, pageSize } = allDevicesSchema.parse(input ?? {});
+  const where = filter === "attention"
+    ? sql`where d.status = 'active' and (d.permissions_ok = false or d.last_seen_at is null or d.last_seen_at < now() - interval '1 day' or d.queue_size > 100)`
+    : sql``;
+  const [count] = (await db.execute(sql`select count(*)::int as n from time.tracker_devices d ${where}`)) as unknown as { n: number }[];
+  const found = (await db.execute(sql`
+    select d.id, d.employee_id, d.name, d.os, d.app_version, d.last_seen_at, d.status, d.permissions_ok, d.queue_size,
+           e.legal_first_name as first, e.legal_last_name as last, e.preferred_name as preferred
+    from time.tracker_devices d join core.employees e on e.id = d.employee_id
+    ${where}
+    order by (d.status = 'active') desc, d.permissions_ok asc, d.last_seen_at asc nulls first, d.created_at desc
+    limit ${pageSize} offset ${(page - 1) * pageSize}`)) as unknown as {
+    id: string; employee_id: string; name: string; os: string; app_version: string; last_seen_at: string | Date | null; status: string; permissions_ok: boolean; queue_size: number; first: string; last: string; preferred: string | null;
+  }[];
+  return {
+    total: count?.n ?? 0,
+    page,
+    pageSize,
+    rows: found.map((r) => ({
+      id: r.id,
+      employeeId: r.employee_id,
+      person: reportName({ first: r.first, last: r.last, preferred: r.preferred }),
+      name: r.name,
+      os: r.os,
+      appVersion: r.app_version,
+      lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at).toISOString() : null,
+      status: r.status,
+      permissionsOk: r.permissions_ok,
+      queueSize: r.queue_size,
+    })),
+  };
 }
