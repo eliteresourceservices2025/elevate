@@ -343,7 +343,7 @@ export async function getTrainingCompliance(): Promise<TrainingCompliance> {
     select count(*)::int as assigned,
            (count(*) filter (where cur.user_id is not null))::int as current,
            (count(*) filter (where cur.user_id is null and ov.user_id is not null))::int as overdue
-    from (select distinct a.user_id, a.course_id from learn.assignments a join core.users u on u.id = a.user_id where u.archived_at is null) pair
+    from (select distinct a.user_id, a.course_id from learn.assignments a join core.users u on u.id = a.user_id where u.archived_at is null and a.status <> 'cancelled') pair
     left join lateral (
       select c.user_id from learn.certificates c join learn.assignments ca on ca.id = c.assignment_id
       where c.user_id = pair.user_id and ca.course_id = pair.course_id and c.ends_on >= ${today}::date

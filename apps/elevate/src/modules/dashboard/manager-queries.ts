@@ -51,17 +51,17 @@ export async function getTeamHoursTile(): Promise<TeamHours | null> {
   };
 }
 
-export type ClockedIn = { working: number; onBreak: number; total: number; longOpen: number };
+export type ClockedIn = { working: number; onBreak: number; /** The size of the lead's team; null when the person sees everyone (there is no single "of N"). */ total: number | null; longOpen: number };
 
 /** How many of the lead's team are clocked in now. Counts only. Null for someone who sees no team attendance. */
 export async function getClockedInTile(): Promise<ClockedIn | null> {
   const user = await me();
   const now = await listWorkingNow();
-  const total = now.scope === "team" ? (await timeDownlineEmployeeIds(db, user.id)).length : now.rows.length;
+  const total = now.scope === "team" ? (await timeDownlineEmployeeIds(db, user.id)).length : null;
   return {
     working: now.rows.filter((r) => r.state === "working").length,
     onBreak: now.rows.filter((r) => r.state === "break").length,
-    total: Math.max(total, now.rows.length),
+    total: total === null ? null : Math.max(total, now.rows.length),
     longOpen: now.rows.filter((r) => r.longOpen).length,
   };
 }
@@ -192,4 +192,11 @@ export async function getAuditHighlights(): Promise<AuditHighlights> {
            (count(*) filter (where action like 'import.%' or action like 'imports.%' or action like 'scheduleimport.%'))::int as imports
     from ops.audit_log where occurred_at > now() - interval '7 days'`)) as unknown as { exports: number; sensitive_views: number; imports: number }[];
   return { exportsWeek: r?.exports ?? 0, sensitiveViewsWeek: r?.sensitive_views ?? 0, importsWeek: r?.imports ?? 0 };
+}
+
+/** How many people report to this lead for time matters (their team). Null when the person sees everyone, where "no team" does not apply. */
+export async function getTeamSize(): Promise<number | null> {
+  const user = await me();
+  if (scopeFor(user, "attendance.view") !== "team") return null;
+  return (await timeDownlineEmployeeIds(db, user.id)).length;
 }

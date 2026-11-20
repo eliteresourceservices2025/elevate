@@ -1,17 +1,21 @@
 import { Activity, AlertTriangle, ClipboardList, Timer } from "lucide-react";
 import { orFallback } from "../or-fallback";
-import { getClockedInTile, getReviewsGoalsTile, getTeamFlagsTile, getTeamHoursTile } from "../manager-queries";
+import { getClockedInTile, getReviewsGoalsTile, getTeamFlagsTile, getTeamHoursTile, getTeamSize } from "../manager-queries";
+
+const NO_TEAM = "No one reports to you yet.";
 import { hoursLabel, RowMeta, Tile, TileList, TileNote, TileRow } from "./bento";
 import { guarded } from "./guard";
 
 /** Last week's hours for the team against the schedule, and how many days wait for approval. */
 export async function TeamHoursTile() {
   return guarded("Team hours", async () => {
-    const hours = await orFallback(() => getTeamHoursTile(), null);
+    const [hours, size] = await Promise.all([orFallback(() => getTeamHoursTile(), null), orFallback(() => getTeamSize(), null)]);
     if (!hours) return null;
     return (
       <Tile label="Team hours" title="Team hours, last week" icon={<Timer className="size-4 text-primary" aria-hidden />} href="/hours-review" hrefLabel="Review">
-        {hours.rows.length === 0 ? (
+        {size === 0 ? (
+          <TileNote>{NO_TEAM}</TileNote>
+        ) : hours.rows.length === 0 ? (
           <TileNote>No hours from last week to review.</TileNote>
         ) : (
           <TileList>
@@ -26,7 +30,7 @@ export async function TeamHoursTile() {
             ))}
           </TileList>
         )}
-        <p className="mt-auto pt-1.5 text-xs text-muted-foreground">{hours.daysWaiting === 0 ? "Everything approved" : `${hours.daysWaiting} ${hours.daysWaiting === 1 ? "day waits" : "days wait"} for approval`}</p>
+        {size === 0 ? null : <p className="mt-auto pt-1.5 text-xs text-muted-foreground">{hours.daysWaiting === 0 ? "Everything approved" : `${hours.daysWaiting} ${hours.daysWaiting === 1 ? "day waits" : "days wait"} for approval`}</p>}
       </Tile>
     );
   });
@@ -35,15 +39,22 @@ export async function TeamHoursTile() {
 /** How many of the team are clocked in now. Counts only. */
 export async function ClockedInTile() {
   return guarded("Clocked in now", async () => {
-    const c = await orFallback(() => getClockedInTile(), null);
+    const [c, size] = await Promise.all([orFallback(() => getClockedInTile(), null), orFallback(() => getTeamSize(), null)]);
     if (!c) return null;
     const detail = [c.onBreak > 0 ? `${c.onBreak} on break` : null, c.longOpen > 0 ? `${c.longOpen} over 12 h` : null].filter(Boolean).join(", ");
     return (
       <Tile label="Clocked in now" title="Clocked in now" icon={<Activity className="size-4 text-primary" aria-hidden />} href="/team-attendance" hrefLabel="Team">
-        <p className="text-2xl font-semibold tabular-nums">
-          {c.working + c.onBreak} <span className="text-sm font-normal text-muted-foreground">of {c.total}</span>
-        </p>
-        <p className="mt-auto pt-1.5 text-xs text-muted-foreground">{detail || "Nobody on break or over 12 h"}</p>
+        {size === 0 ? (
+          <TileNote>{NO_TEAM}</TileNote>
+        ) : (
+          <>
+            <p className="text-2xl font-semibold tabular-nums">
+              {c.working + c.onBreak}
+              {c.total !== null ? <span className="text-sm font-normal text-muted-foreground"> of {c.total}</span> : <span className="text-sm font-normal text-muted-foreground"> clocked in</span>}
+            </p>
+            <p className="mt-auto pt-1.5 text-xs text-muted-foreground">{detail || "Nobody on break or over 12 h"}</p>
+          </>
+        )}
       </Tile>
     );
   });
@@ -52,10 +63,12 @@ export async function ClockedInTile() {
 /** Days worth a look in the last two weeks, by kind. */
 export async function TeamFlagsTile() {
   return guarded("Team flags", async () => {
-    const flags = await orFallback(() => getTeamFlagsTile(), []);
+    const [flags, size] = await Promise.all([orFallback(() => getTeamFlagsTile(), []), orFallback(() => getTeamSize(), null)]);
     return (
       <Tile label="Team flags" title="Team flags" icon={<AlertTriangle className="size-4 text-primary" aria-hidden />} href="/team-attendance" hrefLabel="Flags">
-        {flags.length === 0 ? (
+        {size === 0 ? (
+          <TileNote>{NO_TEAM}</TileNote>
+        ) : flags.length === 0 ? (
           <TileNote>No flags in the last two weeks.</TileNote>
         ) : (
           <TileList>

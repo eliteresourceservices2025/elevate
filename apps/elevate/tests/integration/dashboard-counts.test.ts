@@ -101,3 +101,31 @@ describe("admin tile queries", () => {
     expect(JSON.stringify(highlights)).not.toContain("never read");
   });
 });
+
+describe("training compliance tile query", () => {
+  it("does not count a person whose only assignment was cancelled as assigned or as not current", async () => {
+    const admin = await makeUser("tc", ["super_admin"]);
+    as(admin);
+    const slug = `dash-tc-${Date.now().toString(36)}${counter++}`;
+    const [c] = await rows<{ id: string }>(sql`insert into learn.courses (slug, title) values (${slug}, 'Dashboard test course') returning id`);
+    const [v] = await rows<{ id: string }>(sql`insert into learn.course_versions (course_id, version, exam_config) values (${c.id}, 1, '{}'::jsonb) returning id`);
+    const course = { course_id: c.id, version_id: v.id };
+    const learn = await import("@/modules/learn/queries");
+    const before = await learn.getTrainingCompliance();
+
+    const person = async (label: string) => {
+      const u = await makeUser(label, ["employee"]);
+      const [a] = await rows<{ id: string }>(sql`insert into learn.assignments (user_id, course_id, version_id, track, reason, due_on) values (${u.id}, ${course.course_id}, ${course.version_id}, 'full', 'manual', current_date + 30) returning id`);
+      return { user: u, assignmentId: a.id };
+    };
+    const cancelled = await person("tcc");
+    await db.execute(sql`update learn.assignments set status = 'cancelled' where id = ${cancelled.assignmentId}`);
+    const afterCancelled = await learn.getTrainingCompliance();
+    expect(afterCancelled.assigned - before.assigned).toBe(0);
+    expect(afterCancelled.overdue - before.overdue).toBe(0);
+
+    await person("tco");
+    const afterOpen = await learn.getTrainingCompliance();
+    expect(afterOpen.assigned - before.assigned).toBe(1);
+  });
+});

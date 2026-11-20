@@ -109,3 +109,14 @@ test("a lead hides a tile and reorders another, it persists across a reload, and
   await page.reload();
   await expect(page.getByRole("region", { name: "Team flags", exact: true })).toBeVisible({ timeout: 30_000 });
 });
+
+test("a lead with nobody reporting to them is told so instead of seeing healthy-looking zeros", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const page = await (await browser.newContext()).newPage();
+  await signInEnrollingMfa(page, await createEmployeeAccount("Solo", `Lead${Date.now().toString(36)}`, { roles: ["team_lead"] }));
+  await regions(page, ["Clocked in now", "Team hours", "Team flags"]);
+  for (const name of ["Clocked in now", "Team hours", "Team flags"]) {
+    await expect(page.getByRole("region", { name, exact: true })).toContainText("No one reports to you yet.");
+  }
+  await expect(page.getByRole("region", { name: "Clocked in now", exact: true })).not.toContainText("of 0");
+});
