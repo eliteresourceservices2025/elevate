@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Clock, Coffee, LogOut, Play, WifiOff } from "lucide-react";
+import { Briefcase, ChevronDown, Clock, Coffee, LogOut, Play, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
@@ -398,6 +398,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
   const choices = workChoices(status.clients);
   const needsChoice = choices.length > 1;
   const currentChoice = choices.find((c) => c.clientId === status.currentClientId && (c.projectId ?? null) === status.currentProjectId);
+  const nowLabel = currentChoice?.label ?? status.clients.find((c) => c.id === status.currentClientId)?.name ?? "Client";
 
   async function doClockIn(selfiePath?: string, work?: WorkChoice) {
     setSelfie(false);
@@ -509,12 +510,25 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
         <>
           {needsChoice ? (
             <div className="relative">
-              <Button variant="ghost" size="lg" className="h-10 max-w-52 gap-1 px-2 sm:px-3" disabled={blocked || onBreak} aria-label="Switch client or project" aria-haspopup="menu" aria-expanded={clientMenu === "switch"} onClick={() => setClientMenu(clientMenu === "switch" ? null : "switch")}>
-                <span className="truncate">{currentChoice?.label ?? status.clients.find((c) => c.id === status.currentClientId)?.name ?? "Client"}</span>
+              {/* The long "Client · Project" label only fits on wide screens; below that it is an icon, so Break and Clock out never get pushed off the header. */}
+              <Button
+                variant="ghost"
+                size="lg"
+                className="h-10 gap-1 px-2 sm:px-3 xl:max-w-52"
+                disabled={blocked || onBreak}
+                title={nowLabel}
+                aria-label={`Switch client or project. Now: ${nowLabel}`}
+                aria-haspopup="menu"
+                aria-expanded={clientMenu === "switch"}
+                onClick={() => setClientMenu(clientMenu === "switch" ? null : "switch")}
+              >
+                <Briefcase aria-hidden className="xl:hidden" />
+                <span className="hidden truncate xl:inline">{nowLabel}</span>
                 <ChevronDown aria-hidden />
               </Button>
               {clientMenu === "switch" ? (
                 <div role="menu" aria-label="Switch client or project" className="absolute right-0 top-full z-50 mt-1 max-h-96 w-64 overflow-y-auto rounded-xl border bg-popover py-1 shadow-lg">
+                  <p className="px-3 pt-1.5 text-xs text-muted-foreground">Now: {nowLabel}</p>
                   <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Move the rest of this session to</p>
                   {choices
                     .filter((c) => c !== currentChoice)
@@ -539,13 +553,13 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
           {onBreak ? (
             <Button variant="default" size="lg" className="h-10 gap-2 px-3 font-semibold sm:px-4" disabled={blocked} aria-label="End break" onClick={() => run(() => endBreak(), "Break ended.")}>
               <Play aria-hidden />
-              <span className="max-sm:sr-only">End break</span>
+              <span className="max-lg:sr-only">End break</span>
             </Button>
           ) : (
             <div className="relative">
               <Button variant="ghost" size="lg" className="h-10 gap-1 px-2 sm:px-3" disabled={blocked} aria-label="Break" aria-haspopup="menu" aria-expanded={breakMenu} onClick={() => setBreakMenu((v) => !v)}>
                 <Coffee aria-hidden />
-                <span className="max-sm:sr-only">Break</span>
+                <span className="max-lg:sr-only">Break</span>
                 <ChevronDown aria-hidden />
               </Button>
               {breakMenu ? (
@@ -585,7 +599,7 @@ export function ClockWidget({ status }: { status: ClockStatus | null }) {
             }
           >
             <LogOut aria-hidden />
-            <span className="max-sm:sr-only">Clock out</span>
+            <span className="max-lg:sr-only">Clock out</span>
           </Button>
         </>
       )}
